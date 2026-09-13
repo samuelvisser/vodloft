@@ -1,0 +1,24 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = "VodLoft FastAPI backend API and database"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "SQLAlchemy>=2.0.43,<3",
+    "alembic>=1.19,<1.20",
+    "fastapi>=0.118.0,<1",
+    "pydantic>=2.11.9,<3",
+    "uvicorn>=0.37.0,<1",
+    "config",
+    "controller",
+    "media-profiles",
+    "task-manager",
+    "ytdlp-client",
+]
+
+[project.scripts]
+backend-api = "backend.__main__:main"
+
+[build-system]
+requires = ["uv_build>=0.8.17,<0.9.0"]
+build-backend = "uv_build"

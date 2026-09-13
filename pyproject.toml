@@ -1,0 +1,31 @@
+[project]
+name = "VodLoft"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "backend",
+    "config",
+    "controller",
+    "media-profiles",
+    "task-manager",
+    "ytdlp-client",
+]
+
+[tool.uv.workspace]
+members = ["server/*"]
+
+[tool.uv.sources]
+backend = { workspace = true }
+config = { workspace = true }
+controller = { workspace = true }
+media-profiles = { workspace = true }
+task-manager = { workspace = true }
+ytdlp-client = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4,<9",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit"]

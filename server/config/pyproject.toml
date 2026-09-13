@@ -1,0 +1,13 @@
+[project]
+name = "config"
+version = "0.1.0"
+description = "VodLoft YAML configuration"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "pydantic>=2.11.9,<3",
+    "PyYAML>=6.0.2,<7",
+]
+
+[build-system]
+requires = ["uv_build>=0.8.17,<0.9.0"]
+build-backend = "uv_build"
