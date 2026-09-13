@@ -48,6 +48,16 @@ class Collection(Base, TimestampMixin):
         back_populates="collections",
         lazy="selectin",
     )
+    download_profiles: Mapped[list["DownloadProfile"]] = relationship(
+        back_populates="collection",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    stream_profiles: Mapped[list["StreamProfile"]] = relationship(
+        back_populates="collection",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
 
 
 class Video(Base, TimestampMixin):
@@ -68,13 +78,15 @@ class Video(Base, TimestampMixin):
     upload_date: Mapped[date | None] = mapped_column(nullable=True)
     thumbnail_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     standalone: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
-    downloaded_path: Mapped[str | None] = mapped_column(Text, nullable=True)
-    downloaded_format: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    downloaded_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
     collections: Mapped[list[Collection]] = relationship(
         secondary=collection_videos,
         back_populates="videos",
+        lazy="selectin",
+    )
+    media_downloads: Mapped[list["MediaDownload"]] = relationship(
+        back_populates="video",
+        cascade="all, delete-orphan",
         lazy="selectin",
     )
 
@@ -83,26 +95,35 @@ class LocalMediaProfile(Base, TimestampMixin):
     __tablename__ = "local_media_profiles"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    slug: Mapped[str | None] = mapped_column(String(128), unique=True, nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(128), unique=True)
+    scope: Mapped[str] = mapped_column(String(16), default="video", index=True)
     media_kind: Mapped[str] = mapped_column(String(16))
     output_template: Mapped[str] = mapped_column(Text)
-
-    download_profiles: Mapped[list["DownloadProfile"]] = relationship(back_populates="local_media_profile")
-
-
-class DownloadProfile(Base, TimestampMixin):
-    __tablename__ = "download_profiles"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(128), unique=True)
-    local_media_profile_id: Mapped[int] = mapped_column(ForeignKey("local_media_profiles.id"))
-    format_selector: Mapped[str] = mapped_column(Text, default="bestvideo*+bestaudio/best")
+    preferred_format: Mapped[str] = mapped_column(Text, default="bestvideo*+bestaudio/best")
     merge_output_format: Mapped[str | None] = mapped_column(String(32), nullable=True)
     audio_format: Mapped[str | None] = mapped_column(String(32), nullable=True)
     write_subtitles: Mapped[bool] = mapped_column(Boolean, default=False)
     embed_metadata: Mapped[bool] = mapped_column(Boolean, default=True)
     embed_thumbnail: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    download_profiles: Mapped[list["DownloadProfile"]] = relationship(back_populates="local_media_profile")
+    media_downloads: Mapped[list["MediaDownload"]] = relationship(back_populates="local_media_profile")
+
+
+class DownloadProfile(Base, TimestampMixin):
+    __tablename__ = "download_profiles"
+    __table_args__ = (
+        UniqueConstraint("collection_id", "local_media_profile_id", name="uq_download_profile_collection_media"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(128), unique=True)
+    collection_id: Mapped[int | None] = mapped_column(ForeignKey("collections.id", ondelete="CASCADE"), nullable=True, index=True)
+    local_media_profile_id: Mapped[int] = mapped_column(ForeignKey("local_media_profiles.id"))
+    enable_profile: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    collection: Mapped[Collection | None] = relationship(back_populates="download_profiles")
     local_media_profile: Mapped[LocalMediaProfile] = relationship(back_populates="download_profiles", lazy="joined")
 
 
@@ -111,7 +132,32 @@ class StreamProfile(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(128), unique=True)
+    collection_id: Mapped[int | None] = mapped_column(ForeignKey("collections.id", ondelete="CASCADE"), nullable=True, index=True)
+    enable_profile: Mapped[bool] = mapped_column(Boolean, default=True)
+    use_downloads: Mapped[bool] = mapped_column(Boolean, default=False)
     format_selector: Mapped[str] = mapped_column(
         Text,
         default="best[protocol^=http][vcodec!=none][acodec!=none]/best",
     )
+
+    collection: Mapped[Collection | None] = relationship(back_populates="stream_profiles")
+
+
+class MediaDownload(Base, TimestampMixin):
+    __tablename__ = "media_downloads"
+    __table_args__ = (
+        UniqueConstraint("video_id", "local_media_profile_id", name="uq_media_download_video_profile"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    video_id: Mapped[int] = mapped_column(ForeignKey("videos.id", ondelete="CASCADE"), index=True)
+    local_media_profile_id: Mapped[int] = mapped_column(ForeignKey("local_media_profiles.id"), index=True)
+    status: Mapped[str] = mapped_column(String(32), default="queued", index=True)
+    file_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    downloaded_bytes: Mapped[int | None] = mapped_column(nullable=True)
+    format_downloaded: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    downloaded_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+    video: Mapped[Video] = relationship(back_populates="media_downloads")
+    local_media_profile: Mapped[LocalMediaProfile] = relationship(back_populates="media_downloads", lazy="joined")

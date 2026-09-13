@@ -5,6 +5,8 @@ from datetime import date, datetime
 from media_profiles import CollectionKind
 from pydantic import BaseModel, ConfigDict, Field
 
+from .media_downloads import MediaDownloadRead
+
 
 class CollectionCreate(BaseModel):
     url: str
@@ -30,9 +32,7 @@ class VideoRead(BaseModel):
     upload_date: date | None
     thumbnail_url: str | None
     standalone: bool
-    downloaded_path: str | None
-    downloaded_format: str | None
-    downloaded_at: datetime | None
+    media_downloads: list[MediaDownloadRead] = Field(default_factory=list)
 
 
 class CollectionRead(BaseModel):

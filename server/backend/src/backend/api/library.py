@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -7,8 +7,16 @@ from controller.workers import queue_download, queue_sync, resolve_stream
 from ytdlp_client import YtDlpClient
 
 from backend.db import get_session
-from backend.db.models import Collection, Video
-from backend.schemas import CollectionCreate, CollectionRead, SourceInspection, TaskRead, VideoCreate, VideoRead
+from backend.db.models import Collection, LocalMediaProfile, Video
+from backend.schemas import (
+    CollectionCreate,
+    CollectionRead,
+    SourceInspection,
+    TaskRead,
+    VideoCreate,
+    VideoDownloadCreate,
+    VideoRead,
+)
 from backend.schemas.tasks import task_read
 from backend.services.library import add_collection, add_video, detect_collection_kind
 
@@ -21,7 +29,11 @@ def _client() -> YtDlpClient:
 
 @router.get("/collections", response_model=list[CollectionRead])
 def list_collections(session: Session = Depends(get_session)):
-    statement = select(Collection).options(selectinload(Collection.videos)).order_by(Collection.title)
+    statement = (
+        select(Collection)
+        .options(selectinload(Collection.videos).selectinload(Video.media_downloads))
+        .order_by(Collection.title)
+    )
     return list(session.scalars(statement).unique())
 
 
@@ -42,7 +54,7 @@ def sync_collection_route(collection_id: int, session: Session = Depends(get_ses
 
 @router.get("/videos", response_model=list[VideoRead])
 def list_videos(standalone_only: bool = False, session: Session = Depends(get_session)):
-    statement = select(Video)
+    statement = select(Video).options(selectinload(Video.media_downloads))
     if standalone_only:
         statement = statement.where(Video.standalone.is_(True))
     statement = statement.order_by(Video.upload_date.desc().nullslast(), Video.id.desc())
@@ -58,14 +70,27 @@ def create_video(payload: VideoCreate, session: Session = Depends(get_session)):
 
 
 @router.post("/videos/{video_id}/download", response_model=TaskRead, status_code=202)
-def start_download(video_id: int, profile_id: int = Query(..., gt=0), session: Session = Depends(get_session)):
-    if session.get(Video, video_id) is None:
+def start_download(
+    video_id: int,
+    payload: VideoDownloadCreate,
+    session: Session = Depends(get_session),
+):
+    video = session.get(Video, video_id)
+    if video is None:
         raise HTTPException(status_code=404, detail="Video not found")
-    return task_read(queue_download(video_id, profile_id))
+    profile = session.get(LocalMediaProfile, payload.local_media_profile_id)
+    if profile is None:
+        raise HTTPException(status_code=422, detail="Local media profile not found")
+    if video.standalone and profile.scope != "video":
+        raise HTTPException(status_code=422, detail="Standalone videos require a video local media profile")
+    try:
+        return task_read(queue_download(video_id, profile.id))
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/videos/{video_id}/stream")
-def get_stream(video_id: int, profile_id: int = Query(..., gt=0)):
+def get_stream(video_id: int, profile_id: int):
     try:
         return resolve_stream(video_id, profile_id).model_dump()
     except LookupError as exc:

@@ -1,3 +1,3 @@
-from .models import CollectionKind, MediaKind
+from .models import CollectionKind, LocalMediaScope, MediaKind
 
-__all__ = ["CollectionKind", "MediaKind"]
+__all__ = ["CollectionKind", "LocalMediaScope", "MediaKind"]

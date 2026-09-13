@@ -1,0 +1,12 @@
+database_url: sqlite:////config/vodloft.db
+download_root: /downloads
+worker_threads: 3
+
+scheduler:
+  enabled: true
+  collection_sync_interval_minutes: 30
+
+yt_dlp:
+  # Any YoutubeDL option can be placed here. Examples include cookies,
+  # extractor_args, rate limits and sleep settings.
+  options: {}
