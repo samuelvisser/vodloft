@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from sqlalchemy import select
+
 from backend.db import SessionLocal
+from backend.db.models import MediaDownload, TaskRun
 from backend.services.downloads import download_video, ensure_media_download
 from config import get_settings
 from task_manager.registry import on_event, task
@@ -9,6 +12,24 @@ from ytdlp_client import YtDlpClient
 
 def _client() -> YtDlpClient:
     return YtDlpClient(get_settings().yt_dlp.options)
+
+
+def _terminal_download(run_id: int, status: str) -> None:
+    """Keep the media ledger consistent even if a run never enters the worker."""
+    if status not in {"canceled", "failed"}:
+        return
+    with SessionLocal() as session:
+        artifact = session.scalar(select(MediaDownload).where(MediaDownload.task_run_id == run_id))
+        if artifact is None or artifact.status not in {"queued", "downloading"}:
+            return
+        run = session.get(TaskRun, run_id)
+        if status == "canceled":
+            artifact.status = "cancelled"
+            artifact.error = "Cancelled"
+        else:
+            artifact.status = "failed"
+            artifact.error = (run.last_error if run is not None else None) or "Task failed"
+        session.commit()
 
 
 def _progress(context, event: dict) -> None:
@@ -31,6 +52,7 @@ def _progress(context, event: dict) -> None:
     allowed_resource_types=("video",),
     tracks_progress=True,
     max_concurrency=get_settings().task_manager.download_max_concurrency,
+    terminal_callback=_terminal_download,
 )
 def download_video_worker(context, _resource_type: str, video_id: int, payload: dict):
     local_media_profile_id = int(payload.get("local_media_profile_id") or 0)
@@ -54,6 +76,7 @@ def download_video_worker(context, _resource_type: str, video_id: int, payload: 
             video_id,
             local_media_profile_id,
             progress_hook=lambda event: _progress(context, event),
+            cancellation_check=context.check_cancelled,
         )
     context.report(100, "Downloaded")
     context.emit(

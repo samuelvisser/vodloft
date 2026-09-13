@@ -38,6 +38,9 @@ def ensure_media_download(
         artifact.status = "queued"
         artifact.error = None
         artifact.downloaded_bytes = None
+        artifact.file_path = None
+        artifact.format_downloaded = None
+        artifact.downloaded_at = None
     return artifact
 
 
@@ -47,6 +50,7 @@ def download_video(
     video_id: int,
     local_media_profile_id: int,
     progress_hook=None,
+    cancellation_check=None,
 ) -> dict[str, str | int | None]:
     video = session.get(Video, video_id)
     profile = session.get(LocalMediaProfile, local_media_profile_id)
@@ -86,9 +90,19 @@ def download_video(
             ),
             progress_hook=on_progress,
         )
+        if cancellation_check is not None:
+            cancellation_check()
     except TaskCancelled:
-        artifact.status = "cancelled"
-        artifact.error = "Cancelled"
+        # A stalled-run reconciler may already have finalized this artifact in
+        # another session while yt-dlp was blocked. Refresh before deciding
+        # whether cancellation should replace that terminal state.
+        try:
+            session.refresh(artifact)
+        except Exception:
+            pass
+        if artifact.status not in {"failed", "cancelled"}:
+            artifact.status = "cancelled"
+            artifact.error = "Cancelled"
         session.commit()
         raise
     except Exception as exc:
