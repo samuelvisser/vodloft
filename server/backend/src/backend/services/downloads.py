@@ -10,13 +10,10 @@ from task_manager import TaskCancelled
 from ytdlp_client import DownloadOptions, YtDlpClient
 
 from backend.db.models import LocalMediaProfile, MediaDownload, Video
+from backend.services.templates import ensure_unique_output_template
 
 
-def get_media_download(
-    session: Session,
-    video_id: int,
-    local_media_profile_id: int,
-) -> MediaDownload | None:
+def get_media_download(session: Session, video_id: int, local_media_profile_id: int) -> MediaDownload | None:
     return session.scalar(
         select(MediaDownload).where(
             MediaDownload.video_id == video_id,
@@ -34,17 +31,16 @@ def ensure_media_download(
 ) -> MediaDownload:
     artifact = get_media_download(session, video_id, local_media_profile_id)
     if artifact is None:
-        artifact = MediaDownload(
-            video_id=video_id,
-            local_media_profile_id=local_media_profile_id,
-            status="queued",
-        )
+        artifact = MediaDownload(video_id=video_id, local_media_profile_id=local_media_profile_id, status="queued")
         session.add(artifact)
         session.flush()
     elif reset:
         artifact.status = "queued"
         artifact.error = None
         artifact.downloaded_bytes = None
+        artifact.file_path = None
+        artifact.format_downloaded = None
+        artifact.downloaded_at = None
     return artifact
 
 
@@ -54,6 +50,7 @@ def download_video(
     video_id: int,
     local_media_profile_id: int,
     progress_hook=None,
+    cancellation_check=None,
 ) -> dict[str, str | int | None]:
     video = session.get(Video, video_id)
     profile = session.get(LocalMediaProfile, local_media_profile_id)
@@ -67,7 +64,7 @@ def download_video(
     artifact.error = None
     session.commit()
 
-    template = profile.output_template
+    template = ensure_unique_output_template(profile.output_template)
     settings = get_settings()
     if template.startswith("/downloads/") and settings.download_root != "/downloads":
         template = settings.download_root.rstrip("/") + template[len("/downloads"):]
@@ -93,9 +90,19 @@ def download_video(
             ),
             progress_hook=on_progress,
         )
+        if cancellation_check is not None:
+            cancellation_check()
     except TaskCancelled:
-        artifact.status = "cancelled"
-        artifact.error = "Cancelled"
+        # A stalled-run reconciler may already have finalized this artifact in
+        # another session while yt-dlp was blocked. Refresh before deciding
+        # whether cancellation should replace that terminal state.
+        try:
+            session.refresh(artifact)
+        except Exception:
+            pass
+        if artifact.status not in {"failed", "cancelled"}:
+            artifact.status = "cancelled"
+            artifact.error = "Cancelled"
         session.commit()
         raise
     except Exception as exc:
@@ -116,8 +123,4 @@ def download_video(
             pass
     session.commit()
     session.refresh(artifact)
-    return {
-        "media_download_id": artifact.id,
-        "path": artifact.file_path,
-        "format": artifact.format_downloaded,
-    }
+    return {"media_download_id": artifact.id, "path": artifact.file_path, "format": artifact.format_downloaded}

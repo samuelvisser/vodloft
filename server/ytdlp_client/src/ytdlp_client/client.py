@@ -100,11 +100,24 @@ class YtDlpClient:
             raise ValueError("URL resolved to a collection; add it as a channel or playlist")
         return self._video_from_info(info, url)
 
-    def extract_collection(self, url: str, *, flat: bool = True) -> ExtractedCollection:
+    def extract_collection(
+        self,
+        url: str,
+        *,
+        flat: bool = True,
+        max_entries: int | None = None,
+    ) -> ExtractedCollection:
+        """Extract a normalized collection through yt-dlp.
+
+        ``max_entries`` is used for cheap metadata inspection while adding a
+        collection. Full membership discovery is intentionally left to the
+        registered collection-synchronization worker.
+        """
         options = self._options(
             noplaylist=False,
             extract_flat="in_playlist" if flat else False,
             skip_download=True,
+            playlistend=max_entries,
         )
         with YoutubeDL(options) as ydl:
             info = self._sanitize(ydl, ydl.extract_info(url, download=False))

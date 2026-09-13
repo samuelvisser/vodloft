@@ -1,0 +1,88 @@
+from __future__ import annotations
+
+from sqlalchemy import select
+
+from backend.db import SessionLocal
+from backend.db.models import MediaDownload, TaskRun
+from backend.services.downloads import download_video, ensure_media_download
+from config import get_settings
+from task_manager.registry import on_event, task
+from ytdlp_client import YtDlpClient
+
+
+def _client() -> YtDlpClient:
+    return YtDlpClient(get_settings().yt_dlp.options)
+
+
+def _terminal_download(run_id: int, status: str) -> None:
+    """Keep the media ledger consistent even if a run never enters the worker."""
+    if status not in {"canceled", "failed"}:
+        return
+    with SessionLocal() as session:
+        artifact = session.scalar(select(MediaDownload).where(MediaDownload.task_run_id == run_id))
+        if artifact is None or artifact.status not in {"queued", "downloading"}:
+            return
+        run = session.get(TaskRun, run_id)
+        if status == "canceled":
+            artifact.status = "cancelled"
+            artifact.error = "Cancelled"
+        else:
+            artifact.status = "failed"
+            artifact.error = (run.last_error if run is not None else None) or "Task failed"
+        session.commit()
+
+
+def _progress(context, event: dict) -> None:
+    context.check_cancelled()
+    status = event.get("status")
+    if status == "downloading":
+        downloaded = int(event.get("downloaded_bytes") or 0)
+        total = int(event.get("total_bytes") or event.get("total_bytes_estimate") or 0)
+        progress = int(downloaded * 100 / total) if total else 0
+        context.report(min(progress, 98), "Downloading")
+    elif status == "finished":
+        context.report(99, "Post-processing")
+
+
+@on_event("video.download.requested", resource_type="video")
+@task(
+    "video.download",
+    "Download video",
+    "Runs a video download through yt-dlp using a Local Media Profile.",
+    allowed_resource_types=("video",),
+    tracks_progress=True,
+    max_concurrency=get_settings().task_manager.download_max_concurrency,
+    terminal_callback=_terminal_download,
+)
+def download_video_worker(context, _resource_type: str, video_id: int, payload: dict):
+    local_media_profile_id = int(payload.get("local_media_profile_id") or 0)
+    if local_media_profile_id <= 0:
+        raise ValueError("local_media_profile_id is required")
+    reset_artifact = bool(payload.get("reset_artifact", False))
+
+    context.report(1, "Preparing download")
+    with SessionLocal() as session:
+        artifact = ensure_media_download(
+            session,
+            video_id,
+            local_media_profile_id,
+            reset=reset_artifact,
+        )
+        artifact.task_run_id = context.run_id
+        session.commit()
+        result = download_video(
+            session,
+            _client(),
+            video_id,
+            local_media_profile_id,
+            progress_hook=lambda event: _progress(context, event),
+            cancellation_check=context.check_cancelled,
+        )
+    context.report(100, "Downloaded")
+    context.emit(
+        "video.downloaded",
+        resource_type="video",
+        resource_id=video_id,
+        payload={"local_media_profile_id": local_media_profile_id, **result},
+    )
+    return result

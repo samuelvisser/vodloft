@@ -6,20 +6,24 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from task_manager import emit_event
 
 from backend.db import get_session
 from backend.db.models import Collection, DownloadProfile, LocalMediaProfile, StreamProfile
-from backend.schemas import (
+from backend.schemas.profiles import (
     DownloadProfileCreate,
     DownloadProfileRead,
     DownloadProfileUpdate,
     LocalMediaProfileCreate,
     LocalMediaProfileRead,
     LocalMediaProfileUpdate,
+    OutputTemplatePreviewRead,
+    OutputTemplatePreviewRequest,
     StreamProfileCreate,
     StreamProfileRead,
     StreamProfileUpdate,
 )
+from backend.services.templates import ensure_unique_output_template, preview_output_template, validate_output_template
 
 router = APIRouter(prefix="/profiles", tags=["profiles"])
 
@@ -64,6 +68,25 @@ def _delete(session: Session, obj) -> Response:
     return Response(status_code=204)
 
 
+def _validate_template(value: str) -> None:
+    try:
+        validate_output_template(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/local-media/template-preview", response_model=OutputTemplatePreviewRead)
+def preview_local_media_template(payload: OutputTemplatePreviewRequest):
+    try:
+        return OutputTemplatePreviewRead(
+            valid=True,
+            normalized_template=ensure_unique_output_template(payload.output_template),
+            example_output=preview_output_template(payload.output_template),
+        )
+    except ValueError as exc:
+        return OutputTemplatePreviewRead(valid=False, error=str(exc))
+
+
 @router.get("/local-media", response_model=list[LocalMediaProfileRead])
 def list_local_media_profiles(scope: str | None = None, session: Session = Depends(get_session)):
     statement = select(LocalMediaProfile)
@@ -74,17 +97,16 @@ def list_local_media_profiles(scope: str | None = None, session: Session = Depen
 
 @router.post("/local-media", response_model=LocalMediaProfileRead, status_code=201)
 def create_local_media_profile(payload: LocalMediaProfileCreate, session: Session = Depends(get_session)):
+    _validate_template(payload.output_template)
     values = payload.model_dump(mode="json")
     profile = LocalMediaProfile(slug=_available_slug(session, payload.name), **values)
-    return _commit(session, profile, conflict="A local media profile with that name already exists")
+    profile = _commit(session, profile, conflict="A local media profile with that name already exists")
+    emit_event("local_media_profile.added", resource_type="local_media_profile", resource_id=profile.id)
+    return profile
 
 
 @router.put("/local-media/{profile_id}", response_model=LocalMediaProfileRead)
-def update_local_media_profile(
-    profile_id: int,
-    payload: LocalMediaProfileUpdate,
-    session: Session = Depends(get_session),
-):
+def update_local_media_profile(profile_id: int, payload: LocalMediaProfileUpdate, session: Session = Depends(get_session)):
     profile = session.get(LocalMediaProfile, profile_id)
     if profile is None:
         raise HTTPException(status_code=404, detail="Local media profile not found")
@@ -93,11 +115,15 @@ def update_local_media_profile(
     future_kind = changes.get("media_kind", profile.media_kind)
     if future_scope == "video" and future_kind != "video":
         raise HTTPException(status_code=422, detail="Standalone-video local media profiles must use video media kind")
+    if "output_template" in changes:
+        _validate_template(changes["output_template"])
     if "name" in changes and changes["name"] != profile.name:
         profile.slug = _available_slug(session, changes["name"], exclude_id=profile.id)
     for key, value in changes.items():
         setattr(profile, key, value)
-    return _commit(session, profile, conflict="A local media profile with that name already exists")
+    profile = _commit(session, profile, conflict="A local media profile with that name already exists")
+    emit_event("local_media_profile.updated", resource_type="local_media_profile", resource_id=profile.id)
+    return profile
 
 
 @router.delete("/local-media/{profile_id}", status_code=204)
@@ -121,23 +147,20 @@ def create_download_profile(payload: DownloadProfileCreate, session: Session = D
     if session.get(Collection, payload.collection_id) is None:
         raise HTTPException(status_code=422, detail="Collection does not exist")
     local = session.get(LocalMediaProfile, payload.local_media_profile_id)
-    if local is None:
-        raise HTTPException(status_code=422, detail="Local media profile does not exist")
-    if local.scope != "collection":
+    if local is None or local.scope != "collection":
         raise HTTPException(status_code=422, detail="Download profiles require a collection local media profile")
-    return _commit(
+    profile = _commit(
         session,
         DownloadProfile(**payload.model_dump()),
         conflict="A download profile with that name or local media profile already exists for this collection",
     )
+    if profile.enable_profile:
+        emit_event("download_profile.changed", resource_type="collection", resource_id=profile.collection_id)
+    return profile
 
 
 @router.put("/downloads/{profile_id}", response_model=DownloadProfileRead)
-def update_download_profile(
-    profile_id: int,
-    payload: DownloadProfileUpdate,
-    session: Session = Depends(get_session),
-):
+def update_download_profile(profile_id: int, payload: DownloadProfileUpdate, session: Session = Depends(get_session)):
     profile = session.get(DownloadProfile, profile_id)
     if profile is None:
         raise HTTPException(status_code=404, detail="Download profile not found")
@@ -148,7 +171,10 @@ def update_download_profile(
             raise HTTPException(status_code=422, detail="Download profiles require a collection local media profile")
     for key, value in changes.items():
         setattr(profile, key, value)
-    return _commit(session, profile, conflict="Download profile conflicts with an existing profile")
+    profile = _commit(session, profile, conflict="Download profile conflicts with an existing profile")
+    if profile.enable_profile:
+        emit_event("download_profile.changed", resource_type="collection", resource_id=profile.collection_id)
+    return profile
 
 
 @router.delete("/downloads/{profile_id}", status_code=204)
@@ -171,19 +197,11 @@ def list_stream_profiles(collection_id: int | None = None, session: Session = De
 def create_stream_profile(payload: StreamProfileCreate, session: Session = Depends(get_session)):
     if session.get(Collection, payload.collection_id) is None:
         raise HTTPException(status_code=422, detail="Collection does not exist")
-    return _commit(
-        session,
-        StreamProfile(**payload.model_dump()),
-        conflict="A stream profile with that name already exists",
-    )
+    return _commit(session, StreamProfile(**payload.model_dump()), conflict="A stream profile with that name already exists")
 
 
 @router.put("/streams/{profile_id}", response_model=StreamProfileRead)
-def update_stream_profile(
-    profile_id: int,
-    payload: StreamProfileUpdate,
-    session: Session = Depends(get_session),
-):
+def update_stream_profile(profile_id: int, payload: StreamProfileUpdate, session: Session = Depends(get_session)):
     profile = session.get(StreamProfile, profile_id)
     if profile is None:
         raise HTTPException(status_code=404, detail="Stream profile not found")
