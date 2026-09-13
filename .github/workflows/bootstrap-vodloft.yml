@@ -1,0 +1,37 @@
+name: Bootstrap VodLoft from WireLoft
+
+on:
+  push:
+    paths:
+      - .github/workflows/bootstrap-vodloft.yml
+
+permissions:
+  contents: write
+
+jobs:
+  import-wireloft:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out VodLoft
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Import exact WireLoft develop snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_SHA="fd13eda43a9f74f447b26bd777b572a15e654e4a"
+          git clone --quiet https://github.com/samuelvisser/wireloft.git /tmp/wireloft
+          git -C /tmp/wireloft checkout --quiet "$SOURCE_SHA"
+          rsync -a --delete \
+            --exclude='.git' \
+            --exclude='.github/workflows/bootstrap-vodloft.yml' \
+            /tmp/wireloft/ ./
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Import WireLoft develop ${SOURCE_SHA} as VodLoft baseline"
+          git push
