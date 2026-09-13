@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
-from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, Column, Float, ForeignKey, Integer, String, Table, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -68,6 +67,7 @@ class Video(Base, TimestampMixin):
     duration: Mapped[float | None] = mapped_column(Float, nullable=True)
     upload_date: Mapped[date | None] = mapped_column(nullable=True)
     thumbnail_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    standalone: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     downloaded_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     downloaded_format: Mapped[str | None] = mapped_column(String(128), nullable=True)
     downloaded_at: Mapped[datetime | None] = mapped_column(nullable=True)

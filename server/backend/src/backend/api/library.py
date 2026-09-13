@@ -41,8 +41,12 @@ def sync_collection_route(collection_id: int, session: Session = Depends(get_ses
 
 
 @router.get("/videos", response_model=list[VideoRead])
-def list_videos(session: Session = Depends(get_session)):
-    return list(session.scalars(select(Video).order_by(Video.upload_date.desc().nullslast(), Video.id.desc())))
+def list_videos(standalone_only: bool = False, session: Session = Depends(get_session)):
+    statement = select(Video)
+    if standalone_only:
+        statement = statement.where(Video.standalone.is_(True))
+    statement = statement.order_by(Video.upload_date.desc().nullslast(), Video.id.desc())
+    return list(session.scalars(statement))
 
 
 @router.post("/videos", response_model=VideoRead, status_code=201)
@@ -74,6 +78,8 @@ def get_stream(video_id: int, profile_id: int = Query(..., gt=0)):
 def inspect_source(payload: VideoCreate):
     client = _client()
     try:
+        data = client.extract_collection(payload.url, flat=True)
+    except ValueError:
         video = client.extract_video(payload.url)
         return SourceInspection(
             kind="video",
@@ -82,14 +88,12 @@ def inspect_source(payload: VideoCreate):
             extractor_id=video.extractor_id,
             url=video.webpage_url,
         )
-    except ValueError:
-        data = client.extract_collection(payload.url, flat=True)
-        kind = detect_collection_kind(payload.url, data)
-        return SourceInspection(
-            kind=kind,
-            title=data.title,
-            extractor=data.extractor,
-            extractor_id=data.extractor_id,
-            url=data.webpage_url,
-            entry_count=len(data.entries),
-        )
+    kind = detect_collection_kind(payload.url, data)
+    return SourceInspection(
+        kind=kind,
+        title=data.title,
+        extractor=data.extractor,
+        extractor_id=data.extractor_id,
+        url=data.webpage_url,
+        entry_count=len(data.entries),
+    )

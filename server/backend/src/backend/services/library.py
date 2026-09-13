@@ -51,6 +51,7 @@ def upsert_video(session: Session, data: ExtractedVideo) -> Video:
 
 def add_video(session: Session, client: YtDlpClient, url: str) -> Video:
     video = upsert_video(session, client.extract_video(url))
+    video.standalone = True
     session.commit()
     session.refresh(video)
     return video

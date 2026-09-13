@@ -29,6 +29,7 @@ class VideoRead(BaseModel):
     duration: float | None
     upload_date: date | None
     thumbnail_url: str | None
+    standalone: bool
     downloaded_path: str | None
     downloaded_format: str | None
     downloaded_at: datetime | None

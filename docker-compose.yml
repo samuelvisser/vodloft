@@ -1,0 +1,20 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: .docker/backend.Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - ./downloads:/downloads
+      - ./config/config.yml:/app/config/config.yml:ro
+
+  ui:
+    build:
+      context: .
+      dockerfile: .docker/ui.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3004:80"
