@@ -35,11 +35,30 @@ class LocalMediaProfileUpdate(BaseModel):
     embed_metadata: bool | None = None
     embed_thumbnail: bool | None = None
 
+    @model_validator(mode="after")
+    def reject_null_required_fields(self):
+        required = {"name", "scope", "media_kind", "output_template", "preferred_format", "write_subtitles", "embed_metadata", "embed_thumbnail"}
+        for field in self.model_fields_set & required:
+            if getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
+        return self
+
 
 class LocalMediaProfileRead(LocalMediaProfileCreate):
     model_config = ConfigDict(from_attributes=True)
     id: int
     slug: str | None
+
+
+class OutputTemplatePreviewRequest(BaseModel):
+    output_template: str
+
+
+class OutputTemplatePreviewRead(BaseModel):
+    valid: bool
+    normalized_template: str | None = None
+    example_output: str | None = None
+    error: str | None = None
 
 
 class DownloadProfileCreate(BaseModel):
@@ -53,6 +72,13 @@ class DownloadProfileUpdate(BaseModel):
     name: str | None = None
     local_media_profile_id: int | None = None
     enable_profile: bool | None = None
+
+    @model_validator(mode="after")
+    def reject_null_required_fields(self):
+        for field in self.model_fields_set:
+            if getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
+        return self
 
 
 class DownloadProfileRead(DownloadProfileCreate):
@@ -73,6 +99,13 @@ class StreamProfileUpdate(BaseModel):
     enable_profile: bool | None = None
     use_downloads: bool | None = None
     format_selector: str | None = None
+
+    @model_validator(mode="after")
+    def reject_null_required_fields(self):
+        for field in self.model_fields_set:
+            if getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
+        return self
 
 
 class StreamProfileRead(StreamProfileCreate):

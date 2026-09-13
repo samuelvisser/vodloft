@@ -1,10 +1,14 @@
 [project]
 name = "task-manager"
-version = "0.1.0"
-description = "Provider-independent background task and scheduling primitives for VodLoft"
+version = "0.2.0"
+description = "Durable task scheduling, event dispatch and worker execution for VodLoft"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-    "APScheduler>=3.11,<4",
+    "APScheduler>=3.11.0,<4",
+    "SQLAlchemy>=2.0.43,<3",
+    "backend",
+    "config",
+    "ytdlp-client",
 ]
 
 [build-system]

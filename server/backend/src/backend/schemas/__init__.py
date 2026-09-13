@@ -11,12 +11,25 @@ from .profiles import (
     StreamProfileRead,
     StreamProfileUpdate,
 )
-from .tasks import TaskRead
+from .tasks import TaskRead, TaskRunRead
 
 __all__ = [
-    "CollectionCreate", "CollectionRead", "DownloadProfileCreate", "DownloadProfileRead",
-    "DownloadProfileUpdate", "LocalMediaProfileCreate", "LocalMediaProfileRead",
-    "LocalMediaProfileUpdate", "MediaDownloadRead", "SourceInspection", "StreamProfileCreate",
-    "StreamProfileRead", "StreamProfileUpdate", "TaskRead", "VideoCreate", "VideoDownloadCreate",
+    "CollectionCreate",
+    "CollectionRead",
+    "DownloadProfileCreate",
+    "DownloadProfileRead",
+    "DownloadProfileUpdate",
+    "LocalMediaProfileCreate",
+    "LocalMediaProfileRead",
+    "LocalMediaProfileUpdate",
+    "MediaDownloadRead",
+    "SourceInspection",
+    "StreamProfileCreate",
+    "StreamProfileRead",
+    "StreamProfileUpdate",
+    "TaskRead",
+    "TaskRunRead",
+    "VideoCreate",
+    "VideoDownloadCreate",
     "VideoRead",
 ]

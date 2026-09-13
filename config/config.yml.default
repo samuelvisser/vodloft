@@ -1,10 +1,18 @@
 database_url: sqlite:////config/vodloft.db
 download_root: /downloads
-worker_threads: 3
+worker_threads: 5
 
 scheduler:
   enabled: true
   collection_sync_interval_minutes: 30
+  verification_interval_minutes: 120
+
+task_manager:
+  default_max_retries: 3
+  retry_backoff_base_seconds: 5
+  retry_backoff_max_seconds: 300
+  stalled_timeout_minutes: 20
+  download_max_concurrency: 3
 
 yt_dlp:
   # Any YoutubeDL option can be placed here. Examples include cookies,

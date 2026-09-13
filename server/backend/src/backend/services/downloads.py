@@ -10,13 +10,10 @@ from task_manager import TaskCancelled
 from ytdlp_client import DownloadOptions, YtDlpClient
 
 from backend.db.models import LocalMediaProfile, MediaDownload, Video
+from backend.services.templates import ensure_unique_output_template
 
 
-def get_media_download(
-    session: Session,
-    video_id: int,
-    local_media_profile_id: int,
-) -> MediaDownload | None:
+def get_media_download(session: Session, video_id: int, local_media_profile_id: int) -> MediaDownload | None:
     return session.scalar(
         select(MediaDownload).where(
             MediaDownload.video_id == video_id,
@@ -34,11 +31,7 @@ def ensure_media_download(
 ) -> MediaDownload:
     artifact = get_media_download(session, video_id, local_media_profile_id)
     if artifact is None:
-        artifact = MediaDownload(
-            video_id=video_id,
-            local_media_profile_id=local_media_profile_id,
-            status="queued",
-        )
+        artifact = MediaDownload(video_id=video_id, local_media_profile_id=local_media_profile_id, status="queued")
         session.add(artifact)
         session.flush()
     elif reset:
@@ -67,7 +60,7 @@ def download_video(
     artifact.error = None
     session.commit()
 
-    template = profile.output_template
+    template = ensure_unique_output_template(profile.output_template)
     settings = get_settings()
     if template.startswith("/downloads/") and settings.download_root != "/downloads":
         template = settings.download_root.rstrip("/") + template[len("/downloads"):]
@@ -116,8 +109,4 @@ def download_video(
             pass
     session.commit()
     session.refresh(artifact)
-    return {
-        "media_download_id": artifact.id,
-        "path": artifact.file_path,
-        "format": artifact.format_downloaded,
-    }
+    return {"media_download_id": artifact.id, "path": artifact.file_path, "format": artifact.format_downloaded}

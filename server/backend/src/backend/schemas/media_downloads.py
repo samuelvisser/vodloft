@@ -15,6 +15,7 @@ class MediaDownloadRead(BaseModel):
     format_downloaded: str | None
     error: str | None
     downloaded_at: datetime | None
+    task_run_id: int | None
     created_at: datetime
     updated_at: datetime
 

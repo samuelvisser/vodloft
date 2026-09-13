@@ -23,10 +23,7 @@ def detect_collection_kind(url: str, data: ExtractedCollection) -> CollectionKin
 
 def upsert_video(session: Session, data: ExtractedVideo) -> Video:
     video = session.scalar(
-        select(Video).where(
-            Video.extractor == data.extractor,
-            Video.extractor_id == data.extractor_id,
-        )
+        select(Video).where(Video.extractor == data.extractor, Video.extractor_id == data.extractor_id)
     )
     if video is None:
         video = Video(
@@ -63,7 +60,7 @@ def add_collection(
     url: str,
     requested_kind: CollectionKind | None = None,
 ) -> Collection:
-    data = client.extract_collection(url, flat=True)
+    data = client.extract_collection(url, flat=True, max_entries=1)
     kind = requested_kind or detect_collection_kind(url, data)
     existing = session.scalar(
         select(Collection).where(
@@ -76,7 +73,7 @@ def add_collection(
 
     collection = Collection(
         kind=kind.value,
-        source_url=url,
+        source_url=data.webpage_url or url,
         extractor=data.extractor,
         extractor_id=data.extractor_id,
         title=data.title,
@@ -88,14 +85,13 @@ def add_collection(
         thumbnail_url=data.thumbnail_url,
     )
     session.add(collection)
-    session.flush()
-    _apply_collection_sync(session, collection, data)
     session.commit()
     session.refresh(collection)
     return collection
 
 
 def _apply_collection_sync(session: Session, collection: Collection, data: ExtractedCollection) -> None:
+    collection.source_url = data.webpage_url or collection.source_url
     collection.title = data.title
     collection.description = data.description
     collection.uploader = data.uploader
