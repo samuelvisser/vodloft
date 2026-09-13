@@ -1,6 +1,0 @@
-database_url: sqlite:///./data/vodloft.db
-download_root: /downloads
-worker_threads: 3
-
-yt_dlp:
-  options: {}
