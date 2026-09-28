@@ -14,14 +14,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat .bootstrap/provenance-part-* > "$RUNNER_TEMP/provenance.patch.gz"
-          echo '589b9e1113dca196a8615c36b8c6496a63ac515763745ae3571dfc3854f99304  '"$RUNNER_TEMP/provenance.patch.gz" | sha256sum -c -
-          gzip -dc "$RUNNER_TEMP/provenance.patch.gz" > "$RUNNER_TEMP/provenance.patch"
-          echo '6be1c9f8a2e88a4302c8db59f736e6e2b65c9c620caad6c97e0485cd88100bd1  '"$RUNNER_TEMP/provenance.patch" | sha256sum -c -
+          cat .bootstrap/progress-part-* > "$RUNNER_TEMP/progress.patch.gz"
+          echo '886aed24267ce476b77ec1f3a6166445a940e320e7143597694aad1d2e10bf2b  '"$RUNNER_TEMP/progress.patch.gz" | sha256sum -c -
+          gzip -dc "$RUNNER_TEMP/progress.patch.gz" > "$RUNNER_TEMP/progress.patch"
+          echo 'd3375d34200a798cb016e3b52f3d902c1c75228225697fa1f298a28a67344b47  '"$RUNNER_TEMP/progress.patch" | sha256sum -c -
           git fetch origin codex/vodloft-wireloft-prototype
           git switch -c publish-vodloft FETCH_HEAD
-          git apply --check "$RUNNER_TEMP/provenance.patch"
-          git apply "$RUNNER_TEMP/provenance.patch"
+          git apply --check "$RUNNER_TEMP/progress.patch"
+          git apply "$RUNNER_TEMP/progress.patch"
           git diff --check
           git add -A
           if git diff --cached --name-only | grep -q '^.github/workflows/'; then
@@ -30,5 +30,5 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'Preserve Source provenance and filter Collection feeds'
+          git commit -m 'Report bounded Source download transfer progress'
           git push origin HEAD:refs/heads/codex/vodloft-wireloft-prototype
