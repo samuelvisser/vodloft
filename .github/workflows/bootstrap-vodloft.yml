@@ -1,0 +1,28 @@
+name: Bootstrap VodLoft WireLoft branch
+"on":
+  push:
+    branches:
+      - codex/bootstrap-wireloft-push
+permissions:
+  contents: write
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify and apply VodLoft commits on WireLoft
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .bootstrap/part-* > "$RUNNER_TEMP/vodloft.patch.gz"
+          echo '80ad706f05379056ad24a8ac07bd6866c09bdd3539cab37aad3249ebf2eefe04  '"$RUNNER_TEMP/vodloft.patch.gz" | sha256sum -c -
+          gzip -dc "$RUNNER_TEMP/vodloft.patch.gz" > "$RUNNER_TEMP/vodloft.patch"
+          echo '84bb1a6489d65779c4c6b53caf96fe335f602d3e98cae7866474fe55bed74969  '"$RUNNER_TEMP/vodloft.patch" | sha256sum -c -
+          git remote add wireloft https://github.com/samuelvisser/WireLoft.git
+          git fetch wireloft develop
+          git checkout --detach 7853ee7bdf1137111193932fe9da7e8243442bd5
+          git switch -c codex/vodloft-wireloft-prototype
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git am "$RUNNER_TEMP/vodloft.patch"
+          git push origin HEAD:refs/heads/codex/vodloft-wireloft-prototype
