@@ -1,0 +1,57 @@
+from sqlalchemy import event
+from sqlalchemy.orm import declared_attr, Mapped
+
+from backend.db.models.Metadata import Metadata
+
+
+class HasMetadataMixin:
+    # Create a basic SQLAlchemy relationship to the Metadata table
+    @declared_attr
+    def meta_items(cls) -> Mapped[list[Metadata]]:
+        from sqlalchemy import and_, literal
+        from sqlalchemy.orm import relationship, foreign
+
+        parent_table = getattr(cls, "__metadata_parent_table__", cls.__tablename__)
+        return relationship(
+            Metadata,
+            primaryjoin=lambda: and_(
+                foreign(Metadata.parent_id) == cls.id,
+                Metadata.parent_table == literal(parent_table),
+            ),
+            cascade="all, delete-orphan",
+            lazy="selectin",
+            overlaps="meta_items"
+        )
+
+    def set_meta(self, key: str, value: str | None):
+        for m in self.meta_items:
+            if m.key == key:
+                m.value = value
+                return m
+        m = Metadata(key=key, value=value)
+        self.meta_items.append(m)
+        return m
+
+    def get_meta(self, key: str) -> str | None:
+        for m in self.meta_items:
+            if m.key == key:
+                return m.value
+        return None
+
+def _on_append(parent, meta, initiator):
+    meta.parent_table = getattr(
+        parent,
+        "__metadata_parent_table__",
+        parent.__class__.__tablename__,
+    )
+
+    # If the parent already has a DB identity (it already exists in the db), set it now:
+    if getattr(parent, "id", None) is not None:
+        meta.parent_id = parent.id
+
+
+@event.listens_for(HasMetadataMixin, "mapper_configured", propagate=True)
+def _wire_meta_events(mapper, cls):
+    # cls is now a mapped subclass (e.g., Show, Episode)
+    attr = getattr(cls, "meta_items")     # InstrumentedAttribute
+    event.listen(attr, "append", _on_append, propagate=True)

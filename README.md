@@ -1,72 +1,45 @@
 # VodLoft
 
-VodLoft is a self-hosted video-on-demand library and downloader built around [yt-dlp](https://github.com/yt-dlp/yt-dlp). Its architecture deliberately follows WireLoft so provider-independent code can converge into shared packages.
+VodLoft is a WireLoft-derived local web media manager. Its generic library has separately packaged yt-dlp and Daily Wire Sources; the FastAPI and React layers use a versioned Source contract, Domain-based profiles, durable acquisition jobs and downstream delivery records.
 
-The initial foundation is based on WireLoft `develop` commit `fd13eda43a9f74f447b26bd777b572a15e654e4a`, the current develop snapshot inspected when VodLoft was created. DailyWire-specific integration boundaries are replaced by `ytdlp-client`; provider-independent responsibilities retain the same package-oriented FastAPI/SQLAlchemy/React shape.
+## Baseline and migration
 
-## Domain mapping
+The repository starts from WireLoft `develop` commit `7853ee7bdf1137111193932fe9da7e8243442bd5` (27 September 2026), retaining its history and application structure. The former VodLoft main branch is preserved at `archive/pre-wireloft-rebuild-2026-09-27`.
 
-| WireLoft | VodLoft |
-| --- | --- |
-| Show | Collection |
-| Series / Podcast | Channel / Playlist |
-| Episode | Video in a collection |
-| Movie | Standalone video |
-| DailyWire API/downloader | yt-dlp |
-| Local media profile | Local media profile |
-| Download profile | Collection-scoped download profile |
-| Stream profile | Collection-scoped stream profile |
-| Media download | Media download artifact |
+Alembic migrations add the normalized library alongside inherited WireLoft tables. A background migration maps existing Shows, Episodes, Movies and shared Movie Extras into that library. It also copies available legacy files into VodLoft-owned playback paths while preserving the originals. Existing Daily Wire pages remain available during the transition.
 
-A canonical video can belong to multiple collections. Adding the same source as an individual video marks it as standalone without duplicating the video record.
+## Run locally
 
-## yt-dlp boundary
+Python 3.13, uv, Node.js and FFmpeg are required. From the repository root:
 
-`server/ytdlp_client` is the only package that imports `yt_dlp`. VodLoft calls the supported Python embedding API (`YoutubeDL.extract_info`) for inspection/discovery and download execution. Format selection, extractor behavior, manifests, site support and post-processing remain yt-dlp responsibilities.
-
-`yt_dlp.options` in `config.yml` is passed through to every `YoutubeDL` instance. This is the escape hatch for cookies, extractor arguments, rate limiting, sleep settings and future site-specific requirements without teaching VodLoft about individual websites.
-
-## Profiles
-
-Local media profiles describe a local representation: output template, yt-dlp format selector and post-processing. They have either `collection` or `video` scope. Standalone-video profiles are video-only, matching WireLoft's movie behavior; collection profiles may be video or audio.
-
-Download profiles belong to one channel/playlist and reference a collection-scoped local media profile. Every collection sync discovers metadata through yt-dlp and queues any missing `(video, local media profile)` artifacts for enabled profiles.
-
-Stream profiles also belong to one collection. They resolve a fresh muxed stream through yt-dlp, or can prefer an already-downloaded local artifact.
-
-## Packages
-
-- `server/backend`: FastAPI API, Pydantic API models, SQLAlchemy models and Alembic.
-- `server/controller`: orchestration workers.
-- `server/config`: YAML configuration.
-- `server/ytdlp_client`: thin yt-dlp integration boundary.
-- `server/task_manager`: provider-independent background task execution.
-- `server/media_profiles`: provider-independent profile/domain enums.
-- `ui`: React + TypeScript + Zod frontend.
-
-WireLoft's current `config` and `task-manager` packages still import DailyWire-specific packages, so VodLoft does not depend on them directly. `media_profiles` and the provider-neutral task/config interfaces here are intentionally isolated so they can be extracted to a shared Loft package after WireLoft is decoupled from its DailyWire dependencies.
-
-## Docker
-
-The runtime mirrors WireLoft's single-container layout: React is built in a Node stage; the Python runtime includes FastAPI, ffmpeg and Nginx; `/api` is reverse-proxied internally; `/config` and `/downloads` are persistent volumes.
-
-```bash
-docker compose up -d --build
-```
-
-VodLoft is exposed on `http://localhost:8081` by default, allowing it to run beside WireLoft on `8080`.
-
-## Local development
-
-```bash
-cp config/config.yml.default config/config.yml
+```sh
 uv sync
-uv run backend-api db upgrade head
-uv run backend-api serve --host 0.0.0.0 --port 8000
-
-cd ui
 npm install
-npm run dev
+uv run backend-api db upgrade
+uv run backend-api run --host 127.0.0.1 --port 5001
 ```
 
-FFmpeg must be available for yt-dlp merging and post-processing.
+In a second terminal run `npm run dev`. Open the Vite URL, sign in if an admin password is configured, and select **Web media library**. The Source subprocesses use the current Python interpreter in this development setup. The Docker image installs them into separate, digest-checked Python environments on first start.
+
+For Docker deployment, set `WL_ADMIN_AUTH__PASSWORD` and run `docker compose up --build`. Configuration, database, Source runtimes, encrypted secrets and trusted update bundles persist under `/config`; media and feed enclosures persist under `/downloads`.
+
+## Library workflow
+
+1. Add a public URL and review the normalized Source preview. Import is explicit. Domain, Source, account connection, canonical media identity, Collection membership and local artifacts are stored separately.
+2. Create a Local Media Profile for the item's Domain, choose video or MP3 audio, an output path template and optional delivery targets. A profile remains valid if the selected Source implementation changes.
+3. Download a playable item directly, or create a Collection Download Profile with selected Local Media Profiles, a backfill rule and refresh interval. Mixed-domain Collections report members without an applicable profile.
+4. Watch or listen through the authenticated web player. The playback URL binds to an immutable artifact for its session.
+5. Create an audio or video Collection Stream Profile and its revocable feed. The feed publishes only compatible local renditions and preserves bytes behind each enclosure URL.
+6. Connect a Jellyfin, Plex or Audiobookshelf podcast library. VodLoft maps its visible file path to the server path, requests a scan after publication and records the server item identity when discovered. Jellyfin receives an `.nfo` sidecar; Plex scanner and agent details are exposed by the connection test.
+
+The Source manager accepts versioned wheelhouse bundles from `/config/source-bundles/<source-id>/<version>/`. It verifies wheel digests, installs in an independent environment, checks protocol compatibility and health, then activates according to the automatic update policy. A previous runtime remains available for rollback. A queued acquisition freezes its Source command and profile specification. Trusted administrators control the mounted bundle directory; a digest in a manifest does not authenticate an untrusted publisher.
+
+## Current limits
+
+This is a working prototype with substantial parts of the architecture document implemented. The inherited Daily Wire-specific pages and background tasks still use their original WireLoft integration rather than the new Source gateway. The generic Source contract currently covers URL resolution, a bounded Collection snapshot, downloads and Domain catalogues; it does not yet offer rich search, nested Collection traversal, typed authentication challenges, a complete format/track model or upstream Stream Leases. Collection policies do not yet implement advanced filters, live continuity or retention rules. Media-server scans and path matching are implemented, but no real connected Plex, Jellyfin or Audiobookshelf instance was available to verify their API responses; progress synchronization and deep links are not included. Native helper networking needs an operator egress policy in addition to the built-in Python socket guard. The inherited WireLoft task UI has not yet been unified with the new acquisition jobs.
+
+## Verification
+
+`uv run pytest -q tests/unit/test_vodloft_prototype.py tests/unit/test_vodloft_architecture.py` covers identity, mixed-domain scheduling, multiple representations, feed immutability and format selection, account scoping, cancellation, path finalization recovery and Source bundle rejection. `npm run build`, `uv run backend-api db history` and `uv run backend-api background-migrations history` verify the frontend and migration chains. Backend and Vite smoke checks return HTTP 200 locally.
+
+The full inherited WireLoft suite is not clean at this pinned baseline: two modules import migration files absent from the checkout; with those excluded it reports 175 failures and 700 passes, including tests built for older WireLoft fields. These failures are not represented as passing VodLoft acceptance tests.

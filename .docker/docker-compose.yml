@@ -1,0 +1,24 @@
+# Run WireLoft from the published image
+#
+# Usage:
+#   mkdir wireloft && cd wireloft
+#   curl -O https://raw.githubusercontent.com/samuelvisser/wireloft/develop/.docker/docker-compose.yml
+#   docker compose up -d
+# Then open http://localhost:5273.
+
+services:
+  wireloft:
+    image: ghcr.io/samuelvisser/wireloft:latest
+    container_name: wireloft
+    restart: unless-stopped
+    ports:
+      - "5273:80"
+    volumes:
+      # App config (keep to retain over container restarts)
+      - ./config:/config
+      # Downloaded shows/podcasts.
+      - ./downloads:/downloads
+    environment:
+      - TZ=UTC
+      # Uncomment to require a login (recommended when running behind a reverse proxy):
+      # - WL_ADMIN_AUTH__PASSWORD=change-me

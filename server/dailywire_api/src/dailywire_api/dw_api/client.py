@@ -1,0 +1,655 @@
+import json
+import logging
+import time
+from contextlib import contextmanager
+from contextvars import ContextVar
+from threading import Condition
+
+from builtins import str
+from dataclasses import dataclass
+from typing import Callable, Dict, ClassVar, Any, Iterator, Optional, Literal, NamedTuple
+from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qs, quote, urlencode, urlparse
+from urllib.request import Request, urlopen
+
+from pydantic import ValidationError
+
+from dailywire_api.records import (
+    DwCatalogMovieRecord,
+    DwCatalogRecord,
+    DwCatalogShowRecord,
+    DwEpisodeDetailRecord,
+    DwEpisodeRecord,
+    DwMovieExtraDetailRecord,
+    DwMovieDetailRecord,
+    DwShowRecord,
+    DwUserInfo,
+)
+
+DEFAULT_MIDDLEWARE_URL = "https://middleware-prod.dailywire.com/middleware"
+
+
+def get_settings():
+    """Compatibility hook for WireLoft callers; independent Sources inject pacing."""
+    from config import get_settings as settings
+    return settings()
+
+logger = logging.getLogger(__name__)
+
+# ---------------- request pacing (global across dailywire_api) ----------------
+# We intentionally keep this module-level so that all clients share the same pacing state.
+# A ticketed Condition serializes request starts without holding the underlying lock while
+# a caller waits for its pacing delay. This prevents queued requests from calculating
+# delays from stale pre-lock timestamps.
+_pacing_condition = Condition()
+_pacing_next_ticket: int = 0
+_pacing_serving_ticket: int = 0
+_last_request_ns: Optional[int] = None
+_ms_since_last_request: Optional[int] = None
+_fast_requests: int = 0
+
+SlowRequestCooldownObserver = Callable[[bool], None]
+_slow_request_cooldown_observer: ContextVar[SlowRequestCooldownObserver | None] = ContextVar(
+    "dailywire_slow_request_cooldown_observer",
+    default=None,
+)
+
+
+@contextmanager
+def slow_request_cooldown_observer(observer: SlowRequestCooldownObserver) -> Iterator[None]:
+    """Observe slow request cooldown waits in the current execution context."""
+    token = _slow_request_cooldown_observer.set(observer)
+    try:
+        yield
+    finally:
+        _slow_request_cooldown_observer.reset(token)
+
+
+def _notify_slow_request_cooldown(waiting: bool) -> None:
+    observer = _slow_request_cooldown_observer.get()
+    if observer is None:
+        return
+    try:
+        observer(waiting)
+    except Exception:
+        # Pacing must never fail a Daily Wire request merely because optional
+        # execution-state reporting could not be persisted.
+        logger.exception("Daily Wire slow request cooldown observer failed")
+
+
+def _wait_before_request(pacing_settings=None) -> None:
+    """Enforce the global Daily Wire request pacing policy.
+
+    Requests take a ticket so their starts remain serialized, but ``Condition.wait``
+    releases the pacing lock while a request is delayed. Timing is sampled only after
+    a caller reaches the front of the queue, so time spent waiting behind another
+    caller can never turn into a negative/stale elapsed interval.
+
+    A request that exceeds ``max_fast_requests`` waits for the configured slow gap and
+    then starts a fresh burst. Resetting the burst counter at that point is important:
+    otherwise every request already queued behind the cooldown would independently
+    incur another full slow delay.
+    """
+    global _pacing_next_ticket, _pacing_serving_ticket
+    global _last_request_ns, _ms_since_last_request, _fast_requests
+
+    st = pacing_settings or get_settings().dw_timeout
+    min_fast_ms = int(st.min_fast_request_ms)
+    min_slow_ms = int(st.min_slow_request_ms)
+    max_fast = int(st.max_fast_requests)
+    cooldown_waiting = False
+
+    try:
+        with _pacing_condition:
+            ticket = _pacing_next_ticket
+            _pacing_next_ticket += 1
+
+            while ticket != _pacing_serving_ticket:
+                _pacing_condition.wait()
+
+            try:
+                # Sample the clock only after this request owns the pacing turn. A
+                # timestamp captured before waiting in the queue can be minutes stale.
+                now_ns = time.monotonic_ns()
+                if _last_request_ns is None:
+                    elapsed_ms: Optional[int] = None
+                    next_fast_requests = 0
+                    slow_cooldown = False
+                    target_start_ns = now_ns
+                else:
+                    elapsed_ns = max(0, now_ns - _last_request_ns)
+                    elapsed_ms = int(elapsed_ns / 1_000_000)
+
+                    if elapsed_ms >= min_slow_ms:
+                        next_fast_requests = 0
+                    else:
+                        next_fast_requests = _fast_requests + 1
+
+                    slow_cooldown = next_fast_requests > max_fast
+                    target_ms = min_fast_ms
+                    if slow_cooldown:
+                        target_ms = max(target_ms, min_slow_ms)
+
+                    target_start_ns = max(
+                        now_ns,
+                        _last_request_ns + (target_ms * 1_000_000),
+                    )
+
+                _ms_since_last_request = elapsed_ms
+
+                remaining_ns = target_start_ns - time.monotonic_ns()
+                if slow_cooldown and remaining_ns > 0:
+                    cooldown_waiting = True
+                    _notify_slow_request_cooldown(True)
+
+                # Condition.wait() releases the underlying lock. Other callers can
+                # therefore enqueue while this request is pacing, but cannot overtake
+                # it because only the serving ticket may proceed.
+                while remaining_ns > 0:
+                    _pacing_condition.wait(timeout=remaining_ns / 1_000_000_000)
+                    remaining_ns = target_start_ns - time.monotonic_ns()
+
+                _last_request_ns = time.monotonic_ns()
+                _fast_requests = 0 if slow_cooldown else next_fast_requests
+            finally:
+                _pacing_serving_ticket += 1
+                _pacing_condition.notify_all()
+    finally:
+        if cooldown_waiting:
+            _notify_slow_request_cooldown(False)
+
+
+@dataclass(frozen=True)
+class ByNextPage:
+    next_page_url: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class _ByParameters:
+    membership_plan: Optional[str] = None
+    order_by: str = "CreatedAt_DESC"
+    page_number: int = 1
+    page_size: int = 20
+    show_offset: int = 0
+    podcast_offset: int = 0
+
+
+@dataclass(frozen=True)
+class _BySeason(_ByParameters):
+    season_dw_id: str
+    season_id_key: ClassVar[Literal["showSeasonId", "podcastSeasonId"]]
+
+
+@dataclass(frozen=True)
+class ByShowSeason(_BySeason):
+    season_id_key: ClassVar[str] = "showSeasonId"
+
+
+@dataclass(frozen=True)
+class ByPodcastSeason(_BySeason):
+    season_id_key: ClassVar[str] = "podcastSeasonId"
+
+
+class EpisodesPaginatedResult(NamedTuple):
+    items: list[DwEpisodeRecord]
+    next_page_url: Optional[str]
+    has_next: bool
+
+
+class MiddlewareAPIError(Exception):
+    """Errors raised while communicating with DailyWire Middleware API."""
+
+    def __init__(self, message: str, *, status_code: Optional[int] = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class MiddlewareClient:
+    """
+    HTTP client for DailyWire Middleware API.
+
+    Pass an access token if you have one; premium content typically requires it.
+    Request pacing is enabled by default. Low-volume interactive UI reads may
+    explicitly disable it so they are not blocked behind background cooldowns.
+    """
+
+    def __init__(
+        self,
+        access_token: Optional[str] = None,
+        request_timeout: float = 30.0,
+        base_url: str | None = None,
+        pace_requests: bool = True,
+        pacing_settings=None,
+        token_provider: Callable[[], str | None] | None = None,
+    ) -> None:
+        self._req_timeout = request_timeout
+        # Legacy WireLoft callers keep their configured endpoint; independent
+        # Source runtimes inject an explicit base URL and never import config.
+        self._base_url = (base_url or get_settings().dw_api.middleware_api).rstrip('/')
+        self._pace_requests = bool(pace_requests)
+        self._pacing_settings = pacing_settings
+        self._token_provider = token_provider
+        headers = {
+            # These are generally not required for Middleware, but harmless if present
+            'Accept': 'application/json',
+            'User-Agent': 'wireloft/0.2 (+https://www.dailywire.com)'
+        }
+        if access_token:
+            headers['Authorization'] = f'Bearer {access_token}'
+        self._headers = headers
+
+    # --------------- public methods ---------------
+    def get_show_page(self, slug: str, *, membership_plan: Optional[str] = None) -> DwShowRecord:
+        params: Dict[str, Any] = {'slug': slug}
+        if membership_plan:
+            params['membershipPlan'] = membership_plan
+
+        payload = self._get('v4/getShowPage', params)
+        return DwShowRecord.model_validate(payload)
+
+    def get_catalog(self, *, membership_plan: Optional[str] = None) -> DwCatalogRecord:
+        """Return the shows and movies exposed by Daily Wire's browse page.
+
+        The upstream response repeats items across curated carousels. WireLoft
+        deliberately flattens and de-duplicates those rows so the frontend can
+        offer stable alphabetical and host-grouped browsing.
+        """
+        params: Dict[str, Any] = {'slug': 'web-shows-movies-page'}
+        if membership_plan:
+            params['membershipPlan'] = membership_plan
+        payload = self._get('v4/getPage', params)
+
+        shows: dict[str, DwCatalogShowRecord] = {}
+        movies: dict[str, DwCatalogMovieRecord] = {}
+        for component in payload.get('components') or []:
+            for item in component.get('items') or []:
+                raw_show = item.get('show')
+                if isinstance(raw_show, dict) and raw_show.get('slug'):
+                    record = self._catalog_show_from_payload(raw_show)
+                    shows.setdefault(record.slug, record)
+
+                raw_movie = item.get('video')
+                if isinstance(raw_movie, dict) and raw_movie.get('slug'):
+                    record = DwCatalogMovieRecord.model_validate(raw_movie)
+                    movies.setdefault(record.slug, record)
+
+        return DwCatalogRecord(
+            shows=sorted(shows.values(), key=lambda value: value.title.casefold()),
+            movies=sorted(movies.values(), key=lambda value: value.title.casefold()),
+        )
+
+    def get_square_show_thumbnails(
+        self,
+        *,
+        membership_plan: Optional[str] = None,
+    ) -> dict[str, str]:
+        """Return square show artwork exposed by the Watch page carousel.
+
+        The Daily Wire currently leaves images.thumbnail.square empty in this
+        component and currently duplicates the square artwork into both the
+        land and port fields. WireLoft only interprets that duplicate pair as
+        square art when those two URLs are exactly equal, so genuinely distinct
+        future orientations are not mislabeled.
+        """
+        params: Dict[str, Any] = {'slug': 'watch-page'}
+        if membership_plan:
+            params['membershipPlan'] = membership_plan
+        payload = self._get('v4/getPage', params)
+
+        thumbnails: dict[str, str] = {}
+        for component in payload.get('components') or []:
+            if (
+                not isinstance(component, dict)
+                or component.get('renderType') != 'squareShowCarousel'
+            ):
+                continue
+
+            for item in component.get('items') or []:
+                if not isinstance(item, dict):
+                    continue
+                raw_show = item.get('show')
+                if not isinstance(raw_show, dict):
+                    continue
+
+                record = self._catalog_show_from_payload(raw_show)
+                square_path = record.thumbnail_square_path
+                if square_path is None:
+                    raw_thumbnails = (raw_show.get('images') or {}).get('thumbnail') or {}
+                    raw_landscape = raw_thumbnails.get('land')
+                    raw_portrait = raw_thumbnails.get('port')
+                    if (
+                        isinstance(raw_landscape, str)
+                        and raw_landscape
+                        and raw_landscape == raw_portrait
+                    ):
+                        square_path = raw_landscape
+
+                if not record.slug or not square_path:
+                    continue
+                thumbnails.setdefault(record.slug, square_path)
+
+        return thumbnails
+
+    def get_movie_playback(self, slug: str) -> DwMovieDetailRecord:
+        """Fetch Daily Wire's current signed movie playback URL.
+
+        Movie metadata is resolved through ``v4/getMoviePage`` by
+        ``MovieMiddlewareClient``. Daily Wire's own current web player still uses
+        ``v2/getVideo`` to obtain the signed movie stream, so playback intentionally
+        remains on this endpoint.
+        """
+        payload = self._get('v2/getVideo', {'slug': slug})
+        raw = payload.get('video')
+        if not isinstance(raw, dict):
+            message = payload.get('error') or payload.get('message') or 'Movie playback is unavailable'
+            raise MiddlewareAPIError(str(message))
+
+        secure_video_url = raw.get('secureVideoURL') or None
+        video_url = (
+            self._resolve_secure_video_url(secure_video_url)
+            if secure_video_url
+            else raw.get('videoURL') or None
+        )
+        return DwMovieDetailRecord(
+            video_url=video_url,
+            trailer_url=raw.get('trailerURL') or None,
+            duration=float(raw.get('duration') or 0),
+            trailer_duration=float(raw.get('trailerDuration') or 0),
+            has_video=bool(raw.get('hasVideo')),
+        )
+
+    def get_movie_extra_playback(self, slug: str) -> DwMovieExtraDetailRecord:
+        """Fetch playback and authoritative clip metadata for a movie extra.
+
+        Daily Wire represents movie extras as ``showEpisode`` rows on the movie
+        page, but their playback endpoint is ``getClip``. The movie-only
+        ``getVideo`` endpoint returns ``404 video not found`` for these slugs.
+        """
+        payload = self._get('v4/getClip', {'slug': slug})
+        raw = payload.get('clip') if isinstance(payload.get('clip'), dict) else payload
+        if not isinstance(raw, dict) or not raw.get('slug'):
+            message = payload.get('error') or payload.get('message') or 'Movie-extra playback is unavailable'
+            raise MiddlewareAPIError(str(message))
+
+        secure_video_url = raw.get('secureVideoURL') or None
+        video_url = (
+            self._resolve_secure_video_url(secure_video_url)
+            if secure_video_url
+            else raw.get('videoURL') or None
+        )
+        if not video_url:
+            mux_playback_id = str(raw.get('muxPlaybackId') or '').strip()
+            mux_playback_token = str(raw.get('muxPlaybackToken') or '').strip()
+            playback_policy = str(raw.get('playbackPolicy') or '').strip().casefold()
+            if mux_playback_id and (mux_playback_token or playback_policy == 'public'):
+                video_url = f"https://stream.mux.com/{quote(mux_playback_id, safe='')}.m3u8"
+                if mux_playback_token:
+                    video_url = f"{video_url}?{urlencode({'token': mux_playback_token})}"
+
+        return DwMovieExtraDetailRecord.from_clip_payload(
+            raw,
+            video_url=video_url,
+        )
+
+    def _resolve_secure_video_url(self, secure_url: str) -> str:
+        """Exchange Daily Wire's authenticated resolver URL for its CDN URL."""
+        if not self._is_middleware_url(secure_url):
+            return self._validated_playback_url(secure_url)
+
+        payload = self._get_url(secure_url)
+        destination = payload.get('destination')
+        if not isinstance(destination, str) or not destination:
+            raise MiddlewareAPIError('Daily Wire returned no movie playback destination')
+        return self._validated_playback_url(destination)
+
+    def _is_middleware_url(self, url: str) -> bool:
+        candidate = urlparse(url)
+        middleware = urlparse(self._base_url)
+        return (
+            candidate.scheme in {'http', 'https'}
+            and candidate.scheme == middleware.scheme
+            and candidate.netloc == middleware.netloc
+        )
+
+    @staticmethod
+    def _validated_playback_url(url: str) -> str:
+        parsed = urlparse(url)
+        if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
+            raise MiddlewareAPIError('Daily Wire returned an invalid movie playback URL')
+        return url
+
+    def get_user_info(self) -> DwUserInfo:
+        """
+        Fetch the current user's info using DailyWire Middleware API.
+        Access token is obtained from dailywire_authorisation package.
+        """
+        access_token = self._get_access_token()
+        if not access_token:
+            raise MiddlewareAPIError("No valid access token in token store")
+
+        # Temporarily set Authorization header, preserving any existing value
+        headers_backup = self._headers.copy()
+        try:
+            self._headers['Authorization'] = f'Bearer {access_token}'
+            payload = self._get('v3/getUserInfo', {'nocache': 1})
+        finally:
+            self._headers = headers_backup
+
+        try:
+            record = DwUserInfo.model_validate(payload)
+        except ValidationError as e:
+            raise MiddlewareAPIError("Invalid user info response") from e
+
+        return record
+
+    def get_episodes_paginated(self, show_slug: str, selector: ByNextPage | ByShowSeason | ByPodcastSeason) -> EpisodesPaginatedResult:
+        """
+        Fetch a single page of episodes for a show.
+
+        WARNING: unfortunately, when using the "next page" selector, the DW API might return episodes it already did previously.
+        You will need to de-duplicate the results yourself.
+
+        You can either:
+          - continue from a previous response by providing next_page_url, OR
+          - start a new query by providing the standard params (slug, membership_plan, etc.)
+            AND one of show_season_id or podcast_season_id (required union).
+
+        Returns a dict with:
+          - items: list[dict] EpisodeRecord dicts (JSON-friendly)
+          - next_page_url: str | None
+          - has_next: bool
+          - raw: raw page payload (as dict)
+        """
+        endpoint = 'v4/getPaginatedEpisodes'
+        params: Dict[str, Any] = {}
+
+        match selector:
+            case ByNextPage(next_page_url):
+                parsed = urlparse(next_page_url)
+                q = parsed.query
+                path = parsed.path or ''
+                if path:
+                    path = path.lstrip('/')
+                    if path.startswith('middleware/'):
+                        path = path[len('middleware/'):]
+                    # If path mentions the endpoint, use it; otherwise assume default endpoint
+                    if path:
+                        endpoint = path
+                if q:
+                    qs = parse_qs(q)
+                    for k, v in qs.items():
+                        if not v:
+                            continue
+                        params[k] = v[0] if len(v) == 1 else v
+
+            case _BySeason(season_dw_id=sid) as sel:
+                params = {
+                    "slug": show_slug,
+                    "orderBy": sel.order_by,
+                    "pageNumber": sel.page_number,
+                    "pageSize": sel.page_size,
+                    "showOffset": sel.show_offset,
+                    "podcastOffset": sel.podcast_offset,
+                    type(sel).season_id_key: sid,
+                }
+                if sel.membership_plan:
+                    params["membershipPlan"] = sel.membership_plan
+
+        try:
+            payload = self._get(endpoint, params)
+        except MiddlewareAPIError:
+            # A season without (further) episodes tends to answer with an error rather
+            # than an empty page, so a failing *initial* season request means "no
+            # episodes". A failing continuation request however would silently truncate
+            # the season, so those are propagated to the caller.
+            if isinstance(selector, ByNextPage):
+                raise
+            return EpisodesPaginatedResult([], None, False)
+
+        # Extract items
+        items_raw = payload.get('componentItems')
+
+        # Normalize to EpisodeRecord dicts
+        episodes: list[DwEpisodeRecord] = []
+        for it in items_raw or []:
+            try:
+                ep = DwEpisodeRecord.model_validate(it)
+                episodes.append(ep)
+            except ValidationError as e:
+                raise MiddlewareAPIError("Could not validate episode record") from e
+
+        # Prepare next page URL
+        next_url = payload.get('nextPageUrl') or payload.get('nextPageURL') or None
+
+        # Return
+        return EpisodesPaginatedResult(
+            items=episodes,
+            next_page_url=next_url,
+            has_next=bool(next_url)
+        )
+
+    def get_episode_details(self, episode_slug: str, *, require_member_exclusive: bool = False) -> DwEpisodeDetailRecord:
+        endpoint = 'v4/getEpisode'
+        params: Dict[str, Any] = {
+            'slug': episode_slug,
+            'nocache': 1,
+        }
+
+        if require_member_exclusive:
+            access_token = self._get_access_token()
+            if not access_token:
+                raise MiddlewareAPIError("No valid access token in token store")
+
+            # Temporarily set Authorization header, preserving any existing value
+            headers_backup = self._headers.copy()
+            try:
+                self._headers['Authorization'] = f'Bearer {access_token}'
+                payload = self._get(endpoint, params)
+            finally:
+                self._headers = headers_backup
+        else:
+            payload = self._get(endpoint, params)
+
+        try:
+            record = DwEpisodeDetailRecord.model_validate(payload)
+        except ValidationError as e:
+            raise MiddlewareAPIError("Invalid episode detail response") from e
+
+        return record
+
+    def get_show_id_by_slug(self, show_slug: str) -> str:
+        dw_show = self.get_show_page(show_slug)
+        return dw_show.dw_id
+
+    def get_season_id_by_slugs(self, show_slug: str, season_slug: str) -> str:
+        dw_show = self.get_show_page(show_slug)
+        dw_season = next((s for s in dw_show.seasons if s.slug == season_slug), None)
+        if dw_season is None:
+            raise ValueError(f"Season '{season_slug}' not found in DW API for show '{show_slug}'")
+        return dw_season.dw_id
+
+    @staticmethod
+    def _catalog_show_from_payload(raw: dict[str, Any]) -> DwCatalogShowRecord:
+        host = raw.get('host') or raw.get('author') or {}
+        images = raw.get('images') or {}
+        thumbnails = images.get('thumbnail') or {}
+        return DwCatalogShowRecord(
+            dw_id=str(raw.get('id') or ''),
+            slug=str(raw.get('slug') or ''),
+            title=str(raw.get('title') or ''),
+            description=raw.get('description') or None,
+            author_name=host.get('name') or None,
+            author_slug=host.get('slug') or None,
+            author_headshot_path=host.get('imageUrl') or host.get('headshot') or None,
+            background_image_path=raw.get('backgroundImage') or None,
+            logo_image_path=raw.get('logoImage') or None,
+            thumbnail_landscape_path=thumbnails.get('land') or None,
+            thumbnail_portrait_path=thumbnails.get('port') or None,
+            thumbnail_square_path=thumbnails.get('square') or None,
+        )
+
+    # --------------- internals ---------------
+    _TRANSIENT_HTTP_CODES = (429, 502, 503, 504)
+    _TRANSIENT_RETRIES = 2
+    _TRANSIENT_RETRY_DELAY_S = 2.0
+
+    def _get_access_token(self) -> str | None:
+        if self._token_provider:
+            return self._token_provider()
+        # Legacy WireLoft callers still use its token store. A separately
+        # installed Source supplies a scoped token provider instead.
+        from dailywire_authorisation import DeviceAuthClient
+        tokens = DeviceAuthClient().get_token()
+        return tokens.access_token if tokens else None
+
+    def _get(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        qs = urlencode(params or {})
+        url = f"{self._base_url}/{endpoint}"
+        if qs:
+            url = f"{url}?{qs}"
+
+        return self._get_url(url)
+
+    def _get_url(self, url: str) -> Dict[str, Any]:
+        data: Optional[bytes] = None
+        for attempt in range(self._TRANSIENT_RETRIES + 1):
+            # Background/bulk callers use the global pacing policy. Explicitly
+            # interactive clients bypass only this wait; retries and network
+            # timeouts remain unchanged.
+            if self._pace_requests:
+                if self._pacing_settings is None:
+                    _wait_before_request()
+                else:
+                    _wait_before_request(self._pacing_settings)
+
+            req = Request(url, headers=self._headers, method='GET')
+            try:
+                with urlopen(req, timeout=self._req_timeout) as resp:
+                    data = resp.read()
+                break
+            except HTTPError as e:
+                try:
+                    err_body = e.read().decode('utf-8', errors='ignore')
+                except Exception:
+                    err_body = ''
+                if e.code in self._TRANSIENT_HTTP_CODES and attempt < self._TRANSIENT_RETRIES:
+                    time.sleep(self._TRANSIENT_RETRY_DELAY_S * (attempt + 1))
+                    continue
+                raise MiddlewareAPIError(f"HTTP error {e.code}: {err_body or e.reason}", status_code=e.code) from e
+            except URLError as e:
+                if attempt < self._TRANSIENT_RETRIES:
+                    time.sleep(self._TRANSIENT_RETRY_DELAY_S * (attempt + 1))
+                    continue
+                raise MiddlewareAPIError(f"Network error: {e.reason}") from e
+            except Exception as e:
+                raise MiddlewareAPIError(str(e)) from e
+
+        try:
+            parsed = json.loads(data.decode('utf-8'))
+        except Exception as e:
+            raise MiddlewareAPIError('Failed to parse JSON response') from e
+
+        if not isinstance(parsed, dict):
+            return {}
+        # Middleware tends to return an 'error' string or code fields on failure; pass-through
+        return parsed

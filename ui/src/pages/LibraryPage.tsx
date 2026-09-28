@@ -1,0 +1,201 @@
+import {useEffect, useMemo, useState} from 'react'
+import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
+import {Link, useNavigate, useSearchParams} from 'react-router-dom'
+
+import {toImageUrl} from '../components/Episode/EpisodeCard'
+import ShowIndexingProgress from '../components/ShowIndexingProgress/ShowIndexingProgress'
+import MediaTypeTabs, {MediaType} from '../components/MediaTypeTabs/MediaTypeTabs'
+import ShowTypeFilter, {
+    createDefaultShowTypeFilter,
+    matchesShowTypeFilter,
+} from '../components/common/ShowTypeFilter'
+import {useMediaDownloadsView, useMovies, useShowsView} from '../lib/queries'
+import {MediaDownloadViewRead} from '../types/schemas/media_download'
+import {ShowTypeReg, ShowTypeValue} from '../types/show'
+
+const LIBRARY_SHOW_TYPE_FILTER_STORAGE_KEY = 'libraryShowTypeFilter'
+
+function loadLibraryShowTypeFilter(): Set<ShowTypeValue> {
+    try {
+        const raw = localStorage.getItem(LIBRARY_SHOW_TYPE_FILTER_STORAGE_KEY)
+        if (raw === null) return createDefaultShowTypeFilter()
+
+        const parsed: unknown = JSON.parse(raw)
+        if (!Array.isArray(parsed)) return createDefaultShowTypeFilter()
+
+        const selectedTypes = parsed.filter(
+            (value): value is ShowTypeValue => (
+                typeof value === 'string'
+                && ShowTypeReg.values.includes(value as ShowTypeValue)
+            ),
+        )
+
+        // Preserve an intentionally empty filter, while rejecting stored data that
+        // only contains stale or otherwise invalid values.
+        if (parsed.length > 0 && selectedTypes.length === 0) {
+            return createDefaultShowTypeFilter()
+        }
+
+        return new Set(selectedTypes)
+    } catch {
+        return createDefaultShowTypeFilter()
+    }
+}
+
+function latestMovieDownload(downloads: MediaDownloadViewRead[] | undefined, slug: string) {
+    return downloads?.find((download) => download.movieSlug === slug)
+}
+
+export default function LibraryPage() {
+    const navigate = useNavigate()
+    const [params, setParams] = useSearchParams()
+    const [showTypeFilter, setShowTypeFilter] = useState(loadLibraryShowTypeFilter)
+    const {data: shows, isLoading: showsLoading, error: showsError} = useShowsView()
+    const {data: movies, isLoading: moviesLoading, error: moviesError} = useMovies()
+    const {data: downloads} = useMediaDownloadsView()
+    const filteredShows = useMemo(
+        () => shows?.filter((show) => matchesShowTypeFilter(show.type, showTypeFilter)) ?? [],
+        [shows, showTypeFilter],
+    )
+    const hasShows = !!shows?.length
+    const hasMovies = !!movies?.length
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(
+                LIBRARY_SHOW_TYPE_FILTER_STORAGE_KEY,
+                JSON.stringify(Array.from(showTypeFilter)),
+            )
+        } catch {
+            // Storage can be unavailable in restricted browser contexts. The filter
+            // should still work normally for the current page session in that case.
+        }
+    }, [showTypeFilter])
+
+    // The URL is the single source of truth for the selected library type, just
+    // like on the Browse page. Never switch away from an explicitly requested
+    // type based on which query happens to finish first.
+    const activeType: MediaType = params.get('type') === 'movies' ? 'movies' : 'shows'
+
+    const chooseType = (type: MediaType) => {
+        setParams({type}, {replace: true})
+    }
+
+    const browseUrl = `/browse?type=${activeType}`
+    const loading = showsLoading || moviesLoading
+    const error = showsError || moviesError
+    const showTabs = hasShows && hasMovies
+
+    return (
+        <section className="view library-view" aria-labelledby="library-title">
+            <div className="view-header">
+                <div>
+                    <h1 id="library-title">Library</h1>
+                    <p className="view-description">Shows and movies indexed by WireLoft.</p>
+                </div>
+                <button className="btn btn-primary" onClick={() => navigate(browseUrl)}>
+                    <FontAwesomeIcon icon={['fas', 'compass']}/>
+                    Browse Daily Wire
+                </button>
+            </div>
+
+            {showTabs && (
+                <MediaTypeTabs
+                    activeType={activeType}
+                    onChange={chooseType}
+                    ariaLabel="Library media type"
+                    showCount={shows?.length ?? 0}
+                    movieCount={movies?.length ?? 0}
+                />
+            )}
+
+            {activeType === 'shows' && hasShows && (
+                <ShowTypeFilter
+                    selectedTypes={showTypeFilter}
+                    onChange={setShowTypeFilter}
+                    ariaLabel="Filter library shows by type"
+                />
+            )}
+
+            {loading && !hasShows && !hasMovies ? (
+                <p>Loading library…</p>
+            ) : error && !hasShows && !hasMovies ? (
+                <div className="form-error-card" role="alert">{error.message}</div>
+            ) : !hasShows && !hasMovies ? (
+                <div className="library-empty">
+                    <FontAwesomeIcon icon={['fas', 'book-open']}/>
+                    <h2>Your library is empty</h2>
+                    <p>Browse Daily Wire to add a show or movie.</p>
+                    <button className="btn btn-primary" onClick={() => navigate(browseUrl)}>Browse Daily Wire</button>
+                </div>
+            ) : activeType === 'shows' && hasShows ? (
+                filteredShows.length > 0 ? (
+                    <div className="library-show-list" role="list" aria-label="Shows">
+                        {filteredShows.map((show) => {
+                            const image = toImageUrl(
+                                show.thumbnailPortraitPath || show.thumbnailLandscapePath || show.logoImagePath || show.authorHeadshotPath,
+                            )
+                            return (
+                                <Link className="show-summary-card library-show-card" to={`/show/${show.slug}`} key={show.slug} role="listitem">
+                                    <span className="show-summary-art">
+                                        {image ? <img src={image} alt="" loading="lazy" decoding="async"/> : <span className="show-art-placeholder"><FontAwesomeIcon icon={['fas', 'podcast']}/></span>}
+                                    </span>
+                                    <div className="show-summary-copy">
+                                        <span className="show-summary-title">{show.title}</span>
+                                        <span className="show-summary-author">{show.authorName || 'Daily Wire'}</span>
+                                        <span className="show-summary-meta">{show.episodeCount} episodes{show.years ? ` • ${show.years}` : ''}</span>
+                                        {show.description && <span className="show-summary-description">{show.description}</span>}
+                                        <ShowIndexingProgress
+                                            showId={show.id}
+                                            showSlug={show.slug}
+                                            pollForStart={show.episodeCount === 0}
+                                            className="library-show-indexing"
+                                        />
+                                    </div>
+                                    <FontAwesomeIcon icon={['fas', 'chevron-right']} aria-hidden="true"/>
+                                </Link>
+                            )
+                        })}
+                    </div>
+                ) : (
+                    <div className="catalog-empty">
+                        <FontAwesomeIcon icon={['fas', 'filter']}/>
+                        <p>No shows match the selected filters.</p>
+                    </div>
+                )
+            ) : activeType === 'movies' && hasMovies ? (
+                <div className="movie-poster-grid" role="list" aria-label="Movies">
+                    {movies!.map((movie) => {
+                        const image = toImageUrl(
+                            movie.thumbnailPortraitPath
+                            || movie.thumbnailLandscapePath
+                            || movie.backgroundImagePath
+                            || movie.logoImagePath,
+                        )
+                        const download = latestMovieDownload(downloads, movie.slug)
+                        const status = String(download?.downloadStatus || '')
+                        return (
+                            <Link className="movie-poster-card" to={`/movie/${movie.slug}`} key={movie.slug} role="listitem">
+                                <span className="movie-poster-art">
+                                    {image
+                                        ? <img src={image} alt="" loading="lazy" decoding="async"/>
+                                        : <FontAwesomeIcon icon={['fas', 'clapperboard']}/>
+                                    }
+                                    {status === 'downloaded' || status === 'redownloaded' ? (
+                                        <span className="movie-state is-complete" aria-label="Downloaded"><FontAwesomeIcon icon={['fas', 'check']}/></span>
+                                    ) : status === 'downloading' || status === 'pending' ? (
+                                        <span className="movie-state is-active" aria-label="Downloading"><FontAwesomeIcon icon={['fas', 'circle-down']}/></span>
+                                    ) : status === 'error' ? (
+                                        <span className="movie-state is-error" aria-label="Download failed"><FontAwesomeIcon icon={['fas', 'triangle-exclamation']}/></span>
+                                    ) : null}
+                                </span>
+                                <span className="movie-poster-title">{movie.title}</span>
+                                <span className="movie-poster-meta">{movie.authorName || 'Daily Wire'}</span>
+                            </Link>
+                        )
+                    })}
+                </div>
+            ) : null}
+        </section>
+    )
+}

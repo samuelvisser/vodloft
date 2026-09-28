@@ -1,7 +1,11 @@
-from .scheduler import start_scheduler, stop_scheduler
-from .workers import cancel_task, list_tasks, queue_download, queue_sync, resolve_stream
+"""WireLoft Controller
 
-__all__ = [
-    "cancel_task", "list_tasks", "queue_download", "queue_sync", "resolve_stream",
-    "start_scheduler", "stop_scheduler",
-]
+Provides application initialization and lifecycle management.
+Also contains shared utilities (db_utils, m3u8, util).
+
+Tasks are managed by task_manager package.
+"""
+
+from .app import start_controller, stop_controller
+
+__all__ = ["start_controller", "stop_controller"]

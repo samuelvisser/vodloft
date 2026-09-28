@@ -1,0 +1,350 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from pathlib import Path
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+
+
+def _movie_record(*, dw_id: str, slug: str, title: str, extras):
+    from dailywire_api.records import DwMovieRecord
+
+    return DwMovieRecord(
+        dw_id=dw_id,
+        slug=slug,
+        title=title,
+        sharing_url=f"https://www.dailywire.com/videos/{slug}",
+        published_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        status="published",
+        has_video=True,
+        is_downloadable=True,
+        movie_extras=list(extras),
+        trailer=None,
+    )
+
+
+def test_same_dailywire_clip_uses_one_source_across_multiple_movies() -> None:
+    """One immutable clip source can have multiple movie-specific MediaItems."""
+    import backend.db.models  # noqa: F401
+    from backend.api.endpoints.movie_extras.service import sync_movie_extras
+    from backend.db import Base
+    from backend.db.models import Movie, MovieExtra, MovieExtraSource
+    from backend.types.media_types import MediaType
+    from dailywire_api.records import DwMovieExtraRecord
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session = Session(engine)
+    try:
+        original = Movie(
+            uuid="original-movie-uuid",
+            type=MediaType.MOVIE.value,
+            slug="run-hide-fight",
+            title="Run Hide Fight",
+            description=None,
+            downloaded_date=None,
+            duration=6540,
+        )
+        sequel = Movie(
+            uuid="sequel-movie-uuid",
+            type=MediaType.MOVIE.value,
+            slug="run-hide-fight-infidels",
+            title="Run Hide Fight: Infidels",
+            description=None,
+            downloaded_date=None,
+            duration=0,
+        )
+        session.add_all([original, sequel])
+        session.flush()
+
+        shared_teaser = DwMovieExtraRecord(
+            dw_id="f0f721fa-d187-4c16-8ccb-818fe794234c",
+            slug="run-hide-fight-infidels",
+            title="Run Hide Fight: Infidels | Teaser",
+            movie_extra_type="trailer",
+            duration=77.411633,
+        )
+
+        assert sync_movie_extras(
+            session,
+            movie=original,
+            extras=[shared_teaser],
+            official_trailer=None,
+        ) == 1
+        assert sync_movie_extras(
+            session,
+            movie=sequel,
+            extras=[shared_teaser],
+            official_trailer=None,
+        ) == 1
+        session.commit()
+
+        rows = (
+            session.query(MovieExtra)
+            .filter(MovieExtra.slug == "run-hide-fight-infidels")
+            .order_by(MovieExtra.movie_id)
+            .all()
+        )
+        assert len(rows) == 2
+        assert {row.movie_id for row in rows} == {original.id, sequel.id}
+        assert len({row.source_id for row in rows}) == 1
+        assert session.query(MovieExtraSource).count() == 1
+        source = session.query(MovieExtraSource).one()
+        assert source.slug == "run-hide-fight-infidels"
+        assert all(row.source is source for row in rows)
+        assert all(not hasattr(row, "dw_id") for row in rows)
+
+        # Re-reading the same parent page still updates its existing placement
+        # instead of creating another source or another association.
+        assert sync_movie_extras(
+            session,
+            movie=sequel,
+            extras=[shared_teaser],
+            official_trailer=None,
+        ) == 0
+        session.commit()
+        assert session.query(MovieExtra).filter(
+            MovieExtra.slug == "run-hide-fight-infidels"
+        ).count() == 2
+        assert session.query(MovieExtraSource).count() == 1
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_rotating_dailywire_ids_do_not_change_persisted_movie_identity() -> None:
+    """Movies and extra sources are reidentified only by their stable slugs."""
+    import backend.db.models  # noqa: F401
+    from backend.api.endpoints.movies.service import index_dailywire_movie
+    from backend.db import Base
+    from backend.db.models import Movie, MovieExtra, MovieExtraSource
+    from dailywire_api.records import DwMovieExtraRecord
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session = Session(engine)
+    try:
+        old_trailer = DwMovieExtraRecord(
+            dw_id="old-extra-id",
+            slug="a-movie-trailer",
+            title="Old trailer title",
+            movie_extra_type="trailer",
+            duration=60,
+        )
+        first = _movie_record(
+            dw_id="old-movie-id",
+            slug="a-movie",
+            title="A Movie",
+            extras=[old_trailer],
+        )
+        first.trailer = old_trailer
+
+        movie, created = index_dailywire_movie(session, first)
+        session.commit()
+        first_movie_id = movie.id
+        first_extra_id = movie.movie_extras[0].id
+        first_source_id = movie.movie_extras[0].source_id
+
+        new_trailer = DwMovieExtraRecord(
+            dw_id="rotated-extra-id",
+            slug="a-movie-trailer",
+            title="Updated trailer title",
+            movie_extra_type="trailer",
+            duration=75,
+        )
+        second = _movie_record(
+            dw_id="rotated-movie-id",
+            slug="a-movie",
+            title="A Movie Updated",
+            extras=[new_trailer],
+        )
+        second.trailer = new_trailer
+
+        same_movie, created_again = index_dailywire_movie(session, second)
+        session.commit()
+
+        assert created is True
+        assert created_again is False
+        assert same_movie.id == first_movie_id
+        assert same_movie.title == "A Movie Updated"
+        assert session.query(Movie).count() == 1
+        assert session.query(MovieExtra).count() == 1
+        assert session.query(MovieExtraSource).count() == 1
+        extra = session.query(MovieExtra).one()
+        assert extra.id == first_extra_id
+        assert extra.source_id == first_source_id
+        assert extra.slug == "a-movie-trailer"
+        assert extra.title == "Updated trailer title"
+        assert extra.duration == 75
+        assert same_movie.official_trailer_id == extra.id
+        assert not hasattr(same_movie, "dw_id")
+        assert not hasattr(extra, "dw_id")
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_downloading_one_extra_survives_another_movies_shared_clip(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Indexing all extras must not block a download because one clip is shared."""
+    import backend.db.models  # noqa: F401
+    from backend.api.endpoints.media_downloads.service import create_movie_extra_download
+    from backend.api.endpoints.movies.service import index_dailywire_movie
+    from backend.api.models.media_download import MovieDownloadAPICreate
+    from backend.db import Base
+    from backend.db.models import MovieExtra, MovieExtraSource, MovieLocalMediaProfile
+    from backend.types.media_types import MediaType
+    from config import get_settings
+    from dailywire_api.records import DwMovieExtraRecord
+
+    monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session = Session(engine)
+    try:
+        profile = MovieLocalMediaProfile(
+            slug="movies",
+            name="Movies",
+            output_template="/downloads/movies/{{ movie_title }}/{{ title }}.ext",
+            preferred_format="format_1080p",
+            append_media_type_to_filename=False,
+        )
+        session.add(profile)
+        session.flush()
+
+        shared_teaser = DwMovieExtraRecord(
+            dw_id="f0f721fa-d187-4c16-8ccb-818fe794234c",
+            slug="run-hide-fight-infidels",
+            title="Run Hide Fight: Infidels | Teaser",
+            movie_extra_type="trailer",
+            duration=77.411633,
+        )
+        final_trailer = DwMovieExtraRecord(
+            dw_id="eb5b1a5f-771f-4c99-922a-55bdcb938193",
+            slug="run-hide-fight-infidels-final-trailer",
+            title="Run Hide Fight: Infidels | Final Trailer",
+            movie_extra_type="trailer",
+            duration=66.859422,
+        )
+
+        original = _movie_record(
+            dw_id="5e1eb03f-5702-40ac-bece-b714a3a01f7b",
+            slug="run-hide-fight",
+            title="Run Hide Fight",
+            extras=[shared_teaser],
+        )
+        index_dailywire_movie(session, original)
+        session.flush()
+
+        infidels = _movie_record(
+            dw_id="b96f10fd-b2bc-4389-88d0-e4feefa62a8b",
+            slug="run-hide-fight-infidels",
+            title="Run Hide Fight: Infidels",
+            extras=[final_trailer, shared_teaser],
+        )
+        download = create_movie_extra_download(
+            session,
+            infidels,
+            final_trailer.slug,
+            MovieDownloadAPICreate(local_media_profile_id=profile.id),
+        )
+        session.commit()
+
+        downloaded_extra = session.get(MovieExtra, download.media_item_id)
+        assert downloaded_extra is not None
+        assert downloaded_extra.slug == "run-hide-fight-infidels-final-trailer"
+        assert download.type == MediaType.MOVIE_EXTRA.value
+
+        shared_rows = session.query(MovieExtra).filter(
+            MovieExtra.slug == "run-hide-fight-infidels"
+        ).all()
+        assert len(shared_rows) == 2
+        assert len({row.movie_id for row in shared_rows}) == 2
+        assert len({row.source_id for row in shared_rows}) == 1
+        assert session.query(MovieExtraSource).filter_by(
+            slug="run-hide-fight-infidels"
+        ).count() == 1
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_shared_clip_downloads_remain_scoped_to_parent_movie_and_profile(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """The generic one-download-per-MediaItem/profile invariant stays intact."""
+    import backend.db.models  # noqa: F401
+    from backend.api.endpoints.media_downloads.service import create_movie_extra_download
+    from backend.api.models.media_download import MovieDownloadAPICreate
+    from backend.db import Base
+    from backend.db.models import MovieExtra, MovieExtraSource, MovieLocalMediaProfile
+    from backend.db.models.media_download import MovieExtraMediaDownload
+    from config import get_settings
+    from dailywire_api.records import DwMovieExtraRecord
+
+    monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session = Session(engine)
+    try:
+        profile = MovieLocalMediaProfile(
+            slug="movies",
+            name="Movies",
+            output_template="/downloads/movies/{{ movie_title }}/{{ slug }}.ext",
+            preferred_format="format_1080p",
+            append_media_type_to_filename=False,
+        )
+        session.add(profile)
+        session.flush()
+
+        shared = DwMovieExtraRecord(
+            dw_id="rotating-id-is-irrelevant",
+            slug="shared-teaser",
+            title="Shared Teaser",
+            movie_extra_type="trailer",
+            duration=60,
+        )
+        movie_a = _movie_record(
+            dw_id="movie-a-id",
+            slug="movie-a",
+            title="Movie A",
+            extras=[shared],
+        )
+        movie_b = _movie_record(
+            dw_id="movie-b-id",
+            slug="movie-b",
+            title="Movie B",
+            extras=[shared],
+        )
+        body = MovieDownloadAPICreate(local_media_profile_id=profile.id)
+
+        download_a = create_movie_extra_download(session, movie_a, shared.slug, body)
+        download_b = create_movie_extra_download(session, movie_b, shared.slug, body)
+        session.commit()
+
+        assert download_a.id != download_b.id
+        assert download_a.media_item_id != download_b.media_item_id
+        assert session.query(MovieExtraMediaDownload).count() == 2
+
+        placements = session.query(MovieExtra).order_by(MovieExtra.movie_id).all()
+        assert len(placements) == 2
+        assert placements[0].source_id == placements[1].source_id
+        assert session.query(MovieExtraSource).count() == 1
+        assert download_a.file_path != download_b.file_path
+        assert "Movie A" in download_a.file_path
+        assert "Movie B" in download_b.file_path
+
+        # Re-requesting the same association/profile reuses its MediaDownload;
+        # it does not weaken the existing base-table uniqueness contract.
+        same_download_a = create_movie_extra_download(session, movie_a, shared.slug, body)
+        assert same_download_a.id == download_a.id
+        assert session.query(MovieExtraMediaDownload).count() == 2
+    finally:
+        session.close()
+        engine.dispose()

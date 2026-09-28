@@ -1,19 +1,24 @@
 [project]
 name = "backend"
-version = "0.1.0"
-description = "VodLoft FastAPI backend API and database"
+version = "0.3.0"
+description = "WireLoft FastAPI backend API and DB utilities"
+authors = [{ name = "Samuël Visser", email = "samuvisser@gmail.com" }]
 requires-python = ">=3.13,<3.14"
 dependencies = [
-    "SQLAlchemy>=2.0.43,<3",
+    "SQLAlchemy>=2.0.43",
     "alembic>=1.19,<1.20",
-    "fastapi>=0.118.0,<1",
-    "pydantic>=2.11.9,<3",
-    "uvicorn>=0.37.0,<1",
+    "fastapi>=0.118.0",
+    "pydantic>=2.11.9",
+    "uvicorn>=0.37.0",
+    "cryptography>=43.0.1",
+    "psutil>=6.1.1",
     "config",
-    "controller",
-    "media-profiles",
+    "dailywire-api",
+    "dailywire-authorisation",
     "task-manager",
-    "ytdlp-client",
+    "controller",
+    "source-contracts",
+    "jinja2>=3.1,<4",
 ]
 
 [project.scripts]

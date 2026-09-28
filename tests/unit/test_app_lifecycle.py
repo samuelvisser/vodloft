@@ -1,0 +1,266 @@
+from __future__ import annotations
+
+import asyncio
+import subprocess
+import sys
+import threading
+from datetime import datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+
+def test_backend_factory_imports_without_eager_worker_registration_cycle():
+    """Reproduce backend startup in a fresh interpreter.
+
+    Importing one task helper used to initialize every worker through package
+    ``__init__`` files. ``refresh_movie_extras`` then imported the movies API
+    while media-download routing was only partially initialized, producing the
+    circular import seen under Uvicorn's spawned reload worker.
+    """
+    code = """
+from task_manager.scheduler.registry import all_definitions
+import task_manager.tasks
+assert all_definitions() == []
+from backend.app import create_app
+create_app()
+task_manager.tasks.load_all_tasks()
+assert 'refresh_movie_extras' in {definition.key for definition in all_definitions()}
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_download_filesystem_recovery_cleans_expired_rss_cache(monkeypatch, tmp_path):
+    import backend.api.endpoints.feeds.cached_video as cached_video
+    import backend.app as backend_app
+    import task_manager.tasks.helpers.downloads.download_paths as download_paths
+
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        download_paths,
+        "cleanup_abandoned_download_path_reservations",
+        lambda _root: calls.append("reservations") or 1,
+    )
+    monkeypatch.setattr(
+        download_paths,
+        "cleanup_abandoned_temporary_downloads",
+        lambda _temporary, _downloads: calls.append("temporary") or 2,
+    )
+    monkeypatch.setattr(
+        cached_video,
+        "cleanup_expired_rss_cache",
+        lambda: calls.append("rss-cache") or 3,
+    )
+
+    pause = SimpleNamespace(release=lambda: calls.append("release"))
+    download_settings = SimpleNamespace(
+        download_root=tmp_path / "downloads",
+        temporary_download_root=tmp_path / "temporary",
+    )
+
+    backend_app._recover_download_filesystem(download_settings, pause)
+
+    assert calls == ["reservations", "temporary", "rss-cache", "release"]
+
+
+def test_app_factory_is_side_effect_free_and_lifespan_owns_controller(monkeypatch):
+    import backend.app as backend_app
+    import controller
+    import task_manager.scheduler.scheduler as scheduler_module
+    from config import get_settings
+
+    start = Mock()
+    stop = Mock()
+    monkeypatch.setattr(controller, "start_controller", start)
+    monkeypatch.setattr(controller, "stop_controller", stop)
+    monkeypatch.setattr(get_settings().scheduler, "enabled", False)
+    monkeypatch.setattr(
+        backend_app,
+        "_recover_download_filesystem",
+        lambda *_args: _args[-1].release(),
+    )
+
+    first_app = backend_app.create_app()
+    assert start.call_count == 0
+    assert stop.call_count == 0
+
+    async def run_lifespan(app, expected_start_count, expected_stop_count):
+        async with app.router.lifespan_context(app):
+            assert start.call_count == expected_start_count
+            assert stop.call_count == expected_stop_count
+
+    asyncio.run(run_lifespan(first_app, 1, 0))
+    assert stop.call_count == 1
+    scheduler_module.shutdown_scheduler(wait=False)
+
+    second_app = backend_app.create_app()
+    asyncio.run(run_lifespan(second_app, 2, 1))
+    assert start.call_count == 2
+    assert stop.call_count == 2
+    scheduler_module.shutdown_scheduler(wait=False)
+
+
+def test_controller_uses_asgi_loop_and_resets_scheduler(task_database, monkeypatch):
+    import controller.app as controller_app
+    import task_manager.scheduler.scheduler as scheduler_module
+
+    monkeypatch.setattr(controller_app, "_controller_started", False)
+    monkeypatch.setattr(controller_app, "emit_startup_event", lambda: None)
+
+    async def run_controller():
+        controller_app.start_controller()
+        try:
+            scheduler = scheduler_module._scheduler
+            critical_scheduler = scheduler_module._critical_scheduler
+            assert scheduler is not None
+            assert critical_scheduler is not None
+            assert scheduler.running
+            assert critical_scheduler.running
+            assert scheduler._eventloop is asyncio.get_running_loop()
+            assert critical_scheduler._eventloop is asyncio.get_running_loop()
+            assert scheduler_module._loop_thread is None
+        finally:
+            controller_app.stop_controller()
+
+    asyncio.run(run_controller())
+
+    assert scheduler_module._scheduler is None
+    assert scheduler_module._critical_scheduler is None
+    assert scheduler_module._loop is None
+    assert scheduler_module._loop_thread is None
+    assert not any(thread.name.startswith("wireloft") for thread in threading.enumerate())
+
+
+def test_controller_cancels_task_runs_interrupted_by_restart(task_database, monkeypatch):
+    import controller.app as controller_app
+    from task_manager.scheduler.db import TaskDefinition, TaskRun
+    from task_manager.scheduler.types import ResourceType, TaskStatus
+
+    with task_database() as session:
+        definition = TaskDefinition(
+            key="legacy-indexing-task",
+            title="Legacy indexing task",
+            description=None,
+            allowed_resource_types=["show"],
+            default_max_retries=0,
+        )
+        session.add(definition)
+        session.flush()
+
+        interrupted = TaskRun(
+            definition_id=definition.id,
+            resource_type=ResourceType.SHOW,
+            resource_id=42,
+            status=TaskStatus.RUNNING,
+            progress=65,
+            started_at=datetime.now(timezone.utc),
+        )
+        completed = TaskRun(
+            definition_id=definition.id,
+            resource_type=ResourceType.SHOW,
+            resource_id=43,
+            status=TaskStatus.SUCCEEDED,
+            progress=100,
+            message="OK",
+            started_at=datetime.now(timezone.utc),
+            finished_at=datetime.now(timezone.utc),
+        )
+        session.add_all([interrupted, completed])
+        session.commit()
+        interrupted_id = interrupted.id
+        completed_id = completed.id
+
+    monkeypatch.setattr(controller_app, "_controller_started", False)
+    monkeypatch.setattr(controller_app, "emit_startup_event", lambda: None)
+
+    async def run_controller():
+        controller_app.start_controller()
+        try:
+            with task_database() as session:
+                interrupted = session.get(TaskRun, interrupted_id)
+                completed = session.get(TaskRun, completed_id)
+
+                assert interrupted is not None
+                assert interrupted.status == TaskStatus.CANCELED
+                assert interrupted.message == "Interrupted by WireLoft restart"
+                assert interrupted.finished_at is not None
+                # Preserve the last recorded percentage as historical context;
+                # it is no longer considered active once the status is canceled.
+                assert interrupted.progress == 65
+
+                assert completed is not None
+                assert completed.status == TaskStatus.SUCCEEDED
+                assert completed.message == "OK"
+        finally:
+            controller_app.stop_controller()
+
+    asyncio.run(run_controller())
+
+
+def test_controller_shutdown_does_not_wait_for_background_executors(monkeypatch):
+    import controller.app as controller_app
+    import task_manager.events.registry as event_registry
+    import task_manager.scheduler.scheduler as scheduler_module
+
+    calls = []
+
+    monkeypatch.setattr(controller_app, "_controller_started", True)
+    monkeypatch.setattr(
+        event_registry.WireloftEventLinker,
+        "remove_all",
+        lambda: calls.append(("events.remove_all", None)),
+    )
+    monkeypatch.setattr(
+        event_registry,
+        "shutdown_event_emitter",
+        lambda *, wait=True: calls.append(("events.shutdown", wait)),
+    )
+    monkeypatch.setattr(
+        scheduler_module,
+        "shutdown_scheduler",
+        lambda wait=True: calls.append(("scheduler.shutdown", wait)),
+    )
+
+    controller_app.stop_controller()
+
+    assert calls == [
+        ("events.remove_all", None),
+        ("events.shutdown", False),
+        ("scheduler.shutdown", False),
+    ]
+    assert controller_app._controller_started is False
+
+
+def test_event_emitter_nonblocking_shutdown_skips_drain(monkeypatch):
+    import task_manager.events.registry as event_registry
+
+    class FakeProcessor:
+        def __init__(self):
+            self.wait_calls = 0
+            self.shutdown_calls = []
+
+        def wait_for_tasks(self):
+            self.wait_calls += 1
+
+        def shutdown(self, *, wait, cancel_futures):
+            self.shutdown_calls.append((wait, cancel_futures))
+
+    processor = FakeProcessor()
+    monkeypatch.setattr(event_registry, "_processor", processor)
+    monkeypatch.setattr(event_registry, "_executor", object())
+    monkeypatch.setattr(event_registry, "_emitter", object())
+
+    event_registry.shutdown_event_emitter(wait=False)
+
+    assert processor.wait_calls == 0
+    assert processor.shutdown_calls == [(False, True)]
+    assert event_registry._processor is None
+    assert event_registry._executor is None
+    assert event_registry._emitter is None
