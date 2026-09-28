@@ -1,4 +1,4 @@
-name: Bootstrap VodLoft WireLoft branch
+name: Publish VodLoft follow-up
 "on":
   push:
     branches:
@@ -6,35 +6,29 @@ name: Bootstrap VodLoft WireLoft branch
 permissions:
   contents: write
 jobs:
-  restore:
+  publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify and publish VodLoft snapshot
+      - name: Verify and apply follow-up
         shell: bash
         run: |
           set -euo pipefail
-          cat .bootstrap/part-* > "$RUNNER_TEMP/vodloft.patch.gz"
-          echo '80ad706f05379056ad24a8ac07bd6866c09bdd3539cab37aad3249ebf2eefe04  '"$RUNNER_TEMP/vodloft.patch.gz" | sha256sum -c -
-          gzip -dc "$RUNNER_TEMP/vodloft.patch.gz" > "$RUNNER_TEMP/vodloft.patch"
-          echo '84bb1a6489d65779c4c6b53caf96fe335f602d3e98cae7866474fe55bed74969  '"$RUNNER_TEMP/vodloft.patch" | sha256sum -c -
-          git remote add wireloft https://github.com/samuelvisser/WireLoft.git
-          git fetch wireloft develop
-          git checkout --detach 7853ee7bdf1137111193932fe9da7e8243442bd5
-          git switch -c local-rebuild
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git am "$RUNNER_TEMP/vodloft.patch"
-          mkdir "$RUNNER_TEMP/vodloft-tree"
-          git archive HEAD | tar -x -C "$RUNNER_TEMP/vodloft-tree"
-          git switch codex/bootstrap-wireloft-push
-          git switch -c codex/vodloft-wireloft-prototype
-          rsync -a --delete --exclude=.git --exclude=.github/workflows --exclude=.bootstrap "$RUNNER_TEMP/vodloft-tree"/ ./
-          git rm -r .bootstrap
+          cat .bootstrap/followup-part-* > "$RUNNER_TEMP/followup.patch.gz"
+          echo 'b7cad04f365181784b05a5de1e3916a9d2caea61811cf5b8e35902c35216a829  '"$RUNNER_TEMP/followup.patch.gz" | sha256sum -c -
+          gzip -dc "$RUNNER_TEMP/followup.patch.gz" > "$RUNNER_TEMP/followup.patch"
+          echo 'b1282ad41754c8fee723d41d6a59697bc2c4ca99bbe59cd7f6f2a4df95629f5d  '"$RUNNER_TEMP/followup.patch" | sha256sum -c -
+          git fetch origin codex/vodloft-wireloft-prototype
+          git switch -c publish-vodloft FETCH_HEAD
+          git apply --check "$RUNNER_TEMP/followup.patch"
+          git apply "$RUNNER_TEMP/followup.patch"
+          git diff --check
           git add -A
           if git diff --cached --name-only | grep -q '^.github/workflows/'; then
-            echo 'Workflow changes must use the repository connector'
+            echo 'Workflow changes require connector permission'
             exit 1
           fi
-          git commit -m 'Build VodLoft from WireLoft baseline 7853ee7b'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Extend VodLoft scanning, source routing, playback and job durability'
           git push origin HEAD:refs/heads/codex/vodloft-wireloft-prototype
