@@ -14,14 +14,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat .bootstrap/next-part-* > "$RUNNER_TEMP/next.patch.gz"
-          echo '3daf588381b6ecfd4d640a17a86cd7cb96f99bc5cf7e14f74e178d520723998d  '"$RUNNER_TEMP/next.patch.gz" | sha256sum -c -
-          gzip -dc "$RUNNER_TEMP/next.patch.gz" > "$RUNNER_TEMP/next.patch"
-          echo 'e90301750c7cc61e4ac56bc64fa19d8cfb089e3d7b117d6981e2b96c3bf55dcc  '"$RUNNER_TEMP/next.patch" | sha256sum -c -
+          cat .bootstrap/config-part-* > "$RUNNER_TEMP/config.patch.gz"
+          echo '2f68470aa24f078b7079573f07644d70cd38c4fa132c8f46f99cd7261f967728  '"$RUNNER_TEMP/config.patch.gz" | sha256sum -c -
+          gzip -dc "$RUNNER_TEMP/config.patch.gz" > "$RUNNER_TEMP/config.patch"
+          echo '36bc5645d9c9ed251520ab424de5d1e343646ab7ebb48528333e37a1bade4181  '"$RUNNER_TEMP/config.patch" | sha256sum -c -
           git fetch origin codex/vodloft-wireloft-prototype
           git switch -c publish-vodloft FETCH_HEAD
-          git apply --check "$RUNNER_TEMP/next.patch"
-          git apply "$RUNNER_TEMP/next.patch"
+          git apply --check "$RUNNER_TEMP/config.patch"
+          git apply "$RUNNER_TEMP/config.patch"
           git diff --check
           git add -A
           if git diff --cached --name-only | grep -q '^.github/workflows/'; then
@@ -30,5 +30,5 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'Complete Source search, account selection, and management flows'
+          git commit -m 'Add manifest-driven Source connection configuration and storage safeguards'
           git push origin HEAD:refs/heads/codex/vodloft-wireloft-prototype
