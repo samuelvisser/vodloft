@@ -2,10 +2,10 @@
 
 import logging
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 
 from backend.db import get_session
@@ -20,16 +20,29 @@ router = APIRouter(prefix="/vodloft", tags=["VodLoft collection automation"])
 class DownloadPolicyInput(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     local_profile_ids: list[int] = Field(min_length=1)
-    backfill: str = Field(default="newest", pattern="^(all|newest|metadata_only)$")
+    backfill: str = Field(default="newest", pattern="^(all|newest|date_range|metadata_only)$")
     newest_count: int = Field(default=10, ge=1, le=1000)
+    published_after: date | None = None
+    published_before: date | None = None
+    title_contains: str | None = Field(default=None, max_length=200)
     refresh_minutes: int = Field(default=60, ge=15, le=10080)
     enabled: bool = True
+
+    @model_validator(mode="after")
+    def date_range_is_valid(self):
+        if self.published_after and self.published_before and self.published_after > self.published_before:
+            raise ValueError("The publication start must be on or before the end")
+        if self.backfill == "date_range" and not (self.published_after or self.published_before):
+            raise ValueError("Choose a publication date for date-range backfill")
+        return self
 
 
 def _serialize(policy: CollectionDownloadProfile) -> dict:
     return {"id": policy.id, "collection_id": policy.collection_id, "name": policy.name,
             "local_profile_ids": policy.local_profile_ids, "backfill": policy.backfill,
-            "newest_count": policy.newest_count, "refresh_minutes": policy.refresh_minutes,
+            "newest_count": policy.newest_count, "published_after": policy.published_after,
+            "published_before": policy.published_before, "title_contains": policy.title_contains,
+            "refresh_minutes": policy.refresh_minutes,
             "enabled": policy.enabled, "last_scan_at": policy.last_scan_at}
 
 
@@ -96,6 +109,21 @@ def schedule_profile(profile_id: int, *, dispatch: bool = True) -> dict:
         skipped: list[dict] = []
         for entry in entries:
             item = session.get(MediaItem, entry.item_id)
+            if item.kind == "collection":
+                skipped.append({"item_id": item.id, "reason": "Nested Collection requires an explicit subscription"})
+                continue
+            if policy.title_contains and policy.title_contains.casefold() not in (item.user_title or item.title).casefold():
+                skipped.append({"item_id": item.id, "reason": "Title does not match the Download Profile filter"})
+                continue
+            if policy.backfill == "date_range" or policy.published_after or policy.published_before:
+                if not item.published_at:
+                    skipped.append({"item_id": item.id, "reason": "Publication date is unknown"})
+                    continue
+                published = item.published_at.date()
+                if (policy.published_after and published < policy.published_after or
+                    policy.published_before and published > policy.published_before):
+                    skipped.append({"item_id": item.id, "reason": "Outside the publication date range"})
+                    continue
             candidates = [p for p in local_profiles if p and p.enabled and
                           p.domain_id == item.domain_id and item.kind in p.applicable_kinds]
             if not candidates:
@@ -128,7 +156,9 @@ def run_profile(profile_id: int):
 def scans(collection_id: int):
     with get_session() as session:
         return [{"id": s.id, "source_id": s.source_id, "complete": s.complete,
-                 "entry_count": s.entry_count, "error": s.error, "created_at": s.created_at}
+                 "entry_count": s.entry_count, "error": s.error,
+                 "has_checkpoint": bool(s.next_cursor), "runtime_version": s.runtime_version,
+                 "created_at": s.created_at}
                 for s in session.scalars(select(CollectionScan).where(
                     CollectionScan.collection_id == collection_id).order_by(CollectionScan.id.desc()).limit(50)).all()]
 

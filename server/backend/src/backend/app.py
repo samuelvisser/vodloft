@@ -108,11 +108,12 @@ async def application_lifespan(app: FastAPI):
             from backend.api.endpoints.vodloft.automation import refresh_due_collections
             from backend.source_manager.runtime import install_bundled_updates
             from backend.api.endpoints.vodloft.integrations import reconcile_exports
-            from backend.api.endpoints.vodloft.router import retry_due_acquisition_jobs
+            from backend.api.endpoints.vodloft.router import recover_acquisition_jobs, retry_due_acquisition_jobs
             while not automation_stop.wait(15):
                 try:
                     install_bundled_updates()
                     refresh_due_collections()
+                    recover_acquisition_jobs()
                     retry_due_acquisition_jobs()
                     reconcile_exports()
                 except Exception:

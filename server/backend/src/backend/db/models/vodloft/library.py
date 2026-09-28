@@ -1,8 +1,8 @@
 """Normalized Source independent media identity and local representations."""
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint, JSON, Boolean
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, UniqueConstraint, JSON, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.db.core import Base
@@ -45,6 +45,7 @@ class MediaItem(Base):
     title: Mapped[str] = mapped_column(String)
     description: Mapped[str | None] = mapped_column(String, nullable=True)
     duration: Mapped[float | None] = mapped_column(nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     artwork_url: Mapped[str | None] = mapped_column(String, nullable=True)
     user_title: Mapped[str | None] = mapped_column(String, nullable=True)
     user_description: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -69,10 +70,11 @@ class SourceReference(Base):
 
 class CollectionEntry(Base):
     __tablename__ = "vodloft_collection_entries"
-    __table_args__ = (UniqueConstraint("collection_id", "item_id"),)
+    __table_args__ = (UniqueConstraint("collection_id", "occurrence_key", name="uq_vodloft_collection_entry_occurrence"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     collection_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_items.id", ondelete="CASCADE"))
     item_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_items.id", ondelete="CASCADE"))
+    occurrence_key: Mapped[str | None] = mapped_column(String, nullable=True)
     position: Mapped[int] = mapped_column(Integer)
     group: Mapped[str | None] = mapped_column(String, nullable=True)
     episode_number: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -105,6 +107,9 @@ class CollectionDownloadProfile(Base):
     local_profile_ids: Mapped[list[int]] = mapped_column(JSON)
     backfill: Mapped[str] = mapped_column(String(24), default="newest")
     newest_count: Mapped[int] = mapped_column(Integer, default=10)
+    published_after: Mapped[date | None] = mapped_column(Date, nullable=True)
+    published_before: Mapped[date | None] = mapped_column(Date, nullable=True)
+    title_contains: Mapped[str | None] = mapped_column(String(200), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     refresh_minutes: Mapped[int] = mapped_column(Integer, default=60)
     last_scan_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -116,6 +121,8 @@ class CollectionScan(Base):
     collection_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_items.id", ondelete="CASCADE"))
     source_id: Mapped[str] = mapped_column(String)
     runtime_version: Mapped[str | None] = mapped_column(String, nullable=True)
+    connection_id: Mapped[int | None] = mapped_column(ForeignKey("vodloft_source_connections.id"), nullable=True)
+    next_cursor: Mapped[str | None] = mapped_column(String, nullable=True)
     complete: Mapped[bool] = mapped_column(Boolean)
     entry_count: Mapped[int] = mapped_column(Integer)
     error: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -147,11 +154,14 @@ class AcquisitionJob(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     item_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_items.id", ondelete="CASCADE"))
     reference_id: Mapped[int] = mapped_column(ForeignKey("vodloft_source_references.id"))
+    operation_id: Mapped[str | None] = mapped_column(ForeignKey("task_operations.id"), nullable=True)
     profile_id: Mapped[int | None] = mapped_column(ForeignKey("local_media_profiles.id"), nullable=True)
     execution_spec: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     active_key: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    lease_owner: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     state: Mapped[str] = mapped_column(String(32), default="queued")
     error: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
@@ -219,3 +229,14 @@ class PublishedEntry(Base):
     path: Mapped[str] = mapped_column(String, unique=True)
     size: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class PlaybackProgress(Base):
+    __tablename__ = "vodloft_playback_progress"
+    __table_args__ = (UniqueConstraint("user_key", "item_id", name="uq_vodloft_playback_user_item"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_key: Mapped[str] = mapped_column(String(80), default="admin")
+    item_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_items.id", ondelete="CASCADE"))
+    seconds: Mapped[float] = mapped_column(default=0.0)
+    completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)

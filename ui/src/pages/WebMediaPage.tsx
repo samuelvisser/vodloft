@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react'
+import {useEffect, useRef, useState} from 'react'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {z} from 'zod'
@@ -11,14 +11,17 @@ type Source = {source_id: string; display_name: string; capabilities: string[];
 type Connection = {id: number; source_id: string; name: string; has_secret: boolean; enabled: boolean}
 type Reference = {source_id: string; domain: string; namespace: string; upstream_id: string; url: string}
 type Preview = {kind: string; title: string; description?: string; artwork_url?: string; reference: Reference; entries: {title: string; position: number}[]; enumeration_complete: boolean}
-type Item = {id: number; title: string; description?: string; kind: string; domain: string; downloaded: boolean; artwork_url?: string; entries?: Item[]; extras?: Item[]}
-type Job = {id: number; state: string; error?: string; cancel_requested?: boolean}
+type Item = {id: number; title: string; description?: string; kind: string; domain: string; downloaded: boolean; playback_type?: string; artwork_url?: string; entries?: Item[]; extras?: Item[]}
+type Home = {continue: (Item & {seconds: number})[]; recent: Item[];
+    activity: {id: number; item_id: number; state: string}[]; issues: {kind: string; id: number}[]}
+type Job = {id: number; state: string; error?: string; cancel_requested?: boolean;
+    operation_id?: string; progress?: number}
 type Profile = {id: number; name: string; domain: string; preferred_format: string; output_template: string; applicable_kinds: string[]; enabled: boolean}
 type DownloadPolicy = {id: number; name: string; local_profile_ids: number[]; backfill: string; newest_count: number; enabled: boolean}
 type StreamProfile = {id: number; name: string; format: string; enabled: boolean}
 type Target = {id: number; name: string; kind: string; base_url: string; library_id: string; enabled: boolean}
 type RuntimeState = {active: Record<string, string>; installed: Record<string, string[]>;
-    policy: Record<string, {automatic: boolean; pinned_version: string | null}>}
+    policy: Record<string, {automatic: boolean; pinned_version: string | null; channel: string}>}
 type Catalogue = {source_id: string; items: {hostname: string; display_name: string}[]; exhaustive: boolean}
 const ProfileFormSchema = z.object({
     name: z.string().min(1),
@@ -35,7 +38,7 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
         const body = await response.json().catch(() => null)
         throw new Error(body?.detail || `HTTP ${response.status}`)
     }
-    return response.json() as Promise<T>
+    return response.status === 204 ? undefined as T : response.json() as Promise<T>
 }
 
 export default function WebMediaPage() {
@@ -46,6 +49,7 @@ export default function WebMediaPage() {
     const [connections, setConnections] = useState<Connection[]>([])
     const [importConnectionId, setImportConnectionId] = useState<number | null>(null)
     const [items, setItems] = useState<Item[]>([])
+    const [home, setHome] = useState<Home | null>(null)
     const [preview, setPreview] = useState<Preview | null>(null)
     const [selected, setSelected] = useState<Item | null>(null)
     const [job, setJob] = useState<Job | null>(null)
@@ -62,7 +66,8 @@ export default function WebMediaPage() {
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
-    const refresh = () => api<Item[]>('/library').then(setItems).catch(e => setError(String(e)))
+    const refresh = () => Promise.all([api<Item[]>('/library').then(setItems),
+        api<Home>('/home').then(setHome)]).catch(e => setError(String(e)))
     useEffect(() => {
         void api<Source[]>('/sources').then(setSources).catch(e => setError(String(e)))
         void api<Connection[]>('/sources/connections').then(setConnections).catch(e => setError(String(e)))
@@ -178,6 +183,16 @@ export default function WebMediaPage() {
                 {!preview.enumeration_complete && ' (more entries are available)'}</p>}
             <button className="btn btn-primary" type="button" disabled={busy} onClick={() => void importPreview()}>Add to library</button>
         </section>}
+        {home && <section style={{marginBottom: 24}} aria-label="Home">
+            <h2>Continue</h2>
+            {home.continue.filter(item => item.downloaded).length === 0 && <p>Your local playback will appear here.</p>}
+            <div style={{display: 'flex', flexWrap: 'wrap', gap: 8}}>{home.continue.filter(item => item.downloaded).map(item =>
+                <button className="btn" type="button" key={item.id} onClick={() => void open(item.id)}>
+                    {item.title} · {Math.floor(item.seconds / 60)} min</button>)}</div>
+            <p>Recent arrivals: {home.recent.length}{home.activity.length > 0 &&
+                ` · ${home.activity.length} active download${home.activity.length === 1 ? '' : 's'}`}{home.issues.length > 0 &&
+                ` · ${home.issues.length} issue${home.issues.length === 1 ? '' : 's'}`}</p>
+        </section>}
         <details style={{marginBottom: 24}}><summary>Sources, Domains and media servers</summary>
             <h3>Installed Sources</h3>
             {sources.map(source => <p key={source.source_id}>{source.display_name} · {source.capabilities.join(', ')}
@@ -189,8 +204,16 @@ export default function WebMediaPage() {
                     checked={runtimes?.policy[source.source_id]?.automatic ?? true}
                     onChange={event => void api<unknown>(`/sources/${encodeURIComponent(source.source_id)}/policy`, {
                         method: 'PUT', body: JSON.stringify({automatic: event.target.checked,
-                            pinned_version: runtimes?.policy[source.source_id]?.pinned_version ?? null})})
+                            pinned_version: runtimes?.policy[source.source_id]?.pinned_version ?? null,
+                            channel: runtimes?.policy[source.source_id]?.channel ?? 'stable'})})
                         .then(() => api<RuntimeState>('/sources/runtimes').then(setRuntimes)).catch(e => setError(String(e)))} /></label>
+                {' '}<label>Channel <select value={runtimes?.policy[source.source_id]?.channel ?? 'stable'}
+                    onChange={event => void api<unknown>(`/sources/${encodeURIComponent(source.source_id)}/policy`, {
+                        method: 'PUT', body: JSON.stringify({automatic: runtimes?.policy[source.source_id]?.automatic ?? true,
+                            pinned_version: runtimes?.policy[source.source_id]?.pinned_version ?? null,
+                            channel: event.target.value})})
+                        .then(() => api<RuntimeState>('/sources/runtimes').then(setRuntimes)).catch(e => setError(String(e)))}>
+                    <option value="stable">Stable</option><option value="beta">Beta</option></select></label>
             </p>)}
             <button className="btn" type="button" onClick={() => void api<unknown>('/sources/runtimes/check', {method: 'POST'})
                 .then(() => api<RuntimeState>('/sources/runtimes').then(setRuntimes)).catch(e => setError(String(e)))}>Check Source bundles</button>
@@ -228,6 +251,11 @@ export default function WebMediaPage() {
             }}/>
             {selected.kind === 'collection' && <div style={{display: 'flex', gap: 10, marginBottom: 16}}>
                 <button className="btn" type="button" disabled={busy} onClick={() => void refreshCollection(selected.id)}>Refresh collection</button>
+                <button className="btn" type="button" disabled={busy} onClick={() => {
+                    if (!window.confirm('Remove this collection and its feeds? Shared local media will remain available.')) return
+                    void api<unknown>(`/library/${selected.id}`, {method: 'DELETE'})
+                        .then(() => {setSelected(null); void refresh()}).catch(e => setError(String(e)))
+                }}>Remove collection</button>
             </div>}
             {selected.kind === 'collection' && <section>
                 <h3>Collection downloads</h3>
@@ -264,14 +292,17 @@ export default function WebMediaPage() {
                 }}/>
                 <button className="btn btn-primary" type="button" disabled={!profileId || !!job && !['failed', 'available'].includes(job.state)}
                         onClick={() => void download(selected.id)}>{selected.downloaded ? 'Download again' : 'Download'}</button>
-                {job && <p role="status">Download: {job.state}{job.error ? ` · ${job.error}` : ''}</p>}
+                {job && <p role="status">Download: {job.state}{job.progress !== undefined ? ` · ${job.progress}%` : ''}
+                    {job.error ? ` · ${job.error}` : ''}</p>}
                 {job && ['queued', 'resolving', 'downloading', 'verifying'].includes(job.state) &&
                     <button className="btn" type="button" disabled={job.cancel_requested}
                         onClick={() => void api<Job>(`/jobs/${job.id}/cancel`, {method: 'POST'})
                             .then(() => setJob(previous => previous ? {...previous, cancel_requested: true} : null))
                             .catch(e => setError(String(e)))}>Cancel download</button>}
-                {selected.downloaded && <video controls preload="metadata" style={{display: 'block', width: 'min(100%, 800px)', marginTop: 16}}
-                                               src={`${base()}/library/${selected.id}/play`} />}
+                {job && ['failed', 'canceled'].includes(job.state) &&
+                    <button className="btn" type="button" onClick={() => void api<Job>(`/jobs/${job.id}/retry`, {method: 'POST'})
+                        .then(next => setJob({...job, ...next})).catch(e => setError(String(e)))}>Retry download</button>}
+                {selected.downloaded && <LocalPlayer key={selected.id} item={selected} />}
             </>}
             {selected.entries && <div style={{display: 'grid', gap: 8}}>{selected.entries.map(entry =>
                 <button type="button" className="btn" key={entry.id} onClick={() => void open(entry.id)}
@@ -283,6 +314,33 @@ export default function WebMediaPage() {
             </section>}
         </section>}
     </section>
+}
+
+function LocalPlayer({item}: {item: Item}) {
+    const player = useRef<HTMLVideoElement & HTMLAudioElement>(null)
+    const lastSaved = useRef(0)
+    const [position, setPosition] = useState(0)
+    useEffect(() => {
+        void api<{seconds: number}>(`/library/${item.id}/progress`).then(data => setPosition(data.seconds))
+    }, [item.id])
+    const save = (completed = false) => {
+        const current = player.current?.currentTime ?? 0
+        if (!Number.isFinite(current)) return
+        lastSaved.current = current
+        void api(`/library/${item.id}/progress`, {method: 'PUT',
+            body: JSON.stringify({seconds: current, completed})}).catch(() => {})
+    }
+    const common = {controls: true, preload: 'metadata' as const,
+        src: `${base()}/library/${item.id}/play`,
+        onLoadedMetadata: () => {
+            if (player.current && position > 0 && position < player.current.duration - 1)
+                player.current.currentTime = position
+        },
+        onTimeUpdate: () => {
+            if (player.current && Math.abs(player.current.currentTime - lastSaved.current) >= 10) save()
+        }, onPause: () => save(), onEnded: () => save(true),
+        style: {display: 'block', width: 'min(100%, 800px)', marginTop: 16}}
+    return item.playback_type === 'audio' ? <audio ref={player} {...common} /> : <video ref={player} {...common} />
 }
 
 function DomainProfileForm({domain, targets, onCreated}: {domain: string; targets: Target[]; onCreated: (profile: Profile) => void}) {
@@ -329,9 +387,11 @@ function DomainProfileForm({domain, targets, onCreated}: {domain: string; target
 
 const DownloadPolicySchema = z.object({
     name: z.string().min(1),
-    backfill: z.enum(['newest', 'all', 'metadata_only']).default('newest'),
+    backfill: z.enum(['newest', 'all', 'date_range', 'metadata_only']).default('newest'),
     newest_count: z.coerce.number().int().min(1).max(1000).default(10),
     refresh_minutes: z.coerce.number().int().min(15).max(10080).default(60),
+    published_after: z.string().default(''), published_before: z.string().default(''),
+    title_contains: z.string().max(200).default(''),
 })
 type PolicyFields = z.input<typeof DownloadPolicySchema>
 
@@ -341,7 +401,8 @@ function DownloadPolicyForm({collectionId, profiles, onCreated}: {collectionId: 
     const [error, setError] = useState<string | null>(null)
     const {register, handleSubmit, formState: {errors, isSubmitting}} = useForm<PolicyFields, unknown, z.output<typeof DownloadPolicySchema>>({
         resolver: zodResolver(DownloadPolicySchema),
-        defaultValues: {name: 'New episodes', backfill: 'newest', newest_count: 10, refresh_minutes: 60},
+        defaultValues: {name: 'New episodes', backfill: 'newest', newest_count: 10, refresh_minutes: 60,
+            published_after: '', published_before: '', title_contains: ''},
     })
     if (!expanded) return <button className="btn" type="button" onClick={() => setExpanded(true)}>Create Download Profile</button>
     return <form onSubmit={handleSubmit(async values => {
@@ -349,14 +410,22 @@ function DownloadPolicyForm({collectionId, profiles, onCreated}: {collectionId: 
         setError(null)
         try {
             const created = await api<DownloadPolicy>(`/library/${collectionId}/download-profiles`, {
-                method: 'POST', body: JSON.stringify({...values, local_profile_ids: selectedIds, enabled: true})})
+                method: 'POST', body: JSON.stringify({...values,
+                    published_after: values.published_after || null,
+                    published_before: values.published_before || null,
+                    title_contains: values.title_contains || null,
+                    local_profile_ids: selectedIds, enabled: true})})
             onCreated(created); setExpanded(false)
         } catch (e) { setError(String(e)) }
     })} style={{display: 'grid', gap: 10, maxWidth: 620, margin: '12px 0'}}>
         <label>Name <input {...register('name')} />{errors.name && <span role="alert">{errors.name.message}</span>}</label>
         <label>Backfill <select {...register('backfill')}><option value="newest">Newest N</option>
-            <option value="all">All imported members</option><option value="metadata_only">Metadata only</option></select></label>
+            <option value="all">All imported members</option><option value="date_range">Date range</option>
+            <option value="metadata_only">Metadata only</option></select></label>
         <label>Newest count <input type="number" {...register('newest_count')} /></label>
+        <label>Published on or after <input type="date" {...register('published_after')} /></label>
+        <label>Published on or before <input type="date" {...register('published_before')} /></label>
+        <label>Title contains <input {...register('title_contains')} /></label>
         <label>Refresh every (minutes) <input type="number" {...register('refresh_minutes')} /></label>
         <fieldset><legend>Local Media Profiles by member Domain</legend>{profiles.map(profile =>
             <label key={profile.id} style={{display: 'block'}}><input type="checkbox" checked={selectedIds.includes(profile.id)}

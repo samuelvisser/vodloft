@@ -7,18 +7,19 @@ import re
 import shutil
 import tempfile
 import threading
+import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from backend.db import get_session
 from backend.db.models.vodloft import (
-    AcquisitionJob, Artifact, ArtifactPlacement, CollectionEntry, CollectionScan, Domain, FileFinalization, MediaItem, MovieExtraParent, SourceConnection, SourceDomain, SourceReference,
+    AcquisitionJob, Artifact, ArtifactPlacement, CollectionDownloadProfile, CollectionEntry, CollectionScan, CollectionStreamProfile, Domain, FeedSubscription, FileFinalization, LegacyMediaLink, MediaItem, MediaServerExport, MovieExtraParent, PlaybackProgress, PublishedEntry, SourceConnection, SourceDomain, SourceReference,
 )
 from backend.db.models.local_media_profile import DomainLocalMediaProfile
 from backend.api.endpoints.vodloft.profiles import output_path_from_spec
@@ -29,12 +30,37 @@ from backend.source_manager import runtime as source_runtime
 from backend.api.endpoints.vodloft.connections import access_token as connection_token
 from config import get_settings
 from source_contracts import MediaSnapshot, SourceMediaReference
+from task_manager.scheduler.db import TaskOperation
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/vodloft", tags=["VodLoft library"])
 _download_slots = threading.BoundedSemaphore(2)
 _source_slots: dict[str, threading.BoundedSemaphore] = {}
 _source_slots_lock = threading.Lock()
+_MISSING = object()
+_JOB_PROGRESS = {"queued": 0, "resolving": 10, "downloading": 35,
+                 "processing": 65, "verifying": 75, "finalizing": 90,
+                 "available": 100, "failed": 100, "canceled": 100}
+
+
+def _sync_operation(session, job: AcquisitionJob) -> None:
+    if not job.operation_id:
+        return
+    operation = session.get(TaskOperation, job.operation_id)
+    if not operation:
+        return
+    state = job.state
+    operation.status = ({"available": "SUCCEEDED", "failed": "FAILED",
+        "canceled": "CANCELED", "queued": "QUEUED"}.get(state, "RUNNING"))
+    operation.progress = _JOB_PROGRESS.get(state, 0)
+    operation.message = state.replace("_", " ").capitalize()
+    operation.error = job.error if state == "failed" else None
+    now = datetime.now(timezone.utc)
+    if state not in {"queued", "available", "failed", "canceled"}:
+        operation.started_at = operation.started_at or now
+    operation.finished_at = now if state in {"available", "failed", "canceled"} else None
+    if state == "available":
+        operation.result = {"summary": "Download available", "data": {"item_id": job.item_id}}
 
 
 class JobCancelled(Exception):
@@ -61,6 +87,11 @@ class UserMetadataInput(BaseModel):
     description: str | None = Field(default=None, max_length=10000)
 
 
+class PlaybackInput(BaseModel):
+    seconds: float = Field(ge=0)
+    completed: bool = False
+
+
 def _domain(session, hostname: str) -> Domain:
     hostname = hostname.rstrip(".").lower().encode("idna").decode("ascii")
     domain = session.scalar(select(Domain).where(Domain.hostname == hostname))
@@ -72,8 +103,9 @@ def _domain(session, hostname: str) -> Domain:
 
 
 def _upsert(session, reference: SourceMediaReference, kind: str, title: str,
-            description: str | None = None, duration: float | None = None,
-            artwork_url: str | None = None, connection_id: int | None = None) -> MediaItem:
+            description=_MISSING, duration=_MISSING,
+            artwork_url=_MISSING, connection_id: int | None = None,
+            published_at=_MISSING) -> MediaItem:
     domain = _domain(session, reference.domain)
     supported = session.scalar(select(SourceDomain).where(
         SourceDomain.source_id == reference.source_id, SourceDomain.domain_id == domain.id))
@@ -90,12 +122,14 @@ def _upsert(session, reference: SourceMediaReference, kind: str, title: str,
     if source:
         item = session.get(MediaItem, source.item_id)
         item.title = title
-        if description is not None:
+        if description is not _MISSING:
             item.description = description
-        if duration is not None:
+        if duration is not _MISSING:
             item.duration = duration
-        if artwork_url is not None:
+        if artwork_url is not _MISSING:
             item.artwork_url = artwork_url
+        if published_at is not _MISSING:
+            item.published_at = published_at
         source.url = reference.url
     else:
         related = session.scalar(select(SourceReference).where(
@@ -112,7 +146,10 @@ def _upsert(session, reference: SourceMediaReference, kind: str, title: str,
             item = session.get(MediaItem, related.item_id)
         else:
             item = MediaItem(domain_id=domain.id, kind=kind, title=title,
-                             description=description, duration=duration, artwork_url=artwork_url)
+                             description=None if description is _MISSING else description,
+                             duration=None if duration is _MISSING else duration,
+                             artwork_url=None if artwork_url is _MISSING else artwork_url,
+                             published_at=None if published_at is _MISSING else published_at)
             session.add(item)
             session.flush()
         session.add(SourceReference(item_id=item.id, domain_id=domain.id,
@@ -139,7 +176,10 @@ def _serialize(session, item: MediaItem) -> dict:
     return {"id": item.id, "kind": item.kind, "title": item.user_title or item.title,
             "domain": domain.hostname, "description": item.user_description or item.description,
             "artwork_url": item.artwork_url, "duration": item.duration,
-            "downloaded": bool(artifact and Path(artifact.path).is_file())}
+            "published_at": item.published_at,
+            "downloaded": bool(artifact and Path(artifact.path).is_file()),
+            "playback_type": "audio" if artifact and Path(artifact.path).suffix.lower() in {
+                ".mp3", ".m4a", ".opus", ".ogg", ".wav"} else "video"}
 
 
 @router.get("/sources")
@@ -160,6 +200,46 @@ def source_domains():
     return catalogues
 
 
+@router.get("/sources/{source_id}/manifest")
+def source_manifest(source_id: str):
+    manifest = next((m for m in SourceGateway().manifests() if m.source_id == source_id), None)
+    if not manifest:
+        raise HTTPException(404, "Source runtime is unavailable")
+    return manifest
+
+
+@router.get("/sources/{source_id}/domains")
+def source_domain_page(source_id: str):
+    source_manifest(source_id)
+    return SourceGateway().catalogue(source_id)
+
+
+@router.post("/sources/{source_id}/match")
+def source_match(source_id: str, request: ResolveRequest):
+    source_manifest(source_id)
+    try:
+        return SourceGateway().match(source_id, request.url)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, "Source match operation is unavailable") from exc
+
+
+@router.post("/sources/{source_id}/entries")
+def source_entries(source_id: str, request: ResolveRequest, cursor: str | None = None,
+                   limit: int = 50):
+    source_manifest(source_id)
+    try:
+        with get_session() as session:
+            token = connection_token(session, source_id, request.connection_id)
+        return SourceGateway().entries(source_id, request.url, cursor=cursor, limit=limit,
+            access_token=token)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, "Source enumeration is unavailable") from exc
+
+
 @router.get("/sources/runtimes")
 def source_runtimes():
     return source_runtime.status()
@@ -168,12 +248,14 @@ def source_runtimes():
 class SourceUpdatePolicyInput(BaseModel):
     automatic: bool = True
     pinned_version: str | None = None
+    channel: str = Field(default="stable", pattern="^(stable|beta)$")
 
 
 @router.put("/sources/{source_id}/policy")
 def source_update_policy(source_id: str, data: SourceUpdatePolicyInput):
     try:
-        return source_runtime.set_policy(source_id, data.automatic, data.pinned_version)
+        return source_runtime.set_policy(source_id, data.automatic, data.pinned_version,
+            data.channel)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
 
@@ -210,20 +292,43 @@ def resolve(request: ResolveRequest):
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     gateway = SourceGateway()
-    candidates = [request.source_id] if request.source_id else [s.source_id for s in gateway.manifests()]
+    manifests = gateway.manifests()
+    candidates = [request.source_id] if request.source_id else [s.source_id for s in manifests]
     if not candidates:
         raise HTTPException(503, "No healthy Source runtime is installed")
-    for source_id in candidates:
-        try:
-            with get_session() as session:
-                token = connection_token(session, source_id, request.connection_id)
-            kwargs = {"access_token": token} if token else {}
-            return gateway.resolve(source_id, request.url, **kwargs)
-        except ValueError:
-            continue
-        except Exception:
-            logger.info("Source %s could not resolve URL", source_id, exc_info=True)
-    raise HTTPException(422, "No installed Source could resolve this URL")
+    if request.source_id and request.source_id not in {m.source_id for m in manifests}:
+        raise HTTPException(422, "The selected Source runtime is unavailable")
+    if request.connection_id:
+        with get_session() as session:
+            connection = session.get(SourceConnection, request.connection_id)
+            if not connection or not connection.enabled:
+                raise HTTPException(422, "The selected Source connection is unavailable")
+            if request.source_id and request.source_id != connection.source_id:
+                raise HTTPException(422, "Source and connection do not match")
+            candidates = [connection.source_id]
+    if not request.source_id and not request.connection_id:
+        matches = []
+        for source_id in candidates:
+            try:
+                score = gateway.match(source_id, request.url).confidence
+            except Exception:
+                score = 1  # Older contract-compatible Sources can still resolve URLs.
+            if score:
+                matches.append((score, source_id))
+        candidates = [source_id for _, source_id in sorted(matches, reverse=True)]
+    if not candidates:
+        raise HTTPException(422, "No installed Source recognizes this URL")
+    source_id = candidates[0]
+    try:
+        with get_session() as session:
+            token = connection_token(session, source_id, request.connection_id)
+        kwargs = {"access_token": token} if token else {}
+        return gateway.resolve(source_id, request.url, **kwargs)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:
+        logger.info("Source %s could not resolve URL", source_id, exc_info=True)
+        raise HTTPException(502, f"{source_id} could not resolve this URL; choose another Source explicitly if appropriate") from exc
 
 
 @router.post("/import")
@@ -242,28 +347,46 @@ def import_media(request: ImportRequest):
     return _import_snapshot(snapshot, request.connection_id)
 
 
-def _import_snapshot(snapshot: MediaSnapshot, connection_id: int | None = None) -> dict:
+def _import_snapshot(snapshot: MediaSnapshot, connection_id: int | None = None,
+                     *, scan_error: str | None = None, next_cursor: str | None = None,
+                     runtime_version: str | None = None) -> dict:
     with get_session() as session:
         item = _upsert(session, snapshot.reference, snapshot.kind, snapshot.title,
-                       snapshot.description, snapshot.duration, snapshot.artwork_url, connection_id)
+                       snapshot.description if "description" in snapshot.model_fields_set else _MISSING,
+                       snapshot.duration if "duration" in snapshot.model_fields_set else _MISSING,
+                       snapshot.artwork_url if "artwork_url" in snapshot.model_fields_set else _MISSING,
+                       connection_id,
+                       published_at=snapshot.published_at if "published_at" in snapshot.model_fields_set else _MISSING)
         session.flush()
         if snapshot.kind == "collection":
             for entry in snapshot.entries:
-                child = _upsert(session, entry.reference, "video", entry.title,
-                                connection_id=connection_id)
+                child = _upsert(session, entry.reference, entry.kind, entry.title,
+                                connection_id=connection_id,
+                                published_at=entry.published_at if "published_at" in entry.model_fields_set else _MISSING)
                 session.flush()
+                if child.id == item.id:
+                    continue
+                identity = (CollectionEntry.occurrence_key == entry.occurrence_id
+                            if entry.occurrence_id else
+                            (CollectionEntry.item_id == child.id) & CollectionEntry.occurrence_key.is_(None))
                 membership = session.scalar(select(CollectionEntry).where(
-                    CollectionEntry.collection_id == item.id, CollectionEntry.item_id == child.id))
+                    CollectionEntry.collection_id == item.id, identity))
                 if membership:
+                    membership.item_id = child.id
                     membership.position = entry.position
+                    membership.group = entry.group
+                    membership.episode_number = entry.episode_number
                 else:
                     session.add(CollectionEntry(collection_id=item.id, item_id=child.id,
                         position=entry.position, group=entry.group,
-                        episode_number=entry.episode_number))
+                        episode_number=entry.episode_number,
+                        occurrence_key=entry.occurrence_id))
             # An incomplete scan must never infer removal. This prototype leaves
             # old members in place even after a complete scan until policy exists.
             session.add(CollectionScan(collection_id=item.id, source_id=snapshot.reference.source_id,
-                complete=snapshot.enumeration_complete, entry_count=len(snapshot.entries)))
+                complete=snapshot.enumeration_complete, entry_count=len(snapshot.entries),
+                connection_id=connection_id, next_cursor=next_cursor,
+                runtime_version=runtime_version, error=scan_error))
         if snapshot.kind == "movie":
             for extra in snapshot.extras:
                 child = _upsert(session, extra.reference, "movie_extra", extra.title,
@@ -294,12 +417,47 @@ def refresh_collection(collection_id: int):
         connection_id = reference.connection_id
         token = connection_token(session, source_id, connection_id)
     try:
-        snapshot = SourceGateway().resolve(source_id, url, **({"access_token": token} if token else {}))
+        gateway = SourceGateway()
+        snapshot = gateway.resolve(source_id, url, **({"access_token": token} if token else {}))
     except Exception as exc:
         raise HTTPException(502, "Collection Source is unavailable") from exc
     if snapshot.kind != "collection":
         raise HTTPException(409, "Source no longer identifies this URL as a collection")
-    return _import_snapshot(snapshot, connection_id)
+    runtime_version = None
+    try:
+        runtime_version = command_for(source_id)[1]
+    except (ValueError, RuntimeError):
+        runtime_version = "configured"
+    entries, cursor = [], None
+    try:
+        paged = next((m for m in gateway.manifests() if m.source_id == source_id), None)
+        if paged and "enumerate_pages" in paged.capabilities:
+            complete = False
+            seen_cursors = set()
+            # A bounded reconciliation never expands nested Collections implicitly.
+            for _ in range(100):
+                page = gateway.entries(source_id, url, cursor=cursor, limit=50, access_token=token)
+                entries.extend(page.entries)
+                if page.complete:
+                    complete = True
+                    cursor = None
+                    break
+                if not page.next_cursor or page.next_cursor in seen_cursors:
+                    break
+                cursor = page.next_cursor
+                seen_cursors.add(cursor)
+            snapshot = snapshot.model_copy(update={"entries": entries,
+                "enumeration_complete": complete})
+            return _import_snapshot(snapshot, connection_id, next_cursor=cursor,
+                runtime_version=runtime_version)
+    except Exception:
+        logger.exception("Collection %s enumeration stopped before completion", collection_id)
+        snapshot = snapshot.model_copy(update={"entries": entries or snapshot.entries,
+            "enumeration_complete": False})
+        return _import_snapshot(snapshot, connection_id,
+            scan_error="Collection enumeration stopped before completion",
+            next_cursor=cursor, runtime_version=runtime_version)
+    return _import_snapshot(snapshot, connection_id, runtime_version=runtime_version)
 
 
 @router.get("/library")
@@ -309,6 +467,58 @@ def library():
         members = set(session.scalars(select(CollectionEntry.item_id)).all())
         return [_serialize(session, item) for item in items if item.id not in members and
                 (item.kind != "movie_extra" or item.parent_id is None)]
+
+
+@router.get("/home")
+def home():
+    with get_session() as session:
+        progress = session.scalars(select(PlaybackProgress).where(
+            PlaybackProgress.user_key == "admin", PlaybackProgress.completed.is_(False))
+            .order_by(PlaybackProgress.updated_at.desc()).limit(12)).all()
+        recent = session.scalars(select(MediaItem).where(MediaItem.kind != "collection")
+            .order_by(MediaItem.created_at.desc()).limit(12)).all()
+        active = session.scalars(select(AcquisitionJob).where(AcquisitionJob.state.in_([
+            "queued", "resolving", "downloading", "processing", "verifying", "finalizing"]))
+            .order_by(AcquisitionJob.created_at.desc()).limit(12)).all()
+        failures = session.scalars(select(AcquisitionJob).where(AcquisitionJob.state == "failed")
+            .order_by(AcquisitionJob.updated_at.desc()).limit(10)).all()
+        exports = session.scalars(select(MediaServerExport).where(MediaServerExport.state == "failed")
+            .order_by(MediaServerExport.updated_at.desc()).limit(10)).all()
+        return {"continue": [{**_serialize(session, session.get(MediaItem, p.item_id)),
+            "seconds": p.seconds} for p in progress if session.get(MediaItem, p.item_id)],
+            "recent": [_serialize(session, item) for item in recent],
+            "activity": [{"id": job.id, "item_id": job.item_id, "state": job.state} for job in active],
+            "issues": [{"kind": "acquisition", "id": job.id, "item_id": job.item_id}
+                       for job in failures] +
+                      [{"kind": "delivery", "id": export.id} for export in exports]}
+
+
+@router.get("/library/{item_id}/progress")
+def playback_progress(item_id: int):
+    with get_session() as session:
+        item = session.get(MediaItem, item_id)
+        if not item or item.kind == "collection":
+            raise HTTPException(404, "Playable media item not found")
+        progress = session.scalar(select(PlaybackProgress).where(
+            PlaybackProgress.user_key == "admin", PlaybackProgress.item_id == item_id))
+        return {"seconds": progress.seconds if progress else 0,
+                "completed": progress.completed if progress else False}
+
+
+@router.put("/library/{item_id}/progress")
+def save_playback_progress(item_id: int, data: PlaybackInput):
+    with get_session() as session:
+        item = session.get(MediaItem, item_id)
+        if not item or item.kind == "collection":
+            raise HTTPException(404, "Playable media item not found")
+        progress = session.scalar(select(PlaybackProgress).where(
+            PlaybackProgress.user_key == "admin", PlaybackProgress.item_id == item_id))
+        if not progress:
+            progress = PlaybackProgress(user_key="admin", item_id=item_id)
+            session.add(progress)
+        progress.seconds, progress.completed = data.seconds, data.completed
+        session.commit()
+        return {"seconds": progress.seconds, "completed": progress.completed}
 
 
 @router.get("/library/{item_id}")
@@ -328,6 +538,35 @@ def library_item(item_id: int):
         return result
 
 
+@router.delete("/library/{item_id}", status_code=204)
+def delete_collection(item_id: int):
+    """Remove Collection demand without deleting media shared with other views."""
+    with get_session() as session:
+        item = session.get(MediaItem, item_id)
+        if not item or item.kind != "collection":
+            raise HTTPException(404, "Collection not found")
+        if session.scalar(select(Artifact.id).where(Artifact.item_id == item_id)):
+            raise HTTPException(409, "This Collection has a local artifact; remove its placement first")
+        subscriptions = session.scalars(select(FeedSubscription).where(
+            FeedSubscription.collection_id == item_id)).all()
+        subscription_ids = [subscription.id for subscription in subscriptions]
+        for subscription_id in subscription_ids:
+            session.execute(delete(PublishedEntry).where(PublishedEntry.subscription_id == subscription_id))
+        session.execute(delete(FeedSubscription).where(FeedSubscription.collection_id == item_id))
+        session.execute(delete(CollectionStreamProfile).where(CollectionStreamProfile.collection_id == item_id))
+        session.execute(delete(CollectionDownloadProfile).where(CollectionDownloadProfile.collection_id == item_id))
+        session.execute(delete(CollectionScan).where(CollectionScan.collection_id == item_id))
+        session.execute(delete(CollectionEntry).where(or_(
+            CollectionEntry.collection_id == item_id, CollectionEntry.item_id == item_id)))
+        session.execute(delete(SourceReference).where(SourceReference.item_id == item_id))
+        session.execute(delete(LegacyMediaLink).where(LegacyMediaLink.item_id == item_id))
+        session.delete(item)
+        session.commit()
+    root = Path(get_settings().download_settings.download_root).resolve() / "vodloft-feeds"
+    for subscription_id in subscription_ids:
+        shutil.rmtree(root / str(subscription_id), ignore_errors=True)
+
+
 @router.put("/library/{item_id}/metadata")
 def edit_metadata(item_id: int, data: UserMetadataInput):
     with get_session() as session:
@@ -341,25 +580,69 @@ def edit_metadata(item_id: int, data: UserMetadataInput):
 
 
 def _run_download(job_id: int) -> None:
-    with _download_slots:
+    owner = _claim_job(job_id)
+    if not owner:
+        return
+    stop = threading.Event()
+    heartbeat = threading.Thread(target=_heartbeat_job, args=(job_id, owner, stop),
+                                 daemon=True, name=f"vodloft-lease-{job_id}")
+    heartbeat.start()
+    try:
+        with _download_slots:
+            with get_session() as session:
+                job = session.get(AcquisitionJob, job_id)
+                if not job:
+                    return
+                source_id = session.get(SourceReference, job.reference_id).source_id
+            with _source_slots_lock:
+                slot = _source_slots.setdefault(source_id, threading.BoundedSemaphore(1))
+            with slot:
+                _execute_leased_download(job_id)
+    finally:
+        stop.set()
+        heartbeat.join(timeout=1)
         with get_session() as session:
-            job = session.get(AcquisitionJob, job_id)
-            if not job:
-                return
-            source_id = session.get(SourceReference, job.reference_id).source_id
-        with _source_slots_lock:
-            slot = _source_slots.setdefault(source_id, threading.BoundedSemaphore(1))
-        with slot:
-            _execute_download(job_id)
+            session.execute(update(AcquisitionJob).where(
+                AcquisitionJob.id == job_id, AcquisitionJob.lease_owner == owner).values(
+                    lease_owner=None, lease_until=None))
+            session.commit()
 
 
-def _execute_download(job_id: int) -> None:
+def _claim_job(job_id: int) -> str | None:
+    owner = uuid.uuid4().hex
+    now = datetime.now(timezone.utc)
+    with get_session() as session:
+        claimed = session.execute(update(AcquisitionJob).where(
+            AcquisitionJob.id == job_id,
+            AcquisitionJob.state.in_(["queued", "resolving", "downloading", "processing", "verifying", "finalizing"]),
+            or_(AcquisitionJob.lease_until.is_(None), AcquisitionJob.lease_until < now)).values(
+                lease_owner=owner, lease_until=now + timedelta(seconds=45)))
+        session.commit()
+        return owner if claimed.rowcount == 1 else None
+
+
+def _heartbeat_job(job_id: int, owner: str, stop: threading.Event) -> None:
+    while not stop.wait(10):
+        try:
+            with get_session() as session:
+                result = session.execute(update(AcquisitionJob).where(
+                    AcquisitionJob.id == job_id, AcquisitionJob.lease_owner == owner).values(
+                    lease_until=datetime.now(timezone.utc) + timedelta(seconds=45)))
+                session.commit()
+                if not result.rowcount:
+                    return
+        except Exception:
+            logger.exception("Acquisition job %s lease heartbeat failed", job_id)
+
+
+def _execute_leased_download(job_id: int) -> None:
     with get_session() as session:
         job = session.get(AcquisitionJob, job_id)
         if not job or job.state not in ("queued", "resolving", "downloading", "processing", "verifying", "finalizing"):
             return
         if job.cancel_requested:
             job.state, job.active_key = "canceled", None
+            _sync_operation(session, job)
             session.commit()
             clear_canceled_job(job_id)
             return
@@ -370,6 +653,7 @@ def _execute_download(job_id: int) -> None:
         spec = dict(job.execution_spec or {})
         job.state = "resolving"
         job.attempts += 1
+        _sync_operation(session, job)
         session.commit()
     root = Path(get_settings().download_settings.download_root).resolve() / "vodloft"
     try:
@@ -429,6 +713,7 @@ def _execute_download(job_id: int) -> None:
                         placement_id = placement.id
                 completed = session.get(AcquisitionJob, job_id)
                 completed.state, completed.active_key = "available", None
+                _sync_operation(session, completed)
                 session.delete(session.scalar(select(FileFinalization).where(FileFinalization.job_id == job_id)))
                 session.commit()
             if profile_id and placement_id:
@@ -446,6 +731,7 @@ def _execute_download(job_id: int) -> None:
             job.state, job.active_key, job.error = (
                 "canceled" if canceled else "failed", None,
                 None if canceled else "The Source download or finalization failed")
+            _sync_operation(session, job)
             session.commit()
         try:
             vodloft_finalization.reconcile(job_id)
@@ -460,6 +746,7 @@ def _job_stage(job_id: int, stage: str) -> None:
         if job.cancel_requested:
             raise JobCancelled()
         job.state = stage
+        _sync_operation(session, job)
         session.commit()
 
 
@@ -468,12 +755,17 @@ def recover_acquisition_jobs() -> None:
     with get_session() as session:
         jobs = session.scalars(select(AcquisitionJob).where(
             AcquisitionJob.state.in_(["queued", "resolving", "downloading", "processing", "verifying", "finalizing"]))).all()
-        ids = [job.id for job in jobs]
-        for job in jobs:
+        now = datetime.now(timezone.utc)
+        eligible = [job for job in jobs if not job.lease_until or
+                    job.lease_until.replace(tzinfo=job.lease_until.tzinfo or timezone.utc) < now]
+        ids = [job.id for job in eligible]
+        for job in eligible:
             if job.cancel_requested:
                 job.state, job.active_key = "canceled", None
             else:
                 job.state = "queued"
+            job.lease_owner, job.lease_until = None, None
+            _sync_operation(session, job)
         session.commit()
     for job_id in ids:
         with get_session() as session:
@@ -500,6 +792,7 @@ def retry_due_acquisition_jobs() -> None:
                 continue
             job.state, job.error = "queued", None
             job.active_key = key
+            _sync_operation(session, job)
             ready.append(job.id)
         try:
             session.commit()
@@ -560,6 +853,15 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
             active_key=f"{item_id}:{profile.id}")
         session.add(job)
         try:
+            session.flush()
+            operation = TaskOperation(id=str(uuid.uuid4()), kind="vodloft_acquisition",
+                source="UI" if collection_id is None else "SYSTEM",
+                resource_type="vodloft_media", resource_id=item_id,
+                title=f"Download {item.user_title or item.title}"[:255],
+                status="QUEUED", progress=0, message="Queued",
+                context={"job_id": job.id, "profile_id": profile.id})
+            session.add(operation)
+            job.operation_id = operation.id
             session.commit()
         except IntegrityError:
             session.rollback()
@@ -587,7 +889,8 @@ def job_status(job_id: int):
             raise HTTPException(404, "Acquisition job not found")
         return {"id": job.id, "item_id": job.item_id, "state": job.state,
                 "error": job.error, "attempts": job.attempts,
-                "cancel_requested": job.cancel_requested, "profile_id": job.profile_id}
+                "cancel_requested": job.cancel_requested, "profile_id": job.profile_id,
+                "operation_id": job.operation_id, "progress": _JOB_PROGRESS.get(job.state, 0)}
 
 
 @router.post("/jobs/{job_id}/cancel")
@@ -602,10 +905,34 @@ def cancel_job(job_id: int):
         job.cancel_requested = True
         if was_queued:
             job.state, job.active_key = "canceled", None
+            _sync_operation(session, job)
         session.commit()
     if not was_queued:
         cancel_running_job(job_id)
     return {"id": job_id, "state": "cancel_requested"}
+
+
+@router.post("/jobs/{job_id}/retry")
+def retry_job(job_id: int):
+    with get_session() as session:
+        job = session.get(AcquisitionJob, job_id)
+        if not job:
+            raise HTTPException(404, "Acquisition job not found")
+        if job.state not in {"failed", "canceled"}:
+            raise HTTPException(409, "Only failed or canceled jobs can be restarted")
+        key = f"{job.item_id}:{job.profile_id}"
+        if session.scalar(select(AcquisitionJob.id).where(AcquisitionJob.active_key == key)):
+            raise HTTPException(409, "An acquisition is already active for this representation")
+        job.state, job.error, job.cancel_requested = "queued", None, False
+        job.active_key = key
+        _sync_operation(session, job)
+        try:
+            session.commit()
+        except IntegrityError as exc:
+            raise HTTPException(409, "An acquisition is already active") from exc
+    threading.Thread(target=_run_download, args=(job_id,), daemon=True,
+                     name=f"vodloft-restart-{job_id}").start()
+    return {"id": job_id, "state": "queued"}
 
 
 @router.get("/library/{item_id}/play")

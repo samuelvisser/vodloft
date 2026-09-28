@@ -55,6 +55,10 @@ def cancel_operation(operation_id: str) -> TaskOperationRead | None:
     operation = get_task_operation(operation_id)
     if operation is not None and operation.kind == MEDIA_DOWNLOAD_OPERATION_KIND:
         return _read(cancel_media_download_operation(operation_id))
+    if operation is not None and operation.kind == "vodloft_acquisition":
+        from backend.api.endpoints.vodloft.router import cancel_job
+        cancel_job(operation.context["job_id"])
+        return get_operation(operation_id)
     return _read(cancel_task_operation(operation_id))
 
 
@@ -62,4 +66,8 @@ def restart_operation(operation_id: str) -> TaskOperationRead | None:
     operation = get_task_operation(operation_id)
     if operation is not None and operation.kind == MEDIA_DOWNLOAD_OPERATION_KIND:
         return _read(restart_media_download_operation(operation_id))
+    if operation is not None and operation.kind == "vodloft_acquisition":
+        from backend.api.endpoints.vodloft.router import retry_job
+        retry_job(operation.context["job_id"])
+        return get_operation(operation_id)
     return _read(restart_task_operation(operation_id))

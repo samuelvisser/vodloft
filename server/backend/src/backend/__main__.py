@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import os
 import psutil
 import signal
@@ -340,6 +341,10 @@ def main(argv: Optional[list[str]] = None) -> None:
                 _reload_startup_marker(supervisor_pid).unlink(missing_ok=True)
 
             try:
+                log_config = copy.deepcopy(uvicorn.config.LOGGING_CONFIG)
+                log_config.setdefault("filters", {})["feed_token"] = {
+                    "()": "backend.feed_logging.RedactFeedToken"}
+                log_config["handlers"]["access"]["filters"] = ["feed_token"]
                 uvicorn.run(
                     "backend.app:create_app",
                     factory=True,
@@ -348,6 +353,7 @@ def main(argv: Optional[list[str]] = None) -> None:
                     reload=debug,
                     reload_dirs=str(PROJECT_ROOT / "server") if debug else None,
                     log_level="debug" if debug else "info",
+                    log_config=log_config,
                 )
             finally:
                 if debug:

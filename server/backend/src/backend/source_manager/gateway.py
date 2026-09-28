@@ -7,8 +7,8 @@ import signal
 import threading
 from urllib.parse import urlsplit
 
-from source_contracts import DownloadResult, MediaSnapshot, SourceManifest
-from .runtime import MODULES, command_for
+from source_contracts import CollectionPage, DownloadResult, MediaSnapshot, SourceManifest, SourceMatch
+from .runtime import command_for, registry
 
 _running: dict[int, subprocess.Popen] = {}
 _canceled: set[int] = set()
@@ -61,7 +61,7 @@ class SourceGateway:
         elif os.environ.get("VODLOFT_SOURCE_COMMANDS"):
             self.commands = json.loads(os.environ["VODLOFT_SOURCE_COMMANDS"])
         else:
-            self.commands = {source_id: command_for(source_id)[0] for source_id in MODULES}
+            self.commands = {source_id: command_for(source_id)[0] for source_id in registry()}
 
     def call(self, source_id: str, operation: str, *, timeout: int = 90,
              job_id: int | None = None, **options):
@@ -110,8 +110,23 @@ class SourceGateway:
         return MediaSnapshot.model_validate(self.call(source_id, "resolve", url=url,
             max_entries=max_entries, access_token=access_token))
 
+    def match(self, source_id: str, url: str) -> SourceMatch:
+        validate_public_url(url)
+        result = SourceMatch.model_validate(self.call(source_id, "match", url=url, timeout=15))
+        if result.source_id != source_id:
+            raise ValueError("Source returned a mismatched identity")
+        return result
+
     def catalogue(self, source_id: str) -> dict:
         return self.call(source_id, "domains", timeout=20)
+
+    def entries(self, source_id: str, url: str, *, cursor: str | None = None,
+                limit: int = 50, access_token: str | None = None) -> CollectionPage:
+        validate_public_url(url)
+        if not 1 <= limit <= 100:
+            raise ValueError("Collection page size must be between 1 and 100")
+        return CollectionPage.model_validate(self.call(source_id, "entries", url=url,
+            cursor=cursor, limit=limit, access_token=access_token, timeout=120))
 
     def download(self, source_id: str, url: str, staging: str,
                  preferred_format: str = "format_1080p", access_token: str | None = None,

@@ -102,6 +102,11 @@ def test_shared_media_partial_scan_download_and_playback(monkeypatch, tmp_path):
     assert client.get(enclosure_url).content == b"prototype-media"
     assert client.delete(f"/api/vodloft/library/{collection_id}/feed").status_code == 200
     assert client.get(feed_url).status_code == 404
+    assert client.delete(f"/api/vodloft/library/{collection_id}").status_code == 204
+    assert client.get(f"/api/vodloft/library/{video_id}/play").content == b"changed-artifact"
+    with session_factory() as session:
+        assert len(session.scalars(select(CollectionEntry)).all()) == 1
+        assert Path(artifact_path).is_file()
 
 
 def test_public_url_rejects_local_targets(monkeypatch):

@@ -14,9 +14,9 @@ from sqlalchemy.pool import StaticPool
 
 from backend.app import create_app
 from backend.db.core import Base, load_database_models
-from backend.db.models.vodloft import AcquisitionJob, Artifact, CollectionEntry, MediaItem, SourceReference
+from backend.db.models.vodloft import AcquisitionJob, Artifact, CollectionEntry, CollectionScan, MediaItem, SourceReference
 from config import get_settings
-from source_contracts import DownloadResult, EntrySnapshot, MediaSnapshot, SourceManifest, SourceMediaReference
+from source_contracts import CollectionPage, DownloadResult, EntrySnapshot, MediaSnapshot, SourceManifest, SourceMediaReference
 
 
 def ref(domain, upstream_id):
@@ -90,6 +90,8 @@ def test_collection_policy_matches_member_domain_and_feed_representation(library
         jobs = session.scalars(select(AcquisitionJob)).all()
         assert {j.execution_spec["runtime_version"] for j in jobs} == {"configured"}
         assert all(j.state == "available" and j.active_key is None for j in jobs)
+        from task_manager.scheduler.db import TaskOperation
+        assert all(session.get(TaskOperation, j.operation_id).status == "SUCCEEDED" for j in jobs)
 
     audio = client.post(f"/api/vodloft/library/{collection_id}/stream-profiles",
         json={"name": "Audio", "format": "audio"})
@@ -140,6 +142,185 @@ def test_source_account_references_share_media_without_leaking_secrets(library, 
     assert item["title"] == "My title" and item["description"] == "My notes"
 
 
+def test_paged_collection_refresh_keeps_known_members_on_partial_failure(library, monkeypatch):
+    client, sessions, router, gateway, _, = library
+    collection = MediaSnapshot(kind="collection", reference=SourceMediaReference(
+        source_id="fixture", domain="example.com", namespace="list", upstream_id="l1",
+        url="https://example.com/list/l1"), title="List", entries=[EntrySnapshot(
+            reference=ref("example.com", "old"), title="Old", position=1)])
+    monkeypatch.setattr(gateway.SourceGateway, "resolve", lambda self, source_id, url, **kw: collection)
+    collection_id = client.post("/api/vodloft/import", json={"snapshot": collection.model_dump(mode="json")}).json()["id"]
+    monkeypatch.setattr(gateway.SourceGateway, "manifests", lambda self: [SourceManifest(
+        source_id="fixture", display_name="Fixture", version="1",
+        capabilities={"resolve_url", "enumerate_pages"})])
+    def page(self, source_id, url, *, cursor=None, **kwargs):
+        if cursor:
+            raise RuntimeError("Upstream page failed")
+        return CollectionPage(entries=[EntrySnapshot(reference=ref("example.com", "new"),
+            title="New", position=1)], next_cursor="opaque", complete=False)
+    monkeypatch.setattr(gateway.SourceGateway, "entries", page)
+    assert client.post(f"/api/vodloft/library/{collection_id}/refresh").status_code == 200
+    with sessions() as session:
+        assert {session.get(MediaItem, e.item_id).title for e in session.scalars(select(CollectionEntry)).all()} == {"Old", "New"}
+        scan = session.scalar(select(CollectionScan).order_by(CollectionScan.id.desc()))
+        assert not scan.complete and scan.error and scan.next_cursor == "opaque"
+
+    monkeypatch.setattr(gateway.SourceGateway, "entries", lambda self, source_id, url, *, cursor=None, **kw:
+        CollectionPage(entries=[EntrySnapshot(reference=ref("example.com", "new"),
+            title="New", position=1)], complete=True))
+    assert client.post(f"/api/vodloft/library/{collection_id}/refresh").status_code == 200
+    with sessions() as session:
+        assert {session.get(MediaItem, e.item_id).title for e in session.scalars(select(CollectionEntry)).all()} == {"Old", "New"}
+        assert session.scalar(select(CollectionScan).order_by(CollectionScan.id.desc())).complete
+
+
+def test_explicitly_cleared_upstream_description_respects_user_override(library, monkeypatch):
+    client, sessions, router, gateway, _ = library
+    url = "https://example.com/watch/clear"
+    snapshot = MediaSnapshot(kind="video", reference=ref("example.com", "clear"),
+        title="Original", description="Upstream description")
+    monkeypatch.setattr(gateway.SourceGateway, "resolve", lambda self, source_id, url, **kw: snapshot)
+    item_id = client.post("/api/vodloft/import", json={"snapshot": snapshot.model_dump()}).json()["id"]
+    snapshot = MediaSnapshot(kind="video", reference=ref("example.com", "clear"), title="Original")
+    client.post("/api/vodloft/import", json={"snapshot": snapshot.model_dump()})
+    with sessions() as session:
+        assert session.get(MediaItem, item_id).description == "Upstream description"
+    snapshot = snapshot.model_copy(update={"description": None})
+    client.post("/api/vodloft/import", json={"snapshot": snapshot.model_dump()})
+    with sessions() as session:
+        assert session.get(MediaItem, item_id).description is None
+
+
+def test_stable_collection_occurrences_survive_reordering(library, monkeypatch):
+    client, sessions, router, gateway, _ = library
+    shared = ref("example.com", "shared")
+    collection_ref = SourceMediaReference(source_id="fixture", domain="example.com",
+        namespace="list", upstream_id="duplicates", url="https://example.com/list/duplicates")
+    snapshot = MediaSnapshot(kind="collection", reference=collection_ref, title="Duplicates",
+        entries=[EntrySnapshot(reference=shared, title="Shared", position=1, occurrence_id="first"),
+                 EntrySnapshot(reference=shared, title="Shared", position=2, occurrence_id="second")])
+    monkeypatch.setattr(gateway.SourceGateway, "resolve", lambda self, source_id, url, **kw: snapshot)
+    collection_id = client.post("/api/vodloft/import", json={"snapshot": snapshot.model_dump()}).json()["id"]
+    with sessions() as session:
+        entries = session.scalars(select(CollectionEntry).where(CollectionEntry.collection_id == collection_id)).all()
+        assert len(entries) == 2 and entries[0].item_id == entries[1].item_id
+        original_ids = {entry.occurrence_key: entry.id for entry in entries}
+    snapshot = snapshot.model_copy(update={"entries": [
+        EntrySnapshot(reference=shared, title="Shared", position=1, occurrence_id="second"),
+        EntrySnapshot(reference=shared, title="Shared", position=2, occurrence_id="first")]})
+    client.post("/api/vodloft/import", json={"snapshot": snapshot.model_dump()})
+    with sessions() as session:
+        entries = session.scalars(select(CollectionEntry).where(CollectionEntry.collection_id == collection_id)).all()
+        assert {entry.occurrence_key: entry.id for entry in entries} == original_ids
+        assert {entry.occurrence_key: entry.position for entry in entries} == {"first": 2, "second": 1}
+
+
+def test_source_selection_prefers_specific_match_and_never_silently_falls_back(library, monkeypatch):
+    client, _, router, gateway, _ = library
+    monkeypatch.setattr(gateway.SourceGateway, "manifests", lambda self: [
+        SourceManifest(source_id=source, display_name=source, version="1", capabilities={"resolve_url"})
+        for source in ("specific", "generic")])
+    monkeypatch.setattr(gateway, "validate_public_url", lambda url: url)
+    monkeypatch.setattr(router, "validate_public_url", lambda url: url)
+    from source_contracts import SourceMatch
+    monkeypatch.setattr(gateway.SourceGateway, "match", lambda self, source_id, url: SourceMatch(
+        source_id=source_id, confidence=100 if source_id == "specific" else 10))
+    selected = []
+    def resolve(self, source_id, url, **kwargs):
+        selected.append(source_id)
+        if source_id == "specific":
+            raise RuntimeError("Account required")
+        return MediaSnapshot(kind="video", reference=ref("example.com", "fallback"), title="Wrong")
+    monkeypatch.setattr(gateway.SourceGateway, "resolve", resolve)
+    response = client.post("/api/vodloft/resolve", json={"url": "https://example.com/watch/1"})
+    assert response.status_code == 502 and selected == ["specific"]
+    response = client.post("/api/vodloft/resolve", json={
+        "url": "https://example.com/watch/1", "source_id": "generic"})
+    assert response.status_code == 200 and selected[-1] == "generic"
+
+
+def test_operator_registered_third_source_appears_in_generic_endpoint(tmp_path, monkeypatch):
+    registry = tmp_path / "trusted.json"
+    registry.write_text(json.dumps({"sources": {"fixture": {
+        "module": "fixture_source.worker", "package": "fixture-source"}}}))
+    source = tmp_path / "fixture_source"
+    source.mkdir()
+    (source / "__init__.py").write_text("")
+    (source / "worker.py").write_text(
+        "import json,sys\n"
+        "request=json.load(sys.stdin)\n"
+        "print(json.dumps({'source_id':'fixture','display_name':'Fixture',"
+        "'version':'1','capabilities':['resolve_url']}))\n")
+    monkeypatch.setenv("VODLOFT_SOURCE_REGISTRY", str(registry))
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path) + ":" + str(Path.cwd()))
+    response = TestClient(create_app()).get("/api/vodloft/sources")
+    assert response.status_code == 200
+    assert "fixture" in {source["source_id"] for source in response.json()}
+
+
+def test_local_playback_progress_survives_requests(library, monkeypatch):
+    client, _, _, gateway, _ = library
+    snapshot = MediaSnapshot(kind="video", reference=ref("example.com", "resume"), title="Resume")
+    monkeypatch.setattr(gateway.SourceGateway, "resolve", lambda self, source_id, url, **kw: snapshot)
+    item_id = client.post("/api/vodloft/import", json={"snapshot": snapshot.model_dump()}).json()["id"]
+    assert client.put(f"/api/vodloft/library/{item_id}/progress",
+        json={"seconds": 125.5, "completed": False}).status_code == 200
+    assert client.get(f"/api/vodloft/library/{item_id}/progress").json()["seconds"] == 125.5
+    assert client.get("/api/vodloft/home").json()["continue"][0]["id"] == item_id
+    client.put(f"/api/vodloft/library/{item_id}/progress",
+        json={"seconds": 250, "completed": True})
+    assert client.get("/api/vodloft/home").json()["continue"] == []
+
+
+def test_job_lease_prevents_duplicate_execution(library, monkeypatch):
+    client, sessions, router, gateway, _ = library
+    snapshot = MediaSnapshot(kind="video", reference=ref("example.com", "lease"), title="Lease")
+    monkeypatch.setattr(gateway.SourceGateway, "resolve", lambda self, source_id, url, **kw: snapshot)
+    item_id = client.post("/api/vodloft/import", json={"snapshot": snapshot.model_dump()}).json()["id"]
+    profile = client.post("/api/vodloft/profiles", json={"name": "Lease", "domain": "example.com",
+        "output_template": "/downloads/lease/{{ title }}.ext"}).json()["id"]
+    job_id, _, _ = router.queue_download(item_id, profile)
+    owner = router._claim_job(job_id)
+    assert owner and router._claim_job(job_id) is None
+    router._run_download(job_id)
+    with sessions() as session:
+        assert session.get(AcquisitionJob, job_id).state == "queued"
+
+
+def test_feed_token_is_redacted_from_access_log():
+    import logging
+    from backend.feed_logging import RedactFeedToken
+    record = logging.LogRecord("uvicorn.access", logging.INFO, "", 1, '%s - "%s %s HTTP/%s" %d',
+        ("127.0.0.1", "GET", "/feeds/vodloft/very-secret/media/1/audio.mp3", "1.1", 200), None)
+    assert RedactFeedToken().filter(record)
+    assert "very-secret" not in record.getMessage()
+
+
+def test_collection_date_filter_skips_unknown_publication_dates(library, monkeypatch):
+    from datetime import datetime, timezone
+    client, sessions, _, gateway, automation = library
+    collection = MediaSnapshot(kind="collection", reference=SourceMediaReference(
+        source_id="fixture", domain="example.com", namespace="list", upstream_id="dated",
+        url="https://example.com/list/dated"), title="Dated", entries=[
+        EntrySnapshot(reference=ref("example.com", "in"), title="Include",
+            position=1, published_at=datetime(2026, 9, 5, tzinfo=timezone.utc)),
+        EntrySnapshot(reference=ref("example.com", "out"), title="Exclude",
+            position=2, published_at=datetime(2025, 1, 1, tzinfo=timezone.utc)),
+        EntrySnapshot(reference=ref("example.com", "unknown"), title="Include unknown", position=3)])
+    monkeypatch.setattr(gateway.SourceGateway, "resolve", lambda self, source_id, url, **kw: collection)
+    collection_id = client.post("/api/vodloft/import", json={"snapshot": collection.model_dump(mode="json")}).json()["id"]
+    local_profile = client.post("/api/vodloft/profiles", json={"name": "Dates", "domain": "example.com",
+        "output_template": "/downloads/dates/{{ title }}.ext"}).json()["id"]
+    policy = client.post(f"/api/vodloft/library/{collection_id}/download-profiles", json={
+        "name": "September", "local_profile_ids": [local_profile], "backfill": "date_range",
+        "published_after": "2026-09-01", "title_contains": "Include"})
+    assert policy.status_code == 201, policy.text
+    result = automation.schedule_profile(policy.json()["id"], dispatch=False)
+    assert len(result["queued_job_ids"]) == 1
+    assert len(result["skipped"]) == 2
+    assert any(skip["reason"] == "Publication date is unknown" for skip in result["skipped"])
+
+
 def test_bad_source_bundle_digest_never_activates(monkeypatch, tmp_path):
     from backend.source_manager import runtime
     monkeypatch.setenv("VODLOFT_SOURCE_RUNTIME_ROOT", str(tmp_path / "runtimes"))
@@ -151,6 +332,23 @@ def test_bad_source_bundle_digest_never_activates(monkeypatch, tmp_path):
     with pytest.raises(ValueError, match="digest"):
         runtime.install_bundle("yt-dlp", bundle)
     assert runtime.status()["active"] == {}
+
+
+def test_bundle_rejects_unlisted_wheels_and_update_policy_channels(monkeypatch, tmp_path):
+    from backend.source_manager import runtime
+    monkeypatch.setenv("VODLOFT_SOURCE_RUNTIME_ROOT", str(tmp_path / "runtimes"))
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    (bundle / "pinned.whl").write_bytes(b"pinned")
+    (bundle / "extra.whl").write_bytes(b"unlisted")
+    import hashlib
+    (bundle / "release.json").write_text(json.dumps({"source_id": "yt-dlp", "version": "1.0.0",
+        "wheels": {"pinned.whl": hashlib.sha256(b"pinned").hexdigest()}}))
+    with pytest.raises(ValueError, match="undeclared"):
+        runtime.install_bundle("yt-dlp", bundle)
+    assert runtime.set_policy("yt-dlp", True, None, "beta")["channel"] == "beta"
+    with pytest.raises(ValueError, match="policy"):
+        runtime.set_policy("yt-dlp", True, None, "untrusted")
 
 
 def test_builtin_source_connect_guard_rejects_redirect_to_private_ip():
