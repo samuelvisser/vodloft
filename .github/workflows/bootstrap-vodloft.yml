@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify and apply VodLoft commits on WireLoft
+      - name: Verify and publish VodLoft snapshot
         shell: bash
         run: |
           set -euo pipefail
@@ -21,8 +21,20 @@ jobs:
           git remote add wireloft https://github.com/samuelvisser/WireLoft.git
           git fetch wireloft develop
           git checkout --detach 7853ee7bdf1137111193932fe9da7e8243442bd5
-          git switch -c codex/vodloft-wireloft-prototype
+          git switch -c local-rebuild
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git am "$RUNNER_TEMP/vodloft.patch"
+          mkdir "$RUNNER_TEMP/vodloft-tree"
+          git archive HEAD | tar -x -C "$RUNNER_TEMP/vodloft-tree"
+          git switch codex/bootstrap-wireloft-push
+          git switch -c codex/vodloft-wireloft-prototype
+          rsync -a --delete --exclude=.git --exclude=.github/workflows --exclude=.bootstrap "$RUNNER_TEMP/vodloft-tree"/ ./
+          git rm -r .bootstrap
+          git add -A
+          if git diff --cached --name-only | grep -q '^.github/workflows/'; then
+            echo 'Workflow changes must use the repository connector'
+            exit 1
+          fi
+          git commit -m 'Build VodLoft from WireLoft baseline 7853ee7b'
           git push origin HEAD:refs/heads/codex/vodloft-wireloft-prototype
