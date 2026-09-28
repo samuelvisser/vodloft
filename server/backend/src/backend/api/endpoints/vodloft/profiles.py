@@ -1,6 +1,8 @@
 """Domain-scoped Local Media Profiles using WireLoft's template engine."""
 
 from pathlib import Path
+import ipaddress
+import re
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
@@ -30,6 +32,23 @@ class ProfileInput(BaseModel):
     output_template: str = "/downloads/{{ domain }}/{{ title }} - {{ id }}.ext"
     enabled: bool = True
     delivery_target_ids: list[int] = Field(default_factory=list)
+
+    @field_validator("domain")
+    @classmethod
+    def validate_domain(cls, domain):
+        try:
+            hostname = domain.strip().rstrip(".").lower().encode("idna").decode("ascii")
+        except (UnicodeError, AttributeError) as exc:
+            raise ValueError("Enter a website Domain such as example.com") from exc
+        if len(hostname) > 253 or not re.fullmatch(
+            r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+",
+            hostname):
+            raise ValueError("Enter a website Domain such as example.com")
+        try:
+            ipaddress.ip_address(hostname)
+        except ValueError:
+            return hostname
+        raise ValueError("IP addresses are not website Domains")
 
     @field_validator("applicable_kinds")
     @classmethod
@@ -100,9 +119,11 @@ def profiles(domain: str | None = None):
 @router.post("/profiles", status_code=201)
 def create_profile(data: ProfileInput):
     with get_session() as session:
-        domain = session.scalar(select(Domain).where(Domain.hostname == data.domain.lower()))
+        domain = session.scalar(select(Domain).where(Domain.hostname == data.domain))
         if not domain:
-            raise HTTPException(404, "Resolve and import media from this Domain first")
+            domain = Domain(hostname=data.domain, display_name=data.domain)
+            session.add(domain)
+            session.flush()
         _validate_targets(session, data.delivery_target_ids)
         profile = DomainLocalMediaProfile(name=data.name, slug=slugify(data.name),
             domain_id=domain.id, preferred_format=data.preferred_format.value,

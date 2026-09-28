@@ -7,22 +7,37 @@ const URLForm = z.object({url: z.url().startsWith('https://').or(z.url().startsW
     source_id: z.string(), connection_id: z.string()})
 type URLFields = z.infer<typeof URLForm>
 type Source = {source_id: string; display_name: string; capabilities: string[];
-    configuration_schema: {name: string; label: string; kind: string; required: boolean}[]}
-type Connection = {id: number; source_id: string; name: string; has_secret: boolean; enabled: boolean}
+    configuration_schema: {name: string; label: string; kind: 'text' | 'number' | 'select' | 'secret' | 'credential_file';
+        required: boolean; options: string[]}[]}
+type Connection = {id: number; source_id: string; name: string; has_secret: boolean; enabled: boolean;
+    settings: Record<string, string | number>; secret_fields: string[]}
 type Reference = {source_id: string; domain: string; namespace: string; upstream_id: string; url: string}
 type Preview = {kind: string; title: string; description?: string; artwork_url?: string; reference: Reference; entries: {title: string; position: number}[]; enumeration_complete: boolean}
-type Item = {id: number; title: string; description?: string; kind: string; domain: string; downloaded: boolean; playback_type?: string; artwork_url?: string; entries?: Item[]; extras?: Item[]}
+type Item = {id: number; title: string; description?: string; kind: string; domain: string; downloaded: boolean;
+    capabilities?: string[] | null; playback_type?: string; artwork_url?: string; entries?: Item[]; extras?: Item[];
+    references?: {id: number; source_id: string; connection_id: number | null; namespace: string; upstream_id: string}[]}
 type Home = {continue: (Item & {seconds: number})[]; recent: Item[];
     activity: {id: number; item_id: number; state: string}[]; issues: {kind: string; id: number}[]}
 type Job = {id: number; state: string; error?: string; cancel_requested?: boolean;
-    operation_id?: string; progress?: number}
+    error_code?: string; failed_stage?: string; operation_id?: string; progress?: number;
+    title?: string; attempts?: number; item_id?: number}
+type Export = {id: number; target_id: number; state: string; remote_id?: string; error?: string; attempts: number}
+type SourceHistory = {id: number; source_id: string; connection_id: number | null;
+    runtime_version: string; created_at: string; metadata: {title?: string; description?: string}}
 type Profile = {id: number; name: string; domain: string; preferred_format: string; output_template: string; applicable_kinds: string[]; enabled: boolean}
-type DownloadPolicy = {id: number; name: string; local_profile_ids: number[]; backfill: string; newest_count: number; enabled: boolean}
-type StreamProfile = {id: number; name: string; format: string; enabled: boolean}
+type DownloadPolicy = {id: number; name: string; local_profile_ids: number[]; backfill: string; newest_count: number;
+    source_reference_id: number | null; enabled: boolean}
+type StreamProfile = {id: number; name: string; format: string; enabled: boolean;
+    published_after?: string | null; published_before?: string | null; title_contains?: string | null}
 type Target = {id: number; name: string; kind: string; base_url: string; library_id: string; enabled: boolean}
 type RuntimeState = {active: Record<string, string>; installed: Record<string, string[]>;
     policy: Record<string, {automatic: boolean; pinned_version: string | null; channel: string}>}
 type Catalogue = {source_id: string; items: {hostname: string; display_name: string}[]; exhaustive: boolean}
+type SearchPage = {items: {reference: Reference; kind: string; title: string; description?: string}[];
+    next_cursor: string | null}
+const SearchForm = z.object({query: z.string().min(1).max(200), source_id: z.string().min(1),
+    connection_id: z.string()})
+type SearchFields = z.infer<typeof SearchForm>
 const ProfileFormSchema = z.object({
     name: z.string().min(1),
     preferred_format: z.enum(['format_720p', 'format_1080p', 'format_4k', 'format_audio_only']),
@@ -42,25 +57,39 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export default function WebMediaPage() {
+    const [view, setView] = useState<'home' | 'discover' | 'library' | 'management'>('home')
+    const [libraryQuery, setLibraryQuery] = useState('')
     const {register, handleSubmit, formState: {errors}} = useForm<URLFields>({
         resolver: zodResolver(URLForm), defaultValues: {url: '', source_id: '', connection_id: ''},
     })
+    const {register: registerSearch, handleSubmit: handleSearch, watch: watchSearch,
+        formState: {errors: searchErrors}} = useForm<SearchFields>({
+        resolver: zodResolver(SearchForm), defaultValues: {query: '', source_id: '', connection_id: ''},
+    })
+    const selectedSearchSource = watchSearch('source_id')
     const [sources, setSources] = useState<Source[]>([])
     const [connections, setConnections] = useState<Connection[]>([])
     const [importConnectionId, setImportConnectionId] = useState<number | null>(null)
     const [items, setItems] = useState<Item[]>([])
     const [home, setHome] = useState<Home | null>(null)
     const [preview, setPreview] = useState<Preview | null>(null)
+    const [searchPage, setSearchPage] = useState<SearchPage | null>(null)
+    const [searchRequest, setSearchRequest] = useState<SearchFields | null>(null)
     const [selected, setSelected] = useState<Item | null>(null)
     const [job, setJob] = useState<Job | null>(null)
+    const [jobs, setJobs] = useState<Job[]>([])
+    const [exports, setExports] = useState<Export[]>([])
+    const [sourceHistory, setSourceHistory] = useState<SourceHistory[] | null>(null)
     const [profiles, setProfiles] = useState<Profile[]>([])
     const [downloadPolicies, setDownloadPolicies] = useState<DownloadPolicy[]>([])
     const [streamProfiles, setStreamProfiles] = useState<StreamProfile[]>([])
     const [targets, setTargets] = useState<Target[]>([])
     const [runtimes, setRuntimes] = useState<RuntimeState | null>(null)
     const [catalogues, setCatalogues] = useState<Catalogue[]>([])
+    const [prepareDomain, setPrepareDomain] = useState('')
     const [runResult, setRunResult] = useState<string | null>(null)
     const [profileId, setProfileId] = useState<number | null>(null)
+    const [referenceId, setReferenceId] = useState<number | null>(null)
     const [outputPreview, setOutputPreview] = useState<string | null>(null)
     const [feedUrl, setFeedUrl] = useState<string | null>(null)
     const [busy, setBusy] = useState(false)
@@ -89,6 +118,14 @@ export default function WebMediaPage() {
         }, 2500)
         return () => window.clearInterval(timer)
     }, [job?.id, job?.state, selected?.id])
+    useEffect(() => {
+        if (view !== 'management') return
+        const update = () => void Promise.all([api<Job[]>('/jobs').then(setJobs),
+            api<Export[]>('/integrations/exports').then(setExports)]).catch(e => setError(String(e)))
+        update()
+        const timer = window.setInterval(update, 10000)
+        return () => window.clearInterval(timer)
+    }, [view])
 
     const resolve = handleSubmit(async fields => {
         setBusy(true); setError(null); setPreview(null)
@@ -106,14 +143,37 @@ export default function WebMediaPage() {
             const item = await api<Item>('/import', {method: 'POST',
                 body: JSON.stringify({snapshot: preview, connection_id: importConnectionId})})
             setPreview(null); await refresh()
-            setSelected(await api<Item>(`/library/${item.id}`))
+            await open(item.id)
+        } catch (e) { setError(String(e)) } finally { setBusy(false) }
+    }
+    const fetchSearch = async (fields: SearchFields, cursor?: string) => {
+        setBusy(true); setError(null)
+        try {
+            const params = new URLSearchParams({query: fields.query, limit: '30'})
+            if (cursor) params.set('cursor', cursor)
+            if (fields.connection_id) params.set('connection_id', fields.connection_id)
+            const result = await api<SearchPage>(`/sources/${encodeURIComponent(fields.source_id)}/search?${params}`)
+            setSearchPage(previous => cursor && previous ? {
+                items: [...previous.items, ...result.items], next_cursor: result.next_cursor} : result)
+            setSearchRequest(fields)
+        } catch (e) { setError(String(e)) } finally { setBusy(false) }
+    }
+    const previewSearchResult = async (reference: Reference) => {
+        setBusy(true); setError(null)
+        try {
+            setPreview(await api<Preview>('/resolve', {method: 'POST', body: JSON.stringify({
+                url: reference.url, source_id: reference.source_id,
+                connection_id: searchRequest?.connection_id ? Number(searchRequest.connection_id) : null})}))
+            setImportConnectionId(searchRequest?.connection_id ? Number(searchRequest.connection_id) : null)
         } catch (e) { setError(String(e)) } finally { setBusy(false) }
     }
     const open = async (id: number) => {
-        setError(null); setJob(null); setFeedUrl(null); setOutputPreview(null)
+        setError(null); setJob(null); setFeedUrl(null); setOutputPreview(null); setSourceHistory(null)
+        setView('library')
         try {
             const item = await api<Item>(`/library/${id}`)
             setSelected(item)
+            setReferenceId(item.references?.length === 1 ? item.references[0].id : null)
             const available = await api<Profile[]>(`/profiles${item.kind === 'collection' ? '' : `?domain=${encodeURIComponent(item.domain)}`}`)
             setProfiles(available)
             setProfileId(available.find(profile => profile.enabled && profile.applicable_kinds.includes(item.kind))?.id ?? null)
@@ -125,13 +185,29 @@ export default function WebMediaPage() {
     }
     const download = async (id: number) => {
         setError(null)
-        try { setJob(await api<Job>(`/library/${id}/download`, {method: 'POST', body: JSON.stringify({profile_id: profileId})})) }
+        try { setJob(await api<Job>(`/library/${id}/download`, {method: 'POST',
+            body: JSON.stringify({profile_id: profileId, reference_id: referenceId})})) }
         catch (e) { setError(String(e)) }
     }
-    const refreshCollection = async (id: number) => {
+    const refreshCollection = async (id: number, expandDepth = 0) => {
         setBusy(true); setError(null)
         try {
-            setSelected(await api<Item>(`/library/${id}/refresh`, {method: 'POST'}).then(() => api<Item>(`/library/${id}`)))
+            const params = new URLSearchParams()
+            if (referenceId) params.set('reference_id', String(referenceId))
+            if (expandDepth) params.set('expand_depth', String(expandDepth))
+            const result = await api<Item & {nested_expansion?: {refreshed_ids: number[]; skipped: {item_id: number; reason: string}[]}}>(
+                `/library/${id}/refresh?${params}`, {method: 'POST'})
+            if (result.nested_expansion) setRunResult(`${result.nested_expansion.refreshed_ids.length} nested collections refreshed; ${result.nested_expansion.skipped.length} skipped.`)
+            setSelected(await api<Item>(`/library/${id}`))
+            await refresh()
+        } catch (e) { setError(String(e)) } finally { setBusy(false) }
+    }
+    const refreshDetails = async (id: number) => {
+        setBusy(true); setError(null)
+        try {
+            const params = referenceId ? `?reference_id=${referenceId}` : ''
+            await api<Item>(`/library/${id}/refresh-details${params}`, {method: 'POST'})
+            setSelected(await api<Item>(`/library/${id}`))
             await refresh()
         } catch (e) { setError(String(e)) } finally { setBusy(false) }
     }
@@ -160,7 +236,16 @@ export default function WebMediaPage() {
 
     return <section className="view" aria-labelledby="web-media-title">
         <div className="view-header"><div><h1 id="web-media-title">Web media</h1>
-            <p className="view-description">Add a URL, review its media, and keep a local copy for playback.</p></div></div>
+            <p className="view-description">Discover, collect, download and play media from the web.</p></div></div>
+        <nav aria-label="Web media" style={{display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24}}>
+            {(['home', 'discover', 'library', 'management'] as const).map(next =>
+                <button key={next} type="button" className={`btn ${view === next ? 'btn-primary' : ''}`}
+                    aria-current={view === next ? 'page' : undefined} onClick={() => setView(next)}>
+                    {next[0].toUpperCase() + next.slice(1)}</button>)}
+        </nav>
+        {error && <div className="form-error-card" role="alert">{error}</div>}
+        {view === 'discover' && <>
+        <h2>Add media</h2>
         <form onSubmit={resolve} style={{display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end', marginBottom: 24}}>
             <label style={{flex: '1 1 340px'}}>Media URL
                 <input type="url" {...register('url')} placeholder="https://…" style={{width: '100%'}} />
@@ -175,7 +260,31 @@ export default function WebMediaPage() {
                     {connection.name} ({connection.source_id})</option>)}</select></label>
             <button className="btn btn-primary" type="submit" disabled={busy}>Resolve URL</button>
         </form>
-        {error && <div className="form-error-card" role="alert">{error}</div>}
+        {sources.some(source => source.capabilities.includes('search')) && <section style={{marginBottom: 24}}>
+            <h2>Search a Source</h2>
+            <form onSubmit={handleSearch(fields => void fetchSearch(fields))}
+                style={{display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap'}}>
+                <label>Search phrase <input {...registerSearch('query')} />
+                    {searchErrors.query && <span role="alert">Enter a search phrase.</span>}</label>
+                <label>Source <select {...registerSearch('source_id')}><option value="">Choose Source</option>
+                    {sources.filter(source => source.capabilities.includes('search')).map(source =>
+                        <option key={source.source_id} value={source.source_id}>{source.display_name}</option>)}</select>
+                    {searchErrors.source_id && <span role="alert">Choose a searchable Source.</span>}</label>
+                <label>Connection <select {...registerSearch('connection_id')}><option value="">Anonymous</option>
+                    {connections.filter(connection => connection.enabled && connection.source_id === selectedSearchSource).map(connection =>
+                        <option key={connection.id} value={connection.id}>{connection.name}</option>)}</select></label>
+                <button className="btn" type="submit" disabled={busy}>Search</button>
+            </form>
+            {searchPage && <div style={{display: 'grid', gap: 8, marginTop: 12}}>
+                {searchPage.items.map(item => <button type="button" className="btn"
+                    key={`${item.reference.source_id}:${item.reference.upstream_id}`}
+                    onClick={() => void previewSearchResult(item.reference)} style={{textAlign: 'left'}}>
+                    {item.title} · {item.kind} · {item.reference.domain}</button>)}
+                {searchPage.items.length === 0 && <p>No results from this Source.</p>}
+                {searchPage.next_cursor && searchRequest && <button className="btn" type="button" disabled={busy}
+                    onClick={() => void fetchSearch(searchRequest, searchPage.next_cursor || undefined)}>More results</button>}
+            </div>}
+        </section>}
         {preview && <section style={{marginBottom: 32}}><h2>{preview.title}</h2>
             <p>{preview.kind} · {preview.reference.domain} · {preview.reference.source_id}</p>
             {preview.description && <p>{preview.description.slice(0, 350)}</p>}
@@ -183,17 +292,23 @@ export default function WebMediaPage() {
                 {!preview.enumeration_complete && ' (more entries are available)'}</p>}
             <button className="btn btn-primary" type="button" disabled={busy} onClick={() => void importPreview()}>Add to library</button>
         </section>}
-        {home && <section style={{marginBottom: 24}} aria-label="Home">
+        </>}
+        {view === 'home' && home && <section style={{marginBottom: 24}} aria-label="Home">
             <h2>Continue</h2>
             {home.continue.filter(item => item.downloaded).length === 0 && <p>Your local playback will appear here.</p>}
             <div style={{display: 'flex', flexWrap: 'wrap', gap: 8}}>{home.continue.filter(item => item.downloaded).map(item =>
                 <button className="btn" type="button" key={item.id} onClick={() => void open(item.id)}>
                     {item.title} · {Math.floor(item.seconds / 60)} min</button>)}</div>
-            <p>Recent arrivals: {home.recent.length}{home.activity.length > 0 &&
-                ` · ${home.activity.length} active download${home.activity.length === 1 ? '' : 's'}`}{home.issues.length > 0 &&
-                ` · ${home.issues.length} issue${home.issues.length === 1 ? '' : 's'}`}</p>
+            <h2>Recent arrivals</h2>
+            <div style={{display: 'flex', gap: 8, flexWrap: 'wrap'}}>{home.recent.map(item =>
+                <button className="btn" type="button" key={item.id} onClick={() => void open(item.id)}>
+                    {item.title}{item.downloaded ? ' · Local' : ''}</button>)}</div>
+            <h2>Activity</h2>
+            <p>{home.activity.length} active downloads · {home.issues.length} issues</p>
+            {home.issues.length > 0 && <button className="btn" type="button"
+                onClick={() => setView('management')}>Review issues</button>}
         </section>}
-        <details style={{marginBottom: 24}}><summary>Sources, Domains and media servers</summary>
+        {view === 'management' && <section style={{marginBottom: 24}}><h2>Sources, Domains and media servers</h2>
             <h3>Installed Sources</h3>
             {sources.map(source => <p key={source.source_id}>{source.display_name} · {source.capabilities.join(', ')}
                 {runtimes?.active[source.source_id] && ` · runtime ${runtimes.active[source.source_id]}`}{' '}
@@ -223,21 +338,64 @@ export default function WebMediaPage() {
                         .then(() => api<RuntimeState>('/sources/runtimes').then(setRuntimes)).catch(e => setError(String(e)))}>
                     Activate {source} {version}</button>))}
             <p>Discoverable Domains: {catalogues.flatMap(c => c.items.map(d => `${d.display_name} (${c.source_id})`)).join(', ') || 'None'}. URL resolution also checks sites outside non-exhaustive catalogues.</p>
+            <label>Prepare a Domain profile <input list="vodloft-domain-suggestions"
+                value={prepareDomain} onChange={event => setPrepareDomain(event.target.value)}
+                placeholder="example.com" /></label>
+            <datalist id="vodloft-domain-suggestions">{catalogues.flatMap(c => c.items.map(domain =>
+                <option key={`${c.source_id}:${domain.hostname}`} value={domain.hostname}>{domain.display_name}</option>))}</datalist>
+            {prepareDomain.trim() && <DomainProfileForm key={prepareDomain.trim()} domain={prepareDomain.trim()}
+                targets={targets} onCreated={profile => setProfiles(current => [...current, profile])} />}
             <h3>Source connections</h3>
             {connections.map(connection => <p key={connection.id}>{connection.name} · {connection.source_id}
                 {connection.has_secret ? ' · credential stored' : ' · anonymous'}
-                {!connection.enabled && ' · disabled'}</p>)}
+                {!connection.enabled && ' · disabled'}{' '}
+                <button className="btn" type="button" onClick={() => void api<Connection>(
+                    `/sources/connections/${connection.id}`, {method: 'PUT', body: JSON.stringify({
+                        source_id: connection.source_id, name: connection.name,
+                        settings: connection.settings, enabled: !connection.enabled})})
+                    .then(updated => setConnections(current => current.map(item =>
+                        item.id === updated.id ? updated : item))).catch(e => setError(String(e)))}>
+                    {connection.enabled ? 'Disable' : 'Enable'}</button>
+            </p>)}
             <ConnectionForm sources={sources} onCreated={connection => setConnections(current => [...current, connection])}/>
             <h3>Media servers</h3>
             {targets.map(target => <p key={target.id}>{target.name} · {target.kind} · library {target.library_id}{' '}
                 <button type="button" className="btn" onClick={() => void api<unknown>(`/integrations/${target.id}/test`, {method: 'POST'})
                     .then(result => setRunResult(JSON.stringify(result))).catch(e => setError(String(e)))}>Test connection</button></p>)}
             <TargetForm onCreated={target => setTargets(current => [...current, target])}/>
-        </details>
+            <h3>Recent downloads</h3>
+            {jobs.length === 0 && <p>No download jobs yet.</p>}
+            {jobs.map(record => <p key={record.id}>
+                <button type="button" className="btn" onClick={() => void open(record.item_id!)}>{record.title}</button>
+                {' '}· {record.state} · {record.progress ?? 0}% · attempt {record.attempts}
+                {record.error_code && ` · ${record.error_code.replace(/_/g, ' ')}`}
+                {record.failed_stage && ` during ${record.failed_stage}`}
+                {['failed', 'canceled'].includes(record.state) && <button className="btn" type="button"
+                    onClick={() => void api<Job>(`/jobs/${record.id}/retry`, {method: 'POST'})
+                        .then(() => api<Job[]>('/jobs').then(setJobs)).catch(e => setError(String(e)))}>Retry</button>}
+                {['queued', 'resolving', 'downloading', 'processing', 'verifying'].includes(record.state) &&
+                    <button className="btn" type="button" onClick={() => void api<Job>(`/jobs/${record.id}/cancel`, {method: 'POST'})
+                        .then(() => api<Job[]>('/jobs').then(setJobs)).catch(e => setError(String(e)))}>Cancel</button>}
+            </p>)}
+            <h3>Media-server delivery</h3>
+            {exports.length === 0 && <p>No exports yet.</p>}
+            {exports.map(record => <p key={record.id}>Export {record.id} · {targets.find(t => t.id === record.target_id)?.name}
+                {' '}· {record.state}{record.remote_id && ` · remote item ${record.remote_id}`}
+                {record.error && ` · ${record.error}`}
+                {record.state !== 'available' && <button className="btn" type="button"
+                    onClick={() => void api<unknown>(`/integrations/exports/${record.id}/retry`, {method: 'POST'})
+                        .then(() => api<Export[]>('/integrations/exports').then(setExports)).catch(e => setError(String(e)))}>Retry</button>}
+            </p>)}
+            {runResult && <p role="status">{runResult}</p>}
+        </section>}
+        {view === 'library' && <>
         <h2>Library</h2>
+        <label>Search your library <input type="search" value={libraryQuery}
+            onChange={event => setLibraryQuery(event.target.value)} /></label>
         {items.length === 0 && <p>No web media has been added yet.</p>}
         <div style={{display: 'flex', flexWrap: 'wrap', gap: 12}}>
-            {items.map(item =>
+            {items.filter(item => `${item.title} ${item.domain} ${item.kind}`.toLocaleLowerCase()
+                .includes(libraryQuery.toLocaleLowerCase())).map(item =>
                 <button type="button" key={item.id} onClick={() => void open(item.id)}
                         className="btn" style={{textAlign: 'left', minWidth: 200}}>
                     <strong>{item.title}</strong><br/>{item.kind} · {item.domain}{item.downloaded ? ' · Local' : ''}
@@ -245,12 +403,41 @@ export default function WebMediaPage() {
         </div>
         {selected && <section style={{marginTop: 32}}><h2>{selected.title}</h2>
             <p>{selected.kind} · {selected.domain}</p>
+            {(selected.references?.length ?? 0) > 1 && <label>Source account{' '}
+                <select value={referenceId ?? ''} onChange={event => setReferenceId(Number(event.target.value) || null)}>
+                    <option value="">Choose a Source account</option>
+                    {selected.references?.map(reference => <option key={reference.id} value={reference.id}>
+                        {reference.source_id} · {connections.find(c => c.id === reference.connection_id)?.name ?? 'Anonymous'}
+                    </option>)}
+                </select>
+            </label>}
             <MetadataForm key={selected.id} item={selected} onSaved={updated => {
                 setSelected(previous => previous?.id === updated.id ? {...previous, ...updated} : previous)
                 void refresh()
             }}/>
+            <div style={{margin: '12px 0'}}>
+                <button className="btn" type="button" onClick={() => void api<SourceHistory[]>(
+                    `/library/${selected.id}/source-history`).then(setSourceHistory).catch(e => setError(String(e)))}>
+                    Source history</button>
+                {sourceHistory && <div>{sourceHistory.length === 0 && <p>No Source snapshots yet.</p>}
+                    {sourceHistory.map(snapshot => <p key={snapshot.id}>
+                        {new Date(snapshot.created_at).toLocaleString()} · {snapshot.source_id} {snapshot.runtime_version}
+                        {' '}· {connections.find(c => c.id === snapshot.connection_id)?.name ?? 'Anonymous'}
+                        {' '}· {snapshot.metadata.title ?? 'Untitled'}{' '}
+                        <button className="btn" type="button" onClick={() => {
+                            if (!window.confirm('Restore this upstream metadata? Your library edits remain in place.')) return
+                            void api<Item>(`/library/${selected.id}/source-history/${snapshot.id}/restore`, {method: 'POST'})
+                                .then(() => api<Item>(`/library/${selected.id}`).then(setSelected))
+                                .then(() => refresh()).catch(e => setError(String(e)))
+                        }}>Restore</button>
+                    </p>)}
+                </div>}
+            </div>
             {selected.kind === 'collection' && <div style={{display: 'flex', gap: 10, marginBottom: 16}}>
-                <button className="btn" type="button" disabled={busy} onClick={() => void refreshCollection(selected.id)}>Refresh collection</button>
+                <button className="btn" type="button" disabled={busy || !referenceId}
+                    onClick={() => void refreshCollection(selected.id)}>Refresh collection</button>
+                <button className="btn" type="button" disabled={busy || !referenceId}
+                    onClick={() => void refreshCollection(selected.id, 2)}>Expand nested collections (2 levels, 20 max)</button>
                 <button className="btn" type="button" disabled={busy} onClick={() => {
                     if (!window.confirm('Remove this collection and its feeds? Shared local media will remain available.')) return
                     void api<unknown>(`/library/${selected.id}`, {method: 'DELETE'})
@@ -262,6 +449,7 @@ export default function WebMediaPage() {
                 {downloadPolicies.map(policy => <p key={policy.id}>{policy.name} · {policy.backfill}{' '}
                     <button type="button" className="btn" onClick={() => void runDownloadPolicy(policy.id)}>Run now</button></p>)}
                 <DownloadPolicyForm collectionId={selected.id} profiles={profiles}
+                    sourceReferenceId={referenceId} references={selected.references ?? []}
                     onCreated={policy => setDownloadPolicies(previous => [...previous, policy])}/>
                 <h3>Collection feeds</h3>
                 {streamProfiles.map(profile => <p key={profile.id}>{profile.name} · {profile.format}{' '}
@@ -272,6 +460,8 @@ export default function WebMediaPage() {
             </section>}
             {feedUrl && <p><a href={feedUrl} target="_blank" rel="noreferrer">{feedUrl}</a></p>}
             {selected.kind !== 'collection' && <>
+                <button className="btn" type="button" disabled={busy || !referenceId}
+                    onClick={() => void refreshDetails(selected.id)}>Refresh details</button>
                 <div style={{marginBottom: 16}}>
                     <label>Local Media Profile{' '}
                         <select value={profileId ?? ''} onChange={event => {
@@ -290,9 +480,15 @@ export default function WebMediaPage() {
                     setProfiles(previous => [...previous, profile]); setProfileId(profile.id)
                     void showOutputPreview(profile.id, selected.id, profile)
                 }}/>
-                <button className="btn btn-primary" type="button" disabled={!profileId || !!job && !['failed', 'available'].includes(job.state)}
+                <button className="btn btn-primary" type="button" disabled={!profileId || !referenceId ||
+                    selected.capabilities !== null && selected.capabilities !== undefined && !selected.capabilities.includes('download') ||
+                    !!job && !['failed', 'available'].includes(job.state)}
                         onClick={() => void download(selected.id)}>{selected.downloaded ? 'Download again' : 'Download'}</button>
+                {selected.capabilities && !selected.capabilities.includes('download') &&
+                    <p>This Source does not advertise a download for this item.</p>}
                 {job && <p role="status">Download: {job.state}{job.progress !== undefined ? ` · ${job.progress}%` : ''}
+                    {job.error_code ? ` · ${job.error_code.replace(/_/g, ' ')}` : ''}
+                    {job.failed_stage ? ` during ${job.failed_stage}` : ''}
                     {job.error ? ` · ${job.error}` : ''}</p>}
                 {job && ['queued', 'resolving', 'downloading', 'verifying'].includes(job.state) &&
                     <button className="btn" type="button" disabled={job.cancel_requested}
@@ -313,6 +509,7 @@ export default function WebMediaPage() {
                         style={{textAlign: 'left'}}>{extra.title}{extra.downloaded ? ' · Local' : ''}</button>)}</div>
             </section>}
         </section>}
+        </>}
     </section>
 }
 
@@ -395,7 +592,9 @@ const DownloadPolicySchema = z.object({
 })
 type PolicyFields = z.input<typeof DownloadPolicySchema>
 
-function DownloadPolicyForm({collectionId, profiles, onCreated}: {collectionId: number; profiles: Profile[]; onCreated: (profile: DownloadPolicy) => void}) {
+function DownloadPolicyForm({collectionId, profiles, sourceReferenceId, references, onCreated}: {
+    collectionId: number; profiles: Profile[]; sourceReferenceId: number | null;
+    references: NonNullable<Item['references']>; onCreated: (profile: DownloadPolicy) => void}) {
     const [expanded, setExpanded] = useState(false)
     const [selectedIds, setSelectedIds] = useState<number[]>([])
     const [error, setError] = useState<string | null>(null)
@@ -407,6 +606,7 @@ function DownloadPolicyForm({collectionId, profiles, onCreated}: {collectionId: 
     if (!expanded) return <button className="btn" type="button" onClick={() => setExpanded(true)}>Create Download Profile</button>
     return <form onSubmit={handleSubmit(async values => {
         if (!selectedIds.length) { setError('Select at least one Local Media Profile.'); return }
+        if (!sourceReferenceId && references.length > 1) { setError('Select a Source account above.'); return }
         setError(null)
         try {
             const created = await api<DownloadPolicy>(`/library/${collectionId}/download-profiles`, {
@@ -414,7 +614,8 @@ function DownloadPolicyForm({collectionId, profiles, onCreated}: {collectionId: 
                     published_after: values.published_after || null,
                     published_before: values.published_before || null,
                     title_contains: values.title_contains || null,
-                    local_profile_ids: selectedIds, enabled: true})})
+                    local_profile_ids: selectedIds, source_reference_id: sourceReferenceId,
+                    enabled: true})})
             onCreated(created); setExpanded(false)
         } catch (e) { setError(String(e)) }
     })} style={{display: 'grid', gap: 10, maxWidth: 620, margin: '12px 0'}}>
@@ -438,27 +639,38 @@ function DownloadPolicyForm({collectionId, profiles, onCreated}: {collectionId: 
     </form>
 }
 
-const StreamProfileSchema = z.object({name: z.string().min(1), format: z.enum(['audio', 'video']).default('audio')})
+const StreamProfileSchema = z.object({name: z.string().min(1), format: z.enum(['audio', 'video']).default('audio'),
+    published_after: z.string().default(''), published_before: z.string().default(''),
+    title_contains: z.string().max(200).default('')}).refine(
+        values => !values.published_after || !values.published_before || values.published_after <= values.published_before,
+        {path: ['published_before'], message: 'End date must follow start date'})
 type StreamFields = z.input<typeof StreamProfileSchema>
 
 function StreamProfileForm({collectionId, onCreated}: {collectionId: number; onCreated: (profile: StreamProfile) => void}) {
     const [expanded, setExpanded] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const {register, handleSubmit, formState: {errors, isSubmitting}} = useForm<StreamFields, unknown, z.output<typeof StreamProfileSchema>>({
-        resolver: zodResolver(StreamProfileSchema), defaultValues: {name: 'Podcast feed', format: 'audio'},
+        resolver: zodResolver(StreamProfileSchema), defaultValues: {name: 'Podcast feed', format: 'audio',
+            published_after: '', published_before: '', title_contains: ''},
     })
     if (!expanded) return <button className="btn" type="button" onClick={() => setExpanded(true)}>Create Stream Profile</button>
     return <form onSubmit={handleSubmit(async values => {
         setError(null)
         try {
             onCreated(await api<StreamProfile>(`/library/${collectionId}/stream-profiles`, {method: 'POST',
-                body: JSON.stringify({...values, local_only: true, enabled: true})}))
+                body: JSON.stringify({...values, published_after: values.published_after || null,
+                    published_before: values.published_before || null,
+                    title_contains: values.title_contains || null, local_only: true, enabled: true})}))
             setExpanded(false)
         } catch (e) { setError(String(e)) }
     })} style={{display: 'grid', gap: 10, maxWidth: 500, margin: '12px 0'}}>
         <label>Name <input {...register('name')} />{errors.name && <span role="alert">{errors.name.message}</span>}</label>
         <label>Rendition <select {...register('format')}><option value="audio">Podcast audio</option>
             <option value="video">Video feed</option></select></label>
+        <label>Published on or after <input type="date" {...register('published_after')} /></label>
+        <label>Published on or before <input type="date" {...register('published_before')} />
+            {errors.published_before && <span role="alert">{errors.published_before.message}</span>}</label>
+        <label>Title contains <input {...register('title_contains')} /></label>
         {error && <p role="alert">{error}</p>}
         <div><button type="submit" className="btn btn-primary" disabled={isSubmitting}>Save Stream Profile</button>{' '}
             <button type="button" className="btn" onClick={() => setExpanded(false)}>Cancel</button></div>
@@ -503,34 +715,72 @@ function TargetForm({onCreated}: {onCreated: (target: Target) => void}) {
     </form>
 }
 
-const ConnectionSchema = z.object({source_id: z.string().min(1), name: z.string().min(1), access_token: z.string().optional()})
-type ConnectionFields = z.infer<typeof ConnectionSchema>
+const ConnectionSchema = z.object({source_id: z.string().min(1), name: z.string().min(1),
+    configuration: z.record(z.string(), z.string()).default({})})
+type ConnectionFields = z.input<typeof ConnectionSchema>
 
 function ConnectionForm({sources, onCreated}: {sources: Source[]; onCreated: (connection: Connection) => void}) {
     const [expanded, setExpanded] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const {register, handleSubmit, watch, formState: {errors, isSubmitting}, reset} = useForm<ConnectionFields>({
+    const [fileSecrets, setFileSecrets] = useState<Record<string, string>>({})
+    const [readingFile, setReadingFile] = useState(false)
+    const {register, handleSubmit, watch, formState: {errors, isSubmitting}, reset} = useForm<ConnectionFields, unknown, z.output<typeof ConnectionSchema>>({
         resolver: zodResolver(ConnectionSchema),
-        defaultValues: {source_id: sources[0]?.source_id || '', name: '', access_token: ''},
+        shouldUnregister: true,
+        defaultValues: {source_id: '', name: '', configuration: {}},
     })
     const selected = sources.find(source => source.source_id === watch('source_id'))
+    useEffect(() => setFileSecrets({}), [selected?.source_id])
     if (!expanded) return <button type="button" className="btn" onClick={() => setExpanded(true)}>Add Source connection</button>
     return <form onSubmit={handleSubmit(async values => {
         setError(null)
         try {
+            const schema = sources.find(source => source.source_id === values.source_id)?.configuration_schema ?? []
+            const settings: Record<string, string | number> = {}
+            const secrets: Record<string, string> = {}
+            for (const field of schema) {
+                const value = field.kind === 'credential_file' ? fileSecrets[field.name] ?? '' :
+                    values.configuration[field.name]?.trim() ?? ''
+                if (field.required && !value) {setError(`${field.label} is required.`); return}
+                if (!value) continue
+                if (field.kind === 'secret' || field.kind === 'credential_file') secrets[field.name] = value
+                else if (field.kind === 'number') {
+                    const number = Number(value)
+                    if (!Number.isFinite(number)) {setError(`${field.label} must be a number.`); return}
+                    settings[field.name] = number
+                } else settings[field.name] = value
+            }
             onCreated(await api<Connection>('/sources/connections', {method: 'POST',
-                body: JSON.stringify({...values, access_token: values.access_token || null, enabled: true})}))
-            reset(); setExpanded(false)
+                body: JSON.stringify({source_id: values.source_id, name: values.name,
+                    settings, secrets, enabled: true})}))
+            reset(); setFileSecrets({}); setExpanded(false)
         } catch (e) { setError(String(e)) }
     })} style={{display: 'grid', gap: 10, maxWidth: 500}}>
         <label>Source <select {...register('source_id')}><option value="">Select Source</option>
             {sources.map(source => <option key={source.source_id} value={source.source_id}>{source.display_name}</option>)}</select>
             {errors.source_id && <span role="alert">{errors.source_id.message}</span>}</label>
         <label>Connection name <input {...register('name')} />{errors.name && <span role="alert">{errors.name.message}</span>}</label>
-        {selected?.configuration_schema.filter(field => field.name === 'access_token').map(field =>
-            <label key={field.name}>{field.label} <input type="password" autoComplete="off" {...register('access_token')} /></label>)}
+        {selected?.configuration_schema.map(field => <label key={field.name}>{field.label}
+            {field.kind === 'credential_file' ? <input type="file" accept=".txt,text/plain" required={field.required}
+                onChange={event => { const file = event.target.files?.[0];
+                    if (!file) {setFileSecrets(current => ({...current, [field.name]: ''})); return}
+                    if (file.size > 1024 * 1024) {
+                        setFileSecrets(current => ({...current, [field.name]: ''}))
+                        setError('Credential files must be at most 1 MiB.'); return
+                    }
+                    setReadingFile(true)
+                    void file.text().then(content => setFileSecrets(current => ({...current, [field.name]: content})))
+                        .catch(() => setError('Could not read the credential file.'))
+                        .finally(() => setReadingFile(false))
+                }} /> : field.kind === 'select' ? <select {...register(`configuration.${field.name}`)}>
+                <option value="">Choose an option</option>
+                {field.options.map(option => <option key={option} value={option}>{option}</option>)}
+            </select> : <input type={field.kind === 'secret' ? 'password' : field.kind === 'number' ? 'number' : 'text'}
+                autoComplete={field.kind === 'secret' ? 'off' : undefined}
+                required={field.required} {...register(`configuration.${field.name}`)} />}
+        </label>)}
         {error && <p role="alert">{error}</p>}
-        <div><button className="btn btn-primary" disabled={isSubmitting}>Save connection</button>{' '}
+        <div><button className="btn btn-primary" disabled={isSubmitting || readingFile}>Save connection</button>{' '}
             <button type="button" className="btn" onClick={() => setExpanded(false)}>Cancel</button></div>
     </form>
 }

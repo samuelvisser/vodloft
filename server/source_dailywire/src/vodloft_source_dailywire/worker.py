@@ -2,6 +2,7 @@
 
 import base64
 import binascii
+import errno
 import json
 import re
 import sys
@@ -13,8 +14,10 @@ import yt_dlp
 from dailywire_api.dw_api.client import ByNextPage, ByShowSeason, MiddlewareClient, DEFAULT_MIDDLEWARE_URL
 from dailywire_api.dw_api.movie import MovieMiddlewareClient
 from source_contracts import (CollectionPage, DomainDescriptor, DownloadResult, EntrySnapshot,
-                              MediaSnapshot, SourceManifest, SourceMatch, SourceMediaReference)
+                              MediaSnapshot, SourceError, SourceManifest, SourceMatch, SourceMediaReference,
+                              SourceSearchItem, SourceSearchPage)
 from source_contracts.network import install_public_network_guard
+from source_contracts.progress import download_progress_hook
 
 SOURCE_ID = "dailywire"
 
@@ -48,36 +51,40 @@ def resolve(url: str, max_entries: int = 100, token: str | None = None) -> Media
         record = client.get_show_page(slug)
         entries = [EntrySnapshot(reference=_reference("episode", e.slug, e.dw_id, e.sharing_url),
                                  title=e.title, position=index, published_at=e.published_date,
-                                 episode_number=e.episode_number or None)
+                                 episode_number=e.episode_number or None,
+                                 capabilities={"download"} if getattr(e, "is_downloadable", True) else set())
                    for index, e in enumerate(record.latest_episodes[:max_entries], 1)]
         return MediaSnapshot(kind="collection", reference=_reference("show", record.slug, record.dw_id,
             record.sharing_url), title=record.title, description=record.description,
             artwork_url=record.thumbnail_portrait_path or record.background_image_path,
-            entries=entries, enumeration_complete=False)
+            entries=entries, enumeration_complete=False,
+            capabilities={"enumerate_collection"})
     if kind in ("episode", "episodes"):
         record = client.get_episode_details(slug)
         return MediaSnapshot(kind="video", reference=_reference("episode", record.slug, record.dw_id,
             record.sharing_url), title=record.title, description=record.description,
             duration=record.duration, artwork_url=record.thumbnail_landscape_path,
-            published_at=record.published_date)
+            published_at=record.published_date,
+            capabilities={"download"} if record.is_downloadable else set())
     movie = _client(token, movie=True)
     if kind in ("videos", "movies"):
         record = movie.get_movie_page(slug)
         extras = [EntrySnapshot(reference=_reference("clips", extra.slug,
             extra.dw_id or extra.slug, extra.sharing_url), title=extra.title,
-            position=index, kind="movie_extra", extra_type=extra.movie_extra_type)
+            position=index, kind="movie_extra", extra_type=extra.movie_extra_type,
+            capabilities={"download"})
             for index, extra in enumerate(record.movie_extras, 1)]
         return MediaSnapshot(kind="movie", reference=_reference("videos", record.slug, record.dw_id,
             record.sharing_url), title=record.title, description=record.description,
             duration=record.duration, artwork_url=record.thumbnail_portrait_path,
-            extras=extras)
+            extras=extras, capabilities={"download"})
     if kind in ("clips", "clip"):
         detail = movie.get_movie_extra_playback(slug)
         record = detail.metadata
         return MediaSnapshot(kind="movie_extra", reference=_reference("clips", record.slug,
             record.dw_id or record.slug, record.sharing_url), title=record.title,
             description=record.description, duration=record.duration,
-            artwork_url=record.thumbnail_landscape_path)
+            artwork_url=record.thumbnail_landscape_path, capabilities={"download"})
     raise ValueError("Unsupported Daily Wire media URL")
 
 
@@ -96,7 +103,8 @@ def entries(url: str, cursor: str | None = None, limit: int = 50,
     if not seasons:
         return CollectionPage(entries=[EntrySnapshot(reference=_reference("episode", e.slug, e.dw_id, e.sharing_url),
             title=e.title, position=index, published_at=e.published_date,
-            episode_number=e.episode_number or None)
+            episode_number=e.episode_number or None,
+            capabilities={"download"} if getattr(e, "is_downloadable", True) else set())
             for index, e in enumerate(show.latest_episodes[:limit], 1)],
             complete=False)
     if cursor and len(cursor) > 4096:
@@ -117,7 +125,8 @@ def entries(url: str, cursor: str | None = None, limit: int = 50,
     result = client.get_episodes_paginated(parts[1], selector)
     snapshots = [EntrySnapshot(reference=_reference("episode", e.slug, e.dw_id, e.sharing_url),
         title=e.title, position=position + index, group=season.name,
-        published_at=e.published_date, episode_number=e.episode_number or None)
+        published_at=e.published_date, episode_number=e.episode_number or None,
+        capabilities={"download"} if getattr(e, "is_downloadable", True) else set())
         for index, e in enumerate(result.items, 1)]
     position += len(result.items)
     if result.has_next and result.next_page_url:
@@ -128,6 +137,33 @@ def entries(url: str, cursor: str | None = None, limit: int = 50,
         return CollectionPage(entries=snapshots, complete=True)
     encoded = base64.urlsafe_b64encode(json.dumps(state, separators=(",", ":")).encode()).decode().rstrip("=")
     return CollectionPage(entries=snapshots, next_cursor=encoded, complete=False)
+
+
+def search(query: str, cursor: str | None = None, limit: int = 30,
+           token: str | None = None) -> SourceSearchPage:
+    if (not query.strip() or len(query) > 200 or not 1 <= limit <= 50 or
+        cursor is not None and (not cursor.isdecimal() or len(cursor) > 6)):
+        raise ValueError("Invalid Source search")
+    offset = int(cursor or "0")
+    if offset > 10000:
+        raise ValueError("Search result limit exceeded")
+    catalog = _client(token).get_catalog()
+    needle = query.casefold().strip()
+    items = []
+    for show in catalog.shows:
+        if needle in f"{show.title} {show.author_name or ''}".casefold():
+            items.append(SourceSearchItem(kind="collection", title=show.title,
+                description=show.description, artwork_url=show.thumbnail_portrait_path,
+                reference=_reference("show", show.slug, show.dw_id)))
+    for movie in catalog.movies:
+        if needle in f"{movie.title} {movie.author_name or ''}".casefold():
+            items.append(SourceSearchItem(kind="movie", title=movie.title,
+                description=movie.description, artwork_url=movie.thumbnail_portrait_path,
+                reference=_reference("videos", movie.slug, movie.dw_id)))
+    items.sort(key=lambda item: (item.title.casefold(), item.reference.upstream_id))
+    page = items[offset:offset + limit]
+    return SourceSearchPage(items=page,
+        next_cursor=str(offset + limit) if offset + limit < len(items) else None)
 
 
 def download(url: str, staging: str, preferred_format: str = "format_1080p",
@@ -149,7 +185,8 @@ def download(url: str, staging: str, preferred_format: str = "format_1080p",
     destination = Path(staging).resolve()
     destination.mkdir(parents=True, exist_ok=True)
     options = {"quiet": True, "no_warnings": True, "noplaylist": True,
-               "outtmpl": str(destination / "media.%(ext)s"), "hls_prefer_native": True}
+               "outtmpl": str(destination / "media.%(ext)s"), "hls_prefer_native": True,
+               "progress_hooks": [download_progress_hook()]}
     if preferred_format == "format_audio_only":
         options.update(format="bestaudio/best", postprocessors=[{"key": "FFmpegExtractAudio", "preferredcodec": "mp3"}])
     with yt_dlp.YoutubeDL(options) as ydl:
@@ -163,11 +200,11 @@ def download(url: str, staging: str, preferred_format: str = "format_1080p",
 def main():
     request = json.load(sys.stdin)
     operation = request["operation"]
-    if operation in ("resolve", "download", "entries"):
+    if operation in ("resolve", "download", "entries", "search"):
         install_public_network_guard()
     if operation == "manifest":
         result = SourceManifest(source_id=SOURCE_ID, display_name="Daily Wire API",
-            version="0.1.0", capabilities={"resolve_url", "enumerate_collection", "enumerate_pages", "download", "domain_catalogue"},
+            version="0.1.0", capabilities={"resolve_url", "enumerate_collection", "enumerate_pages", "download", "domain_catalogue", "search"},
             exhaustive_domain_catalogue=True,
             configuration_schema=[{"name": "access_token", "label": "Access token", "kind": "secret",
                                    "required": False}])
@@ -188,6 +225,9 @@ def main():
     elif operation == "entries":
         result = entries(request["url"], request.get("cursor"), request.get("limit", 50),
                          request.get("access_token"))
+    elif operation == "search":
+        result = search(request["query"], request.get("cursor"), request.get("limit", 30),
+                        request.get("access_token"))
     elif operation == "download":
         result = download(request["url"], request["staging"], request.get("preferred_format", "format_1080p"),
                           request.get("access_token"))
@@ -197,4 +237,16 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        if isinstance(exc, PermissionError):
+            code, message = "authentication_required", "Daily Wire authorization is required"
+        elif isinstance(exc, OSError) and exc.errno == errno.ENOSPC:
+            code, message = "insufficient_disk", "Insufficient staging disk space"
+        elif isinstance(exc, ValueError):
+            code = "unsupported_operation" if str(exc).startswith("Unsupported Source operation") else "invalid_url"
+            message = "Source operation is unsupported" if code == "unsupported_operation" else "Daily Wire media reference is invalid"
+        else:
+            code, message = "unavailable", "Daily Wire operation failed"
+        print(json.dumps({"error": SourceError(code=code, message=message).model_dump()}))

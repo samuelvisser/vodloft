@@ -1,17 +1,39 @@
 """One request per process: JSON on stdin, JSON on stdout, diagnostics on stderr."""
 
 import json
+import errno
 import sys
+import tempfile
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
 import yt_dlp
 from source_contracts import (
-    CollectionPage, DownloadResult, EntrySnapshot, MediaSnapshot, SourceManifest,
+    CollectionPage, DownloadResult, EntrySnapshot, MediaSnapshot, SourceError, SourceManifest,
     SourceMatch, SourceMediaReference,
 )
 from source_contracts.network import install_public_network_guard
+from source_contracts.progress import download_progress_hook
+
+
+@contextmanager
+def _cookie_options(cookies: str | None, scratch: str | None = None):
+    if not cookies:
+        yield {}
+        return
+    if (len(cookies.encode()) > 1024 * 1024 or "\x00" in cookies or
+        not cookies.lstrip("\ufeff").startswith(("# Netscape HTTP Cookie File", "# HTTP Cookie File"))):
+        raise ValueError("Upload a Netscape-format cookies.txt file")
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", prefix="vodloft-cookies-",
+                                     suffix=".txt", dir=scratch, delete=False) as output:
+        output.write(cookies.lstrip("\ufeff"))
+        path = Path(output.name)
+    try:
+        yield {"cookiefile": str(path)}
+    finally:
+        path.unlink(missing_ok=True)
 
 
 def _published(info: dict) -> datetime | None:
@@ -47,8 +69,11 @@ def _reference(info: dict, fallback_url: str, *, strict: bool = False) -> Source
     )
 
 
-def resolve(url: str, *, max_entries: int = 100) -> MediaSnapshot:
-    with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "extract_flat": "in_playlist", "playlistend": max_entries + 1, "skip_download": True}) as ydl:
+def resolve(url: str, *, max_entries: int = 100, cookies: str | None = None,
+            scratch: str | None = None) -> MediaSnapshot:
+    with _cookie_options(cookies, scratch) as auth, yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True,
+            "extract_flat": "in_playlist", "playlistend": max_entries + 1,
+            "skip_download": True, **auth}) as ydl:
         info = ydl.extract_info(url, download=False)
     if not info:
         raise ValueError("No media was found at this URL")
@@ -61,6 +86,7 @@ def resolve(url: str, *, max_entries: int = 100) -> MediaSnapshot:
         entries.append(EntrySnapshot(
             reference=_reference(entry, url, strict=True), title=str(entry.get("title") or entry.get("id") or "Untitled"),
             position=position, kind="collection" if entry.get("_type") == "playlist" else "video",
+            capabilities={"enumerate_collection"} if entry.get("_type") == "playlist" else {"download"},
             **({"published_at": published} if (published := _published(entry)) else {}),
         ))
     thumbnails = info.get("thumbnails") or []
@@ -72,19 +98,21 @@ def resolve(url: str, *, max_entries: int = 100) -> MediaSnapshot:
     return MediaSnapshot(
         kind=kind, reference=_reference(info, url),
         title=str(info.get("title") or info.get("id") or "Untitled"),
-        entries=entries, enumeration_complete=len(raw_entries) <= max_entries, **optional,
+        entries=entries, enumeration_complete=len(raw_entries) <= max_entries,
+        capabilities={"enumerate_collection"} if kind == "collection" else {"download"}, **optional,
     )
 
 
-def entries(url: str, cursor: str | None = None, limit: int = 50) -> CollectionPage:
+def entries(url: str, cursor: str | None = None, limit: int = 50,
+            cookies: str | None = None, scratch: str | None = None) -> CollectionPage:
     if cursor is not None and (not cursor.isdecimal() or len(cursor) > 8):
         raise ValueError("Invalid Collection cursor")
     offset = int(cursor or "0")
     if offset > 100000 or not 1 <= limit <= 100:
         raise ValueError("Collection enumeration limit exceeded")
-    with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "extract_flat": "in_playlist",
+    with _cookie_options(cookies, scratch) as auth, yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "extract_flat": "in_playlist",
                            "playliststart": offset + 1, "playlistend": offset + limit + 1,
-                           "skip_download": True}) as ydl:
+                           "skip_download": True, **auth}) as ydl:
         info = ydl.extract_info(url, download=False)
     if not info or info.get("_type") not in ("playlist", "multi_video"):
         raise ValueError("This URL is not a Collection")
@@ -93,6 +121,7 @@ def entries(url: str, cursor: str | None = None, limit: int = 50) -> CollectionP
         title=str(item.get("title") or item.get("id") or "Untitled"),
         position=offset + position + 1,
         kind="collection" if item.get("_type") == "playlist" else "video",
+        capabilities={"enumerate_collection"} if item.get("_type") == "playlist" else {"download"},
         **({"published_at": published} if (published := _published(item)) else {}))
         for position, item in enumerate(raw[:limit]) if item]
     has_more = len(raw) > limit
@@ -100,7 +129,8 @@ def entries(url: str, cursor: str | None = None, limit: int = 50) -> CollectionP
                           complete=not has_more)
 
 
-def download(url: str, staging: str, preferred_format: str = "format_1080p") -> DownloadResult:
+def download(url: str, staging: str, preferred_format: str = "format_1080p",
+             cookies: str | None = None, scratch: str | None = None) -> DownloadResult:
     destination = Path(staging).resolve()
     destination.mkdir(parents=True, exist_ok=True)
     if preferred_format == "format_audio_only":
@@ -110,13 +140,15 @@ def download(url: str, staging: str, preferred_format: str = "format_1080p") -> 
         height = {"format_720p": 720, "format_1080p": 1080, "format_4k": 2160}.get(preferred_format, 1080)
         format_selector = f"bestvideo*[height<={height}]+bestaudio/best[height<={height}]/best"
         postprocessors = []
-    with yt_dlp.YoutubeDL({
+    with _cookie_options(cookies, scratch) as auth, yt_dlp.YoutubeDL({
         "quiet": True, "no_warnings": True, "noplaylist": True,
         "outtmpl": str(destination / "media.%(ext)s"),
         "restrictfilenames": True,
         "format": format_selector,
         "hls_prefer_native": True,
+        "progress_hooks": [download_progress_hook()],
         "postprocessors": postprocessors,
+        **auth,
     }) as ydl:
         ydl.download([url])
     files = [p for p in destination.iterdir() if p.is_file() and not p.name.endswith((".part", ".ytdl"))]
@@ -132,7 +164,9 @@ def main() -> None:
         install_public_network_guard()
     if operation == "manifest":
         result = SourceManifest(source_id="yt-dlp", display_name="yt-dlp", version=yt_dlp.version.__version__,
-                                capabilities={"resolve_url", "enumerate_collection", "enumerate_pages", "download", "domain_catalogue"})
+                                capabilities={"resolve_url", "enumerate_collection", "enumerate_pages", "download", "domain_catalogue"},
+                                configuration_schema=[{"name": "cookies", "label": "Netscape cookies.txt",
+                                                       "kind": "credential_file"}])
     elif operation == "domains":
         # This is deliberately a discoverable subset. Generic extractors and
         # embeds can resolve additional sites beyond any advertised catalogue.
@@ -154,7 +188,8 @@ def main() -> None:
                   "supports_url_resolution_outside_catalog": True,
                   "catalog_revision": yt_dlp.version.__version__}
     elif operation == "resolve":
-        result = resolve(request["url"], max_entries=request.get("max_entries", 100))
+        result = resolve(request["url"], max_entries=request.get("max_entries", 100),
+                         cookies=request.get("cookies"), scratch=request.get("scratch"))
     elif operation == "match":
         from yt_dlp.extractor import gen_extractor_classes
         matching = [extractor for extractor in gen_extractor_classes()
@@ -163,13 +198,27 @@ def main() -> None:
         result = SourceMatch(source_id="yt-dlp", confidence=60 if specific else 10,
                              reason="Supported extractor" if specific else "Generic URL candidate")
     elif operation == "entries":
-        result = entries(request["url"], request.get("cursor"), request.get("limit", 50))
+        result = entries(request["url"], request.get("cursor"), request.get("limit", 50),
+                         request.get("cookies"), request.get("scratch"))
     elif operation == "download":
-        result = download(request["url"], request["staging"], request.get("preferred_format", "format_1080p"))
+        result = download(request["url"], request["staging"], request.get("preferred_format", "format_1080p"),
+                          request.get("cookies"), request.get("scratch"))
     else:
         raise ValueError(f"Unsupported Source operation: {operation}")
     print(result.model_dump_json(exclude_unset=True) if hasattr(result, "model_dump_json") else json.dumps(result))
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        if isinstance(exc, PermissionError):
+            code, message = "authentication_required", "Source authorization is required"
+        elif isinstance(exc, OSError) and exc.errno == errno.ENOSPC:
+            code, message = "insufficient_disk", "Insufficient staging disk space"
+        elif isinstance(exc, ValueError):
+            code = "unsupported_operation" if str(exc).startswith("Unsupported Source operation") else "invalid_url"
+            message = "Source operation is unsupported" if code == "unsupported_operation" else "Source URL or media reference is invalid"
+        else:
+            code, message = "unavailable", "Source operation failed"
+        print(json.dumps({"error": SourceError(code=code, message=message).model_dump()}))

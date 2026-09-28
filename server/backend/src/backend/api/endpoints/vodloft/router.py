@@ -1,6 +1,7 @@
 """Generic Add URL, library, acquisition and local playback prototype."""
 
 import logging
+import errno
 import mimetypes
 import os
 import re
@@ -9,6 +10,7 @@ import tempfile
 import threading
 import uuid
 from datetime import datetime, timezone, timedelta
+from contextlib import nullcontext
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
@@ -19,23 +21,25 @@ from sqlalchemy.exc import IntegrityError
 
 from backend.db import get_session
 from backend.db.models.vodloft import (
-    AcquisitionJob, Artifact, ArtifactPlacement, CollectionDownloadProfile, CollectionEntry, CollectionScan, CollectionStreamProfile, Domain, FeedSubscription, FileFinalization, LegacyMediaLink, MediaItem, MediaServerExport, MovieExtraParent, PlaybackProgress, PublishedEntry, SourceConnection, SourceDomain, SourceReference,
+    AcquisitionJob, Artifact, ArtifactPlacement, CollectionDownloadProfile, CollectionEntry, CollectionScan, CollectionStreamProfile, Domain, FeedSubscription, FileFinalization, LegacyMediaLink, MediaItem, MediaServerExport, MovieExtraParent, PlaybackProgress, PublishedEntry, SourceConnection, SourceDomain, SourceReference, SourceSnapshot,
 )
 from backend.db.models.local_media_profile import DomainLocalMediaProfile
 from backend.api.endpoints.vodloft.profiles import output_path_from_spec
-from backend.source_manager.gateway import SourceGateway, cancel_running_job, clear_canceled_job, validate_public_url
+from backend.source_manager.gateway import SourceGateway, SourceInvocationError, cancel_running_job, clear_canceled_job, validate_public_url
 from backend.source_manager.runtime import command_for
 from backend.services import vodloft_finalization
 from backend.source_manager import runtime as source_runtime
-from backend.api.endpoints.vodloft.connections import access_token as connection_token
+from backend.api.endpoints.vodloft.connections import source_options
 from config import get_settings
 from source_contracts import MediaSnapshot, SourceMediaReference
 from task_manager.scheduler.db import TaskOperation
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/vodloft", tags=["VodLoft library"])
-_download_slots = threading.BoundedSemaphore(2)
+_download_slots = threading.BoundedSemaphore(5)
 _source_slots: dict[str, threading.BoundedSemaphore] = {}
+_domain_slots: dict[int, threading.BoundedSemaphore] = {}
+_connection_slots: dict[int, threading.BoundedSemaphore] = {}
 _source_slots_lock = threading.Lock()
 _MISSING = object()
 _JOB_PROGRESS = {"queued": 0, "resolving": 10, "downloading": 35,
@@ -63,8 +67,41 @@ def _sync_operation(session, job: AcquisitionJob) -> None:
         operation.result = {"summary": "Download available", "data": {"item_id": job.item_id}}
 
 
+def _download_progress(job_id: int, percent: float) -> None:
+    """Map Source byte progress into the reserved download portion of a job."""
+    with get_session() as session:
+        job = session.get(AcquisitionJob, job_id)
+        if not job or job.state != "downloading" or not job.operation_id:
+            return
+        operation = session.get(TaskOperation, job.operation_id)
+        if not operation:
+            return
+        progress = min(64, 35 + int(percent * 0.29))
+        if progress <= (operation.progress or 0):
+            return
+        operation.progress = progress
+        operation.message = f"Downloading ({int(percent)}%)"
+        session.commit()
+
+
+def _progress_for(session, job: AcquisitionJob) -> int:
+    operation = session.get(TaskOperation, job.operation_id) if job.operation_id else None
+    return operation.progress if operation and operation.progress is not None else _JOB_PROGRESS.get(job.state, 0)
+
+
 class JobCancelled(Exception):
     pass
+
+
+def _source_problem(exc: Exception, fallback: str) -> HTTPException:
+    if isinstance(exc, SourceInvocationError):
+        status = {"authentication_required": 409, "rate_limited": 429,
+                  "invalid_url": 422, "unsupported_operation": 422,
+                  "unsupported_format": 409, "insufficient_disk": 503,
+                  "unavailable": 503}.get(exc.code, 502)
+        return HTTPException(status, str(exc),
+            headers={"X-VodLoft-Source-Error": exc.code})
+    return HTTPException(502, fallback)
 
 
 class ResolveRequest(BaseModel):
@@ -80,6 +117,7 @@ class ImportRequest(BaseModel):
 
 class DownloadRequest(BaseModel):
     profile_id: int | None = None
+    reference_id: int | None = None
 
 
 class UserMetadataInput(BaseModel):
@@ -105,7 +143,7 @@ def _domain(session, hostname: str) -> Domain:
 def _upsert(session, reference: SourceMediaReference, kind: str, title: str,
             description=_MISSING, duration=_MISSING,
             artwork_url=_MISSING, connection_id: int | None = None,
-            published_at=_MISSING) -> MediaItem:
+            published_at=_MISSING, capabilities=_MISSING) -> MediaItem:
     domain = _domain(session, reference.domain)
     supported = session.scalar(select(SourceDomain).where(
         SourceDomain.source_id == reference.source_id, SourceDomain.domain_id == domain.id))
@@ -130,6 +168,8 @@ def _upsert(session, reference: SourceMediaReference, kind: str, title: str,
             item.artwork_url = artwork_url
         if published_at is not _MISSING:
             item.published_at = published_at
+        if capabilities is not _MISSING:
+            item.capabilities = sorted(capabilities) if capabilities is not None else None
         source.url = reference.url
     else:
         related = session.scalar(select(SourceReference).where(
@@ -149,7 +189,8 @@ def _upsert(session, reference: SourceMediaReference, kind: str, title: str,
                              description=None if description is _MISSING else description,
                              duration=None if duration is _MISSING else duration,
                              artwork_url=None if artwork_url is _MISSING else artwork_url,
-                             published_at=None if published_at is _MISSING else published_at)
+                             published_at=None if published_at is _MISSING else published_at,
+                             capabilities=sorted(capabilities) if capabilities is not _MISSING and capabilities is not None else None)
             session.add(item)
             session.flush()
         session.add(SourceReference(item_id=item.id, domain_id=domain.id,
@@ -159,15 +200,29 @@ def _upsert(session, reference: SourceMediaReference, kind: str, title: str,
     return item
 
 
-def _reference_for(session, item_id: int) -> SourceReference | None:
+def _reference_for(session, item_id: int, *, reference_id: int | None = None,
+                   collection_id: int | None = None,
+                   collection_reference_id: int | None = None) -> SourceReference | None:
     references = session.scalars(select(SourceReference).where(SourceReference.item_id == item_id)).all()
+    eligible = []
     for reference in references:
         if reference.connection_id:
             connection = session.get(SourceConnection, reference.connection_id)
             if not connection or not connection.enabled:
                 continue
-        return reference
-    return None
+        eligible.append(reference)
+    if reference_id is not None:
+        return next((reference for reference in eligible if reference.id == reference_id), None)
+    if collection_id is not None:
+        parent = _reference_for(session, collection_id, reference_id=collection_reference_id)
+        if parent:
+            matching = [reference for reference in eligible if
+                reference.source_id == parent.source_id and
+                reference.connection_id == parent.connection_id]
+            if len(matching) == 1:
+                return matching[0]
+        return None
+    return eligible[0] if len(eligible) == 1 else None
 
 
 def _serialize(session, item: MediaItem) -> dict:
@@ -176,7 +231,7 @@ def _serialize(session, item: MediaItem) -> dict:
     return {"id": item.id, "kind": item.kind, "title": item.user_title or item.title,
             "domain": domain.hostname, "description": item.user_description or item.description,
             "artwork_url": item.artwork_url, "duration": item.duration,
-            "published_at": item.published_at,
+            "published_at": item.published_at, "capabilities": item.capabilities,
             "downloaded": bool(artifact and Path(artifact.path).is_file()),
             "playback_type": "audio" if artifact and Path(artifact.path).suffix.lower() in {
                 ".mp3", ".m4a", ".opus", ".ogg", ".wav"} else "video"}
@@ -222,7 +277,7 @@ def source_match(source_id: str, request: ResolveRequest):
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(502, "Source match operation is unavailable") from exc
+        raise _source_problem(exc, "Source match operation is unavailable") from exc
 
 
 @router.post("/sources/{source_id}/entries")
@@ -231,13 +286,30 @@ def source_entries(source_id: str, request: ResolveRequest, cursor: str | None =
     source_manifest(source_id)
     try:
         with get_session() as session:
-            token = connection_token(session, source_id, request.connection_id)
+            options = source_options(session, source_id, request.connection_id)
         return SourceGateway().entries(source_id, request.url, cursor=cursor, limit=limit,
-            access_token=token)
+            **options)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(502, "Source enumeration is unavailable") from exc
+        raise _source_problem(exc, "Source enumeration is unavailable") from exc
+
+
+@router.get("/sources/{source_id}/search")
+def source_search(source_id: str, query: str, cursor: str | None = None,
+                  limit: int = 30, connection_id: int | None = None):
+    manifest = source_manifest(source_id)
+    if "search" not in manifest.capabilities:
+        raise HTTPException(422, "This Source does not advertise search")
+    try:
+        with get_session() as session:
+            options = source_options(session, source_id, connection_id)
+        return SourceGateway().search(source_id, query, cursor=cursor,
+            limit=limit, **options)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:
+        raise _source_problem(exc, "Source search is unavailable") from exc
 
 
 @router.get("/sources/runtimes")
@@ -321,14 +393,14 @@ def resolve(request: ResolveRequest):
     source_id = candidates[0]
     try:
         with get_session() as session:
-            token = connection_token(session, source_id, request.connection_id)
-        kwargs = {"access_token": token} if token else {}
-        return gateway.resolve(source_id, request.url, **kwargs)
+            options = source_options(session, source_id, request.connection_id)
+        return gateway.resolve(source_id, request.url, **options)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     except Exception as exc:
         logger.info("Source %s could not resolve URL", source_id, exc_info=True)
-        raise HTTPException(502, f"{source_id} could not resolve this URL; choose another Source explicitly if appropriate") from exc
+        raise _source_problem(exc,
+            f"{source_id} could not resolve this URL; choose another Source explicitly if appropriate") from exc
 
 
 @router.post("/import")
@@ -337,13 +409,12 @@ def import_media(request: ImportRequest):
     # Re-resolve the original URL instead of trusting client-supplied metadata or identity.
     try:
         with get_session() as session:
-            token = connection_token(session, snapshot.reference.source_id, request.connection_id)
-        kwargs = {"access_token": token} if token else {}
-        snapshot = SourceGateway().resolve(snapshot.reference.source_id, snapshot.reference.url, **kwargs)
+            options = source_options(session, snapshot.reference.source_id, request.connection_id)
+        snapshot = SourceGateway().resolve(snapshot.reference.source_id, snapshot.reference.url, **options)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(502, "Source could not verify this media") from exc
+        raise _source_problem(exc, "Source could not verify this media") from exc
     return _import_snapshot(snapshot, request.connection_id)
 
 
@@ -356,13 +427,29 @@ def _import_snapshot(snapshot: MediaSnapshot, connection_id: int | None = None,
                        snapshot.duration if "duration" in snapshot.model_fields_set else _MISSING,
                        snapshot.artwork_url if "artwork_url" in snapshot.model_fields_set else _MISSING,
                        connection_id,
-                       published_at=snapshot.published_at if "published_at" in snapshot.model_fields_set else _MISSING)
+                       published_at=snapshot.published_at if "published_at" in snapshot.model_fields_set else _MISSING,
+                       capabilities=snapshot.capabilities if "capabilities" in snapshot.model_fields_set else _MISSING)
         session.flush()
+        metadata_snapshot = snapshot.model_dump(mode="json", exclude={"reference", "entries", "extras"},
+                                                exclude_unset=True)
+        previous = session.scalar(select(SourceSnapshot).where(
+            SourceSnapshot.item_id == item.id,
+            SourceSnapshot.source_id == snapshot.reference.source_id,
+            SourceSnapshot.connection_id == connection_id).order_by(SourceSnapshot.id.desc()))
+        if not previous or previous.metadata_snapshot != metadata_snapshot:
+            try:
+                source_version = runtime_version or command_for(snapshot.reference.source_id)[1]
+            except (ValueError, RuntimeError):
+                source_version = "configured"
+            session.add(SourceSnapshot(item_id=item.id, source_id=snapshot.reference.source_id,
+                connection_id=connection_id, runtime_version=source_version,
+                metadata_snapshot=metadata_snapshot))
         if snapshot.kind == "collection":
             for entry in snapshot.entries:
                 child = _upsert(session, entry.reference, entry.kind, entry.title,
                                 connection_id=connection_id,
-                                published_at=entry.published_at if "published_at" in entry.model_fields_set else _MISSING)
+                                published_at=entry.published_at if "published_at" in entry.model_fields_set else _MISSING,
+                                capabilities=entry.capabilities if "capabilities" in entry.model_fields_set else _MISSING)
                 session.flush()
                 if child.id == item.id:
                     continue
@@ -390,7 +477,8 @@ def _import_snapshot(snapshot: MediaSnapshot, connection_id: int | None = None,
         if snapshot.kind == "movie":
             for extra in snapshot.extras:
                 child = _upsert(session, extra.reference, "movie_extra", extra.title,
-                                connection_id=connection_id)
+                                connection_id=connection_id,
+                                capabilities=extra.capabilities if "capabilities" in extra.model_fields_set else _MISSING)
                 child.parent_id = child.parent_id or item.id
                 child.extra_type = extra.extra_type or "other"
                 session.flush()
@@ -405,22 +493,73 @@ def _import_snapshot(snapshot: MediaSnapshot, connection_id: int | None = None,
 
 
 @router.post("/library/{collection_id}/refresh")
-def refresh_collection(collection_id: int):
+def refresh_collection(collection_id: int, reference_id: int | None = None,
+                       expand_depth: int = 0, max_nested: int = 20):
+    if not 0 <= expand_depth <= 3 or not 1 <= max_nested <= 25:
+        raise HTTPException(422, "Choose up to three nested levels and 25 nested Collections")
+    result = _refresh_collection_one(collection_id, reference_id)
+    if not expand_depth:
+        return result
+
+    visited = {collection_id}
+    refreshed: list[int] = []
+    skipped: list[dict] = []
+
+    def expand(parent_id: int, parent_reference_id: int | None, depth: int) -> None:
+        if depth >= expand_depth:
+            return
+        with get_session() as session:
+            parent = _reference_for(session, parent_id, reference_id=parent_reference_id)
+            children = []
+            for entry in session.scalars(select(CollectionEntry).where(
+                CollectionEntry.collection_id == parent_id).order_by(CollectionEntry.position)).all():
+                child = session.get(MediaItem, entry.item_id)
+                if not child or child.kind != "collection":
+                    continue
+                references = session.scalars(select(SourceReference).where(
+                    SourceReference.item_id == child.id,
+                    SourceReference.source_id == parent.source_id,
+                    SourceReference.connection_id == parent.connection_id)).all()
+                children.append((child.id, references[0].id if len(references) == 1 else None))
+        for child_id, child_reference_id in children:
+            if child_id in visited:
+                skipped.append({"item_id": child_id, "reason": "Collection cycle or repeated reference"})
+                continue
+            visited.add(child_id)
+            if len(refreshed) >= max_nested:
+                skipped.append({"item_id": child_id, "reason": "Nested Collection limit reached"})
+                continue
+            if child_reference_id is None:
+                skipped.append({"item_id": child_id, "reason": "No unambiguous Source reference in this account"})
+                continue
+            try:
+                _refresh_collection_one(child_id, child_reference_id)
+            except HTTPException as exc:
+                skipped.append({"item_id": child_id, "reason": f"Nested Source could not refresh ({exc.status_code})"})
+                continue
+            refreshed.append(child_id)
+            expand(child_id, child_reference_id, depth + 1)
+
+    expand(collection_id, reference_id, 0)
+    return result | {"nested_expansion": {"refreshed_ids": refreshed, "skipped": skipped}}
+
+
+def _refresh_collection_one(collection_id: int, reference_id: int | None = None):
     with get_session() as session:
         collection = session.get(MediaItem, collection_id)
         if not collection or collection.kind != "collection":
             raise HTTPException(404, "Collection not found")
-        reference = _reference_for(session, collection_id)
+        reference = _reference_for(session, collection_id, reference_id=reference_id)
         if not reference:
-            raise HTTPException(409, "Collection has no available Source connection")
+            raise HTTPException(409, "Select an available Source reference for this Collection")
         source_id, url = reference.source_id, reference.url
         connection_id = reference.connection_id
-        token = connection_token(session, source_id, connection_id)
+        options = source_options(session, source_id, connection_id)
     try:
         gateway = SourceGateway()
-        snapshot = gateway.resolve(source_id, url, **({"access_token": token} if token else {}))
+        snapshot = gateway.resolve(source_id, url, **options)
     except Exception as exc:
-        raise HTTPException(502, "Collection Source is unavailable") from exc
+        raise _source_problem(exc, "Collection Source is unavailable") from exc
     if snapshot.kind != "collection":
         raise HTTPException(409, "Source no longer identifies this URL as a collection")
     runtime_version = None
@@ -429,14 +568,24 @@ def refresh_collection(collection_id: int):
     except (ValueError, RuntimeError):
         runtime_version = "configured"
     entries, cursor = [], None
+    with get_session() as session:
+        previous = session.scalar(select(CollectionScan).where(
+            CollectionScan.collection_id == collection_id,
+            CollectionScan.source_id == source_id,
+            CollectionScan.connection_id == connection_id,
+        ).order_by(CollectionScan.id.desc()))
+        if (previous and not previous.complete and previous.next_cursor and
+            previous.runtime_version == runtime_version):
+            cursor = previous.next_cursor
+    resumed = cursor is not None
     try:
         paged = next((m for m in gateway.manifests() if m.source_id == source_id), None)
         if paged and "enumerate_pages" in paged.capabilities:
             complete = False
             seen_cursors = set()
-            # A bounded reconciliation never expands nested Collections implicitly.
+            # Nested Collections are traversed only by explicit bounded expansion.
             for _ in range(100):
-                page = gateway.entries(source_id, url, cursor=cursor, limit=50, access_token=token)
+                page = gateway.entries(source_id, url, cursor=cursor, limit=50, **options)
                 entries.extend(page.entries)
                 if page.complete:
                     complete = True
@@ -456,8 +605,38 @@ def refresh_collection(collection_id: int):
             "enumeration_complete": False})
         return _import_snapshot(snapshot, connection_id,
             scan_error="Collection enumeration stopped before completion",
-            next_cursor=cursor, runtime_version=runtime_version)
+            next_cursor=cursor if entries or not resumed else None,
+            runtime_version=runtime_version)
     return _import_snapshot(snapshot, connection_id, runtime_version=runtime_version)
+
+
+@router.post("/library/{item_id}/refresh-details")
+def refresh_details(item_id: int, reference_id: int | None = None):
+    """Hydrate one playable item after lightweight Collection enumeration."""
+    with get_session() as session:
+        item = session.get(MediaItem, item_id)
+        if not item or item.kind == "collection":
+            raise HTTPException(404, "Playable media item not found")
+        reference = _reference_for(session, item_id, reference_id=reference_id)
+        if not reference:
+            raise HTTPException(409, "Select an available Source reference for this item")
+        source_id, url = reference.source_id, reference.url
+        connection_id = reference.connection_id
+        options = source_options(session, source_id, connection_id)
+    try:
+        snapshot = SourceGateway().resolve(source_id, url, **options)
+    except Exception as exc:
+        raise _source_problem(exc, "Source could not refresh this item") from exc
+    if snapshot.kind == "collection" or snapshot.reference.source_id != source_id:
+        raise HTTPException(409, "Source no longer identifies this URL as the same playable item")
+    with get_session() as session:
+        old = session.get(SourceReference, reference.id)
+        domain = session.get(Domain, old.domain_id)
+        if (snapshot.reference.domain != domain.hostname or
+            snapshot.reference.namespace != old.namespace or
+            snapshot.reference.upstream_id != old.upstream_id):
+            raise HTTPException(409, "Source changed the item identity; add the URL as new media")
+    return _import_snapshot(snapshot, connection_id)
 
 
 @router.get("/library")
@@ -528,6 +707,10 @@ def library_item(item_id: int):
         if not item:
             raise HTTPException(404, "Media item not found")
         result = _serialize(session, item)
+        result["references"] = [{"id": reference.id, "source_id": reference.source_id,
+            "connection_id": reference.connection_id, "namespace": reference.namespace,
+            "upstream_id": reference.upstream_id} for reference in session.scalars(
+                select(SourceReference).where(SourceReference.item_id == item_id)).all()]
         if item.kind == "collection":
             entries = session.scalars(select(CollectionEntry).where(
                 CollectionEntry.collection_id == item_id).order_by(CollectionEntry.position)).all()
@@ -536,6 +719,37 @@ def library_item(item_id: int):
             extras = session.scalars(select(MovieExtraParent).where(MovieExtraParent.movie_id == item_id)).all()
             result["extras"] = [_serialize(session, session.get(MediaItem, e.extra_id)) for e in extras]
         return result
+
+
+@router.get("/library/{item_id}/source-history")
+def source_history(item_id: int):
+    with get_session() as session:
+        if not session.get(MediaItem, item_id):
+            raise HTTPException(404, "Media item not found")
+        snapshots = session.scalars(select(SourceSnapshot).where(
+            SourceSnapshot.item_id == item_id).order_by(SourceSnapshot.id.desc()).limit(50)).all()
+        return [{"id": snapshot.id, "source_id": snapshot.source_id,
+                 "connection_id": snapshot.connection_id,
+                 "runtime_version": snapshot.runtime_version,
+                 "created_at": snapshot.created_at,
+                 "metadata": snapshot.metadata_snapshot} for snapshot in snapshots]
+
+
+@router.post("/library/{item_id}/source-history/{snapshot_id}/restore")
+def restore_source_metadata(item_id: int, snapshot_id: int):
+    with get_session() as session:
+        item = session.get(MediaItem, item_id)
+        snapshot = session.get(SourceSnapshot, snapshot_id)
+        if not item or not snapshot or snapshot.item_id != item_id:
+            raise HTTPException(404, "Source snapshot not found")
+        values = snapshot.metadata_snapshot
+        for field in ("title", "description", "duration", "artwork_url", "capabilities"):
+            if field in values:
+                setattr(item, field, values[field])
+        if "published_at" in values:
+            item.published_at = datetime.fromisoformat(values["published_at"]) if values["published_at"] else None
+        session.commit()
+        return _serialize(session, item)
 
 
 @router.delete("/library/{item_id}", status_code=204)
@@ -559,6 +773,7 @@ def delete_collection(item_id: int):
         session.execute(delete(CollectionEntry).where(or_(
             CollectionEntry.collection_id == item_id, CollectionEntry.item_id == item_id)))
         session.execute(delete(SourceReference).where(SourceReference.item_id == item_id))
+        session.execute(delete(SourceSnapshot).where(SourceSnapshot.item_id == item_id))
         session.execute(delete(LegacyMediaLink).where(LegacyMediaLink.item_id == item_id))
         session.delete(item)
         session.commit()
@@ -593,10 +808,15 @@ def _run_download(job_id: int) -> None:
                 job = session.get(AcquisitionJob, job_id)
                 if not job:
                     return
-                source_id = session.get(SourceReference, job.reference_id).source_id
+                reference = session.get(SourceReference, job.reference_id)
+                source_id, domain_id, connection_id = (
+                    reference.source_id, reference.domain_id, reference.connection_id)
             with _source_slots_lock:
-                slot = _source_slots.setdefault(source_id, threading.BoundedSemaphore(1))
-            with slot:
+                source_slot = _source_slots.setdefault(source_id, threading.BoundedSemaphore(3))
+                domain_slot = _domain_slots.setdefault(domain_id, threading.BoundedSemaphore(2))
+                connection_slot = (_connection_slots.setdefault(connection_id, threading.BoundedSemaphore(1))
+                                   if connection_id else nullcontext())
+            with source_slot, domain_slot, connection_slot:
                 _execute_leased_download(job_id)
     finally:
         stop.set()
@@ -658,15 +878,17 @@ def _execute_leased_download(job_id: int) -> None:
     root = Path(get_settings().download_settings.download_root).resolve() / "vodloft"
     try:
         with get_session() as session:
-            token = connection_token(session, source_id, connection_id)
+            options = source_options(session, source_id, connection_id)
+        if not root.parent.is_dir():
+            raise OSError("Download storage is unavailable")
         root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix=f"job-{job_id}-", dir=root) as staging:
             _job_stage(job_id, "downloading")
             command = spec.get("source_command")
             gateway = SourceGateway({source_id: command}) if command else SourceGateway()
-            kwargs = {"access_token": token} if token else {}
             result = gateway.download(source_id, url, staging,
-                preferred_format=spec.get("preferred_format", "format_1080p"), job_id=job_id, **kwargs)
+                preferred_format=spec.get("preferred_format", "format_1080p"), job_id=job_id,
+                on_progress=lambda percent: _download_progress(job_id, percent), **options)
             _job_stage(job_id, "verifying")
             source_file = Path(staging, result.filename).resolve()
             if source_file.parent != Path(staging).resolve() or not source_file.is_file() or source_file.stat().st_size != result.size:
@@ -728,9 +950,17 @@ def _execute_leased_download(job_id: int) -> None:
             canceled = job.cancel_requested or isinstance(exc, JobCancelled)
             if not canceled:
                 logger.exception("Acquisition job %s failed", job_id)
+            stage = job.state
+            code = (exc.code if isinstance(exc, SourceInvocationError) else
+                    "insufficient_disk" if isinstance(exc, OSError) and exc.errno == errno.ENOSPC else
+                    "unavailable" if isinstance(exc, (OSError, TimeoutError)) else "runtime_error")
             job.state, job.active_key, job.error = (
                 "canceled" if canceled else "failed", None,
-                None if canceled else "The Source download or finalization failed")
+                None if canceled else str(exc) if isinstance(exc, SourceInvocationError) else
+                "Insufficient disk space" if code == "insufficient_disk" else
+                f"Acquisition failed during {stage}")
+            job.error_code = None if canceled else code
+            job.failed_stage = None if canceled else stage
             _sync_operation(session, job)
             session.commit()
         try:
@@ -785,12 +1015,14 @@ def retry_due_acquisition_jobs() -> None:
         ready = []
         for job in jobs:
             age = now - job.updated_at.replace(tzinfo=job.updated_at.tzinfo or timezone.utc)
-            if age < timedelta(seconds=30 * (2 ** max(job.attempts - 1, 0))):
+            delay = max(300 if job.error_code == "rate_limited" else 0,
+                        30 * (2 ** max(job.attempts - 1, 0)))
+            if age < timedelta(seconds=delay):
                 continue
             key = f"{job.item_id}:{job.profile_id}"
             if session.scalar(select(AcquisitionJob.id).where(AcquisitionJob.active_key == key)):
                 continue
-            job.state, job.error = "queued", None
+            job.state, job.error, job.error_code, job.failed_stage = "queued", None, None, None
             job.active_key = key
             _sync_operation(session, job)
             ready.append(job.id)
@@ -805,12 +1037,17 @@ def retry_due_acquisition_jobs() -> None:
 
 
 def queue_download(item_id: int, profile_id: int | None, *, collection_id: int | None = None,
+                   reference_id: int | None = None, collection_reference_id: int | None = None,
                    force: bool = False) -> tuple[int | None, str, bool]:
     """Freeze a Domain profile for one playable item; null means already satisfied."""
     with get_session() as session:
         item = session.get(MediaItem, item_id)
         if not item or item.kind == "collection":
             raise HTTPException(404, "Playable media item not found")
+        if not Path(get_settings().download_settings.download_root).resolve().is_dir():
+            raise HTTPException(503, "Download storage is unavailable")
+        if item.capabilities is not None and "download" not in item.capabilities:
+            raise HTTPException(409, "The Source does not advertise download for this media item")
         if not force:
             existing_artifact = session.scalar(select(Artifact).where(
                 Artifact.item_id == item_id, Artifact.profile_id == profile_id).order_by(Artifact.id.desc()))
@@ -819,10 +1056,19 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
         existing = session.scalar(select(AcquisitionJob).where(
             AcquisitionJob.active_key == f"{item_id}:{profile_id}"))
         if existing:
+            if reference_id is not None and existing.reference_id != reference_id:
+                raise HTTPException(409, "This profile has an active download through another Source reference")
+            if collection_id is not None:
+                selected = _reference_for(session, item_id, collection_id=collection_id,
+                    collection_reference_id=collection_reference_id)
+                if not selected or existing.reference_id != selected.id:
+                    raise HTTPException(409, "This profile has an active download through another Source account")
             return existing.id, existing.state, False
-        reference = _reference_for(session, item_id)
+        reference = _reference_for(session, item_id, reference_id=reference_id,
+                                   collection_id=collection_id,
+                                   collection_reference_id=collection_reference_id)
         if not reference:
-            raise HTTPException(409, "No Source reference is available")
+            raise HTTPException(409, "Select an available Source and account reference for this item")
         query = select(DomainLocalMediaProfile).where(
             DomainLocalMediaProfile.domain_id == item.domain_id,
             DomainLocalMediaProfile.enabled.is_(True))
@@ -867,6 +1113,8 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
             session.rollback()
             existing = session.scalar(select(AcquisitionJob).where(AcquisitionJob.active_key == f"{item_id}:{profile.id}"))
             if existing:
+                if existing.reference_id != reference.id:
+                    raise HTTPException(409, "This profile has an active download through another Source account")
                 return existing.id, existing.state, False
             raise
         return job.id, job.state, True
@@ -874,11 +1122,27 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
 
 @router.post("/library/{item_id}/download")
 def download_item(item_id: int, background: BackgroundTasks, request: DownloadRequest | None = None):
-    job_id, state, created = queue_download(item_id, request.profile_id if request else None, force=True)
+    job_id, state, created = queue_download(item_id, request.profile_id if request else None,
+        reference_id=request.reference_id if request else None, force=True)
     if not created:
         return {"id": job_id, "state": state}
     background.add_task(_run_download, job_id)
     return {"id": job_id, "state": state}
+
+
+@router.get("/jobs")
+def jobs(limit: int = 50):
+    if not 1 <= limit <= 100:
+        raise HTTPException(422, "Choose between 1 and 100 recent jobs")
+    with get_session() as session:
+        recent = session.scalars(select(AcquisitionJob).order_by(
+            AcquisitionJob.created_at.desc(), AcquisitionJob.id.desc()).limit(limit)).all()
+        return [{"id": job.id, "item_id": job.item_id,
+                 "title": (item.user_title or item.title) if (item := session.get(MediaItem, job.item_id)) else "Removed item",
+                 "state": job.state, "attempts": job.attempts,
+                 "error_code": job.error_code, "failed_stage": job.failed_stage,
+                 "progress": _progress_for(session, job),
+                 "created_at": job.created_at} for job in recent]
 
 
 @router.get("/jobs/{job_id}")
@@ -888,9 +1152,10 @@ def job_status(job_id: int):
         if not job:
             raise HTTPException(404, "Acquisition job not found")
         return {"id": job.id, "item_id": job.item_id, "state": job.state,
-                "error": job.error, "attempts": job.attempts,
+                "error": job.error, "error_code": job.error_code,
+                "failed_stage": job.failed_stage, "attempts": job.attempts,
                 "cancel_requested": job.cancel_requested, "profile_id": job.profile_id,
-                "operation_id": job.operation_id, "progress": _JOB_PROGRESS.get(job.state, 0)}
+                "operation_id": job.operation_id, "progress": _progress_for(session, job)}
 
 
 @router.post("/jobs/{job_id}/cancel")
@@ -923,7 +1188,8 @@ def retry_job(job_id: int):
         key = f"{job.item_id}:{job.profile_id}"
         if session.scalar(select(AcquisitionJob.id).where(AcquisitionJob.active_key == key)):
             raise HTTPException(409, "An acquisition is already active for this representation")
-        job.state, job.error, job.cancel_requested = "queued", None, False
+        job.state, job.error, job.error_code, job.failed_stage, job.cancel_requested = (
+            "queued", None, None, None, False)
         job.active_key = key
         _sync_operation(session, job)
         try:

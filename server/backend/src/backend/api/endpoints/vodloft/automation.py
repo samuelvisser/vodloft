@@ -11,7 +11,7 @@ from sqlalchemy import select
 from backend.db import get_session
 from backend.db.models.local_media_profile import DomainLocalMediaProfile
 from backend.db.models.vodloft import CollectionDownloadProfile, CollectionEntry, CollectionScan, MediaItem
-from backend.api.endpoints.vodloft.router import queue_download, _run_download, refresh_collection
+from backend.api.endpoints.vodloft.router import queue_download, _run_download, refresh_collection, _reference_for
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/vodloft", tags=["VodLoft collection automation"])
@@ -20,6 +20,7 @@ router = APIRouter(prefix="/vodloft", tags=["VodLoft collection automation"])
 class DownloadPolicyInput(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     local_profile_ids: list[int] = Field(min_length=1)
+    source_reference_id: int | None = None
     backfill: str = Field(default="newest", pattern="^(all|newest|date_range|metadata_only)$")
     newest_count: int = Field(default=10, ge=1, le=1000)
     published_after: date | None = None
@@ -39,7 +40,8 @@ class DownloadPolicyInput(BaseModel):
 
 def _serialize(policy: CollectionDownloadProfile) -> dict:
     return {"id": policy.id, "collection_id": policy.collection_id, "name": policy.name,
-            "local_profile_ids": policy.local_profile_ids, "backfill": policy.backfill,
+            "local_profile_ids": policy.local_profile_ids,
+            "source_reference_id": policy.source_reference_id, "backfill": policy.backfill,
             "newest_count": policy.newest_count, "published_after": policy.published_after,
             "published_before": policy.published_before, "title_contains": policy.title_contains,
             "refresh_minutes": policy.refresh_minutes,
@@ -60,11 +62,15 @@ def create_profile(collection_id: int, data: DownloadPolicyInput):
     with get_session() as session:
         if not (item := session.get(MediaItem, collection_id)) or item.kind != "collection":
             raise HTTPException(404, "Collection not found")
+        reference = _reference_for(session, collection_id, reference_id=data.source_reference_id)
+        if not reference:
+            raise HTTPException(422, "Select an available Source reference for this Collection")
         for profile_id in set(data.local_profile_ids):
             if not session.get(DomainLocalMediaProfile, profile_id):
                 raise HTTPException(422, f"Local Media Profile {profile_id} does not exist")
         profile = CollectionDownloadProfile(collection_id=collection_id,
-            **(data.model_dump() | {"local_profile_ids": list(dict.fromkeys(data.local_profile_ids))}))
+            **(data.model_dump() | {"source_reference_id": reference.id,
+                                    "local_profile_ids": list(dict.fromkeys(data.local_profile_ids))}))
         session.add(profile)
         session.commit()
         return _serialize(profile)
@@ -76,11 +82,15 @@ def update_profile(profile_id: int, data: DownloadPolicyInput):
         profile = session.get(CollectionDownloadProfile, profile_id)
         if not profile:
             raise HTTPException(404, "Download Profile not found")
+        reference = _reference_for(session, profile.collection_id, reference_id=data.source_reference_id)
+        if not reference:
+            raise HTTPException(422, "Select an available Source reference for this Collection")
         for local_id in set(data.local_profile_ids):
             if not session.get(DomainLocalMediaProfile, local_id):
                 raise HTTPException(422, f"Local Media Profile {local_id} does not exist")
         for key, value in data.model_dump().items():
             setattr(profile, key, value)
+        profile.source_reference_id = reference.id
         session.commit()
         return _serialize(profile)
 
@@ -103,7 +113,15 @@ def schedule_profile(profile_id: int, *, dispatch: bool = True) -> dict:
         entries = session.scalars(select(CollectionEntry).where(
             CollectionEntry.collection_id == policy.collection_id).order_by(CollectionEntry.position)).all()
         if policy.backfill == "newest":
-            entries = entries[:policy.newest_count]
+            # Source ordering is not necessarily reverse chronological (a
+            # series may enumerate its first season first).
+            def newest_key(entry):
+                published = session.get(MediaItem, entry.item_id).published_at
+                timestamp = (published.replace(tzinfo=published.tzinfo or timezone.utc).timestamp()
+                             if published else float("-inf"))
+                return timestamp, -entry.position
+
+            entries = sorted(entries, key=newest_key, reverse=True)[:policy.newest_count]
         local_profiles = [session.get(DomainLocalMediaProfile, pid) for pid in policy.local_profile_ids]
         compatible: list[tuple[int, int]] = []
         skipped: list[dict] = []
@@ -111,6 +129,9 @@ def schedule_profile(profile_id: int, *, dispatch: bool = True) -> dict:
             item = session.get(MediaItem, entry.item_id)
             if item.kind == "collection":
                 skipped.append({"item_id": item.id, "reason": "Nested Collection requires an explicit subscription"})
+                continue
+            if item.capabilities is not None and "download" not in item.capabilities:
+                skipped.append({"item_id": item.id, "reason": "Source does not advertise download for this item"})
                 continue
             if policy.title_contains and policy.title_contains.casefold() not in (item.user_title or item.title).casefold():
                 skipped.append({"item_id": item.id, "reason": "Title does not match the Download Profile filter"})
@@ -131,10 +152,12 @@ def schedule_profile(profile_id: int, *, dispatch: bool = True) -> dict:
             elif policy.backfill != "metadata_only":
                 compatible.extend((item.id, p.id) for p in candidates)
         collection_id = policy.collection_id
+        collection_reference_id = policy.source_reference_id
     queued: list[int] = []
     for item_id, local_id in compatible:
         try:
-            job_id, state, created = queue_download(item_id, local_id, collection_id=collection_id)
+            job_id, state, created = queue_download(item_id, local_id, collection_id=collection_id,
+                collection_reference_id=collection_reference_id)
             if created and job_id is not None:
                 queued.append(job_id)
         except Exception:
@@ -173,11 +196,11 @@ def refresh_due_collections() -> None:
             last = profile.last_scan_at
             if not last or now - last.replace(tzinfo=last.tzinfo or timezone.utc) >= timedelta(minutes=profile.refresh_minutes):
                 profile.last_scan_at = now
-                due.append((profile.id, profile.collection_id))
+                due.append((profile.id, profile.collection_id, profile.source_reference_id))
         session.commit()
-    for profile_id, collection_id in due:
+    for profile_id, collection_id, reference_id in due:
         try:
-            refresh_collection(collection_id)
+            refresh_collection(collection_id, reference_id=reference_id)
             schedule_profile(profile_id)
         except Exception:
             logger.exception("Collection %s automatic refresh failed", collection_id)

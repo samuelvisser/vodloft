@@ -86,6 +86,8 @@ def test_shared_media_partial_scan_download_and_playback(monkeypatch, tmp_path):
     playback = client.get(f"/api/vodloft/library/{video_id}/play")
     assert playback.status_code == 200
     assert playback.content == b"prototype-media"
+    ranged = client.get(f"/api/vodloft/library/{video_id}/play", headers={"Range": "bytes=0-4"})
+    assert ranged.status_code == 206 and ranged.content == b"proto"
 
     collection_id = client.get("/api/vodloft/library").json()[0]["id"]
     subscription = client.post(f"/api/vodloft/library/{collection_id}/feed")
@@ -96,12 +98,23 @@ def test_shared_media_partial_scan_download_and_playback(monkeypatch, tmp_path):
     root = ElementTree.fromstring(feed.content)
     enclosure_url = root.find("channel/item/enclosure").attrib["url"]
     assert client.get(enclosure_url).content == b"prototype-media"
+    enclosure_range = client.get(enclosure_url, headers={"Range": "bytes=0-4"})
+    assert enclosure_range.status_code == 206 and enclosure_range.content == b"proto"
     with session_factory() as session:
         artifact_path = session.scalar(select(Artifact).where(Artifact.item_id == video_id)).path
     Path(artifact_path).write_bytes(b"changed-artifact")
     assert client.get(enclosure_url).content == b"prototype-media"
     assert client.delete(f"/api/vodloft/library/{collection_id}/feed").status_code == 200
     assert client.get(feed_url).status_code == 404
+    assert not list((tmp_path / "vodloft-feeds").rglob(f"{video_id}.mp4"))
+    filtered = client.post(f"/api/vodloft/library/{collection_id}/stream-profiles", json={
+        "name": "Filtered", "format": "video", "title_contains": "unrelated"})
+    assert filtered.status_code == 201, filtered.text
+    filtered_url = client.post(f"/api/vodloft/stream-profiles/{filtered.json()['id']}/feed").json()["url"]
+    assert ElementTree.fromstring(client.get(filtered_url).content).find("channel/item") is None
+    assert client.post(f"/api/vodloft/library/{collection_id}/stream-profiles", json={
+        "name": "Bad date", "published_after": "2026-12-01",
+        "published_before": "2026-01-01"}).status_code == 422
     assert client.delete(f"/api/vodloft/library/{collection_id}").status_code == 204
     assert client.get(f"/api/vodloft/library/{video_id}/play").content == b"changed-artifact"
     with session_factory() as session:
@@ -129,3 +142,18 @@ def test_third_source_uses_the_generic_process_contract(tmp_path, monkeypatch):
     )
     gateway = gateway_module.SourceGateway({"fixture": [sys.executable, str(worker)]})
     assert [manifest.source_id for manifest in gateway.manifests()] == ["fixture"]
+
+
+def test_source_error_envelope_stays_typed_and_redacted(tmp_path):
+    import pytest
+    gateway_module = importlib.import_module("backend.source_manager.gateway")
+    worker = tmp_path / "error_source.py"
+    worker.write_text("import json,sys\njson.load(sys.stdin)\n"
+        "print(json.dumps({'error': {'code': 'authentication_required',"
+        "'message': 'Authorization is required; token=secret-value'}}))\n")
+    gateway = gateway_module.SourceGateway({"fixture": [sys.executable, str(worker)]})
+    with pytest.raises(gateway_module.SourceInvocationError) as error:
+        gateway.call("fixture", "resolve")
+    assert error.value.code == "authentication_required"
+    assert "Authorization is required" == str(error.value)
+    assert "secret-value" not in str(error.value)

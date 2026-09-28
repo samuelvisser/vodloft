@@ -5,13 +5,14 @@ import os
 import secrets
 import shutil
 import tempfile
+from datetime import date
 from email.utils import format_datetime
 from pathlib import Path
 from xml.etree.ElementTree import Element, SubElement, tostring
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 
 from backend.db import get_session
@@ -27,13 +28,25 @@ _video_extensions = frozenset({".mp4", ".mkv", ".webm", ".mov"})
 class StreamProfileInput(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     format: str = Field(default="audio", pattern="^(audio|video)$")
+    published_after: date | None = None
+    published_before: date | None = None
+    title_contains: str | None = Field(default=None, max_length=200)
     local_only: bool = True
     enabled: bool = True
+
+    @model_validator(mode="after")
+    def validate_dates(self):
+        if self.published_after and self.published_before and self.published_after > self.published_before:
+            raise ValueError("The publication start must be on or before the end")
+        return self
 
 
 def _stream_profile(profile: CollectionStreamProfile) -> dict:
     return {"id": profile.id, "collection_id": profile.collection_id,
             "name": profile.name, "format": profile.format,
+            "published_after": profile.published_after,
+            "published_before": profile.published_before,
+            "title_contains": profile.title_contains,
             "local_only": profile.local_only, "enabled": profile.enabled}
 
 
@@ -87,17 +100,24 @@ def delete_stream_profile(profile_id: int):
             raise HTTPException(404, "Stream Profile not found")
         subscription = session.scalar(select(FeedSubscription).where(
             FeedSubscription.stream_profile_id == profile_id))
+        subscription_id = subscription.id if subscription else None
         if subscription:
             session.delete(subscription)
             session.flush()
         session.delete(profile)
         session.commit()
+    if subscription_id:
+        _remove_published(subscription_id)
 
 
 def _feed_root() -> Path:
     root = Path(get_settings().download_settings.download_root).resolve() / "vodloft-feeds"
     root.mkdir(parents=True, exist_ok=True)
     return root
+
+
+def _remove_published(subscription_id: int) -> None:
+    shutil.rmtree(_feed_root() / str(subscription_id), ignore_errors=True)
 
 
 @api_router.post("/library/{collection_id}/feed")
@@ -122,8 +142,10 @@ def revoke(collection_id: int):
             FeedSubscription.collection_id == collection_id, FeedSubscription.stream_profile_id.is_(None)))
         if not subscription:
             raise HTTPException(404, "Collection feed not found")
+        subscription_id = subscription.id
         session.delete(subscription)
         session.commit()
+    _remove_published(subscription_id)
     return {"revoked": True}
 
 
@@ -150,8 +172,10 @@ def revoke_profile(profile_id: int):
             FeedSubscription.stream_profile_id == profile_id))
         if not subscription:
             raise HTTPException(404, "Stream Profile feed not found")
+        subscription_id = subscription.id
         session.delete(subscription)
         session.commit()
+    _remove_published(subscription_id)
     return {"revoked": True}
 
 
@@ -203,8 +227,8 @@ def feed(token: str, request: Request):
         subscription = session.scalar(select(FeedSubscription).where(FeedSubscription.token == token))
         if not subscription:
             raise HTTPException(404, "Feed not found")
+        profile = session.get(CollectionStreamProfile, subscription.stream_profile_id) if subscription.stream_profile_id else None
         if subscription.stream_profile_id:
-            profile = session.get(CollectionStreamProfile, subscription.stream_profile_id)
             if not profile or not profile.enabled:
                 raise HTTPException(404, "Feed not found")
         collection = session.get(MediaItem, subscription.collection_id)
@@ -216,6 +240,16 @@ def feed(token: str, request: Request):
             CollectionEntry.collection_id == collection.id).order_by(CollectionEntry.position)).all()
         for membership in memberships:
             media = session.get(MediaItem, membership.item_id)
+            if profile and profile.title_contains and profile.title_contains.casefold() not in (
+                media.user_title or media.title).casefold():
+                continue
+            if profile and (profile.published_after or profile.published_before):
+                if not media.published_at:
+                    continue
+                published = media.published_at.date()
+                if (profile.published_after and published < profile.published_after or
+                    profile.published_before and published > profile.published_before):
+                    continue
             entry = _publish(session, subscription, media.id)
             if not entry:
                 continue

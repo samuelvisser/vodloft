@@ -33,7 +33,8 @@ class SourceConnection(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     source_id: Mapped[str] = mapped_column(String)
     name: Mapped[str] = mapped_column(String)
-    secret_reference: Mapped[str | None] = mapped_column(String, nullable=True)
+    settings: Mapped[dict] = mapped_column(JSON, default=dict)
+    secret_references: Mapped[dict] = mapped_column(JSON, default=dict)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
@@ -46,6 +47,7 @@ class MediaItem(Base):
     description: Mapped[str | None] = mapped_column(String, nullable=True)
     duration: Mapped[float | None] = mapped_column(nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    capabilities: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     artwork_url: Mapped[str | None] = mapped_column(String, nullable=True)
     user_title: Mapped[str | None] = mapped_column(String, nullable=True)
     user_description: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -66,6 +68,18 @@ class SourceReference(Base):
     url: Mapped[str] = mapped_column(String)
     connection_id: Mapped[int | None] = mapped_column(ForeignKey("vodloft_source_connections.id"), nullable=True)
     connection_key: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+
+class SourceSnapshot(Base):
+    """Prior upstream metadata for a scoped repair after a faulty Source update."""
+    __tablename__ = "vodloft_source_snapshots"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_items.id", ondelete="CASCADE"))
+    source_id: Mapped[str] = mapped_column(String)
+    connection_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    runtime_version: Mapped[str] = mapped_column(String)
+    metadata_snapshot: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
 class CollectionEntry(Base):
@@ -103,6 +117,7 @@ class CollectionDownloadProfile(Base):
     __tablename__ = "vodloft_collection_download_profiles"
     id: Mapped[int] = mapped_column(primary_key=True)
     collection_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_items.id", ondelete="CASCADE"))
+    source_reference_id: Mapped[int | None] = mapped_column(ForeignKey("vodloft_source_references.id"), nullable=True)
     name: Mapped[str] = mapped_column(String)
     local_profile_ids: Mapped[list[int]] = mapped_column(JSON)
     backfill: Mapped[str] = mapped_column(String(24), default="newest")
@@ -135,6 +150,9 @@ class CollectionStreamProfile(Base):
     collection_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_items.id", ondelete="CASCADE"))
     name: Mapped[str] = mapped_column(String)
     format: Mapped[str] = mapped_column(String(16), default="audio")
+    published_after: Mapped[date | None] = mapped_column(Date, nullable=True)
+    published_before: Mapped[date | None] = mapped_column(Date, nullable=True)
+    title_contains: Mapped[str | None] = mapped_column(String(200), nullable=True)
     local_only: Mapped[bool] = mapped_column(Boolean, default=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
@@ -164,6 +182,8 @@ class AcquisitionJob(Base):
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     state: Mapped[str] = mapped_column(String(32), default="queued")
     error: Mapped[str | None] = mapped_column(String, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    failed_stage: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
 

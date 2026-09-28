@@ -2,9 +2,25 @@
 
 from datetime import datetime
 from typing import Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 PROTOCOL_VERSION = 1
+
+
+class ConfigurationField(BaseModel):
+    name: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
+    label: str
+    kind: Literal["text", "number", "select", "secret", "credential_file"]
+    required: bool = False
+    options: list[str] = Field(default_factory=list)
+
+    @field_validator("name")
+    @classmethod
+    def safe_transport_name(cls, value: str) -> str:
+        if value in {"operation", "url", "query", "staging", "cursor", "limit", "timeout",
+                     "job_id", "source_id", "preferred_format", "max_entries", "scratch"}:
+            raise ValueError("Configuration field collides with a protocol argument")
+        return value
 
 
 class SourceManifest(BaseModel):
@@ -14,7 +30,7 @@ class SourceManifest(BaseModel):
     version: str
     capabilities: set[str]
     exhaustive_domain_catalogue: bool = False
-    configuration_schema: list[dict] = Field(default_factory=list)
+    configuration_schema: list[ConfigurationField] = Field(default_factory=list)
 
 
 class DomainDescriptor(BaseModel):
@@ -49,6 +65,7 @@ class EntrySnapshot(BaseModel):
     extra_type: str | None = None
     occurrence_id: str | None = None
     published_at: datetime | None = None
+    capabilities: set[str] | None = None
 
 
 class MediaSnapshot(BaseModel):
@@ -58,6 +75,7 @@ class MediaSnapshot(BaseModel):
     description: str | None = None
     duration: float | None = None
     published_at: datetime | None = None
+    capabilities: set[str] | None = None
     artwork_url: str | None = None
     entries: list[EntrySnapshot] = Field(default_factory=list)
     extras: list[EntrySnapshot] = Field(default_factory=list)
@@ -70,6 +88,19 @@ class CollectionPage(BaseModel):
     entries: list[EntrySnapshot]
     next_cursor: str | None = None
     complete: bool = False
+
+
+class SourceSearchItem(BaseModel):
+    reference: SourceMediaReference
+    kind: Literal["collection", "video", "movie", "movie_extra"]
+    title: str
+    description: str | None = None
+    artwork_url: str | None = None
+
+
+class SourceSearchPage(BaseModel):
+    items: list[SourceSearchItem]
+    next_cursor: str | None = None
 
 
 class StreamLease(BaseModel):
@@ -88,6 +119,12 @@ class DownloadResult(BaseModel):
     size: int
 
 
+class DownloadEvent(BaseModel):
+    """A bounded, Source-reported transfer fraction; local stages remain VodLoft-owned."""
+    percent: float = Field(ge=0, le=100)
+
+
 class SourceError(BaseModel):
-    code: Literal["unsupported_operation", "unavailable", "authentication_required", "rate_limited", "invalid_url", "runtime_error"]
+    code: Literal["unsupported_operation", "unavailable", "authentication_required", "rate_limited",
+                  "invalid_url", "unsupported_format", "insufficient_disk", "runtime_error"]
     message: str

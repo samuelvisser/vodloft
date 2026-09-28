@@ -162,7 +162,11 @@ def discover(target: MediaServerTarget) -> dict:
                 "agent": section.attrib.get("agent"), "type": section.attrib.get("type")}
     if target.kind == "jellyfin":
         info = json.loads(_request(target, "GET", "/System/Info"))
-        return {"server": info.get("ServerName"), "version": info.get("Version")}
+        library = json.loads(_request(target, "GET", f"/Items/{quote(target.library_id, safe='')}"))
+        if not library.get("Id"):
+            raise ValueError("Jellyfin library not found")
+        return {"server": info.get("ServerName"), "version": info.get("Version"),
+                "library": library.get("Name")}
     libraries = json.loads(_request(target, "GET", "/api/libraries"))["libraries"]
     library = next((entry for entry in libraries if entry.get("id") == target.library_id), None)
     if not library:
@@ -200,20 +204,36 @@ def _write_nfo(path: Path, item: MediaItem) -> None:
 
 def _find_remote(target: MediaServerTarget, server_path: str) -> str | None:
     if target.kind == "plex":
-        root = ElementTree.fromstring(_request(target, "GET", f"/library/sections/{quote(target.library_id, safe='')}/all?X-Plex-Container-Size=200"))
-        for media in root.findall(".//Video"):
-            if any(part.attrib.get("file") == server_path for part in media.findall(".//Part")):
-                return media.attrib.get("ratingKey")
+        for page in range(20):
+            root = ElementTree.fromstring(_request(target, "GET",
+                f"/library/sections/{quote(target.library_id, safe='')}/all?X-Plex-Container-Size=200&X-Plex-Container-Start={page * 200}"))
+            media_items = [*root.findall(".//Video"), *root.findall(".//Track")]
+            for media in media_items:
+                if any(part.attrib.get("file") == server_path for part in media.findall(".//Part")):
+                    return media.attrib.get("ratingKey")
+            if len(media_items) < 200 or page * 200 + len(media_items) >= int(root.attrib.get("totalSize", 1000000)):
+                break
         return None
     if target.kind == "jellyfin":
-        results = json.loads(_request(target, "GET", "/Items?Recursive=true&Limit=200&Fields=Path"))
-        return next((str(item.get("Id")) for item in results.get("Items", [])
-                     if item.get("Path") == server_path), None)
-    results = json.loads(_request(target, "GET", f"/api/libraries/{quote(target.library_id, safe='')}/items?limit=200"))
-    for item in results.get("results", []):
-        if item.get("path") == server_path or any(f.get("metadata", {}).get("path") == server_path
-            for f in item.get("media", {}).get("audioFiles", [])):
-            return str(item.get("id"))
+        for page in range(20):
+            results = json.loads(_request(target, "GET", "/Items?Recursive=true&Limit=200&"
+                f"StartIndex={page * 200}&Fields=Path&ParentId={quote(target.library_id, safe='')}"))
+            items = results.get("Items", [])
+            for item in items:
+                if item.get("Path") == server_path:
+                    return str(item.get("Id"))
+            if len(items) < 200 or page * 200 + len(items) >= results.get("TotalRecordCount", 1000000):
+                break
+        return None
+    for page in range(20):
+        results = json.loads(_request(target, "GET", f"/api/libraries/{quote(target.library_id, safe='')}/items?limit=200&page={page}"))
+        items = results.get("results", [])
+        for item in items:
+            if item.get("path") == server_path or any(f.get("metadata", {}).get("path") == server_path
+                for f in item.get("media", {}).get("audioFiles", [])):
+                return str(item.get("id"))
+        if len(items) < 200 or page * 200 + len(items) >= results.get("total", 1000000):
+            break
     return None
 
 
