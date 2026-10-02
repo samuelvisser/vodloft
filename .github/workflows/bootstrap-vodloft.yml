@@ -1,4 +1,4 @@
-name: Publish VodLoft follow-up
+name: Publish VodLoft 1.0
 "on":
   push:
     branches:
@@ -10,18 +10,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify and apply follow-up
+      - name: Verify and apply VodLoft 1.0
         shell: bash
         run: |
           set -euo pipefail
-          cat .bootstrap/credentials-part-* > "$RUNNER_TEMP/credentials.patch.gz"
-          echo '593a560cbabdf7839db0c088f7cedbf80773d31739bde9e30eb895d9e6003458  '"$RUNNER_TEMP/credentials.patch.gz" | sha256sum -c -
-          gzip -dc "$RUNNER_TEMP/credentials.patch.gz" > "$RUNNER_TEMP/credentials.patch"
-          echo '491b8eb092358c75813070d214e04f1cc1402c90511460a32bfe80bc3a76aa8d  '"$RUNNER_TEMP/credentials.patch" | sha256sum -c -
+          cat .bootstrap/vodloft-1-0-part-* > "$RUNNER_TEMP/vodloft-1-0.patch.gz"
+          echo '3f844b98f3b3ae55a7163226a4b4b56c0bdbb8853f0296f51a95ff43b907195c  '"$RUNNER_TEMP/vodloft-1-0.patch.gz" | sha256sum -c -
+          gzip -dc "$RUNNER_TEMP/vodloft-1-0.patch.gz" > "$RUNNER_TEMP/vodloft-1-0.patch"
+          echo '8a6cd5a68cf135904449404ec3aef6c6af977d485d7dffedbebc30296c17f089  '"$RUNNER_TEMP/vodloft-1-0.patch" | sha256sum -c -
           git fetch origin codex/vodloft-wireloft-prototype
           git switch -c publish-vodloft FETCH_HEAD
-          git apply --check "$RUNNER_TEMP/credentials.patch"
-          git apply "$RUNNER_TEMP/credentials.patch"
+          git apply --check "$RUNNER_TEMP/vodloft-1-0.patch"
+          git apply "$RUNNER_TEMP/vodloft-1-0.patch"
           git diff --check
           git add -A
           if git diff --cached --name-only | grep -q '^.github/workflows/'; then
@@ -30,5 +30,5 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'Add scoped yt-dlp credential-file connections'
+          git commit -m 'Complete VodLoft 1.0 media workflows and Source delivery'
           git push origin HEAD:refs/heads/codex/vodloft-wireloft-prototype
