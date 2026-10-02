@@ -15,6 +15,7 @@ type Reference = {source_id: string; domain: string; namespace: string; upstream
 type Preview = {kind: string; title: string; description?: string; artwork_url?: string; reference: Reference; entries: {title: string; position: number}[]; enumeration_complete: boolean}
 type Item = {id: number; title: string; description?: string; kind: string; domain: string; downloaded: boolean;
     capabilities?: string[] | null; playback_type?: string; artwork_url?: string; entries?: Item[]; extras?: Item[];
+    is_live?: boolean | null; formats?: {code: string; description?: string; audio_only: boolean; height?: number}[];
     references?: {id: number; source_id: string; connection_id: number | null; namespace: string; upstream_id: string}[]}
 type Home = {continue: (Item & {seconds: number})[]; recent: Item[];
     activity: {id: number; item_id: number; state: string}[]; issues: {kind: string; id: number}[]}
@@ -22,12 +23,16 @@ type Job = {id: number; state: string; error?: string; cancel_requested?: boolea
     error_code?: string; failed_stage?: string; operation_id?: string; progress?: number;
     title?: string; attempts?: number; item_id?: number}
 type Export = {id: number; target_id: number; state: string; remote_id?: string; error?: string; attempts: number}
+type RemoteItem = {id: number; kind: string; name: string; state: string; url: string | null;
+    remote_episode_id: string | null}
 type SourceHistory = {id: number; source_id: string; connection_id: number | null;
     runtime_version: string; created_at: string; metadata: {title?: string; description?: string}}
 type Profile = {id: number; name: string; domain: string; preferred_format: string; output_template: string; applicable_kinds: string[]; enabled: boolean}
 type DownloadPolicy = {id: number; name: string; local_profile_ids: number[]; backfill: string; newest_count: number;
+    retain_newest: number | null; retain_days: number | null;
     source_reference_id: number | null; enabled: boolean}
 type StreamProfile = {id: number; name: string; format: string; enabled: boolean;
+    include_live: boolean; local_only: boolean;
     published_after?: string | null; published_before?: string | null; title_contains?: string | null}
 type Target = {id: number; name: string; kind: string; base_url: string; library_id: string; enabled: boolean}
 type RuntimeState = {active: Record<string, string>; installed: Record<string, string[]>;
@@ -79,6 +84,7 @@ export default function WebMediaPage() {
     const [job, setJob] = useState<Job | null>(null)
     const [jobs, setJobs] = useState<Job[]>([])
     const [exports, setExports] = useState<Export[]>([])
+    const [remoteItems, setRemoteItems] = useState<RemoteItem[]>([])
     const [sourceHistory, setSourceHistory] = useState<SourceHistory[] | null>(null)
     const [profiles, setProfiles] = useState<Profile[]>([])
     const [downloadPolicies, setDownloadPolicies] = useState<DownloadPolicy[]>([])
@@ -173,6 +179,7 @@ export default function WebMediaPage() {
         try {
             const item = await api<Item>(`/library/${id}`)
             setSelected(item)
+            setRemoteItems(await api<RemoteItem[]>(`/library/${id}/integrations`))
             setReferenceId(item.references?.length === 1 ? item.references[0].id : null)
             const available = await api<Profile[]>(`/profiles${item.kind === 'collection' ? '' : `?domain=${encodeURIComponent(item.domain)}`}`)
             setProfiles(available)
@@ -295,8 +302,8 @@ export default function WebMediaPage() {
         </>}
         {view === 'home' && home && <section style={{marginBottom: 24}} aria-label="Home">
             <h2>Continue</h2>
-            {home.continue.filter(item => item.downloaded).length === 0 && <p>Your local playback will appear here.</p>}
-            <div style={{display: 'flex', flexWrap: 'wrap', gap: 8}}>{home.continue.filter(item => item.downloaded).map(item =>
+            {home.continue.length === 0 && <p>Play an item to continue it here.</p>}
+            <div style={{display: 'flex', flexWrap: 'wrap', gap: 8}}>{home.continue.map(item =>
                 <button className="btn" type="button" key={item.id} onClick={() => void open(item.id)}>
                     {item.title} · {Math.floor(item.seconds / 60)} min</button>)}</div>
             <h2>Recent arrivals</h2>
@@ -403,6 +410,7 @@ export default function WebMediaPage() {
         </div>
         {selected && <section style={{marginTop: 32}}><h2>{selected.title}</h2>
             <p>{selected.kind} · {selected.domain}</p>
+            {selected.is_live && <p role="status">Live now</p>}
             {(selected.references?.length ?? 0) > 1 && <label>Source account{' '}
                 <select value={referenceId ?? ''} onChange={event => setReferenceId(Number(event.target.value) || null)}>
                     <option value="">Choose a Source account</option>
@@ -446,13 +454,16 @@ export default function WebMediaPage() {
             </div>}
             {selected.kind === 'collection' && <section>
                 <h3>Collection downloads</h3>
-                {downloadPolicies.map(policy => <p key={policy.id}>{policy.name} · {policy.backfill}{' '}
+                {downloadPolicies.map(policy => <p key={policy.id}>{policy.name} · {policy.backfill}
+                    {policy.retain_newest && ` · keep newest ${policy.retain_newest}`}
+                    {policy.retain_days && ` · ${policy.retain_days} days`}{' '}
                     <button type="button" className="btn" onClick={() => void runDownloadPolicy(policy.id)}>Run now</button></p>)}
                 <DownloadPolicyForm collectionId={selected.id} profiles={profiles}
                     sourceReferenceId={referenceId} references={selected.references ?? []}
                     onCreated={policy => setDownloadPolicies(previous => [...previous, policy])}/>
                 <h3>Collection feeds</h3>
-                {streamProfiles.map(profile => <p key={profile.id}>{profile.name} · {profile.format}{' '}
+                {streamProfiles.map(profile => <p key={profile.id}>{profile.name} · {profile.format}
+                    {profile.include_live && ' · live admission'}{' '}
                     <button type="button" className="btn" onClick={() => void createStreamFeed(profile.id)}>Get feed</button></p>)}
                 <StreamProfileForm collectionId={selected.id}
                     onCreated={profile => setStreamProfiles(previous => [...previous, profile])}/>
@@ -460,6 +471,15 @@ export default function WebMediaPage() {
             </section>}
             {feedUrl && <p><a href={feedUrl} target="_blank" rel="noreferrer">{feedUrl}</a></p>}
             {selected.kind !== 'collection' && <>
+                {remoteItems.length > 0 && <div style={{margin: '12px 0'}}><h3>Media servers</h3>
+                    {remoteItems.map(remote => <p key={remote.id}>{remote.name} · {remote.state}{' '}
+                        {remote.url && <a href={remote.url} target="_blank" rel="noreferrer">Open in {remote.name}</a>}
+                        {remote.kind === 'audiobookshelf' && remote.state === 'available' &&
+                            remote.remote_episode_id && <button className="btn" type="button"
+                                onClick={() => void api(`/integrations/exports/${remote.id}/progress/pull`,
+                                    {method: 'POST'}).then(() => setRunResult('Audiobookshelf progress imported.'))
+                                    .catch(e => setError(String(e)))}>Import progress</button>}</p>)}
+                </div>}
                 <button className="btn" type="button" disabled={busy || !referenceId}
                     onClick={() => void refreshDetails(selected.id)}>Refresh details</button>
                 <div style={{marginBottom: 16}}>
@@ -476,7 +496,7 @@ export default function WebMediaPage() {
                     </label>
                     {outputPreview && <p>Output: <code>{outputPreview}</code></p>}
                 </div>
-                <DomainProfileForm domain={selected.domain} targets={targets} onCreated={profile => {
+                <DomainProfileForm domain={selected.domain} formats={selected.formats} targets={targets} onCreated={profile => {
                     setProfiles(previous => [...previous, profile]); setProfileId(profile.id)
                     void showOutputPreview(profile.id, selected.id, profile)
                 }}/>
@@ -498,7 +518,15 @@ export default function WebMediaPage() {
                 {job && ['failed', 'canceled'].includes(job.state) &&
                     <button className="btn" type="button" onClick={() => void api<Job>(`/jobs/${job.id}/retry`, {method: 'POST'})
                         .then(next => setJob({...job, ...next})).catch(e => setError(String(e)))}>Retry download</button>}
-                {selected.downloaded && <LocalPlayer key={selected.id} item={selected} />}
+                {selected.downloaded && profileId && <button className="btn" type="button" onClick={() => {
+                    if (!window.confirm('Remove this local representation and pause automatic downloads for it?')) return
+                    void api(`/library/${selected.id}/local/${profileId}`, {method: 'DELETE'})
+                        .then(() => api<Item>(`/library/${selected.id}`).then(setSelected))
+                        .then(() => refresh()).catch(e => setError(String(e)))
+                }}>Remove local copy</button>}
+                {(selected.downloaded || selected.capabilities?.includes('stream_lease') ||
+                    selected.references?.some(ref => sources.find(source => source.source_id === ref.source_id)?.capabilities.includes('stream_lease'))) &&
+                    <LocalPlayer key={`${selected.id}:${referenceId ?? ''}`} item={selected} referenceId={referenceId} />}
             </>}
             {selected.entries && <div style={{display: 'grid', gap: 8}}>{selected.entries.map(entry =>
                 <button type="button" className="btn" key={entry.id} onClick={() => void open(entry.id)}
@@ -513,13 +541,38 @@ export default function WebMediaPage() {
     </section>
 }
 
-function LocalPlayer({item}: {item: Item}) {
+function LocalPlayer({item, referenceId}: {item: Item; referenceId: number | null}) {
     const player = useRef<HTMLVideoElement & HTMLAudioElement>(null)
     const lastSaved = useRef(0)
     const [position, setPosition] = useState(0)
+    const [delivery, setDelivery] = useState<{transport: string; url: string} | null>(null)
+    const [failure, setFailure] = useState<string | null>(null)
     useEffect(() => {
         void api<{seconds: number}>(`/library/${item.id}/progress`).then(data => setPosition(data.seconds))
     }, [item.id])
+    useEffect(() => {
+        let disposed = false
+        setDelivery(null); setFailure(null)
+        void api<{transport: string; url: string}>(`/library/${item.id}/watch${referenceId ? `?reference_id=${referenceId}` : ''}`,
+            {method: 'POST'}).then(result => {if (!disposed) setDelivery(result)})
+            .catch(error => {if (!disposed) setFailure(String(error))})
+        return () => {disposed = true}
+    }, [item.id, referenceId])
+    useEffect(() => {
+        const element = player.current
+        if (!element || !delivery || delivery.transport !== 'hls' ||
+            element.canPlayType('application/vnd.apple.mpegurl')) return
+        let disposed = false
+        let destroy: (() => void) | undefined
+        void import('hls.js').then(({default: Hls}) => {
+            if (disposed || !Hls.isSupported()) return
+            const hls = new Hls({enableWorker: true})
+            hls.loadSource(delivery.url)
+            hls.attachMedia(element)
+            destroy = () => hls.destroy()
+        }).catch(() => setFailure('This browser cannot play this stream. Download it for local playback.'))
+        return () => {disposed = true; destroy?.()}
+    }, [delivery])
     const save = (completed = false) => {
         const current = player.current?.currentTime ?? 0
         if (!Number.isFinite(current)) return
@@ -528,7 +581,7 @@ function LocalPlayer({item}: {item: Item}) {
             body: JSON.stringify({seconds: current, completed})}).catch(() => {})
     }
     const common = {controls: true, preload: 'metadata' as const,
-        src: `${base()}/library/${item.id}/play`,
+        src: delivery?.transport === 'hls' && !player.current?.canPlayType('application/vnd.apple.mpegurl') ? undefined : delivery?.url,
         onLoadedMetadata: () => {
             if (player.current && position > 0 && position < player.current.duration - 1)
                 player.current.currentTime = position
@@ -537,18 +590,26 @@ function LocalPlayer({item}: {item: Item}) {
             if (player.current && Math.abs(player.current.currentTime - lastSaved.current) >= 10) save()
         }, onPause: () => save(), onEnded: () => save(true),
         style: {display: 'block', width: 'min(100%, 800px)', marginTop: 16}}
-    return item.playback_type === 'audio' ? <audio ref={player} {...common} /> : <video ref={player} {...common} />
+    return <div>{failure && <p role="alert">{failure}</p>}
+        {!delivery && !failure && <p>Preparing playback…</p>}
+        {delivery && (item.playback_type === 'audio' ? <audio ref={player} {...common} /> : <video ref={player} {...common} />)}
+    </div>
 }
 
-function DomainProfileForm({domain, targets, onCreated}: {domain: string; targets: Target[]; onCreated: (profile: Profile) => void}) {
+function DomainProfileForm({domain, formats, targets, onCreated}: {domain: string; formats?: Item['formats'];
+    targets: Target[]; onCreated: (profile: Profile) => void}) {
     const [expanded, setExpanded] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [deliveryIds, setDeliveryIds] = useState<number[]>([])
-    const {register, handleSubmit, formState: {errors, isSubmitting}, reset} = useForm<ProfileFields>({
+    const {register, handleSubmit, formState: {errors, isSubmitting}, reset, setValue} = useForm<ProfileFields>({
         resolver: zodResolver(ProfileFormSchema),
         defaultValues: {name: `${domain} video`, preferred_format: 'format_1080p',
             output_template: '/downloads/{{ domain }}/{{ title }} - {{ id }}.ext'},
     })
+    useEffect(() => {
+        if (formats?.length && !formats.some(format => format.code === 'format_1080p'))
+            setValue('preferred_format', formats[0].code as ProfileFields['preferred_format'])
+    }, [formats, setValue])
     const submit = handleSubmit(async values => {
         setError(null)
         try {
@@ -564,10 +625,13 @@ function DomainProfileForm({domain, targets, onCreated}: {domain: string; target
         <h3>New profile for {domain}</h3>
         <label>Name <input {...register('name')} />{errors.name && <span role="alert">{errors.name.message}</span>}</label>
         <label>Preferred format <select {...register('preferred_format')}>
-            <option value="format_720p">Video up to 720p</option>
-            <option value="format_1080p">Video up to 1080p</option>
-            <option value="format_4k">Video up to 4K</option>
-            <option value="format_audio_only">Audio only (MP3)</option>
+            {(formats?.length ? formats : [
+                {code: 'format_720p', description: 'Video up to 720p', audio_only: false},
+                {code: 'format_1080p', description: 'Video up to 1080p', audio_only: false},
+                {code: 'format_4k', description: 'Video up to 4K', audio_only: false},
+                {code: 'format_audio_only', description: 'Audio only (MP3)', audio_only: true},
+            ]).map(format => <option key={format.code} value={format.code}>
+                {format.description ?? format.code.replace(/_/g, ' ')}</option>)}
         </select></label>
         <label>Output path template <input {...register('output_template')} style={{width: '100%'}} />
             {errors.output_template && <span role="alert">{errors.output_template.message}</span>}
@@ -587,6 +651,7 @@ const DownloadPolicySchema = z.object({
     backfill: z.enum(['newest', 'all', 'date_range', 'metadata_only']).default('newest'),
     newest_count: z.coerce.number().int().min(1).max(1000).default(10),
     refresh_minutes: z.coerce.number().int().min(15).max(10080).default(60),
+    retain_newest: z.string().default(''), retain_days: z.string().default(''),
     published_after: z.string().default(''), published_before: z.string().default(''),
     title_contains: z.string().max(200).default(''),
 })
@@ -601,7 +666,8 @@ function DownloadPolicyForm({collectionId, profiles, sourceReferenceId, referenc
     const {register, handleSubmit, formState: {errors, isSubmitting}} = useForm<PolicyFields, unknown, z.output<typeof DownloadPolicySchema>>({
         resolver: zodResolver(DownloadPolicySchema),
         defaultValues: {name: 'New episodes', backfill: 'newest', newest_count: 10, refresh_minutes: 60,
-            published_after: '', published_before: '', title_contains: ''},
+            published_after: '', published_before: '', title_contains: '',
+            retain_newest: '', retain_days: ''},
     })
     if (!expanded) return <button className="btn" type="button" onClick={() => setExpanded(true)}>Create Download Profile</button>
     return <form onSubmit={handleSubmit(async values => {
@@ -614,6 +680,8 @@ function DownloadPolicyForm({collectionId, profiles, sourceReferenceId, referenc
                     published_after: values.published_after || null,
                     published_before: values.published_before || null,
                     title_contains: values.title_contains || null,
+                    retain_newest: values.retain_newest ? Number(values.retain_newest) : null,
+                    retain_days: values.retain_days ? Number(values.retain_days) : null,
                     local_profile_ids: selectedIds, source_reference_id: sourceReferenceId,
                     enabled: true})})
             onCreated(created); setExpanded(false)
@@ -628,6 +696,8 @@ function DownloadPolicyForm({collectionId, profiles, sourceReferenceId, referenc
         <label>Published on or before <input type="date" {...register('published_before')} /></label>
         <label>Title contains <input {...register('title_contains')} /></label>
         <label>Refresh every (minutes) <input type="number" {...register('refresh_minutes')} /></label>
+        <label>Keep newest items (optional) <input type="number" min="1" {...register('retain_newest')} /></label>
+        <label>Keep items for days (optional) <input type="number" min="1" {...register('retain_days')} /></label>
         <fieldset><legend>Local Media Profiles by member Domain</legend>{profiles.map(profile =>
             <label key={profile.id} style={{display: 'block'}}><input type="checkbox" checked={selectedIds.includes(profile.id)}
                 onChange={event => setSelectedIds(current => event.target.checked ? [...current, profile.id] :
@@ -640,6 +710,7 @@ function DownloadPolicyForm({collectionId, profiles, sourceReferenceId, referenc
 }
 
 const StreamProfileSchema = z.object({name: z.string().min(1), format: z.enum(['audio', 'video']).default('audio'),
+    include_live: z.boolean().default(false), local_only: z.boolean().default(true),
     published_after: z.string().default(''), published_before: z.string().default(''),
     title_contains: z.string().max(200).default('')}).refine(
         values => !values.published_after || !values.published_before || values.published_after <= values.published_before,
@@ -651,7 +722,7 @@ function StreamProfileForm({collectionId, onCreated}: {collectionId: number; onC
     const [error, setError] = useState<string | null>(null)
     const {register, handleSubmit, formState: {errors, isSubmitting}} = useForm<StreamFields, unknown, z.output<typeof StreamProfileSchema>>({
         resolver: zodResolver(StreamProfileSchema), defaultValues: {name: 'Podcast feed', format: 'audio',
-            published_after: '', published_before: '', title_contains: ''},
+            published_after: '', published_before: '', title_contains: '', include_live: false, local_only: true},
     })
     if (!expanded) return <button className="btn" type="button" onClick={() => setExpanded(true)}>Create Stream Profile</button>
     return <form onSubmit={handleSubmit(async values => {
@@ -660,7 +731,7 @@ function StreamProfileForm({collectionId, onCreated}: {collectionId: number; onC
             onCreated(await api<StreamProfile>(`/library/${collectionId}/stream-profiles`, {method: 'POST',
                 body: JSON.stringify({...values, published_after: values.published_after || null,
                     published_before: values.published_before || null,
-                    title_contains: values.title_contains || null, local_only: true, enabled: true})}))
+                    title_contains: values.title_contains || null, enabled: true})}))
             setExpanded(false)
         } catch (e) { setError(String(e)) }
     })} style={{display: 'grid', gap: 10, maxWidth: 500, margin: '12px 0'}}>
@@ -671,6 +742,9 @@ function StreamProfileForm({collectionId, onCreated}: {collectionId: number; onC
         <label>Published on or before <input type="date" {...register('published_before')} />
             {errors.published_before && <span role="alert">{errors.published_before.message}</span>}</label>
         <label>Title contains <input {...register('title_contains')} /></label>
+        <label><input type="checkbox" {...register('include_live')} /> Include live items</label>
+        <label><input type="checkbox" {...register('local_only')} /> Require an enabled Download Profile before admitting live items</label>
+        <p>Podcast feed enclosures appear when a compatible local file is ready. Admitted live items can play upstream in the web player while an archive downloads.</p>
         {error && <p role="alert">{error}</p>}
         <div><button type="submit" className="btn btn-primary" disabled={isSubmitting}>Save Stream Profile</button>{' '}
             <button type="button" className="btn" onClick={() => setExpanded(false)}>Cancel</button></div>

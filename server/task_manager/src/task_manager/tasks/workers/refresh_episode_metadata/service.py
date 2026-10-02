@@ -10,7 +10,7 @@ from backend.db.models import Episode
 from backend.services.custom_indexes import request_show_custom_index_reconciliation
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
-from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
+from backend.source_manager.dailywire_legacy import MiddlewareAPIError, MiddlewareClient
 from dailywire_api.records import DwEpisodeDetailRecord
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.db import TaskOperation, TaskOperationTarget

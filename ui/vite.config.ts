@@ -30,4 +30,12 @@ function fontAwesomePack(mode: string): Plugin {
 // The paid kit is opt-in through `npm run build:pro-icons` / `pro-icons` mode.
 export default defineConfig(({mode}) => ({
   plugins: [react(), fontAwesomePack(mode)],
+  server: {
+    proxy: {
+      '/api': {
+        target: process.env.VODLOFT_API_PROXY_TARGET || 'http://127.0.0.1:5001',
+        changeOrigin: true,
+      },
+    },
+  },
 }))

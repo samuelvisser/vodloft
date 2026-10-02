@@ -12,7 +12,7 @@ from backend.db.models.media_item import Episode
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.helpers import generate_uuid
 from backend.types.media_types import MediaType
-from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
+from backend.source_manager.dailywire_legacy import MiddlewareAPIError, MiddlewareClient
 from dailywire_api.records import DwEpisodeRecord
 from task_manager.events.transactional import queue_event
 from .identifier import EpisodeWithIdentifier

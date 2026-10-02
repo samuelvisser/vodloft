@@ -6,8 +6,8 @@ from time import monotonic
 
 from pydantic import ValidationError
 
-from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
-from dailywire_api.dw_api.movie import MovieMiddlewareClient
+from backend.source_manager.dailywire_legacy import MiddlewareAPIError, MiddlewareClient
+from backend.source_manager.dailywire_legacy import MovieMiddlewareClient
 from dailywire_api.records import (
     DwCatalogMoviePageRecord,
     DwCatalogMovieRecord,

@@ -930,3 +930,292 @@ def test_source_gateway_reclaims_scratch_after_worker_failure(tmp_path):
     with pytest.raises(SourceInvocationError):
         gateway.call("fixture", "resolve")
     assert not Path(marker.read_text()).exists()
+
+
+def test_inherited_episode_enumeration_crosses_dailywire_worker_boundary(monkeypatch):
+    from backend.source_manager.dailywire_legacy import MiddlewareClient, ByShowSeason
+    from backend.source_manager.gateway import SourceGateway
+    from vodloft_source_dailywire import worker
+
+    seen = []
+    def call(self, source_id, operation, **options):
+        seen.append((source_id, operation, options))
+        return {"items": [], "next_page_url": None, "has_next": False}
+    monkeypatch.setattr(SourceGateway, "call", call)
+    page = MiddlewareClient(access_token="private-token").get_episodes_paginated(
+        "series", ByShowSeason(season_dw_id="season", page_size=7))
+    assert page.items == [] and not page.has_next
+    assert seen[0][0:2] == ("dailywire", "legacy_call")
+    assert seen[0][2]["args"][1] == {"type": "ByShowSeason", "fields": {
+        "season_dw_id": "season", "membership_plan": None, "order_by": "CreatedAt_DESC",
+        "page_number": 1, "page_size": 7, "show_offset": 0, "podcast_offset": 0}}
+
+    class FakeClient:
+        def get_episodes_paginated(self, show, selector):
+            assert show == "series" and isinstance(selector, ByShowSeason)
+            return SimpleNamespace(items=[], next_page_url=None, has_next=False)
+    monkeypatch.setattr(worker, "_client", lambda token, movie=False: FakeClient())
+    assert worker.legacy_call({"method": "get_episodes_paginated", "args": seen[0][2]["args"],
+        "kwargs": {}, "access_token": "private-token"}) == {
+            "items": [], "next_page_url": None, "has_next": False}
+
+
+def test_upstream_hls_session_masks_lease_and_child_urls(library, monkeypatch):
+    import base64
+    from source_contracts import StreamLease
+    from backend.api.endpoints.vodloft import playback
+    client, sessions, _, gateway, _ = library
+    monkeypatch.setattr(playback, "get_session", sessions)
+    monkeypatch.setattr(playback, "validate_public_url", lambda url: url)
+    snapshot = MediaSnapshot(kind="video", reference=ref("example.com", "private-hls"), title="Stream")
+    monkeypatch.setattr(gateway.SourceGateway, "resolve", lambda *args, **kw: snapshot)
+    item_id = client.post("/api/vodloft/import", json={
+        "snapshot": snapshot.model_dump(mode="json")}).json()["id"]
+    monkeypatch.setattr(gateway.SourceGateway, "stream_lease", lambda *args, **kw: StreamLease(
+        transport="hls", url="https://cdn.example.com/secret.m3u8?sig=private",
+        headers={"Authorization": "Bearer private-token"}))
+    calls = []
+    def fetch(self, source_id, operation, **options):
+        calls.append(options)
+        playlist = options["url"].endswith("m3u8?sig=private")
+        payload = b"#EXTM3U\n#EXTINF:5,\nsegment.ts?sig=hidden\n" if playlist else b"segment bytes"
+        return {"data": base64.b64encode(payload).decode(),
+            "content_type": "application/vnd.apple.mpegurl" if playlist else "video/mp2t",
+            "content_range": None, "status": 200, "url": options["url"]}
+    monkeypatch.setattr(gateway.SourceGateway, "call", fetch)
+    watch = client.post(f"/api/vodloft/library/{item_id}/watch")
+    assert watch.status_code == 200, watch.text
+    assert watch.json()["transport"] == "hls" and "private" not in watch.text
+    manifest = client.get(watch.json()["url"])
+    assert manifest.status_code == 200
+    assert "cdn.example.com" not in manifest.text and "private" not in manifest.text
+    child_url = manifest.text.splitlines()[-1]
+    assert client.get(child_url).content == b"segment bytes"
+    assert calls[-1]["headers"]["Authorization"] == "Bearer private-token"
+    with sessions() as session:
+        from backend.db.models.vodloft import PlaybackSession
+        stored = session.scalar(select(PlaybackSession))
+        assert "private-token" not in stored.lease_ciphertext
+
+
+def test_retention_preserves_shared_demands_and_active_local_session(library, monkeypatch, tmp_path):
+    from datetime import datetime, timedelta, timezone
+    from sqlalchemy import delete
+    from backend.db.models.vodloft import ArtifactPlacement, MediaDemand, PlaybackSession
+    from backend.api.endpoints.vodloft import playback
+    from backend.services import vodloft_retention
+    client, sessions, _, gateway, _ = library
+    monkeypatch.setattr(playback, "get_session", sessions)
+    monkeypatch.setattr(vodloft_retention, "get_session", sessions)
+    snapshot = MediaSnapshot(kind="video", reference=ref("example.com", "shared-copy"), title="Shared")
+    monkeypatch.setattr(gateway.SourceGateway, "resolve", lambda *args, **kw: snapshot)
+    item_id = client.post("/api/vodloft/import", json={"snapshot": snapshot.model_dump(mode="json")}).json()["id"]
+    profile_id = client.post("/api/vodloft/profiles", json={"name": "Shared",
+        "domain": "example.com", "output_template": "/downloads/shared/{{ title }}.ext"}).json()["id"]
+    canonical = tmp_path / "vodloft" / f"{item_id}-1.mp4"
+    canonical.parent.mkdir()
+    canonical.write_bytes(b"shared media")
+    presented = tmp_path / "shared.mp4"
+    presented.write_bytes(b"shared media")
+    with sessions() as session:
+        artifact = Artifact(item_id=item_id, profile_id=profile_id, path=str(canonical),
+            size=canonical.stat().st_size, created_at=datetime(2020, 1, 1, tzinfo=timezone.utc))
+        session.add(artifact); session.flush()
+        session.add(ArtifactPlacement(artifact_id=artifact.id, profile_id=profile_id,
+            path=str(presented)))
+        for owner in (1, 2):
+            session.add(MediaDemand(item_id=item_id, profile_id=profile_id,
+                owner_kind="policy", owner_id=owner))
+        session.commit()
+    assert vodloft_retention.reconcile(grace_hours=0) == 0
+    with sessions() as session:
+        session.execute(delete(MediaDemand).where(MediaDemand.owner_id == 1)); session.commit()
+    assert vodloft_retention.reconcile(grace_hours=0) == 0
+    watch = client.post(f"/api/vodloft/library/{item_id}/watch")
+    assert watch.json()["transport"] == "file"
+    with sessions() as session:
+        session.execute(delete(MediaDemand).where(MediaDemand.owner_id == 2)); session.commit()
+    assert vodloft_retention.reconcile(grace_hours=0) == 0
+    assert client.get(watch.json()["url"]).content == b"shared media"
+    with sessions() as session:
+        session.scalar(select(PlaybackSession)).expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        session.commit()
+    assert vodloft_retention.reconcile(grace_hours=0) == 1
+    assert not canonical.exists() and not presented.exists()
+
+
+def test_compatible_profiles_share_one_artifact_without_crossing_source_accounts(library, monkeypatch):
+    from datetime import datetime, timezone
+    from backend.db.models.vodloft import ArtifactPlacement
+    from backend.services import vodloft_retention
+    client, sessions, router, gateway, _ = library
+    monkeypatch.setattr(vodloft_retention, "get_session", sessions)
+    snapshot = MediaSnapshot(kind="video", reference=ref("example.com", "dedup"), title="Shared")
+    monkeypatch.setattr(gateway.SourceGateway, "resolve", lambda *args, **kw: snapshot)
+    item_id = client.post("/api/vodloft/import", json={
+        "snapshot": snapshot.model_dump(mode="json")}).json()["id"]
+    profiles = [client.post("/api/vodloft/profiles", json={"name": f"Layout {index}",
+        "domain": "example.com", "output_template": f"/downloads/layout-{index}/{{{{ title }}}}.ext"}).json()["id"]
+        for index in (1, 2)]
+    def download(self, source_id, url, staging, **options):
+        output = Path(staging) / "media.mp4"
+        output.write_bytes(b"one representation")
+        return DownloadResult(filename=output.name, size=output.stat().st_size)
+    monkeypatch.setattr(gateway.SourceGateway, "download", download)
+    first_job, _, created = router.queue_download(item_id, profiles[0])
+    assert created
+    router._run_download(first_job)
+    assert router.queue_download(item_id, profiles[1]) == (None, "available", False)
+    with sessions() as session:
+        artifacts = session.scalars(select(Artifact)).all()
+        placements = session.scalars(select(ArtifactPlacement)).all()
+        assert len(artifacts) == 1 and len(placements) == 2
+        assert {placement.profile_id for placement in placements} == set(profiles)
+        artifacts[0].created_at = datetime(2020, 1, 1, tzinfo=timezone.utc)
+        canonical = Path(artifacts[0].path)
+        first_path = Path(next(p.path for p in placements if p.profile_id == profiles[0]))
+        second_path = Path(next(p.path for p in placements if p.profile_id == profiles[1]))
+        session.commit()
+    assert client.delete(f"/api/vodloft/library/{item_id}/local/{profiles[0]}").status_code == 200
+    assert canonical.exists() and second_path.exists() and not first_path.exists()
+    with sessions() as session:
+        assert len(session.scalars(select(Artifact)).all()) == 1
+    account = client.post("/api/vodloft/sources/connections", json={"source_id": "fixture",
+        "name": "Other account", "secrets": {"access_token": "private"}}).json()["id"]
+    client.post("/api/vodloft/import", json={"snapshot": snapshot.model_dump(mode="json"),
+        "connection_id": account})
+    references = client.get(f"/api/vodloft/library/{item_id}").json()["references"]
+    other = next(reference["id"] for reference in references if reference["connection_id"] == account)
+    third = client.post("/api/vodloft/profiles", json={"name": "Different account",
+        "domain": "example.com", "output_template": "/downloads/other-account/{{ title }}.ext"}).json()["id"]
+    new_job, state, created = router.queue_download(item_id, third, reference_id=other)
+    assert created and state == "queued" and new_job != first_job
+
+
+def test_live_admission_requires_download_policy_and_survives_archive_transition(library, monkeypatch, tmp_path):
+    from backend.api.endpoints.vodloft import feeds
+    from backend.db.models.vodloft import LiveAdmission
+    client, sessions, router, gateway, _ = library
+    child = EntrySnapshot(reference=ref("example.com", "live"), title="Broadcast",
+        position=1, is_live=True, capabilities={"download", "stream_lease"})
+    collection = MediaSnapshot(kind="collection", reference=SourceMediaReference(
+        source_id="fixture", domain="example.com", namespace="list", upstream_id="live-list",
+        url="https://example.com/list/live-list"), title="Broadcasts", entries=[child])
+    monkeypatch.setattr(gateway.SourceGateway, "resolve", lambda *args, **kw: collection)
+    collection_id = client.post("/api/vodloft/import", json={
+        "snapshot": collection.model_dump(mode="json")}).json()["id"]
+    strict = client.post(f"/api/vodloft/library/{collection_id}/stream-profiles", json={
+        "name": "Live audio", "format": "audio", "include_live": True,
+        "local_only": True}).json()["id"]
+    assert client.get(f"/api/vodloft/stream-profiles/{strict}/admissions").json() == []
+    audio_profile = client.post("/api/vodloft/profiles", json={"name": "Live MP3",
+        "domain": "example.com", "preferred_format": "format_audio_only",
+        "output_template": "/downloads/live/{{ title }}.ext"}).json()["id"]
+    policy = client.post(f"/api/vodloft/library/{collection_id}/download-profiles", json={
+        "name": "Archive live", "local_profile_ids": [audio_profile], "backfill": "all"})
+    assert policy.status_code == 201
+    queued = []
+    monkeypatch.setattr(router, "queue_download", lambda *args, **kw:
+        (queued.append((args, kw)), (None, "queued", False))[1])
+    feeds.reconcile_live_admissions(collection_id)
+    with sessions() as session:
+        admission = session.scalar(select(LiveAdmission))
+        assert admission.state == "upstream"
+        item_id = admission.item_id
+    assert queued and queued[0][1]["policy_id"] == policy.json()["id"]
+    child.is_live = False
+    client.post("/api/vodloft/import", json={"snapshot": collection.model_dump(mode="json")})
+    assert client.get(f"/api/vodloft/stream-profiles/{strict}/admissions").json()[0]["state"] == "upstream"
+    local = tmp_path / "vodloft" / "live.mp3"
+    local.parent.mkdir(exist_ok=True)
+    local.write_bytes(b"archived audio")
+    with sessions() as session:
+        session.add(Artifact(item_id=item_id, profile_id=audio_profile,
+            path=str(local), size=local.stat().st_size))
+        session.commit()
+    feeds.reconcile_live_admissions(collection_id)
+    assert client.get(f"/api/vodloft/stream-profiles/{strict}/admissions").json()[0]["state"] == "local"
+
+
+def test_jellyfin_presentation_freezes_episode_number_and_writes_explicit_metadata(tmp_path):
+    from backend.api.endpoints.vodloft.integrations import _write_nfo
+    from backend.db.models.vodloft import MediaServerExport
+    item = SimpleNamespace(id=32, kind="video", title="Source title", user_title="Library title",
+        description="Description", user_description=None, duration=300,
+        published_at=None)
+    export = MediaServerExport(season_number=2, episode_number=7)
+    path = tmp_path / "episode.mp4"
+    path.write_bytes(b"media")
+    _write_nfo(path, item, export, "Collection title")
+    tree = ElementTree.parse(path.with_suffix(".nfo"))
+    assert tree.findtext("title") == "Library title"
+    assert tree.findtext("showtitle") == "Collection title"
+    assert tree.findtext("season") == "2" and tree.findtext("episode") == "7"
+
+
+def test_plex_presentation_uses_actual_scanner_agent_and_server_identity(monkeypatch):
+    from backend.api.endpoints.vodloft import integrations
+    from backend.db.models.vodloft import MediaServerExport
+    target = SimpleNamespace(kind="plex", library_id="4", base_url="http://plex.local:32400")
+    requested = []
+    def request(_target, method, path):
+        requested.append(path)
+        if path == "/library/sections":
+            return (b'<MediaContainer><Directory key="4" title="Web videos" '
+                b'scanner="Plex Video Files Scanner" agent="com.plexapp.agents.none" '
+                b'type="movie" /></MediaContainer>')
+        assert path == "/identity"
+        return b'<MediaContainer machineIdentifier="0123456789abcdef0123456789abcdef" />'
+    monkeypatch.setattr(integrations, "_request", request)
+    capabilities = integrations.discover(target)
+    assert requested == ["/library/sections", "/identity"]
+    assert capabilities["presentation"] == "personal_media"
+    export = MediaServerExport(remote_id="42", remote_server_id=capabilities["machine_id"])
+    assert integrations._external_url(target, export).endswith(
+        "/details?key=%2Flibrary%2Fmetadata%2F42")
+
+
+def test_audiobookshelf_item_mapping_and_progress_pull_never_rewinds(library, monkeypatch, tmp_path):
+    from backend.api.endpoints.vodloft import integrations
+    from backend.db.models.vodloft import ArtifactPlacement, MediaServerExport, PlaybackProgress
+    client, sessions, _, gateway, _ = library
+    snapshot = MediaSnapshot(kind="video", reference=ref("example.com", "podcast-ep"), title="Episode")
+    monkeypatch.setattr(gateway.SourceGateway, "resolve", lambda *args, **kw: snapshot)
+    item_id = client.post("/api/vodloft/import", json={
+        "snapshot": snapshot.model_dump(mode="json")}).json()["id"]
+    target = client.post("/api/vodloft/integrations", json={"kind": "audiobookshelf",
+        "name": "Podcasts", "base_url": "http://localhost:13378", "library_id": "lib_1",
+        "local_prefix": str(tmp_path), "server_prefix": "/podcasts", "api_key": "private"})
+    assert target.status_code == 201, target.text
+    path = tmp_path / "episode.mp3"
+    path.write_bytes(b"audio")
+    with sessions() as session:
+        artifact = Artifact(item_id=item_id, path=str(tmp_path / "vodloft" / "episode.mp3"), size=5)
+        session.add(artifact); session.flush()
+        placement = ArtifactPlacement(artifact_id=artifact.id, profile_id=None, path=str(path))
+        # A delivery placement normally has a Local Media Profile. Its ID is
+        # used only as a foreign key in this in-memory mapping fixture.
+        from backend.db.models.local_media_profile import DomainLocalMediaProfile
+        from backend.db.models.vodloft import Domain
+        domain = session.scalar(select(Domain).where(Domain.hostname == "example.com"))
+        profile = DomainLocalMediaProfile(name="Podcast audio", slug="podcast-audio",
+            domain_id=domain.id, preferred_format="format_audio_only",
+            output_template="/downloads/podcast/{{ title }}.ext", applicable_kinds=["video"],
+            enabled=True, delivery_target_ids=[])
+        session.add(profile); session.flush()
+        placement.profile_id = profile.id
+        session.add(placement); session.flush()
+        export = MediaServerExport(placement_id=placement.id, target_id=target.json()["id"],
+            remote_id="li_podcast", remote_episode_id="ep_episode", state="available", attempts=1)
+        session.add(export)
+        session.add(PlaybackProgress(user_key="admin", item_id=item_id, seconds=120, completed=False))
+        session.commit()
+        export_id = export.id
+    mappings = client.get(f"/api/vodloft/library/{item_id}/integrations").json()
+    assert mappings[0]["remote_episode_id"] == "ep_episode"
+    assert mappings[0]["url"] == "http://localhost:13378/item/li_podcast"
+    monkeypatch.setattr(integrations, "_request", lambda target, method, path:
+        json.dumps({"currentTime": 60, "isFinished": True}).encode())
+    pulled = client.post(f"/api/vodloft/integrations/exports/{export_id}/progress/pull")
+    assert pulled.status_code == 200, pulled.text
+    assert pulled.json() == {"seconds": 120, "completed": True}

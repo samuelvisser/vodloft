@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from backend.db.models import Episode, Show
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
-from dailywire_api.dw_api.client import ByShowSeason, MiddlewareAPIError, MiddlewareClient
+from backend.source_manager.dailywire_legacy import ByShowSeason, MiddlewareAPIError, MiddlewareClient
 from task_manager.events.transactional import queue_event
 
 from ._helpers import save_status_metadata

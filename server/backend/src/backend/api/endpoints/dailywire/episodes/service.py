@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from dailywire_api.dw_api.client import MiddlewareClient, ByShowSeason, ByNextPage
+from backend.source_manager.dailywire_legacy import MiddlewareClient, ByShowSeason, ByNextPage
 from dailywire_api.records import DwEpisodeRecord
 
 

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Show
 from backend.types.dailywire_user_info import WlDwMembershipLevel
-from dailywire_api.dw_api.client import MiddlewareClient
+from backend.source_manager.dailywire_legacy import MiddlewareClient
 from dailywire_downloader import DownloadCancelled
 
 

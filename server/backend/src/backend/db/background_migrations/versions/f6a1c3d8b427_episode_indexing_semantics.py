@@ -18,7 +18,7 @@ from backend.db.core import get_session
 from backend.db.datetime_types import utc_datetime
 from backend.db.models import Metadata, Show
 from backend.db.models.media_item import Episode
-from dailywire_api.dw_api.client import (
+from backend.source_manager.dailywire_legacy import (
     ByNextPage,
     ByShowSeason,
     MiddlewareAPIError,

@@ -82,6 +82,8 @@ def output_path_from_spec(template: str, values: dict, extension: str) -> Path:
     path = (root / sanitized.removeprefix("/downloads/")).resolve()
     if not path.is_relative_to(root):
         raise ValueError("Output path escapes the download root")
+    if path.is_relative_to(root / "vodloft") or path.is_relative_to(root / "vodloft-feeds"):
+        raise ValueError("Output path is reserved for VodLoft-managed representations")
     return path
 
 

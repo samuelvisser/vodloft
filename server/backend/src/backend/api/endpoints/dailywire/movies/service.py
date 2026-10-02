@@ -7,8 +7,8 @@ from pydantic import ValidationError
 
 from backend.app import db_session
 from backend.db.models import Movie
-from dailywire_api.dw_api.client import MiddlewareAPIError
-from dailywire_api.dw_api.movie import MovieMiddlewareClient
+from backend.source_manager.dailywire_legacy import MiddlewareAPIError
+from backend.source_manager.dailywire_legacy import MovieMiddlewareClient
 from dailywire_api.records import DwMovieExtraRecord, DwMovieRecord
 from dailywire_authorisation import DeviceAuthClient
 

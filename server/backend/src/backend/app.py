@@ -108,6 +108,8 @@ async def application_lifespan(app: FastAPI):
             from backend.api.endpoints.vodloft.automation import refresh_due_collections
             from backend.source_manager.runtime import install_bundled_updates
             from backend.api.endpoints.vodloft.integrations import reconcile_exports
+            from backend.api.endpoints.vodloft.playback import expire_sessions
+            from backend.services.vodloft_retention import reconcile as reconcile_retention
             from backend.api.endpoints.vodloft.router import recover_acquisition_jobs, retry_due_acquisition_jobs
             while not automation_stop.wait(15):
                 try:
@@ -116,6 +118,8 @@ async def application_lifespan(app: FastAPI):
                     recover_acquisition_jobs()
                     retry_due_acquisition_jobs()
                     reconcile_exports()
+                    expire_sessions()
+                    reconcile_retention()
                 except Exception:
                     logger.exception("Collection automation sweep failed")
                 if automation_stop.wait(45):
@@ -257,6 +261,7 @@ def create_app() -> FastAPI:
     from backend.api.endpoints.vodloft.automation import router as vodloft_automation_router
     from backend.api.endpoints.vodloft.integrations import router as vodloft_integrations_router
     from backend.api.endpoints.vodloft.connections import router as vodloft_connections_router
+    from backend.api.endpoints.vodloft.playback import router as vodloft_playback_router
 
     # Public auth endpoints
     app.include_router(auth_router, prefix="/api")
@@ -266,6 +271,7 @@ def create_app() -> FastAPI:
     app.include_router(vodloft_automation_router, prefix="/api")
     app.include_router(vodloft_integrations_router, prefix="/api")
     app.include_router(vodloft_connections_router, prefix="/api")
+    app.include_router(vodloft_playback_router, prefix="/api")
     app.include_router(vodloft_feeds_public)
 
     # Podcast feed endpoints: intentionally mounted outside /api (and thus

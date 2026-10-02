@@ -5,6 +5,7 @@ import os
 import secrets
 import shutil
 import tempfile
+import threading
 from datetime import date
 from email.utils import format_datetime
 from pathlib import Path
@@ -13,10 +14,13 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field, model_validator
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from backend.db import get_session
-from backend.db.models.vodloft import Artifact, CollectionEntry, CollectionStreamProfile, FeedSubscription, MediaItem, PublishedEntry
+from backend.db.models.vodloft import (AcquisitionJob, Artifact, CollectionDownloadProfile,
+    CollectionEntry, CollectionStreamProfile, FeedSubscription, LiveAdmission, MediaItem,
+    PublishedEntry, SourceReference)
+from backend.db.models.local_media_profile import DomainLocalMediaProfile
 from config import get_settings
 
 api_router = APIRouter(prefix="/vodloft", tags=["VodLoft feeds"])
@@ -32,6 +36,7 @@ class StreamProfileInput(BaseModel):
     published_before: date | None = None
     title_contains: str | None = Field(default=None, max_length=200)
     local_only: bool = True
+    include_live: bool = False
     enabled: bool = True
 
     @model_validator(mode="after")
@@ -47,7 +52,8 @@ def _stream_profile(profile: CollectionStreamProfile) -> dict:
             "published_after": profile.published_after,
             "published_before": profile.published_before,
             "title_contains": profile.title_contains,
-            "local_only": profile.local_only, "enabled": profile.enabled}
+            "local_only": profile.local_only, "include_live": profile.include_live,
+            "enabled": profile.enabled}
 
 
 @api_router.get("/library/{collection_id}/stream-profiles")
@@ -61,21 +67,19 @@ def stream_profiles(collection_id: int):
 
 @api_router.post("/library/{collection_id}/stream-profiles", status_code=201)
 def create_stream_profile(collection_id: int, data: StreamProfileInput):
-    if not data.local_only:
-        raise HTTPException(422, "Upstream feed delivery requires a prepared local rendition")
     with get_session() as session:
         if not (item := session.get(MediaItem, collection_id)) or item.kind != "collection":
             raise HTTPException(404, "Collection not found")
         profile = CollectionStreamProfile(collection_id=collection_id, **data.model_dump())
         session.add(profile)
         session.commit()
-        return _stream_profile(profile)
+        result = _stream_profile(profile)
+    reconcile_live_admissions(collection_id)
+    return result
 
 
 @api_router.put("/stream-profiles/{profile_id}")
 def update_stream_profile(profile_id: int, data: StreamProfileInput):
-    if not data.local_only:
-        raise HTTPException(422, "Upstream feed delivery requires a prepared local rendition")
     with get_session() as session:
         profile = session.get(CollectionStreamProfile, profile_id)
         if not profile:
@@ -88,8 +92,11 @@ def update_stream_profile(profile_id: int, data: StreamProfileInput):
             raise HTTPException(409, "Revoke this feed before changing its representation")
         for key, value in data.model_dump().items():
             setattr(profile, key, value)
+        collection_id = profile.collection_id
         session.commit()
-        return _stream_profile(profile)
+        result = _stream_profile(profile)
+    reconcile_live_admissions(collection_id)
+    return result
 
 
 @api_router.delete("/stream-profiles/{profile_id}", status_code=204)
@@ -104,6 +111,7 @@ def delete_stream_profile(profile_id: int):
         if subscription:
             session.delete(subscription)
             session.flush()
+        session.execute(delete(LiveAdmission).where(LiveAdmission.stream_profile_id == profile_id))
         session.delete(profile)
         session.commit()
     if subscription_id:
@@ -221,6 +229,116 @@ def _publish(session, subscription: FeedSubscription, item_id: int) -> Published
     return entry
 
 
+def reconcile_live_admissions(collection_id: int) -> None:
+    """Freeze live admission until a local archive arrives or acquisition fails."""
+    from backend.api.endpoints.vodloft.router import queue_download, _run_download, _reference_for
+
+    queued = []
+    with get_session() as session:
+        profiles = session.scalars(select(CollectionStreamProfile).where(
+            CollectionStreamProfile.collection_id == collection_id,
+            CollectionStreamProfile.enabled.is_(True),
+            CollectionStreamProfile.include_live.is_(True))).all()
+        entries = session.scalars(select(CollectionEntry).where(
+            CollectionEntry.collection_id == collection_id)).all()
+        policies = session.scalars(select(CollectionDownloadProfile).where(
+            CollectionDownloadProfile.collection_id == collection_id,
+            CollectionDownloadProfile.enabled.is_(True))).all()
+        for profile in profiles:
+            for entry in entries:
+                item = session.get(MediaItem, entry.item_id)
+                admission = session.scalar(select(LiveAdmission).where(
+                    LiveAdmission.stream_profile_id == profile.id,
+                    LiveAdmission.item_id == item.id))
+                if not item.is_live and not admission:
+                    continue
+                if profile.title_contains and profile.title_contains.casefold() not in (
+                    item.user_title or item.title).casefold():
+                    continue
+                if profile.published_after or profile.published_before:
+                    if not item.published_at:
+                        continue
+                    published = item.published_at.date()
+                    if (profile.published_after and published < profile.published_after or
+                        profile.published_before and published > profile.published_before):
+                        continue
+                extensions = _audio_extensions if profile.format == "audio" else _video_extensions
+                local = any(Path(a.path).is_file() and Path(a.path).suffix.lower() in extensions
+                    for a in session.scalars(select(Artifact).where(Artifact.item_id == item.id)).all())
+                candidate = None
+                for policy in policies:
+                    if policy.backfill == "metadata_only" or (
+                        policy.title_contains and policy.title_contains.casefold() not in
+                            (item.user_title or item.title).casefold()):
+                        continue
+                    if policy.published_after or policy.published_before:
+                        if not item.published_at:
+                            continue
+                        published = item.published_at.date()
+                        if (policy.published_after and published < policy.published_after or
+                            policy.published_before and published > policy.published_before):
+                            continue
+                    reference = _reference_for(session, item.id, collection_id=collection_id,
+                        collection_reference_id=policy.source_reference_id)
+                    for profile_id in policy.local_profile_ids:
+                        media_profile = session.get(DomainLocalMediaProfile, profile_id)
+                        if (reference and media_profile and media_profile.enabled and
+                            media_profile.domain_id == item.domain_id and
+                            item.kind in media_profile.applicable_kinds and
+                            (media_profile.preferred_format == "format_audio_only") ==
+                                (profile.format == "audio")):
+                            candidate = (policy.id, media_profile.id, reference.id)
+                            break
+                    if candidate:
+                        break
+                if not admission:
+                    if profile.local_only and not candidate:
+                        continue
+                    reference = (session.get(SourceReference, candidate[2]) if candidate else
+                                 _reference_for(session, item.id))
+                    if not reference:
+                        continue
+                    admission = LiveAdmission(stream_profile_id=profile.id,
+                        item_id=item.id, source_reference_id=reference.id,
+                        state="local" if local else "upstream")
+                    session.add(admission)
+                if local:
+                    admission.state = "local"
+                else:
+                    job = session.scalar(select(AcquisitionJob).where(
+                        AcquisitionJob.item_id == item.id,
+                        AcquisitionJob.reference_id == admission.source_reference_id)
+                        .order_by(AcquisitionJob.id.desc()))
+                    admission.state = ("failed" if job and job.state == "failed" else
+                        "upstream" if item.capabilities is None or "stream_lease" in item.capabilities
+                        else "waiting")
+                    if profile.local_only and candidate and admission.state != "failed":
+                        queued.append((item.id, candidate))
+        session.commit()
+    for item_id, (policy_id, local_id, reference_id) in set(queued):
+        try:
+            job_id, _, created = queue_download(item_id, local_id, reference_id=reference_id,
+                policy_id=policy_id)
+            if created and job_id is not None:
+                threading.Thread(target=_run_download, args=(job_id,), daemon=True,
+                    name=f"vodloft-live-{job_id}").start()
+        except Exception:
+            # The normal Download Profile scheduler retries; admission remains
+            # persisted so the temporary upstream period is not lost.
+            pass
+
+
+@api_router.get("/stream-profiles/{profile_id}/admissions")
+def live_admissions(profile_id: int):
+    with get_session() as session:
+        if not session.get(CollectionStreamProfile, profile_id):
+            raise HTTPException(404, "Stream Profile not found")
+        return [{"item_id": admission.item_id, "state": admission.state,
+            "source_reference_id": admission.source_reference_id,
+            "admitted_at": admission.admitted_at} for admission in session.scalars(
+                select(LiveAdmission).where(LiveAdmission.stream_profile_id == profile_id)).all()]
+
+
 @public_router.get("/{token}.xml", name="vodloft_feed")
 def feed(token: str, request: Request):
     with get_session() as session:
@@ -240,6 +358,10 @@ def feed(token: str, request: Request):
             CollectionEntry.collection_id == collection.id).order_by(CollectionEntry.position)).all()
         for membership in memberships:
             media = session.get(MediaItem, membership.item_id)
+            if profile and media.is_live and (not profile.include_live or not session.scalar(
+                select(LiveAdmission.id).where(LiveAdmission.stream_profile_id == profile.id,
+                    LiveAdmission.item_id == media.id))):
+                continue
             if profile and profile.title_contains and profile.title_contains.casefold() not in (
                 media.user_title or media.title).casefold():
                 continue

@@ -1,7 +1,7 @@
 """Versioned transport contracts; independent of the VodLoft application."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 from pydantic import BaseModel, Field, field_validator
 
 PROTOCOL_VERSION = 1
@@ -31,6 +31,14 @@ class SourceManifest(BaseModel):
     capabilities: set[str]
     exhaustive_domain_catalogue: bool = False
     configuration_schema: list[ConfigurationField] = Field(default_factory=list)
+
+
+class AuthenticationChallenge(BaseModel):
+    kind: Literal["device_code", "access_token", "credential_file", "login_required"]
+    message: str
+    verification_url: str | None = None
+    user_code: str | None = None
+    expires_at: datetime | None = None
 
 
 class DomainDescriptor(BaseModel):
@@ -66,6 +74,16 @@ class EntrySnapshot(BaseModel):
     occurrence_id: str | None = None
     published_at: datetime | None = None
     capabilities: set[str] | None = None
+    is_live: bool | None = None
+
+
+class FormatDescriptor(BaseModel):
+    code: str
+    container: str | None = None
+    height: int | None = Field(default=None, ge=0)
+    audio_only: bool = False
+    language: str | None = None
+    description: str | None = None
 
 
 class MediaSnapshot(BaseModel):
@@ -76,10 +94,35 @@ class MediaSnapshot(BaseModel):
     duration: float | None = None
     published_at: datetime | None = None
     capabilities: set[str] | None = None
+    is_live: bool | None = None
+    formats: list[FormatDescriptor] = Field(default_factory=list)
+    extensions: dict[str, dict] = Field(default_factory=dict)
     artwork_url: str | None = None
     entries: list[EntrySnapshot] = Field(default_factory=list)
     extras: list[EntrySnapshot] = Field(default_factory=list)
     enumeration_complete: bool = True
+
+
+class CollectionSnapshot(MediaSnapshot):
+    kind: Literal["collection"] = "collection"
+
+
+class VideoSnapshot(MediaSnapshot):
+    kind: Literal["video"] = "video"
+
+
+class MovieSnapshot(MediaSnapshot):
+    kind: Literal["movie"] = "movie"
+
+
+class MovieExtraSnapshot(MediaSnapshot):
+    kind: Literal["movie_extra"] = "movie_extra"
+
+
+NormalizedSnapshot = Annotated[
+    CollectionSnapshot | VideoSnapshot | MovieSnapshot | MovieExtraSnapshot,
+    Field(discriminator="kind"),
+]
 
 
 class CollectionPage(BaseModel):
@@ -119,6 +162,12 @@ class DownloadResult(BaseModel):
     size: int
 
 
+class DownloadRequest(BaseModel):
+    reference: SourceMediaReference
+    staging: str
+    preferred_format: str = "format_1080p"
+
+
 class DownloadEvent(BaseModel):
     """A bounded, Source-reported transfer fraction; local stages remain VodLoft-owned."""
     percent: float = Field(ge=0, le=100)
@@ -128,3 +177,4 @@ class SourceError(BaseModel):
     code: Literal["unsupported_operation", "unavailable", "authentication_required", "rate_limited",
                   "invalid_url", "unsupported_format", "insufficient_disk", "runtime_error"]
     message: str
+    challenge: AuthenticationChallenge | None = None

@@ -5,7 +5,7 @@ from typing import Any, List, Optional, OrderedDict, Sequence, Tuple
 
 from backend.db.models import Episode, Season, Show
 from backend.types.show_types import EpisodeIdentifier
-from dailywire_api.dw_api.client import (
+from backend.source_manager.dailywire_legacy import (
     ByNextPage,
     ByShowSeason,
     MiddlewareAPIError,

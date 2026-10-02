@@ -7,6 +7,7 @@ from threading import Condition
 
 from builtins import str
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Callable, Dict, ClassVar, Any, Iterator, Optional, Literal, NamedTuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, urlencode, urlparse
@@ -30,9 +31,10 @@ DEFAULT_MIDDLEWARE_URL = "https://middleware-prod.dailywire.com/middleware"
 
 
 def get_settings():
-    """Compatibility hook for WireLoft callers; independent Sources inject pacing."""
-    from config import get_settings as settings
-    return settings()
+    """Self-contained defaults for the standalone Daily Wire client."""
+    return SimpleNamespace(dw_timeout=SimpleNamespace(
+        min_fast_request_ms=100, min_slow_request_ms=120000,
+        max_fast_requests=350))
 
 logger = logging.getLogger(__name__)
 
@@ -223,9 +225,7 @@ class MiddlewareClient:
         token_provider: Callable[[], str | None] | None = None,
     ) -> None:
         self._req_timeout = request_timeout
-        # Legacy WireLoft callers keep their configured endpoint; independent
-        # Source runtimes inject an explicit base URL and never import config.
-        self._base_url = (base_url or get_settings().dw_api.middleware_api).rstrip('/')
+        self._base_url = (base_url or DEFAULT_MIDDLEWARE_URL).rstrip('/')
         self._pace_requests = bool(pace_requests)
         self._pacing_settings = pacing_settings
         self._token_provider = token_provider

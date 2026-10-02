@@ -8,8 +8,9 @@ import shutil
 import tempfile
 import threading
 from urllib.parse import urlsplit
+from pydantic import TypeAdapter
 
-from source_contracts import CollectionPage, DownloadEvent, DownloadResult, MediaSnapshot, SourceError, SourceManifest, SourceMatch, SourceSearchPage
+from source_contracts import CollectionPage, DownloadEvent, DownloadResult, MediaSnapshot, NormalizedSnapshot, SourceError, SourceManifest, SourceMatch, SourceSearchPage, StreamLease
 from .runtime import command_for, registry
 
 _running: dict[int, subprocess.Popen] = {}
@@ -33,6 +34,7 @@ _PUBLIC_ERRORS = {
     "insufficient_disk": "Insufficient staging disk space",
     "runtime_error": "The Source runtime failed",
 }
+_SNAPSHOT = TypeAdapter(NormalizedSnapshot)
 
 
 def cancel_running_job(job_id: int) -> None:
@@ -89,10 +91,15 @@ class SourceGateway:
         if not command or not isinstance(command, list) or not all(isinstance(arg, str) for arg in command):
             raise ValueError("The selected Source is not installed")
         scratch = tempfile.mkdtemp(prefix="vodloft-source-")
+        output_file = tempfile.TemporaryFile(mode="w+t", encoding="utf-8") if on_progress is None else None
         try:
-            process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE, text=True, start_new_session=True)
+            process = subprocess.Popen(command, stdin=subprocess.PIPE,
+                stdout=output_file if output_file is not None else subprocess.PIPE,
+                stderr=subprocess.DEVNULL if output_file is not None else subprocess.PIPE,
+                text=True, start_new_session=True)
         except BaseException:
+            if output_file is not None:
+                output_file.close()
             shutil.rmtree(scratch, ignore_errors=True)
             raise
         try:
@@ -106,8 +113,12 @@ class SourceGateway:
                             pass
             if on_progress is None:
                 try:
-                    stdout, _stderr = process.communicate(
+                    process.communicate(
                         input=json.dumps({"operation": operation, **options, "scratch": scratch}), timeout=timeout)
+                    output_file.seek(0)
+                    stdout = output_file.read(32 * 1024 * 1024 + 1)
+                    if len(stdout) > 32 * 1024 * 1024:
+                        raise SourceInvocationError("runtime_error", "Source response is too large")
                 except subprocess.TimeoutExpired:
                     os.killpg(process.pid, signal.SIGKILL)
                     process.communicate()
@@ -168,6 +179,8 @@ class SourceGateway:
                 with _running_lock:
                     _running.pop(job_id, None)
                     _canceled.discard(job_id)
+            if output_file is not None:
+                output_file.close()
             shutil.rmtree(scratch, ignore_errors=True)
         if process.returncode:
             # The worker's stderr may contain upstream URLs or credentials.
@@ -195,7 +208,7 @@ class SourceGateway:
     def resolve(self, source_id: str, url: str, max_entries: int = 100,
                 **source_options) -> MediaSnapshot:
         validate_public_url(url)
-        return MediaSnapshot.model_validate(self.call(source_id, "resolve", url=url,
+        return _SNAPSHOT.validate_python(self.call(source_id, "resolve", url=url,
             max_entries=max_entries, **source_options))
 
     def match(self, source_id: str, url: str) -> SourceMatch:
@@ -233,3 +246,10 @@ class SourceGateway:
                                                       timeout=3600, job_id=job_id,
                                                       on_progress=on_progress,
                                                       **source_options))
+
+    def stream_lease(self, source_id: str, url: str, **source_options) -> StreamLease:
+        validate_public_url(url)
+        lease = StreamLease.model_validate(self.call(source_id, "stream_lease", url=url,
+            timeout=90, **source_options))
+        validate_public_url(lease.url)
+        return lease

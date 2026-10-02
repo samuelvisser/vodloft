@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from backend.api.endpoints.media_downloads.actions import (
+from backend.services.media_download_actions import (
     cancel_media_download_action,
     delete_media_download_artifact_action,
     retry_media_download_action,

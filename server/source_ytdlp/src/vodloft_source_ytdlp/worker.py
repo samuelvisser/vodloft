@@ -4,6 +4,7 @@ import json
 import errno
 import sys
 import tempfile
+from urllib.error import HTTPError
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,9 +13,9 @@ from urllib.parse import urlsplit
 import yt_dlp
 from source_contracts import (
     CollectionPage, DownloadResult, EntrySnapshot, MediaSnapshot, SourceError, SourceManifest,
-    SourceMatch, SourceMediaReference,
+    SourceMatch, SourceMediaReference, StreamLease,
 )
-from source_contracts.network import install_public_network_guard
+from source_contracts.network import install_public_network_guard, fetch_stream
 from source_contracts.progress import download_progress_hook
 
 
@@ -95,11 +96,21 @@ def resolve(url: str, *, max_entries: int = 100, cookies: str | None = None,
         optional["artwork_url"] = info.get("thumbnail") or thumbnails[-1].get("url")
     if published := _published(info):
         optional["published_at"] = published
+    if kind != "collection":
+        optional["is_live"] = bool(info.get("is_live") or info.get("live_status") == "is_live")
+        heights = [fmt.get("height") for fmt in info.get("formats") or []
+                   if isinstance(fmt, dict) and isinstance(fmt.get("height"), int)]
+        maximum = max(heights, default=int(info.get("height") or 0))
+        optional["formats"] = ([{"code": "format_audio_only", "audio_only": True,
+            "container": "mp3", "description": "Audio MP3"}] + [
+            {"code": code, "height": height, "description": f"Video up to {height}p"}
+            for code, height in (("format_720p", 720), ("format_1080p", 1080),
+                                 ("format_4k", 2160)) if maximum == 0 or maximum >= height])
     return MediaSnapshot(
         kind=kind, reference=_reference(info, url),
         title=str(info.get("title") or info.get("id") or "Untitled"),
         entries=entries, enumeration_complete=len(raw_entries) <= max_entries,
-        capabilities={"enumerate_collection"} if kind == "collection" else {"download"}, **optional,
+        capabilities={"enumerate_collection"} if kind == "collection" else {"download", "stream_lease"}, **optional,
     )
 
 
@@ -157,14 +168,37 @@ def download(url: str, staging: str, preferred_format: str = "format_1080p",
     return DownloadResult(filename=files[0].name, size=files[0].stat().st_size)
 
 
+def stream_lease(url: str, cookies: str | None = None, scratch: str | None = None) -> StreamLease:
+    """Resolve one direct transport; mixed adaptive formats need a local remux."""
+    with _cookie_options(cookies, scratch) as auth, yt_dlp.YoutubeDL({
+        "quiet": True, "no_warnings": True, "noplaylist": True,
+        "format": "best[protocol=https]/best[protocol=http]/best",
+        "skip_download": True, **auth,
+    }) as ydl:
+        info = ydl.extract_info(url, download=False)
+    if not info or info.get("_type") == "playlist" or info.get("requested_formats"):
+        raise ValueError("This item needs a prepared local streaming rendition")
+    media_url = info.get("url")
+    if not isinstance(media_url, str) or urlsplit(media_url).scheme != "https":
+        raise ValueError("No safe direct streaming representation")
+    protocol = str(info.get("protocol") or "")
+    if protocol not in {"https", "http", "m3u8", "m3u8_native"}:
+        raise ValueError("This transport requires a prepared local rendition")
+    headers = {key: value for key, value in (info.get("http_headers") or {}).items()
+               if key.lower() in {"user-agent", "referer", "origin", "cookie"} and
+               isinstance(value, str) and len(value) < 8192}
+    return StreamLease(transport="hls" if "m3u8" in protocol else "http", url=media_url,
+        renewable=True, seekable=True, headers=headers)
+
+
 def main() -> None:
     request = json.load(sys.stdin)
     operation = request["operation"]
-    if operation in ("resolve", "download", "entries"):
+    if operation in ("resolve", "download", "entries", "stream_lease", "stream_fetch"):
         install_public_network_guard()
     if operation == "manifest":
         result = SourceManifest(source_id="yt-dlp", display_name="yt-dlp", version=yt_dlp.version.__version__,
-                                capabilities={"resolve_url", "enumerate_collection", "enumerate_pages", "download", "domain_catalogue"},
+                                capabilities={"resolve_url", "enumerate_collection", "enumerate_pages", "download", "domain_catalogue", "stream_lease"},
                                 configuration_schema=[{"name": "cookies", "label": "Netscape cookies.txt",
                                                        "kind": "credential_file"}])
     elif operation == "domains":
@@ -203,6 +237,10 @@ def main() -> None:
     elif operation == "download":
         result = download(request["url"], request["staging"], request.get("preferred_format", "format_1080p"),
                           request.get("cookies"), request.get("scratch"))
+    elif operation == "stream_lease":
+        result = stream_lease(request["url"], request.get("cookies"), request.get("scratch"))
+    elif operation == "stream_fetch":
+        result = fetch_stream(request["url"], request.get("headers"), request.get("byte_range"))
     else:
         raise ValueError(f"Unsupported Source operation: {operation}")
     print(result.model_dump_json(exclude_unset=True) if hasattr(result, "model_dump_json") else json.dumps(result))
@@ -212,7 +250,10 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as exc:
-        if isinstance(exc, PermissionError):
+        if isinstance(exc, HTTPError) and exc.code in (401, 403, 429):
+            code = "rate_limited" if exc.code == 429 else "authentication_required"
+            message = "Source rate limit reached" if code == "rate_limited" else "Source authorization is required"
+        elif isinstance(exc, PermissionError):
             code, message = "authentication_required", "Source authorization is required"
         elif isinstance(exc, OSError) and exc.errno == errno.ENOSPC:
             code, message = "insufficient_disk", "Insufficient staging disk space"

@@ -6,7 +6,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from backend.api.endpoints.movie_extras.service import update_movie_extra_source_metadata
+from backend.services.movies import update_movie_extra_source_metadata
 from backend.db.models import Movie, MovieExtra
 from backend.db.models.media_download import MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
@@ -22,7 +22,7 @@ from backend.services.media_download_history import (
 from backend.utils.artifact_identity import inspect_artifact
 from backend.utils.output_template import resolve_movie_output_path
 from config import get_settings
-from dailywire_api.dw_api.movie import MovieMiddlewareClient
+from backend.source_manager.dailywire_legacy import MovieMiddlewareClient
 from dailywire_api.records import DwMovieExtraRecord
 from dailywire_authorisation import DeviceAuthClient
 from dailywire_downloader import DownloadCancelled, DownloadError, MediaUnavailableError

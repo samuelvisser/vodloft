@@ -48,6 +48,8 @@ class MediaItem(Base):
     duration: Mapped[float | None] = mapped_column(nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     capabilities: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    is_live: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    formats: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     artwork_url: Mapped[str | None] = mapped_column(String, nullable=True)
     user_title: Mapped[str | None] = mapped_column(String, nullable=True)
     user_description: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -127,6 +129,8 @@ class CollectionDownloadProfile(Base):
     title_contains: Mapped[str | None] = mapped_column(String(200), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     refresh_minutes: Mapped[int] = mapped_column(Integer, default=60)
+    retain_newest: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    retain_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_scan_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
@@ -154,7 +158,22 @@ class CollectionStreamProfile(Base):
     published_before: Mapped[date | None] = mapped_column(Date, nullable=True)
     title_contains: Mapped[str | None] = mapped_column(String(200), nullable=True)
     local_only: Mapped[bool] = mapped_column(Boolean, default=True)
+    include_live: Mapped[bool] = mapped_column(Boolean, default=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class LiveAdmission(Base):
+    """An admitted live item survives its upstream live-to-archive transition."""
+    __tablename__ = "vodloft_live_admissions"
+    __table_args__ = (UniqueConstraint("stream_profile_id", "item_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    stream_profile_id: Mapped[int] = mapped_column(ForeignKey(
+        "vodloft_collection_stream_profiles.id", ondelete="CASCADE"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_items.id", ondelete="CASCADE"))
+    source_reference_id: Mapped[int] = mapped_column(ForeignKey("vodloft_source_references.id"))
+    state: Mapped[str] = mapped_column(String(24), default="upstream")
+    admitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
 
 
 class Artifact(Base):
@@ -162,6 +181,8 @@ class Artifact(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     item_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_items.id", ondelete="CASCADE"))
     profile_id: Mapped[int | None] = mapped_column(ForeignKey("local_media_profiles.id"), nullable=True)
+    source_reference_id: Mapped[int | None] = mapped_column(ForeignKey("vodloft_source_references.id"), nullable=True)
+    representation_key: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     path: Mapped[str] = mapped_column(String, unique=True)
     size: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
@@ -206,6 +227,27 @@ class ArtifactPlacement(Base):
     path: Mapped[str] = mapped_column(String, unique=True)
 
 
+class MediaDemand(Base):
+    """A durable reason to keep a particular item/profile representation."""
+    __tablename__ = "vodloft_media_demands"
+    __table_args__ = (UniqueConstraint("item_id", "profile_id", "owner_kind", "owner_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_items.id", ondelete="CASCADE"))
+    profile_id: Mapped[int] = mapped_column(ForeignKey("local_media_profiles.id"))
+    owner_kind: Mapped[str] = mapped_column(String(24))
+    owner_id: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class MediaSuppression(Base):
+    __tablename__ = "vodloft_media_suppressions"
+    __table_args__ = (UniqueConstraint("item_id", "profile_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_items.id", ondelete="CASCADE"))
+    profile_id: Mapped[int] = mapped_column(ForeignKey("local_media_profiles.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
 class MediaServerTarget(Base):
     __tablename__ = "vodloft_media_server_targets"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -226,6 +268,11 @@ class MediaServerExport(Base):
     placement_id: Mapped[int] = mapped_column(ForeignKey("vodloft_artifact_placements.id", ondelete="CASCADE"))
     target_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_server_targets.id"))
     remote_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    remote_episode_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    remote_server_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    presentation_strategy: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    season_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    episode_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     state: Mapped[str] = mapped_column(String(24), default="pending")
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -260,3 +307,26 @@ class PlaybackProgress(Base):
     seconds: Mapped[float] = mapped_column(default=0.0)
     completed: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+
+class PlaybackSession(Base):
+    """One web session remains bound to one local or upstream representation."""
+    __tablename__ = "vodloft_playback_sessions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_items.id", ondelete="CASCADE"))
+    source_id: Mapped[str] = mapped_column(String(64))
+    reference_id: Mapped[int | None] = mapped_column(ForeignKey("vodloft_source_references.id"), nullable=True)
+    transport: Mapped[str] = mapped_column(String(16))
+    lease_ciphertext: Mapped[str] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class PlaybackSegment(Base):
+    __tablename__ = "vodloft_playback_segments"
+    __table_args__ = (UniqueConstraint("session_id", "public_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("vodloft_playback_sessions.id", ondelete="CASCADE"))
+    public_id: Mapped[str] = mapped_column(String(40))
+    url_ciphertext: Mapped[str] = mapped_column(String)

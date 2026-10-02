@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from backend.db.models import Show
-from dailywire_api.dw_api.client import MiddlewareClient, ByShowSeason
+from backend.source_manager.dailywire_legacy import MiddlewareClient, ByShowSeason
 from dailywire_api.types.user_info import DwMembershipLevel
 from controller.m3u8 import get_vod_info
 from controller.m3u8.get_vod_info import _fmt_hhmmss

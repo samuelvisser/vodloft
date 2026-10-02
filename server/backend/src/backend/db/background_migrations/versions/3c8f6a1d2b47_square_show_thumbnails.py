@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 
 from backend.db.core import get_session
 from backend.db.models import Show
-from dailywire_api.dw_api.client import MiddlewareClient
+from backend.source_manager.dailywire_legacy import MiddlewareClient
 from dailywire_authorisation import DeviceAuthClient
 
 

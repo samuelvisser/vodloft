@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from dailywire_api.dw_api.client import MiddlewareClient
+from backend.source_manager.dailywire_legacy import MiddlewareClient
 from dailywire_api.records import DwShowRecord
 from dailywire_authorisation import DeviceAuthClient
 

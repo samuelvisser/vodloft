@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from backend.db import get_session
 from backend.db.models.local_media_profile import DomainLocalMediaProfile
-from backend.db.models.vodloft import CollectionDownloadProfile, CollectionEntry, CollectionScan, MediaItem
+from backend.db.models.vodloft import CollectionDownloadProfile, CollectionEntry, CollectionScan, MediaDemand, MediaItem
 from backend.api.endpoints.vodloft.router import queue_download, _run_download, refresh_collection, _reference_for
 
 logger = logging.getLogger(__name__)
@@ -27,6 +27,8 @@ class DownloadPolicyInput(BaseModel):
     published_before: date | None = None
     title_contains: str | None = Field(default=None, max_length=200)
     refresh_minutes: int = Field(default=60, ge=15, le=10080)
+    retain_newest: int | None = Field(default=None, ge=1, le=10000)
+    retain_days: int | None = Field(default=None, ge=1, le=36500)
     enabled: bool = True
 
     @model_validator(mode="after")
@@ -45,6 +47,7 @@ def _serialize(policy: CollectionDownloadProfile) -> dict:
             "newest_count": policy.newest_count, "published_after": policy.published_after,
             "published_before": policy.published_before, "title_contains": policy.title_contains,
             "refresh_minutes": policy.refresh_minutes,
+            "retain_newest": policy.retain_newest, "retain_days": policy.retain_days,
             "enabled": policy.enabled, "last_scan_at": policy.last_scan_at}
 
 
@@ -101,6 +104,8 @@ def delete_profile(profile_id: int):
         profile = session.get(CollectionDownloadProfile, profile_id)
         if not profile:
             raise HTTPException(404, "Download Profile not found")
+        session.query(MediaDemand).filter(MediaDemand.owner_kind == "policy",
+            MediaDemand.owner_id == profile_id).delete(synchronize_session=False)
         session.delete(profile)
         session.commit()
 
@@ -122,6 +127,12 @@ def schedule_profile(profile_id: int, *, dispatch: bool = True) -> dict:
                 return timestamp, -entry.position
 
             entries = sorted(entries, key=newest_key, reverse=True)[:policy.newest_count]
+        if policy.retain_newest is not None:
+            def retention_key(entry):
+                published = session.get(MediaItem, entry.item_id).published_at
+                return (published.replace(tzinfo=published.tzinfo or timezone.utc).timestamp()
+                    if published else float("-inf")), -entry.position
+            entries = sorted(entries, key=retention_key, reverse=True)[:policy.retain_newest]
         local_profiles = [session.get(DomainLocalMediaProfile, pid) for pid in policy.local_profile_ids]
         compatible: list[tuple[int, int]] = []
         skipped: list[dict] = []
@@ -145,21 +156,39 @@ def schedule_profile(profile_id: int, *, dispatch: bool = True) -> dict:
                     policy.published_before and published > policy.published_before):
                     skipped.append({"item_id": item.id, "reason": "Outside the publication date range"})
                     continue
+            if (policy.retain_days is not None and item.published_at and
+                item.published_at.replace(tzinfo=item.published_at.tzinfo or timezone.utc) <
+                    datetime.now(timezone.utc) - timedelta(days=policy.retain_days)):
+                skipped.append({"item_id": item.id, "reason": "Outside the retention window"})
+                continue
             candidates = [p for p in local_profiles if p and p.enabled and
                           p.domain_id == item.domain_id and item.kind in p.applicable_kinds]
+            supported = [p for p in candidates if not item.formats or
+                p.preferred_format in {fmt.get("code") for fmt in item.formats}]
             if not candidates:
                 skipped.append({"item_id": item.id, "reason": "No applicable Local Media Profile for the item's Domain"})
+            elif not supported:
+                skipped.append({"item_id": item.id, "reason": "Requested format is unavailable for this item"})
             elif policy.backfill != "metadata_only":
-                compatible.extend((item.id, p.id) for p in candidates)
+                compatible.extend((item.id, p.id) for p in supported)
         collection_id = policy.collection_id
         collection_reference_id = policy.source_reference_id
+        if policy.backfill != "metadata_only" and (policy.retain_newest or policy.retain_days):
+            keep = set(compatible)
+            for demand in session.scalars(select(MediaDemand).where(
+                MediaDemand.owner_kind == "policy", MediaDemand.owner_id == policy.id)).all():
+                if (demand.item_id, demand.profile_id) not in keep:
+                    session.delete(demand)
+            session.commit()
     queued: list[int] = []
     for item_id, local_id in compatible:
         try:
             job_id, state, created = queue_download(item_id, local_id, collection_id=collection_id,
-                collection_reference_id=collection_reference_id)
+                collection_reference_id=collection_reference_id, policy_id=profile_id)
             if created and job_id is not None:
                 queued.append(job_id)
+            elif state == "suppressed":
+                skipped.append({"item_id": item_id, "reason": "Intentionally removed from this profile"})
         except Exception:
             logger.exception("Could not queue Collection %s item %s", collection_id, item_id)
             skipped.append({"item_id": item_id, "reason": "Could not queue acquisition"})

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dailywire_api.dw_api.client import MiddlewareClient
+from backend.source_manager.dailywire_legacy import MiddlewareClient
 from dailywire_api.records import DwUserInfo
 
 

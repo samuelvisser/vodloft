@@ -2,6 +2,9 @@
 
 import logging
 import errno
+import hashlib
+import json
+import filecmp
 import mimetypes
 import os
 import re
@@ -21,7 +24,7 @@ from sqlalchemy.exc import IntegrityError
 
 from backend.db import get_session
 from backend.db.models.vodloft import (
-    AcquisitionJob, Artifact, ArtifactPlacement, CollectionDownloadProfile, CollectionEntry, CollectionScan, CollectionStreamProfile, Domain, FeedSubscription, FileFinalization, LegacyMediaLink, MediaItem, MediaServerExport, MovieExtraParent, PlaybackProgress, PublishedEntry, SourceConnection, SourceDomain, SourceReference, SourceSnapshot,
+    AcquisitionJob, Artifact, ArtifactPlacement, CollectionDownloadProfile, CollectionEntry, CollectionScan, CollectionStreamProfile, LiveAdmission, Domain, FeedSubscription, FileFinalization, LegacyMediaLink, MediaDemand, MediaSuppression, MediaItem, MediaServerExport, MovieExtraParent, PlaybackProgress, PublishedEntry, SourceConnection, SourceDomain, SourceReference, SourceSnapshot,
 )
 from backend.db.models.local_media_profile import DomainLocalMediaProfile
 from backend.api.endpoints.vodloft.profiles import output_path_from_spec
@@ -31,7 +34,7 @@ from backend.services import vodloft_finalization
 from backend.source_manager import runtime as source_runtime
 from backend.api.endpoints.vodloft.connections import source_options
 from config import get_settings
-from source_contracts import MediaSnapshot, SourceMediaReference
+from source_contracts import MediaSnapshot, NormalizedSnapshot, SourceMediaReference
 from task_manager.scheduler.db import TaskOperation
 
 logger = logging.getLogger(__name__)
@@ -111,7 +114,7 @@ class ResolveRequest(BaseModel):
 
 
 class ImportRequest(BaseModel):
-    snapshot: MediaSnapshot
+    snapshot: NormalizedSnapshot
     connection_id: int | None = None
 
 
@@ -143,7 +146,8 @@ def _domain(session, hostname: str) -> Domain:
 def _upsert(session, reference: SourceMediaReference, kind: str, title: str,
             description=_MISSING, duration=_MISSING,
             artwork_url=_MISSING, connection_id: int | None = None,
-            published_at=_MISSING, capabilities=_MISSING) -> MediaItem:
+            published_at=_MISSING, capabilities=_MISSING,
+            is_live=_MISSING, formats=_MISSING) -> MediaItem:
     domain = _domain(session, reference.domain)
     supported = session.scalar(select(SourceDomain).where(
         SourceDomain.source_id == reference.source_id, SourceDomain.domain_id == domain.id))
@@ -170,6 +174,10 @@ def _upsert(session, reference: SourceMediaReference, kind: str, title: str,
             item.published_at = published_at
         if capabilities is not _MISSING:
             item.capabilities = sorted(capabilities) if capabilities is not None else None
+        if is_live is not _MISSING:
+            item.is_live = is_live
+        if formats is not _MISSING:
+            item.formats = [format.model_dump(mode="json") for format in formats]
         source.url = reference.url
     else:
         related = session.scalar(select(SourceReference).where(
@@ -190,7 +198,9 @@ def _upsert(session, reference: SourceMediaReference, kind: str, title: str,
                              duration=None if duration is _MISSING else duration,
                              artwork_url=None if artwork_url is _MISSING else artwork_url,
                              published_at=None if published_at is _MISSING else published_at,
-                             capabilities=sorted(capabilities) if capabilities is not _MISSING and capabilities is not None else None)
+                             capabilities=sorted(capabilities) if capabilities is not _MISSING and capabilities is not None else None,
+                             is_live=None if is_live is _MISSING else is_live,
+                             formats=[format.model_dump(mode="json") for format in formats] if formats is not _MISSING else None)
             session.add(item)
             session.flush()
         session.add(SourceReference(item_id=item.id, domain_id=domain.id,
@@ -227,12 +237,15 @@ def _reference_for(session, item_id: int, *, reference_id: int | None = None,
 
 def _serialize(session, item: MediaItem) -> dict:
     domain = session.get(Domain, item.domain_id)
-    artifact = session.scalar(select(Artifact).where(Artifact.item_id == item.id).order_by(Artifact.id.desc()))
+    artifact = next((candidate for candidate in session.scalars(select(Artifact).where(
+        Artifact.item_id == item.id).order_by(Artifact.id.desc())).all()
+        if Path(candidate.path).is_file()), None)
     return {"id": item.id, "kind": item.kind, "title": item.user_title or item.title,
             "domain": domain.hostname, "description": item.user_description or item.description,
             "artwork_url": item.artwork_url, "duration": item.duration,
             "published_at": item.published_at, "capabilities": item.capabilities,
-            "downloaded": bool(artifact and Path(artifact.path).is_file()),
+            "is_live": item.is_live, "formats": item.formats or [],
+            "downloaded": bool(artifact),
             "playback_type": "audio" if artifact and Path(artifact.path).suffix.lower() in {
                 ".mp3", ".m4a", ".opus", ".ogg", ".wav"} else "video"}
 
@@ -428,7 +441,9 @@ def _import_snapshot(snapshot: MediaSnapshot, connection_id: int | None = None,
                        snapshot.artwork_url if "artwork_url" in snapshot.model_fields_set else _MISSING,
                        connection_id,
                        published_at=snapshot.published_at if "published_at" in snapshot.model_fields_set else _MISSING,
-                       capabilities=snapshot.capabilities if "capabilities" in snapshot.model_fields_set else _MISSING)
+                       capabilities=snapshot.capabilities if "capabilities" in snapshot.model_fields_set else _MISSING,
+                       is_live=snapshot.is_live if "is_live" in snapshot.model_fields_set else _MISSING,
+                       formats=snapshot.formats if "formats" in snapshot.model_fields_set else _MISSING)
         session.flush()
         metadata_snapshot = snapshot.model_dump(mode="json", exclude={"reference", "entries", "extras"},
                                                 exclude_unset=True)
@@ -449,7 +464,8 @@ def _import_snapshot(snapshot: MediaSnapshot, connection_id: int | None = None,
                 child = _upsert(session, entry.reference, entry.kind, entry.title,
                                 connection_id=connection_id,
                                 published_at=entry.published_at if "published_at" in entry.model_fields_set else _MISSING,
-                                capabilities=entry.capabilities if "capabilities" in entry.model_fields_set else _MISSING)
+                                capabilities=entry.capabilities if "capabilities" in entry.model_fields_set else _MISSING,
+                                is_live=entry.is_live if "is_live" in entry.model_fields_set else _MISSING)
                 session.flush()
                 if child.id == item.id:
                     continue
@@ -488,8 +504,12 @@ def _import_snapshot(snapshot: MediaSnapshot, connection_id: int | None = None,
                     session.add(MovieExtraParent(movie_id=item.id, extra_id=child.id,
                         extra_type=child.extra_type))
         result = _serialize(session, item)
+        imported_item_id = item.id
         session.commit()
-        return result
+    if snapshot.kind == "collection":
+        from backend.api.endpoints.vodloft.feeds import reconcile_live_admissions
+        reconcile_live_admissions(imported_item_id)
+    return result
 
 
 @router.post("/library/{collection_id}/refresh")
@@ -767,7 +787,12 @@ def delete_collection(item_id: int):
         for subscription_id in subscription_ids:
             session.execute(delete(PublishedEntry).where(PublishedEntry.subscription_id == subscription_id))
         session.execute(delete(FeedSubscription).where(FeedSubscription.collection_id == item_id))
+        session.execute(delete(LiveAdmission).where(LiveAdmission.stream_profile_id.in_(
+            select(CollectionStreamProfile.id).where(CollectionStreamProfile.collection_id == item_id))))
         session.execute(delete(CollectionStreamProfile).where(CollectionStreamProfile.collection_id == item_id))
+        session.execute(delete(MediaDemand).where(MediaDemand.owner_kind == "policy",
+            MediaDemand.owner_id.in_(select(CollectionDownloadProfile.id).where(
+                CollectionDownloadProfile.collection_id == item_id))))
         session.execute(delete(CollectionDownloadProfile).where(CollectionDownloadProfile.collection_id == item_id))
         session.execute(delete(CollectionScan).where(CollectionScan.collection_id == item_id))
         session.execute(delete(CollectionEntry).where(or_(
@@ -867,7 +892,8 @@ def _execute_leased_download(job_id: int) -> None:
             clear_canceled_job(job_id)
             return
         reference = session.get(SourceReference, job.reference_id)
-        item_id, source_id, url = job.item_id, reference.source_id, reference.url
+        item_id, source_id, url, reference_id = (
+            job.item_id, reference.source_id, reference.url, reference.id)
         connection_id = reference.connection_id
         profile_id = job.profile_id
         spec = dict(job.execution_spec or {})
@@ -906,6 +932,8 @@ def _execute_leased_download(job_id: int) -> None:
             with get_session() as session:
                 placement_id = None
                 artifact = Artifact(item_id=item_id, profile_id=profile_id,
+                                    source_reference_id=reference_id,
+                                    representation_key=spec.get("representation_key"),
                                     path=str(destination), size=result.size)
                 session.add(artifact)
                 session.flush()
@@ -1038,7 +1066,7 @@ def retry_due_acquisition_jobs() -> None:
 
 def queue_download(item_id: int, profile_id: int | None, *, collection_id: int | None = None,
                    reference_id: int | None = None, collection_reference_id: int | None = None,
-                   force: bool = False) -> tuple[int | None, str, bool]:
+                   policy_id: int | None = None, force: bool = False) -> tuple[int | None, str, bool]:
     """Freeze a Domain profile for one playable item; null means already satisfied."""
     with get_session() as session:
         item = session.get(MediaItem, item_id)
@@ -1048,11 +1076,21 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
             raise HTTPException(503, "Download storage is unavailable")
         if item.capabilities is not None and "download" not in item.capabilities:
             raise HTTPException(409, "The Source does not advertise download for this media item")
-        if not force:
-            existing_artifact = session.scalar(select(Artifact).where(
-                Artifact.item_id == item_id, Artifact.profile_id == profile_id).order_by(Artifact.id.desc()))
-            if existing_artifact and Path(existing_artifact.path).is_file():
-                return None, "available", False
+        if profile_id is not None:
+            suppressed = session.scalar(select(MediaSuppression).where(
+                MediaSuppression.item_id == item_id, MediaSuppression.profile_id == profile_id))
+            if suppressed and not force:
+                return None, "suppressed", False
+            if suppressed:
+                session.delete(suppressed)
+                session.flush()
+            owner_kind, owner_id = ("policy", policy_id) if policy_id else ("direct", item_id)
+            if not session.scalar(select(MediaDemand.id).where(MediaDemand.item_id == item_id,
+                MediaDemand.profile_id == profile_id, MediaDemand.owner_kind == owner_kind,
+                MediaDemand.owner_id == owner_id)):
+                session.add(MediaDemand(item_id=item_id, profile_id=profile_id,
+                    owner_kind=owner_kind, owner_id=owner_id))
+                session.flush()
         existing = session.scalar(select(AcquisitionJob).where(
             AcquisitionJob.active_key == f"{item_id}:{profile_id}"))
         if existing:
@@ -1063,6 +1101,7 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
                     collection_reference_id=collection_reference_id)
                 if not selected or existing.reference_id != selected.id:
                     raise HTTPException(409, "This profile has an active download through another Source account")
+            session.commit()
             return existing.id, existing.state, False
         reference = _reference_for(session, item_id, reference_id=reference_id,
                                    collection_id=collection_id,
@@ -1077,7 +1116,60 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
         profile = next((p for p in session.scalars(query).all() if item.kind in p.applicable_kinds), None)
         if not profile:
             raise HTTPException(409, "Create and select a Local Media Profile for this Domain and media type")
+        if item.formats and profile.preferred_format not in {fmt.get("code") for fmt in item.formats}:
+            raise HTTPException(409, "The Source does not offer this item's requested format")
+        representation_key = hashlib.sha256(json.dumps({
+            "source_id": reference.source_id, "namespace": reference.namespace,
+            "upstream_id": reference.upstream_id, "connection_key": reference.connection_key,
+            "format": profile.preferred_format, "media_type": item.kind,
+        }, sort_keys=True).encode()).hexdigest()
         domain = session.get(Domain, item.domain_id)
+        values = {"domain": domain.hostname, "title": item.user_title or item.title,
+                  "id": item.id, "upstream_id": reference.upstream_id,
+                  "media_type": item.kind,
+                  "collection": (session.get(MediaItem, collection_id).user_title or
+                      session.get(MediaItem, collection_id).title) if collection_id else ""}
+        if not force:
+            compatible = next((artifact for artifact in session.scalars(select(Artifact).where(
+                Artifact.item_id == item_id, Artifact.representation_key == representation_key)
+                .order_by(Artifact.id.desc())).all() if Path(artifact.path).is_file()), None)
+            if compatible:
+                placement = session.scalar(select(ArtifactPlacement).where(
+                    ArtifactPlacement.artifact_id == compatible.id,
+                    ArtifactPlacement.profile_id == profile.id))
+                if placement and Path(placement.path).is_file():
+                    session.commit()
+                    return None, "available", False
+                output = output_path_from_spec(profile.output_template, values,
+                    Path(compatible.path).suffix.lstrip("."))
+                occupied = session.scalar(select(ArtifactPlacement).where(
+                    ArtifactPlacement.path == str(output)))
+                if occupied:
+                    raise HTTPException(409, "The output path belongs to another representation")
+                output.parent.mkdir(parents=True, exist_ok=True)
+                if output.exists():
+                    if not output.is_file() or not filecmp.cmp(compatible.path, output, shallow=False):
+                        raise HTTPException(409, "The output path contains an unmanaged file")
+                else:
+                    with tempfile.NamedTemporaryFile(dir=output.parent, prefix=".vodloft-",
+                                                     delete=False) as temporary:
+                        with Path(compatible.path).open("rb") as input_file:
+                            shutil.copyfileobj(input_file, temporary)
+                        temporary_path = Path(temporary.name)
+                    try:
+                        os.link(temporary_path, output)
+                    finally:
+                        temporary_path.unlink(missing_ok=True)
+                placement = ArtifactPlacement(artifact_id=compatible.id,
+                    profile_id=profile.id, path=str(output))
+                session.add(placement)
+                session.commit()
+                try:
+                    from backend.api.endpoints.vodloft.integrations import dispatch_exports
+                    dispatch_exports(profile.id, placement.id)
+                except Exception:
+                    logger.exception("Media-server delivery for reused artifact %s failed", compatible.id)
+                return None, "available", False
         gateway = SourceGateway()
         selected_command = gateway.commands.get(reference.source_id)
         try:
@@ -1085,15 +1177,13 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
         except ValueError:
             runtime_version = "configured"
         spec = {"preferred_format": profile.preferred_format,
+                "representation_key": representation_key,
                 "output_template": profile.output_template, "profile_id": profile.id,
                 "profile_revision": profile.updated_at.isoformat() if profile.updated_at else None,
                 "source_id": reference.source_id, "reference_id": reference.id,
                 "source_command": selected_command, "runtime_version": runtime_version,
                 "connection_id": reference.connection_id, "queued_at": datetime.now(timezone.utc).isoformat(),
-                "values": {"domain": domain.hostname, "title": item.user_title or item.title,
-                           "id": item.id, "upstream_id": reference.upstream_id,
-                           "media_type": item.kind,
-                           "collection": session.get(MediaItem, collection_id).user_title or session.get(MediaItem, collection_id).title if collection_id else ""}}
+                "values": values}
         job = AcquisitionJob(item_id=item_id, reference_id=reference.id,
             profile_id=profile.id, execution_spec=spec, state="queued",
             active_key=f"{item_id}:{profile.id}")
@@ -1128,6 +1218,46 @@ def download_item(item_id: int, background: BackgroundTasks, request: DownloadRe
         return {"id": job_id, "state": state}
     background.add_task(_run_download, job_id)
     return {"id": job_id, "state": state}
+
+
+@router.delete("/library/{item_id}/local/{profile_id}")
+def remove_local_representation(item_id: int, profile_id: int):
+    """Intentional removal suppresses every policy until the user resumes it."""
+    with get_session() as session:
+        if not session.get(MediaItem, item_id):
+            raise HTTPException(404, "Media item not found")
+        suppression = session.scalar(select(MediaSuppression).where(
+            MediaSuppression.item_id == item_id, MediaSuppression.profile_id == profile_id))
+        if not suppression:
+            session.add(MediaSuppression(item_id=item_id, profile_id=profile_id))
+        session.execute(delete(MediaDemand).where(MediaDemand.item_id == item_id,
+            MediaDemand.profile_id == profile_id))
+        active = session.scalars(select(AcquisitionJob).where(
+            AcquisitionJob.item_id == item_id, AcquisitionJob.profile_id == profile_id,
+            AcquisitionJob.active_key.is_not(None))).all()
+        for job in active:
+            job.cancel_requested = True
+            if job.state == "queued":
+                job.state, job.active_key = "canceled", None
+                _sync_operation(session, job)
+        session.commit()
+        ids = [job.id for job in active]
+    for job_id in ids:
+        cancel_running_job(job_id)
+    from backend.services.vodloft_retention import reconcile
+    return {"suppressed": True, "removed": reconcile(grace_hours=0)}
+
+
+@router.post("/library/{item_id}/local/{profile_id}/resume")
+def resume_local_representation(item_id: int, profile_id: int):
+    with get_session() as session:
+        suppression = session.scalar(select(MediaSuppression).where(
+            MediaSuppression.item_id == item_id, MediaSuppression.profile_id == profile_id))
+        if not suppression:
+            raise HTTPException(404, "Suppression not found")
+        session.delete(suppression)
+        session.commit()
+    return {"suppressed": False}
 
 
 @router.get("/jobs")
@@ -1214,7 +1344,7 @@ def play(item_id: int):
         return RedirectResponse(url=f"/api/vodloft/library/{item_id}/play/version/{path.name}")
 
 
-@router.get("/library/{item_id}/play/version/{filename}")
+@router.get("/library/{item_id}/play/version/{filename}", name="vodloft_play_version")
 def play_version(item_id: int, filename: str):
     # A redirect binds subsequent range requests to the same immutable file,
     # even when a newer download is published for this item.
