@@ -28,6 +28,8 @@ def verify(base: str, password: str, timeout: int):
         try:
             html = request('/').decode()
             if 'VodLoft' in html:
+                # nginx serves the shell before the ASGI lifespan is ready.
+                request('/api/auth/status', expected=401)
                 break
         except (OSError, AssertionError):
             if time.monotonic() >= deadline:
