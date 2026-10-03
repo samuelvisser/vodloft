@@ -40,7 +40,7 @@ from .config import PROJECT_ROOT
 def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="backend-api",
-        description="WireLoft backend API and DB utilities",
+        description="VodLoft backend API and DB utilities",
     )
     subparsers = parser.add_subparsers(dest="command", required=True, help="Command to execute")
 
@@ -329,7 +329,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         if args.command == "run":
             _configure_database_for_args(args)
 
-            print("Starting Wireloft backend...")
+            print("Starting VodLoft backend...")
             _validate_db_health()
             require_database_current()
             validate_background_migration_state()

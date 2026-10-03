@@ -1995,3 +1995,24 @@ def test_legacy_aliases_reuse_modern_media_without_changing_existing_account_sco
         else:
             assert artifact.source_reference_id == public_id
         assert artifact.path == '/unchanged/legacy.mp4'
+
+
+def test_public_library_envelope_preserves_an_intentionally_blank_description(library, monkeypatch):
+    client, sessions, router, gateway, _ = library
+    snapshot = MediaSnapshot(kind='video', reference=ref('example.com', 'blank-description'),
+        title='Source title', description='Source description',
+        chapters=[{'title': 'Opening', 'start': 0}], tracks=[{'kind': 'audio', 'language': 'en'}])
+    monkeypatch.setattr(gateway.SourceGateway, 'resolve', lambda *args, **kwargs: snapshot)
+    item_id = client.post('/api/vodloft/import', json={'snapshot': snapshot.model_dump()}).json()['id']
+    with sessions() as session:
+        item = session.get(MediaItem, item_id)
+        item.user_title, item.user_description = 'My title', ''
+        session.commit()
+    detail = client.get(f'/api/vodloft/library/{item_id}').json()
+    assert detail['title'] == 'My title' and detail['description'] == ''
+    assert detail['chapters'][0]['title'] == 'Opening' and detail['tracks'][0]['language'] == 'en'
+    assert detail['references'][0]['source_id'] == 'fixture'
+    assert 'url' not in detail['references'][0]
+    client.put(f'/api/vodloft/library/{item_id}/progress', json={'seconds': 12})
+    continued = client.get('/api/vodloft/home').json()['continue'][0]
+    assert continued['id'] == item_id and continued['seconds'] == 12

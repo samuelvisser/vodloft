@@ -1,4 +1,4 @@
-"""Generic Add URL, library, acquisition and local playback prototype."""
+"""Generic Add URL, normalized library, durable acquisition and local playback."""
 
 import logging
 import errno
@@ -13,6 +13,7 @@ import tempfile
 import threading
 import uuid
 from datetime import datetime, timezone, timedelta
+from dataclasses import replace
 from contextlib import nullcontext
 from pathlib import Path
 
@@ -23,6 +24,8 @@ from sqlalchemy import delete, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from backend.db import get_session
+from backend.api.models.vodloft import (ActivityResponse, ContinueResponse, HomeResponse, IssueResponse,
+    LibraryDetailResponse, LibraryItemResponse, LibraryItemSource, ReferenceResponse)
 from backend.db.models.vodloft import (
     AcquisitionJob, Artifact, ArtifactPlacement, CollectionDownloadProfile, CollectionEntry, CollectionScan, CollectionStreamProfile, LiveAdmission, Domain, FeedSubscription, FileFinalization, LegacyMediaLink, LibraryRequest, MediaDemand, MediaSuppression, MediaItem, MediaServerExport, MovieExtraParent, PlaybackProgress, PublishedEntry, SourceConnection, SourceDomain, SourceReference, SourceSnapshot,
 )
@@ -245,25 +248,15 @@ def _reference_for(session, item_id: int, *, reference_id: int | None = None,
     return eligible[0] if len(eligible) == 1 else None
 
 
-def _serialize(session, item: MediaItem) -> dict:
-    domain = session.get(Domain, item.domain_id)
+def _library_source(session, item: MediaItem) -> LibraryItemSource:
     artifact = next((candidate for candidate in session.scalars(select(Artifact).where(
         Artifact.item_id == item.id).order_by(Artifact.id.desc())).all()
         if Path(candidate.path).is_file()), None)
-    return {"id": item.id, "kind": item.kind, "title": item.user_title or item.title,
-            "domain": domain.hostname, "description": item.user_description or item.description,
-            "artwork_url": item.artwork_url, "artwork_available": bool(item.artwork_url or
-                (item.normalized_metadata or {}).get("artwork")), "duration": item.duration,
-            "published_at": item.published_at, "capabilities": item.capabilities,
-            "is_live": item.is_live, "formats": item.formats or [],
-            "chapters": (item.normalized_metadata or {}).get("chapters", []),
-            "tracks": (item.normalized_metadata or {}).get("tracks", []),
-            "author": (item.normalized_metadata or {}).get("author"),
-            "movie_year": (item.normalized_metadata or {}).get("movie_year"),
-            "parent_id": item.parent_id, "extra_type": item.extra_type,
-            "downloaded": bool(artifact),
-            "playback_type": "audio" if artifact and Path(artifact.path).suffix.lower() in {
-                ".mp3", ".m4a", ".opus", ".ogg", ".wav"} else "video"}
+    return LibraryItemSource(item=item, domain=session.get(Domain, item.domain_id), artifact=artifact)
+
+
+def _serialize(session, item: MediaItem) -> LibraryItemResponse:
+    return LibraryItemResponse.model_validate(_library_source(session, item))
 
 
 @router.get("/sources")
@@ -692,7 +685,7 @@ def library():
 
 
 @router.get("/home")
-def home(request: Request):
+def home(request: Request) -> HomeResponse:
     with get_session() as session:
         progress = session.scalars(select(PlaybackProgress).where(
             PlaybackProgress.user_key == principal(request).key, PlaybackProgress.completed.is_(False))
@@ -712,13 +705,13 @@ def home(request: Request):
             owned = set(session.scalars(select(LibraryRequest.job_id).where(LibraryRequest.user_key == actor.key)).all())
             active = [job for job in active if job.id in owned]
             failures = [job for job in failures if job.id in owned]
-        return {"continue": [{**_serialize(session, session.get(MediaItem, p.item_id)),
-            "seconds": p.seconds} for p in progress if session.get(MediaItem, p.item_id)],
-            "recent": [_serialize(session, item) for item in recent],
-            "activity": [{"id": job.id, "item_id": job.item_id, "state": job.state} for job in active],
-            "issues": [{"kind": "acquisition", "id": job.id, "item_id": job.item_id}
-                       for job in failures] +
-                      [{"kind": "delivery", "id": export.id} for export in exports]}
+        return HomeResponse(continue_=[ContinueResponse.model_validate(replace(
+            _library_source(session, session.get(MediaItem, p.item_id)), seconds=p.seconds))
+            for p in progress if session.get(MediaItem, p.item_id)],
+            recent=[_serialize(session, item) for item in recent],
+            activity=[ActivityResponse.model_validate(job) for job in active],
+            issues=[IssueResponse(kind='acquisition', id=job.id, item_id=job.item_id) for job in failures] +
+                   [IssueResponse(kind='delivery', id=export.id) for export in exports])
 
 
 @router.get("/library/{item_id}/progress")
@@ -750,27 +743,24 @@ def save_playback_progress(item_id: int, data: PlaybackInput, request: Request):
 
 
 @router.get("/library/{item_id}")
-def library_item(item_id: int, request: Request):
+def library_item(item_id: int, request: Request) -> LibraryDetailResponse:
     with get_session() as session:
         item = session.get(MediaItem, item_id)
         if not item:
             raise HTTPException(404, "Media item not found")
-        result = _serialize(session, item)
-        result["references"] = [{"id": reference.id, "source_id": reference.source_id,
-            "connection_id": reference.connection_id, "namespace": reference.namespace,
-            "upstream_id": reference.upstream_id} for reference in session.scalars(
-                select(SourceReference).where(SourceReference.item_id == item_id)).all()
-                if principal(request).can_use_connection(reference.connection_id)]
-        if item.kind == "collection":
-            entries = session.scalars(select(CollectionEntry).where(
-                CollectionEntry.collection_id == item_id).order_by(CollectionEntry.position)).all()
-            result["entries"] = [_serialize(session, session.get(MediaItem, e.item_id)) for e in entries]
-            result["member_groups"] = list(dict.fromkeys(e.group or "" for e in entries))
-            result["member_roles"] = list(dict.fromkeys(e.role or "" for e in entries))
-        if item.kind == "movie":
-            extras = session.scalars(select(MovieExtraParent).where(MovieExtraParent.movie_id == item_id)).all()
-            result["extras"] = [_serialize(session, session.get(MediaItem, e.extra_id)) for e in extras]
-        return result
+        references = [reference for reference in session.scalars(
+            select(SourceReference).where(SourceReference.item_id == item_id)).all()
+            if principal(request).can_use_connection(reference.connection_id)]
+        members = session.scalars(select(CollectionEntry).where(
+            CollectionEntry.collection_id == item_id).order_by(CollectionEntry.position)).all() if item.kind == 'collection' else []
+        extras = session.scalars(select(MovieExtraParent).where(
+            MovieExtraParent.movie_id == item_id)).all() if item.kind == 'movie' else []
+        view = replace(_library_source(session, item), references=references,
+            entries=[_serialize(session, session.get(MediaItem, member.item_id)) for member in members],
+            extras=[_serialize(session, session.get(MediaItem, extra.extra_id)) for extra in extras],
+            member_groups=list(dict.fromkeys(member.group or '' for member in members)),
+            member_roles=list(dict.fromkeys(member.role or '' for member in members)))
+        return LibraryDetailResponse.model_validate(view)
 
 
 @router.get("/library/{item_id}/artwork")
