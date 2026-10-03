@@ -2089,3 +2089,22 @@ def test_shared_movie_extra_edits_keep_parents_roles_and_explicit_choices(librar
     assert client.get(f"/api/vodloft/library/{movies[0][0]}").json()["extras"] == []
     assert client.put(f"/api/vodloft/library/{extra_id}/metadata", json={"parent_ids": []}).status_code == 422
     assert client.put(f"/api/vodloft/library/{extra_id}/metadata", json={"parent_ids": [extra_id]}).status_code == 422
+
+
+def test_source_activation_validates_saved_private_authentication(library, monkeypatch):
+    from backend import db
+    from backend.db.models.vodloft import SourceConnection
+    from backend.source_manager import runtime, secrets
+    _, sessions, _, _, _ = library
+    monkeypatch.setattr(db, "get_session", sessions)
+    reference = secrets.save(json.dumps({"configuration": {"access_token": "private-value"}}))
+    with sessions() as session:
+        session.add(SourceConnection(source_id="fixture", name="Authenticated",
+            settings={}, secret_references={}, authentication_reference=reference))
+        session.commit()
+    manifest = SourceManifest(source_id="fixture", display_name="Fixture", version="2", capabilities=set(),
+        configuration_schema=[{"name": "access_token", "label": "Token", "kind": "secret", "required": True}])
+    runtime._validate_saved_configuration(manifest)
+    incompatible = manifest.model_copy(update={"configuration_schema": []})
+    with pytest.raises(ValueError, match="review saved connections"):
+        runtime._validate_saved_configuration(incompatible)

@@ -197,8 +197,8 @@ def _validate_saved_configuration(manifest: SourceManifest) -> None:
         for connection in connections:
             values = dict(connection.settings or {})
             if connection.authentication_reference:
-                from .secrets import load
-                authentication = json.loads(load(connection.authentication_reference))
+                from .secrets import read
+                authentication = json.loads(read(connection.authentication_reference))
                 values.update(authentication.get("configuration", {}))
             saved = set(values) | set(connection.secret_references or {})
             if saved - set(fields):
