@@ -1,8 +1,7 @@
 name: VodLoft acceptance
+# Validation is manual while the 1.0 implementation is being completed.
 "on":
-  push:
-    branches: [main, codex/vodloft-wireloft-prototype]
-  pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
