@@ -42,6 +42,7 @@ type DownloadPolicy = MembershipPolicy & {id: number; name: string; local_profil
     retain_newest: number | null; retain_days: number | null;
     source_reference_id: number | null; enabled: boolean; refresh_minutes: number; published_after: string | null; published_before: string | null; title_contains: string | null}
 type StreamProfile = MembershipPolicy & {id: number; name: string; format: string; enabled: boolean; max_items: number; feed_title: string | null;
+    source_reference_id: number | null; local_profile_ids: number[]; refresh_minutes: number;
     include_live: boolean; local_only: boolean;
     published_after?: string | null; published_before?: string | null; title_contains?: string | null}
 type Target = {local_prefix: string; server_prefix: string; id: number; name: string; kind: string; base_url: string; library_id: string; enabled: boolean}
@@ -551,9 +552,10 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                     {me?.can_subscribe && <><button type="button" className="btn" onClick={() => void createStreamFeed(profile.id)}>Get feed</button>{' '}
                     <button type="button" className="btn" onClick={() => void api<{url: string}>(`/stream-profiles/${profile.id}/feed/rotate`, {method: 'POST'}).then(result => {setFeedUrl(result.url); setRunResult('Old feed URL revoked.')}).catch(e => setError(String(e)))}>Rotate URL</button>{' '}
                     <button type="button" className="btn" onClick={() => void api(`/stream-profiles/${profile.id}/feed`, {method: 'DELETE'}).then(() => {setFeedUrl(null); setRunResult('Feed revoked.')}).catch(e => setError(String(e)))}>Revoke my feed</button></>}{' '}
-                    {me?.role === 'admin' && <><StreamProfileForm initial={profile} collection={selected} collectionId={selected.id} onCreated={updated => setStreamProfiles(current => current.map(value => value.id === updated.id ? updated : value))}/>{' '}
+                    {me?.role === 'admin' && <>{!profile.local_only && <button type="button" className="btn" onClick={() => void api<{queued_job_ids: number[]; skipped: {reason: string}[]}>(`/stream-profiles/${profile.id}/prepare`, {method: 'POST'}).then(result => setRunResult(`Queued ${result.queued_job_ids.length} feed renditions. ${result.skipped.map(value => value.reason).join(' ')}`)).catch(e => setError(String(e)))}>Prepare now</button>}{' '}
+                    <StreamProfileForm initial={profile} profiles={profiles} sourceReferenceId={referenceId} collection={selected} collectionId={selected.id} onCreated={updated => setStreamProfiles(current => current.map(value => value.id === updated.id ? updated : value))}/>{' '}
                     <button type="button" className="btn" onClick={() => void api(`/stream-profiles/${profile.id}`, {method: 'DELETE'}).then(() => setStreamProfiles(current => current.filter(value => value.id !== profile.id))).catch(e => setError(String(e)))}>Delete profile</button></>}</div>)}
-                {me?.role === 'admin' && <StreamProfileForm collection={selected} collectionId={selected.id}
+                {me?.role === 'admin' && <StreamProfileForm profiles={profiles} sourceReferenceId={referenceId} collection={selected} collectionId={selected.id}
                     onCreated={profile => setStreamProfiles(previous => [...previous, profile])}/>}
                 {me?.role === 'admin' && <RSSDeliveryForm targets={targets} profiles={streamProfiles}/>}
                 {runResult && <p role="status">{runResult}</p>}
@@ -871,6 +873,7 @@ function DownloadPolicyForm({collection, collectionId, profiles, sourceReference
 }
 
 const StreamProfileSchema = z.object({enabled: z.boolean().default(true), name: z.string().min(1).default('Podcast feed'), format: z.enum(['audio', 'video']).default('audio'),
+    source_reference_id: z.string().default(''), local_profile_ids: z.array(z.number()).default([]), refresh_minutes: z.coerce.number().int().min(15).max(10080).default(60),
     selected_groups: z.array(z.string()).nullable().default(null), include_future_groups: z.boolean().default(true), member_roles: z.array(z.string()).nullable().default(null),
     max_items: z.coerce.number().int().min(0).max(10000).default(50), feed_title: z.string().max(200).default(''),
     include_live: z.boolean().default(false), local_only: z.boolean().default(true),
@@ -880,18 +883,22 @@ const StreamProfileSchema = z.object({enabled: z.boolean().default(true), name: 
         {path: ['published_before'], message: 'End date must follow start date'})
 type StreamFields = z.input<typeof StreamProfileSchema>
 
-function StreamProfileForm({collection, collectionId, initial, onCreated}: {collection: Item; collectionId: number; initial?: StreamProfile; onCreated: (profile: StreamProfile) => void}) {
+function StreamProfileForm({collection, collectionId, profiles, sourceReferenceId, initial, onCreated}: {collection: Item; collectionId: number; profiles: Profile[]; sourceReferenceId: number | null; initial?: StreamProfile; onCreated: (profile: StreamProfile) => void}) {
     const [expanded, setExpanded] = useState(false)
     const form = useForm<StreamFields, unknown, z.output<typeof StreamProfileSchema>>({
         resolver: zodResolver(StreamProfileSchema), defaultValues: {...StreamProfileSchema.partial({name: true}).parse({}), name: 'Podcast feed',
-            ...(initial ? {...initial, feed_title: initial.feed_title ?? '', format: initial.format as 'audio' | 'video', published_after: initial.published_after ?? '', published_before: initial.published_before ?? '', title_contains: initial.title_contains ?? ''} : {})},
+            ...(initial ? {...initial, feed_title: initial.feed_title ?? '', format: initial.format as 'audio' | 'video', published_after: initial.published_after ?? '', published_before: initial.published_before ?? '', title_contains: initial.title_contains ?? ''} : {}),
+            source_reference_id: String(initial?.source_reference_id ?? sourceReferenceId ?? '')},
     })
     const {register, formState: {errors, isSubmitting}} = form
+    const selectedIds = form.watch('local_profile_ids') ?? []
+    const rendition = form.watch('format')
     const submit = buildServerAwareSubmit(form, (values: z.output<typeof StreamProfileSchema>) => formRequest(
         initial ? `/stream-profiles/${initial.id}` : `/library/${collectionId}/stream-profiles`, initial ? 'PUT' : 'POST', {
             ...values, published_after: values.published_after || null, published_before: values.published_before || null,
             title_contains: values.title_contains || null,
             feed_title: values.feed_title || null,
+            source_reference_id: values.source_reference_id ? Number(values.source_reference_id) : null,
         }), {successStatuses: [200, 201], onSuccess: result => {onCreated(result as StreamProfile); setExpanded(false)}})
     if (!expanded) return <button className="btn" type="button" onClick={() => setExpanded(true)}>{initial ? 'Edit Stream Profile' : 'Create Stream Profile'}</button>
     return <form onSubmit={submit} style={{display: 'grid', gap: 10, maxWidth: 500, margin: '12px 0'}}>
@@ -907,8 +914,16 @@ function StreamProfileForm({collection, collectionId, initial, onCreated}: {coll
             {errors.published_before && <span role="alert">{errors.published_before.message}</span>}</label>
         <label>Title contains <input {...register('title_contains')} /></label>
         <label><input type="checkbox" {...register('include_live')} /> Include live items</label>
-        <label><input type="checkbox" {...register('local_only')} /> Require an enabled Download Profile before admitting live items</label>
-        <p>Podcast feed enclosures appear when a compatible local file is ready. Admitted live items can play upstream in the web player while an archive downloads.</p>
+        <label><input type="checkbox" {...register('local_only')} /> Use existing local files only</label>
+        <label>Source account <select {...register('source_reference_id')}><option value="">Automatic when unambiguous</option>
+            {(collection.references ?? []).map(reference => <option key={reference.id} value={reference.id}>{reference.source_id} · {reference.connection_id ? `account ${reference.connection_id}` : 'public'} · {reference.upstream_id}</option>)}</select></label>
+        <label>Refresh every (minutes) <input type="number" min="15" max="10080" {...register('refresh_minutes')}/></label>
+        {!form.watch('local_only') && <fieldset><legend>Prepare portable files using Local Media Profiles</legend>
+            {profiles.filter(profile => (profile.preferred_format === 'format_audio_only') === (rendition === 'audio')).map(profile => <label key={profile.id} style={{display: 'block'}}>
+                <input type="checkbox" checked={selectedIds.includes(profile.id)} onChange={event => form.setValue('local_profile_ids', event.target.checked ? [...selectedIds, profile.id] : selectedIds.filter(id => id !== profile.id), {shouldDirty: true})}/>
+                {' '}{profile.name} · {profile.domain}</label>)}
+            <p>Select MP3 or M4A audio profiles, or an MP4 video profile, for each member Domain.</p></fieldset>}
+        <p>Subscribed feeds refresh automatically. Enclosures appear when portable local files are ready and retain their published bytes. With local files only, live admission also requires an enabled Download Profile.</p>
         {errors.root && <p role="alert">{errors.root.message}</p>}
         <div><button type="submit" className="btn btn-primary" disabled={isSubmitting}>Save Stream Profile</button>{' '}
             <button type="button" className="btn" onClick={() => setExpanded(false)}>Cancel</button></div>

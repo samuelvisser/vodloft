@@ -912,6 +912,9 @@ def test_cancel_queued_job_releases_active_identity(library, monkeypatch):
     with sessions() as session:
         job = session.get(AcquisitionJob, job_id)
         assert job.state == "canceled" and job.active_key is None
+    assert router.queue_download(item_id, profile_id)[1] == 'suppressed'
+    assert client.post(f'/api/vodloft/library/{item_id}/local/{profile_id}/resume').status_code == 200
+    assert router.queue_download(item_id, profile_id)[2]
 
 
 def test_cancel_running_source_terminates_process(tmp_path):
@@ -1854,3 +1857,83 @@ def test_group_role_filters_future_groups_and_feed_limits_preserve_enclosures(li
     channel = ElementTree.fromstring(client.get(url).content).find('channel')
     assert channel.find('item/title').text == 'Episode 2' and channel.find('item/guid').text != guid
     assert client.get(enclosure).content == b'Episode 3'
+
+
+def test_feed_preparation_acquires_portable_files_and_preserves_shared_demand(library, monkeypatch):
+    from backend.api.endpoints.vodloft import feeds
+    from backend.db.models.vodloft import MediaDemand
+    client, sessions, router, gateway, _ = library
+    collection = MediaSnapshot(kind='collection', reference=ref('example.com', 'podcast'), title='Podcast',
+        entries=[EntrySnapshot(reference=ref('example.com', 'episode'), title='Episode', position=1)])
+    monkeypatch.setattr(gateway.SourceGateway, 'resolve', lambda *args, **kwargs: collection)
+    collection_id = client.post('/api/vodloft/import', json={'snapshot': collection.model_dump()}).json()['id']
+    profile_id = client.post('/api/vodloft/profiles', json={'name': 'Podcast audio', 'domain': 'example.com',
+        'preferred_format': 'format_audio_only', 'representation': {'container': 'mp3'}}).json()['id']
+    profile = client.post(f'/api/vodloft/library/{collection_id}/stream-profiles', json={
+        'name': 'Prepared feed', 'local_only': False, 'local_profile_ids': [profile_id]})
+    assert profile.status_code == 201, profile.text
+    stream_id = profile.json()['id']
+    assert profile.json()['source_reference_id'] is not None
+    feed_url = client.post(f'/api/vodloft/stream-profiles/{stream_id}/feed').json()['url']
+    assert ElementTree.fromstring(client.get(feed_url).content).find('channel/item') is None
+    prepared = feeds.prepare_stream_profile(stream_id, dispatch=False)
+    assert prepared['considered'] == 1 and len(prepared['queued_job_ids']) == 1
+    assert feeds.prepare_stream_profile(stream_id, dispatch=False)['queued_job_ids'] == []
+    def download(self, source_id, url, staging, **kwargs):
+        output = Path(staging) / 'portable.mp3'
+        output.write_bytes(b'portable feed audio')
+        return DownloadResult(filename=output.name, size=output.stat().st_size)
+    monkeypatch.setattr(gateway.SourceGateway, 'download', download)
+    router._run_download(prepared['queued_job_ids'][0])
+    enclosure = ElementTree.fromstring(client.get(feed_url).content).find('channel/item/enclosure').attrib['url']
+    assert client.get(enclosure).content == b'portable feed audio'
+    with sessions() as session:
+        artifact = session.scalar(select(Artifact)); item_id, path = artifact.item_id, artifact.path
+        assert session.scalar(select(MediaDemand)).owner_kind == 'stream'
+    assert router.queue_download(item_id, profile_id)[1] == 'available'
+    assert client.delete(f'/api/vodloft/stream-profiles/{stream_id}').status_code == 204
+    assert client.get(enclosure).status_code == 404
+    with sessions() as session:
+        assert {d.owner_kind for d in session.scalars(select(MediaDemand)).all()} == {'direct'}
+        assert session.scalar(select(Artifact)).path == path and Path(path).is_file()
+
+
+def test_feed_scheduler_reuses_failed_job_and_preserves_retry_budget(library, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from backend.api.endpoints.vodloft import feeds
+    client, sessions, router, gateway, _ = library
+    collection = MediaSnapshot(kind='collection', reference=ref('example.com', 'retry-feed'), title='Retry feed',
+        entries=[EntrySnapshot(reference=ref('example.com', 'retry-episode'), title='Episode', position=1)])
+    monkeypatch.setattr(gateway.SourceGateway, 'resolve', lambda *args, **kwargs: collection)
+    collection_id = client.post('/api/vodloft/import', json={'snapshot': collection.model_dump()}).json()['id']
+    local_id = client.post('/api/vodloft/profiles', json={'name': 'Retry audio', 'domain': 'example.com',
+        'preferred_format': 'format_audio_only'}).json()['id']
+    stream_id = client.post(f'/api/vodloft/library/{collection_id}/stream-profiles', json={
+        'name': 'Retry', 'local_only': False, 'local_profile_ids': [local_id]}).json()['id']
+    monkeypatch.setattr(get_settings().download_settings, 'max_download_attempts', 2)
+    def unavailable(*args, **kwargs):
+        raise RuntimeError('temporary provider outage')
+    monkeypatch.setattr(gateway.SourceGateway, 'download', unavailable)
+    job_id = feeds.prepare_stream_profile(stream_id, dispatch=False)['queued_job_ids'][0]
+    router._run_download(job_id)
+    assert feeds.prepare_stream_profile(stream_id, dispatch=False)['queued_job_ids'] == []
+    dispatched = []
+    monkeypatch.setattr(router.threading, 'Thread', lambda **kwargs: SimpleNamespace(
+        start=lambda: dispatched.append(kwargs['args'][0])))
+    router.retry_due_acquisition_jobs()
+    assert dispatched == []
+    with sessions() as session:
+        job = session.get(AcquisitionJob, job_id)
+        assert job.attempts == 1
+        job.updated_at = datetime.now(timezone.utc) - timedelta(days=1)
+        session.commit()
+    router.retry_due_acquisition_jobs()
+    assert dispatched == [job_id]
+    router._run_download(job_id)
+    assert feeds.prepare_stream_profile(stream_id, dispatch=False)['queued_job_ids'] == []
+    with sessions() as session:
+        jobs = session.scalars(select(AcquisitionJob)).all()
+        assert len(jobs) == 1 and jobs[0].attempts == 2 and jobs[0].state == 'failed'
+        jobs[0].updated_at = datetime.now(timezone.utc) - timedelta(days=1); session.commit()
+    router.retry_due_acquisition_jobs()
+    assert dispatched == [job_id]

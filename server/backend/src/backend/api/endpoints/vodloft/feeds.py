@@ -1,12 +1,13 @@
 """Revocable collection feeds with immutable enclosure copies."""
 
 import mimetypes
+import logging
 import os
 import secrets
 import shutil
 import tempfile
 import threading
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from email.utils import format_datetime
 from pathlib import Path
 from xml.etree.ElementTree import Element, SubElement, tostring
@@ -20,13 +21,14 @@ from sqlalchemy import delete, select
 from backend.db import get_session
 from backend.db.models.vodloft import (AcquisitionJob, Artifact, CollectionDownloadProfile,
     CollectionEntry, CollectionStreamProfile, FeedSubscription, LiveAdmission, MediaItem,
-    PublishedEntry, SourceReference, MediaServerTarget)
+    PublishedEntry, SourceReference, MediaServerTarget, ArtifactPlacement, MediaDemand)
 from backend.db.models.local_media_profile import DomainLocalMediaProfile
 from config import get_settings
 from backend.services.vodloft_collections import known_groups, matches_membership
 
 api_router = APIRouter(prefix="/vodloft", tags=["VodLoft feeds"])
 public_router = APIRouter(prefix="/feeds/vodloft", tags=["VodLoft feeds"])
+logger = logging.getLogger(__name__)
 _audio_extensions = frozenset({".mp3", ".m4a", ".aac"})
 _video_extensions = frozenset({".mp4", ".mkv", ".webm", ".mov"})
 
@@ -42,6 +44,9 @@ class StreamProfileInput(BaseModel):
     member_roles: list[str] | None = Field(default=None, max_length=100)
     max_items: int = Field(default=0, ge=0, le=10000)
     feed_title: str | None = Field(default=None, max_length=200)
+    source_reference_id: int | None = None
+    local_profile_ids: list[int] = Field(default_factory=list, max_length=100)
+    refresh_minutes: int = Field(default=60, ge=15, le=10080)
     local_only: bool = True
     include_live: bool = False
     enabled: bool = True
@@ -63,6 +68,23 @@ def _stream_profile(profile: CollectionStreamProfile) -> StreamProfileResponse:
     return StreamProfileResponse.model_validate(profile)
 
 
+def _validate_preparation(session, collection_id: int, data: StreamProfileInput):
+    from backend.api.endpoints.vodloft.router import _reference_for
+    reference = _reference_for(session, collection_id, reference_id=data.source_reference_id)
+    if not reference and (data.source_reference_id is not None or data.local_profile_ids and not data.local_only):
+        raise HTTPException(422, 'Select an available Source account reference for this Collection')
+    for profile_id in data.local_profile_ids:
+        local = session.get(DomainLocalMediaProfile, profile_id)
+        if not local or local.deleted or not local.enabled or local.impairment:
+            raise HTTPException(422, 'Select enabled Local Media Profiles for feed preparation')
+        if (local.preferred_format == 'format_audio_only') != (data.format == 'audio'):
+            raise HTTPException(422, 'The Local Media Profile must match the feed audio or video format')
+        container = (local.representation or {}).get('container', 'source')
+        if container not in ({'source', 'mp3', 'm4a'} if data.format == 'audio' else {'source', 'mp4'}):
+            raise HTTPException(422, 'Choose MP3 or M4A for portable audio feeds, or MP4 for video feeds')
+    return reference.id if reference else None
+
+
 @api_router.get("/library/{collection_id}/stream-profiles")
 def stream_profiles(collection_id: int):
     with get_session() as session:
@@ -77,8 +99,10 @@ def create_stream_profile(collection_id: int, data: StreamProfileInput):
     with get_session() as session:
         if not (item := session.get(MediaItem, collection_id)) or item.kind != "collection":
             raise HTTPException(404, "Collection not found")
+        reference_id = _validate_preparation(session, collection_id, data)
         profile = CollectionStreamProfile(collection_id=collection_id,
-            known_groups=known_groups(session, collection_id), **data.model_dump())
+            known_groups=known_groups(session, collection_id),
+            **(data.model_dump() | {'source_reference_id': reference_id}))
         session.add(profile)
         session.commit()
         result = _stream_profile(profile)
@@ -92,6 +116,7 @@ def update_stream_profile(profile_id: int, data: StreamProfileInput):
         profile = session.get(CollectionStreamProfile, profile_id)
         if not profile:
             raise HTTPException(404, "Stream Profile not found")
+        reference_id = _validate_preparation(session, profile.collection_id, data)
         # A published enclosure never changes format or bytes. Create a new
         # Stream Profile for a different representation after publication.
         published = session.scalar(select(FeedSubscription.id).where(
@@ -100,7 +125,7 @@ def update_stream_profile(profile_id: int, data: StreamProfileInput):
             raise HTTPException(409, "Revoke this feed before changing its representation")
         if profile.selected_groups != data.selected_groups:
             profile.known_groups = known_groups(session, profile.collection_id)
-        for key, value in data.model_dump().items():
+        for key, value in (data.model_dump() | {'source_reference_id': reference_id}).items():
             setattr(profile, key, value)
         collection_id = profile.collection_id
         session.commit()
@@ -122,6 +147,7 @@ def delete_stream_profile(profile_id: int):
             session.delete(subscription)
         session.flush()
         session.execute(delete(LiveAdmission).where(LiveAdmission.stream_profile_id == profile_id))
+        session.execute(delete(MediaDemand).where(MediaDemand.owner_kind == 'stream', MediaDemand.owner_id == profile_id))
         session.delete(profile)
         session.commit()
     for subscription_id in subscription_ids:
@@ -222,10 +248,16 @@ def _publish(session, subscription: FeedSubscription, item_id: int) -> Published
     if existing:
         return existing if Path(existing.path).is_file() else None
     profile = session.get(CollectionStreamProfile, subscription.stream_profile_id) if subscription.stream_profile_id else None
-    extensions = (_audio_extensions if profile.format == "audio" else _video_extensions) if profile else None
+    # Publish portable completed files only. Other formats remain playable
+    # in the library, without becoming incompatible podcast enclosures.
+    extensions = ({'.mp3', '.m4a'} if profile.format == 'audio' else {'.mp4'}) if profile else {'.mp3', '.m4a', '.mp4'}
+    selected_profiles = set(profile.local_profile_ids) if profile else set()
+    placements = set(session.scalars(select(ArtifactPlacement.artifact_id).where(
+        ArtifactPlacement.profile_id.in_(selected_profiles))).all()) if selected_profiles else set()
     artifact = next((a for a in session.scalars(select(Artifact).where(
         Artifact.item_id == item_id).order_by(Artifact.id.desc())).all()
-        if extensions is None or Path(a.path).suffix.lower() in extensions), None)
+        if Path(a.path).is_file() and Path(a.path).suffix.lower() in extensions and
+        (not selected_profiles or a.profile_id in selected_profiles or a.id in placements)), None)
     if not artifact or not Path(artifact.path).is_file():
         return None
     source = Path(artifact.path).resolve()
@@ -326,7 +358,8 @@ def reconcile_live_admissions(collection_id: int) -> None:
                     if profile.local_only and not candidate:
                         continue
                     reference = (session.get(SourceReference, candidate[2]) if candidate else
-                                 _reference_for(session, item.id))
+                                 _reference_for(session, item.id, collection_id=collection_id,
+                                     collection_reference_id=profile.source_reference_id))
                     if not reference:
                         continue
                     admission = LiveAdmission(stream_profile_id=profile.id,
@@ -369,6 +402,119 @@ def live_admissions(profile_id: int):
             "source_reference_id": admission.source_reference_id,
             "admitted_at": admission.admitted_at} for admission in session.scalars(
                 select(LiveAdmission).where(LiveAdmission.stream_profile_id == profile_id)).all()]
+
+
+class FeedPreparationSkip(BaseModel):
+    item_id: int
+    reason: str
+
+
+class FeedPreparationResponse(BaseModel):
+    queued_job_ids: list[int]
+    skipped: list[FeedPreparationSkip]
+    considered: int
+
+
+def prepare_stream_profile(profile_id: int, *, dispatch: bool = True) -> dict:
+    """Prepare portable files through the ordinary durable acquisition lifecycle."""
+    from backend.api.endpoints.vodloft.router import queue_download, _run_download, _reference_for
+    jobs, skipped, desired = [], [], set()
+    with get_session() as session:
+        profile = session.get(CollectionStreamProfile, profile_id)
+        if not profile or not profile.enabled:
+            raise HTTPException(404, 'Enabled Stream Profile not found')
+        if profile.local_only:
+            return {'queued_job_ids': [], 'skipped': [], 'considered': 0}
+        entries = session.scalars(select(CollectionEntry).where(
+            CollectionEntry.collection_id == profile.collection_id)).all()
+        collection_reference_id = profile.source_reference_id
+        def newest(entry):
+            published = session.get(MediaItem, entry.item_id).published_at
+            return (published.replace(tzinfo=published.tzinfo or timezone.utc).timestamp()
+                if published else float('-inf')), -entry.position
+        entries.sort(key=newest, reverse=True)
+        candidates = [session.get(DomainLocalMediaProfile, local_id) for local_id in profile.local_profile_ids]
+        selected, seen = [], set()
+        for entry in entries:
+            item = session.get(MediaItem, entry.item_id)
+            if item.kind == 'collection' or item.is_live or not matches_membership(entry, profile) or item.id in seen:
+                continue
+            if profile.title_contains and profile.title_contains.casefold() not in (item.user_title or item.title).casefold():
+                continue
+            if profile.published_after or profile.published_before:
+                if not item.published_at or (profile.published_after and item.published_at.date() < profile.published_after or
+                        profile.published_before and item.published_at.date() > profile.published_before):
+                    continue
+            if profile.max_items and len(selected) >= profile.max_items:
+                break
+            seen.add(item.id)
+            selected.append(item.id)
+            local = next((local for local in candidates if local and local.enabled and not local.deleted and not local.impairment and
+                local.domain_id == item.domain_id and item.kind in local.applicable_kinds), None)
+            reference = _reference_for(session, item.id, collection_id=profile.collection_id,
+                collection_reference_id=profile.source_reference_id)
+            if not local or not reference:
+                skipped.append({'item_id': item.id, 'reason': 'Select a compatible Local Media Profile and an unambiguous Source account'})
+                continue
+            desired.add((item.id, local.id))
+            jobs.append((item.id, local.id, reference.id, profile.collection_id))
+        for demand in session.scalars(select(MediaDemand).where(
+                MediaDemand.owner_kind == 'stream', MediaDemand.owner_id == profile.id)).all():
+            if (demand.item_id, demand.profile_id) not in desired:
+                session.delete(demand)
+        session.commit()
+    queued = []
+    for item_id, local_id, reference_id, collection_id in jobs:
+        try:
+            job_id, state, created = queue_download(item_id, local_id, reference_id=reference_id,
+                collection_id=collection_id, collection_reference_id=collection_reference_id, stream_profile_id=profile_id)
+            if created and job_id is not None:
+                queued.append(job_id)
+            if state == 'suppressed':
+                skipped.append({'item_id': item_id, 'reason': 'Intentionally removed from this Local Media Profile'})
+            elif state == 'failed':
+                skipped.append({'item_id': item_id, 'reason': 'Acquisition failed; automatic retries retain their backoff and attempt limit'})
+        except Exception:
+            logger.warning('Stream Profile %s could not queue item %s', profile_id, item_id)
+            skipped.append({'item_id': item_id, 'reason': 'Feed rendition could not be queued; review acquisition issues'})
+    if dispatch:
+        for job_id in queued:
+            threading.Thread(target=_run_download, args=(job_id,), daemon=True, name=f'vodloft-feed-{job_id}').start()
+    return {'queued_job_ids': queued, 'skipped': skipped, 'considered': len(selected)}
+
+
+@api_router.post('/stream-profiles/{profile_id}/prepare')
+def prepare_profile(profile_id: int) -> FeedPreparationResponse:
+    return FeedPreparationResponse.model_validate(prepare_stream_profile(profile_id))
+
+
+def prepare_subscribed_feeds():
+    from backend.api.endpoints.vodloft.router import refresh_collection
+    with get_session() as session:
+        profiles = session.scalars(select(CollectionStreamProfile).join(FeedSubscription,
+            FeedSubscription.stream_profile_id == CollectionStreamProfile.id).where(
+                CollectionStreamProfile.enabled.is_(True)).distinct()).all()
+        due, prepare = [], []
+        now = datetime.now(timezone.utc)
+        for profile in profiles:
+            last = profile.last_scan_at
+            if not last or now - last.replace(tzinfo=last.tzinfo or timezone.utc) >= timedelta(minutes=profile.refresh_minutes):
+                profile.last_scan_at = now
+                due.append((profile.collection_id, profile.source_reference_id))
+            if not profile.local_only:
+                prepare.append(profile.id)
+        session.commit()
+    for collection_id, reference_id in dict.fromkeys(due):
+        try:
+            refresh_collection(collection_id, reference_id=reference_id)
+        except Exception:
+            # Offline Sources never invalidate existing enclosures.
+            logger.warning('Feed Collection %s could not refresh through its selected Source', collection_id)
+    for profile_id in prepare:
+        try:
+            prepare_stream_profile(profile_id)
+        except Exception:
+            logger.warning('Stream Profile %s could not prepare its next renditions', profile_id)
 
 
 def _subscription_enabled(session, subscription):
@@ -432,8 +578,10 @@ def feed(token: str, request: Request):
             published_count += 1
             node = SubElement(channel, "item")
             SubElement(node, "title").text = media.user_title or media.title
+            SubElement(node, "description").text = media.user_description or media.description or ''
             SubElement(node, "guid", isPermaLink="false").text = f"urn:vodloft:feed:{subscription.id}:media:{media.id}"
-            SubElement(node, "pubDate").text = format_datetime(entry.created_at)
+            published_at = media.published_at or entry.created_at
+            SubElement(node, "pubDate").text = format_datetime(published_at.replace(tzinfo=published_at.tzinfo or timezone.utc))
             SubElement(node, "enclosure", url=str(request.url_for("vodloft_enclosure", token=token,
                 entry_id=entry.id, name=Path(entry.path).name)), length=str(entry.size),
                 type=mimetypes.guess_type(entry.path)[0] or "application/octet-stream")

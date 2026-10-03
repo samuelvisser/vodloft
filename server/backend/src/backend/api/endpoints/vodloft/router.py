@@ -833,6 +833,9 @@ def delete_collection(item_id: int):
         session.execute(delete(FeedSubscription).where(FeedSubscription.collection_id == item_id))
         session.execute(delete(LiveAdmission).where(LiveAdmission.stream_profile_id.in_(
             select(CollectionStreamProfile.id).where(CollectionStreamProfile.collection_id == item_id))))
+        session.execute(delete(MediaDemand).where(MediaDemand.owner_kind == 'stream',
+            MediaDemand.owner_id.in_(select(CollectionStreamProfile.id).where(
+                CollectionStreamProfile.collection_id == item_id))))
         session.execute(delete(CollectionStreamProfile).where(CollectionStreamProfile.collection_id == item_id))
         session.execute(delete(MediaDemand).where(MediaDemand.owner_kind == "policy",
             MediaDemand.owner_id.in_(select(CollectionDownloadProfile.id).where(
@@ -1115,7 +1118,10 @@ def retry_due_acquisition_jobs() -> None:
         ready = []
         for job in jobs:
             profile = session.get(DomainLocalMediaProfile, job.profile_id)
-            if profile and (profile.deleted or not profile.enabled or profile.impairment):
+            if not profile or profile.deleted or not profile.enabled or profile.impairment:
+                continue
+            if session.scalar(select(MediaSuppression.id).where(MediaSuppression.item_id == job.item_id,
+                    MediaSuppression.profile_id == job.profile_id)):
                 continue
             age = now - job.updated_at.replace(tzinfo=job.updated_at.tzinfo or timezone.utc)
             delay = max(300 if job.error_code == "rate_limited" else 0,
@@ -1142,6 +1148,7 @@ def retry_due_acquisition_jobs() -> None:
 def queue_download(item_id: int, profile_id: int | None, *, collection_id: int | None = None,
                    reference_id: int | None = None, collection_reference_id: int | None = None,
                    policy_id: int | None = None, request_id: int | None = None,
+                   stream_profile_id: int | None = None,
                    force: bool = False) -> tuple[int | None, str, bool]:
     """Freeze a Domain profile for one playable item; null means already satisfied."""
     with get_session() as session:
@@ -1161,6 +1168,7 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
                 session.delete(suppressed)
                 session.flush()
             owner_kind, owner_id = (("request", request_id) if request_id else
+                ("stream", stream_profile_id) if stream_profile_id else
                 ("policy", policy_id) if policy_id else ("direct", item_id))
             if not session.scalar(select(MediaDemand.id).where(MediaDemand.item_id == item_id,
                 MediaDemand.profile_id == profile_id, MediaDemand.owner_kind == owner_kind,
@@ -1272,6 +1280,14 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
                 "source_command": selected_command, "runtime_version": runtime_version,
                 "connection_id": reference.connection_id, "queued_at": datetime.now(timezone.utc).isoformat(),
                 "values": values}
+        if not force and (policy_id or stream_profile_id):
+            previous = session.scalar(select(AcquisitionJob).where(
+                AcquisitionJob.item_id == item_id, AcquisitionJob.profile_id == profile.id,
+                AcquisitionJob.reference_id == reference.id, AcquisitionJob.state == 'failed')
+                .order_by(AcquisitionJob.id.desc()))
+            if previous and previous.execution_spec.get('representation_key') == representation_key:
+                session.commit()
+                return previous.id, 'failed', False
         job = AcquisitionJob(item_id=item_id, reference_id=reference.id,
             profile_id=profile.id, execution_spec=spec, state="queued",
             active_key=f"{item_id}:{profile.id}")
@@ -1392,6 +1408,9 @@ def cancel_job(job_id: int):
             raise HTTPException(409, "This job is no longer cancelable")
         was_queued = job.state == "queued"
         job.cancel_requested = True
+        if job.profile_id and not session.scalar(select(MediaSuppression.id).where(
+                MediaSuppression.item_id == job.item_id, MediaSuppression.profile_id == job.profile_id)):
+            session.add(MediaSuppression(item_id=job.item_id, profile_id=job.profile_id))
         if was_queued:
             job.state, job.active_key = "canceled", None
             _sync_operation(session, job)
@@ -1415,6 +1434,8 @@ def retry_job(job_id: int):
         key = f"{job.item_id}:{job.profile_id}"
         if session.scalar(select(AcquisitionJob.id).where(AcquisitionJob.active_key == key)):
             raise HTTPException(409, "An acquisition is already active for this representation")
+        session.execute(delete(MediaSuppression).where(MediaSuppression.item_id == job.item_id,
+            MediaSuppression.profile_id == job.profile_id))
         job.state, job.error, job.error_code, job.failed_stage, job.cancel_requested = (
             "queued", None, None, None, False)
         job.active_key = key
