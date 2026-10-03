@@ -39,3 +39,25 @@ jobs:
           uv build --wheel server/source_ytdlp
           uv build --wheel server/dailywire_api
           uv build --wheel server/source_dailywire
+  container:
+    needs: acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Build production image
+        run: docker build -t vodloft:acceptance -f .docker/Dockerfile .
+      - name: Verify a fresh container
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name vodloft-acceptance -p 8080:80 -e WL_ADMIN_AUTH__PASSWORD=acceptance-password vodloft:acceptance
+          trap 'docker logs vodloft-acceptance; docker rm -f vodloft-acceptance' EXIT
+          python tools/verify_container.py http://127.0.0.1:8080 --password acceptance-password
+          if docker logs vodloft-acceptance 2>&1 | rg -q 'secret-fixture-token'; then
+            echo 'A bearer URL appeared in container logs'
+            exit 1
+          fi
