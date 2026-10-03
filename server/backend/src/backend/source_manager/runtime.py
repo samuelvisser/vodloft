@@ -16,7 +16,7 @@ from packaging.version import Version
 from contextlib import contextmanager
 from pathlib import Path
 
-from source_contracts import PROTOCOL_VERSION, DomainCatalogue, SourceManifest
+from source_contracts import PROTOCOL_VERSION, METADATA_SCHEMA_VERSION, DomainCatalogue, SourceManifest
 
 MODULES = {"yt-dlp": "vodloft_source_ytdlp.worker",
            "dailywire": "vodloft_source_dailywire.worker"}
@@ -88,6 +88,8 @@ def command_for(source_id: str) -> tuple[list[str], str]:
         if not Path(command[0]).is_file():
             raise RuntimeError("Active Source runtime is missing")
         return command, version
+    if os.environ.get("VODLOFT_REQUIRE_ISOLATED_SOURCES") == "1":
+        raise RuntimeError("The selected Source has no active isolated runtime")
     return [sys.executable, "-m", module], "bundled"
 
 
@@ -105,7 +107,8 @@ def _probe(command: list[str], source_id: str) -> SourceManifest:
     result = subprocess.run(command, input='{"operation":"manifest"}', text=True,
         capture_output=True, timeout=20, check=True)
     manifest = SourceManifest.model_validate_json(result.stdout)
-    if manifest.source_id != source_id or manifest.protocol_version != PROTOCOL_VERSION:
+    if (manifest.source_id != source_id or manifest.protocol_version != PROTOCOL_VERSION or
+            manifest.metadata_schema_version != METADATA_SCHEMA_VERSION):
         raise ValueError("Source runtime failed contract compatibility")
     if "domain_catalogue" in manifest.capabilities:
         _catalogue(command, source_id)
@@ -113,9 +116,15 @@ def _probe(command: list[str], source_id: str) -> SourceManifest:
         text=True, capture_output=True, timeout=10, check=True).stdout.strip()
     if Version(python_version) not in SpecifierSet(manifest.python_requirement):
         raise ValueError("The Source requires a different Python interpreter")
+    helper_versions = {}
     for helper in manifest.native_helpers:
         if not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", helper) or not shutil.which(helper):
             raise ValueError("A required Source native helper is unavailable")
+        version_result = subprocess.run([helper, '-version' if helper in {'ffmpeg', 'ffprobe'} else '--version'],
+            text=True, capture_output=True, timeout=10, check=True)
+        output = (version_result.stdout or version_result.stderr).splitlines()
+        helper_versions[helper] = output[0][:300] if output else 'available'
+
     # Every operation is private and non-networked. Sources declaring health
     # checks must prove their dependencies before receiving real jobs.
     if "health" in manifest.capabilities:
@@ -123,7 +132,7 @@ def _probe(command: list[str], source_id: str) -> SourceManifest:
             capture_output=True, timeout=20, check=True)
         if json.loads(health.stdout).get("healthy") is not True:
             raise ValueError("The Source runtime health check failed")
-    return manifest
+    return manifest.model_copy(update={'python_version': python_version, 'helper_versions': helper_versions})
 
 
 def _catalogue(command: list[str], source_id: str) -> DomainCatalogue:

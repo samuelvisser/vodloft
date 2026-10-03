@@ -1,6 +1,6 @@
 [project]
 name = "vodloft-source-ytdlp"
-version = "0.1.0"
+version = "1.0.0"
 requires-python = ">=3.12"
 dependencies = ["source-contracts", "vodloft-source-media", "yt-dlp>=2025.1.1"]
 

@@ -62,16 +62,7 @@ RUN uv sync --frozen --no-dev
 
 # Build trusted offline Source releases. Each runtime installs into its own
 # persistent virtual environment after its wheel digests and contract pass.
-RUN mkdir -p /app/source-bundles/yt-dlp/0.1.0 /app/source-bundles/dailywire/0.1.0 \
-    && uv build --wheel server/source_contracts --out-dir /app/source-bundles/yt-dlp/0.1.0 \
-    && uv build --wheel server/source_ytdlp --out-dir /app/source-bundles/yt-dlp/0.1.0 \
-    && uv build --wheel server/source_media --out-dir /app/source-bundles/yt-dlp/0.1.0 \
-    && uv build --wheel server/dailywire_api --out-dir /app/source-bundles/dailywire/0.1.0 \
-    && uv build --wheel server/source_contracts --out-dir /app/source-bundles/dailywire/0.1.0 \
-    && uv build --wheel server/source_dailywire --out-dir /app/source-bundles/dailywire/0.1.0 \
-    && python -m pip download --dest /app/source-bundles/yt-dlp/0.1.0 'pydantic>=2.11,<3' 'yt-dlp>=2025.1.1' \
-    && cp /app/source-bundles/yt-dlp/0.1.0/*.whl /app/source-bundles/dailywire/0.1.0/ \
-    && python tools/create_source_bundle_manifests.py /app/source-bundles
+RUN python tools/build_source_bundles.py /app/source-bundles
 
 # Default config seed, copied into the /config volume on first run if missing
 COPY config/config.yml.default ./config/config.yml.default
@@ -101,6 +92,7 @@ ENV PATH="/app/.venv/bin:${PATH}" \
     WL_DATABASE_PATH=/config/vodloft.db \
     VODLOFT_SOURCE_RUNTIME_ROOT=/config/source-runtimes \
     VODLOFT_SOURCE_BUNDLE_DIR=/config/source-bundles \
+    VODLOFT_REQUIRE_ISOLATED_SOURCES=1 \
     # DailyWire login tokens are stored via the `keyring` package. Containers
     # have no OS keychain/D-Bus session, so keyring already falls back to the
     # file-based keyrings.alt backend automatically -- these two env vars just
@@ -111,7 +103,7 @@ ENV PATH="/app/.venv/bin:${PATH}" \
     XDG_CONFIG_HOME=/config/keyring/config
 
 # OpenContainers support
-ARG WIRELOFT_VERSION=development
+ARG WIRELOFT_VERSION=1.0.0
 ARG WIRELOFT_REVISION=unknown
 LABEL org.opencontainers.image.title="VodLoft" \
       org.opencontainers.image.source="https://github.com/samuelvisser/VodLoft" \

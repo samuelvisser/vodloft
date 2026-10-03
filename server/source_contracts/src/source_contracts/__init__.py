@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field, field_validator
 
 PROTOCOL_VERSION = 1
+METADATA_SCHEMA_VERSION = 1
 
 
 class ConfigurationField(BaseModel):
@@ -26,6 +27,7 @@ class ConfigurationField(BaseModel):
 
 class SourceManifest(BaseModel):
     protocol_version: int = PROTOCOL_VERSION
+    metadata_schema_version: int = METADATA_SCHEMA_VERSION
     source_id: str
     display_name: str
     version: str
@@ -34,6 +36,8 @@ class SourceManifest(BaseModel):
     configuration_schema: list[ConfigurationField] = Field(default_factory=list)
     upstream_versions: dict[str, str] = Field(default_factory=dict)
     python_requirement: str = ">=3.12"
+    python_version: str | None = None
+    helper_versions: dict[str, str] = Field(default_factory=dict)
     native_helpers: list[str] = Field(default_factory=list)
     configuration_version: int = 1
     catalogue_revision: str = "1"

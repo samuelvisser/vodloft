@@ -83,7 +83,13 @@ class SourceGateway:
         elif os.environ.get("VODLOFT_SOURCE_COMMANDS"):
             self.commands = json.loads(os.environ["VODLOFT_SOURCE_COMMANDS"])
         else:
-            self.commands = {source_id: command_for(source_id)[0] for source_id in registry()}
+            self.commands = {}
+            for source_id in registry():
+                try:
+                    self.commands[source_id] = command_for(source_id)[0]
+                except RuntimeError:
+                    # One unavailable isolated runtime must not hide healthy Sources.
+                    continue
 
     def call(self, source_id: str, operation: str, *, timeout: int = 90,
              job_id: int | None = None, on_progress=None, on_stage=None, **options):

@@ -15,5 +15,5 @@ services:
       - ./downloads:/downloads
     environment:
       - TZ=Europe/Amsterdam
-      # Uncomment to require a login (leave unset for open/no-auth access):
+      # Set a password here or complete the first-run administrator setup:
       # - WL_ADMIN_AUTH__PASSWORD=change-me

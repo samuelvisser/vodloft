@@ -287,7 +287,7 @@ def main():
         install_public_network_guard()
     if operation == "manifest":
         result = SourceManifest(source_id=SOURCE_ID, display_name="Daily Wire API",
-            version="0.1.0", upstream_versions={"dailywire-api": "0.2.1", "yt-dlp": yt_dlp.version.__version__},
+            version="1.0.0", upstream_versions={"dailywire-api": "0.2.1", "yt-dlp": yt_dlp.version.__version__},
             native_helpers=["ffmpeg"], capabilities={"health", "resolve_url", "enumerate_collection", "enumerate_pages", "download", "domain_catalogue", "search", "stream_lease", "authentication"},
             exhaustive_domain_catalogue=True,
             configuration_schema=[{"name": "access_token", "label": "Access token", "kind": "secret",

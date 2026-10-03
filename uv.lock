@@ -76,7 +76,7 @@ wheels = [
 
 [[package]]
 name = "backend"
-version = "0.3.0"
+version = "1.0.0"
 source = { editable = "server/backend" }
 dependencies = [
     { name = "alembic" },
@@ -773,7 +773,7 @@ wheels = [
 
 [[package]]
 name = "source-contracts"
-version = "0.1.0"
+version = "1.0.0"
 source = { editable = "server/source_contracts" }
 dependencies = [
     { name = "pydantic" },
@@ -958,7 +958,7 @@ dev = [
 
 [[package]]
 name = "vodloft-source-dailywire"
-version = "0.1.0"
+version = "1.0.0"
 source = { editable = "server/source_dailywire" }
 dependencies = [
     { name = "dailywire-api" },
@@ -977,7 +977,7 @@ requires-dist = [
 
 [[package]]
 name = "vodloft-source-media"
-version = "0.1.0"
+version = "1.0.0"
 source = { editable = "server/source_media" }
 dependencies = [
     { name = "source-contracts" },
@@ -992,7 +992,7 @@ requires-dist = [
 
 [[package]]
 name = "vodloft-source-ytdlp"
-version = "0.1.0"
+version = "1.0.0"
 source = { editable = "server/source_ytdlp" }
 dependencies = [
     { name = "source-contracts" },

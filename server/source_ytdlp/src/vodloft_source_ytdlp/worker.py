@@ -206,7 +206,7 @@ def main() -> None:
     if operation in ("resolve", "download", "entries", "stream_lease", "stream_fetch"):
         install_public_network_guard()
     if operation == "manifest":
-        result = SourceManifest(source_id="yt-dlp", display_name="yt-dlp", version="0.1.0", upstream_versions={"yt-dlp": yt_dlp.version.__version__},
+        result = SourceManifest(source_id="yt-dlp", display_name="yt-dlp", version="1.0.0", upstream_versions={"yt-dlp": yt_dlp.version.__version__},
                                 native_helpers=["ffmpeg"], catalogue_revision=yt_dlp.version.__version__,
                                 capabilities={"health", "resolve_url", "enumerate_collection", "enumerate_pages", "download", "domain_catalogue", "stream_lease"},
                                 configuration_schema=[{"name": "cookies", "label": "Netscape cookies.txt",
