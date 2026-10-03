@@ -2185,7 +2185,7 @@ def test_upstream_disappearance_and_server_outage_preserve_local_acquisition(lib
     item_id = client.get(f"/api/vodloft/library/{collection_id}").json()["entries"][0]["id"]
     with sessions() as session:
         target = MediaServerTarget(kind="jellyfin", name="Unavailable server", base_url="http://server.example",
-            library_id="1", local_prefix=str(tmp_path), server_prefix="/media", token_ciphertext="unused", enabled=True)
+            library_id="1", local_prefix=str(tmp_path), server_prefix="/media", secret_ciphertext="unused", enabled=True)
         session.add(target); session.commit(); target_id = target.id
     profile = client.post("/api/vodloft/profiles", json={"name": "Outage safe", "domain": "example.com",
         "delivery_target_ids": [target_id]})
