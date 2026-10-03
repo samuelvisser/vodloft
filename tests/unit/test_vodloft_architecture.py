@@ -2132,3 +2132,83 @@ def test_source_activation_validates_saved_private_authentication(library, monke
     incompatible = manifest.model_copy(update={"configuration_schema": []})
     with pytest.raises(ValueError, match="review saved connections"):
         runtime._validate_saved_configuration(incompatible)
+
+
+def test_upstream_session_stays_pinned_when_local_file_arrives(library, monkeypatch, tmp_path):
+    import base64
+    from backend.api.endpoints.vodloft import playback
+    from backend.db.models.vodloft import PlaybackSession
+    from source_contracts import StreamLease
+    client, sessions, _, gateway, _ = library
+    monkeypatch.setattr(playback, "get_session", sessions)
+    monkeypatch.setattr(playback, "validate_public_url", lambda url: url)
+    snapshot = MediaSnapshot(kind="video", reference=ref("example.com", "handoff"), title="Handoff")
+    monkeypatch.setattr(gateway.SourceGateway, "resolve", lambda *a, **k: snapshot)
+    item_id = client.post("/api/vodloft/import", json={"snapshot": snapshot.model_dump(mode="json")}).json()["id"]
+    old_command = [sys.executable, "-m", "fixture_old.worker"]
+    monkeypatch.setattr(gateway.SourceGateway, "__init__", lambda self, commands=None:
+        setattr(self, "commands", commands or {"fixture": old_command}))
+    monkeypatch.setattr(gateway.SourceGateway, "stream_lease", lambda *a, **k:
+        StreamLease(transport="http", url="https://cdn.example.com/current.mp4", representation_id="upstream-1"))
+    commands = []
+    def fetch(self, source, operation, **options):
+        commands.append(self.commands[source])
+        return {"data": base64.b64encode(b"upstream bytes").decode(), "content_type": "video/mp4",
+            "status": 200, "url": options["url"]}
+    monkeypatch.setattr(gateway.SourceGateway, "call", fetch)
+    upstream = client.post(f"/api/vodloft/library/{item_id}/watch").json()
+    assert client.get(upstream["url"]).content == b"upstream bytes"
+    local = tmp_path / "vodloft" / "arrived.mp4"
+    local.parent.mkdir(exist_ok=True); local.write_bytes(b"local bytes")
+    with sessions() as session:
+        session.add(Artifact(item_id=item_id, path=str(local), size=local.stat().st_size))
+        session.commit()
+    # New sessions prefer local; the existing session keeps upstream bytes and its original worker.
+    fresh = client.post(f"/api/vodloft/library/{item_id}/watch").json()
+    assert fresh["transport"] == "file" and client.get(fresh["url"]).content == b"local bytes"
+    assert client.get(upstream["url"]).content == b"upstream bytes"
+    assert commands == [old_command, old_command]
+    with sessions() as session:
+        assert sorted(s.transport for s in session.scalars(select(PlaybackSession)).all()) == ["file", "http"]
+
+
+def test_upstream_disappearance_and_server_outage_preserve_local_acquisition(library, monkeypatch, tmp_path):
+    import threading
+    from backend.api.endpoints.vodloft import integrations
+    from backend.db.models.vodloft import MediaServerExport, MediaServerTarget
+    client, sessions, router, gateway, _ = library
+    item_ref = ref("example.com", "offline-safe")
+    collection = MediaSnapshot(kind="collection", reference=ref("example.com", "vanished-list"), title="List",
+        entries=[EntrySnapshot(reference=item_ref, title="Local survives", position=1)])
+    monkeypatch.setattr(gateway.SourceGateway, "resolve", lambda *a, **k: collection)
+    collection_id = client.post("/api/vodloft/import", json={"snapshot": collection.model_dump(mode="json")}).json()["id"]
+    item_id = client.get(f"/api/vodloft/library/{collection_id}").json()["entries"][0]["id"]
+    with sessions() as session:
+        target = MediaServerTarget(kind="jellyfin", name="Unavailable server", base_url="http://server.example",
+            library_id="1", local_prefix=str(tmp_path), server_prefix="/media", token_ciphertext="unused", enabled=True)
+        session.add(target); session.commit(); target_id = target.id
+    profile = client.post("/api/vodloft/profiles", json={"name": "Outage safe", "domain": "example.com",
+        "delivery_target_ids": [target_id]})
+    assert profile.status_code == 201, profile.text
+    def download(self, source_id, url, staging, **options):
+        file = Path(staging) / "media.mp4"; file.write_bytes(b"local survives")
+        return DownloadResult(filename=file.name, size=file.stat().st_size)
+    monkeypatch.setattr(gateway.SourceGateway, "download", download)
+    monkeypatch.setattr(integrations, "discover", lambda target: (_ for _ in ()).throw(OSError("server offline")))
+    original_thread = threading.Thread
+    class ImmediateExport:
+        def __init__(self, target, args, **kw): self.target, self.args = target, args
+        def start(self): self.target(*self.args)
+    monkeypatch.setattr(threading, "Thread", lambda *a, **kw:
+        ImmediateExport(*a, **kw) if kw.get("name", "").startswith("vodloft-export-") else original_thread(*a, **kw))
+    job_id, _, _ = router.queue_download(item_id, profile.json()["id"])
+    router._run_download(job_id)
+    assert client.get(f"/api/vodloft/jobs/{job_id}").json()["state"] == "available"
+    with sessions() as session:
+        export = session.scalar(select(MediaServerExport))
+        assert export.state == "failed" and export.attempts == 1
+    assert client.get(f"/api/vodloft/library/{item_id}/play").content == b"local survives"
+    collection = collection.model_copy(update={"entries": [], "enumeration_complete": True})
+    assert client.post("/api/vodloft/import", json={"snapshot": collection.model_dump(mode="json")}).status_code == 200
+    assert client.get(f"/api/vodloft/library/{item_id}/play").content == b"local survives"
+    assert client.get(f"/api/vodloft/library/{item_id}").json()["downloaded"]
