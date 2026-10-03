@@ -137,6 +137,7 @@ class UserMetadataInput(BaseModel):
     description: str | None = Field(default=None, max_length=10000)
     kind: str | None = Field(default=None, pattern="^(video|movie|movie_extra)$")
     parent_id: int | None = None
+    parent_ids: list[int] | None = Field(default=None, max_length=100)
     extra_type: str | None = Field(default=None, pattern="^(trailer|interview|behind_the_scenes|deleted_scene|featurette|other)$")
 
 
@@ -253,7 +254,10 @@ def _library_source(session, item: MediaItem) -> LibraryItemSource:
     artifact = next((candidate for candidate in session.scalars(select(Artifact).where(
         Artifact.item_id == item.id).order_by(Artifact.id.desc())).all()
         if Path(candidate.path).is_file()), None)
-    return LibraryItemSource(item=item, domain=session.get(Domain, item.domain_id), artifact=artifact)
+    parents = session.scalars(select(MovieExtraParent.movie_id).where(
+        MovieExtraParent.extra_id == item.id).order_by(MovieExtraParent.id)).all()
+    return LibraryItemSource(item=item, domain=session.get(Domain, item.domain_id), artifact=artifact,
+        parent_ids=list(parents))
 
 
 def _serialize(session, item: MediaItem) -> LibraryItemResponse:
@@ -512,14 +516,20 @@ def _import_snapshot(snapshot: MediaSnapshot, connection_id: int | None = None,
                 child = _upsert(session, extra.reference, "movie_extra", extra.title,
                                 connection_id=connection_id,
                                 capabilities=extra.capabilities if "capabilities" in extra.model_fields_set else _MISSING)
-                child.parent_id = child.parent_id or item.id
-                child.extra_type = extra.extra_type or "other"
+                if child.user_parent_ids is None:
+                    child.parent_id = child.parent_id or item.id
+                if child.user_extra_type is None:
+                    child.extra_type = extra.extra_type or "other"
                 session.flush()
                 membership = session.scalar(select(MovieExtraParent).where(
                     MovieExtraParent.movie_id == item.id, MovieExtraParent.extra_id == child.id))
-                if not membership:
-                    session.add(MovieExtraParent(movie_id=item.id, extra_id=child.id,
-                        extra_type=child.extra_type))
+                if child.user_parent_ids is None or item.id in child.user_parent_ids:
+                    role = child.user_extra_type or extra.extra_type or "other"
+                    if not membership:
+                        session.add(MovieExtraParent(movie_id=item.id, extra_id=child.id, extra_type=role))
+                    else:
+                        membership.extra_type = role
+        session.flush()
         result = _serialize(session, item)
         imported_item_id = item.id
         session.commit()
@@ -762,7 +772,9 @@ def library_item(item_id: int, request: Request) -> LibraryDetailResponse:
             MovieExtraParent.movie_id == item_id)).all() if item.kind == 'movie' else []
         view = replace(_library_source(session, item), references=references,
             entries=[_serialize(session, session.get(MediaItem, member.item_id)) for member in members],
-            extras=[_serialize(session, session.get(MediaItem, extra.extra_id)) for extra in extras],
+            extras=[LibraryItemResponse.model_validate(replace(
+                _library_source(session, session.get(MediaItem, extra.extra_id)),
+                context_extra_type=extra.extra_type)) for extra in extras],
             member_groups=list(dict.fromkeys(member.group or '' for member in members)),
             member_roles=list(dict.fromkeys(member.role or '' for member in members)))
         return LibraryDetailResponse.model_validate(view)
@@ -863,21 +875,47 @@ def edit_metadata(item_id: int, data: UserMetadataInput):
             if item.kind == "collection":
                 raise HTTPException(422, "A Collection cannot be reclassified as playable media")
             item.kind, item.user_kind = data.kind, data.kind
-        if "parent_id" in data.model_fields_set:
-            parent = session.get(MediaItem, data.parent_id) if data.parent_id else None
-            if data.parent_id and (not parent or parent.kind != "movie" or parent.id == item.id):
-                raise HTTPException(422, "Choose a different Movie as this extra's parent")
-            if parent and item.kind != "movie_extra":
-                raise HTTPException(422, "Only Movie Extras can have a parent Movie")
-            session.execute(delete(MovieExtraParent).where(MovieExtraParent.extra_id == item.id))
-            item.parent_id = data.parent_id
-            if parent:
-                session.add(MovieExtraParent(movie_id=parent.id, extra_id=item.id,
-                    extra_type=data.extra_type or item.extra_type or "other"))
+        links = session.scalars(select(MovieExtraParent).where(
+            MovieExtraParent.extra_id == item.id).order_by(MovieExtraParent.id)).all()
+        if "parent_ids" in data.model_fields_set or "parent_id" in data.model_fields_set:
+            if "parent_ids" in data.model_fields_set:
+                parent_ids = list(dict.fromkeys(data.parent_ids or []))
+            elif data.parent_id:
+                # Choosing a primary parent must preserve other shared relationships.
+                parent_ids = list(dict.fromkeys([data.parent_id, *(link.movie_id for link in links)]))
+            else:
+                parent_ids = []
+            if item.kind != "movie_extra" and parent_ids:
+                raise HTTPException(422, "Only Movie Extras can have parent Movies")
+            for parent_id in parent_ids:
+                parent = session.get(MediaItem, parent_id)
+                if not parent or parent.kind != "movie" or parent.id == item.id:
+                    raise HTTPException(422, "Choose different Movies as this extra's parents")
+            if item.kind == "movie_extra" and not parent_ids:
+                raise HTTPException(422, "Choose at least one parent Movie for this extra")
+            item.user_parent_ids = parent_ids
+            item.parent_id = parent_ids[0] if parent_ids else None
+            for link in links:
+                if link.movie_id not in parent_ids:
+                    session.delete(link)
+            existing = {link.movie_id for link in links}
+            for parent_id in parent_ids:
+                if parent_id not in existing:
+                    link = MovieExtraParent(movie_id=parent_id, extra_id=item.id,
+                        extra_type=data.extra_type or item.user_extra_type or item.extra_type or "other")
+                    session.add(link)
+                    links.append(link)
         if "extra_type" in data.model_fields_set:
-            item.extra_type = data.extra_type
+            item.user_extra_type = data.extra_type
+            if data.extra_type:
+                item.extra_type = data.extra_type
+                for link in links:
+                    link.extra_type = data.extra_type
+        if item.kind == "movie_extra" and not links:
+            raise HTTPException(422, "Choose at least one parent Movie for this extra")
         if item.kind != "movie_extra":
             item.parent_id, item.extra_type = None, None
+            item.user_parent_ids, item.user_extra_type = None, None
             session.execute(delete(MovieExtraParent).where(MovieExtraParent.extra_id == item.id))
         session.commit()
         return _serialize(session, item)

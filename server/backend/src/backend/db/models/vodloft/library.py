@@ -58,6 +58,8 @@ class MediaItem(Base):
     user_description: Mapped[str | None] = mapped_column(String, nullable=True)
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("vodloft_media_items.id"), nullable=True)
     extra_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    user_parent_ids: Mapped[list[int] | None] = mapped_column(JSON, nullable=True)
+    user_extra_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 

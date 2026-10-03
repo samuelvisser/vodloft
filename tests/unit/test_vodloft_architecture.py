@@ -2046,3 +2046,46 @@ def test_source_publisher_catalogue_is_accepted_by_the_update_verifier_and_detec
     wheel.write_bytes(b'changed bytes')
     with pytest.raises(ValueError, match='digest'):
         publisher['sign_bundle'](bundle, 'https://releases.example.com/fixture/1.0.0', key_file, catalog)
+
+
+def test_shared_movie_extra_edits_keep_parents_roles_and_explicit_choices(library):
+    from backend.db.models.vodloft import MovieExtraParent
+    client, sessions, _, _, _ = library
+    shared = ref("example.com", "shared-extra")
+    movies = []
+    for index, role in enumerate(("trailer", "interview"), start=1):
+        snapshot = MediaSnapshot(kind="movie", reference=ref("example.com", f"movie-{index}"),
+            title=f"Movie {index}", extras=[EntrySnapshot(reference=shared, title="Shared extra",
+                kind="movie_extra", position=1, extra_type=role)])
+        result = client.post("/api/vodloft/import", json={"snapshot": snapshot.model_dump(mode="json")})
+        assert result.status_code == 200, result.text
+        movies.append((result.json()["id"], snapshot))
+    first = client.get(f"/api/vodloft/library/{movies[0][0]}").json()
+    second = client.get(f"/api/vodloft/library/{movies[1][0]}").json()
+    extra_id = first["extras"][0]["id"]
+    assert second["extras"][0]["id"] == extra_id
+    assert first["extras"][0]["extra_type"] == "trailer"
+    assert second["extras"][0]["extra_type"] == "interview"
+    assert set(client.get(f"/api/vodloft/library/{extra_id}").json()["parent_ids"]) == {m[0] for m in movies}
+
+    response = client.put(f"/api/vodloft/library/{extra_id}/metadata",
+        json={"title": "Personal title", "parent_id": movies[0][0]})
+    assert response.status_code == 200, response.text
+    assert set(response.json()["parent_ids"]) == {m[0] for m in movies}
+    with sessions() as session:
+        assert len(session.scalars(select(MovieExtraParent).where(MovieExtraParent.extra_id == extra_id)).all()) == 2
+
+    response = client.put(f"/api/vodloft/library/{extra_id}/metadata",
+        json={"parent_ids": [movies[1][0]], "extra_type": "featurette"})
+    assert response.status_code == 200, response.text
+    assert response.json()["parent_ids"] == [movies[1][0]]
+    # Source refresh cannot reattach a parent removed by the user or replace the chosen role.
+    for _, snapshot in movies:
+        response = client.post("/api/vodloft/import", json={"snapshot": snapshot.model_dump(mode="json")})
+        assert response.status_code == 200, response.text
+    extra = client.get(f"/api/vodloft/library/{extra_id}").json()
+    assert extra["title"] == "Personal title"
+    assert extra["parent_ids"] == [movies[1][0]] and extra["extra_type"] == "featurette"
+    assert client.get(f"/api/vodloft/library/{movies[0][0]}").json()["extras"] == []
+    assert client.put(f"/api/vodloft/library/{extra_id}/metadata", json={"parent_ids": []}).status_code == 422
+    assert client.put(f"/api/vodloft/library/{extra_id}/metadata", json={"parent_ids": [extra_id]}).status_code == 422

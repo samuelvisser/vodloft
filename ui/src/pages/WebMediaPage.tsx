@@ -20,7 +20,7 @@ type Connection = {id: number; source_id: string; name: string; has_secret: bool
     settings: Record<string, string | number>; secret_fields: string[]}
 type Reference = {source_id: string; domain: string; namespace: string; upstream_id: string; url: string}
 type Preview = {kind: string; title: string; description?: string; artwork_url?: string; reference: Reference; entries: {title: string; position: number}[]; enumeration_complete: boolean}
-type Item = {parent_id?: number | null; extra_type?: string | null; chapters?: {title: string; start: number; end?: number}[]; id: number; title: string; description?: string; kind: string; domain: string; downloaded: boolean;
+type Item = {parent_id?: number | null; parent_ids?: number[]; extra_type?: string | null; chapters?: {title: string; start: number; end?: number}[]; id: number; title: string; description?: string; kind: string; domain: string; downloaded: boolean;
     member_groups?: string[]; member_roles?: string[];
     capabilities?: string[] | null; playback_type?: string; artwork_url?: string; artwork_available?: boolean; entries?: Item[]; extras?: Item[];
     is_live?: boolean | null; formats?: {code: string; description?: string; audio_only: boolean; height?: number}[];
@@ -1184,28 +1184,32 @@ function ConnectionForm({sources, initial, onCreated}: {sources: Source[]; initi
 }
 
 const MetadataSchema = z.object({title: z.string().max(500).default(''), description: z.string().max(10000).default(''),
-    kind: z.enum(['collection', 'video', 'movie', 'movie_extra']).default('video'), parent_id: z.string().default(''),
-    extra_type: z.enum(['trailer', 'interview', 'behind_the_scenes', 'deleted_scene', 'featurette', 'other']).default('other')})
+    kind: z.enum(['collection', 'video', 'movie', 'movie_extra']).default('video'), parent_ids: z.array(z.string().min(1)).max(100).default([]),
+    extra_type: z.enum(['trailer', 'interview', 'behind_the_scenes', 'deleted_scene', 'featurette', 'other']).default('other')}).superRefine((values, ctx) => {
+    if (values.kind === 'movie_extra' && !values.parent_ids.length) ctx.addIssue({code: 'custom', path: ['parent_ids'], message: 'Choose at least one parent Movie'})
+})
 type MetadataFields = z.input<typeof MetadataSchema>
 
 function MetadataForm({item, items, onSaved}: {item: Item; items: Item[]; onSaved: (updated: Item) => void}) {
     const [expanded, setExpanded] = useState(false)
     const form = useForm<MetadataFields, unknown, z.output<typeof MetadataSchema>>({resolver: zodResolver(MetadataSchema),
-        defaultValues: {...MetadataSchema.parse({}), title: item.title, description: item.description ?? '', kind: item.kind as z.output<typeof MetadataSchema>['kind'], parent_id: item.parent_id?.toString() ?? '', extra_type: (item.extra_type ?? 'other') as z.output<typeof MetadataSchema>['extra_type']}})
-    const {register, watch, formState: {errors, isSubmitting}} = form
+        defaultValues: {...MetadataSchema.parse({}), title: item.title, description: item.description ?? '', kind: item.kind as z.output<typeof MetadataSchema>['kind'], parent_ids: (item.parent_ids ?? (item.parent_id ? [item.parent_id] : [])).map(String), extra_type: (item.extra_type ?? 'other') as z.output<typeof MetadataSchema>['extra_type']}})
+    const {register, watch, formState: {errors, isSubmitting, dirtyFields}} = form
     const submit = buildServerAwareSubmit(form, (values: z.output<typeof MetadataSchema>) => formRequest(`/library/${item.id}/metadata`, 'PUT', {
         title: values.title || null, description: values.description || null,
         kind: item.kind === 'collection' ? undefined : values.kind,
-        parent_id: values.kind === 'movie_extra' ? Number(values.parent_id) || null : null,
-        extra_type: values.kind === 'movie_extra' ? values.extra_type : null,
+        parent_ids: values.kind === 'movie_extra' && (dirtyFields.parent_ids || dirtyFields.kind) ? values.parent_ids.map(Number) : undefined,
+        extra_type: values.kind === 'movie_extra' && (dirtyFields.extra_type || dirtyFields.kind) ? values.extra_type : undefined,
     }), {onSuccess: result => {onSaved(result as Item); setExpanded(false)}})
     if (!expanded) return <button className="btn" type="button" onClick={() => setExpanded(true)}>Edit library metadata</button>
     return <form onSubmit={submit} style={{display: 'grid', gap: 10, maxWidth: 640, marginBottom: 16}}>
         <label>Display title <input {...register('title')}/></label>
         <label>Description <textarea {...register('description')} rows={4}/></label>
         {item.kind !== 'collection' && <label>Classification <select {...register('kind')}><option value="video">Video</option><option value="movie">Movie</option><option value="movie_extra">Movie Extra</option></select></label>}
-        {watch('kind') === 'movie_extra' && <><label>Parent Movie <select {...register('parent_id')}><option value="">Unassigned</option>
-            {items.filter(candidate => candidate.kind === 'movie' && candidate.id !== item.id).map(movie => <option key={movie.id} value={movie.id}>{movie.title}</option>)}</select></label>
+        {watch('kind') === 'movie_extra' && <><fieldset><legend>Parent Movies</legend>
+            {items.filter(candidate => candidate.kind === 'movie' && candidate.id !== item.id).map(movie => <label key={movie.id} style={{display: 'block'}}>
+                <input type="checkbox" value={String(movie.id)} {...register('parent_ids')}/> {movie.title}</label>)}
+            <small>A shared extra can belong to more than one Movie.</small></fieldset>
             <label>Extra type <select {...register('extra_type')}>{['trailer', 'interview', 'behind_the_scenes', 'deleted_scene', 'featurette', 'other'].map(kind => <option key={kind} value={kind}>{kind.replace(/_/g, ' ')}</option>)}</select></label></>}
         <p>Clear the title or description to restore the latest Source value.</p>
         {Object.entries(errors).map(([key, value]) => <p role="alert" key={key}>{String(value?.message ?? 'Check the fields')}</p>)}

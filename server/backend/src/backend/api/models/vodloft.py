@@ -14,7 +14,7 @@ from backend.db.models.vodloft import Artifact, Domain, MediaItem, SourceReferen
 def _library_alias(name: str):
     if name == 'domain':
         return AliasPath('domain', 'hostname')
-    if name in {'id', 'kind', 'duration', 'published_at', 'capabilities', 'is_live', 'formats', 'parent_id', 'extra_type', 'artwork_url'}:
+    if name in {'id', 'kind', 'duration', 'published_at', 'capabilities', 'is_live', 'formats', 'parent_id', 'artwork_url'}:
         return AliasPath('item', name)
     if name in {'chapters', 'tracks', 'author', 'movie_year'}:
         return AliasPath('item', 'normalized_metadata', name)
@@ -40,6 +40,7 @@ class LibraryItemResponse(BaseModel):
     author: str | None = None
     movie_year: int | None = None
     parent_id: int | None
+    parent_ids: list[int] = Field(default_factory=list)
     extra_type: str | None
     downloaded: bool
     playback_type: Literal['audio', 'video']
@@ -119,11 +120,17 @@ class LibraryItemSource:
     domain: Domain
     artifact: Artifact | None
     seconds: float = 0
+    parent_ids: list[int] = field(default_factory=list)
+    context_extra_type: str | None = None
     references: list[SourceReference] = field(default_factory=list)
     entries: list[LibraryItemResponse] = field(default_factory=list)
     extras: list[LibraryItemResponse] = field(default_factory=list)
     member_groups: list[str] = field(default_factory=list)
     member_roles: list[str] = field(default_factory=list)
+
+    @property
+    def extra_type(self) -> str | None:
+        return self.context_extra_type or self.item.user_extra_type or self.item.extra_type
 
     @property
     def title(self) -> str:
