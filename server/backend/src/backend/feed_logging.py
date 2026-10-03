@@ -1,9 +1,9 @@
-"""Keep revocable RSS subscription credentials out of HTTP access logs."""
+"""Keep feed and opaque playback credentials out of HTTP access logs."""
 
 import logging
 import re
 
-_TOKEN_PATH = re.compile(r"(/feeds/vodloft/)[^/?\s]+")
+_TOKEN_PATH = re.compile(r"((?:/feeds/vodloft|/api/vodloft/streams?)/)[^/?\s]+")
 
 
 class RedactFeedToken(logging.Filter):

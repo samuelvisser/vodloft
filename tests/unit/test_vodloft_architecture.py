@@ -619,11 +619,14 @@ def test_job_lease_prevents_duplicate_execution(library, monkeypatch):
         assert session.get(AcquisitionJob, job_id).state == "queued"
 
 
-def test_feed_token_is_redacted_from_access_log():
+@pytest.mark.parametrize("path", ["/feeds/vodloft/very-secret/media/1/audio.mp3",
+    "/api/vodloft/stream/very-secret", "/api/vodloft/stream/very-secret/segment/abcdef",
+    "/api/vodloft/streams/very-secret"])
+def test_feed_token_is_redacted_from_access_log(path):
     import logging
     from backend.feed_logging import RedactFeedToken
     record = logging.LogRecord("uvicorn.access", logging.INFO, "", 1, '%s - "%s %s HTTP/%s" %d',
-        ("127.0.0.1", "GET", "/feeds/vodloft/very-secret/media/1/audio.mp3", "1.1", 200), None)
+        ("127.0.0.1", "GET", path, "1.1", 200), None)
     assert RedactFeedToken().filter(record)
     assert "very-secret" not in record.getMessage()
 
