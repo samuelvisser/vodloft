@@ -147,7 +147,7 @@ def request_media(item_id: int, data: RequestInput, request: Request, background
     with get_session() as session:
         item = session.get(MediaItem, item_id)
         profile = session.get(DomainLocalMediaProfile, data.profile_id)
-        if not item or item.kind == "collection" or not profile or not profile.enabled or (
+        if not item or item.kind == "collection" or not profile or profile.deleted or profile.impairment or not profile.enabled or (
                 profile.domain_id != item.domain_id or item.kind not in profile.applicable_kinds):
             raise HTTPException(422, "Select a playable item and compatible enabled Local Media Profile")
         reference = _reference_for(session, item_id, reference_id=data.reference_id)

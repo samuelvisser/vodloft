@@ -1085,6 +1085,9 @@ def retry_due_acquisition_jobs() -> None:
             AcquisitionJob.cancel_requested.is_(False))).all()
         ready = []
         for job in jobs:
+            profile = session.get(DomainLocalMediaProfile, job.profile_id)
+            if profile and (profile.deleted or not profile.enabled or profile.impairment):
+                continue
             age = now - job.updated_at.replace(tzinfo=job.updated_at.tzinfo or timezone.utc)
             delay = max(300 if job.error_code == "rate_limited" else 0,
                         30 * (2 ** max(job.attempts - 1, 0)))
@@ -1155,7 +1158,8 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
             raise HTTPException(409, "Select an available Source and account reference for this item")
         query = select(DomainLocalMediaProfile).where(
             DomainLocalMediaProfile.domain_id == item.domain_id,
-            DomainLocalMediaProfile.enabled.is_(True))
+            DomainLocalMediaProfile.enabled.is_(True),
+            DomainLocalMediaProfile.deleted.is_(False), DomainLocalMediaProfile.impairment.is_(None))
         if profile_id is not None:
             query = query.where(DomainLocalMediaProfile.id == profile_id)
         profile = next((p for p in session.scalars(query).all() if item.kind in p.applicable_kinds), None)
@@ -1371,6 +1375,9 @@ def retry_job(job_id: int):
             raise HTTPException(404, "Acquisition job not found")
         if job.state not in {"failed", "canceled"}:
             raise HTTPException(409, "Only failed or canceled jobs can be restarted")
+        profile = session.get(DomainLocalMediaProfile, job.profile_id)
+        if not profile or profile.deleted or not profile.enabled or profile.impairment:
+            raise HTTPException(409, "The Local Media Profile is unavailable; choose an enabled profile")
         key = f"{job.item_id}:{job.profile_id}"
         if session.scalar(select(AcquisitionJob.id).where(AcquisitionJob.active_key == key)):
             raise HTTPException(409, "An acquisition is already active for this representation")

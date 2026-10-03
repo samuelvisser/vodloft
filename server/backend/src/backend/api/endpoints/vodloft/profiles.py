@@ -1,19 +1,20 @@
 """Domain-scoped Local Media Profiles using WireLoft's template engine."""
 
 from pathlib import Path
+from dataclasses import dataclass
 import ipaddress
 import re
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import AliasGenerator, AliasPath, BaseModel, ConfigDict, Field, field_validator, model_validator
 from source_contracts import RepresentationPolicy
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from backend.db import get_session
 from backend.db.models.local_media_profile import DomainLocalMediaProfile
-from backend.db.models.vodloft import ArtifactPlacement, CollectionEntry, Domain, MediaItem, MediaServerTarget, SourceReference
+from backend.db.models.vodloft import AcquisitionJob, CollectionDownloadProfile, CollectionEntry, Domain, LibraryRequest, MediaDemand, MediaItem, MediaServerTarget, SourceReference
 from backend.types.local_media_profile_types import PreferredFormat
 from backend.utils.helpers import slugify
 from backend.utils.output_template import render_output_template, finalize_output_path
@@ -116,13 +117,30 @@ def output_path_from_spec(template: str, values: dict, extension: str) -> Path:
     return path
 
 
-def _serialize(profile: DomainLocalMediaProfile, domain: Domain) -> dict:
-    return {"id": profile.id, "name": profile.name, "domain": domain.hostname,
-        "preferred_format": profile.preferred_format, "output_template": profile.output_template,
-        "applicable_kinds": profile.applicable_kinds, "enabled": profile.enabled,
-        "impairment": profile.impairment,
-        "representation": RepresentationPolicy.model_validate(profile.representation or {}).model_dump(),
-        "delivery_target_ids": profile.delivery_target_ids}
+class ProfileResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True,
+        alias_generator=AliasGenerator(validation_alias=lambda name:
+            AliasPath("domain", "hostname") if name == "domain" else AliasPath("profile", name)))
+    id: int
+    name: str
+    domain: str
+    preferred_format: PreferredFormat
+    applicable_kinds: list[Kind]
+    output_template: str
+    enabled: bool
+    delivery_target_ids: list[int]
+    representation: RepresentationPolicy
+    impairment: str | None = None
+
+
+@dataclass(frozen=True)
+class ProfileSource:
+    profile: DomainLocalMediaProfile
+    domain: Domain
+
+
+def _serialize(profile: DomainLocalMediaProfile, domain: Domain) -> ProfileResponse:
+    return ProfileResponse.model_validate(ProfileSource(profile, domain))
 
 
 def _validate_targets(session, ids: list[int]) -> None:
@@ -140,7 +158,7 @@ def domains():
 @router.get("/profiles")
 def profiles(domain: str | None = None):
     with get_session() as session:
-        query = select(DomainLocalMediaProfile)
+        query = select(DomainLocalMediaProfile).where(DomainLocalMediaProfile.deleted.is_(False))
         if domain:
             domain_record = session.scalar(select(Domain).where(Domain.hostname == domain))
             if not domain_record:
@@ -190,7 +208,7 @@ def template_preview(data: TemplatePreviewInput):
                 "author": "Example creator", "duration": 1800, "movie_year": 2026}
         try:
             return {"path": str(output_path_from_spec(data.template, values, data.extension)), "values": values}
-        except (ValueError, Exception) as exc:
+        except Exception as exc:
             raise HTTPException(422, "Template is invalid: " + str(exc)[:400]) from exc
 
 
@@ -221,7 +239,7 @@ def update_profile(profile_id: int, data: ProfileInput):
     with get_session() as session:
         profile = session.get(DomainLocalMediaProfile, profile_id)
         domain = session.scalar(select(Domain).where(Domain.hostname == data.domain.lower()))
-        if not profile or not domain:
+        if not profile or profile.deleted or not domain:
             raise HTTPException(404, "Profile or Domain not found")
         _validate_targets(session, data.delivery_target_ids)
         profile.name, profile.slug = data.name, slugify(data.name)
@@ -242,12 +260,32 @@ def update_profile(profile_id: int, data: ProfileInput):
 def delete_profile(profile_id: int):
     with get_session() as session:
         profile = session.get(DomainLocalMediaProfile, profile_id)
-        if not profile:
+        if not profile or profile.deleted:
             raise HTTPException(404, "Profile not found")
-        if session.scalar(select(ArtifactPlacement.id).where(ArtifactPlacement.profile_id == profile_id)):
-            raise HTTPException(409, "Remove the profile's file placements before deleting it")
-        session.delete(profile)
+        # Keep the retired record for frozen job/history foreign keys. Demand,
+        # rather than that record, decides whether a shared artifact is retained.
+        profile.deleted, profile.enabled = True, False
+        profile.slug = f"retired-{profile.id}"
+        session.query(MediaDemand).filter(MediaDemand.profile_id == profile_id).delete(synchronize_session=False)
+        for policy in session.scalars(select(CollectionDownloadProfile)).all():
+            if profile_id in policy.local_profile_ids:
+                policy.local_profile_ids = [pid for pid in policy.local_profile_ids if pid != profile_id]
+                if not policy.local_profile_ids:
+                    policy.enabled = False
+        for demand in session.scalars(select(LibraryRequest).where(LibraryRequest.profile_id == profile_id,
+                LibraryRequest.state.in_(["pending", "approved"]))).all():
+            demand.state, demand.active_key, demand.reason = "canceled", None, "Local Media Profile was deleted"
+        jobs = session.scalars(select(AcquisitionJob).where(AcquisitionJob.profile_id == profile_id,
+            AcquisitionJob.state.in_(["queued", "resolving", "downloading", "processing", "verifying"]))).all()
+        job_ids = [job.id for job in jobs]
         session.commit()
+    from .router import cancel_job
+    for job_id in job_ids:
+        try:
+            cancel_job(job_id)
+        except HTTPException as error:
+            if error.status_code != 409:
+                raise
 
 
 @router.post("/profiles/{profile_id}/preview")
@@ -255,7 +293,7 @@ def preview(profile_id: int, item_id: int, extension: str = "mp4"):
     with get_session() as session:
         profile = session.get(DomainLocalMediaProfile, profile_id)
         item = session.get(MediaItem, item_id)
-        if not profile or not item or item.domain_id != profile.domain_id or item.kind not in profile.applicable_kinds:
+        if not profile or profile.deleted or not item or item.domain_id != profile.domain_id or item.kind not in profile.applicable_kinds:
             raise HTTPException(404, "This profile does not apply to the media item")
         domain = session.get(Domain, item.domain_id)
         reference = session.scalar(select(SourceReference).where(SourceReference.item_id == item_id))

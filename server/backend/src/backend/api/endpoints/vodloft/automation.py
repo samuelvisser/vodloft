@@ -69,7 +69,7 @@ def create_profile(collection_id: int, data: DownloadPolicyInput):
         if not reference:
             raise HTTPException(422, "Select an available Source reference for this Collection")
         for profile_id in set(data.local_profile_ids):
-            if not session.get(DomainLocalMediaProfile, profile_id):
+            if not (local := session.get(DomainLocalMediaProfile, profile_id)) or local.deleted:
                 raise HTTPException(422, f"Local Media Profile {profile_id} does not exist")
         profile = CollectionDownloadProfile(collection_id=collection_id,
             **(data.model_dump() | {"source_reference_id": reference.id,
@@ -89,7 +89,7 @@ def update_profile(profile_id: int, data: DownloadPolicyInput):
         if not reference:
             raise HTTPException(422, "Select an available Source reference for this Collection")
         for local_id in set(data.local_profile_ids):
-            if not session.get(DomainLocalMediaProfile, local_id):
+            if not (local := session.get(DomainLocalMediaProfile, local_id)) or local.deleted:
                 raise HTTPException(422, f"Local Media Profile {local_id} does not exist")
         for key, value in data.model_dump().items():
             setattr(profile, key, value)
@@ -161,7 +161,7 @@ def schedule_profile(profile_id: int, *, dispatch: bool = True) -> dict:
                     datetime.now(timezone.utc) - timedelta(days=policy.retain_days)):
                 skipped.append({"item_id": item.id, "reason": "Outside the retention window"})
                 continue
-            candidates = [p for p in local_profiles if p and p.enabled and
+            candidates = [p for p in local_profiles if p and p.enabled and not p.deleted and not p.impairment and
                           p.domain_id == item.domain_id and item.kind in p.applicable_kinds]
             supported = [p for p in candidates if not item.formats or
                 p.preferred_format in {fmt.get("code") for fmt in item.formats}]

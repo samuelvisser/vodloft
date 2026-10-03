@@ -1520,3 +1520,38 @@ def test_source_update_failure_isolated_to_one_release(library, monkeypatch, tmp
     assert results[0]['state'] == 'failed'
     assert results[1]['source_id'] == 'dailywire'
     assert 'private-credential' not in json.dumps(runtime.status())
+
+
+def test_profile_deletion_cancels_queued_work_and_preserves_shared_artifact(library, monkeypatch, tmp_path):
+    from backend.db.models.vodloft import ArtifactPlacement, MediaDemand
+    from backend.services import vodloft_retention
+    client, sessions, router, gateway, _ = library
+    monkeypatch.setattr(vodloft_retention, 'get_session', sessions)
+    snapshot = MediaSnapshot(kind='video', reference=ref('example.com', 'shared-delete'), title='Shared')
+    monkeypatch.setattr(gateway.SourceGateway, 'resolve', lambda *args, **kw: snapshot)
+    item_id = client.post('/api/vodloft/import', json={'snapshot': snapshot.model_dump()}).json()['id']
+    ids = [client.post('/api/vodloft/profiles', json={'name': name, 'domain': 'example.com',
+        'output_template': '/downloads/' + name + '/{{ title }}.ext'}).json()['id'] for name in ('one', 'two')]
+    canonical = tmp_path / 'vodloft' / 'shared.mp4'
+    canonical.parent.mkdir()
+    canonical.write_bytes(b'shared representation')
+    with sessions() as db:
+        artifact = Artifact(item_id=item_id, profile_id=ids[0], path=str(canonical), size=canonical.stat().st_size)
+        db.add(artifact); db.flush()
+        for profile_id in ids:
+            placement = tmp_path / f'{profile_id}.mp4'
+            placement.write_bytes(canonical.read_bytes())
+            db.add(ArtifactPlacement(artifact_id=artifact.id, profile_id=profile_id, path=str(placement)))
+            db.add(MediaDemand(item_id=item_id, profile_id=profile_id, owner_kind='direct', owner_id=item_id))
+        job = AcquisitionJob(item_id=item_id, reference_id=db.scalar(select(SourceReference.id).where(SourceReference.item_id == item_id)), profile_id=ids[0], state='queued', execution_spec={}, active_key=f'{item_id}:{ids[0]}')
+        db.add(job); db.commit(); job_id=job.id
+    assert client.delete(f'/api/vodloft/profiles/{ids[0]}').status_code == 204
+    assert [p['id'] for p in client.get('/api/vodloft/profiles').json()] == [ids[1]]
+    with sessions() as db:
+        assert db.get(AcquisitionJob, job_id).state == 'canceled'
+        assert db.scalar(select(MediaDemand.id).where(MediaDemand.profile_id == ids[0])) is None
+        assert db.scalar(select(MediaDemand.id).where(MediaDemand.profile_id == ids[1])) is not None
+    assert client.post(f'/api/vodloft/jobs/{job_id}/retry').status_code == 409
+    assert vodloft_retention.reconcile(grace_hours=0) == 0
+    assert canonical.is_file() and (tmp_path / f'{ids[1]}.mp4').is_file()
+    assert not (tmp_path / f'{ids[0]}.mp4').exists()
