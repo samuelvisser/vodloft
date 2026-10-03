@@ -1952,6 +1952,8 @@ def test_legacy_aliases_reuse_modern_media_without_changing_existing_account_sco
     client, sessions, _, _, _ = library
     legacy = importlib.import_module('backend.db.background_migrations.versions.8e5a2c9f41d0_vodloft_legacy_library')
     conversion = importlib.import_module('backend.db.background_migrations.versions.a03f7e9bc261_vodloft_automation_conversion')
+    monkeypatch.setattr(legacy, 'get_session', sessions)
+    monkeypatch.setattr(conversion, 'get_session', sessions)
     with sessions() as session:
         domain = Domain(hostname='dailywire.com', display_name='Daily Wire')
         session.add(domain); session.flush()
