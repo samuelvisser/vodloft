@@ -16,7 +16,7 @@ from packaging.version import Version
 from contextlib import contextmanager
 from pathlib import Path
 
-from source_contracts import PROTOCOL_VERSION, SourceManifest
+from source_contracts import PROTOCOL_VERSION, DomainCatalogue, SourceManifest
 
 MODULES = {"yt-dlp": "vodloft_source_ytdlp.worker",
            "dailywire": "vodloft_source_dailywire.worker"}
@@ -96,7 +96,8 @@ def status() -> dict:
     state = _read_state(root)
     return {"active": state.get("active", {}), "history": state.get("history", [])[-30:],
             "policy": state.get("policy", {}),
-            "installed": {source: sorted(p.name for p in (root / source).iterdir() if p.is_dir())
+            "installed": {source: sorted(p.name for p in (root / source).iterdir()
+                          if p.is_dir() and not p.name.startswith("."))
                           if (root / source).is_dir() else [] for source in registry()}}
 
 
@@ -106,6 +107,8 @@ def _probe(command: list[str], source_id: str) -> SourceManifest:
     manifest = SourceManifest.model_validate_json(result.stdout)
     if manifest.source_id != source_id or manifest.protocol_version != PROTOCOL_VERSION:
         raise ValueError("Source runtime failed contract compatibility")
+    if "domain_catalogue" in manifest.capabilities:
+        _catalogue(command, source_id)
     python_version = subprocess.run([command[0], "-c", "import platform; print(platform.python_version())"],
         text=True, capture_output=True, timeout=10, check=True).stdout.strip()
     if Version(python_version) not in SpecifierSet(manifest.python_requirement):
@@ -121,6 +124,44 @@ def _probe(command: list[str], source_id: str) -> SourceManifest:
         if json.loads(health.stdout).get("healthy") is not True:
             raise ValueError("The Source runtime health check failed")
     return manifest
+
+
+def _catalogue(command: list[str], source_id: str) -> DomainCatalogue:
+    result = subprocess.run(command, input='{"operation":"domains"}', text=True,
+        capture_output=True, timeout=20, check=True)
+    catalogue = DomainCatalogue.model_validate_json(result.stdout)
+    if any(domain.source_id != source_id for domain in catalogue.items):
+        raise ValueError("Domain catalogue returned another Source's identity")
+    return catalogue
+
+
+def _reconcile_domains(command: list[str], manifest: SourceManifest) -> None:
+    if "domain_catalogue" not in manifest.capabilities:
+        return
+    catalogue = _catalogue(command, manifest.source_id)
+    from backend.db import get_session
+    from backend.db.models.vodloft import Domain, SourceDomain
+    from backend.db.models.local_media_profile import DomainLocalMediaProfile
+    from sqlalchemy import select
+    with get_session() as session:
+        advertised = {domain.hostname.rstrip('.').lower().encode('idna').decode('ascii')
+                      for domain in catalogue.items}
+        for support in session.scalars(select(SourceDomain).where(SourceDomain.source_id == manifest.source_id)).all():
+            domain = session.get(Domain, support.domain_id)
+            if catalogue.exhaustive and domain.hostname not in advertised:
+                support.support = "failing"
+            elif domain.hostname in advertised:
+                support.support = "advertised"
+            other = session.scalar(select(SourceDomain.source_id).where(
+                SourceDomain.domain_id == domain.id, SourceDomain.source_id != manifest.source_id,
+                SourceDomain.support.in_(["advertised", "verified", "authentication_required"])))
+            for profile in session.scalars(select(DomainLocalMediaProfile).where(
+                    DomainLocalMediaProfile.domain_id == domain.id)).all():
+                if support.support == "failing" and not other:
+                    profile.impairment = "Installed Sources no longer advertise support for this Domain"
+                elif profile.impairment == "Installed Sources no longer advertise support for this Domain":
+                    profile.impairment = None
+        session.commit()
 
 
 def _interpreter(source_id: str, release: dict) -> str:
@@ -145,15 +186,22 @@ def _validate_saved_configuration(manifest: SourceManifest) -> None:
         connections = session.scalars(select(SourceConnection).where(
             SourceConnection.source_id == manifest.source_id, SourceConnection.enabled.is_(True))).all()
         for connection in connections:
-            values = connection.settings or {}
+            values = dict(connection.settings or {})
+            if connection.authentication_reference:
+                from .secrets import load
+                authentication = json.loads(load(connection.authentication_reference))
+                values.update(authentication.get("configuration", {}))
             saved = set(values) | set(connection.secret_references or {})
             if saved - set(fields):
                 raise ValueError("The Source configuration changed; review saved connections before activation")
             for name, value in values.items():
                 field = fields[name]
-                if (field.kind == "number" and not isinstance(value, (int, float)) or
-                    field.kind == "select" and value not in field.options):
+                if (field.kind == "number" and (isinstance(value, bool) or not isinstance(value, (int, float))) or
+                    field.kind == "select" and value not in field.options or
+                    field.kind in {"text", "secret", "credential_file"} and not isinstance(value, str)):
                     raise ValueError("A saved connection is incompatible with the new Source schema")
+            if any(field.required and field.name not in saved for field in fields.values()):
+                raise ValueError("The new Source schema requires additional connection configuration")
 
 
 def record_failure(source_id: str, action: str, error: Exception) -> None:
@@ -203,27 +251,37 @@ def install_bundle(source_id: str, bundle: Path, *, activate: bool = True) -> di
                     capture_output=True)
                 python = staging / "bin" / "python"
                 subprocess.run([str(python), "-m", "pip", "install", "--no-index",
-                    "--find-links", str(bundle), f"{package}=={version}"],
+                    "--find-links", str(bundle), f"{package}=={release.get('adapter_version', version)}"],
                     timeout=240, check=True, capture_output=True)
                 _probe([str(python), "-m", module], source_id)
+                (staging / "release.json").write_text(json.dumps(release, sort_keys=True))
                 os.replace(staging, target)
             finally:
                 if staging.exists():
                     shutil.rmtree(staging)
+        saved_release = target / "release.json"
+        if saved_release.is_file() and json.loads(saved_release.read_text()) != release:
+            raise ValueError("An installed Source runtime is immutable; publish a new bundle version")
         # A previously installed bundle is still probed before a new activation.
         manifest = _probe([str(target / "bin" / "python"), "-m", module], source_id)
+        if manifest.version != release.get("adapter_version", version):
+            raise ValueError("The installed adapter version does not match the release")
+        if any(manifest.upstream_versions.get(name) != expected
+               for name, expected in release.get("upstream_versions", {}).items()):
+            raise ValueError("The installed upstream dependencies do not match the release")
         if activate:
             _validate_saved_configuration(manifest)
         state = _read_state(root)
         if activate and state["active"].get(source_id) != version:
+            _reconcile_domains([str(target / "bin" / "python"), "-m", module], manifest)
             previous = state["active"].get(source_id)
             state["active"][source_id] = version
             state["history"].append({"source_id": source_id, "from": previous,
                 "to": version, "action": "activate", "state": "available",
-                "at": datetime.now(timezone.utc).isoformat(), "manifest": manifest.model_dump()})
+                "at": datetime.now(timezone.utc).isoformat(), "manifest": manifest.model_dump(mode="json")})
             _write_state(root, state)
     return {"source_id": source_id, "version": version, "active": activate,
-            "manifest": manifest.model_dump()}
+            "manifest": manifest.model_dump(mode="json")}
 
 
 def activate(source_id: str, version: str) -> dict:
@@ -235,23 +293,38 @@ def activate(source_id: str, version: str) -> dict:
         command = [str(root / source_id / version / "bin" / "python"), "-m", sources[source_id]["module"]]
         manifest = _probe(command, source_id)
         _validate_saved_configuration(manifest)
+        _reconcile_domains(command, manifest)
         state = _read_state(root)
         previous = state["active"].get(source_id)
         state["active"][source_id] = version
         state["history"].append({"source_id": source_id, "from": previous,
             "to": version, "action": "activate", "state": "available",
-            "at": datetime.now(timezone.utc).isoformat(), "manifest": manifest.model_dump()})
+            "at": datetime.now(timezone.utc).isoformat(), "manifest": manifest.model_dump(mode="json")})
         _write_state(root, state)
-    return manifest.model_dump()
+    return manifest.model_dump(mode="json")
 
 
 def rollback(source_id: str) -> dict:
     state = _read_state(runtime_root())
-    previous = next((entry["from"] for entry in reversed(state.get("history", []))
-                     if entry["source_id"] == source_id and entry["to"] == state["active"].get(source_id)
-                     and entry["from"]), None)
-    if not previous:
+    activations = [entry for entry in reversed(state.get("history", []))
+        if entry.get("action") == "activate" and entry["source_id"] == source_id
+        and entry.get("to") == state["active"].get(source_id)]
+    if not activations:
         raise ValueError("No retained prior runtime is available")
+    previous = activations[0].get("from")
+    if previous is None:
+        sources = registry()
+        manifest = _probe([sys.executable, "-m", sources[source_id]["module"]], source_id)
+        _validate_saved_configuration(manifest)
+        _reconcile_domains([sys.executable, "-m", sources[source_id]["module"]], manifest)
+        with _locked(runtime_root()):
+            state = _read_state(runtime_root())
+            current = state["active"].pop(source_id, None)
+            state["history"].append({"source_id": source_id, "from": current,
+                "to": None, "action": "rollback", "state": "available",
+                "at": datetime.now(timezone.utc).isoformat(), "manifest": manifest.model_dump(mode="json")})
+            _write_state(runtime_root(), state)
+        return manifest.model_dump(mode="json")
     return activate(source_id, previous)
 
 
@@ -276,24 +349,29 @@ def install_bundled_updates() -> list[dict]:
         return []
     results = []
     for source_id in registry():
-        directory = catalog / source_id
-        if not directory.is_dir():
-            continue
-        candidates = []
-        policy = status()["policy"].get(source_id, {"automatic": True,
-            "pinned_version": None, "channel": "stable"})
-        for bundle in sorted(directory.iterdir()):
-            if bundle.is_dir() and (bundle / "release.json").is_file():
-                release = json.loads((bundle / "release.json").read_text())
-                if release.get("version") not in status()["installed"][source_id]:
-                    results.append(install_bundle(source_id, bundle, activate=False))
-                if (release.get("channel", "stable") == policy.get("channel", "stable") and
-                    (not policy["pinned_version"] or policy["pinned_version"] == release.get("version"))):
-                    candidates.append(release["version"])
-        if candidates and policy["automatic"]:
-            version = max(candidates, key=lambda value: tuple(int(part) for part in re.findall(r"\d+", value)))
-            if status()["active"].get(source_id) != version:
-                activate(source_id, version)
+        try:
+            directory = catalog / source_id
+            if not directory.is_dir():
+                continue
+            candidates = []
+            policy = status()["policy"].get(source_id, {"automatic": True,
+                "pinned_version": None, "channel": "stable"})
+            for bundle in sorted(directory.iterdir()):
+                if bundle.is_dir() and (bundle / "release.json").is_file():
+                    release = json.loads((bundle / "release.json").read_text())
+                    if release.get("version") not in status()["installed"][source_id]:
+                        results.append(install_bundle(source_id, bundle, activate=False))
+                    if (release.get("channel", "stable") == policy.get("channel", "stable") and
+                        (not policy["pinned_version"] or policy["pinned_version"] == release.get("version"))):
+                        candidates.append(release["version"])
+            if candidates and policy["automatic"]:
+                version = max(candidates, key=Version)
+                if status()["active"].get(source_id) != version:
+                    activate(source_id, version)
+        except Exception as error:
+            from .runtime import record_failure
+            record_failure(source_id, "mounted_update", error)
+            results.append({"source_id": source_id, "state": "failed", "reason": type(error).__name__})
     return results
 
 

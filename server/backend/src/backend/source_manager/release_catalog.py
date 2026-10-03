@@ -21,6 +21,7 @@ from urllib.parse import urljoin, urlsplit
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from packaging.version import Version
 
 from .runtime import registry, runtime_root
 
@@ -111,7 +112,9 @@ def _verified_releases(source_id: str, config: dict) -> list[dict]:
     if len(document["releases"]) > 100:
         raise ValueError("Source release catalogue is too large")
     for release in document["releases"]:
-        if (not isinstance(release, dict) or set(release) != {"version", "channel", "wheels"} or
+        if (not isinstance(release, dict) or not {"version", "channel", "wheels"} <= set(release) or
+            set(release) - {"version", "channel", "wheels", "adapter_version", "upstream_versions",
+                "protocol_version", "configuration_version", "catalogue_revision", "python_requirement", "native_helpers"} or
             not isinstance(release["version"], str) or not _VERSION.fullmatch(release["version"]) or
             release["channel"] not in ("stable", "beta") or
             not isinstance(release["wheels"], dict) or not 1 <= len(release["wheels"]) <= 40):
@@ -126,7 +129,7 @@ def _verified_releases(source_id: str, config: dict) -> list[dict]:
 
 
 def _version(value: str) -> tuple:
-    return tuple(int(part) for part in re.findall(r"\d+", value))
+    return Version(value)
 
 
 def install_remote_updates() -> list[dict]:
@@ -135,32 +138,37 @@ def install_remote_updates() -> list[dict]:
 
     results = []
     for source_id, config in configured_catalogs().items():
-        policy = status()["policy"].get(source_id, {"automatic": True,
-            "pinned_version": None, "channel": "stable"})
-        releases = _verified_releases(source_id, config)
-        eligible = [release for release in releases
-            if release["channel"] == policy["channel"] and
-            (not policy["pinned_version"] or policy["pinned_version"] == release["version"])]
-        if not eligible:
-            continue
-        selected = max(eligible, key=lambda release: _version(release["version"]))
-        version = selected["version"]
-        if version in status()["installed"][source_id]:
-            if policy["automatic"] and status()["active"].get(source_id) != version:
-                from .runtime import activate
-                activate(source_id, version)
-            continue
-        runtime_root().mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix="vodloft-release-", dir=runtime_root()) as folder:
-            bundle = Path(folder)
-            wheels = {}
-            for filename, descriptor in selected["wheels"].items():
-                content = _fetch_https(descriptor["url"], 128 * 1024 * 1024)
-                if hashlib.sha256(content).hexdigest() != descriptor["sha256"]:
-                    raise ValueError("Source wheel digest mismatch")
-                (bundle / filename).write_bytes(content)
-                wheels[filename] = descriptor["sha256"]
-            (bundle / "release.json").write_text(json.dumps({"source_id": source_id,
-                "version": version, "channel": selected["channel"], "wheels": wheels}))
-            results.append(install_bundle(source_id, bundle, activate=policy["automatic"]))
+        try:
+            policy = status()["policy"].get(source_id, {"automatic": True,
+                "pinned_version": None, "channel": "stable"})
+            releases = _verified_releases(source_id, config)
+            eligible = [release for release in releases
+                if release["channel"] == policy["channel"] and
+                (not policy["pinned_version"] or policy["pinned_version"] == release["version"])]
+            if not eligible:
+                continue
+            selected = max(eligible, key=lambda release: _version(release["version"]))
+            version = selected["version"]
+            if version in status()["installed"][source_id]:
+                if policy["automatic"] and status()["active"].get(source_id) != version:
+                    from .runtime import activate
+                    activate(source_id, version)
+                continue
+            runtime_root().mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryDirectory(prefix="vodloft-release-", dir=runtime_root()) as folder:
+                bundle = Path(folder)
+                wheels = {}
+                for filename, descriptor in selected["wheels"].items():
+                    content = _fetch_https(descriptor["url"], 128 * 1024 * 1024)
+                    if hashlib.sha256(content).hexdigest() != descriptor["sha256"]:
+                        raise ValueError("Source wheel digest mismatch")
+                    (bundle / filename).write_bytes(content)
+                    wheels[filename] = descriptor["sha256"]
+                (bundle / "release.json").write_text(json.dumps({**selected,
+                    "source_id": source_id, "wheels": wheels}))
+                results.append(install_bundle(source_id, bundle, activate=policy["automatic"]))
+        except Exception as error:
+            from .runtime import record_failure
+            record_failure(source_id, "remote_update", error)
+            results.append({"source_id": source_id, "state": "failed", "reason": type(error).__name__})
     return results

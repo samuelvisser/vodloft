@@ -1447,3 +1447,76 @@ def test_audiobookshelf_item_mapping_and_progress_pull_never_rewinds(library, mo
     pulled = client.post(f"/api/vodloft/integrations/exports/{export_id}/progress/pull")
     assert pulled.status_code == 200, pulled.text
     assert pulled.json() == {"seconds": 120, "completed": True}
+
+
+def test_independent_source_bundle_install_health_failure_and_rollback(library, monkeypatch, tmp_path):
+    import hashlib
+    import zipfile
+    from backend.source_manager import runtime
+    _, sessions, _, _, _ = library
+    monkeypatch.setattr(importlib.import_module('backend.db'), 'get_session', sessions)
+    registry = tmp_path / 'registry.json'
+    registry.write_text(json.dumps({'sources': {'third': {'module': 'fixture_source.worker',
+        'package': 'fixture-source-runtime'}}}))
+    monkeypatch.setenv('VODLOFT_SOURCE_REGISTRY', str(registry))
+    monkeypatch.setenv('VODLOFT_SOURCE_RUNTIME_ROOT', str(tmp_path / 'runtimes'))
+
+    def bundle(version, engine, healthy=True):
+        folder = tmp_path / version
+        folder.mkdir()
+        manifest = {'source_id': 'third', 'display_name': 'Third Source', 'version': '1.0.0',
+            'upstream_versions': {'fixture-engine': engine}, 'capabilities': ['health', 'domain_catalogue']}
+        worker = 'import json,sys\nr=json.load(sys.stdin)\nprint(json.dumps({' + repr('manifest') + ': ' + repr(manifest) + ', ' + repr('health') + ': ' + repr({'healthy': healthy}) + ', ' + repr('domains') + ': ' + repr({'items': [], 'exhaustive': True}) + '}[r["operation"]]))\n'
+        wheel = folder / 'fixture_source_runtime-1.0.0-py3-none-any.whl'
+        dist = 'fixture_source_runtime-1.0.0.dist-info/'
+        with zipfile.ZipFile(wheel, 'w') as archive:
+            archive.writestr('fixture_source/__init__.py', '')
+            archive.writestr('fixture_source/worker.py', worker)
+            archive.writestr(dist + 'METADATA', 'Metadata-Version: 2.1\nName: fixture-source-runtime\nVersion: 1.0.0\n')
+            archive.writestr(dist + 'WHEEL', 'Wheel-Version: 1.0\nGenerator: fixture\nRoot-Is-Purelib: true\nTag: py3-none-any\n')
+            archive.writestr(dist + 'RECORD', '')
+        release = {'source_id': 'third', 'version': version, 'adapter_version': '1.0.0',
+            'upstream_versions': {'fixture-engine': engine},
+            'wheels': {wheel.name: hashlib.sha256(wheel.read_bytes()).hexdigest()}}
+        (folder / 'release.json').write_text(json.dumps(release))
+        return folder
+
+    first = bundle('1.0.0+engine1', '1.0')
+    assert runtime.install_bundle('third', first)['active'] is True
+    old_command = runtime.command_for('third')[0]
+    second = bundle('1.0.0+engine2', '2.0')
+    assert runtime.install_bundle('third', second)['manifest']['upstream_versions'] == {'fixture-engine': '2.0'}
+    assert runtime.command_for('third')[0] != old_command
+    assert Path(old_command[0]).is_file()
+    bad = bundle('1.0.0+engine3', '3.0', healthy=False)
+    with pytest.raises(ValueError, match='health'):
+        runtime.install_bundle('third', bad)
+    assert runtime.status()['active']['third'] == '1.0.0+engine2'
+    assert runtime.status()['installed']['third'] == ['1.0.0+engine1', '1.0.0+engine2']
+    runtime.record_failure('third', 'test_health', ValueError('private-token'))
+    assert 'private-token' not in json.dumps(runtime.status())
+    runtime.rollback('third')
+    assert runtime.command_for('third')[0] == old_command
+
+
+def test_source_update_failure_isolated_to_one_release(library, monkeypatch, tmp_path):
+    from backend.source_manager import runtime
+    monkeypatch.setenv('VODLOFT_SOURCE_RUNTIME_ROOT', str(tmp_path / 'runtimes'))
+    monkeypatch.setenv('VODLOFT_SOURCE_BUNDLE_DIR', str(tmp_path / 'bundles'))
+    for source in ('yt-dlp', 'dailywire'):
+        folder = tmp_path / 'bundles' / source / '1.0.0'
+        folder.mkdir(parents=True)
+        (folder / 'release.json').write_text(json.dumps({'source_id': source, 'version': '1.0.0'}))
+    called = []
+    def install(source, bundle, *, activate):
+        called.append(source)
+        if source == 'yt-dlp':
+            raise ValueError('private-credential')
+        return {'source_id': source, 'version': '1.0.0'}
+    monkeypatch.setattr(runtime, 'install_bundle', install)
+    monkeypatch.setattr(runtime, 'activate', lambda *args: {})
+    results = runtime.install_bundled_updates()
+    assert called == ['yt-dlp', 'dailywire']
+    assert results[0]['state'] == 'failed'
+    assert results[1]['source_id'] == 'dailywire'
+    assert 'private-credential' not in json.dumps(runtime.status())

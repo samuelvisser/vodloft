@@ -5,11 +5,6 @@ from task_manager.scheduler.operation_control import (
     cancel_operation as cancel_task_operation,
     restart_operation as restart_task_operation,
 )
-from task_manager.tasks.media_download_operations import (
-    MEDIA_DOWNLOAD_OPERATION_KIND,
-    cancel_media_download_operation,
-    restart_media_download_operation,
-)
 from task_manager.scheduler.operations import (
     get_operation as get_task_operation,
     list_operations as list_task_operations,
@@ -53,8 +48,6 @@ def mark_operation_seen(operation_id: str) -> TaskOperationRead | None:
 
 def cancel_operation(operation_id: str) -> TaskOperationRead | None:
     operation = get_task_operation(operation_id)
-    if operation is not None and operation.kind == MEDIA_DOWNLOAD_OPERATION_KIND:
-        return _read(cancel_media_download_operation(operation_id))
     if operation is not None and operation.kind == "vodloft_acquisition":
         from backend.api.endpoints.vodloft.router import cancel_job
         cancel_job(operation.context["job_id"])
@@ -64,8 +57,6 @@ def cancel_operation(operation_id: str) -> TaskOperationRead | None:
 
 def restart_operation(operation_id: str) -> TaskOperationRead | None:
     operation = get_task_operation(operation_id)
-    if operation is not None and operation.kind == MEDIA_DOWNLOAD_OPERATION_KIND:
-        return _read(restart_media_download_operation(operation_id))
     if operation is not None and operation.kind == "vodloft_acquisition":
         from backend.api.endpoints.vodloft.router import retry_job
         retry_job(operation.context["job_id"])

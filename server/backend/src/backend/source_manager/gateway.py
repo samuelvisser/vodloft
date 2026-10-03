@@ -10,7 +10,7 @@ import threading
 from urllib.parse import urlsplit
 from pydantic import TypeAdapter
 
-from source_contracts import CollectionPage, DownloadEvent, DownloadResult, MediaSnapshot, NormalizedSnapshot, SourceError, SourceManifest, SourceMatch, SourceSearchPage, StreamLease
+from source_contracts import CollectionPage, DomainCatalogue, DownloadEvent, DownloadResult, MediaSnapshot, NormalizedSnapshot, SourceError, SourceManifest, SourceMatch, SourceSearchPage, StreamLease
 from .runtime import command_for, registry
 
 _running: dict[int, subprocess.Popen] = {}
@@ -219,7 +219,7 @@ class SourceGateway:
         return result
 
     def catalogue(self, source_id: str) -> dict:
-        return self.call(source_id, "domains", timeout=20)
+        return DomainCatalogue.model_validate(self.call(source_id, "domains", timeout=20)).model_dump()
 
     def entries(self, source_id: str, url: str, *, cursor: str | None = None,
                 limit: int = 50, **source_options) -> CollectionPage:

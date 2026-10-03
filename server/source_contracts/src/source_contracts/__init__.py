@@ -19,7 +19,7 @@ class ConfigurationField(BaseModel):
     def safe_transport_name(cls, value: str) -> str:
         if value in {"operation", "url", "query", "staging", "cursor", "limit", "timeout",
                      "job_id", "source_id", "preferred_format", "max_entries", "scratch",
-                     "private_state", "representation", "metadata"}:
+                     "private_state", "representation", "metadata", "reference"}:
             raise ValueError("Configuration field collides with a protocol argument")
         return value
 
@@ -64,6 +64,14 @@ class DomainDescriptor(BaseModel):
     support: Literal["advertised", "verified", "authentication_required", "failing"] = "advertised"
     aliases: list[str] = Field(default_factory=list)
     capabilities: set[str] | None = None
+
+
+class DomainCatalogue(BaseModel):
+    items: list[DomainDescriptor] = Field(default_factory=list, max_length=5000)
+    next_cursor: str | None = None
+    exhaustive: bool = False
+    supports_url_resolution_outside_catalog: bool = True
+    catalog_revision: str = "1"
 
 
 class SourceMediaReference(BaseModel):
