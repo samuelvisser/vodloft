@@ -57,5 +57,6 @@ jobs:
           docker run -d --name vodloft-acceptance -p 8080:80 -e WL_ADMIN_AUTH__PASSWORD=acceptance-password vodloft:acceptance
           trap 'docker logs vodloft-acceptance; docker rm -f vodloft-acceptance' EXIT
           python tools/verify_container.py http://127.0.0.1:8080 --password acceptance-password
+          docker exec vodloft-acceptance /config/source-runtimes/yt-dlp/1.0.0/bin/python /app/tools/verify_media_pipeline.py
           docker logs vodloft-acceptance 2>&1 | python -c 'import sys; assert "secret-fixture-token" not in sys.stdin.read()'
           docker exec vodloft-acceptance cat /var/log/nginx/access.log /var/log/nginx/error.log | python -c 'import sys; assert "secret-fixture-token" not in sys.stdin.read()'
