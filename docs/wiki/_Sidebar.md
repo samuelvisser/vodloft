@@ -1,28 +1,19 @@
-**WireLoft Wiki**
-
-- [[Home]]
-
-**Getting started**
-- [[Installation]]
-- [[First-Run-Setup]]
-
-**Using WireLoft**
-- [[Shows-and-Library]]
-- [[Local-Media-Profiles]]
-- [[Download-Profiles]]
-- [[Downloads-and-File-Integrity]]
-- [[Podcast-RSS-Feeds]]
-
-**How WireLoft stays current**
-- [[Daily-Wire-Integration]]
-- [[Automation-and-Background-Tasks]]
-
-**Administration**
-- [[Settings]]
-- [[Security-and-Remote-Access]]
-- [[Backups-and-Upgrades]]
-- [[Troubleshooting]]
-
----
-
-[WireLoft repository](https://github.com/samuelvisser/wireloft)
+* [Home](Home)
+* [Installation](Installation)
+* [First-run setup](First-Run-Setup)
+* [Library and discovery](Shows-and-Library)
+* [Local Media Profiles](Local-Media-Profiles)
+* [Collection Download Profiles](Download-Profiles)
+* [Output templates](Output-Path-Validation)
+* [Downloads and files](Downloads-and-File-Integrity)
+* [RSS feeds](Podcast-RSS-Feeds)
+* [Media-server integrations](Media-Server-Integrations)
+* [Accounts and requests](Accounts-and-Requests)
+* [Sources and updates](Sources-and-Updates)
+* [The Daily Wire](Daily-Wire-Integration)
+* [Artwork](Show-Artwork)
+* [Automation](Automation-and-Background-Tasks)
+* [Settings](Settings)
+* [Backups and upgrades](Backups-and-Upgrades)
+* [Security and remote access](Security-and-Remote-Access)
+* [Troubleshooting](Troubleshooting)
