@@ -16,7 +16,7 @@ from datetime import datetime, timezone, timedelta
 from contextlib import nullcontext
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from fastapi import Query, APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, or_, select, update
@@ -64,6 +64,10 @@ def _sync_operation(session, job: AcquisitionJob) -> None:
     operation.message = state.replace("_", " ").capitalize()
     operation.error = job.error if state == "failed" else None
     now = datetime.now(timezone.utc)
+    stages = list((operation.context or {}).get("stages", []))
+    if not stages or stages[-1]["stage"] != state or stages[-1]["attempt"] != job.attempts:
+        stages.append({"stage": state, "attempt": job.attempts, "at": now.isoformat()})
+        operation.context = {**(operation.context or {}), "stages": stages[-100:]}
     if state not in {"queued", "available", "failed", "canceled"}:
         operation.started_at = operation.started_at or now
     operation.finished_at = now if state in {"available", "failed", "canceled"} else None
@@ -248,7 +252,8 @@ def _serialize(session, item: MediaItem) -> dict:
         if Path(candidate.path).is_file()), None)
     return {"id": item.id, "kind": item.kind, "title": item.user_title or item.title,
             "domain": domain.hostname, "description": item.user_description or item.description,
-            "artwork_url": item.artwork_url, "duration": item.duration,
+            "artwork_url": item.artwork_url, "artwork_available": bool(item.artwork_url or
+                (item.normalized_metadata or {}).get("artwork")), "duration": item.duration,
             "published_at": item.published_at, "capabilities": item.capabilities,
             "is_live": item.is_live, "formats": item.formats or [],
             "chapters": (item.normalized_metadata or {}).get("chapters", []),
@@ -765,6 +770,16 @@ def library_item(item_id: int, request: Request):
         return result
 
 
+@router.get("/library/{item_id}/artwork")
+def item_artwork(item_id: int, shape: str = Query(default="landscape", pattern="^(square|portrait|landscape)$")):
+    from backend.services.vodloft_artwork import artwork
+    try:
+        return FileResponse(artwork(item_id, shape), media_type="image/jpeg",
+            headers={"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff"})
+    except ValueError as exc:
+        raise HTTPException(404, "Artwork is unavailable") from exc
+
+
 @router.get("/library/{item_id}/source-history")
 def source_history(item_id: int):
     with get_session() as session:
@@ -964,7 +979,8 @@ def _execute_leased_download(job_id: int) -> None:
                 preferred_format=spec.get("preferred_format", "format_1080p"), job_id=job_id,
                 representation=spec.get("representation", {}), metadata=spec.get("metadata", {}),
                 reference=spec["source_reference"],
-                on_progress=lambda percent: _download_progress(job_id, percent), **options)
+                on_progress=lambda percent: _download_progress(job_id, percent),
+                on_stage=lambda stage: _job_stage(job_id, stage), **options)
             _job_stage(job_id, "verifying")
             source_file = Path(staging, result.filename).resolve()
             if source_file.parent != Path(staging).resolve() or not source_file.is_file() or source_file.stat().st_size != result.size:
@@ -1053,6 +1069,8 @@ def _job_stage(job_id: int, stage: str) -> None:
         job = session.get(AcquisitionJob, job_id)
         if job.cancel_requested:
             raise JobCancelled()
+        if stage == job.state or _JOB_PROGRESS[stage] < _JOB_PROGRESS[job.state]:
+            return
         job.state = stage
         _sync_operation(session, job)
         session.commit()
@@ -1264,6 +1282,8 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
                 context={"job_id": job.id, "profile_id": profile.id})
             session.add(operation)
             job.operation_id = operation.id
+            session.flush()
+            _sync_operation(session, job)
             session.commit()
         except IntegrityError:
             session.rollback()

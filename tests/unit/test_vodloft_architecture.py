@@ -1757,3 +1757,57 @@ def test_abs_progress_uses_each_local_users_verified_token(library, monkeypatch)
         assert {row.user_key: row.seconds for row in session.scalars(select(PlaybackProgress)).all()} == {'alice': 80, 'bob': 20}
     actor = permissions.Principal(key='bob', role='member')
     assert client.post(f'/api/vodloft/integrations/rss-items/{mapping_id}/progress/pull').status_code == 404
+
+
+def test_generic_artwork_selects_role_reencodes_and_caches(library, monkeypatch):
+    import base64
+    import io
+    from PIL import Image
+    from backend.services import vodloft_artwork
+    from source_contracts import ArtworkCandidate
+    client, sessions, _, gateway, _ = library
+    monkeypatch.setattr(vodloft_artwork, 'get_session', sessions)
+    monkeypatch.setattr(vodloft_artwork, 'validate_public_url', lambda url: url)
+    snapshot = MediaSnapshot(kind='movie', reference=ref('example.com', 'poster'), title='Movie', artwork=[
+        ArtworkCandidate(url='https://images.example.com/landscape.png', role='landscape', width=320, height=180),
+        ArtworkCandidate(url='https://images.example.com/portrait.png', role='portrait', width=120, height=180)])
+    monkeypatch.setattr(gateway.SourceGateway, 'resolve', lambda *a, **k: snapshot)
+    item_id = client.post('/api/vodloft/import', json={'snapshot': snapshot.model_dump(mode='json')}).json()['id']
+    calls = []
+    def fetch(self, source, operation, **kwargs):
+        calls.append(kwargs['url']); assert not kwargs['headers']
+        buffer = io.BytesIO(); Image.new('RGB', (120, 180), 'blue').save(buffer, 'PNG')
+        return {'data': base64.b64encode(buffer.getvalue()).decode()}
+    monkeypatch.setattr(gateway.SourceGateway, 'call', fetch)
+    response = client.get(f'/api/vodloft/library/{item_id}/artwork?shape=portrait')
+    assert response.status_code == 200 and response.headers['content-type'] == 'image/jpeg'
+    assert calls == ['https://images.example.com/portrait.png']
+    assert Image.open(io.BytesIO(response.content)).format == 'JPEG'
+    assert client.get(f'/api/vodloft/library/{item_id}/artwork?shape=portrait').content == response.content
+    assert len(calls) == 1
+    assert client.get(f'/api/vodloft/library/{item_id}/artwork?shape=svg').status_code == 422
+
+
+def test_source_processing_event_reports_actual_job_stage(library, monkeypatch):
+    client, sessions, router, gateway, _ = library
+    snapshot = MediaSnapshot(kind='video', reference=ref('example.com', 'processing'), title='Processing')
+    monkeypatch.setattr(gateway.SourceGateway, 'resolve', lambda *a, **k: snapshot)
+    item_id = client.post('/api/vodloft/import', json={'snapshot': snapshot.model_dump(mode='json')}).json()['id']
+    profile_id = client.post('/api/vodloft/profiles', json={'name': 'Processing', 'domain': 'example.com'}).json()['id']
+    job_id, _, _ = router.queue_download(item_id, profile_id)
+    def download(self, source_id, url, staging, **kwargs):
+        kwargs['on_progress'](60); kwargs['on_stage']('downloading')
+        assert client.get(f'/api/vodloft/jobs/{job_id}').json()['progress'] > 35
+        kwargs['on_stage']('processing')
+        assert client.get(f'/api/vodloft/jobs/{job_id}').json()['state'] == 'processing'
+        kwargs['on_stage']('downloading')
+        assert client.get(f'/api/vodloft/jobs/{job_id}').json()['state'] == 'processing'
+        path = Path(staging) / 'media.mp4'; path.write_bytes(b'media')
+        return DownloadResult(filename=path.name, size=5)
+    monkeypatch.setattr(gateway.SourceGateway, 'download', download)
+    router._run_download(job_id)
+    from task_manager.scheduler.db import TaskOperation
+    with sessions() as session:
+        operation = session.get(TaskOperation, session.get(AcquisitionJob, job_id).operation_id)
+        assert [stage['stage'] for stage in operation.context['stages']] == [
+            'queued', 'resolving', 'downloading', 'processing', 'verifying', 'finalizing', 'available']

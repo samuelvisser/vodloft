@@ -86,12 +86,13 @@ class SourceGateway:
             self.commands = {source_id: command_for(source_id)[0] for source_id in registry()}
 
     def call(self, source_id: str, operation: str, *, timeout: int = 90,
-             job_id: int | None = None, on_progress=None, **options):
+             job_id: int | None = None, on_progress=None, on_stage=None, **options):
         command = self.commands.get(source_id)
         if not command or not isinstance(command, list) or not all(isinstance(arg, str) for arg in command):
             raise ValueError("The selected Source is not installed")
         scratch = tempfile.mkdtemp(prefix="vodloft-source-")
-        output_file = tempfile.TemporaryFile(mode="w+t", encoding="utf-8") if on_progress is None else None
+        events_requested = on_progress is not None or on_stage is not None
+        output_file = tempfile.TemporaryFile(mode="w+t", encoding="utf-8") if not events_requested else None
         try:
             process = subprocess.Popen(command, stdin=subprocess.PIPE,
                 stdout=output_file if output_file is not None else subprocess.PIPE,
@@ -111,7 +112,7 @@ class SourceGateway:
                             os.killpg(process.pid, signal.SIGTERM)
                         except ProcessLookupError:
                             pass
-            if on_progress is None:
+            if not events_requested:
                 try:
                     process.communicate(
                         input=json.dumps({"operation": operation, **options, "scratch": scratch}), timeout=timeout)
@@ -138,7 +139,10 @@ class SourceGateway:
                             packet = json.loads(line)
                             if isinstance(packet, dict) and "event" in packet:
                                 event = DownloadEvent.model_validate(packet["event"])
-                                on_progress(event.percent)
+                                if on_stage:
+                                    on_stage(event.stage)
+                                if event.stage == "downloading" and on_progress:
+                                    on_progress(event.percent)
                         except (ValueError, TypeError, KeyError):
                             continue
                         except Exception:
@@ -238,7 +242,7 @@ class SourceGateway:
 
     def download(self, source_id: str, url: str, staging: str,
                  preferred_format: str = "format_1080p", job_id: int | None = None,
-                 on_progress=None,
+                 on_progress=None, on_stage=None,
                  representation: dict | None = None, metadata: dict | None = None,
                  reference: dict | None = None,
                  **source_options) -> DownloadResult:
@@ -249,6 +253,7 @@ class SourceGateway:
                                                       reference=reference,
                                                       timeout=3600, job_id=job_id,
                                                       on_progress=on_progress,
+                                                      on_stage=on_stage,
                                                       **source_options))
 
     def stream_lease(self, source_id: str, url: str, **source_options) -> StreamLease:

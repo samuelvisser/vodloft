@@ -1,3 +1,4 @@
+import type Hls from 'hls.js'
 import {useEffect, useRef, useState} from 'react'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
@@ -20,7 +21,7 @@ type Connection = {id: number; source_id: string; name: string; has_secret: bool
 type Reference = {source_id: string; domain: string; namespace: string; upstream_id: string; url: string}
 type Preview = {kind: string; title: string; description?: string; artwork_url?: string; reference: Reference; entries: {title: string; position: number}[]; enumeration_complete: boolean}
 type Item = {parent_id?: number | null; extra_type?: string | null; chapters?: {title: string; start: number; end?: number}[]; id: number; title: string; description?: string; kind: string; domain: string; downloaded: boolean;
-    capabilities?: string[] | null; playback_type?: string; artwork_url?: string; entries?: Item[]; extras?: Item[];
+    capabilities?: string[] | null; playback_type?: string; artwork_url?: string; artwork_available?: boolean; entries?: Item[]; extras?: Item[];
     is_live?: boolean | null; formats?: {code: string; description?: string; audio_only: boolean; height?: number}[];
     references?: {id: number; source_id: string; connection_id: number | null; namespace: string; upstream_id: string}[]}
 type Home = {continue: (Item & {seconds: number})[]; recent: Item[];
@@ -101,6 +102,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
     const [preview, setPreview] = useState<Preview | null>(null)
     const [searchPage, setSearchPage] = useState<SearchPage | null>(null)
     const [searchRequest, setSearchRequest] = useState<SearchFields | null>(null)
+    const [queue, setQueue] = useState<{id: number; title: string}[]>([])
     const [selected, setSelected] = useState<Item | null>(null)
     const [job, setJob] = useState<Job | null>(null)
     const [jobs, setJobs] = useState<Job[]>([])
@@ -136,6 +138,8 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
         }).catch(e => setError(String(e)))
         void api<Catalogue[]>('/sources/domains').then(setCatalogues).catch(e => setError(String(e)))
         void refresh()
+        const itemId = Number(new URLSearchParams(window.location.search).get('media'))
+        if (itemId > 0) void open(itemId)
     }, [])
     useEffect(() => {
         if (!job || !['queued', 'resolving', 'downloading', 'processing', 'verifying', 'finalizing'].includes(job.state)) return
@@ -199,12 +203,14 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
             setImportConnectionId(searchRequest?.connection_id ? Number(searchRequest.connection_id) : null)
         } catch (e) { setError(String(e)) } finally { setBusy(false) }
     }
-    const open = async (id: number) => {
+    const open = async (id: number, keepQueue = false) => {
+        if (!keepQueue) setQueue([])
         setError(null); setJob(null); setFeedUrl(null); setOutputPreview(null); setSourceHistory(null)
         setView('library')
         try {
             const item = await api<Item>(`/library/${id}`)
             setSelected(item)
+            const location = new URL(window.location.href); location.searchParams.set('media', String(id)); window.history.replaceState(null, '', location)
             setRemoteItems(await api<RemoteItem[]>(`/library/${id}/integrations`))
             setReferenceId(item.references?.length === 1 ? item.references[0].id : null)
             const available = await api<Profile[]>(`/profiles${item.kind === 'collection' ? '' : `?domain=${encodeURIComponent(item.domain)}`}`)
@@ -340,11 +346,11 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
             {home.continue.length === 0 && <p>Play an item to continue it here.</p>}
             <div style={{display: 'flex', flexWrap: 'wrap', gap: 8}}>{home.continue.map(item =>
                 <button className="btn" type="button" key={item.id} onClick={() => void open(item.id)}>
-                    {item.title} · {Math.floor(item.seconds / 60)} min</button>)}</div>
+                    <MediaArtwork item={item} shape="square"/>{item.title} · {Math.floor(item.seconds / 60)} min</button>)}</div>
             <h2>Recent arrivals</h2>
             <div style={{display: 'flex', gap: 8, flexWrap: 'wrap'}}>{home.recent.map(item =>
                 <button className="btn" type="button" key={item.id} onClick={() => void open(item.id)}>
-                    {item.title}{item.downloaded ? ' · Local' : ''}</button>)}</div>
+                    <MediaArtwork item={item} shape={item.kind === 'movie' ? 'portrait' : 'landscape'}/>{item.title}{item.downloaded ? ' · Local' : ''}</button>)}</div>
             <h2>Activity</h2>
             <p>{home.activity.length} active downloads · {home.issues.length} issues</p>
             {home.issues.length > 0 && <button className="btn" type="button"
@@ -390,7 +396,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
             <datalist id="vodloft-domain-suggestions">{catalogues.flatMap(c => c.items.map(domain =>
                 <option key={`${c.source_id}:${domain.hostname}`} value={domain.hostname}>{domain.display_name}</option>))}</datalist>
             {prepareDomain.trim() && <DomainProfileForm key={prepareDomain.trim()} domain={prepareDomain.trim()}
-                targets={targets} onCreated={profile => setProfiles(current => [...current, profile])} />}
+                targets={targets} onCreated={profile => {setProfiles(current => [...current, profile]); setManagedProfiles(current => [...current, profile])}} />}
             <h3>Local Media Profiles</h3>
             {managedProfiles.map(profile => <div key={profile.id} style={{marginBottom: 16}}>
                 <p>{profile.name} · {profile.domain} · {profile.enabled ? 'Enabled' : 'Disabled'}
@@ -597,11 +603,17 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                 }}>Remove local copy</button>}
                 {(selected.downloaded || selected.capabilities?.includes('stream_lease') ||
                     selected.references?.some(ref => sources.find(source => source.source_id === ref.source_id)?.capabilities.includes('stream_lease'))) &&
-                    <LocalPlayer key={`${selected.id}:${referenceId ?? ''}`} item={selected} referenceId={referenceId} />}
+                    <LocalPlayer key={`${selected.id}:${referenceId ?? ''}`} item={selected} referenceId={referenceId} onEnded={() => {const next = queue[0]; if (next) {setQueue(current => current.slice(1)); void open(next.id, true)}}} />}
             </>}
+            {queue.length > 0 && <div><h3>Up next</h3><ol>{queue.map((entry, index) => <li key={`${entry.id}:${index}`}>{entry.title}</li>)}</ol>
+                <button className="btn" type="button" onClick={() => setQueue([])}>Clear queue</button></div>}
+            {selected.kind === 'collection' && selected.entries?.some(entry => entry.kind !== 'collection') && <button className="btn" type="button" onClick={() => {
+                const playable = selected.entries!.filter(entry => entry.kind !== 'collection')
+                setQueue(playable.slice(1)); void open(playable[0].id, true)
+            }}>Play collection in order</button>}
             {selected.entries && <div style={{display: 'grid', gap: 8}}>{selected.entries.map(entry =>
                 <button type="button" className="btn" key={entry.id} onClick={() => void open(entry.id)}
-                        style={{textAlign: 'left'}}>{entry.title}{entry.downloaded ? ' · Local' : ''}</button>)}</div>}
+                        style={{textAlign: 'left'}}><MediaArtwork item={entry} shape="square"/>{entry.title}{entry.downloaded ? ' · Local' : ''}</button>)}</div>}
             {selected.extras && selected.extras.length > 0 && <section><h3>Movie extras</h3>
                 <div style={{display: 'grid', gap: 8}}>{selected.extras.map(extra =>
                     <button type="button" className="btn" key={extra.id} onClick={() => void open(extra.id)}
@@ -612,58 +624,94 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
     </section>
 }
 
-function LocalPlayer({item, referenceId}: {item: Item; referenceId: number | null}) {
+function MediaArtwork({item, shape}: {item: Item; shape: 'square' | 'portrait' | 'landscape'}) {
+    const [failed, setFailed] = useState(false)
+    useEffect(() => setFailed(false), [item.id, item.artwork_url, item.artwork_available, shape])
+    if ((!item.artwork_url && !item.artwork_available) || failed) return null
+    return <img src={`${base()}/library/${item.id}/artwork?shape=${shape}`} alt="" loading="lazy" referrerPolicy="no-referrer"
+        onError={() => setFailed(true)} style={{width: shape === 'square' ? 64 : shape === 'portrait' ? 100 : 160,
+            aspectRatio: shape === 'portrait' ? '2/3' : shape === 'square' ? '1' : '16/9', objectFit: 'cover', borderRadius: 8, marginRight: 12}}/>
+}
+
+function LocalPlayer({item, referenceId, onEnded}: {item: Item; referenceId: number | null; onEnded?: () => void}) {
     const player = useRef<HTMLVideoElement & HTMLAudioElement>(null)
+    const hlsPlayer = useRef<Hls | null>(null)
+    const resumed = useRef(false)
+    const saving = useRef<Promise<unknown>>(Promise.resolve())
     const lastSaved = useRef(0)
     const [position, setPosition] = useState(0)
+    const [speed, setSpeed] = useState(1)
+    const [subtitles, setSubtitles] = useState<{index: number; label: string}[]>([])
+    const [retry, setRetry] = useState(0)
     const [delivery, setDelivery] = useState<{transport: string; url: string} | null>(null)
     const [failure, setFailure] = useState<string | null>(null)
     useEffect(() => {
-        void api<{seconds: number}>(`/library/${item.id}/progress`).then(data => setPosition(data.seconds))
+        let disposed = false
+        void api<{seconds: number}>(`/library/${item.id}/progress`).then(data => {if (!disposed) setPosition(data.seconds)})
+            .catch(() => {})
+        return () => {disposed = true}
     }, [item.id])
     useEffect(() => {
         let disposed = false
-        setDelivery(null); setFailure(null)
-        void api<{transport: string; url: string}>(`/library/${item.id}/watch${referenceId ? `?reference_id=${referenceId}` : ''}`,
-            {method: 'POST'}).then(result => {if (!disposed) setDelivery(result)})
-            .catch(error => {if (!disposed) setFailure(String(error))})
+        setDelivery(null); setFailure(null); resumed.current = false
+        void api<{transport: string; url: string}>(`/library/${item.id}/watch${referenceId ? `?reference_id=${referenceId}` : ''}`, {method: 'POST'})
+            .then(result => {if (!disposed) setDelivery(result)}).catch(error => {if (!disposed) setFailure(String(error))})
         return () => {disposed = true}
-    }, [item.id, referenceId])
+    }, [item.id, referenceId, retry])
+    const resume = () => {
+        const element = player.current
+        if (element) element.playbackRate = speed
+        if (element && !resumed.current && position > 0 && element.readyState >= 1 && position < element.duration - 1) {
+            element.currentTime = position; resumed.current = true
+        }
+    }
+    useEffect(resume, [position, delivery])
     useEffect(() => {
         const element = player.current
-        if (!element || !delivery || delivery.transport !== 'hls' ||
-            element.canPlayType('application/vnd.apple.mpegurl')) return
+        if (!element || !delivery || delivery.transport !== 'hls' || element.canPlayType('application/vnd.apple.mpegurl')) return
         let disposed = false
-        let destroy: (() => void) | undefined
         void import('hls.js').then(({default: Hls}) => {
-            if (disposed || !Hls.isSupported()) return
-            const hls = new Hls({enableWorker: true})
-            hls.loadSource(delivery.url)
-            hls.attachMedia(element)
-            destroy = () => hls.destroy()
-        }).catch(() => setFailure('This browser cannot play this stream. Download it for local playback.'))
-        return () => {disposed = true; destroy?.()}
+            if (disposed) return
+            if (!Hls.isSupported()) {setFailure('This browser cannot play this stream. Download a local copy.'); return}
+            const hls = new Hls({enableWorker: true}); hlsPlayer.current = hls
+            hls.on(Hls.Events.MANIFEST_PARSED, () => setSubtitles(hls.subtitleTracks.map((track, index) => ({index, label: track.name || track.lang || `Track ${index + 1}`}))))
+            hls.on(Hls.Events.ERROR, (_event, data) => {if (data.fatal) setFailure('Playback was interrupted. Restart playback to obtain a new session.')})
+            hls.loadSource(delivery.url); hls.attachMedia(element)
+        }).catch(() => setFailure('This browser cannot play this stream. Download a local copy.'))
+        return () => {disposed = true; hlsPlayer.current?.destroy(); hlsPlayer.current = null}
     }, [delivery])
     const save = (completed = false) => {
         const current = player.current?.currentTime ?? 0
-        if (!Number.isFinite(current)) return
+        if (!Number.isFinite(current)) return Promise.resolve()
         lastSaved.current = current
-        void api(`/library/${item.id}/progress`, {method: 'PUT',
-            body: JSON.stringify({seconds: current, completed})}).catch(() => {})
+        saving.current = saving.current.then(() => api(`/library/${item.id}/progress`, {method: 'PUT',
+            body: JSON.stringify({seconds: current, completed})})).catch(() => {})
+        return saving.current
     }
     const common = {controls: true, preload: 'metadata' as const,
         src: delivery?.transport === 'hls' && !player.current?.canPlayType('application/vnd.apple.mpegurl') ? undefined : delivery?.url,
         onLoadedMetadata: () => {
-            if (player.current && position > 0 && position < player.current.duration - 1)
-                player.current.currentTime = position
+            resume()
+            if (player.current && !hlsPlayer.current) setSubtitles(Array.from(player.current.textTracks).map((track, index) => ({index, label: track.label || track.language || `Track ${index + 1}`})))
         },
-        onTimeUpdate: () => {
-            if (player.current && Math.abs(player.current.currentTime - lastSaved.current) >= 10) save()
-        }, onPause: () => save(), onEnded: () => save(true),
+        onTimeUpdate: () => {if (player.current && Math.abs(player.current.currentTime - lastSaved.current) >= 10) void save()},
+        onPause: () => {if (!player.current?.ended) void save()},
+        onEnded: () => {void save(true).then(() => onEnded?.())},
+        onError: () => setFailure('Playback is unavailable. Restart playback or prepare a compatible local copy.'),
         style: {display: 'block', width: 'min(100%, 800px)', marginTop: 16}}
-    return <div>{failure && <p role="alert">{failure}</p>}
+    return <div>{failure && <p role="alert">{failure} <button className="btn" type="button" onClick={() => setRetry(value => value + 1)}>Restart playback</button></p>}
         {!delivery && !failure && <p>Preparing playback…</p>}
-        {delivery && (item.playback_type === 'audio' ? <audio ref={player} {...common} /> : <video ref={player} {...common} />)}
+        {delivery && <>{item.playback_type === 'audio' ? <audio ref={player} {...common}/> : <video ref={player} {...common}/>}
+            <label>Speed <select value={speed} onChange={event => {const value = Number(event.target.value); setSpeed(value); if (player.current) player.current.playbackRate = value}}>
+                {[0.75, 1, 1.25, 1.5, 1.75, 2].map(value => <option key={value} value={value}>{value}×</option>)}</select></label>{' '}
+            {subtitles.length > 0 && <label>Subtitles <select defaultValue="-1" onChange={event => {
+                const selected = Number(event.target.value)
+                if (hlsPlayer.current) hlsPlayer.current.subtitleTrack = selected
+                else if (player.current) Array.from(player.current.textTracks).forEach((track, index) => {track.mode = index === selected ? 'showing' : 'disabled'})
+            }}><option value="-1">Off</option>{subtitles.map(track => <option key={track.index} value={track.index}>{track.label}</option>)}</select></label>}
+            {!!item.chapters?.length && <details><summary>Chapters</summary>{item.chapters.map((chapter, index) =>
+                <button className="btn" type="button" key={index} onClick={() => {if (player.current) player.current.currentTime = chapter.start}}>{chapter.title} · {Math.floor(chapter.start / 60)}:{String(Math.floor(chapter.start % 60)).padStart(2, '0')}</button>)}</details>}
+        </>}
     </div>
 }
 

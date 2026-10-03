@@ -84,7 +84,7 @@ def allowed_api(actor: Principal, method: str, path: str) -> bool:
     if method == "GET":
         return (path in {"/me", "/home", "/library", "/profiles", "/domains", "/sources",
             "/sources/domains", "/sources/connections", "/requests", "/integrations"} or
-            bool(re.fullmatch(r"/(?:library/\d+(?:/(?:progress|integrations|stream-profiles|download-profiles|history))?|jobs/\d+|sources/[^/]+/(?:manifest|domains|search)|stream-profiles/\d+/admissions)", path)))
+            bool(re.fullmatch(r"/(?:library/\d+(?:/(?:progress|artwork|integrations|stream-profiles|download-profiles|history))?|jobs/\d+|sources/[^/]+/(?:manifest|domains|search)|stream-profiles/\d+/admissions)", path)))
     if method == "POST" and (path in {"/resolve", "/import"} or re.fullmatch(
             r"/(?:library/\d+/(?:watch|requests)|sources/[^/]+/(?:match|entries))", path)):
         return True

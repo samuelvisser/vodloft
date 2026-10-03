@@ -23,3 +23,9 @@ def download_progress_hook():
         print(json.dumps({"event": event.model_dump()}), file=sys.stderr, flush=True)
 
     return report
+
+
+def processing_progress_hook(data: dict) -> None:
+    if data.get("status") == "started" and data.get("postprocessor") != "EffectiveMetadata":
+        event = DownloadEvent(stage="processing")
+        print(json.dumps({"event": event.model_dump()}), file=sys.stderr, flush=True)

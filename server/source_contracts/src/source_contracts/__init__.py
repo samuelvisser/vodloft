@@ -243,7 +243,8 @@ class DownloadRequest(BaseModel):
 
 class DownloadEvent(BaseModel):
     """A bounded, Source-reported transfer fraction; local stages remain VodLoft-owned."""
-    percent: float = Field(ge=0, le=100)
+    percent: float = Field(default=0, ge=0, le=100)
+    stage: Literal["downloading", "processing"] = "downloading"
 
 
 class SourceError(BaseModel):

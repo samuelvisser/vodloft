@@ -258,29 +258,15 @@ def _write_nfo(path: Path, item: MediaItem, export: MediaServerExport,
 
 def _write_artwork(path: Path, item: MediaItem, source_id: str | None) -> None:
     """Keep a validated local image beside the exported file for Jellyfin."""
-    if not item.artwork_url or not source_id:
-        return
     try:
-        result = SourceGateway().call(source_id, "stream_fetch", timeout=35,
-            url=item.artwork_url, headers={})
-        body = base64.b64decode(result["data"], validate=True)
-        image_type = result["content_type"].split(";", 1)[0].lower()
-        if image_type == "image/jpeg" and body.startswith(b"\xff\xd8\xff"):
-            extension = ".jpg"
-        elif image_type == "image/png" and body.startswith(b"\x89PNG\r\n\x1a\n"):
-            extension = ".png"
-        elif image_type == "image/webp" and body.startswith(b"RIFF") and body[8:12] == b"WEBP":
-            extension = ".webp"
-        else:
-            raise ValueError("Unsupported artwork representation")
-        destination = path.with_name(path.stem + ("-poster" if item.kind == "movie" else "-thumb") + extension)
-        with tempfile.NamedTemporaryFile(dir=path.parent, prefix=".artwork-", delete=False) as output:
-            output.write(body)
-            temporary = Path(output.name)
+        from backend.services.vodloft_artwork import artwork
+        image = artwork(item.id, 'portrait' if item.kind == 'movie' else 'landscape')
+        destination = path.with_name(path.stem + ('-poster' if item.kind == 'movie' else '-thumb') + '.jpg')
+        with tempfile.NamedTemporaryFile(dir=path.parent, prefix='.artwork-', delete=False) as output:
+            output.write(image.read_bytes()); temporary = Path(output.name)
         os.replace(temporary, destination)
     except Exception:
-        # Artwork is optional; discovery and the media file remain usable.
-        logger.warning("Could not prepare artwork for media item %s", item.id)
+        logger.warning('Could not prepare artwork for media item %s', item.id)
 
 
 def _presentation_numbers(session, item_id: int) -> tuple[int | None, int | None]:

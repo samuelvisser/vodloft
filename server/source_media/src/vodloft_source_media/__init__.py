@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlsplit
 import yt_dlp
 from yt_dlp.postprocessor.common import PostProcessor
 from source_contracts import DownloadResult, RepresentationPolicy
-from source_contracts.progress import download_progress_hook
+from source_contracts.progress import download_progress_hook, processing_progress_hook
 
 
 class UnsupportedRepresentation(ValueError):
@@ -108,7 +108,8 @@ def download(url: str, staging: str, preferred_format: str,
     policy = RepresentationPolicy.model_validate(representation or {})
     config = {"quiet": True, "no_warnings": True, "noprogress": True, "noplaylist": True,
         "outtmpl": str(destination / "media.%(ext)s"), "restrictfilenames": True,
-        "progress_hooks": [download_progress_hook()], **options(preferred_format, policy),
+        "progress_hooks": [download_progress_hook()], "postprocessor_hooks": [processing_progress_hook],
+        **options(preferred_format, policy),
         "postprocessor_args": {"ffmpeg_i": ["-protocol_whitelist", "file,pipe,crypto,data"]},
         **(authentication or {})}
     try:

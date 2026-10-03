@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useState} from 'react'
+import {useEffect, useMemo, useRef, useState} from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import {jinja} from '@codemirror/lang-jinja'
 import {autocompletion} from '@codemirror/autocomplete'
@@ -16,6 +16,8 @@ export default function DomainTemplateEditor({form, domain}: {form: UseFormRetur
     const template = useWatch({control: form.control, name: 'output_template'}) as string
     const format = useWatch({control: form.control, name: 'preferred_format'}) as string
     const container = useWatch({control: form.control, name: 'container'}) as string
+    const applicability = useWatch({control: form.control, name: 'applicable_kinds'}) as string[] | undefined
+    const allowedKinds = (applicability?.length ? applicability : ['video', 'movie', 'movie_extra']).filter(value => value !== 'collection')
     const [kind, setKind] = useState('video')
     const [search, setSearch] = useState('')
     const [examples, setExamples] = useState<{id: number; label: string}[]>([])
@@ -23,6 +25,10 @@ export default function DomainTemplateEditor({form, domain}: {form: UseFormRetur
     const [preview, setPreview] = useState<{path: string; values: Record<string, unknown>} | null>(null)
     const [error, setError] = useState<string | null>(null)
     const base = `${(window as any).appConfig?.API_URL || '/api'}/vodloft/profiles`
+    useEffect(() => {
+        if (!allowedKinds.includes(kind)) {setKind(allowedKinds[0] || 'video'); setExample(null)}
+    }, [allowedKinds.join(','), kind])
+    useEffect(() => {setExample(null); setSearch('')}, [domain, kind])
     useEffect(() => {
         const controller = new AbortController()
         const timer = window.setTimeout(() => {
@@ -53,15 +59,12 @@ export default function DomainTemplateEditor({form, domain}: {form: UseFormRetur
     }]})], [])
     return <fieldset className="output-template-editor"><legend>Output template</legend>
         <Controller name="output_template" control={form.control} render={({field}) =>
-            <CodeMirror value={renderEditorOutputTemplate(parseOutputTemplate(field.value ?? '', 'compact')).value} extensions={extensions}
-                minHeight="130px" theme="dark" onBlur={field.onBlur}
-                onChange={value => field.onChange(renderCompactOutputTemplate(parseOutputTemplate(value, 'editor')))}
-                aria-label="Output path template"/>}/>
+            <TemplateBuffer value={field.value ?? ''} onChange={field.onChange} onBlur={field.onBlur} extensions={extensions}/>}/>
         <p>Use <code>{'{{ title }}'}</code> and conditions to organize files. The final path must stay inside your library folder.</p>
         <details><summary>Template variables</summary><dl>{Object.entries(variables).map(([key, value]) =>
             <div key={key}><dt><code>{key}</code></dt><dd>{value}</dd></div>)}</dl></details>
         <label>Example media type <select value={kind} onChange={e => {setKind(e.target.value); setExample(null)}}>
-            <option value="video">Video</option><option value="movie">Movie</option><option value="movie_extra">Movie Extra</option>
+            {allowedKinds.map(value => <option key={value} value={value}>{value === 'movie_extra' ? 'Movie Extra' : value === 'movie' ? 'Movie' : 'Video'}</option>)}
         </select></label>
         <label>Find an example <input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder={`Search ${domain} media`}/></label>
         <label>Example <select value={example ?? ''} onChange={e => setExample(Number(e.target.value) || null)}>
@@ -71,4 +74,23 @@ export default function DomainTemplateEditor({form, domain}: {form: UseFormRetur
         {error && <p role="alert">{error}</p>}
         {form.formState.errors.output_template && <p role="alert">{String(form.formState.errors.output_template.message)}</p>}
     </fieldset>
+}
+
+function TemplateBuffer({value, onChange, onBlur, extensions}: {
+    value: string; onChange: (value: string) => void; onBlur: () => void;
+    extensions: React.ComponentProps<typeof CodeMirror>['extensions'];
+}) {
+    const format = (raw: string) => renderEditorOutputTemplate(parseOutputTemplate(raw, 'compact')).value
+    const [buffer, setBuffer] = useState(() => format(value))
+    const committed = useRef(value)
+    useEffect(() => {
+        if (value !== committed.current) {committed.current = value; setBuffer(format(value))}
+    }, [value])
+    return <><CodeMirror value={buffer} extensions={extensions} minHeight="130px" theme="dark"
+        onBlur={onBlur} onChange={raw => {
+            setBuffer(raw)
+            committed.current = renderCompactOutputTemplate(parseOutputTemplate(raw, 'editor'))
+            onChange(committed.current)
+        }} aria-label="Output path template"/>
+        <button className="btn" type="button" onClick={() => setBuffer(format(committed.current))}>Format template</button></>
 }

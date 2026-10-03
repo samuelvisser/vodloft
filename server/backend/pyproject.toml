@@ -20,6 +20,7 @@ dependencies = [
     "source-contracts",
     "jinja2>=3.1,<4",
     "packaging>=24,<27",
+    "pillow>=11.3.0",
 ]
 
 [project.scripts]
