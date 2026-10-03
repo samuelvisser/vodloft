@@ -51,7 +51,9 @@ def build(output: Path, source_id: str, release_version: str | None, channel: st
             '--dest', str(staging), '--require-hashes', '-r', str(requirements)], cwd=root, check=True)
         shutil.rmtree(tool_env)
         requirements.unlink()
-        create_manifest(staging, source_id, version, project['name'], project['requires-python'], channel)
+        # Platform wheels are built for this interpreter's minor version.
+        python_requirement = f'>={sys.version_info.major}.{sys.version_info.minor},<{sys.version_info.major}.{sys.version_info.minor + 1}'
+        create_manifest(staging, source_id, version, project['name'], python_requirement, channel)
         os.replace(staging, target)
         print(f'Built {source_id} release {version}: {target}')
     finally:

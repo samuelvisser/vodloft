@@ -114,7 +114,8 @@ def _verified_releases(source_id: str, config: dict) -> list[dict]:
     for release in document["releases"]:
         if (not isinstance(release, dict) or not {"version", "channel", "wheels"} <= set(release) or
             set(release) - {"version", "channel", "wheels", "adapter_version", "upstream_versions",
-                "protocol_version", "configuration_version", "catalogue_revision", "python_requirement", "native_helpers"} or
+                "protocol_version", "metadata_schema_version", "packages", "configuration_version",
+                "catalogue_revision", "python_requirement", "native_helpers"} or
             not isinstance(release["version"], str) or not _VERSION.fullmatch(release["version"]) or
             release["channel"] not in ("stable", "beta") or
             not isinstance(release["wheels"], dict) or not 1 <= len(release["wheels"]) <= 40):

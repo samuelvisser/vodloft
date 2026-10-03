@@ -242,8 +242,9 @@ def install_bundle(source_id: str, bundle: Path, *, activate: bool = True) -> di
         raise ValueError("Source bundle contains undeclared or missing wheels")
     if release.get("channel", "stable") not in {"stable", "beta"}:
         raise ValueError("Invalid Source release channel")
-    if release.get("protocol_version", PROTOCOL_VERSION) != PROTOCOL_VERSION:
-        raise ValueError("Source release requires a different protocol version")
+    if (release.get("protocol_version", PROTOCOL_VERSION) != PROTOCOL_VERSION or
+            release.get("metadata_schema_version", METADATA_SCHEMA_VERSION) != METADATA_SCHEMA_VERSION):
+        raise ValueError("Source release requires a different protocol or metadata schema version")
     for filename, digest in wheels.items():
         if Path(filename).name != filename or not filename.endswith(".whl") or not re.fullmatch(r"[a-f0-9]{64}", digest):
             raise ValueError("Invalid wheel entry")

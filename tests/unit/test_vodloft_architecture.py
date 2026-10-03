@@ -2016,3 +2016,33 @@ def test_public_library_envelope_preserves_an_intentionally_blank_description(li
     client.put(f'/api/vodloft/library/{item_id}/progress', json={'seconds': 12})
     continued = client.get('/api/vodloft/home').json()['continue'][0]
     assert continued['id'] == item_id and continued['seconds'] == 12
+
+
+def test_source_publisher_catalogue_is_accepted_by_the_update_verifier_and_detects_changed_wheels(tmp_path, monkeypatch):
+    import hashlib
+    import runpy
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from backend.source_manager import release_catalog
+    publisher = runpy.run_path(str(Path(__file__).resolve().parents[2] / 'tools' / 'publish_source_catalogue.py'))
+    bundle = tmp_path / 'bundle'; bundle.mkdir()
+    filename = 'fixture-1.0.0-py3-none-any.whl'
+    wheel = bundle / filename; wheel.write_bytes(b'fixture release')
+    manifest = {'source_id': 'fixture', 'version': '1.0.0', 'adapter_version': '1.0.0', 'channel': 'stable',
+        'protocol_version': 1, 'metadata_schema_version': 1, 'packages': {'fixture': '1.0.0'},
+        'wheels': {filename: hashlib.sha256(wheel.read_bytes()).hexdigest()}}
+    (bundle / 'release.json').write_text(json.dumps(manifest))
+    key = Ed25519PrivateKey.generate()
+    key_file = tmp_path / 'publisher.pem'
+    key_file.write_bytes(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption()))
+    catalog = tmp_path / 'catalogue.json'
+    result = publisher['sign_bundle'](bundle, 'https://releases.example.com/fixture/1.0.0', key_file, catalog)
+    monkeypatch.setattr(release_catalog, '_fetch_https', lambda *args: catalog.read_bytes())
+    releases = release_catalog._verified_releases('fixture', {'url': 'https://releases.example.com/index.json',
+        'public_key': result['public_key']})
+    assert releases[0]['packages']['fixture'] == '1.0.0' and releases[0]['metadata_schema_version'] == 1
+    assert releases[0]['wheels'][filename]['url'].endswith(filename)
+    wheel.write_bytes(b'changed bytes')
+    with pytest.raises(ValueError, match='digest'):
+        publisher['sign_bundle'](bundle, 'https://releases.example.com/fixture/1.0.0', key_file, catalog)
