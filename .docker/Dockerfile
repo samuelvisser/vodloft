@@ -62,7 +62,7 @@ RUN uv sync --frozen --no-dev
 
 # Build trusted offline Source releases. Each runtime installs into its own
 # persistent virtual environment after its wheel digests and contract pass.
-RUN python tools/build_source_bundles.py /app/source-bundles
+RUN uv run --frozen --no-dev python tools/build_source_bundles.py /app/source-bundles
 
 # Default config seed, copied into the /config volume on first run if missing
 COPY config/config.yml.default ./config/config.yml.default

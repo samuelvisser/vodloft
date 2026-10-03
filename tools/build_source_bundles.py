@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import tomllib
+import venv
 from pathlib import Path
 
 from create_source_bundle_manifests import create_manifest
@@ -41,8 +42,14 @@ def build(output: Path, source_id: str, release_version: str | None, channel: st
         subprocess.run(['uv', 'export', '--frozen', '--no-dev', '--package', project['name'],
             '--no-emit-workspace', '--output-file', str(requirements)], cwd=root, check=True,
             stdout=subprocess.DEVNULL)
-        subprocess.run([sys.executable, '-m', 'pip', 'download', '--only-binary=:all:',
+        # uv environments omit pip. Use a disposable stdlib-created tool
+        # environment; it never becomes part of the Source wheel payload.
+        tool_env = staging / '.build-tools'
+        venv.EnvBuilder(with_pip=True).create(tool_env)
+        tool_python = tool_env / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+        subprocess.run([str(tool_python), '-m', 'pip', 'download', '--only-binary=:all:',
             '--dest', str(staging), '--require-hashes', '-r', str(requirements)], cwd=root, check=True)
+        shutil.rmtree(tool_env)
         requirements.unlink()
         create_manifest(staging, source_id, version, project['name'], project['requires-python'], channel)
         os.replace(staging, target)
