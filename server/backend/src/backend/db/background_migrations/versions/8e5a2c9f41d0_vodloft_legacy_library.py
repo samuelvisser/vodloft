@@ -16,7 +16,7 @@ from backend.db import get_session
 from backend.db.models import Show
 from backend.db.models.media_item import Episode, Movie, MovieExtra
 from backend.db.models.vodloft import (Artifact, ArtifactPlacement, CollectionEntry,
-    Domain, LegacyMediaLink, MediaItem, MovieExtraParent, SourceDomain, SourceReference)
+    Domain, LegacyMediaLink, MediaDemand, MediaItem, MovieExtraParent, SourceDomain, SourceReference)
 from config import get_settings
 
 revision = "8e5a2c9f41d0"
@@ -102,12 +102,18 @@ def _copy_downloads(session, item: MediaItem, downloads) -> None:
         if not placement:
             session.add(ArtifactPlacement(artifact_id=artifact.id,
                 profile_id=download.local_media_profile_id, path=str(source)))
+        if not session.scalar(select(MediaDemand.id).where(MediaDemand.item_id == item.id,
+            MediaDemand.profile_id == download.local_media_profile_id, MediaDemand.owner_kind == "direct")):
+            session.add(MediaDemand(item_id=item.id, profile_id=download.local_media_profile_id,
+                owner_kind="direct", owner_id=item.id))
 
 
 def _migrate(context) -> None:
     with get_session() as session:
         count = int(session.scalar(select(func.count(Show.id))) or 0) + int(
             session.scalar(select(func.count(Movie.id))) or 0)
+    if count == 0:
+        return
     context.update_progress(0, count, "Importing the existing WireLoft library")
     processed = 0
     with get_session() as session:

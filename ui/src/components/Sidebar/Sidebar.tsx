@@ -9,18 +9,10 @@ import type { NavItem } from './navTypes'
 library.add(fas)
 
 const items: NavItem[] = [
-    {path: '/web-media', label: 'Web media library', icon: ['fas', 'book-open']},
-    {path: '/library', label: 'Daily Wire library', icon: ['fas', 'film']},
-    {path: '/downloads', label: 'Daily Wire downloads', icon: ['fas', 'circle-down']},
-    {
-        label: 'Profiles',
-        icon: ['fas', 'layer-group'],
-        children: [
-            { path: '/local-media-profiles', label: 'Local Media Profiles', icon: ['fas', 'clapperboard'] },
-            { path: '/download-profiles', label: 'Download Profiles', icon: ['fas', 'download'] },
-            { path: '/stream-profiles', label: 'Stream Profiles', icon: ['fas', 'rss'] },
-        ]
-    },
+    {path: '/', label: 'Home', icon: ['fas', 'house']},
+    {path: '/discover', label: 'Discover / Add', icon: ['fas', 'magnifying-glass']},
+    {path: '/library', label: 'Library', icon: ['fas', 'book-open']},
+    {path: '/management', label: 'Management', icon: ['fas', 'layer-group']},
     {path: '/settings', label: 'Settings', icon: ['fas', 'gear']},
 ]
 

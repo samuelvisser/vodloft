@@ -18,7 +18,8 @@ class ConfigurationField(BaseModel):
     @classmethod
     def safe_transport_name(cls, value: str) -> str:
         if value in {"operation", "url", "query", "staging", "cursor", "limit", "timeout",
-                     "job_id", "source_id", "preferred_format", "max_entries", "scratch"}:
+                     "job_id", "source_id", "preferred_format", "max_entries", "scratch",
+                     "private_state", "representation", "metadata"}:
             raise ValueError("Configuration field collides with a protocol argument")
         return value
 
@@ -31,6 +32,11 @@ class SourceManifest(BaseModel):
     capabilities: set[str]
     exhaustive_domain_catalogue: bool = False
     configuration_schema: list[ConfigurationField] = Field(default_factory=list)
+    upstream_versions: dict[str, str] = Field(default_factory=dict)
+    python_requirement: str = ">=3.12"
+    native_helpers: list[str] = Field(default_factory=list)
+    configuration_version: int = 1
+    catalogue_revision: str = "1"
 
 
 class AuthenticationChallenge(BaseModel):
@@ -41,12 +47,23 @@ class AuthenticationChallenge(BaseModel):
     expires_at: datetime | None = None
 
 
+class AuthenticationResult(BaseModel):
+    """Only status and challenge are public; all other fields are private transport."""
+    status: Literal["pending", "authorized", "denied", "expired"]
+    challenge: AuthenticationChallenge | None = None
+    private_state: dict = Field(default_factory=dict)
+    configuration: dict[str, str | int | float] = Field(default_factory=dict)
+    expires_at: float | None = None
+    interval: int = Field(default=5, ge=1, le=120)
+
+
 class DomainDescriptor(BaseModel):
     hostname: str
     display_name: str
     source_id: str
-    support: Literal["advertised", "verified"] = "advertised"
+    support: Literal["advertised", "verified", "authentication_required", "failing"] = "advertised"
     aliases: list[str] = Field(default_factory=list)
+    capabilities: set[str] | None = None
 
 
 class SourceMediaReference(BaseModel):
@@ -86,6 +103,26 @@ class FormatDescriptor(BaseModel):
     description: str | None = None
 
 
+class ArtworkCandidate(BaseModel):
+    url: str
+    role: Literal["square", "portrait", "landscape", "thumbnail"] = "thumbnail"
+    width: int | None = Field(default=None, gt=0)
+    height: int | None = Field(default=None, gt=0)
+
+
+class Chapter(BaseModel):
+    title: str
+    start: float = Field(ge=0)
+    end: float | None = Field(default=None, ge=0)
+
+
+class MediaTrack(BaseModel):
+    kind: Literal["audio", "video", "subtitle"]
+    language: str | None = None
+    codec: str | None = None
+    label: str | None = None
+
+
 class MediaSnapshot(BaseModel):
     kind: Literal["collection", "video", "movie", "movie_extra"]
     reference: SourceMediaReference
@@ -98,6 +135,11 @@ class MediaSnapshot(BaseModel):
     formats: list[FormatDescriptor] = Field(default_factory=list)
     extensions: dict[str, dict] = Field(default_factory=dict)
     artwork_url: str | None = None
+    artwork: list[ArtworkCandidate] = Field(default_factory=list, max_length=50)
+    chapters: list[Chapter] = Field(default_factory=list, max_length=1000)
+    tracks: list[MediaTrack] = Field(default_factory=list, max_length=100)
+    author: str | None = None
+    movie_year: int | None = Field(default=None, ge=1880, le=2200)
     entries: list[EntrySnapshot] = Field(default_factory=list)
     extras: list[EntrySnapshot] = Field(default_factory=list)
     enumeration_complete: bool = True
@@ -155,6 +197,28 @@ class StreamLease(BaseModel):
     renewable: bool = False
     seekable: bool = False
     headers: dict[str, str] = Field(default_factory=dict)
+    representation_id: str | None = None
+
+
+class RepresentationPolicy(BaseModel):
+    """Common intent, translated by each Source into its acquisition options."""
+    languages: list[str] = Field(default_factory=list, max_length=10)
+    subtitles: list[str] = Field(default_factory=list, max_length=10)
+    language_fallback: bool = True
+    chapters: bool = True
+    artwork: bool = False
+    container: Literal["source", "mp4", "mkv", "mp3", "m4a", "opus"] = "source"
+    video_codec: Literal["source", "h264", "h265", "vp9", "av1"] = "source"
+    audio_codec: Literal["source", "aac", "mp3", "opus"] = "source"
+    embed_metadata: bool = True
+
+    @field_validator("languages", "subtitles")
+    @classmethod
+    def language_codes(cls, values):
+        import re
+        if any(not re.fullmatch(r"[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]{2,8})*", value) for value in values):
+            raise ValueError("Use language codes such as en, nl or en-US")
+        return list(dict.fromkeys(values))
 
 
 class DownloadResult(BaseModel):
@@ -166,6 +230,7 @@ class DownloadRequest(BaseModel):
     reference: SourceMediaReference
     staging: str
     preferred_format: str = "format_1080p"
+    representation: RepresentationPolicy = Field(default_factory=RepresentationPolicy)
 
 
 class DownloadEvent(BaseModel):

@@ -40,34 +40,13 @@ def _recover_download_filesystem(download_settings, scheduled_work_pause) -> Non
     own lease at the same time; normal work resumes only after the final lease is
     released.
     """
-    from backend.api.endpoints.feeds.cached_video import cleanup_expired_rss_cache
-    from task_manager.tasks.helpers.downloads.download_paths import (
-        cleanup_abandoned_download_path_reservations,
-        cleanup_abandoned_temporary_downloads,
-    )
-
+    from backend.services.vodloft_finalization import reconcile
+    from backend.services.vodloft_retention import reconcile as reconcile_retention
     try:
-        logger.info("Starting background download filesystem recovery")
-        reservation_count = cleanup_abandoned_download_path_reservations(
-            download_settings.download_root
-        )
-        temporary_count = cleanup_abandoned_temporary_downloads(
-            download_settings.temporary_download_root,
-            download_settings.download_root,
-        )
-        rss_cache_count = cleanup_expired_rss_cache()
-        logger.info(
-            "Download filesystem recovery complete: cleaned %s stale path claim(s), %s temporary workspace(s), and %s expired RSS cache file(s)",
-            reservation_count,
-            temporary_count,
-            rss_cache_count,
-        )
+        reconcile()
+        reconcile_retention()
     except Exception:
-        # Filesystem recovery is best-effort crash cleanup. A transient mount or
-        # permissions problem must not leave every background task paused forever.
-        logger.exception(
-            "Download filesystem recovery failed; releasing its scheduled-work pause without complete cleanup"
-        )
+        logger.exception("Download filesystem recovery failed")
     finally:
         scheduled_work_pause.release()
 
@@ -106,22 +85,20 @@ async def application_lifespan(app: FastAPI):
 
         def collection_automation_loop():
             from backend.api.endpoints.vodloft.automation import refresh_due_collections
-            from backend.source_manager.runtime import install_bundled_updates
+            from backend.source_manager.runtime import check_updates
             from backend.api.endpoints.vodloft.integrations import reconcile_exports
             from backend.api.endpoints.vodloft.playback import expire_sessions
             from backend.services.vodloft_retention import reconcile as reconcile_retention
             from backend.api.endpoints.vodloft.router import recover_acquisition_jobs, retry_due_acquisition_jobs
+            from task_manager.scheduler.scheduler import scheduled_work_is_paused
             while not automation_stop.wait(15):
-                try:
-                    install_bundled_updates()
-                    refresh_due_collections()
-                    recover_acquisition_jobs()
-                    retry_due_acquisition_jobs()
-                    reconcile_exports()
-                    expire_sessions()
-                    reconcile_retention()
-                except Exception:
-                    logger.exception("Collection automation sweep failed")
+                if not scheduled_work_is_paused():
+                    for sweep in (check_updates, refresh_due_collections, recover_acquisition_jobs,
+                                  retry_due_acquisition_jobs, reconcile_exports, expire_sessions, reconcile_retention):
+                        try:
+                            sweep()
+                        except Exception:
+                            logger.exception("Automatic sweep %s failed", sweep.__name__)
                 if automation_stop.wait(45):
                     break
 
@@ -131,7 +108,7 @@ async def application_lifespan(app: FastAPI):
         recovery_thread = threading.Thread(
             target=_recover_download_filesystem,
             args=(settings.download_settings, filesystem_pause),
-            name="wireloft-startup-download-recovery",
+            name="vodloft-startup-download-recovery",
             daemon=True,
         )
         recovery_thread.start()
@@ -215,6 +192,10 @@ def create_app() -> FastAPI:
             if is_api and not (is_public_auth or is_public_config):
                 if not is_authenticated(request):
                     return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+                from backend.security.permissions import principal, allowed_api
+                request.state.principal = principal(request)
+                if not allowed_api(request.state.principal, request.method, path):
+                    return JSONResponse({"detail": "This action requires library or administrator permission"}, status_code=403)
             return await call_next(request)
         except Exception as exc:
             # External HTTP clients use several libraries. Normalize only strong
@@ -229,31 +210,12 @@ def create_app() -> FastAPI:
             )
 
     # Import routers lazily to avoid circular imports during app module import
-    from backend.api.endpoints import (
-        dailywire_router,
-        download_profile_podcast_router,
-        download_profile_series_router,
-        download_profile_router,
-        media_download_router,
-        show_router,
-        movie_router,
-        onboarding_router,
-        operation_router,
-        puller_router,
-        episode_router,
-        season_router,
-        setting_router,
-        local_media_profile_router,
-        show_local_media_profile_router,
-        movie_local_media_profile_router,
-        meta_router,
-        config_router,
-        rss_stream_profile_router,
-        stream_profile_router,
-        task_router,
-        feeds_router,
-        custom_metadata_router,
-    )
+    from backend.api.endpoints.onboarding.router import router as onboarding_router
+    from backend.api.endpoints.operations.router import router as operation_router
+    from backend.api.endpoints.puller.router import router as puller_router
+    from backend.api.endpoints.settings.router import router as setting_router
+    from backend.api.endpoints.config.router import router as config_router
+    from backend.api.endpoints.meta_router import router as meta_router
     from backend.api.endpoints.auth.router import router as auth_router
     from backend.api.endpoints.vodloft import router as vodloft_router
     from backend.api.endpoints.vodloft.feeds import api_router as vodloft_feeds_api, public_router as vodloft_feeds_public
@@ -262,6 +224,7 @@ def create_app() -> FastAPI:
     from backend.api.endpoints.vodloft.integrations import router as vodloft_integrations_router
     from backend.api.endpoints.vodloft.connections import router as vodloft_connections_router
     from backend.api.endpoints.vodloft.playback import router as vodloft_playback_router
+    from backend.api.endpoints.vodloft.requests import router as vodloft_requests_router
 
     # Public auth endpoints
     app.include_router(auth_router, prefix="/api")
@@ -272,36 +235,13 @@ def create_app() -> FastAPI:
     app.include_router(vodloft_integrations_router, prefix="/api")
     app.include_router(vodloft_connections_router, prefix="/api")
     app.include_router(vodloft_playback_router, prefix="/api")
+    app.include_router(vodloft_requests_router, prefix="/api")
     app.include_router(vodloft_feeds_public)
 
-    # Podcast feed endpoints: intentionally mounted outside /api (and thus
-    # outside the auth middleware below) so feed URLs keep working in podcast
-    # apps even when local auth is enabled. Secured instead by an unguessable
-    # per-profile token baked into the URL - see backend.api.endpoints.feeds.
-    app.include_router(feeds_router)
-
-    # Protected API endpoints (shielded by middleware above)
-    app.include_router(dailywire_router, prefix="/api")
-    app.include_router(download_profile_podcast_router, prefix="/api")
-    app.include_router(download_profile_series_router, prefix="/api")
-    app.include_router(download_profile_router, prefix="/api")
-    app.include_router(episode_router, prefix="/api")
-    app.include_router(season_router, prefix="/api")
-    app.include_router(media_download_router, prefix="/api")
-    app.include_router(show_router, prefix="/api")
-    app.include_router(movie_router, prefix="/api")
-    app.include_router(onboarding_router, prefix="/api")
-    app.include_router(operation_router, prefix="/api")
-    app.include_router(puller_router, prefix="/api")
-    app.include_router(setting_router, prefix="/api")
-    app.include_router(local_media_profile_router, prefix="/api")
-    app.include_router(show_local_media_profile_router, prefix="/api")
-    app.include_router(movie_local_media_profile_router, prefix="/api")
-    app.include_router(custom_metadata_router, prefix="/api")
-    app.include_router(meta_router, prefix="/api")
-    app.include_router(config_router, prefix="/api")
-    app.include_router(rss_stream_profile_router, prefix="/api")
-    app.include_router(stream_profile_router, prefix="/api")
-    app.include_router(task_router, prefix="/api")
+    # WireLoft's shared infrastructure remains; all media workflows use the
+    # normalized library and the Source gateway.
+    for shared_router in (onboarding_router, operation_router, puller_router,
+                          setting_router, meta_router, config_router):
+        app.include_router(shared_router, prefix="/api")
 
     return app

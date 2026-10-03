@@ -223,12 +223,15 @@ class MiddlewareClient:
         pace_requests: bool = True,
         pacing_settings=None,
         token_provider: Callable[[], str | None] | None = None,
+        transport: Callable[..., Any] | None = None,
     ) -> None:
         self._req_timeout = request_timeout
         self._base_url = (base_url or DEFAULT_MIDDLEWARE_URL).rstrip('/')
         self._pace_requests = bool(pace_requests)
         self._pacing_settings = pacing_settings
         self._token_provider = token_provider
+        self._access_token = access_token
+        self._transport = transport or urlopen
         headers = {
             # These are generally not required for Middleware, but harmless if present
             'Accept': 'application/json',
@@ -421,11 +424,11 @@ class MiddlewareClient:
     def get_user_info(self) -> DwUserInfo:
         """
         Fetch the current user's info using DailyWire Middleware API.
-        Access token is obtained from dailywire_authorisation package.
+        The caller supplies a token or a scoped token provider.
         """
         access_token = self._get_access_token()
         if not access_token:
-            raise MiddlewareAPIError("No valid access token in token store")
+            raise MiddlewareAPIError("An access token is required")
 
         # Temporarily set Authorization header, preserving any existing value
         headers_backup = self._headers.copy()
@@ -596,11 +599,7 @@ class MiddlewareClient:
     def _get_access_token(self) -> str | None:
         if self._token_provider:
             return self._token_provider()
-        # Legacy WireLoft callers still use its token store. A separately
-        # installed Source supplies a scoped token provider instead.
-        from dailywire_authorisation import DeviceAuthClient
-        tokens = DeviceAuthClient().get_token()
-        return tokens.access_token if tokens else None
+        return self._access_token
 
     def _get(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         qs = urlencode(params or {})
@@ -624,7 +623,7 @@ class MiddlewareClient:
 
             req = Request(url, headers=self._headers, method='GET')
             try:
-                with urlopen(req, timeout=self._req_timeout) as resp:
+                with self._transport(req, timeout=self._req_timeout) as resp:
                     data = resp.read()
                 break
             except HTTPError as e:

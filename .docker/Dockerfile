@@ -65,6 +65,7 @@ RUN uv sync --frozen --no-dev
 RUN mkdir -p /app/source-bundles/yt-dlp/0.1.0 /app/source-bundles/dailywire/0.1.0 \
     && uv build --wheel server/source_contracts --out-dir /app/source-bundles/yt-dlp/0.1.0 \
     && uv build --wheel server/source_ytdlp --out-dir /app/source-bundles/yt-dlp/0.1.0 \
+    && uv build --wheel server/source_media --out-dir /app/source-bundles/yt-dlp/0.1.0 \
     && uv build --wheel server/dailywire_api --out-dir /app/source-bundles/dailywire/0.1.0 \
     && uv build --wheel server/source_contracts --out-dir /app/source-bundles/dailywire/0.1.0 \
     && uv build --wheel server/source_dailywire --out-dir /app/source-bundles/dailywire/0.1.0 \

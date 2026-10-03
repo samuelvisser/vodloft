@@ -12,11 +12,11 @@ import threading
 from pathlib import Path
 from typing import Literal
 from urllib.parse import quote, urlsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, Request as UpstreamRequest, build_opener
 from xml.etree import ElementTree
 
 from cryptography.fernet import Fernet
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
@@ -26,6 +26,7 @@ from backend.db.models.vodloft import (Artifact, ArtifactPlacement, CollectionEn
     MediaItem, MediaServerExport, MediaServerTarget, PlaybackProgress, SourceReference)
 from backend.source_manager.gateway import SourceGateway
 from backend.source_manager.runtime import runtime_root
+from backend.security.permissions import principal
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/vodloft", tags=["VodLoft integrations"])
@@ -83,9 +84,10 @@ def _serialize(target: MediaServerTarget) -> dict:
 
 
 @router.get("/integrations")
-def targets():
+def targets(request: Request):
     with get_session() as session:
-        return [_serialize(t) for t in session.scalars(select(MediaServerTarget)).all()]
+        return [_serialize(t) for t in session.scalars(select(MediaServerTarget)).all()
+                if principal(request).can_use_target(t.id)]
 
 
 @router.post("/integrations", status_code=201)
@@ -143,7 +145,7 @@ def _request(target: MediaServerTarget, method: str, path: str,
         headers["Authorization"] = f"Bearer {token}"
     if payload is not None:
         headers["Content-Type"] = "application/json"
-    request = Request(f"{target.base_url}{path}", headers=headers, method=method,
+    request = UpstreamRequest(f"{target.base_url}{path}", headers=headers, method=method,
         data=json.dumps(payload).encode() if payload is not None else None)
     with build_opener(_NoRedirect()).open(request, timeout=10) as response:
         return response.read(2 * 1024 * 1024)
@@ -426,7 +428,7 @@ def _external_url(target: MediaServerTarget, export: MediaServerExport) -> str:
 
 
 @router.get("/library/{item_id}/integrations")
-def item_integrations(item_id: int):
+def item_integrations(item_id: int, request: Request):
     with get_session() as session:
         if not session.get(MediaItem, item_id):
             raise HTTPException(404, "Media item not found")
@@ -438,7 +440,8 @@ def item_integrations(item_id: int):
             "remote_episode_id": export.remote_episode_id,
             "presentation_strategy": export.presentation_strategy,
             "url": _external_url(target, export) if export.state == "available" else None}
-            for export in exports if (target := session.get(MediaServerTarget, export.target_id))]
+            for export in exports if (target := session.get(MediaServerTarget, export.target_id))
+            and principal(request).can_use_target(target.id)]
 
 
 @router.post("/integrations/exports/{export_id}/progress/pull")

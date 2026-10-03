@@ -14,6 +14,7 @@ members = [
     "task-manager",
     "vodloft",
     "vodloft-source-dailywire",
+    "vodloft-source-media",
     "vodloft-source-ytdlp",
 ]
 
@@ -86,6 +87,7 @@ dependencies = [
     { name = "dailywire-authorisation" },
     { name = "fastapi" },
     { name = "jinja2" },
+    { name = "packaging" },
     { name = "psutil" },
     { name = "pydantic" },
     { name = "source-contracts" },
@@ -104,6 +106,7 @@ requires-dist = [
     { name = "dailywire-authorisation", editable = "server/dailywire_authorisation" },
     { name = "fastapi", specifier = ">=0.118.0" },
     { name = "jinja2", specifier = ">=3.1,<4" },
+    { name = "packaging", specifier = ">=24,<27" },
     { name = "psutil", specifier = ">=6.1.1" },
     { name = "pydantic", specifier = ">=2.11.9" },
     { name = "source-contracts", editable = "server/source_contracts" },
@@ -300,6 +303,12 @@ requires-dist = [
 name = "dailywire-downloader"
 version = "1.0.1"
 source = { editable = "server/dailywire_downloader" }
+dependencies = [
+    { name = "source-contracts" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "source-contracts", editable = "server/source_contracts" }]
 
 [[package]]
 name = "fastapi"
@@ -796,6 +805,7 @@ dependencies = [
     { name = "dailywire-authorisation" },
     { name = "dailywire-downloader" },
     { name = "pyventus" },
+    { name = "source-contracts" },
     { name = "sqlalchemy" },
 ]
 
@@ -809,6 +819,7 @@ requires-dist = [
     { name = "dailywire-authorisation", editable = "server/dailywire_authorisation" },
     { name = "dailywire-downloader", editable = "server/dailywire_downloader" },
     { name = "pyventus", specifier = ">=0.7.2" },
+    { name = "source-contracts", editable = "server/source_contracts" },
     { name = "sqlalchemy", specifier = ">=2.0.43,<3.0" },
 ]
 
@@ -890,6 +901,7 @@ dependencies = [
     { name = "source-contracts" },
     { name = "task-manager" },
     { name = "vodloft-source-dailywire" },
+    { name = "vodloft-source-media" },
     { name = "vodloft-source-ytdlp" },
 ]
 
@@ -911,6 +923,7 @@ requires-dist = [
     { name = "source-contracts", editable = "server/source_contracts" },
     { name = "task-manager", editable = "server/task_manager" },
     { name = "vodloft-source-dailywire", editable = "server/source_dailywire" },
+    { name = "vodloft-source-media", editable = "server/source_media" },
     { name = "vodloft-source-ytdlp", editable = "server/source_ytdlp" },
 ]
 
@@ -928,12 +941,29 @@ source = { editable = "server/source_dailywire" }
 dependencies = [
     { name = "dailywire-api" },
     { name = "source-contracts" },
+    { name = "vodloft-source-media" },
     { name = "yt-dlp" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "dailywire-api", editable = "server/dailywire_api" },
+    { name = "source-contracts", editable = "server/source_contracts" },
+    { name = "vodloft-source-media", editable = "server/source_media" },
+    { name = "yt-dlp", specifier = ">=2025.1.1" },
+]
+
+[[package]]
+name = "vodloft-source-media"
+version = "0.1.0"
+source = { editable = "server/source_media" }
+dependencies = [
+    { name = "source-contracts" },
+    { name = "yt-dlp" },
+]
+
+[package.metadata]
+requires-dist = [
     { name = "source-contracts", editable = "server/source_contracts" },
     { name = "yt-dlp", specifier = ">=2025.1.1" },
 ]
@@ -944,12 +974,14 @@ version = "0.1.0"
 source = { editable = "server/source_ytdlp" }
 dependencies = [
     { name = "source-contracts" },
+    { name = "vodloft-source-media" },
     { name = "yt-dlp" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "source-contracts", editable = "server/source_contracts" },
+    { name = "vodloft-source-media", editable = "server/source_media" },
     { name = "yt-dlp", specifier = ">=2025.1.1" },
 ]
 

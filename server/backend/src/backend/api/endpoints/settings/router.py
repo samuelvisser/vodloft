@@ -2,7 +2,6 @@ from fastapi import APIRouter, HTTPException
 
 from backend.api.models.settings import SettingsAPIRead, SettingsAPIUpdate
 from backend.app import db_session
-from backend.services.show_assets import request_show_asset_reconciliation
 from .service import (
     SettingsManagedByEnvironmentError,
     SettingsPersistenceError,
@@ -30,11 +29,4 @@ def settings_update(body: SettingsAPIUpdate):
     except SettingsPersistenceError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    if set(body.changed_fields) & {
-        "downloadSettings.downloadShowAssets", "downloadSettings.downloadRoot",
-        "downloadSettings.filenameRestrictionMode", "downloadSettings.ffmpegPath",
-    }:
-        with db_session() as session:
-            request_show_asset_reconciliation(session)
-            session.commit()
     return result

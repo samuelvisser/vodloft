@@ -18,7 +18,7 @@ from apscheduler.triggers.date import DateTrigger
 from backend.db.datetime_types import utc_datetime
 from config import get_settings
 from config.network import is_no_internet_error
-from dailywire_downloader import MediaUnavailableError
+from source_contracts.errors import MediaUnavailableError
 
 _scheduler: Optional[AsyncIOScheduler] = None
 _critical_scheduler: Optional[AsyncIOScheduler] = None
@@ -163,7 +163,7 @@ def _execute_task_job(**kwargs) -> None:
             # failure visible without asking APScheduler to dump the whole causal
             # traceback for an expected authentication/media-availability state.
             logger.warning(
-                "Task %s could not access Daily Wire media: %s",
+                "Task %s could not access upstream media: %s",
                 kwargs.get("def_key", "unknown"),
                 exc,
             )

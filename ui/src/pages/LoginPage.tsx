@@ -5,14 +5,15 @@ import { buildServerAwareSubmit } from '../utils/buildServerAwareSubmit'
 import { hashPasswordForAdminAuth } from '../utils/security/adminAuth'
 
 const LoginSchema = z.object({
+  username: z.string().min(1),
   password: z.string().min(7, 'Password must be at least 7 characters'),
 })
-type LoginValues = z.infer<typeof LoginSchema>
+type LoginValues = z.input<typeof LoginSchema>
 
 export default function LoginPage() {
   const form = useForm<LoginValues>({
     resolver: zodResolver(LoginSchema),
-    defaultValues: { password: '' },
+    defaultValues: { username: 'admin', password: '' },
     shouldFocusError: true,
   })
 
@@ -20,8 +21,8 @@ export default function LoginPage() {
     form,
     async (data) => {
       const base = (window as any).appConfig?.API_URL || '/api'
-      const passwordHash = await hashPasswordForAdminAuth(data.password)
-      const payload = { passwordHash }
+      const passwordHash = await hashPasswordForAdminAuth(data.password ?? '')
+      const payload = { passwordHash, username: data.username }
       return await fetch(`${base}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -52,7 +53,7 @@ export default function LoginPage() {
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, marginBottom: 18 }}>
           <strong style={{color: 'white', fontSize: 34}}>VodLoft</strong>
           <h1 style={{ color: 'white', fontSize: 24, margin: 0, fontWeight: 600 }}>Welcome</h1>
-          <p style={{ color: 'rgba(255,255,255,0.7)', margin: 0, fontSize: 14 }}>Enter the admin password to continue</p>
+          <p style={{ color: 'rgba(255,255,255,0.7)', margin: 0, fontSize: 14 }}>Sign in with your local account</p>
         </div>
 
         {/* Root error banner */}
@@ -64,6 +65,9 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit}>
           <div style={{ display: 'grid', gap: 10 }}>
+            <label htmlFor="username" style={{color: 'white'}}>Username</label>
+            <input id="username" autoComplete="username" {...register('username')}
+              style={{fontSize: 16, padding: '12px 14px', borderRadius: 10}} />
             <label htmlFor="password" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13 }}>Password</label>
             <input
               id="password"
@@ -79,7 +83,7 @@ export default function LoginPage() {
                 padding: '12px 14px',
                 borderRadius: 10,
                 outline: 'none',
-                fontSize: 14,
+                fontSize: 16,
                 boxShadow: errors.password ? '0 0 0 3px rgba(255,77,77,0.15)' : 'none',
               }}
             />
@@ -94,7 +98,7 @@ export default function LoginPage() {
         </form>
 
         <div style={{ marginTop: 18, textAlign: 'center', color: 'rgba(255,255,255,0.55)', fontSize: 12 }}>
-          Protected by the local administrator password.
+          Your VodLoft account is separate from your upstream media accounts.
         </div>
       </div>
     </div>

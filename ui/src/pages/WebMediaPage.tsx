@@ -2,6 +2,9 @@ import {useEffect, useRef, useState} from 'react'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {z} from 'zod'
+import {buildServerAwareSubmit} from '../utils/buildServerAwareSubmit'
+import {hashPasswordForAdminAuth} from '../utils/security/adminAuth'
+import DomainTemplateEditor from '../components/LocalMediaProfile/DomainTemplateEditor'
 
 const URLForm = z.object({url: z.url().startsWith('https://').or(z.url().startsWith('http://')),
     source_id: z.string(), connection_id: z.string()})
@@ -9,7 +12,10 @@ type URLFields = z.infer<typeof URLForm>
 type Source = {source_id: string; display_name: string; capabilities: string[];
     configuration_schema: {name: string; label: string; kind: 'text' | 'number' | 'select' | 'secret' | 'credential_file';
         required: boolean; options: string[]}[]}
+type Me = {key: string; username: string; role: string; manages_library: boolean; can_subscribe: boolean; auto_approve: boolean; request_quota: number}
+type MediaRequest = {id: number; item_id: number; user_key: string; profile_id: number; state: string; job_id: number | null; reason: string | null}
 type Connection = {id: number; source_id: string; name: string; has_secret: boolean; enabled: boolean;
+    authentication_status?: string | null;
     settings: Record<string, string | number>; secret_fields: string[]}
 type Reference = {source_id: string; domain: string; namespace: string; upstream_id: string; url: string}
 type Preview = {kind: string; title: string; description?: string; artwork_url?: string; reference: Reference; entries: {title: string; position: number}[]; enumeration_complete: boolean}
@@ -47,8 +53,17 @@ const ProfileFormSchema = z.object({
     name: z.string().min(1),
     preferred_format: z.enum(['format_720p', 'format_1080p', 'format_4k', 'format_audio_only']),
     output_template: z.string().min(16),
+    languages: z.string().default('').refine(value => value.split(',').map(code => code.trim()).filter(Boolean)
+        .every(code => /^[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]{2,8})*$/.test(code)), 'Use language codes such as en, nl or en-US'),
+    subtitles: z.string().default('').refine(value => value.split(',').map(code => code.trim()).filter(Boolean)
+        .every(code => /^[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]{2,8})*$/.test(code)), 'Use language codes such as en or nl'),
+    container: z.enum(['source', 'mp4', 'mkv', 'mp3', 'm4a', 'opus']).default('source'),
+    video_codec: z.enum(['source', 'h264', 'h265', 'vp9', 'av1']).default('source'),
+    audio_codec: z.enum(['source', 'aac', 'mp3', 'opus']).default('source'),
+    chapters: z.boolean().default(true), artwork: z.boolean().default(false),
+    embed_metadata: z.boolean().default(true), language_fallback: z.boolean().default(true),
 })
-type ProfileFields = z.infer<typeof ProfileFormSchema>
+type ProfileFields = z.input<typeof ProfileFormSchema>
 
 const base = () => `${(window as any).appConfig?.API_URL || '/api'}/vodloft`
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
@@ -61,8 +76,9 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
     return response.status === 204 ? undefined as T : response.json() as Promise<T>
 }
 
-export default function WebMediaPage() {
-    const [view, setView] = useState<'home' | 'discover' | 'library' | 'management'>('home')
+export default function WebMediaPage({initialView = 'home'}: {initialView?: 'home' | 'discover' | 'library' | 'management'}) {
+    const [view, setView] = useState<'home' | 'discover' | 'library' | 'management'>(initialView)
+    const [me, setMe] = useState<Me | null>(null)
     const [libraryQuery, setLibraryQuery] = useState('')
     const {register, handleSubmit, formState: {errors}} = useForm<URLFields>({
         resolver: zodResolver(URLForm), defaultValues: {url: '', source_id: '', connection_id: ''},
@@ -107,7 +123,10 @@ export default function WebMediaPage() {
         void api<Source[]>('/sources').then(setSources).catch(e => setError(String(e)))
         void api<Connection[]>('/sources/connections').then(setConnections).catch(e => setError(String(e)))
         void api<Target[]>('/integrations').then(setTargets).catch(e => setError(String(e)))
-        void api<RuntimeState>('/sources/runtimes').then(setRuntimes).catch(e => setError(String(e)))
+        void api<Me>('/me').then(actor => {
+            setMe(actor)
+            if (actor.role === 'admin') void api<RuntimeState>('/sources/runtimes').then(setRuntimes).catch(e => setError(String(e)))
+        }).catch(e => setError(String(e)))
         void api<Catalogue[]>('/sources/domains').then(setCatalogues).catch(e => setError(String(e)))
         void refresh()
     }, [])
@@ -125,13 +144,13 @@ export default function WebMediaPage() {
         return () => window.clearInterval(timer)
     }, [job?.id, job?.state, selected?.id])
     useEffect(() => {
-        if (view !== 'management') return
+        if (view !== 'management' || me?.role !== 'admin') return
         const update = () => void Promise.all([api<Job[]>('/jobs').then(setJobs),
             api<Export[]>('/integrations/exports').then(setExports)]).catch(e => setError(String(e)))
         update()
         const timer = window.setInterval(update, 10000)
         return () => window.clearInterval(timer)
-    }, [view])
+    }, [view, me?.role])
 
     const resolve = handleSubmit(async fields => {
         setBusy(true); setError(null); setPreview(null)
@@ -192,8 +211,17 @@ export default function WebMediaPage() {
     }
     const download = async (id: number) => {
         setError(null)
-        try { setJob(await api<Job>(`/library/${id}/download`, {method: 'POST',
-            body: JSON.stringify({profile_id: profileId, reference_id: referenceId})})) }
+        try {
+            if (me?.role === 'admin' && selected?.downloaded) {
+                setJob(await api<Job>(`/library/${id}/download`, {method: 'POST',
+                    body: JSON.stringify({profile_id: profileId, reference_id: referenceId})}))
+            } else {
+                const demand = await api<MediaRequest>(`/library/${id}/requests`, {method: 'POST',
+                    body: JSON.stringify({profile_id: profileId, reference_id: referenceId})})
+                if (demand.job_id) setJob(await api<Job>(`/jobs/${demand.job_id}`))
+                setRunResult(demand.state === 'pending' ? 'Download requested; waiting for approval.' : `Request ${demand.state}.`)
+            }
+        }
         catch (e) { setError(String(e)) }
     }
     const refreshCollection = async (id: number, expandDepth = 0) => {
@@ -315,7 +343,9 @@ export default function WebMediaPage() {
             {home.issues.length > 0 && <button className="btn" type="button"
                 onClick={() => setView('management')}>Review issues</button>}
         </section>}
-        {view === 'management' && <section style={{marginBottom: 24}}><h2>Sources, Domains and media servers</h2>
+        {view === 'management' && <section style={{marginBottom: 24}}><h2>Management</h2>
+            {me && <RequestsView me={me} items={items} onOpen={open}/>}
+            {me?.role === 'admin' && <>
             <h3>Installed Sources</h3>
             {sources.map(source => <p key={source.source_id}>{source.display_name} · {source.capabilities.join(', ')}
                 {runtimes?.active[source.source_id] && ` · runtime ${runtimes.active[source.source_id]}`}{' '}
@@ -353,7 +383,7 @@ export default function WebMediaPage() {
             {prepareDomain.trim() && <DomainProfileForm key={prepareDomain.trim()} domain={prepareDomain.trim()}
                 targets={targets} onCreated={profile => setProfiles(current => [...current, profile])} />}
             <h3>Source connections</h3>
-            {connections.map(connection => <p key={connection.id}>{connection.name} · {connection.source_id}
+            {connections.map(connection => <div key={connection.id} style={{marginBottom: 12}}>{connection.name} · {connection.source_id}
                 {connection.has_secret ? ' · credential stored' : ' · anonymous'}
                 {!connection.enabled && ' · disabled'}{' '}
                 <button className="btn" type="button" onClick={() => void api<Connection>(
@@ -363,7 +393,11 @@ export default function WebMediaPage() {
                     .then(updated => setConnections(current => current.map(item =>
                         item.id === updated.id ? updated : item))).catch(e => setError(String(e)))}>
                     {connection.enabled ? 'Disable' : 'Enable'}</button>
-            </p>)}
+                {connection.enabled && sources.find(source => source.source_id === connection.source_id)?.capabilities.includes('authentication') &&
+                    <ConnectionAuthentication connection={connection} onUpdated={() => {
+                        void api<Connection[]>('/sources/connections').then(setConnections)
+                    }}/>} 
+            </div>)}
             <ConnectionForm sources={sources} onCreated={connection => setConnections(current => [...current, connection])}/>
             <h3>Media servers</h3>
             {targets.map(target => <p key={target.id}>{target.name} · {target.kind} · library {target.library_id}{' '}
@@ -393,7 +427,9 @@ export default function WebMediaPage() {
                     onClick={() => void api<unknown>(`/integrations/exports/${record.id}/retry`, {method: 'POST'})
                         .then(() => api<Export[]>('/integrations/exports').then(setExports)).catch(e => setError(String(e)))}>Retry</button>}
             </p>)}
+            <UsersManagement connections={connections} targets={targets}/>
             {runResult && <p role="status">{runResult}</p>}
+            </>}
         </section>}
         {view === 'library' && <>
         <h2>Library</h2>
@@ -601,11 +637,19 @@ function DomainProfileForm({domain, formats, targets, onCreated}: {domain: strin
     const [expanded, setExpanded] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [deliveryIds, setDeliveryIds] = useState<number[]>([])
-    const {register, handleSubmit, formState: {errors, isSubmitting}, reset, setValue} = useForm<ProfileFields>({
+    const form = useForm<ProfileFields, unknown, z.output<typeof ProfileFormSchema>>({
         resolver: zodResolver(ProfileFormSchema),
-        defaultValues: {name: `${domain} video`, preferred_format: 'format_1080p',
+        defaultValues: {...ProfileFormSchema.partial({name: true, output_template: true, preferred_format: true}).parse({}),
+            name: `${domain} video`, preferred_format: 'format_1080p',
             output_template: '/downloads/{{ domain }}/{{ title }} - {{ id }}.ext'},
     })
+    const {register, handleSubmit, formState: {errors, isSubmitting}, reset, setValue, watch} = form
+    const audioOnly = watch('preferred_format') === 'format_audio_only'
+    useEffect(() => {
+        const container = watch('container')
+        if (audioOnly && ['mp4', 'mkv'].includes(container ?? '') ||
+            !audioOnly && ['mp3', 'm4a', 'opus'].includes(container ?? '')) setValue('container', 'source')
+    }, [audioOnly])
     useEffect(() => {
         if (formats?.length && !formats.some(format => format.code === 'format_1080p'))
             setValue('preferred_format', formats[0].code as ProfileFields['preferred_format'])
@@ -614,7 +658,13 @@ function DomainProfileForm({domain, formats, targets, onCreated}: {domain: strin
         setError(null)
         try {
             const profile = await api<Profile>('/profiles', {method: 'POST',
-                body: JSON.stringify({...values, domain, applicable_kinds: ['video', 'movie', 'movie_extra'],
+                body: JSON.stringify({name: values.name, preferred_format: values.preferred_format,
+                    output_template: values.output_template, domain, applicable_kinds: ['video', 'movie', 'movie_extra'],
+                    representation: {languages: values.languages.split(',').map(code => code.trim()).filter(Boolean),
+                        subtitles: audioOnly ? [] : values.subtitles.split(',').map(code => code.trim()).filter(Boolean),
+                        container: values.container, video_codec: audioOnly ? 'source' : values.video_codec,
+                        audio_codec: values.audio_codec, chapters: values.chapters, artwork: values.artwork,
+                        embed_metadata: values.embed_metadata, language_fallback: values.language_fallback},
                     delivery_target_ids: deliveryIds})})
             onCreated(profile); setExpanded(false); reset()
         } catch (e) { setError(String(e)) }
@@ -633,9 +683,24 @@ function DomainProfileForm({domain, formats, targets, onCreated}: {domain: strin
             ]).map(format => <option key={format.code} value={format.code}>
                 {format.description ?? format.code.replace(/_/g, ' ')}</option>)}
         </select></label>
-        <label>Output path template <input {...register('output_template')} style={{width: '100%'}} />
-            {errors.output_template && <span role="alert">{errors.output_template.message}</span>}
-        </label>
+        <fieldset><legend>Representation</legend>
+            <label>Audio languages <input {...register('languages')} placeholder="en, nl" />
+                {errors.languages && <span role="alert">{errors.languages.message}</span>}</label>
+            <label style={{display: 'block'}}><input type="checkbox" {...register('language_fallback')} /> Allow another language when the preferred tracks are unavailable</label>
+            {!audioOnly && <label>Subtitle languages <input {...register('subtitles')} placeholder="en, nl" />
+                {errors.subtitles && <span role="alert">{errors.subtitles.message}</span>}</label>}
+            <label>Container <select {...register('container')}><option value="source">Automatic</option>
+                {(audioOnly ? ['mp3', 'm4a', 'opus'] : ['mp4', 'mkv']).map(value => <option key={value} value={value}>{value.toUpperCase()}</option>)}
+            </select></label>
+            {!audioOnly && <label>Video codec <select {...register('video_codec')}><option value="source">Automatic</option>
+                {['h264', 'h265', 'vp9', 'av1'].map(value => <option key={value} value={value}>{value.toUpperCase()}</option>)}</select></label>}
+            <label>Audio codec <select {...register('audio_codec')}><option value="source">Automatic</option>
+                {['aac', 'mp3', 'opus'].map(value => <option key={value} value={value}>{value.toUpperCase()}</option>)}</select></label>
+            <label style={{display: 'block'}}><input type="checkbox" {...register('chapters')} /> Include chapters when supplied</label>
+            <label style={{display: 'block'}}><input type="checkbox" {...register('artwork')} /> Embed artwork when supplied</label>
+            <label style={{display: 'block'}}><input type="checkbox" {...register('embed_metadata')} /> Embed the library title and description</label>
+        </fieldset>
+        <DomainTemplateEditor form={form} domain={domain}/>
         {targets.length > 0 && <fieldset><legend>Media-server delivery</legend>{targets.map(target =>
             <label key={target.id} style={{display: 'block'}}><input type="checkbox" checked={deliveryIds.includes(target.id)}
                 onChange={event => setDeliveryIds(current => event.target.checked ? [...current, target.id] :
@@ -792,6 +857,134 @@ function TargetForm({onCreated}: {onCreated: (target: Target) => void}) {
 const ConnectionSchema = z.object({source_id: z.string().min(1), name: z.string().min(1),
     configuration: z.record(z.string(), z.string()).default({})})
 type ConnectionFields = z.input<typeof ConnectionSchema>
+
+function RequestsView({me, items, onOpen}: {me: Me; items: Item[]; onOpen: (id: number) => Promise<void>}) {
+    const [requests, setRequests] = useState<MediaRequest[]>([])
+    const [error, setError] = useState<string | null>(null)
+    const [reason, setReason] = useState('Request declined')
+    const refresh = () => api<MediaRequest[]>('/requests').then(setRequests).catch(e => setError(String(e)))
+    useEffect(() => {
+        void refresh()
+        const timer = window.setInterval(() => {if (!document.hidden) void refresh()}, 10000)
+        return () => window.clearInterval(timer)
+    }, [])
+    const act = async (record: MediaRequest, action: 'approve' | 'reject' | 'withdraw') => {
+        try {
+            await api(`/requests/${record.id}${action === 'withdraw' ? '' : `/${action}`}`,
+                {method: action === 'withdraw' ? 'DELETE' : 'POST',
+                    body: action === 'reject' ? JSON.stringify({reason}) : undefined})
+            await refresh()
+        } catch (e) {setError(String(e))}
+    }
+    return <section><h3>{me.manages_library ? 'Media requests' : 'My requests'}</h3>
+        {!requests.length && <p>No requests yet.</p>}
+        {me.manages_library && requests.some(record => record.state === 'pending') &&
+            <label>Decline reason <input value={reason} onChange={event => setReason(event.target.value)} maxLength={1000}/></label>}
+        {requests.map(record => <div key={record.id} style={{marginBottom: 10}}>
+            <button type="button" className="btn" onClick={() => void onOpen(record.item_id)}>
+                {items.find(item => item.id === record.item_id)?.title ?? `Media ${record.item_id}`}</button>
+            {' '}· {record.state}{record.reason && ` · ${record.reason}`}{' '}
+            {me.manages_library && record.state === 'pending' && <>
+                <button type="button" className="btn" onClick={() => void act(record, 'approve')}>Approve</button>{' '}
+                <button type="button" className="btn" disabled={!reason.trim()} onClick={() => void act(record, 'reject')}>Decline</button>{' '}
+            </>}
+            {!['canceled', 'rejected'].includes(record.state) && <button type="button" className="btn" onClick={() => void act(record, 'withdraw')}>Withdraw demand</button>}
+        </div>)}
+        {error && <p role="alert">{error}</p>}
+    </section>
+}
+
+type LocalAccount = {key: string; username: string; role: 'member' | 'manager'; enabled: boolean;
+    can_subscribe: boolean; auto_approve: boolean; request_quota: number; connection_ids: number[]; target_ids: number[]}
+const AccountSchema = z.object({username: z.string().regex(/^[a-z0-9][a-z0-9_.-]{0,79}$/),
+    password: z.string().min(7), role: z.enum(['member', 'manager']).default('member'),
+    request_quota: z.number().int().min(1).max(10000).default(10),
+    can_subscribe: z.boolean().default(true), auto_approve: z.boolean().default(false)})
+type AccountFields = z.input<typeof AccountSchema>
+
+function UsersManagement({connections, targets}: {connections: Connection[]; targets: Target[]}) {
+    const [users, setUsers] = useState<LocalAccount[]>([])
+    const [expanded, setExpanded] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+    const [connectionIds, setConnectionIds] = useState<number[]>([])
+    const [targetIds, setTargetIds] = useState<number[]>([])
+    const form = useForm<AccountFields, unknown, z.output<typeof AccountSchema>>({
+        resolver: zodResolver(AccountSchema), defaultValues: {...AccountSchema.partial({username: true, password: true}).parse({}), username: '', password: ''}})
+    useEffect(() => {void api<LocalAccount[]>('/users').then(setUsers).catch(e => setError(String(e)))}, [])
+    const submit = buildServerAwareSubmit(form, async (values: z.output<typeof AccountSchema>) => {
+        const {password, ...settings} = values
+        return fetch(`${base()}/users`, {method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({...settings, passwordHash: await hashPasswordForAdminAuth(password),
+                connection_ids: connectionIds, target_ids: targetIds})})
+    }, {successStatuses: [201], onSuccess: async result => {
+        setUsers(current => [...current, result as LocalAccount]); setExpanded(false); form.reset()
+        setConnectionIds([]); setTargetIds([])
+    }, fallbackField: 'username', fieldAlias: {passwordHash: 'password'}})
+    return <section><h3>Local accounts</h3>
+        {users.map(user => <p key={user.key}>{user.username} · {user.role} · {user.request_quota} open requests{' '}
+            <button type="button" className="btn" onClick={() => void api<LocalAccount>(`/users/${user.key}`,
+                {method: 'PUT', body: JSON.stringify({...user, enabled: !user.enabled})})
+                .then(updated => setUsers(current => current.map(value => value.key === updated.key ? updated : value)))
+                .catch(e => setError(String(e)))}>{user.enabled ? 'Disable account' : 'Enable account'}</button></p>)}
+        {!expanded ? <button type="button" className="btn" onClick={() => setExpanded(true)}>Add local account</button> :
+            <form onSubmit={submit} style={{display: 'grid', maxWidth: 560, gap: 10}}>
+                <label>Username <input {...form.register('username')} autoComplete="off"/></label>
+                <label>Password <input type="password" {...form.register('password')} autoComplete="new-password"/></label>
+                <label>Role <select {...form.register('role')}><option value="member">Member</option><option value="manager">Library manager</option></select></label>
+                <label>Open request quota <input type="number" {...form.register('request_quota', {valueAsNumber: true})} min={1} max={10000}/></label>
+                <label><input type="checkbox" {...form.register('auto_approve')}/> Automatically approve requests</label>
+                <label><input type="checkbox" {...form.register('can_subscribe')}/> Allow feed subscriptions</label>
+                <fieldset><legend>Upstream account access</legend>{connections.map(connection => <label key={connection.id} style={{display: 'block'}}>
+                    <input type="checkbox" checked={connectionIds.includes(connection.id)} onChange={event => setConnectionIds(current => event.target.checked ? [...current, connection.id] : current.filter(id => id !== connection.id))}/>
+                    {connection.name}</label>)}</fieldset>
+                <fieldset><legend>Media-server access</legend>{targets.map(target => <label key={target.id} style={{display: 'block'}}>
+                    <input type="checkbox" checked={targetIds.includes(target.id)} onChange={event => setTargetIds(current => event.target.checked ? [...current, target.id] : current.filter(id => id !== target.id))}/>
+                    {target.name}</label>)}</fieldset>
+                {Object.entries(form.formState.errors).map(([key, value]) => <p role="alert" key={key}>{String(value?.message ?? 'Check the form fields')}</p>)}
+                <div><button className="btn btn-primary" disabled={form.formState.isSubmitting}>Save account</button>{' '}
+                    <button type="button" className="btn" onClick={() => setExpanded(false)}>Cancel</button></div>
+            </form>}
+        {error && <p role="alert">{error}</p>}
+    </section>
+}
+
+type AuthenticationState = {status: string; interval: number;
+    challenge?: {message: string; verification_url?: string; user_code?: string; expires_at?: string} | null}
+
+function ConnectionAuthentication({connection, onUpdated}: {connection: Connection; onUpdated: () => void}) {
+    const [state, setState] = useState<AuthenticationState>({status: connection.authentication_status ?? 'expired', interval: 5})
+    const [error, setError] = useState<string | null>(null)
+    const [busy, setBusy] = useState(false)
+    useEffect(() => {
+        if (state.status !== 'pending') return
+        const timer = window.setTimeout(() => {
+            void api<AuthenticationState>(`/sources/connections/${connection.id}/authentication`)
+                .then(next => {setState(next); if (next.status !== 'pending') onUpdated()})
+                .catch(e => {setError(String(e)); setState(current => ({...current}))})
+        }, Math.max(1, state.interval) * 1000)
+        return () => window.clearTimeout(timer)
+    }, [state, connection.id])
+    return <div style={{marginTop: 8}}>
+        {state.status === 'pending' ? <>
+            <p>{state.challenge?.message ?? 'Waiting for authorization…'}{' '}
+                {state.challenge?.verification_url && <a href={state.challenge.verification_url} target="_blank" rel="noreferrer">Open authorization page</a>}
+                {state.challenge?.user_code && <> · Code: <strong>{state.challenge.user_code}</strong></>}
+            </p>
+        </> : <span>{state.status === 'authorized' ? 'Account authorized. ' : state.status === 'denied' ? 'Authorization declined. ' : ''}</span>}
+        <button type="button" className="btn" disabled={busy} onClick={() => {
+            setBusy(true); setError(null)
+            void api<AuthenticationState>(`/sources/connections/${connection.id}/authenticate`, {method: 'POST'})
+                .then(setState).catch(e => setError(String(e))).finally(() => setBusy(false))
+        }}>{state.status === 'pending' ? 'Restart authorization' : 'Authorize account'}</button>{' '}
+        {(state.status === 'pending' || state.status === 'authorized') && <button type="button" className="btn" disabled={busy} onClick={() => {
+            setBusy(true)
+            void api(`/sources/connections/${connection.id}/authentication`, {method: 'DELETE'})
+                .then(() => {setState({status: 'expired', interval: 5}); onUpdated()})
+                .catch(e => setError(String(e))).finally(() => setBusy(false))
+        }}>{state.status === 'pending' ? 'Cancel' : 'Sign out'}</button>}
+        {error && <p role="alert">{error}</p>}
+    </div>
+}
 
 function ConnectionForm({sources, onCreated}: {sources: Source[]; onCreated: (connection: Connection) => void}) {
     const [expanded, setExpanded] = useState(false)

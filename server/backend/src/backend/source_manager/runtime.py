@@ -9,6 +9,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+from datetime import datetime, timezone
+from packaging.specifiers import SpecifierSet
+from packaging.version import Version
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -18,6 +22,7 @@ MODULES = {"yt-dlp": "vodloft_source_ytdlp.worker",
            "dailywire": "vodloft_source_dailywire.worker"}
 PACKAGES = {"yt-dlp": "vodloft-source-ytdlp",
             "dailywire": "vodloft-source-dailywire"}
+_last_remote_check = 0.0
 
 
 def registry() -> dict[str, dict[str, str]]:
@@ -101,7 +106,65 @@ def _probe(command: list[str], source_id: str) -> SourceManifest:
     manifest = SourceManifest.model_validate_json(result.stdout)
     if manifest.source_id != source_id or manifest.protocol_version != PROTOCOL_VERSION:
         raise ValueError("Source runtime failed contract compatibility")
+    python_version = subprocess.run([command[0], "-c", "import platform; print(platform.python_version())"],
+        text=True, capture_output=True, timeout=10, check=True).stdout.strip()
+    if Version(python_version) not in SpecifierSet(manifest.python_requirement):
+        raise ValueError("The Source requires a different Python interpreter")
+    for helper in manifest.native_helpers:
+        if not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", helper) or not shutil.which(helper):
+            raise ValueError("A required Source native helper is unavailable")
+    # Every operation is private and non-networked. Sources declaring health
+    # checks must prove their dependencies before receiving real jobs.
+    if "health" in manifest.capabilities:
+        health = subprocess.run(command, input='{"operation":"health"}', text=True,
+            capture_output=True, timeout=20, check=True)
+        if json.loads(health.stdout).get("healthy") is not True:
+            raise ValueError("The Source runtime health check failed")
     return manifest
+
+
+def _interpreter(source_id: str, release: dict) -> str:
+    configured = os.environ.get("VODLOFT_SOURCE_PYTHONS")
+    interpreters = json.loads(Path(configured).read_text()) if configured else {}
+    python = str(interpreters.get(source_id, sys.executable))
+    if not Path(python).is_absolute() or not Path(python).is_file():
+        raise ValueError("Configure an existing absolute Source Python interpreter")
+    version = subprocess.run([python, "-c", "import platform; print(platform.python_version())"],
+        text=True, capture_output=True, timeout=10, check=True).stdout.strip()
+    if Version(version) not in SpecifierSet(release.get("python_requirement", ">=3.12")):
+        raise ValueError("The release is incompatible with the selected Source Python interpreter")
+    return python
+
+
+def _validate_saved_configuration(manifest: SourceManifest) -> None:
+    from backend.db import get_session
+    from backend.db.models.vodloft import SourceConnection
+    from sqlalchemy import select
+    fields = {field.name: field for field in manifest.configuration_schema}
+    with get_session() as session:
+        connections = session.scalars(select(SourceConnection).where(
+            SourceConnection.source_id == manifest.source_id, SourceConnection.enabled.is_(True))).all()
+        for connection in connections:
+            values = connection.settings or {}
+            saved = set(values) | set(connection.secret_references or {})
+            if saved - set(fields):
+                raise ValueError("The Source configuration changed; review saved connections before activation")
+            for name, value in values.items():
+                field = fields[name]
+                if (field.kind == "number" and not isinstance(value, (int, float)) or
+                    field.kind == "select" and value not in field.options):
+                    raise ValueError("A saved connection is incompatible with the new Source schema")
+
+
+def record_failure(source_id: str, action: str, error: Exception) -> None:
+    root = runtime_root()
+    with _locked(root):
+        state = _read_state(root)
+        state["history"].append({"source_id": source_id, "action": action, "state": "failed",
+            "at": datetime.now(timezone.utc).isoformat(), "reason": type(error).__name__,
+            "message": "Release verification, installation or compatibility check failed"})
+        state["history"] = state["history"][-200:]
+        _write_state(root, state)
 
 
 def install_bundle(source_id: str, bundle: Path, *, activate: bool = True) -> dict:
@@ -136,7 +199,7 @@ def install_bundle(source_id: str, bundle: Path, *, activate: bool = True) -> di
             target.parent.mkdir(parents=True, exist_ok=True)
             staging = Path(tempfile.mkdtemp(prefix=".install-", dir=target.parent))
             try:
-                subprocess.run([sys.executable, "-m", "venv", str(staging)], timeout=60, check=True,
+                subprocess.run([_interpreter(source_id, release), "-m", "venv", str(staging)], timeout=60, check=True,
                     capture_output=True)
                 python = staging / "bin" / "python"
                 subprocess.run([str(python), "-m", "pip", "install", "--no-index",
@@ -149,12 +212,15 @@ def install_bundle(source_id: str, bundle: Path, *, activate: bool = True) -> di
                     shutil.rmtree(staging)
         # A previously installed bundle is still probed before a new activation.
         manifest = _probe([str(target / "bin" / "python"), "-m", module], source_id)
+        if activate:
+            _validate_saved_configuration(manifest)
         state = _read_state(root)
         if activate and state["active"].get(source_id) != version:
             previous = state["active"].get(source_id)
             state["active"][source_id] = version
             state["history"].append({"source_id": source_id, "from": previous,
-                "to": version, "action": "activate"})
+                "to": version, "action": "activate", "state": "available",
+                "at": datetime.now(timezone.utc).isoformat(), "manifest": manifest.model_dump()})
             _write_state(root, state)
     return {"source_id": source_id, "version": version, "active": activate,
             "manifest": manifest.model_dump()}
@@ -168,11 +234,13 @@ def activate(source_id: str, version: str) -> dict:
     with _locked(root):
         command = [str(root / source_id / version / "bin" / "python"), "-m", sources[source_id]["module"]]
         manifest = _probe(command, source_id)
+        _validate_saved_configuration(manifest)
         state = _read_state(root)
         previous = state["active"].get(source_id)
         state["active"][source_id] = version
         state["history"].append({"source_id": source_id, "from": previous,
-            "to": version, "action": "activate"})
+            "to": version, "action": "activate", "state": "available",
+            "at": datetime.now(timezone.utc).isoformat(), "manifest": manifest.model_dump()})
         _write_state(root, state)
     return manifest.model_dump()
 
@@ -226,4 +294,16 @@ def install_bundled_updates() -> list[dict]:
             version = max(candidates, key=lambda value: tuple(int(part) for part in re.findall(r"\d+", value)))
             if status()["active"].get(source_id) != version:
                 activate(source_id, version)
+    return results
+
+
+def check_updates(*, force: bool = False) -> list[dict]:
+    """Check mounted bundles and periodically discover signed remote releases."""
+    global _last_remote_check
+    results = install_bundled_updates()
+    now = time.monotonic()
+    if force or not _last_remote_check or now - _last_remote_check >= 6 * 60 * 60:
+        from .release_catalog import install_remote_updates
+        results.extend(install_remote_updates())
+        _last_remote_check = now
     return results

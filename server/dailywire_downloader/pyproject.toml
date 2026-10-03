@@ -4,7 +4,8 @@ version = "1.0.1"
 description = "Standalone HLS / direct-file media downloader used by Wireloft (no yt-dlp)"
 authors = [{ name = "Samuël Visser", email = "samuvisser@gmail.com" }]
 requires-python = ">=3.13,<3.14"
-dependencies = []
+dependencies = [
+    "source-contracts",]
 
 [project.scripts]
 dailywire-downloader = "dailywire_downloader.__main__:main"

@@ -12,6 +12,7 @@ from pathlib import Path
 from xml.etree.ElementTree import Element, SubElement, tostring
 
 from fastapi import APIRouter, HTTPException, Request
+from backend.security.permissions import principal, user_enabled
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import delete, select
@@ -105,16 +106,16 @@ def delete_stream_profile(profile_id: int):
         profile = session.get(CollectionStreamProfile, profile_id)
         if not profile:
             raise HTTPException(404, "Stream Profile not found")
-        subscription = session.scalar(select(FeedSubscription).where(
-            FeedSubscription.stream_profile_id == profile_id))
-        subscription_id = subscription.id if subscription else None
-        if subscription:
+        subscriptions = session.scalars(select(FeedSubscription).where(
+            FeedSubscription.stream_profile_id == profile_id)).all()
+        subscription_ids = [subscription.id for subscription in subscriptions]
+        for subscription in subscriptions:
             session.delete(subscription)
-            session.flush()
+        session.flush()
         session.execute(delete(LiveAdmission).where(LiveAdmission.stream_profile_id == profile_id))
         session.delete(profile)
         session.commit()
-    if subscription_id:
+    for subscription_id in subscription_ids:
         _remove_published(subscription_id)
 
 
@@ -135,19 +136,22 @@ def subscribe(collection_id: int, request: Request):
         if not item or item.kind != "collection":
             raise HTTPException(404, "Collection not found")
         subscription = session.scalar(select(FeedSubscription).where(
-            FeedSubscription.collection_id == collection_id, FeedSubscription.stream_profile_id.is_(None)))
+            FeedSubscription.collection_id == collection_id, FeedSubscription.stream_profile_id.is_(None),
+            FeedSubscription.user_key == principal(request).key))
         if not subscription:
-            subscription = FeedSubscription(collection_id=collection_id, token=secrets.token_urlsafe(32))
+            subscription = FeedSubscription(collection_id=collection_id, token=secrets.token_urlsafe(32),
+                                            user_key=principal(request).key)
             session.add(subscription)
             session.commit()
         return {"url": str(request.url_for("vodloft_feed", token=subscription.token))}
 
 
 @api_router.delete("/library/{collection_id}/feed")
-def revoke(collection_id: int):
+def revoke(collection_id: int, request: Request):
     with get_session() as session:
         subscription = session.scalar(select(FeedSubscription).where(
-            FeedSubscription.collection_id == collection_id, FeedSubscription.stream_profile_id.is_(None)))
+            FeedSubscription.collection_id == collection_id, FeedSubscription.stream_profile_id.is_(None),
+            FeedSubscription.user_key == principal(request).key))
         if not subscription:
             raise HTTPException(404, "Collection feed not found")
         subscription_id = subscription.id
@@ -164,20 +168,23 @@ def subscribe_profile(profile_id: int, request: Request):
         if not profile or not profile.enabled:
             raise HTTPException(404, "Enabled Stream Profile not found")
         subscription = session.scalar(select(FeedSubscription).where(
-            FeedSubscription.stream_profile_id == profile_id))
+            FeedSubscription.stream_profile_id == profile_id,
+            FeedSubscription.user_key == principal(request).key))
         if not subscription:
             subscription = FeedSubscription(collection_id=profile.collection_id,
-                stream_profile_id=profile_id, token=secrets.token_urlsafe(32))
+                stream_profile_id=profile_id, token=secrets.token_urlsafe(32),
+                user_key=principal(request).key)
             session.add(subscription)
             session.commit()
         return {"url": str(request.url_for("vodloft_feed", token=subscription.token))}
 
 
 @api_router.delete("/stream-profiles/{profile_id}/feed")
-def revoke_profile(profile_id: int):
+def revoke_profile(profile_id: int, request: Request):
     with get_session() as session:
         subscription = session.scalar(select(FeedSubscription).where(
-            FeedSubscription.stream_profile_id == profile_id))
+            FeedSubscription.stream_profile_id == profile_id,
+            FeedSubscription.user_key == principal(request).key))
         if not subscription:
             raise HTTPException(404, "Stream Profile feed not found")
         subscription_id = subscription.id
@@ -309,7 +316,8 @@ def reconcile_live_admissions(collection_id: int) -> None:
                         AcquisitionJob.item_id == item.id,
                         AcquisitionJob.reference_id == admission.source_reference_id)
                         .order_by(AcquisitionJob.id.desc()))
-                    admission.state = ("failed" if job and job.state == "failed" else
+                    admission.state = ("failed" if profile.local_only and not candidate or
+                        job and job.state in {"failed", "canceled"} else
                         "upstream" if item.capabilities is None or "stream_lease" in item.capabilities
                         else "waiting")
                     if profile.local_only and candidate and admission.state != "failed":
@@ -343,7 +351,7 @@ def live_admissions(profile_id: int):
 def feed(token: str, request: Request):
     with get_session() as session:
         subscription = session.scalar(select(FeedSubscription).where(FeedSubscription.token == token))
-        if not subscription:
+        if not subscription or subscription.user_key != "admin" and not user_enabled(subscription.user_key):
             raise HTTPException(404, "Feed not found")
         profile = session.get(CollectionStreamProfile, subscription.stream_profile_id) if subscription.stream_profile_id else None
         if subscription.stream_profile_id:
@@ -389,7 +397,7 @@ def feed(token: str, request: Request):
                         media_type="application/rss+xml")
 
 
-@public_router.get("/{token}/media/{entry_id}/{name}", name="vodloft_enclosure")
+@public_router.api_route("/{token}/media/{entry_id}/{name}", methods=["GET", "HEAD"], name="vodloft_enclosure")
 def enclosure(token: str, entry_id: int, name: str):
     with get_session() as session:
         entry = session.get(PublishedEntry, entry_id)
@@ -397,7 +405,8 @@ def enclosure(token: str, entry_id: int, name: str):
             raise HTTPException(404, "Enclosure not found")
         subscription = session.get(FeedSubscription, entry.subscription_id)
         path = Path(entry.path).resolve()
-        if (not subscription or not secrets.compare_digest(subscription.token, token)
+        if (not subscription or subscription.user_key != "admin" and not user_enabled(subscription.user_key)
+                or not secrets.compare_digest(subscription.token, token)
                 or path.name != name or not path.is_relative_to(_feed_root()) or not path.is_file()):
             raise HTTPException(404, "Enclosure not found")
         return FileResponse(path, media_type=mimetypes.guess_type(path.name)[0] or "application/octet-stream")

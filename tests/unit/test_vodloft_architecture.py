@@ -36,6 +36,53 @@ def test_source_contract_and_generic_gateway_keep_package_boundary():
         else:
             assert not any(name.startswith(("vodloft_source_", "dailywire_api", "yt_dlp"))
                            for name in imports), path
+    for path in (root / "dailywire_api" / "src").rglob("*.py"):
+        imports = [node.module or "" for node in ast.walk(ast.parse(path.read_text()))
+                   if isinstance(node, ast.ImportFrom)]
+        assert not any(name.startswith(("backend", "config", "dailywire_authorisation"))
+                       for name in imports), path
+
+
+def test_signed_release_catalogue_rejects_tampering_and_stages_exact_wheels(monkeypatch, tmp_path):
+    import base64
+    import hashlib
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from backend.source_manager import release_catalog
+
+    private_key = Ed25519PrivateKey.generate()
+    public_key = base64.b64encode(private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw)).decode()
+    wheel_name = "vodloft_source_ytdlp-1.2.3-py3-none-any.whl"
+    wheel = b"fixture wheelhouse content"
+    document = {"source_id": "yt-dlp", "releases": [{"version": "1.2.3",
+        "channel": "stable", "wheels": {wheel_name: {
+            "sha256": hashlib.sha256(wheel).hexdigest(),
+            "url": "https://releases.example.com/wheel.whl"}}}]}
+    message = json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    document["signature"] = base64.b64encode(private_key.sign(message)).decode()
+    config = {"url": "https://releases.example.com/index.json", "public_key": public_key}
+    monkeypatch.setattr(release_catalog, "_fetch_https", lambda url, limit:
+        json.dumps(document).encode() if url == config["url"] else wheel)
+    assert release_catalog._verified_releases("yt-dlp", config)[0]["version"] == "1.2.3"
+    signed = document.copy()
+    document = {**signed, "releases": [{**signed["releases"][0], "version": "9.9.9"}]}
+    with pytest.raises(ValueError, match="signature"):
+        release_catalog._verified_releases("yt-dlp", config)
+    document = signed
+
+    monkeypatch.setattr(release_catalog, "configured_catalogs", lambda: {"yt-dlp": config})
+    monkeypatch.setattr(release_catalog, "runtime_root", lambda: tmp_path)
+    monkeypatch.setattr(importlib.import_module("backend.source_manager.runtime"), "status", lambda: {
+        "policy": {}, "installed": {"yt-dlp": []}, "active": {}})
+    def installed(source, bundle, *, activate):
+        assert source == "yt-dlp" and activate is True
+        assert (bundle / wheel_name).read_bytes() == wheel
+        assert json.loads((bundle / "release.json").read_text())["wheels"][wheel_name] == hashlib.sha256(wheel).hexdigest()
+        return {"version": "1.2.3"}
+    monkeypatch.setattr(importlib.import_module("backend.source_manager.runtime"), "install_bundle", installed)
+    assert release_catalog.install_remote_updates() == [{"version": "1.2.3"}]
 
 
 def test_media_server_item_matching_pages_and_scopes_library(monkeypatch):
@@ -75,6 +122,54 @@ def ref(domain, upstream_id):
         upstream_id=upstream_id, url=f"https://{domain}/watch/{upstream_id}")
 
 
+def test_local_roles_requests_quotas_progress_and_subscriptions_are_separate(library, monkeypatch):
+    from backend.security import permissions
+    from backend.db.models.vodloft import LibraryRequest, MediaDemand
+    client, sessions, router, gateway, automation = library
+    actor = permissions.Principal()
+    monkeypatch.setattr(permissions, "principal", lambda request: actor)
+    # Routers import principal once; keep them on the same identity resolver.
+    for name in ("router", "requests", "feeds", "connections", "integrations", "playback"):
+        module = importlib.import_module("backend.api.endpoints.vodloft." + name)
+        if hasattr(module, "principal"):
+            monkeypatch.setattr(module, "principal", lambda request: actor)
+    collection = MediaSnapshot(kind="collection", reference=ref("example.com", "list"), title="Playlist",
+        entries=[EntrySnapshot(reference=ref("example.com", key), title=key, position=i)
+                 for i, key in enumerate(("first", "second"), 1)])
+    monkeypatch.setattr(gateway.SourceGateway, "resolve", lambda self, source_id, url, **kw: collection)
+    collection_id = client.post("/api/vodloft/import", json={"snapshot": collection.model_dump()}).json()["id"]
+    entries = client.get(f"/api/vodloft/library/{collection_id}").json()["entries"]
+    profile_id = client.post("/api/vodloft/profiles", json={"name": "Video", "domain": "example.com"}).json()["id"]
+    actor = permissions.Principal(key="alice", username="alice", role="member", request_quota=1,
+                                  auto_approve=False)
+    assert client.post("/api/vodloft/sources/connections", json={}).status_code == 403
+    assert client.delete(f"/api/vodloft/library/{collection_id}").status_code == 403
+    assert client.post(f"/api/vodloft/library/{collection_id}/download-profiles", json={}).status_code == 403
+    response = client.post(f"/api/vodloft/library/{entries[0]['id']}/requests", json={"profile_id": profile_id})
+    assert response.status_code == 201, response.text
+    first = response.json()
+    assert first["state"] == "pending" and first["job_id"] is None
+    duplicate = client.post(f"/api/vodloft/library/{entries[0]['id']}/requests", json={"profile_id": profile_id})
+    assert duplicate.json()["id"] == first["id"]
+    assert client.post(f"/api/vodloft/library/{entries[1]['id']}/requests", json={"profile_id": profile_id}).status_code == 429
+    assert client.post(f"/api/vodloft/requests/{first['id']}/approve").status_code == 403
+    assert client.put(f"/api/vodloft/library/{entries[0]['id']}/progress", json={"seconds": 42}).status_code == 200
+    alice_feed = client.post(f"/api/vodloft/library/{collection_id}/feed").json()["url"]
+    actor = permissions.Principal(key="bob", username="bob", role="member", can_subscribe=False)
+    assert client.get("/api/vodloft/requests").json() == []
+    assert client.get(f"/api/vodloft/library/{entries[0]['id']}/progress").json()["seconds"] == 0
+    assert client.delete(f"/api/vodloft/requests/{first['id']}").status_code == 404
+    assert client.post(f"/api/vodloft/library/{collection_id}/feed").status_code == 403
+    actor = permissions.Principal(key="bob", username="bob", role="member")
+    bob_feed = client.post(f"/api/vodloft/library/{collection_id}/feed").json()["url"]
+    assert bob_feed != alice_feed
+    actor = permissions.Principal(key="alice", username="alice", role="member")
+    assert client.delete(f"/api/vodloft/requests/{first['id']}").status_code == 204
+    with sessions() as session:
+        assert session.get(LibraryRequest, first["id"]).state == "canceled"
+        assert session.scalar(select(MediaDemand.id)) is None
+
+
 @pytest.fixture
 def library(monkeypatch, tmp_path):
     router = importlib.import_module("backend.api.endpoints.vodloft.router")
@@ -83,13 +178,15 @@ def library(monkeypatch, tmp_path):
     feeds = importlib.import_module("backend.api.endpoints.vodloft.feeds")
     connections = importlib.import_module("backend.api.endpoints.vodloft.connections")
     integrations = importlib.import_module("backend.api.endpoints.vodloft.integrations")
+    requests = importlib.import_module("backend.api.endpoints.vodloft.requests")
+    permissions = importlib.import_module("backend.security.permissions")
     finalization = importlib.import_module("backend.services.vodloft_finalization")
     gateway = importlib.import_module("backend.source_manager.gateway")
     load_database_models()
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
     sessions = sessionmaker(engine, autoflush=False)
-    for module in (router, profiles, automation, feeds, connections, integrations, finalization):
+    for module in (router, profiles, automation, feeds, connections, integrations, finalization, requests, permissions):
         monkeypatch.setattr(module, "get_session", sessions)
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
     monkeypatch.setenv("VODLOFT_SOURCE_RUNTIME_ROOT", str(tmp_path / "runtimes"))
@@ -156,6 +253,8 @@ def test_collection_policy_matches_member_domain_and_feed_representation(library
         enclosure = feed.find("channel/item/enclosure")
         assert enclosure.attrib["url"].endswith(extension)
         assert client.get(enclosure.attrib["url"]).status_code == 200
+        head = client.head(enclosure.attrib["url"])
+        assert head.status_code == 200 and head.content == b"" and int(head.headers["content-length"]) > 0
 
 
 def test_source_account_references_share_media_without_leaking_secrets(library, monkeypatch):
@@ -235,6 +334,56 @@ def test_manifest_declared_connection_settings_are_scoped_and_secret(library, mo
         "connection_id": response.json()["id"]})
     assert imported.status_code == 200 and received == [{
         "region": "eu", "limit_per_day": 10, "client_secret": "sensitive"}]
+
+
+def test_interactive_authentication_keeps_credentials_scoped_and_renews_privately(library, monkeypatch):
+    client, sessions, _, gateway, _ = library
+    connections = importlib.import_module("backend.api.endpoints.vodloft.connections")
+    clock = [1000.0]
+    monkeypatch.setattr(connections, "time", SimpleNamespace(time=lambda: clock[0]))
+    monkeypatch.setattr(gateway.SourceGateway, "__init__", lambda self, commands=None:
+        setattr(self, "commands", commands or {"fixture": ["fixture-runtime"]}))
+    monkeypatch.setattr(gateway.SourceGateway, "manifests", lambda self: [SourceManifest(
+        source_id="fixture", display_name="Fixture", version="1", capabilities={"authentication"},
+        configuration_schema=[{"name": "access_token", "label": "Token", "kind": "secret"}])])
+    calls = []
+    def call(self, source, operation, **options):
+        calls.append((operation, options, self.commands[source]))
+        if operation == "auth_start":
+            return {"status": "pending", "interval": 2, "expires_at": 1600,
+                "private_state": {"device_code": "private-device"},
+                "challenge": {"kind": "device_code", "message": "Authorize", "user_code": "PUBLIC",
+                    "verification_url": "https://account.example.com/device"}}
+        if operation == "auth_poll":
+            assert options["private_state"] == {"device_code": "private-device"}
+            return {"status": "authorized", "expires_at": 1100,
+                "private_state": {"refresh_token": "private-refresh"},
+                "configuration": {"access_token": "private-access"}}
+        assert operation == "auth_refresh" and options["private_state"]["refresh_token"] == "private-refresh"
+        return {"status": "authorized", "expires_at": 2000,
+            "private_state": {"refresh_token": "rotated-refresh"},
+            "configuration": {"access_token": "renewed-access"}}
+    monkeypatch.setattr(gateway.SourceGateway, "call", call)
+    account = client.post("/api/vodloft/sources/connections", json={"source_id": "fixture", "name": "Account"}).json()["id"]
+    other = client.post("/api/vodloft/sources/connections", json={"source_id": "fixture", "name": "Other"}).json()["id"]
+    response = client.post(f"/api/vodloft/sources/connections/{account}/authenticate")
+    assert response.status_code == 200 and response.json()["challenge"]["user_code"] == "PUBLIC"
+    assert "private-" not in response.text
+    assert client.get(f"/api/vodloft/sources/connections/{account}/authentication").json()["status"] == "pending"
+    assert len(calls) == 1  # Server enforces the advertised polling interval.
+    clock[0] = 1003
+    assert client.get(f"/api/vodloft/sources/connections/{account}/authentication").json()["status"] == "authorized"
+    assert "private-" not in client.get("/api/vodloft/sources/connections").text
+    with sessions() as session:
+        assert connections.source_options(session, "fixture", account) == {"access_token": "private-access"}
+        assert connections.source_options(session, "fixture", other) == {}
+    clock[0] = 1060
+    with sessions() as session:
+        assert connections.source_options(session, "fixture", account) == {"access_token": "renewed-access"}
+    assert calls[-1][2] == ["fixture-runtime"]
+    assert client.delete(f"/api/vodloft/sources/connections/{account}/authentication").status_code == 204
+    with sessions() as session:
+        assert connections.source_options(session, "fixture", account) == {}
 
 
 def test_source_authentication_error_is_distinct_from_app_login(library, monkeypatch):
@@ -996,6 +1145,85 @@ def test_upstream_hls_session_masks_lease_and_child_urls(library, monkeypatch):
         from backend.db.models.vodloft import PlaybackSession
         stored = session.scalar(select(PlaybackSession))
         assert "private-token" not in stored.lease_ciphertext
+
+
+def test_hls_child_renews_signed_uri_and_keeps_one_representation(library, monkeypatch):
+    import base64
+    from datetime import datetime, timedelta, timezone
+    from source_contracts import StreamLease
+    from backend.api.endpoints.vodloft import playback
+    from backend.db.models.vodloft import PlaybackSession, PlaybackSegment
+    client, sessions, _, gateway, _ = library
+    monkeypatch.setattr(playback, "get_session", sessions)
+    monkeypatch.setattr(playback, "validate_public_url", lambda url: url)
+    snapshot = MediaSnapshot(kind="video", reference=ref("example.com", "renew"), title="Renewable")
+    monkeypatch.setattr(gateway.SourceGateway, "resolve", lambda *args, **kw: snapshot)
+    item_id = client.post("/api/vodloft/import", json={"snapshot": snapshot.model_dump(mode="json")}).json()["id"]
+    revision = ["first"]
+    representation = ["same-format"]
+    monkeypatch.setattr(gateway.SourceGateway, "stream_lease", lambda *args, **kw: StreamLease(
+        transport="hls", url=f"https://cdn.example.com/master.m3u8?sig={revision[0]}",
+        renewable=True, representation_id=representation[0],
+        expires_at=(datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()))
+    calls = []
+    def fetch(self, source, operation, **options):
+        calls.append(options["url"])
+        playlist = "/master.m3u8" in options["url"]
+        payload = (f"#EXTM3U\n#EXTINF:5,\nsegment.ts?sig={revision[0]}\n".encode()
+            if playlist else b"segment-" + revision[0].encode())
+        return {"data": base64.b64encode(payload).decode(), "url": options["url"],
+            "content_type": "application/vnd.apple.mpegurl" if playlist else "video/mp2t", "status": 200}
+    monkeypatch.setattr(gateway.SourceGateway, "call", fetch)
+    watch = client.post(f"/api/vodloft/library/{item_id}/watch").json()
+    first = client.get(watch["url"])
+    child = first.text.splitlines()[-1]
+    assert client.get(watch["url"]).text == first.text
+    with sessions() as session:
+        assert len(session.scalars(select(PlaybackSegment)).all()) == 1
+        stored = session.scalar(select(PlaybackSession))
+        lease = playback._unseal(stored.lease_ciphertext)
+        lease["expires_at"] = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+        stored.lease_ciphertext = playback._seal(lease)
+        session.commit()
+    revision[0] = "renewed"
+    assert client.get(child).content == b"segment-renewed"
+    assert calls[-1] == "https://cdn.example.com/segment.ts?sig=renewed"
+    with sessions() as session:
+        stored = session.scalar(select(PlaybackSession))
+        lease = playback._unseal(stored.lease_ciphertext)
+        lease["expires_at"] = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+        stored.lease_ciphertext = playback._seal(lease)
+        session.commit()
+    representation[0] = "different-edit"
+    assert client.get(child).status_code == 409
+
+
+def test_profile_representation_is_frozen_and_partitions_artifact_reuse(library, monkeypatch):
+    client, sessions, router, gateway, _ = library
+    snapshot = MediaSnapshot(kind="video", reference=ref("example.com", "tracks"), title="Tracks")
+    monkeypatch.setattr(gateway.SourceGateway, "resolve", lambda *args, **kw: snapshot)
+    item_id = client.post("/api/vodloft/import", json={"snapshot": snapshot.model_dump(mode="json")}).json()["id"]
+    profiles = []
+    for language in ("en", "nl"):
+        response = client.post("/api/vodloft/profiles", json={"name": language, "domain": "example.com",
+            "output_template": f"/downloads/{language}/{{{{ title }}}}.ext",
+            "representation": {"languages": [language], "subtitles": [language], "container": "mkv"}})
+        assert response.status_code == 201, response.text
+        profiles.append(response.json()["id"])
+    seen = []
+    def download(self, source, url, staging, **options):
+        seen.append(options["representation"])
+        path = Path(staging) / "media.mkv"
+        path.write_bytes(options["representation"]["languages"][0].encode())
+        return DownloadResult(filename=path.name, size=path.stat().st_size)
+    monkeypatch.setattr(gateway.SourceGateway, "download", download)
+    for profile_id in profiles:
+        job_id, _, created = router.queue_download(item_id, profile_id)
+        assert created
+        router._run_download(job_id)
+    assert [policy["languages"] for policy in seen] == [["en"], ["nl"]]
+    with sessions() as session:
+        assert len({artifact.representation_key for artifact in session.scalars(select(Artifact)).all()}) == 2
 
 
 def test_retention_preserves_shared_demands_and_active_local_session(library, monkeypatch, tmp_path):

@@ -35,6 +35,7 @@ class SourceConnection(Base):
     name: Mapped[str] = mapped_column(String)
     settings: Mapped[dict] = mapped_column(JSON, default=dict)
     secret_references: Mapped[dict] = mapped_column(JSON, default=dict)
+    authentication_reference: Mapped[str | None] = mapped_column(String(64), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
@@ -50,6 +51,8 @@ class MediaItem(Base):
     capabilities: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     is_live: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     formats: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
+    normalized_metadata: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    user_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
     artwork_url: Mapped[str | None] = mapped_column(String, nullable=True)
     user_title: Mapped[str | None] = mapped_column(String, nullable=True)
     user_description: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -281,9 +284,11 @@ class MediaServerExport(Base):
 
 class FeedSubscription(Base):
     __tablename__ = "vodloft_feed_subscriptions"
+    __table_args__ = (UniqueConstraint("stream_profile_id", "user_key", name="uq_vodloft_feed_profile_user"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     collection_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_items.id", ondelete="CASCADE"))
-    stream_profile_id: Mapped[int | None] = mapped_column(ForeignKey("vodloft_collection_stream_profiles.id"), unique=True, nullable=True)
+    stream_profile_id: Mapped[int | None] = mapped_column(ForeignKey("vodloft_collection_stream_profiles.id"), nullable=True)
+    user_key: Mapped[str] = mapped_column(String(80), default="admin", server_default="admin")
     token: Mapped[str] = mapped_column(String(64), unique=True)
 
 
@@ -330,3 +335,32 @@ class PlaybackSegment(Base):
     session_id: Mapped[int] = mapped_column(ForeignKey("vodloft_playback_sessions.id", ondelete="CASCADE"))
     public_id: Mapped[str] = mapped_column(String(40))
     url_ciphertext: Mapped[str] = mapped_column(String)
+
+
+class LocalUser(Base):
+    __tablename__ = "vodloft_users"
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    username: Mapped[str] = mapped_column(String(80), unique=True)
+    password_hash: Mapped[str] = mapped_column(String)
+    role: Mapped[str] = mapped_column(String(16), default="member")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    can_subscribe: Mapped[bool] = mapped_column(Boolean, default=True)
+    auto_approve: Mapped[bool] = mapped_column(Boolean, default=False)
+    request_quota: Mapped[int] = mapped_column(Integer, default=10)
+    connection_ids: Mapped[list[int]] = mapped_column(JSON, default=list)
+    target_ids: Mapped[list[int]] = mapped_column(JSON, default=list)
+
+
+class LibraryRequest(Base):
+    """User demand exists independently from the acquisition job it may cause."""
+    __tablename__ = "vodloft_requests"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_key: Mapped[str] = mapped_column(String(80), index=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_items.id", ondelete="CASCADE"))
+    profile_id: Mapped[int] = mapped_column(ForeignKey("local_media_profiles.id"))
+    reference_id: Mapped[int | None] = mapped_column(ForeignKey("vodloft_source_references.id"), nullable=True)
+    state: Mapped[str] = mapped_column(String(24), default="pending")
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("vodloft_acquisition_jobs.id", ondelete="SET NULL"), nullable=True)
+    reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    active_key: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

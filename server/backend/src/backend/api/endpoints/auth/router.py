@@ -21,13 +21,20 @@ async def auth_status(request: Request) -> AuthResponse:
 
 @router.post("/login", status_code=status.HTTP_204_NO_CONTENT)
 async def password_login(data: LoginInput, response: Response) -> None:
-    if not verify_admin_password_hash(data.passwordHash):
+    if data.username.strip().casefold() == "admin":
+        verified = verify_admin_password_hash(data.passwordHash)
+        user_key = "admin"
+    else:
+        from backend.security.permissions import verify_user_password
+        user_key = verify_user_password(data.username, data.passwordHash)
+        verified = user_key is not None
+    if not verified:
         # Provide a server error in FastAPI format with field-level mapping
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=[{"loc": ["body", "password"], "msg": "Incorrect password", "type": "value_error"}],
         )
-    set_session_cookie(response)
+    set_session_cookie(response, user_key=user_key)
     # Do not return a new Response object; returning here allows FastAPI to
     # use the provided 'response' with the Set-Cookie header attached.
     return

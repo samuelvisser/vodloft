@@ -16,7 +16,7 @@ from datetime import datetime, timezone, timedelta
 from contextlib import nullcontext
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, or_, select, update
@@ -24,17 +24,18 @@ from sqlalchemy.exc import IntegrityError
 
 from backend.db import get_session
 from backend.db.models.vodloft import (
-    AcquisitionJob, Artifact, ArtifactPlacement, CollectionDownloadProfile, CollectionEntry, CollectionScan, CollectionStreamProfile, LiveAdmission, Domain, FeedSubscription, FileFinalization, LegacyMediaLink, MediaDemand, MediaSuppression, MediaItem, MediaServerExport, MovieExtraParent, PlaybackProgress, PublishedEntry, SourceConnection, SourceDomain, SourceReference, SourceSnapshot,
+    AcquisitionJob, Artifact, ArtifactPlacement, CollectionDownloadProfile, CollectionEntry, CollectionScan, CollectionStreamProfile, LiveAdmission, Domain, FeedSubscription, FileFinalization, LegacyMediaLink, LibraryRequest, MediaDemand, MediaSuppression, MediaItem, MediaServerExport, MovieExtraParent, PlaybackProgress, PublishedEntry, SourceConnection, SourceDomain, SourceReference, SourceSnapshot,
 )
 from backend.db.models.local_media_profile import DomainLocalMediaProfile
-from backend.api.endpoints.vodloft.profiles import output_path_from_spec
+from backend.api.endpoints.vodloft.profiles import output_path_from_spec, template_values
 from backend.source_manager.gateway import SourceGateway, SourceInvocationError, cancel_running_job, clear_canceled_job, validate_public_url
 from backend.source_manager.runtime import command_for
 from backend.services import vodloft_finalization
 from backend.source_manager import runtime as source_runtime
 from backend.api.endpoints.vodloft.connections import source_options
+from backend.security.permissions import principal, require_connection
 from config import get_settings
-from source_contracts import MediaSnapshot, NormalizedSnapshot, SourceMediaReference
+from source_contracts import MediaSnapshot, NormalizedSnapshot, SourceMediaReference, RepresentationPolicy
 from task_manager.scheduler.db import TaskOperation
 
 logger = logging.getLogger(__name__)
@@ -126,6 +127,9 @@ class DownloadRequest(BaseModel):
 class UserMetadataInput(BaseModel):
     title: str | None = Field(default=None, max_length=500)
     description: str | None = Field(default=None, max_length=10000)
+    kind: str | None = Field(default=None, pattern="^(video|movie|movie_extra)$")
+    parent_id: int | None = None
+    extra_type: str | None = Field(default=None, pattern="^(trailer|interview|behind_the_scenes|deleted_scene|featurette|other)$")
 
 
 class PlaybackInput(BaseModel):
@@ -147,7 +151,7 @@ def _upsert(session, reference: SourceMediaReference, kind: str, title: str,
             description=_MISSING, duration=_MISSING,
             artwork_url=_MISSING, connection_id: int | None = None,
             published_at=_MISSING, capabilities=_MISSING,
-            is_live=_MISSING, formats=_MISSING) -> MediaItem:
+            is_live=_MISSING, formats=_MISSING, normalized_metadata: dict | None = None) -> MediaItem:
     domain = _domain(session, reference.domain)
     supported = session.scalar(select(SourceDomain).where(
         SourceDomain.source_id == reference.source_id, SourceDomain.domain_id == domain.id))
@@ -207,6 +211,8 @@ def _upsert(session, reference: SourceMediaReference, kind: str, title: str,
             source_id=reference.source_id, namespace=reference.namespace,
             upstream_id=reference.upstream_id, url=reference.url,
             connection_id=connection_id, connection_key=connection_id or 0))
+    if normalized_metadata is not None:
+        item.normalized_metadata = {**(item.normalized_metadata or {}), **normalized_metadata}
     return item
 
 
@@ -245,6 +251,11 @@ def _serialize(session, item: MediaItem) -> dict:
             "artwork_url": item.artwork_url, "duration": item.duration,
             "published_at": item.published_at, "capabilities": item.capabilities,
             "is_live": item.is_live, "formats": item.formats or [],
+            "chapters": (item.normalized_metadata or {}).get("chapters", []),
+            "tracks": (item.normalized_metadata or {}).get("tracks", []),
+            "author": (item.normalized_metadata or {}).get("author"),
+            "movie_year": (item.normalized_metadata or {}).get("movie_year"),
+            "parent_id": item.parent_id, "extra_type": item.extra_type,
             "downloaded": bool(artifact),
             "playback_type": "audio" if artifact and Path(artifact.path).suffix.lower() in {
                 ".mp3", ".m4a", ".opus", ".ogg", ".wav"} else "video"}
@@ -294,9 +305,10 @@ def source_match(source_id: str, request: ResolveRequest):
 
 
 @router.post("/sources/{source_id}/entries")
-def source_entries(source_id: str, request: ResolveRequest, cursor: str | None = None,
+def source_entries(source_id: str, request: ResolveRequest, http_request: Request, cursor: str | None = None,
                    limit: int = 50):
     source_manifest(source_id)
+    require_connection(http_request, request.connection_id)
     try:
         with get_session() as session:
             options = source_options(session, source_id, request.connection_id)
@@ -309,11 +321,12 @@ def source_entries(source_id: str, request: ResolveRequest, cursor: str | None =
 
 
 @router.get("/sources/{source_id}/search")
-def source_search(source_id: str, query: str, cursor: str | None = None,
+def source_search(source_id: str, query: str, http_request: Request, cursor: str | None = None,
                   limit: int = 30, connection_id: int | None = None):
     manifest = source_manifest(source_id)
     if "search" not in manifest.capabilities:
         raise HTTPException(422, "This Source does not advertise search")
+    require_connection(http_request, connection_id)
     try:
         with get_session() as session:
             options = source_options(session, source_id, connection_id)
@@ -348,7 +361,7 @@ def source_update_policy(source_id: str, data: SourceUpdatePolicyInput):
 @router.post("/sources/runtimes/check")
 def check_source_updates():
     try:
-        return source_runtime.install_bundled_updates()
+        return source_runtime.check_updates(force=True)
     except (ValueError, OSError, RuntimeError) as exc:
         logger.exception("Source bundle update failed")
         raise HTTPException(422, "Source bundle verification or health check failed") from exc
@@ -371,7 +384,8 @@ def rollback_source(source_id: str):
 
 
 @router.post("/resolve")
-def resolve(request: ResolveRequest):
+def resolve(request: ResolveRequest, http_request: Request):
+    require_connection(http_request, request.connection_id)
     try:
         validate_public_url(request.url)
     except ValueError as exc:
@@ -417,7 +431,8 @@ def resolve(request: ResolveRequest):
 
 
 @router.post("/import")
-def import_media(request: ImportRequest):
+def import_media(request: ImportRequest, http_request: Request):
+    require_connection(http_request, request.connection_id)
     snapshot = request.snapshot
     # Re-resolve the original URL instead of trusting client-supplied metadata or identity.
     try:
@@ -443,7 +458,9 @@ def _import_snapshot(snapshot: MediaSnapshot, connection_id: int | None = None,
                        published_at=snapshot.published_at if "published_at" in snapshot.model_fields_set else _MISSING,
                        capabilities=snapshot.capabilities if "capabilities" in snapshot.model_fields_set else _MISSING,
                        is_live=snapshot.is_live if "is_live" in snapshot.model_fields_set else _MISSING,
-                       formats=snapshot.formats if "formats" in snapshot.model_fields_set else _MISSING)
+                       formats=snapshot.formats if "formats" in snapshot.model_fields_set else _MISSING,
+                       normalized_metadata=snapshot.model_dump(mode="json", include={
+                           "artwork", "chapters", "tracks", "author", "movie_year"}, exclude_unset=True))
         session.flush()
         metadata_snapshot = snapshot.model_dump(mode="json", exclude={"reference", "entries", "extras"},
                                                 exclude_unset=True)
@@ -669,10 +686,10 @@ def library():
 
 
 @router.get("/home")
-def home():
+def home(request: Request):
     with get_session() as session:
         progress = session.scalars(select(PlaybackProgress).where(
-            PlaybackProgress.user_key == "admin", PlaybackProgress.completed.is_(False))
+            PlaybackProgress.user_key == principal(request).key, PlaybackProgress.completed.is_(False))
             .order_by(PlaybackProgress.updated_at.desc()).limit(12)).all()
         recent = session.scalars(select(MediaItem).where(MediaItem.kind != "collection")
             .order_by(MediaItem.created_at.desc()).limit(12)).all()
@@ -693,27 +710,27 @@ def home():
 
 
 @router.get("/library/{item_id}/progress")
-def playback_progress(item_id: int):
+def playback_progress(item_id: int, request: Request):
     with get_session() as session:
         item = session.get(MediaItem, item_id)
         if not item or item.kind == "collection":
             raise HTTPException(404, "Playable media item not found")
         progress = session.scalar(select(PlaybackProgress).where(
-            PlaybackProgress.user_key == "admin", PlaybackProgress.item_id == item_id))
+            PlaybackProgress.user_key == principal(request).key, PlaybackProgress.item_id == item_id))
         return {"seconds": progress.seconds if progress else 0,
                 "completed": progress.completed if progress else False}
 
 
 @router.put("/library/{item_id}/progress")
-def save_playback_progress(item_id: int, data: PlaybackInput):
+def save_playback_progress(item_id: int, data: PlaybackInput, request: Request):
     with get_session() as session:
         item = session.get(MediaItem, item_id)
         if not item or item.kind == "collection":
             raise HTTPException(404, "Playable media item not found")
         progress = session.scalar(select(PlaybackProgress).where(
-            PlaybackProgress.user_key == "admin", PlaybackProgress.item_id == item_id))
+            PlaybackProgress.user_key == principal(request).key, PlaybackProgress.item_id == item_id))
         if not progress:
-            progress = PlaybackProgress(user_key="admin", item_id=item_id)
+            progress = PlaybackProgress(user_key=principal(request).key, item_id=item_id)
             session.add(progress)
         progress.seconds, progress.completed = data.seconds, data.completed
         session.commit()
@@ -721,7 +738,7 @@ def save_playback_progress(item_id: int, data: PlaybackInput):
 
 
 @router.get("/library/{item_id}")
-def library_item(item_id: int):
+def library_item(item_id: int, request: Request):
     with get_session() as session:
         item = session.get(MediaItem, item_id)
         if not item:
@@ -730,7 +747,8 @@ def library_item(item_id: int):
         result["references"] = [{"id": reference.id, "source_id": reference.source_id,
             "connection_id": reference.connection_id, "namespace": reference.namespace,
             "upstream_id": reference.upstream_id} for reference in session.scalars(
-                select(SourceReference).where(SourceReference.item_id == item_id)).all()]
+                select(SourceReference).where(SourceReference.item_id == item_id)).all()
+                if principal(request).can_use_connection(reference.connection_id)]
         if item.kind == "collection":
             entries = session.scalars(select(CollectionEntry).where(
                 CollectionEntry.collection_id == item_id).order_by(CollectionEntry.position)).all()
@@ -768,6 +786,8 @@ def restore_source_metadata(item_id: int, snapshot_id: int):
                 setattr(item, field, values[field])
         if "published_at" in values:
             item.published_at = datetime.fromisoformat(values["published_at"]) if values["published_at"] else None
+        item.normalized_metadata = {**(item.normalized_metadata or {}), **{key: values[key]
+            for key in ("artwork", "chapters", "tracks", "author", "movie_year") if key in values}}
         session.commit()
         return _serialize(session, item)
 
@@ -813,8 +833,30 @@ def edit_metadata(item_id: int, data: UserMetadataInput):
         item = session.get(MediaItem, item_id)
         if not item:
             raise HTTPException(404, "Media item not found")
-        item.user_title = data.title.strip() if data.title and data.title.strip() else None
-        item.user_description = data.description.strip() if data.description and data.description.strip() else None
+        if "title" in data.model_fields_set:
+            item.user_title = data.title.strip() if data.title and data.title.strip() else None
+        if "description" in data.model_fields_set:
+            item.user_description = data.description.strip() if data.description and data.description.strip() else None
+        if data.kind:
+            if item.kind == "collection":
+                raise HTTPException(422, "A Collection cannot be reclassified as playable media")
+            item.kind, item.user_kind = data.kind, data.kind
+        if "parent_id" in data.model_fields_set:
+            parent = session.get(MediaItem, data.parent_id) if data.parent_id else None
+            if data.parent_id and (not parent or parent.kind != "movie" or parent.id == item.id):
+                raise HTTPException(422, "Choose a different Movie as this extra's parent")
+            if parent and item.kind != "movie_extra":
+                raise HTTPException(422, "Only Movie Extras can have a parent Movie")
+            session.execute(delete(MovieExtraParent).where(MovieExtraParent.extra_id == item.id))
+            item.parent_id = data.parent_id
+            if parent:
+                session.add(MovieExtraParent(movie_id=parent.id, extra_id=item.id,
+                    extra_type=data.extra_type or item.extra_type or "other"))
+        if "extra_type" in data.model_fields_set:
+            item.extra_type = data.extra_type
+        if item.kind != "movie_extra":
+            item.parent_id, item.extra_type = None, None
+            session.execute(delete(MovieExtraParent).where(MovieExtraParent.extra_id == item.id))
         session.commit()
         return _serialize(session, item)
 
@@ -914,6 +956,7 @@ def _execute_leased_download(job_id: int) -> None:
             gateway = SourceGateway({source_id: command}) if command else SourceGateway()
             result = gateway.download(source_id, url, staging,
                 preferred_format=spec.get("preferred_format", "format_1080p"), job_id=job_id,
+                representation=spec.get("representation", {}), metadata=spec.get("metadata", {}),
                 on_progress=lambda percent: _download_progress(job_id, percent), **options)
             _job_stage(job_id, "verifying")
             source_file = Path(staging, result.filename).resolve()
@@ -1066,7 +1109,8 @@ def retry_due_acquisition_jobs() -> None:
 
 def queue_download(item_id: int, profile_id: int | None, *, collection_id: int | None = None,
                    reference_id: int | None = None, collection_reference_id: int | None = None,
-                   policy_id: int | None = None, force: bool = False) -> tuple[int | None, str, bool]:
+                   policy_id: int | None = None, request_id: int | None = None,
+                   force: bool = False) -> tuple[int | None, str, bool]:
     """Freeze a Domain profile for one playable item; null means already satisfied."""
     with get_session() as session:
         item = session.get(MediaItem, item_id)
@@ -1084,7 +1128,8 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
             if suppressed:
                 session.delete(suppressed)
                 session.flush()
-            owner_kind, owner_id = ("policy", policy_id) if policy_id else ("direct", item_id)
+            owner_kind, owner_id = (("request", request_id) if request_id else
+                ("policy", policy_id) if policy_id else ("direct", item_id))
             if not session.scalar(select(MediaDemand.id).where(MediaDemand.item_id == item_id,
                 MediaDemand.profile_id == profile_id, MediaDemand.owner_kind == owner_kind,
                 MediaDemand.owner_id == owner_id)):
@@ -1122,13 +1167,17 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
             "source_id": reference.source_id, "namespace": reference.namespace,
             "upstream_id": reference.upstream_id, "connection_key": reference.connection_key,
             "format": profile.preferred_format, "media_type": item.kind,
+            "representation": RepresentationPolicy.model_validate(profile.representation or {}).model_dump(),
+            "metadata": {"title": item.user_title or item.title,
+                         "description": item.user_description or item.description or ""}
+                         if (profile.representation or {}).get("embed_metadata", True) else {},
         }, sort_keys=True).encode()).hexdigest()
         domain = session.get(Domain, item.domain_id)
-        values = {"domain": domain.hostname, "title": item.user_title or item.title,
-                  "id": item.id, "upstream_id": reference.upstream_id,
-                  "media_type": item.kind,
-                  "collection": (session.get(MediaItem, collection_id).user_title or
-                      session.get(MediaItem, collection_id).title) if collection_id else ""}
+        membership = session.scalar(select(CollectionEntry).where(CollectionEntry.collection_id == collection_id,
+            CollectionEntry.item_id == item_id)) if collection_id else None
+        values = template_values(item, domain, reference, membership=membership,
+            collection=(session.get(MediaItem, collection_id).user_title or
+                        session.get(MediaItem, collection_id).title) if collection_id else "")
         if not force:
             compatible = next((artifact for artifact in session.scalars(select(Artifact).where(
                 Artifact.item_id == item_id, Artifact.representation_key == representation_key)
@@ -1177,6 +1226,9 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
         except ValueError:
             runtime_version = "configured"
         spec = {"preferred_format": profile.preferred_format,
+                "representation": RepresentationPolicy.model_validate(profile.representation or {}).model_dump(),
+                "metadata": {"title": item.user_title or item.title,
+                             "description": item.user_description or item.description or ""},
                 "representation_key": representation_key,
                 "output_template": profile.output_template, "profile_id": profile.id,
                 "profile_revision": profile.updated_at.isoformat() if profile.updated_at else None,
@@ -1276,10 +1328,14 @@ def jobs(limit: int = 50):
 
 
 @router.get("/jobs/{job_id}")
-def job_status(job_id: int):
+def job_status(job_id: int, request: Request):
     with get_session() as session:
         job = session.get(AcquisitionJob, job_id)
         if not job:
+            raise HTTPException(404, "Acquisition job not found")
+        actor = principal(request)
+        if not actor.manages_library and not session.scalar(select(LibraryRequest.id).where(
+                LibraryRequest.job_id == job_id, LibraryRequest.user_key == actor.key)):
             raise HTTPException(404, "Acquisition job not found")
         return {"id": job.id, "item_id": job.item_id, "state": job.state,
                 "error": job.error, "error_code": job.error_code,

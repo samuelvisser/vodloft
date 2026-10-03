@@ -3,9 +3,13 @@
 import base64
 import binascii
 import errno
+import hashlib
 import json
 import re
 import sys
+import uuid
+import shutil
+import subprocess
 from urllib.error import HTTPError
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,7 +22,7 @@ from source_contracts import (CollectionPage, DomainDescriptor, DownloadResult, 
                               MediaSnapshot, SourceError, SourceManifest, SourceMatch, SourceMediaReference, StreamLease,
                               SourceSearchItem, SourceSearchPage)
 from source_contracts.network import install_public_network_guard, fetch_stream
-from source_contracts.progress import download_progress_hook
+from vodloft_source_media import download as acquire_media, UnsupportedRepresentation, lease_expiry
 
 SOURCE_ID = "dailywire"
 
@@ -67,9 +71,11 @@ def _client(token: str | None = None, movie: bool = False):
 
 def _reference(kind: str, slug: str, upstream_id: str | None = None,
                sharing_url: str | None = None) -> SourceMediaReference:
+    canonical = f"https://www.dailywire.com/{kind}/{slug}"
     return SourceMediaReference(source_id=SOURCE_ID, domain="dailywire.com", namespace=kind,
-        upstream_id=upstream_id or slug,
-        url=sharing_url or f"https://www.dailywire.com/{kind}/{slug}")
+        # The provider replaces playback record IDs when an episode becomes
+        # an archive. The verified content URL identifies that same edition.
+        upstream_id=str(uuid.uuid5(uuid.NAMESPACE_URL, canonical)), url=canonical)
 
 
 def resolve(url: str, max_entries: int = 100, token: str | None = None) -> MediaSnapshot:
@@ -209,7 +215,8 @@ def search(query: str, cursor: str | None = None, limit: int = 30,
 
 
 def download(url: str, staging: str, preferred_format: str = "format_1080p",
-             token: str | None = None) -> DownloadResult:
+             token: str | None = None, representation: dict | None = None,
+             metadata: dict | None = None) -> DownloadResult:
     snapshot = resolve(url, token=token)
     if snapshot.kind == "collection":
         raise ValueError("Download a playable item, not a Collection")
@@ -224,19 +231,8 @@ def download(url: str, staging: str, preferred_format: str = "format_1080p",
         playback_url = _client(token, movie=True).get_movie_playback(slug).video_url
     if not playback_url or urlsplit(playback_url).scheme != "https":
         raise ValueError("No compatible playback representation is available")
-    destination = Path(staging).resolve()
-    destination.mkdir(parents=True, exist_ok=True)
-    options = {"quiet": True, "no_warnings": True, "noplaylist": True,
-               "outtmpl": str(destination / "media.%(ext)s"), "hls_prefer_native": True,
-               "progress_hooks": [download_progress_hook()]}
-    if preferred_format == "format_audio_only":
-        options.update(format="bestaudio/best", postprocessors=[{"key": "FFmpegExtractAudio", "preferredcodec": "mp3"}])
-    with yt_dlp.YoutubeDL(options) as ydl:
-        ydl.download([playback_url])
-    files = [p for p in destination.iterdir() if p.is_file() and not p.name.endswith((".part", ".ytdl"))]
-    if len(files) != 1:
-        raise RuntimeError("Daily Wire Source did not produce one completed file")
-    return DownloadResult(filename=files[0].name, size=files[0].stat().st_size)
+    return acquire_media(playback_url, staging, preferred_format, representation,
+        metadata or {"title": snapshot.title, "description": snapshot.description or ""})
 
 
 def stream_lease(url: str, token: str | None = None) -> StreamLease:
@@ -258,20 +254,27 @@ def stream_lease(url: str, token: str | None = None) -> StreamLease:
     if not playback_url or urlsplit(playback_url).scheme != "https":
         raise ValueError("No playable representation is available")
     return StreamLease(transport="hls" if urlsplit(playback_url).path.endswith(".m3u8") else "http",
-        url=playback_url, renewable=True, seekable=True)
+        url=playback_url, renewable=True, seekable=True, expires_at=lease_expiry(playback_url),
+        representation_id=hashlib.sha256(urlsplit(playback_url).path.encode()).hexdigest())
 
 
 def main():
     request = json.load(sys.stdin)
     operation = request["operation"]
-    if operation in ("resolve", "download", "entries", "search", "legacy_call", "stream_lease", "stream_fetch"):
+    if operation in ("resolve", "download", "entries", "search", "legacy_call", "stream_lease", "stream_fetch",
+                     "auth_start", "auth_poll", "auth_refresh"):
         install_public_network_guard()
     if operation == "manifest":
         result = SourceManifest(source_id=SOURCE_ID, display_name="Daily Wire API",
-            version="0.1.0", capabilities={"resolve_url", "enumerate_collection", "enumerate_pages", "download", "domain_catalogue", "search", "stream_lease"},
+            version="0.1.0", upstream_versions={"dailywire-api": "0.2.1", "yt-dlp": yt_dlp.version.__version__},
+            native_helpers=["ffmpeg"], capabilities={"health", "resolve_url", "enumerate_collection", "enumerate_pages", "download", "domain_catalogue", "search", "stream_lease", "authentication"},
             exhaustive_domain_catalogue=True,
             configuration_schema=[{"name": "access_token", "label": "Access token", "kind": "secret",
                                    "required": False}])
+    elif operation == "health":
+        result = {"healthy": bool(shutil.which("ffmpeg")), "protocol_version": 1}
+        if result["healthy"]:
+            subprocess.run(["ffmpeg", "-version"], timeout=10, check=True, capture_output=True)
     elif operation == "domains":
         result = {"items": [DomainDescriptor(hostname="dailywire.com", display_name="Daily Wire",
             source_id=SOURCE_ID).model_dump()], "next_cursor": None, "exhaustive": True,
@@ -294,15 +297,21 @@ def main():
                         request.get("access_token"))
     elif operation == "download":
         result = download(request["url"], request["staging"], request.get("preferred_format", "format_1080p"),
-                          request.get("access_token"))
+                          request.get("access_token"), request.get("representation"), request.get("metadata"))
     elif operation == "legacy_call":
         result = legacy_call(request)
     elif operation == "stream_lease":
         result = stream_lease(request["url"], request.get("access_token"))
     elif operation == "stream_fetch":
         result = fetch_stream(request["url"], request.get("headers"), request.get("byte_range"))
+    elif operation in ("auth_start", "auth_poll", "auth_refresh"):
+        from . import auth
+        result = (auth.start() if operation == "auth_start" else
+            auth.poll(request["private_state"]) if operation == "auth_poll" else
+            auth.refresh(request["private_state"]))
     else:
-        raise ValueError(f"Unsupported Source operation: {operation}")
+        print(json.dumps({"error": SourceError(code="unsupported_operation", message="This Source does not support the requested operation").model_dump()}))
+        return
     print(result.model_dump_json(exclude_unset=True) if hasattr(result, "model_dump_json") else json.dumps(result))
 
 
@@ -323,6 +332,8 @@ if __name__ == "__main__":
             code, message = "authentication_required", "Daily Wire authorization is required"
         elif isinstance(exc, OSError) and exc.errno == errno.ENOSPC:
             code, message = "insufficient_disk", "Insufficient staging disk space"
+        elif isinstance(exc, UnsupportedRepresentation):
+            code, message = "unsupported_format", "The requested representation is unavailable"
         elif isinstance(exc, ValueError):
             code = "unsupported_operation" if str(exc).startswith("Unsupported Source operation") else "invalid_url"
             message = "Source operation is unsupported" if code == "unsupported_operation" else "Daily Wire media reference is invalid"

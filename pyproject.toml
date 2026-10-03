@@ -13,6 +13,7 @@ dependencies = [
     "source-contracts",
     "vodloft-source-ytdlp",
     "vodloft-source-dailywire",
+    "vodloft-source-media",
 ]
 
 [tool.uv.workspace]
@@ -29,6 +30,7 @@ task-manager = { workspace = true }
 source-contracts = { workspace = true }
 vodloft-source-ytdlp = { workspace = true }
 vodloft-source-dailywire = { workspace = true }
+vodloft-source-media = { workspace = true }
 
 [dependency-groups]
 dev = [

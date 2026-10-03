@@ -36,14 +36,11 @@ from config.network import (
     NoInternetConnectionError,
     is_no_internet_error,
 )
-from dailywire_api.dw_api.client import slow_request_cooldown_observer
-from dailywire_downloader import DownloadCancelled
+from source_contracts.errors import DownloadCancelled
 from task_manager.scheduler import scheduler
 
 
 logger = logging.getLogger(__name__)
-_DAILY_WIRE_COOLDOWN_REASON = "daily_wire_request_cooldown"
-_DAILY_WIRE_COOLDOWN_MESSAGE = "Waiting for Daily Wire request cooldown. Will resume soon."
 
 
 class TaskCancellationRequested(Exception):
@@ -549,17 +546,8 @@ def execute_task(
     cancellation_reason: str | None = None
     started_perf = time.perf_counter()
 
-    def on_slow_request_cooldown(waiting: bool) -> None:
-        updater.set_wait_state(
-            _DAILY_WIRE_COOLDOWN_REASON if waiting else None,
-            _DAILY_WIRE_COOLDOWN_MESSAGE if waiting else None,
-        )
-
     try:
-        with (
-            operation_context(prepared.linked_operation_ids),
-            slow_request_cooldown_observer(on_slow_request_cooldown),
-        ):
+        with operation_context(prepared.linked_operation_ids):
             if inspect.iscoroutinefunction(fn):
                 worker_result = asyncio.run(
                     fn(resource_id=resource_id, progress=updater, **prepared.call_kwargs)

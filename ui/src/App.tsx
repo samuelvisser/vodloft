@@ -21,6 +21,7 @@ export default function App() {
   const [authState, setAuthState] = useState<'checking' | 'ok' | 'no'>('checking')
   const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus | null>(null)
   const [onboardingError, setOnboardingError] = useState<string | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -57,6 +58,9 @@ export default function App() {
 
   useEffect(() => {
     if (authState !== 'ok') return
+    const base = (window as any).appConfig?.API_URL || '/api'
+    void fetch(`${base}/vodloft/me`, {credentials: 'include'}).then(r => r.json())
+      .then(actor => setIsAdmin(actor.role === 'admin'))
     void loadOnboardingStatus()
   }, [authState, loadOnboardingStatus])
 
@@ -95,19 +99,18 @@ export default function App() {
     )
   }
 
-  return (
-    <FrontendPuller onUnauthorized={() => setAuthState('no')}>
-      <OperationNotifier definitions={operationNotificationDefinitions}>
+  const content = (
         <div className="app">
           <Sidebar />
           <main className="content" role="main">
             {/* Deliberately mounted only after onboarding so first-run setup never shows this banner. */}
-            <BackgroundMigrationBanner />
+            {isAdmin && <BackgroundMigrationBanner />}
             <Outlet />
           </main>
           <Footer wrapperClass="page-footer" />
         </div>
-      </OperationNotifier>
-    </FrontendPuller>
   )
+  return isAdmin ? <FrontendPuller onUnauthorized={() => setAuthState('no')}>
+    <OperationNotifier definitions={operationNotificationDefinitions}>{content}</OperationNotifier>
+  </FrontendPuller> : content
 }

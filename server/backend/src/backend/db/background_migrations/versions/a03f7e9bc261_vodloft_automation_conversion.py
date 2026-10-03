@@ -1,0 +1,100 @@
+"""Carry WireLoft automation into normalized Collections and scoped Source secrets.
+
+Revision ID: a03f7e9bc261
+Revises: 8e5a2c9f41d0
+"""
+import asyncio
+import json
+import uuid
+from urllib.parse import urlsplit
+from datetime import date, timedelta
+from sqlalchemy import select
+from backend.db import get_session
+from backend.db.models import DownloadProfileBase, PodcastDownloadProfile, RssStreamProfile
+from backend.db.models.vodloft import (Artifact, CollectionDownloadProfile, CollectionStreamProfile,
+    FeedSubscription, LegacyMediaLink, MediaDemand, SourceConnection, SourceReference)
+from backend.source_manager import secrets as secret_store
+from backend.source_manager.runtime import command_for
+from config import get_settings
+
+revision = "a03f7e9bc261"
+down_revision = "8e5a2c9f41d0"
+title = "Convert existing media automation and accounts"
+
+
+def _convert(context):
+    # The old token store is read once. Future account authentication belongs
+    # exclusively to the Source worker and encrypted generic connection store.
+    try:
+        from dailywire_authorisation.storage import TokenStore
+        oauth = get_settings().dw_oauth
+        credentials = TokenStore().load("|".join((oauth.issuer, oauth.client_id, oauth.audience, oauth.scope)))
+    except Exception:
+        credentials = None
+    with get_session() as session:
+        connection = session.scalar(select(SourceConnection).where(SourceConnection.name == "Imported WireLoft account"))
+        if credentials and not connection:
+            authentication = {"status": "authorized", "configuration": {"access_token": credentials.access_token},
+                "expires_at": credentials.expires_at, "private_state": {"refresh_token": credentials.refresh_token},
+                "_command": command_for("dailywire")[0]}
+            reference = secret_store.save(json.dumps(authentication))
+            connection = SourceConnection(source_id="dailywire", name="Imported WireLoft account",
+                settings={}, secret_references={}, authentication_reference=reference, enabled=True)
+            session.add(connection)
+            session.flush()
+            for upstream in session.scalars(select(SourceReference).where(SourceReference.source_id == "dailywire",
+                    SourceReference.connection_id.is_(None))).all():
+                upstream.connection_id, upstream.connection_key = connection.id, connection.id
+        for upstream in session.scalars(select(SourceReference).where(SourceReference.source_id == "dailywire")).all():
+            parts = urlsplit(upstream.url).path.strip("/").split("/")
+            if len(parts) != 2:
+                continue
+            namespace = {"shows": "show", "episodes": "episode", "movies": "videos", "clip": "clips"}.get(parts[0], parts[0])
+            canonical = f"https://www.dailywire.com/{namespace}/{parts[1]}"
+            upstream.namespace, upstream.upstream_id, upstream.url = namespace, str(uuid.uuid5(uuid.NAMESPACE_URL, canonical)), canonical
+        links = {link.legacy_id: link.item_id for link in session.scalars(select(LegacyMediaLink).where(
+            LegacyMediaLink.legacy_type == "show")).all()}
+        for old in session.scalars(select(DownloadProfileBase)).all():
+            context.raise_if_cancelled()
+            if old.show_id not in links:
+                continue
+            name = f"Imported download profile {old.id}"
+            if session.scalar(select(CollectionDownloadProfile.id).where(CollectionDownloadProfile.name == name)):
+                continue
+            collection_id = links[old.show_id]
+            reference = session.scalar(select(SourceReference).where(SourceReference.item_id == collection_id,
+                SourceReference.source_id == "dailywire"))
+            podcast = isinstance(old, PodcastDownloadProfile)
+            count = old.download_episode_count if podcast else 0
+            start = old.download_starting_from if podcast else None
+            if podcast and old.download_days_in_past:
+                start = max(start or date.min, date.today() - timedelta(days=old.download_days_in_past))
+            session.add(CollectionDownloadProfile(collection_id=collection_id,
+                source_reference_id=reference.id if reference else None, name=name,
+                local_profile_ids=[old.local_media_profile_id], backfill="date_range" if start else "newest" if count else "all",
+                newest_count=max(count, 1), published_after=start, enabled=old.enable_profile,
+                refresh_minutes=60, retain_newest=count if podcast and old.delete_older_episodes and count else None,
+                retain_days=old.download_days_in_past if podcast and old.delete_older_episodes and old.download_days_in_past else None))
+        for old in session.scalars(select(RssStreamProfile)).all():
+            if old.show_id not in links:
+                continue
+            name = f"Imported stream profile {old.id}"
+            if session.scalar(select(CollectionStreamProfile.id).where(CollectionStreamProfile.name == name)):
+                continue
+            profile = CollectionStreamProfile(collection_id=links[old.show_id], name=name,
+                format="audio" if old.preferred_format == "format_audio_only" else "video",
+                local_only=not old.use_dw_stream, include_live=old.stream_live_episodes, enabled=old.enable_profile)
+            session.add(profile)
+            session.flush()
+            session.add(FeedSubscription(collection_id=profile.collection_id, stream_profile_id=profile.id,
+                user_key="admin", token=old.token))
+        for artifact in session.scalars(select(Artifact).where(Artifact.profile_id.is_not(None))).all():
+            if not session.scalar(select(MediaDemand.id).where(MediaDemand.item_id == artifact.item_id,
+                    MediaDemand.profile_id == artifact.profile_id)):
+                session.add(MediaDemand(item_id=artifact.item_id, profile_id=artifact.profile_id,
+                    owner_kind="direct", owner_id=artifact.item_id))
+        session.commit()
+
+
+async def migrate(context):
+    await asyncio.to_thread(_convert, context)

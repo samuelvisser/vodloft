@@ -2,7 +2,10 @@
 
 import json
 import errno
+import hashlib
 import sys
+import shutil
+import subprocess
 import tempfile
 from urllib.error import HTTPError
 from contextlib import contextmanager
@@ -16,7 +19,7 @@ from source_contracts import (
     SourceMatch, SourceMediaReference, StreamLease,
 )
 from source_contracts.network import install_public_network_guard, fetch_stream
-from source_contracts.progress import download_progress_hook
+from vodloft_source_media import download as acquire_media, UnsupportedRepresentation, lease_expiry
 
 
 @contextmanager
@@ -97,6 +100,14 @@ def resolve(url: str, *, max_entries: int = 100, cookies: str | None = None,
     if published := _published(info):
         optional["published_at"] = published
     if kind != "collection":
+        optional["chapters"] = [{"title": str(chapter.get("title") or "Chapter"),
+            "start": max(0, chapter.get("start_time") or 0), "end": chapter.get("end_time")}
+            for chapter in (info.get("chapters") or [])[:1000]]
+        optional["tracks"] = [{"kind": "audio", "language": language}
+            for language in sorted({fmt["language"] for fmt in info.get("formats") or []
+                if isinstance(fmt, dict) and fmt.get("language")})][:80] + [
+            {"kind": "subtitle", "language": language}
+            for language in sorted(info.get("subtitles") or {})][:20]
         optional["is_live"] = bool(info.get("is_live") or info.get("live_status") == "is_live")
         heights = [fmt.get("height") for fmt in info.get("formats") or []
                    if isinstance(fmt, dict) and isinstance(fmt.get("height"), int)]
@@ -106,6 +117,12 @@ def resolve(url: str, *, max_entries: int = 100, cookies: str | None = None,
             {"code": code, "height": height, "description": f"Video up to {height}p"}
             for code, height in (("format_720p", 720), ("format_1080p", 1080),
                                  ("format_4k", 2160)) if maximum == 0 or maximum >= height])
+    optional["author"] = info.get("uploader") or info.get("creator")
+    optional["artwork"] = [{"url": image["url"],
+        "role": "square" if image.get("width") and image.get("width") == image.get("height") else
+                "portrait" if image.get("height", 0) > image.get("width", 0) else "landscape",
+        "width": image.get("width") or None, "height": image.get("height") or None}
+        for image in thumbnails[-50:] if image.get("url")]
     return MediaSnapshot(
         kind=kind, reference=_reference(info, url),
         title=str(info.get("title") or info.get("id") or "Untitled"),
@@ -141,31 +158,10 @@ def entries(url: str, cursor: str | None = None, limit: int = 50,
 
 
 def download(url: str, staging: str, preferred_format: str = "format_1080p",
-             cookies: str | None = None, scratch: str | None = None) -> DownloadResult:
-    destination = Path(staging).resolve()
-    destination.mkdir(parents=True, exist_ok=True)
-    if preferred_format == "format_audio_only":
-        format_selector = "bestaudio/best"
-        postprocessors = [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3"}]
-    else:
-        height = {"format_720p": 720, "format_1080p": 1080, "format_4k": 2160}.get(preferred_format, 1080)
-        format_selector = f"bestvideo*[height<={height}]+bestaudio/best[height<={height}]/best"
-        postprocessors = []
-    with _cookie_options(cookies, scratch) as auth, yt_dlp.YoutubeDL({
-        "quiet": True, "no_warnings": True, "noplaylist": True,
-        "outtmpl": str(destination / "media.%(ext)s"),
-        "restrictfilenames": True,
-        "format": format_selector,
-        "hls_prefer_native": True,
-        "progress_hooks": [download_progress_hook()],
-        "postprocessors": postprocessors,
-        **auth,
-    }) as ydl:
-        ydl.download([url])
-    files = [p for p in destination.iterdir() if p.is_file() and not p.name.endswith((".part", ".ytdl"))]
-    if len(files) != 1:
-        raise RuntimeError("Source did not produce exactly one completed media file")
-    return DownloadResult(filename=files[0].name, size=files[0].stat().st_size)
+             cookies: str | None = None, scratch: str | None = None,
+             representation: dict | None = None, metadata: dict | None = None) -> DownloadResult:
+    with _cookie_options(cookies, scratch) as auth:
+        return acquire_media(url, staging, preferred_format, representation, metadata, auth)
 
 
 def stream_lease(url: str, cookies: str | None = None, scratch: str | None = None) -> StreamLease:
@@ -176,6 +172,7 @@ def stream_lease(url: str, cookies: str | None = None, scratch: str | None = Non
         "skip_download": True, **auth,
     }) as ydl:
         info = ydl.extract_info(url, download=False)
+        private_cookie = ydl.cookiejar.get_cookie_header(info.get("url", "")) if info else None
     if not info or info.get("_type") == "playlist" or info.get("requested_formats"):
         raise ValueError("This item needs a prepared local streaming rendition")
     media_url = info.get("url")
@@ -187,8 +184,13 @@ def stream_lease(url: str, cookies: str | None = None, scratch: str | None = Non
     headers = {key: value for key, value in (info.get("http_headers") or {}).items()
                if key.lower() in {"user-agent", "referer", "origin", "cookie"} and
                isinstance(value, str) and len(value) < 8192}
+    if private_cookie:
+        headers["Cookie"] = private_cookie
+    identity = hashlib.sha256(json.dumps({key: info.get(key) for key in
+        ("id", "format_id", "vcodec", "acodec", "height", "duration", "filesize")}, sort_keys=True).encode()).hexdigest()
     return StreamLease(transport="hls" if "m3u8" in protocol else "http", url=media_url,
-        renewable=True, seekable=True, headers=headers)
+        renewable=True, seekable=True, headers=headers,
+        expires_at=lease_expiry(media_url), representation_id=identity)
 
 
 def main() -> None:
@@ -197,10 +199,15 @@ def main() -> None:
     if operation in ("resolve", "download", "entries", "stream_lease", "stream_fetch"):
         install_public_network_guard()
     if operation == "manifest":
-        result = SourceManifest(source_id="yt-dlp", display_name="yt-dlp", version=yt_dlp.version.__version__,
-                                capabilities={"resolve_url", "enumerate_collection", "enumerate_pages", "download", "domain_catalogue", "stream_lease"},
+        result = SourceManifest(source_id="yt-dlp", display_name="yt-dlp", version="0.1.0", upstream_versions={"yt-dlp": yt_dlp.version.__version__},
+                                native_helpers=["ffmpeg"], catalogue_revision=yt_dlp.version.__version__,
+                                capabilities={"health", "resolve_url", "enumerate_collection", "enumerate_pages", "download", "domain_catalogue", "stream_lease"},
                                 configuration_schema=[{"name": "cookies", "label": "Netscape cookies.txt",
                                                        "kind": "credential_file"}])
+    elif operation == "health":
+        result = {"healthy": bool(shutil.which("ffmpeg")), "protocol_version": 1}
+        if result["healthy"]:
+            subprocess.run(["ffmpeg", "-version"], timeout=10, check=True, capture_output=True)
     elif operation == "domains":
         # This is deliberately a discoverable subset. Generic extractors and
         # embeds can resolve additional sites beyond any advertised catalogue.
@@ -236,13 +243,14 @@ def main() -> None:
                          request.get("cookies"), request.get("scratch"))
     elif operation == "download":
         result = download(request["url"], request["staging"], request.get("preferred_format", "format_1080p"),
-                          request.get("cookies"), request.get("scratch"))
+                          request.get("cookies"), request.get("scratch"), request.get("representation"), request.get("metadata"))
     elif operation == "stream_lease":
         result = stream_lease(request["url"], request.get("cookies"), request.get("scratch"))
     elif operation == "stream_fetch":
         result = fetch_stream(request["url"], request.get("headers"), request.get("byte_range"))
     else:
-        raise ValueError(f"Unsupported Source operation: {operation}")
+        print(json.dumps({"error": SourceError(code="unsupported_operation", message="This Source does not support the requested operation").model_dump()}))
+        return
     print(result.model_dump_json(exclude_unset=True) if hasattr(result, "model_dump_json") else json.dumps(result))
 
 
@@ -257,6 +265,8 @@ if __name__ == "__main__":
             code, message = "authentication_required", "Source authorization is required"
         elif isinstance(exc, OSError) and exc.errno == errno.ENOSPC:
             code, message = "insufficient_disk", "Insufficient staging disk space"
+        elif isinstance(exc, UnsupportedRepresentation):
+            code, message = "unsupported_format", "The requested representation is unavailable"
         elif isinstance(exc, ValueError):
             code = "unsupported_operation" if str(exc).startswith("Unsupported Source operation") else "invalid_url"
             message = "Source operation is unsupported" if code == "unsupported_operation" else "Source URL or media reference is invalid"

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Index, String, func
+from sqlalchemy import Boolean, Index, String, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
@@ -28,6 +28,8 @@ class LocalMediaProfileBase(Base):
             "output_template",
             "preferred_format",
             unique=True,
+            sqlite_where=text("type <> 'domain'"),
+            postgresql_where=text("type <> 'domain'"),
         ),
     )
     __mapper_args__ = {

@@ -1,81 +1,29 @@
-from __future__ import annotations
-
-from collections.abc import Callable
-
+"""First-install library defaults; migrations own existing-install changes."""
 from sqlalchemy import select
-from sqlalchemy.orm import Session
-
-from .core import get_session, load_database_models
-
-
-# Data every brand-new WireLoft installation should start with belongs here.
-#
-# This module runs only after Alembic has brought a fresh database to the
-# current schema. Keep schema/data transformations for existing installations
-# in migrations; keep development/demo fixtures in backend.db.fake_data.
-_SHOW_VIDEO_TEMPLATE = (
-    "/downloads/shows/{{ show_title }}/{{ season_name }}/{{ episode_title }}.ext"
-)
-_SHOW_AUDIO_TEMPLATE = (
-    "/downloads/podcasts/{{ show_title }}/"
-    "{{ episode_published_date }} - {{ episode_title }}.ext"
-)
-_MOVIE_TEMPLATE = (
-    "{% set output_year = ' (' ~ movie_year ~ ')' if movie_year %}"
-    "/downloads/movies/{{ movie_title }}{{ output_year }}/"
-    "{{ movie_title }}{{ output_year }}"
-    "{% if media_type != 'movie' %}-{{ media_type }} [{{ title }}]{% endif %}"
-    "{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext"
-)
+from backend.db.core import get_session, load_database_models
+from backend.db.models.local_media_profile import DomainLocalMediaProfile
+from backend.db.models.vodloft import Domain
 
 
-def _seed_local_media_profiles(session: Session) -> None:
-    from backend.db.models import (
-        LocalMediaProfileBase,
-        MovieLocalMediaProfile,
-        ShowLocalMediaProfile,
-    )
-
-    existing_slugs = set(session.scalars(select(LocalMediaProfileBase.slug)))
-    profiles = (
-        ShowLocalMediaProfile(
-            slug="wireloft-shows-video",
-            name="WireLoft Shows (Video)",
-            output_template=_SHOW_VIDEO_TEMPLATE,
-            preferred_format="format_1080p",
-        ),
-        ShowLocalMediaProfile(
-            slug="wireloft-shows-audio",
-            name="WireLoft Shows (Audio)",
-            output_template=_SHOW_AUDIO_TEMPLATE,
-            preferred_format="format_audio_only",
-        ),
-        MovieLocalMediaProfile(
-            slug="wireloft-movies",
-            name="WireLoft Movies",
-            output_template=_MOVIE_TEMPLATE,
-            preferred_format="format_1080p",
-        ),
-    )
-    session.add_all(profile for profile in profiles if profile.slug not in existing_slugs)
+def _seed_local_media_profiles(session):
+    for hostname, label in (("dailywire.com", "The Daily Wire"), ("youtube.com", "YouTube")):
+        domain = session.scalar(select(Domain).where(Domain.hostname == hostname))
+        if not domain:
+            domain = Domain(hostname=hostname, display_name=label)
+            session.add(domain)
+            session.flush()
+        for suffix, preferred in (("video", "format_1080p"), ("audio", "format_audio_only")):
+            slug = f"{hostname}-{suffix}"
+            if not session.scalar(select(DomainLocalMediaProfile.id).where(DomainLocalMediaProfile.slug == slug)):
+                session.add(DomainLocalMediaProfile(name=f"{label} {suffix.title()}", slug=slug,
+                    domain_id=domain.id, preferred_format=preferred,
+                    output_template="/downloads/{{ domain }}/{{ collection or media_type }}/{{ title }} - {{ id }}.ext",
+                    applicable_kinds=["video", "movie", "movie_extra"], enabled=True,
+                    representation={"container": "m4a" if suffix == "audio" else "mp4"}, delivery_target_ids=[]))
 
 
-_INITIAL_SEED_STEPS: tuple[Callable[[Session], None], ...] = (
-    _seed_local_media_profiles,
-)
-
-
-def seed_initial_database() -> None:
-    """Populate the application data for a brand-new WireLoft database."""
+def seed_initial_database():
     load_database_models()
-
-    session = get_session()
-    try:
-        for seed_step in _INITIAL_SEED_STEPS:
-            seed_step(session)
+    with get_session() as session:
+        _seed_local_media_profiles(session)
         session.commit()
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()

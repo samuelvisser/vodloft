@@ -47,7 +47,7 @@ def load_all_tasks() -> None:
     unrelated workers. Controller startup and the CLI call this function before
     they rely on the complete registry.
     """
-    for name in _WORKER_EXPORTS:
+    for name in ("background_migration_runner", "trigger_task_worker"):
         _load_worker(name)
 
 
