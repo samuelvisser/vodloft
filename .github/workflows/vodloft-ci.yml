@@ -27,6 +27,10 @@ jobs:
           python -m pip install uv
           uv sync --frozen
           npm --prefix ui ci --registry=https://registry.npmjs.org
+      - name: Report frontend dependency advisories
+        run: |
+          npm --prefix ui audit --json > /tmp/vodloft-ui-audit.json || true
+          python -c 'import json; report=json.load(open("/tmp/vodloft-ui-audit.json")); print(json.dumps({"metadata":report.get("metadata"),"vulnerabilities":report.get("vulnerabilities",{})},separators=(",",":")))'
       - name: Verify architecture, lifecycle, and WireLoft upgrade
         run: |
           uv run --frozen pytest tests/unit/test_vodloft_architecture.py tests/unit/test_vodloft_prototype.py tests/unit/test_vodloft_upgrade.py -q

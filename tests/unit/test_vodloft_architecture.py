@@ -2048,15 +2048,18 @@ def test_source_publisher_catalogue_is_accepted_by_the_update_verifier_and_detec
         publisher['sign_bundle'](bundle, 'https://releases.example.com/fixture/1.0.0', key_file, catalog)
 
 
-def test_shared_movie_extra_edits_keep_parents_roles_and_explicit_choices(library):
+def test_shared_movie_extra_edits_keep_parents_roles_and_explicit_choices(library, monkeypatch):
     from backend.db.models.vodloft import MovieExtraParent
-    client, sessions, _, _, _ = library
+    client, sessions, _, gateway, _ = library
+    snapshots = {}
+    monkeypatch.setattr(gateway.SourceGateway, "resolve", lambda self, source_id, url, **kw: snapshots[url])
     shared = ref("example.com", "shared-extra")
     movies = []
     for index, role in enumerate(("trailer", "interview"), start=1):
         snapshot = MediaSnapshot(kind="movie", reference=ref("example.com", f"movie-{index}"),
             title=f"Movie {index}", extras=[EntrySnapshot(reference=shared, title="Shared extra",
                 kind="movie_extra", position=1, extra_type=role)])
+        snapshots[snapshot.reference.url] = snapshot
         result = client.post("/api/vodloft/import", json={"snapshot": snapshot.model_dump(mode="json")})
         assert result.status_code == 200, result.text
         movies.append((result.json()["id"], snapshot))
