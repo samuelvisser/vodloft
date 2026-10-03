@@ -56,6 +56,8 @@ jobs:
           set -euo pipefail
           docker run -d --name vodloft-acceptance -p 8080:80 -e WL_ADMIN_AUTH__PASSWORD=acceptance-password vodloft:acceptance
           trap 'docker logs vodloft-acceptance; docker rm -f vodloft-acceptance' EXIT
+          # On a fresh image, expose an offline installation traceback if a bundled Source failed.
+          docker exec vodloft-acceptance python -c 'from pathlib import Path; from backend.source_manager.runtime import install_bundle, status; installed=status(); print(installed); [install_bundle(source, Path("/config/source-bundles") / source / "1.0.0") for source in ("yt-dlp", "dailywire") if source not in installed["active"]]'
           python tools/verify_container.py http://127.0.0.1:8080 --password acceptance-password
           docker exec vodloft-acceptance /config/source-runtimes/yt-dlp/1.0.0/bin/python /app/tools/verify_media_pipeline.py
           docker logs vodloft-acceptance 2>&1 | python -c 'import sys; assert "secret-fixture-token" not in sys.stdin.read()'
