@@ -702,7 +702,7 @@ def test_dailywire_pages_keep_season_group_and_opaque_cursor(monkeypatch):
     from dailywire_api.dw_api.client import EpisodesPaginatedResult
     from vodloft_source_dailywire import worker
     date = datetime(2026, 9, 5, tzinfo=timezone.utc)
-    season = SimpleNamespace(dw_id="season-1", name="2026")
+    season = SimpleNamespace(dw_id="season-1", name="2026", slug="2026")
     show = SimpleNamespace(seasons=[season])
     calls = []
     class Client:
@@ -948,12 +948,14 @@ def test_source_download_events_reach_gateway(tmp_path):
     worker = tmp_path / "worker.py"
     worker.write_text("import json,sys\njson.load(sys.stdin)\n"
         "print(json.dumps({'event': {'percent': 47}}), file=sys.stderr, flush=True)\n"
+        "print(json.dumps({'event': {'stage': 'processing'}}), file=sys.stderr, flush=True)\n"
         "print(json.dumps({'filename': 'media.mp4', 'size': 7}))\n")
-    seen = []
+    seen, stages = [], []
     result = SourceGateway({"fixture": [sys.executable, str(worker)]}).call(
-        "fixture", "download", on_progress=seen.append)
+        "fixture", "download", on_progress=seen.append, on_stage=stages.append)
     assert result == {"filename": "media.mp4", "size": 7}
     assert seen == [47]
+    assert stages == ['downloading', 'processing']
 
 
 def test_source_progress_updates_job_operation(library, monkeypatch):
@@ -1811,3 +1813,44 @@ def test_source_processing_event_reports_actual_job_stage(library, monkeypatch):
         operation = session.get(TaskOperation, session.get(AcquisitionJob, job_id).operation_id)
         assert [stage['stage'] for stage in operation.context['stages']] == [
             'queued', 'resolving', 'downloading', 'processing', 'verifying', 'finalizing', 'available']
+
+
+def test_group_role_filters_future_groups_and_feed_limits_preserve_enclosures(library, monkeypatch, tmp_path):
+    from datetime import datetime, timezone
+    client, sessions, router, gateway, automation = library
+    snapshots = [EntrySnapshot(reference=ref('example.com', str(i)), title=f'Episode {i}', position=i,
+        group=group, role=role, published_at=datetime(2026, 9, i, tzinfo=timezone.utc))
+        for i, group, role in [(1, 'Group 1', 'episode'), (2, 'Group 1', 'trailer'), (3, 'Group 2', 'episode')]]
+    collection = MediaSnapshot(kind='collection', reference=ref('example.com', 'groups'), title='Collection', entries=snapshots)
+    monkeypatch.setattr(gateway.SourceGateway, 'resolve', lambda *a, **kw: collection)
+    collection_id = client.post('/api/vodloft/import', json={'snapshot': collection.model_dump(mode='json')}).json()['id']
+    profile_id = client.post('/api/vodloft/profiles', json={'name': 'Audio', 'domain': 'example.com', 'preferred_format': 'format_audio_only'}).json()['id']
+    policy = client.post(f'/api/vodloft/library/{collection_id}/download-profiles', json={'name': 'Selected',
+        'local_profile_ids': [profile_id], 'backfill': 'all', 'selected_groups': ['Group 1'], 'member_roles': ['episode'],
+        'include_future_groups': True}).json()
+    entries = client.get(f'/api/vodloft/library/{collection_id}').json()['entries']
+    with sessions() as session:
+        session.add(CollectionEntry(collection_id=collection_id, item_id=entries[2]['id'], position=4, group='Group 3', role='episode'))
+        root = tmp_path / 'vodloft'; root.mkdir()
+        for item in entries:
+            path = root / f"{item['id']}.mp3"; path.write_bytes(item['title'].encode())
+            session.add(Artifact(item_id=item['id'], path=str(path), size=path.stat().st_size))
+        session.commit()
+    decision = automation.schedule_profile(policy['id'], dispatch=False)
+    from backend.db.models.vodloft import MediaDemand
+    with sessions() as session:
+        requested = {demand.item_id for demand in session.scalars(select(MediaDemand).where(
+            MediaDemand.owner_kind == 'policy', MediaDemand.owner_id == policy['id'])).all()}
+    assert requested == {entries[0]['id'], entries[2]['id']}
+    assert len(decision['skipped']) == 2
+    stream = client.post(f'/api/vodloft/library/{collection_id}/stream-profiles', json={'name': 'Feed',
+        'format': 'audio', 'member_roles': ['episode'], 'max_items': 1, 'feed_title': 'Selected podcast'}).json()
+    url = client.post(f"/api/vodloft/stream-profiles/{stream['id']}/feed").json()['url']
+    channel = ElementTree.fromstring(client.get(url).content).find('channel')
+    assert channel.find('title').text == 'Selected podcast' and len(channel.findall('item')) == 1
+    enclosure = channel.find('item/enclosure').attrib['url']; guid = channel.find('item/guid').text
+    assert channel.find('item/title').text == 'Episode 3'
+    assert client.put(f"/api/vodloft/stream-profiles/{stream['id']}", json={**stream, 'member_roles': ['trailer']}).status_code == 200
+    channel = ElementTree.fromstring(client.get(url).content).find('channel')
+    assert channel.find('item/title').text == 'Episode 2' and channel.find('item/guid').text != guid
+    assert client.get(enclosure).content == b'Episode 3'

@@ -1,6 +1,6 @@
 import type Hls from 'hls.js'
 import {useEffect, useRef, useState} from 'react'
-import {useForm} from 'react-hook-form'
+import {useForm, type UseFormReturn} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {z} from 'zod'
 import {buildServerAwareSubmit} from '../utils/buildServerAwareSubmit'
@@ -21,6 +21,7 @@ type Connection = {id: number; source_id: string; name: string; has_secret: bool
 type Reference = {source_id: string; domain: string; namespace: string; upstream_id: string; url: string}
 type Preview = {kind: string; title: string; description?: string; artwork_url?: string; reference: Reference; entries: {title: string; position: number}[]; enumeration_complete: boolean}
 type Item = {parent_id?: number | null; extra_type?: string | null; chapters?: {title: string; start: number; end?: number}[]; id: number; title: string; description?: string; kind: string; domain: string; downloaded: boolean;
+    member_groups?: string[]; member_roles?: string[];
     capabilities?: string[] | null; playback_type?: string; artwork_url?: string; artwork_available?: boolean; entries?: Item[]; extras?: Item[];
     is_live?: boolean | null; formats?: {code: string; description?: string; audio_only: boolean; height?: number}[];
     references?: {id: number; source_id: string; connection_id: number | null; namespace: string; upstream_id: string}[]}
@@ -36,10 +37,11 @@ type SourceHistory = {id: number; source_id: string; connection_id: number | nul
     runtime_version: string; created_at: string; metadata: {title?: string; description?: string}}
 type Representation = {languages: string[]; subtitles: string[]; container: ProfileFields['container']; video_codec: ProfileFields['video_codec']; audio_codec: ProfileFields['audio_codec']; chapters: boolean; artwork: boolean; embed_metadata: boolean; language_fallback: boolean}
 type Profile = {representation: Representation; delivery_target_ids: number[]; impairment: string | null; id: number; name: string; domain: string; preferred_format: string; output_template: string; applicable_kinds: string[]; enabled: boolean}
-type DownloadPolicy = {id: number; name: string; local_profile_ids: number[]; backfill: string; newest_count: number;
+type MembershipPolicy = {selected_groups: string[] | null; include_future_groups: boolean; member_roles: string[] | null}
+type DownloadPolicy = MembershipPolicy & {id: number; name: string; local_profile_ids: number[]; backfill: string; newest_count: number;
     retain_newest: number | null; retain_days: number | null;
     source_reference_id: number | null; enabled: boolean; refresh_minutes: number; published_after: string | null; published_before: string | null; title_contains: string | null}
-type StreamProfile = {id: number; name: string; format: string; enabled: boolean;
+type StreamProfile = MembershipPolicy & {id: number; name: string; format: string; enabled: boolean; max_items: number; feed_title: string | null;
     include_live: boolean; local_only: boolean;
     published_after?: string | null; published_before?: string | null; title_contains?: string | null}
 type Target = {local_prefix: string; server_prefix: string; id: number; name: string; kind: string; base_url: string; library_id: string; enabled: boolean}
@@ -527,9 +529,9 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                     {policy.retain_newest && ` · keep newest ${policy.retain_newest}`}
                     {policy.retain_days && ` · ${policy.retain_days} days`}{' '}
                     {me?.role === 'admin' && <><button type="button" className="btn" onClick={() => void runDownloadPolicy(policy.id)}>Run now</button>{' '}
-                    <DownloadPolicyForm initial={policy} collectionId={selected.id} profiles={profiles} sourceReferenceId={referenceId} references={selected.references ?? []} onCreated={updated => setDownloadPolicies(current => current.map(value => value.id === updated.id ? updated : value))}/>{' '}
+                    <DownloadPolicyForm initial={policy} collection={selected} collectionId={selected.id} profiles={profiles} sourceReferenceId={referenceId} references={selected.references ?? []} onCreated={updated => setDownloadPolicies(current => current.map(value => value.id === updated.id ? updated : value))}/>{' '}
                     <button type="button" className="btn" onClick={() => void api(`/download-profiles/${policy.id}`, {method: 'DELETE'}).then(() => setDownloadPolicies(current => current.filter(value => value.id !== policy.id))).catch(e => setError(String(e)))}>Delete</button></>}</div>)}
-                {me?.role === 'admin' && <DownloadPolicyForm collectionId={selected.id} profiles={profiles}
+                {me?.role === 'admin' && <DownloadPolicyForm collection={selected} collectionId={selected.id} profiles={profiles}
                     sourceReferenceId={referenceId} references={selected.references ?? []}
                     onCreated={policy => setDownloadPolicies(previous => [...previous, policy])}/>}
                 <h3>Collection feeds</h3>
@@ -538,9 +540,9 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                     {me?.can_subscribe && <><button type="button" className="btn" onClick={() => void createStreamFeed(profile.id)}>Get feed</button>{' '}
                     <button type="button" className="btn" onClick={() => void api<{url: string}>(`/stream-profiles/${profile.id}/feed/rotate`, {method: 'POST'}).then(result => {setFeedUrl(result.url); setRunResult('Old feed URL revoked.')}).catch(e => setError(String(e)))}>Rotate URL</button>{' '}
                     <button type="button" className="btn" onClick={() => void api(`/stream-profiles/${profile.id}/feed`, {method: 'DELETE'}).then(() => {setFeedUrl(null); setRunResult('Feed revoked.')}).catch(e => setError(String(e)))}>Revoke my feed</button></>}{' '}
-                    {me?.role === 'admin' && <><StreamProfileForm initial={profile} collectionId={selected.id} onCreated={updated => setStreamProfiles(current => current.map(value => value.id === updated.id ? updated : value))}/>{' '}
+                    {me?.role === 'admin' && <><StreamProfileForm initial={profile} collection={selected} collectionId={selected.id} onCreated={updated => setStreamProfiles(current => current.map(value => value.id === updated.id ? updated : value))}/>{' '}
                     <button type="button" className="btn" onClick={() => void api(`/stream-profiles/${profile.id}`, {method: 'DELETE'}).then(() => setStreamProfiles(current => current.filter(value => value.id !== profile.id))).catch(e => setError(String(e)))}>Delete profile</button></>}</div>)}
-                {me?.role === 'admin' && <StreamProfileForm collectionId={selected.id}
+                {me?.role === 'admin' && <StreamProfileForm collection={selected} collectionId={selected.id}
                     onCreated={profile => setStreamProfiles(previous => [...previous, profile])}/>}
                 {me?.role === 'admin' && <RSSDeliveryForm targets={targets} profiles={streamProfiles}/>}
                 {runResult && <p role="status">{runResult}</p>}
@@ -792,6 +794,7 @@ function DomainProfileForm({domain, formats, targets, initial, onCreated}: {doma
 }
 
 const DownloadPolicySchema = z.object({
+    selected_groups: z.array(z.string()).nullable().default(null), include_future_groups: z.boolean().default(true), member_roles: z.array(z.string()).nullable().default(null),
     enabled: z.boolean().default(true),
     name: z.string().min(1).default('New episodes'),
     backfill: z.enum(['newest', 'all', 'date_range', 'metadata_only']).default('newest'),
@@ -803,7 +806,8 @@ const DownloadPolicySchema = z.object({
 })
 type PolicyFields = z.input<typeof DownloadPolicySchema>
 
-function DownloadPolicyForm({collectionId, profiles, sourceReferenceId, references, initial, onCreated}: {
+function DownloadPolicyForm({collection, collectionId, profiles, sourceReferenceId, references, initial, onCreated}: {
+    collection: Item;
     collectionId: number; profiles: Profile[]; sourceReferenceId: number | null;
     references: NonNullable<Item['references']>; initial?: DownloadPolicy; onCreated: (profile: DownloadPolicy) => void}) {
     const [expanded, setExpanded] = useState(false)
@@ -836,6 +840,7 @@ function DownloadPolicyForm({collectionId, profiles, sourceReferenceId, referenc
         <label>Published on or after <input type="date" {...register('published_after')} /></label>
         <label>Published on or before <input type="date" {...register('published_before')} /></label>
         <label>Title contains <input {...register('title_contains')} /></label>
+        <MembershipFilter form={form} collection={collection}/>
         <label>Refresh every (minutes) <input type="number" {...register('refresh_minutes')} /></label>
         <label>Keep newest items (optional) <input type="number" min="1" {...register('retain_newest')} /></label>
         <label>Keep items for days (optional) <input type="number" min="1" {...register('retain_days')} /></label>
@@ -851,6 +856,8 @@ function DownloadPolicyForm({collectionId, profiles, sourceReferenceId, referenc
 }
 
 const StreamProfileSchema = z.object({enabled: z.boolean().default(true), name: z.string().min(1).default('Podcast feed'), format: z.enum(['audio', 'video']).default('audio'),
+    selected_groups: z.array(z.string()).nullable().default(null), include_future_groups: z.boolean().default(true), member_roles: z.array(z.string()).nullable().default(null),
+    max_items: z.coerce.number().int().min(0).max(10000).default(50), feed_title: z.string().max(200).default(''),
     include_live: z.boolean().default(false), local_only: z.boolean().default(true),
     published_after: z.string().default(''), published_before: z.string().default(''),
     title_contains: z.string().max(200).default('')}).refine(
@@ -858,17 +865,18 @@ const StreamProfileSchema = z.object({enabled: z.boolean().default(true), name: 
         {path: ['published_before'], message: 'End date must follow start date'})
 type StreamFields = z.input<typeof StreamProfileSchema>
 
-function StreamProfileForm({collectionId, initial, onCreated}: {collectionId: number; initial?: StreamProfile; onCreated: (profile: StreamProfile) => void}) {
+function StreamProfileForm({collection, collectionId, initial, onCreated}: {collection: Item; collectionId: number; initial?: StreamProfile; onCreated: (profile: StreamProfile) => void}) {
     const [expanded, setExpanded] = useState(false)
     const form = useForm<StreamFields, unknown, z.output<typeof StreamProfileSchema>>({
         resolver: zodResolver(StreamProfileSchema), defaultValues: {...StreamProfileSchema.partial({name: true}).parse({}), name: 'Podcast feed',
-            ...(initial ? {...initial, format: initial.format as 'audio' | 'video', published_after: initial.published_after ?? '', published_before: initial.published_before ?? '', title_contains: initial.title_contains ?? ''} : {})},
+            ...(initial ? {...initial, feed_title: initial.feed_title ?? '', format: initial.format as 'audio' | 'video', published_after: initial.published_after ?? '', published_before: initial.published_before ?? '', title_contains: initial.title_contains ?? ''} : {})},
     })
     const {register, formState: {errors, isSubmitting}} = form
     const submit = buildServerAwareSubmit(form, (values: z.output<typeof StreamProfileSchema>) => formRequest(
         initial ? `/stream-profiles/${initial.id}` : `/library/${collectionId}/stream-profiles`, initial ? 'PUT' : 'POST', {
             ...values, published_after: values.published_after || null, published_before: values.published_before || null,
             title_contains: values.title_contains || null,
+            feed_title: values.feed_title || null,
         }), {successStatuses: [200, 201], onSuccess: result => {onCreated(result as StreamProfile); setExpanded(false)}})
     if (!expanded) return <button className="btn" type="button" onClick={() => setExpanded(true)}>{initial ? 'Edit Stream Profile' : 'Create Stream Profile'}</button>
     return <form onSubmit={submit} style={{display: 'grid', gap: 10, maxWidth: 500, margin: '12px 0'}}>
@@ -876,6 +884,9 @@ function StreamProfileForm({collectionId, initial, onCreated}: {collectionId: nu
         <label>Name <input {...register('name')} />{errors.name && <span role="alert">{errors.name.message}</span>}</label>
         <label>Rendition <select {...register('format')}><option value="audio">Podcast audio</option>
             <option value="video">Video feed</option></select></label>
+        <label>Feed title (optional) <input {...register('feed_title')}/></label>
+        <label>Maximum entries (0 for all) <input type="number" min="0" max="10000" {...register('max_items')}/></label>
+        <MembershipFilter form={form} collection={collection}/>
         <label>Published on or after <input type="date" {...register('published_after')} /></label>
         <label>Published on or before <input type="date" {...register('published_before')} />
             {errors.published_before && <span role="alert">{errors.published_before.message}</span>}</label>
@@ -887,6 +898,23 @@ function StreamProfileForm({collectionId, initial, onCreated}: {collectionId: nu
         <div><button type="submit" className="btn btn-primary" disabled={isSubmitting}>Save Stream Profile</button>{' '}
             <button type="button" className="btn" onClick={() => setExpanded(false)}>Cancel</button></div>
     </form>
+}
+
+function MembershipFilter({form, collection}: {form: UseFormReturn<any, any, any>; collection: Item}) {
+    const groups = form.watch('selected_groups') as string[] | null
+    const roles = form.watch('member_roles') as string[] | null
+    const options = (available: string[] | undefined, selected: string[] | null) => [...new Set([...(available ?? []), ...(selected ?? [])])]
+    const toggle = (field: string, selected: string[] | null, value: string, enabled: boolean) =>
+        form.setValue(field, enabled ? [...(selected ?? []), value] : (selected ?? []).filter(v => v !== value), {shouldDirty: true})
+    return <fieldset><legend>Collection members</legend>
+        <label><input type="checkbox" checked={groups !== null} onChange={e => form.setValue('selected_groups', e.target.checked ? [] : null)}/> Select groups</label>
+        {groups !== null && <>{options(collection.member_groups, groups).map(group => <label key={group} style={{display: 'block'}}>
+            <input type="checkbox" checked={groups.includes(group)} onChange={e => toggle('selected_groups', groups, group, e.target.checked)}/> {group || 'Ungrouped'}</label>)}
+            <label><input type="checkbox" {...form.register('include_future_groups')}/> Include new groups discovered after saving</label></>}
+        <label><input type="checkbox" checked={roles !== null} onChange={e => form.setValue('member_roles', e.target.checked ? [] : null)}/> Select member roles</label>
+        {roles !== null && options(collection.member_roles, roles).map(role => <label key={role} style={{display: 'block'}}>
+            <input type="checkbox" checked={roles.includes(role)} onChange={e => toggle('member_roles', roles, role, e.target.checked)}/> {role.split('_').join(' ') || 'Unspecified'}</label>)}
+    </fieldset>
 }
 
 const TargetSchema = z.object({

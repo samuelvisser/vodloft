@@ -89,6 +89,7 @@ class SourceMatch(BaseModel):
 
 
 class EntrySnapshot(BaseModel):
+    role: str | None = Field(default=None, max_length=32)
     reference: SourceMediaReference
     title: str
     position: int

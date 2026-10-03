@@ -14,7 +14,7 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 from fastapi import APIRouter, HTTPException, Request
 from backend.security.permissions import principal, user_enabled
 from fastapi.responses import FileResponse, Response
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import delete, select
 
 from backend.db import get_session
@@ -23,6 +23,7 @@ from backend.db.models.vodloft import (AcquisitionJob, Artifact, CollectionDownl
     PublishedEntry, SourceReference, MediaServerTarget)
 from backend.db.models.local_media_profile import DomainLocalMediaProfile
 from config import get_settings
+from backend.services.vodloft_collections import known_groups, matches_membership
 
 api_router = APIRouter(prefix="/vodloft", tags=["VodLoft feeds"])
 public_router = APIRouter(prefix="/feeds/vodloft", tags=["VodLoft feeds"])
@@ -36,6 +37,11 @@ class StreamProfileInput(BaseModel):
     published_after: date | None = None
     published_before: date | None = None
     title_contains: str | None = Field(default=None, max_length=200)
+    selected_groups: list[str] | None = Field(default=None, max_length=1000)
+    include_future_groups: bool = True
+    member_roles: list[str] | None = Field(default=None, max_length=100)
+    max_items: int = Field(default=0, ge=0, le=10000)
+    feed_title: str | None = Field(default=None, max_length=200)
     local_only: bool = True
     include_live: bool = False
     enabled: bool = True
@@ -47,14 +53,14 @@ class StreamProfileInput(BaseModel):
         return self
 
 
-def _stream_profile(profile: CollectionStreamProfile) -> dict:
-    return {"id": profile.id, "collection_id": profile.collection_id,
-            "name": profile.name, "format": profile.format,
-            "published_after": profile.published_after,
-            "published_before": profile.published_before,
-            "title_contains": profile.title_contains,
-            "local_only": profile.local_only, "include_live": profile.include_live,
-            "enabled": profile.enabled}
+class StreamProfileResponse(StreamProfileInput):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    collection_id: int
+
+
+def _stream_profile(profile: CollectionStreamProfile) -> StreamProfileResponse:
+    return StreamProfileResponse.model_validate(profile)
 
 
 @api_router.get("/library/{collection_id}/stream-profiles")
@@ -71,7 +77,8 @@ def create_stream_profile(collection_id: int, data: StreamProfileInput):
     with get_session() as session:
         if not (item := session.get(MediaItem, collection_id)) or item.kind != "collection":
             raise HTTPException(404, "Collection not found")
-        profile = CollectionStreamProfile(collection_id=collection_id, **data.model_dump())
+        profile = CollectionStreamProfile(collection_id=collection_id,
+            known_groups=known_groups(session, collection_id), **data.model_dump())
         session.add(profile)
         session.commit()
         result = _stream_profile(profile)
@@ -91,6 +98,8 @@ def update_stream_profile(profile_id: int, data: StreamProfileInput):
             FeedSubscription.stream_profile_id == profile_id))
         if published and profile.format != data.format:
             raise HTTPException(409, "Revoke this feed before changing its representation")
+        if profile.selected_groups != data.selected_groups:
+            profile.known_groups = known_groups(session, profile.collection_id)
         for key, value in data.model_dump().items():
             setattr(profile, key, value)
         collection_id = profile.collection_id
@@ -266,6 +275,8 @@ def reconcile_live_admissions(collection_id: int) -> None:
             CollectionDownloadProfile.enabled.is_(True))).all()
         for profile in profiles:
             for entry in entries:
+                if not matches_membership(entry, profile):
+                    continue
                 item = session.get(MediaItem, entry.item_id)
                 admission = session.scalar(select(LiveAdmission).where(
                     LiveAdmission.stream_profile_id == profile.id,
@@ -287,7 +298,7 @@ def reconcile_live_admissions(collection_id: int) -> None:
                     for a in session.scalars(select(Artifact).where(Artifact.item_id == item.id)).all())
                 candidate = None
                 for policy in policies:
-                    if policy.backfill == "metadata_only" or (
+                    if not matches_membership(entry, policy) or policy.backfill == "metadata_only" or (
                         policy.title_contains and policy.title_contains.casefold() not in
                             (item.user_title or item.title).casefold()):
                         continue
@@ -381,13 +392,22 @@ def feed(token: str, request: Request):
                 raise HTTPException(404, "Feed not found")
         collection = session.get(MediaItem, subscription.collection_id)
         channel = Element("channel")
-        SubElement(channel, "title").text = collection.user_title or collection.title
+        SubElement(channel, "title").text = (profile.feed_title if profile else None) or collection.user_title or collection.title
         SubElement(channel, "description").text = collection.description or collection.title
         SubElement(channel, "link").text = str(request.base_url)
         memberships = session.scalars(select(CollectionEntry).where(
             CollectionEntry.collection_id == collection.id).order_by(CollectionEntry.position)).all()
+        if profile and profile.max_items:
+            memberships.sort(key=lambda entry: (
+                session.get(MediaItem, entry.item_id).published_at.timestamp()
+                if session.get(MediaItem, entry.item_id).published_at else float('-inf'), -entry.position), reverse=True)
         seen = set()
+        published_count = 0
         for membership in memberships:
+            if profile and profile.max_items and published_count >= profile.max_items:
+                break
+            if profile and not matches_membership(membership, profile):
+                continue
             if membership.item_id in seen:
                 continue
             seen.add(membership.item_id)
@@ -409,6 +429,7 @@ def feed(token: str, request: Request):
             entry = _publish(session, subscription, media.id)
             if not entry:
                 continue
+            published_count += 1
             node = SubElement(channel, "item")
             SubElement(node, "title").text = media.user_title or media.title
             SubElement(node, "guid", isPermaLink="false").text = f"urn:vodloft:feed:{subscription.id}:media:{media.id}"

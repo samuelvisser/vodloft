@@ -136,6 +136,21 @@ def resolve(url: str, max_entries: int = 100, token: str | None = None) -> Media
     raise ValueError("Unsupported Daily Wire media URL")
 
 
+def _member_role(episode, season=None) -> str:
+    trailer = getattr(episode, 'is_trailer', None) is True or bool(re.search(r'\bofficial\s+trailer\b', episode.title, re.I))
+    raw = (episode.episode_number or '').split('.', 1)
+    numbered = raw[0].isdigit()
+    segment = int(raw[1]) if len(raw) == 2 and raw[1].isdigit() else 0
+    if (season and season.slug == 'extras') or not numbered or segment >= 20:
+        # Year-based podcast groups may identify full episodes by their date.
+        if not numbered and season and season.name.isdigit() and len(season.name) == 4 and not trailer:
+            return 'episode'
+        return 'trailer' if trailer else 'auxiliary'
+    if segment:
+        return 'episode_extra'
+    return 'trailer' if trailer else 'episode'
+
+
 def entries(url: str, cursor: str | None = None, limit: int = 50,
             token: str | None = None) -> CollectionPage:
     parsed = urlsplit(url)
@@ -151,6 +166,7 @@ def entries(url: str, cursor: str | None = None, limit: int = 50,
     if not seasons:
         return CollectionPage(entries=[EntrySnapshot(reference=_reference("episode", e.slug, e.dw_id, e.sharing_url),
             title=e.title, position=index, published_at=e.published_date,
+            role=_member_role(e),
             episode_number=e.episode_number or None,
             capabilities={"download"} if getattr(e, "is_downloadable", True) else set())
             for index, e in enumerate(show.latest_episodes[:limit], 1)],
@@ -173,6 +189,7 @@ def entries(url: str, cursor: str | None = None, limit: int = 50,
     result = client.get_episodes_paginated(parts[1], selector)
     snapshots = [EntrySnapshot(reference=_reference("episode", e.slug, e.dw_id, e.sharing_url),
         title=e.title, position=position + index, group=season.name,
+        role=_member_role(e, season),
         published_at=e.published_date, episode_number=e.episode_number or None,
         capabilities={"download"} if getattr(e, "is_downloadable", True) else set())
         for index, e in enumerate(result.items, 1)]

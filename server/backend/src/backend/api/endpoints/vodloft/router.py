@@ -499,12 +499,13 @@ def _import_snapshot(snapshot: MediaSnapshot, connection_id: int | None = None,
                 if membership:
                     membership.item_id = child.id
                     membership.position = entry.position
-                    membership.group = entry.group
-                    membership.episode_number = entry.episode_number
+                    for field in ("group", "episode_number", "role"):
+                        if field in entry.model_fields_set:
+                            setattr(membership, field, getattr(entry, field))
                 else:
                     session.add(CollectionEntry(collection_id=item.id, item_id=child.id,
                         position=entry.position, group=entry.group,
-                        episode_number=entry.episode_number,
+                        episode_number=entry.episode_number, role=entry.role,
                         occurrence_key=entry.occurrence_id))
             # An incomplete scan must never infer removal. This prototype leaves
             # old members in place even after a complete scan until policy exists.
@@ -764,6 +765,8 @@ def library_item(item_id: int, request: Request):
             entries = session.scalars(select(CollectionEntry).where(
                 CollectionEntry.collection_id == item_id).order_by(CollectionEntry.position)).all()
             result["entries"] = [_serialize(session, session.get(MediaItem, e.item_id)) for e in entries]
+            result["member_groups"] = list(dict.fromkeys(e.group or "" for e in entries))
+            result["member_roles"] = list(dict.fromkeys(e.role or "" for e in entries))
         if item.kind == "movie":
             extras = session.scalars(select(MovieExtraParent).where(MovieExtraParent.movie_id == item_id)).all()
             result["extras"] = [_serialize(session, session.get(MediaItem, e.extra_id)) for e in extras]

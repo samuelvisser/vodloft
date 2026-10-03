@@ -5,7 +5,7 @@ import threading
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
 
 from backend.db import get_session
@@ -14,6 +14,7 @@ from backend.db.models.vodloft import CollectionDownloadProfile, CollectionEntry
 from backend.api.endpoints.vodloft.router import queue_download, _run_download, refresh_collection, _reference_for
 
 logger = logging.getLogger(__name__)
+from backend.services.vodloft_collections import known_groups, matches_membership
 router = APIRouter(prefix="/vodloft", tags=["VodLoft collection automation"])
 
 
@@ -26,6 +27,9 @@ class DownloadPolicyInput(BaseModel):
     published_after: date | None = None
     published_before: date | None = None
     title_contains: str | None = Field(default=None, max_length=200)
+    selected_groups: list[str] | None = Field(default=None, max_length=1000)
+    include_future_groups: bool = True
+    member_roles: list[str] | None = Field(default=None, max_length=100)
     refresh_minutes: int = Field(default=60, ge=15, le=10080)
     retain_newest: int | None = Field(default=None, ge=1, le=10000)
     retain_days: int | None = Field(default=None, ge=1, le=36500)
@@ -40,15 +44,15 @@ class DownloadPolicyInput(BaseModel):
         return self
 
 
-def _serialize(policy: CollectionDownloadProfile) -> dict:
-    return {"id": policy.id, "collection_id": policy.collection_id, "name": policy.name,
-            "local_profile_ids": policy.local_profile_ids,
-            "source_reference_id": policy.source_reference_id, "backfill": policy.backfill,
-            "newest_count": policy.newest_count, "published_after": policy.published_after,
-            "published_before": policy.published_before, "title_contains": policy.title_contains,
-            "refresh_minutes": policy.refresh_minutes,
-            "retain_newest": policy.retain_newest, "retain_days": policy.retain_days,
-            "enabled": policy.enabled, "last_scan_at": policy.last_scan_at}
+class DownloadPolicyResponse(DownloadPolicyInput):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    collection_id: int
+    last_scan_at: datetime | None
+
+
+def _serialize(policy: CollectionDownloadProfile) -> DownloadPolicyResponse:
+    return DownloadPolicyResponse.model_validate(policy)
 
 
 @router.get("/library/{collection_id}/download-profiles")
@@ -72,6 +76,7 @@ def create_profile(collection_id: int, data: DownloadPolicyInput):
             if not (local := session.get(DomainLocalMediaProfile, profile_id)) or local.deleted:
                 raise HTTPException(422, f"Local Media Profile {profile_id} does not exist")
         profile = CollectionDownloadProfile(collection_id=collection_id,
+            known_groups=known_groups(session, collection_id),
             **(data.model_dump() | {"source_reference_id": reference.id,
                                     "local_profile_ids": list(dict.fromkeys(data.local_profile_ids))}))
         session.add(profile)
@@ -91,6 +96,8 @@ def update_profile(profile_id: int, data: DownloadPolicyInput):
         for local_id in set(data.local_profile_ids):
             if not (local := session.get(DomainLocalMediaProfile, local_id)) or local.deleted:
                 raise HTTPException(422, f"Local Media Profile {local_id} does not exist")
+        if profile.selected_groups != data.selected_groups:
+            profile.known_groups = known_groups(session, profile.collection_id)
         for key, value in data.model_dump().items():
             setattr(profile, key, value)
         profile.source_reference_id = reference.id
@@ -117,6 +124,9 @@ def schedule_profile(profile_id: int, *, dispatch: bool = True) -> dict:
             raise HTTPException(404, "Enabled Download Profile not found")
         entries = session.scalars(select(CollectionEntry).where(
             CollectionEntry.collection_id == policy.collection_id).order_by(CollectionEntry.position)).all()
+        excluded = [{"item_id": entry.item_id, "reason": "Group or member role does not match the Download Profile"}
+            for entry in entries if not matches_membership(entry, policy)]
+        entries = [entry for entry in entries if matches_membership(entry, policy)]
         if policy.backfill == "newest":
             # Source ordering is not necessarily reverse chronological (a
             # series may enumerate its first season first).
@@ -135,7 +145,7 @@ def schedule_profile(profile_id: int, *, dispatch: bool = True) -> dict:
             entries = sorted(entries, key=retention_key, reverse=True)[:policy.retain_newest]
         local_profiles = [session.get(DomainLocalMediaProfile, pid) for pid in policy.local_profile_ids]
         compatible: list[tuple[int, int]] = []
-        skipped: list[dict] = []
+        skipped: list[dict] = excluded
         for entry in entries:
             item = session.get(MediaItem, entry.item_id)
             if item.kind == "collection":
