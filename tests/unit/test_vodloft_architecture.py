@@ -2075,6 +2075,10 @@ def test_shared_movie_extra_edits_keep_parents_roles_and_explicit_choices(librar
     snapshots = {}
     monkeypatch.setattr(gateway.SourceGateway, "resolve", lambda self, source_id, url, **kw: snapshots[url])
     shared = ref("example.com", "shared-extra")
+    standalone = MediaSnapshot(kind="video", reference=shared, title="Standalone clip")
+    snapshots[shared.url] = standalone
+    direct = client.post("/api/vodloft/import", json={"snapshot": standalone.model_dump(mode="json")})
+    assert direct.status_code == 200 and direct.json()["kind"] == "video"
     movies = []
     for index, role in enumerate(("trailer", "interview"), start=1):
         snapshot = MediaSnapshot(kind="movie", reference=ref("example.com", f"movie-{index}"),
@@ -2087,6 +2091,7 @@ def test_shared_movie_extra_edits_keep_parents_roles_and_explicit_choices(librar
     first = client.get(f"/api/vodloft/library/{movies[0][0]}").json()
     second = client.get(f"/api/vodloft/library/{movies[1][0]}").json()
     extra_id = first["extras"][0]["id"]
+    assert extra_id == direct.json()["id"] and first["extras"][0]["kind"] == "movie_extra"
     assert second["extras"][0]["id"] == extra_id
     assert first["extras"][0]["extra_type"] == "trailer"
     assert second["extras"][0]["extra_type"] == "interview"
@@ -2113,6 +2118,11 @@ def test_shared_movie_extra_edits_keep_parents_roles_and_explicit_choices(librar
     assert client.get(f"/api/vodloft/library/{movies[0][0]}").json()["extras"] == []
     assert client.put(f"/api/vodloft/library/{extra_id}/metadata", json={"parent_ids": []}).status_code == 422
     assert client.put(f"/api/vodloft/library/{extra_id}/metadata", json={"parent_ids": [extra_id]}).status_code == 422
+    assert client.put(f"/api/vodloft/library/{extra_id}/metadata", json={"kind": "video"}).status_code == 200
+    response = client.post("/api/vodloft/import", json={"snapshot": movies[1][1].model_dump(mode="json")})
+    assert response.status_code == 200
+    assert client.get(f"/api/vodloft/library/{extra_id}").json()["kind"] == "video"
+    assert client.get(f"/api/vodloft/library/{movies[1][0]}").json()["extras"] == []
 
 
 def test_source_activation_validates_saved_private_authentication(library, monkeypatch):

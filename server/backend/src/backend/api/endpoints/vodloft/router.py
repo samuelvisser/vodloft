@@ -516,6 +516,9 @@ def _import_snapshot(snapshot: MediaSnapshot, connection_id: int | None = None,
                 child = _upsert(session, extra.reference, "movie_extra", extra.title,
                                 connection_id=connection_id,
                                 capabilities=extra.capabilities if "capabilities" in extra.model_fields_set else _MISSING)
+                if child.user_kind and child.user_kind != "movie_extra":
+                    continue
+                child.kind = "movie_extra"
                 if child.user_parent_ids is None:
                     child.parent_id = child.parent_id or item.id
                 if child.user_extra_type is None:
