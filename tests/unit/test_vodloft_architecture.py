@@ -1443,8 +1443,12 @@ def test_audiobookshelf_item_mapping_and_progress_pull_never_rewinds(library, mo
     mappings = client.get(f"/api/vodloft/library/{item_id}/integrations").json()
     assert mappings[0]["remote_episode_id"] == "ep_episode"
     assert mappings[0]["url"] == "http://localhost:13378/item/li_podcast"
-    monkeypatch.setattr(integrations, "_request", lambda target, method, path:
-        json.dumps({"currentTime": 60, "isFinished": True}).encode())
+    monkeypatch.setattr(integrations, "_request", lambda target, method, path, **kw:
+        json.dumps({"id": "abs-admin"} if path == "/api/me" else {"currentTime": 60, "isFinished": True}).encode())
+    assert client.post(f"/api/vodloft/integrations/exports/{export_id}/progress/pull").status_code == 409
+    mapped = client.put(f"/api/vodloft/integrations/{target.json()['id']}/users", json={
+        "user_key": "admin", "remote_user_id": "abs-admin", "api_key": "listening-token"})
+    assert mapped.status_code == 200 and "listening-token" not in mapped.text
     pulled = client.post(f"/api/vodloft/integrations/exports/{export_id}/progress/pull")
     assert pulled.status_code == 200, pulled.text
     assert pulled.json() == {"seconds": 120, "completed": True}
@@ -1637,3 +1641,119 @@ def test_management_edits_keep_secrets_and_feed_rotation_revokes_old_url(library
     assert client.post(f"/api/vodloft/stream-profiles/{profile['id']}/feed").json()['url'] == old
     rotated = client.post(f"/api/vodloft/stream-profiles/{profile['id']}/feed/rotate").json()['url']
     assert client.get(old).status_code == 404 and client.get(rotated).status_code == 200
+
+
+def test_rss_pull_delivery_is_idempotent_owned_and_tracks_downloaded_availability(library, monkeypatch, tmp_path):
+    from backend.api.endpoints.vodloft import integrations
+    from backend.db.models.vodloft import IntegrationFeedDelivery, IntegrationFeedItem, FeedSubscription
+    client, sessions, _, gateway, _ = library
+    with sessions() as session:
+        session.connection().exec_driver_sql('PRAGMA foreign_keys=ON')
+    snapshot = MediaSnapshot(kind='collection', reference=ref('example.com', 'abs-feed'), title='Podcast',
+        entries=[EntrySnapshot(reference=ref('example.com', 'abs-episode'), title='Episode', position=1)])
+    monkeypatch.setattr(gateway.SourceGateway, 'resolve', lambda *a, **k: snapshot)
+    collection = client.post('/api/vodloft/import', json={'snapshot': snapshot.model_dump(mode='json')}).json()
+    item_id = client.get(f"/api/vodloft/library/{collection['id']}").json()['entries'][0]['id']
+    profile = client.post(f"/api/vodloft/library/{collection['id']}/stream-profiles", json={'name': 'Podcast'}).json()
+    target = client.post('/api/vodloft/integrations', json={'kind': 'audiobookshelf', 'name': 'ABS',
+        'base_url': 'http://abs:13378', 'library_id': 'lib', 'local_prefix': str(tmp_path),
+        'server_prefix': '/podcasts', 'api_key': 'delivery-secret'}).json()
+    original = tmp_path / 'vodloft' / 'episode.mp3'; original.parent.mkdir(); original.write_bytes(b'immutable audio')
+    with sessions() as session:
+        session.add(Artifact(item_id=item_id, path=str(original), size=original.stat().st_size)); session.commit()
+    remote = {}; calls = []
+    def request(target, method, path, payload=None, **kw):
+        calls.append((method, path, payload))
+        if '/items?limit=' in path:
+            return json.dumps({'results': [remote] if remote else [], 'total': int(bool(remote))}).encode()
+        if method == 'POST' and path == '/api/podcasts':
+            assert not remote, 'Retry must not create a second podcast'
+            assert payload['media']['autoDownloadEpisodes'] and payload['folderId'] == 'folder'
+            remote.update({'id': 'podcast', 'libraryId': 'lib', 'mediaType': 'podcast', 'path': payload['path'],
+                'media': {'metadata': payload['media']['metadata'], 'episodes': []}})
+            return json.dumps(remote).encode()
+        if path.startswith('/api/items/'):
+            return json.dumps(remote).encode()
+        if '/checknew?' in path: return b'{}'
+        raise AssertionError(path)
+    monkeypatch.setattr(integrations, '_request', request)
+    response = client.post('/api/vodloft/integrations/rss', json={'target_id': target['id'],
+        'stream_profile_id': profile['id'], 'folder_id': 'folder', 'server_path': '/podcasts/Podcast',
+        'vodloft_url': 'http://testserver'})
+    assert response.status_code == 201, response.text
+    delivery_id = response.json()['id']
+    feed_url = remote['media']['metadata']['feedUrl']
+    feed = client.get(feed_url)
+    assert feed.status_code == 200, feed.text
+    enclosure = ElementTree.fromstring(feed.content).find('channel/item/enclosure').attrib['url']
+    remote['media']['episodes'] = [{'id': 'episode', 'enclosure': {'url': enclosure}, 'audioFile': {'path': '/podcasts/Podcast/episode.mp3'}}]
+    integrations.reconcile_feed_delivery(delivery_id)
+    assert client.get(f'/api/vodloft/library/{item_id}/integrations').json()[0]['state'] == 'available'
+    original.unlink()
+    assert client.get(enclosure).content == b'immutable audio'
+    assert sum(path == '/api/podcasts' and method == 'POST' for method, path, _ in calls) == 1
+    with sessions() as session:
+        assert session.scalar(select(IntegrationFeedDelivery)).state == 'subscribed'
+        assert session.scalar(select(IntegrationFeedItem)).available
+    remote['media']['metadata']['feedUrl'] = 'https://unrelated.example/feed.xml'
+    integrations.reconcile_feed_delivery(delivery_id)
+    assert client.get('/api/vodloft/integrations/rss').json()[0]['state'] == 'failed'
+    assert client.delete(f'/api/vodloft/integrations/rss/{delivery_id}').status_code == 204
+    assert client.get(feed_url).status_code == 404 and client.get(enclosure).status_code == 404
+    assert not any(method == 'DELETE' for method, _, _ in calls)
+    with sessions() as session:
+        assert session.scalar(select(FeedSubscription)) is None
+        assert session.scalar(select(IntegrationFeedDelivery)) is None
+        assert session.scalar(select(IntegrationFeedItem)) is None
+
+
+def test_abs_progress_uses_each_local_users_verified_token(library, monkeypatch):
+    from backend.api.endpoints.vodloft import integrations
+    from backend.security import permissions
+    from backend.db.models.vodloft import (Domain, LocalUser, CollectionStreamProfile, FeedSubscription,
+        IntegrationFeedDelivery, IntegrationFeedItem, PlaybackProgress)
+    client, sessions, _, _, _ = library
+    target = client.post('/api/vodloft/integrations', json={'kind': 'audiobookshelf', 'name': 'ABS',
+        'base_url': 'http://abs:13378', 'library_id': 'lib', 'local_prefix': '/downloads',
+        'server_prefix': '/podcasts', 'api_key': 'administrator-token'}).json()
+    with sessions() as session:
+        domain = Domain(hostname='example.com', display_name='Example'); session.add(domain); session.flush()
+        collection = MediaItem(domain_id=domain.id, kind='collection', title='Podcast')
+        item = MediaItem(domain_id=domain.id, kind='video', title='Episode')
+        session.add_all([collection, item]); session.flush(); item_id = item.id
+        profile = CollectionStreamProfile(collection_id=collection.id, name='Podcast'); session.add(profile); session.flush()
+        subscription = FeedSubscription(collection_id=collection.id, stream_profile_id=profile.id,
+            user_key='integration:1', token='private-feed', integration_target_id=target['id'])
+        session.add(subscription); session.flush()
+        delivery = IntegrationFeedDelivery(target_id=target['id'], subscription_id=subscription.id,
+            folder_id='folder', server_path='/podcasts/Podcast', feed_url='https://vodloft/feeds', state='subscribed', remote_id='remote-podcast')
+        session.add(delivery); session.flush()
+        row = IntegrationFeedItem(delivery_id=delivery.id, item_id=item.id, remote_episode_id='episode', available=True)
+        session.add(row)
+        for key in ['alice', 'bob']:
+            session.add(LocalUser(key=key, username=key, password_hash='unused', role='member', target_ids=[target['id']], enabled=True))
+        session.commit(); mapping_id = row.id
+    actor = permissions.Principal(key='alice', role='member', target_ids=[target['id']])
+    monkeypatch.setattr(permissions, 'principal', lambda request: actor)
+    monkeypatch.setattr(integrations, 'principal', lambda request: actor)
+    seen = []
+    def request(target, method, path, payload=None, *, token_override=None):
+        assert token_override != 'administrator-token'
+        seen.append(token_override)
+        return json.dumps({'id': token_override} if path == '/api/me' else {
+            'currentTime': 80 if token_override == 'alice-token' else 20, 'isFinished': False}).encode()
+    monkeypatch.setattr(integrations, '_request', request)
+    for key in ['alice', 'bob']:
+        actor = permissions.Principal(key=key, role='member', target_ids=[target['id']])
+        wrong = client.put(f"/api/vodloft/integrations/{target['id']}/users", json={
+            'user_key': key, 'remote_user_id': 'different-user', 'api_key': key + '-token'})
+        assert wrong.status_code == 422
+        mapped = client.put(f"/api/vodloft/integrations/{target['id']}/users", json={
+            'user_key': key, 'remote_user_id': key + '-token', 'api_key': key + '-token'})
+        assert mapped.status_code == 200, mapped.text
+        response = client.post(f'/api/vodloft/integrations/rss-items/{mapping_id}/progress/pull')
+        assert response.status_code == 200, response.text
+    with sessions() as session:
+        assert {row.user_key: row.seconds for row in session.scalars(select(PlaybackProgress)).all()} == {'alice': 80, 'bob': 20}
+    actor = permissions.Principal(key='bob', role='member')
+    assert client.post(f'/api/vodloft/integrations/rss-items/{mapping_id}/progress/pull').status_code == 404

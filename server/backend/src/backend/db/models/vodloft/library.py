@@ -289,6 +289,7 @@ class FeedSubscription(Base):
     collection_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_items.id", ondelete="CASCADE"))
     stream_profile_id: Mapped[int | None] = mapped_column(ForeignKey("vodloft_collection_stream_profiles.id"), nullable=True)
     user_key: Mapped[str] = mapped_column(String(80), default="admin", server_default="admin")
+    integration_target_id: Mapped[int | None] = mapped_column(ForeignKey("vodloft_media_server_targets.id"), nullable=True)
     token: Mapped[str] = mapped_column(String(64), unique=True)
 
 
@@ -365,3 +366,39 @@ class LibraryRequest(Base):
     reason: Mapped[str | None] = mapped_column(String, nullable=True)
     active_key: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class IntegrationUserMapping(Base):
+    __tablename__ = "vodloft_integration_user_mappings"
+    __table_args__ = (UniqueConstraint("target_id", "user_key"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    target_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_server_targets.id"))
+    user_key: Mapped[str] = mapped_column(String(80))
+    remote_user_id: Mapped[str] = mapped_column(String(120))
+    secret_ciphertext: Mapped[str] = mapped_column(String)
+
+
+class IntegrationFeedDelivery(Base):
+    __tablename__ = "vodloft_integration_feed_deliveries"
+    __table_args__ = (UniqueConstraint("target_id", "subscription_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    target_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_server_targets.id"))
+    subscription_id: Mapped[int] = mapped_column(ForeignKey("vodloft_feed_subscriptions.id", ondelete="CASCADE"))
+    folder_id: Mapped[str] = mapped_column(String(120))
+    server_path: Mapped[str] = mapped_column(String)
+    feed_url: Mapped[str] = mapped_column(String)
+    remote_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    state: Mapped[str] = mapped_column(String(24), default="pending")
+    error: Mapped[str | None] = mapped_column(String, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class IntegrationFeedItem(Base):
+    __tablename__ = "vodloft_integration_feed_items"
+    __table_args__ = (UniqueConstraint("delivery_id", "item_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    delivery_id: Mapped[int] = mapped_column(ForeignKey("vodloft_integration_feed_deliveries.id", ondelete="CASCADE"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_items.id", ondelete="CASCADE"))
+    remote_episode_id: Mapped[str] = mapped_column(String(120))
+    available: Mapped[bool] = mapped_column(Boolean, default=False)

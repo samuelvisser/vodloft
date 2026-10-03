@@ -76,6 +76,11 @@ def allowed_api(actor: Principal, method: str, path: str) -> bool:
     path = path[len(prefix):]
     if method in {"GET", "HEAD"} and re.fullmatch(r"/stream/[A-Za-z0-9_-]+(?:/segment/[a-f0-9]+)?", path):
         return True  # Playback handlers enforce ownership and current Source grants.
+    if (method == "GET" and (path == "/integrations/rss" or re.fullmatch(r"/integrations/\d+/users", path)) or
+        method == "PUT" and re.fullmatch(r"/integrations/\d+/users", path) or
+        method == "DELETE" and re.fullmatch(r"/integrations/\d+/users/[A-Za-z0-9_-]+", path) or
+        method == "POST" and re.fullmatch(r"/integrations/(?:exports|rss-items)/\d+/progress/pull", path)):
+        return True  # Handlers verify the granted server and the user's explicit identity.
     if method == "GET":
         return (path in {"/me", "/home", "/library", "/profiles", "/domains", "/sources",
             "/sources/domains", "/sources/connections", "/requests", "/integrations"} or

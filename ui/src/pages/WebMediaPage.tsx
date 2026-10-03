@@ -30,7 +30,7 @@ type Job = {id: number; state: string; error?: string; cancel_requested?: boolea
     title?: string; attempts?: number; item_id?: number}
 type Export = {id: number; target_id: number; state: string; remote_id?: string; error?: string; attempts: number}
 type RemoteItem = {id: number; kind: string; name: string; state: string; url: string | null;
-    remote_episode_id: string | null}
+    remote_episode_id: string | null; progress_path: string}
 type SourceHistory = {id: number; source_id: string; connection_id: number | null;
     runtime_version: string; created_at: string; metadata: {title?: string; description?: string}}
 type Representation = {languages: string[]; subtitles: string[]; container: ProfileFields['container']; video_codec: ProfileFields['video_codec']; audio_codec: ProfileFields['audio_codec']; chapters: boolean; artwork: boolean; embed_metadata: boolean; language_fallback: boolean}
@@ -352,6 +352,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
         </section>}
         {view === 'management' && <section style={{marginBottom: 24}}><h2>Management</h2>
             {me && <RequestsView me={me} items={items} onOpen={open}/>}
+            {me && <ListeningAccounts me={me} targets={targets}/>}
             {me?.role === 'admin' && <>
             <h3>Installed Sources</h3>
             {sources.map(source => <p key={source.source_id}>{source.display_name} · {source.capabilities.join(', ')}
@@ -429,6 +430,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                 {!target.enabled && ' · disabled'}
             </div>)}
             <TargetForm onCreated={target => setTargets(current => [...current, target])}/>
+            <RSSDeliveries targets={targets}/>
             <h3>Recent downloads</h3>
             {jobs.length === 0 && <p>No download jobs yet.</p>}
             {jobs.map(record => <p key={record.id}>
@@ -534,16 +536,17 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                     <button type="button" className="btn" onClick={() => void api(`/stream-profiles/${profile.id}`, {method: 'DELETE'}).then(() => setStreamProfiles(current => current.filter(value => value.id !== profile.id))).catch(e => setError(String(e)))}>Delete profile</button></>}</div>)}
                 {me?.role === 'admin' && <StreamProfileForm collectionId={selected.id}
                     onCreated={profile => setStreamProfiles(previous => [...previous, profile])}/>}
+                {me?.role === 'admin' && <RSSDeliveryForm targets={targets} profiles={streamProfiles}/>}
                 {runResult && <p role="status">{runResult}</p>}
             </section>}
             {feedUrl && <p><a href={feedUrl} target="_blank" rel="noreferrer">{feedUrl}</a></p>}
             {selected.kind !== 'collection' && <>
                 {remoteItems.length > 0 && <div style={{margin: '12px 0'}}><h3>Media servers</h3>
-                    {remoteItems.map(remote => <p key={remote.id}>{remote.name} · {remote.state}{' '}
+                    {remoteItems.map(remote => <p key={remote.progress_path}>{remote.name} · {remote.state}{' '}
                         {remote.url && <a href={remote.url} target="_blank" rel="noreferrer">Open in {remote.name}</a>}
                         {remote.kind === 'audiobookshelf' && remote.state === 'available' &&
                             remote.remote_episode_id && <button className="btn" type="button"
-                                onClick={() => void api(`/integrations/exports/${remote.id}/progress/pull`,
+                                onClick={() => void api(remote.progress_path,
                                     {method: 'POST'}).then(() => setRunResult('Audiobookshelf progress imported.'))
                                     .catch(e => setError(String(e)))}>Import progress</button>}</p>)}
                 </div>}
@@ -1102,4 +1105,84 @@ function MetadataForm({item, items, onSaved}: {item: Item; items: Item[]; onSave
         <div><button className="btn btn-primary" disabled={isSubmitting}>Save metadata</button>{' '}
             <button className="btn" type="button" onClick={() => setExpanded(false)}>Cancel</button></div>
     </form>
+}
+
+
+type ListeningMapping = {id: number; target_id: number; user_key: string; remote_user_id: string}
+const ListeningSchema = z.object({target_id: z.string().min(1).default(''), user_key: z.string().min(1).default('admin'),
+    remote_user_id: z.string().min(1).max(120).default(''), api_key: z.string().min(1).max(16384).default('')})
+function ListeningAccounts({me, targets}: {me: Me; targets: Target[]}) {
+    const [expanded, setExpanded] = useState(false)
+    const [users, setUsers] = useState<LocalAccount[]>([])
+    const [mappings, setMappings] = useState<ListeningMapping[]>([])
+    const form = useForm<z.input<typeof ListeningSchema>, unknown, z.output<typeof ListeningSchema>>({resolver: zodResolver(ListeningSchema),
+        defaultValues: {...ListeningSchema.parse({}), user_key: me.key}})
+    const targetId = form.watch('target_id')
+    const refresh = () => targetId ? api<ListeningMapping[]>(`/integrations/${targetId}/users`).then(setMappings).catch(error => form.setError('root', {message: String(error)})) : Promise.resolve()
+    useEffect(() => {if (me.role === 'admin') void api<LocalAccount[]>('/users').then(setUsers)}, [me.role])
+    useEffect(() => {setMappings([]); void refresh()}, [targetId])
+    const submit = buildServerAwareSubmit(form, values => formRequest(`/integrations/${values.target_id}/users`, 'PUT', {
+        user_key: me.role === 'admin' ? values.user_key : me.key, remote_user_id: values.remote_user_id, api_key: values.api_key,
+    }), {onSuccess: () => {form.setValue('api_key', ''); void refresh()}})
+    const servers = targets.filter(target => target.kind === 'audiobookshelf' && target.enabled)
+    if (!servers.length) return null
+    return <section><h3>Listening account mappings</h3>
+        <p>Progress import uses an explicitly linked Audiobookshelf account. Imports only advance your VodLoft position.</p>
+        <button className="btn" type="button" onClick={() => setExpanded(value => !value)}>{expanded ? 'Close mappings' : 'Link listening account'}</button>
+        {expanded && <form onSubmit={submit} style={{display: 'grid', gap: 10, maxWidth: 580, margin: '12px 0'}}>
+            <label>Server <select {...form.register('target_id')}><option value="">Select server</option>{servers.map(target => <option key={target.id} value={target.id}>{target.name}</option>)}</select></label>
+            {me.role === 'admin' && <label>Local account <select {...form.register('user_key')}><option value="admin">Administrator</option>{users.map(user => <option key={user.key} value={user.key}>{user.username}</option>)}</select></label>}
+            <label>Audiobookshelf user ID <input {...form.register('remote_user_id')}/></label>
+            <label>That user's API token <input type="password" autoComplete="off" {...form.register('api_key')}/></label>
+            {Object.entries(form.formState.errors).map(([key, value]) => <p role="alert" key={key}>{String(value?.message ?? 'Check the fields')}</p>)}
+            <button className="btn btn-primary" disabled={form.formState.isSubmitting}>Verify and save mapping</button>
+            {mappings.map(mapping => <div key={mapping.id}>{mapping.user_key === me.key ? me.username : users.find(user => user.key === mapping.user_key)?.username ?? mapping.user_key} → {mapping.remote_user_id}{' '}
+                <button className="btn" type="button" onClick={() => void api(`/integrations/${targetId}/users/${mapping.user_key}`, {method: 'DELETE'}).then(refresh).catch(error => form.setError('root', {message: String(error)}))}>Unlink</button></div>)}
+        </form>}
+    </section>
+}
+
+const RSSDeliverySchema = z.object({target_id: z.string().min(1).default(''), stream_profile_id: z.string().min(1).default(''),
+    folder_id: z.string().min(1).max(120).default(''), server_path: z.string().startsWith('/').default('/podcasts/'),
+    vodloft_url: z.url().default('')})
+function RSSDeliveryForm({targets, profiles}: {targets: Target[]; profiles: StreamProfile[]}) {
+    const [expanded, setExpanded] = useState(false)
+    const [saved, setSaved] = useState(false)
+    const form = useForm<z.input<typeof RSSDeliverySchema>, unknown, z.output<typeof RSSDeliverySchema>>({resolver: zodResolver(RSSDeliverySchema),
+        defaultValues: {...RSSDeliverySchema.parse({}), vodloft_url: window.location.origin}})
+    const submit = buildServerAwareSubmit(form, values => formRequest('/integrations/rss', 'POST', {
+        ...values, target_id: Number(values.target_id), stream_profile_id: Number(values.stream_profile_id),
+    }), {successStatuses: [201], onSuccess: () => {setSaved(true); setExpanded(false)}})
+    const servers = targets.filter(target => target.kind === 'audiobookshelf' && target.enabled)
+    const feeds = profiles.filter(profile => profile.enabled && profile.format === 'audio')
+    if (!servers.length || !feeds.length) return null
+    return <div style={{margin: '12px 0'}}>
+        <button className="btn" type="button" onClick={() => setExpanded(value => !value)}>Deliver a feed to Audiobookshelf</button>
+        {saved && <p role="status">RSS delivery queued. Review its status in Management.</p>}
+        {expanded && <form onSubmit={submit} style={{display: 'grid', gap: 10, maxWidth: 600}}>
+            <p>VodLoft owns the published feed files. Audiobookshelf downloads its own copies every 15 minutes and owns their retention. Removing this delivery revokes the feed and retains Audiobookshelf's downloaded copies.</p>
+            <label>Server <select {...form.register('target_id')}><option value="">Select server</option>{servers.map(target => <option key={target.id} value={target.id}>{target.name}</option>)}</select></label>
+            <label>Audio Stream Profile <select {...form.register('stream_profile_id')}><option value="">Select feed</option>{feeds.map(profile => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select></label>
+            <label>Audiobookshelf library folder ID <input {...form.register('folder_id')}/></label>
+            <label>Podcast folder on that server <input {...form.register('server_path')}/></label>
+            <label>VodLoft address reachable by that server <input {...form.register('vodloft_url')}/></label>
+            {Object.entries(form.formState.errors).map(([key, value]) => <p role="alert" key={key}>{String(value?.message ?? 'Check the fields')}</p>)}
+            <button className="btn btn-primary" disabled={form.formState.isSubmitting}>Save RSS delivery</button>
+        </form>}
+    </div>
+}
+
+type FeedDelivery = {id: number; target_id: number; server_path: string; state: string; error: string | null; remote_id: string | null}
+function RSSDeliveries({targets}: {targets: Target[]}) {
+    const [records, setRecords] = useState<FeedDelivery[]>([])
+    const [error, setError] = useState<string | null>(null)
+    const refresh = () => api<FeedDelivery[]>('/integrations/rss').then(setRecords).catch(error => setError(String(error)))
+    useEffect(() => {void refresh(); const timer = window.setInterval(() => {if (!document.hidden) void refresh()}, 15000); return () => window.clearInterval(timer)}, [])
+    return <section><h3>Audiobookshelf RSS deliveries</h3>{!records.length && <p>Set up an audio Stream Profile on a Collection to deliver without shared storage.</p>}
+        {records.map(record => <p key={record.id}>{targets.find(target => target.id === record.target_id)?.name} · {record.server_path} · {record.state} {record.error}{' '}
+            {record.remote_id && <a href={`${targets.find(target => target.id === record.target_id)?.base_url}/item/${encodeURIComponent(record.remote_id)}`} target="_blank" rel="noreferrer">Open podcast</a>}{' '}
+            <button className="btn" type="button" onClick={() => void api(`/integrations/rss/${record.id}/retry`, {method: 'POST'}).then(refresh).catch(error => setError(String(error)))}>Refresh delivery</button>{' '}
+            <button className="btn" type="button" onClick={() => {if (window.confirm('Revoke this feed delivery? Audiobookshelf keeps its downloaded copies.')) void api(`/integrations/rss/${record.id}`, {method: 'DELETE'}).then(refresh).catch(error => setError(String(error)))}}>Revoke delivery</button></p>)}
+        {error && <p role="alert">{error}</p>}
+    </section>
 }

@@ -1,1 +1,2 @@
 from .library import Domain, SourceDomain, SourceConnection, MediaItem, SourceReference, SourceSnapshot, CollectionEntry, LegacyMediaLink, MovieExtraParent, CollectionDownloadProfile, CollectionScan, CollectionStreamProfile, LiveAdmission, Artifact, ArtifactPlacement, MediaDemand, MediaSuppression, MediaServerTarget, MediaServerExport, AcquisitionJob, FileFinalization, FeedSubscription, PublishedEntry, PlaybackProgress, PlaybackSession, PlaybackSegment, LocalUser, LibraryRequest
+from .library import IntegrationUserMapping, IntegrationFeedDelivery, IntegrationFeedItem

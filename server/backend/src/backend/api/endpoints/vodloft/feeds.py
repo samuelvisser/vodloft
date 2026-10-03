@@ -20,7 +20,7 @@ from sqlalchemy import delete, select
 from backend.db import get_session
 from backend.db.models.vodloft import (AcquisitionJob, Artifact, CollectionDownloadProfile,
     CollectionEntry, CollectionStreamProfile, FeedSubscription, LiveAdmission, MediaItem,
-    PublishedEntry, SourceReference)
+    PublishedEntry, SourceReference, MediaServerTarget)
 from backend.db.models.local_media_profile import DomainLocalMediaProfile
 from config import get_settings
 
@@ -360,11 +360,20 @@ def live_admissions(profile_id: int):
                 select(LiveAdmission).where(LiveAdmission.stream_profile_id == profile_id)).all()]
 
 
+def _subscription_enabled(session, subscription):
+    if not subscription:
+        return False
+    if subscription.integration_target_id is not None:
+        target = session.get(MediaServerTarget, subscription.integration_target_id)
+        return bool(target and target.enabled)
+    return subscription.user_key == "admin" or user_enabled(subscription.user_key)
+
+
 @public_router.get("/{token}.xml", name="vodloft_feed")
 def feed(token: str, request: Request):
     with get_session() as session:
         subscription = session.scalar(select(FeedSubscription).where(FeedSubscription.token == token))
-        if not subscription or subscription.user_key != "admin" and not user_enabled(subscription.user_key):
+        if not _subscription_enabled(session, subscription):
             raise HTTPException(404, "Feed not found")
         profile = session.get(CollectionStreamProfile, subscription.stream_profile_id) if subscription.stream_profile_id else None
         if subscription.stream_profile_id:
@@ -377,7 +386,11 @@ def feed(token: str, request: Request):
         SubElement(channel, "link").text = str(request.base_url)
         memberships = session.scalars(select(CollectionEntry).where(
             CollectionEntry.collection_id == collection.id).order_by(CollectionEntry.position)).all()
+        seen = set()
         for membership in memberships:
+            if membership.item_id in seen:
+                continue
+            seen.add(membership.item_id)
             media = session.get(MediaItem, membership.item_id)
             if profile and media.is_live and (not profile.include_live or not session.scalar(
                 select(LiveAdmission.id).where(LiveAdmission.stream_profile_id == profile.id,
@@ -418,7 +431,7 @@ def enclosure(token: str, entry_id: int, name: str):
             raise HTTPException(404, "Enclosure not found")
         subscription = session.get(FeedSubscription, entry.subscription_id)
         path = Path(entry.path).resolve()
-        if (not subscription or subscription.user_key != "admin" and not user_enabled(subscription.user_key)
+        if (not _subscription_enabled(session, subscription)
                 or not secrets.compare_digest(subscription.token, token)
                 or path.name != name or not path.is_relative_to(_feed_root()) or not path.is_file()):
             raise HTTPException(404, "Enclosure not found")

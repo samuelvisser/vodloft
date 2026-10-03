@@ -86,7 +86,7 @@ async def application_lifespan(app: FastAPI):
         def collection_automation_loop():
             from backend.api.endpoints.vodloft.automation import refresh_due_collections
             from backend.source_manager.runtime import check_updates
-            from backend.api.endpoints.vodloft.integrations import reconcile_exports
+            from backend.api.endpoints.vodloft.integrations import reconcile_exports, reconcile_feed_deliveries
             from backend.api.endpoints.vodloft.playback import expire_sessions
             from backend.services.vodloft_retention import reconcile as reconcile_retention
             from backend.api.endpoints.vodloft.router import recover_acquisition_jobs, retry_due_acquisition_jobs
@@ -94,7 +94,8 @@ async def application_lifespan(app: FastAPI):
             while not automation_stop.wait(15):
                 if not scheduled_work_is_paused():
                     for sweep in (check_updates, refresh_due_collections, recover_acquisition_jobs,
-                                  retry_due_acquisition_jobs, reconcile_exports, expire_sessions, reconcile_retention):
+                                  retry_due_acquisition_jobs, reconcile_exports, reconcile_feed_deliveries,
+                                  expire_sessions, reconcile_retention):
                         try:
                             sweep()
                         except Exception:
