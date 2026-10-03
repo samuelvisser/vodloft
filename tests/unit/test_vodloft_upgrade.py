@@ -30,7 +30,7 @@ def test_wireloft_upgrade_preserves_files_memberships_profiles_feeds_and_history
     original = tmp_path / 'existing.mp3'; original.write_bytes(b'existing WireLoft audio bytes')
     with sessions() as session:
         profile = ShowLocalMediaProfile(name='Existing audio', slug='existing-audio', preferred_format='format_audio_only',
-            output_template=str(tmp_path / '{{ show_title }}' / '{{ season_name }}' / '{{ episode_title }}.ext'))
+            output_template='/downloads/{{ show_title }}/{{ season_name }}/{{ episode_title }}.ext')
         show = Show(uuid='show', slug='show', title='Existing series', sharing_url='https://www.dailywire.com/show/show',
             membership_level='FREE', type='series', episode_identifier='seasonal', author_name='Host', author_slug='host')
         session.add_all([profile, show]); session.flush()

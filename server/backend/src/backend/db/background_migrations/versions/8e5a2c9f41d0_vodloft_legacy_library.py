@@ -9,6 +9,7 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from sqlalchemy import func, select
 
@@ -46,8 +47,12 @@ def _item(session, domain: Domain, legacy_type: str, legacy_id: int, kind: str,
         LegacyMediaLink.legacy_type == legacy_type, LegacyMediaLink.legacy_id == legacy_id))
     if link:
         return session.get(MediaItem, link.item_id)
+    parts = urlsplit(url).path.strip('/').split('/')
+    namespace = {'shows': 'show', 'episodes': 'episode', 'movies': 'videos', 'clip': 'clips'}.get(parts[0], parts[0])
+    canonical = f'https://www.dailywire.com/{namespace}/{parts[1]}' if len(parts) == 2 else url
     reference = session.scalar(select(SourceReference).where(
-        SourceReference.source_id == "dailywire", SourceReference.url == url))
+        SourceReference.source_id == "dailywire", SourceReference.domain_id == domain.id,
+        SourceReference.url.in_([url, canonical])))
     if reference:
         item = session.get(MediaItem, reference.item_id)
     else:

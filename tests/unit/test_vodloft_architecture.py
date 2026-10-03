@@ -1941,3 +1941,55 @@ def test_feed_scheduler_reuses_failed_job_and_preserves_retry_budget(library, mo
         jobs[0].updated_at = datetime.now(timezone.utc) - timedelta(days=1); session.commit()
     router.retry_due_acquisition_jobs()
     assert dispatched == [job_id]
+
+
+@pytest.mark.parametrize('has_credentials', [False, True])
+def test_legacy_aliases_reuse_modern_media_without_changing_existing_account_scope(library, monkeypatch, has_credentials):
+    import uuid
+    from backend.db.models import Show
+    from backend.db.models.vodloft import Domain, LegacyMediaLink, SourceConnection
+    from dailywire_authorisation.storage import TokenStore
+    client, sessions, _, _, _ = library
+    legacy = importlib.import_module('backend.db.background_migrations.versions.8e5a2c9f41d0_vodloft_legacy_library')
+    conversion = importlib.import_module('backend.db.background_migrations.versions.a03f7e9bc261_vodloft_automation_conversion')
+    with sessions() as session:
+        domain = Domain(hostname='dailywire.com', display_name='Daily Wire')
+        session.add(domain); session.flush()
+        item = MediaItem(domain_id=domain.id, kind='collection', title='Current metadata', user_title='My title')
+        session.add(item); session.flush()
+        url = 'https://www.dailywire.com/show/preexisting'
+        reference = SourceReference(item_id=item.id, source_id='dailywire', domain_id=domain.id,
+            namespace='show', upstream_id=str(uuid.uuid5(uuid.NAMESPACE_URL, url)), url=url, connection_key=0)
+        show = Show(uuid='legacy-show', slug='preexisting', title='Legacy title',
+            sharing_url='https://www.dailywire.com/shows/preexisting', membership_level='FREE',
+            type='series', episode_identifier='seasonal', author_name='Host', author_slug='host')
+        session.add_all([reference, show]); session.commit()
+        item_id, public_id = item.id, reference.id
+    credentials = SimpleNamespace(access_token='legacy-token', refresh_token='legacy-refresh', expires_at=4102444800)
+    monkeypatch.setattr(TokenStore, 'load', lambda *args: credentials if has_credentials else None)
+    saved = []
+    monkeypatch.setattr(conversion.secret_store, 'save', lambda value: saved.append(json.loads(value)) or 'encrypted-fixture')
+    context = SimpleNamespace(raise_if_cancelled=lambda: None, update_progress=lambda *args: None)
+    legacy._migrate(context)
+    with sessions() as session:
+        alias = session.scalar(select(SourceReference).where(SourceReference.upstream_id == 'preexisting'))
+        artifact = Artifact(item_id=item_id, source_reference_id=alias.id, path='/unchanged/legacy.mp4', size=10)
+        session.add(artifact); session.commit()
+    for _ in range(2):
+        conversion._convert(context); legacy._migrate(context)
+    with sessions() as session:
+        assert len(session.scalars(select(MediaItem)).all()) == 1
+        assert session.scalar(select(LegacyMediaLink)).item_id == item_id
+        assert session.get(MediaItem, item_id).user_title == 'My title'
+        assert session.get(SourceReference, public_id).connection_id is None
+        references = session.scalars(select(SourceReference)).all()
+        assert len(references) == (2 if has_credentials else 1)
+        artifact = session.scalar(select(Artifact))
+        if has_credentials:
+            imported = session.scalar(select(SourceConnection))
+            assert imported.authentication_reference == 'encrypted-fixture'
+            assert session.get(SourceReference, artifact.source_reference_id).connection_id == imported.id
+            assert len(saved) == 1 and saved[0]['private_state']['refresh_token'] == 'legacy-refresh'
+        else:
+            assert artifact.source_reference_id == public_id
+        assert artifact.path == '/unchanged/legacy.mp4'
