@@ -27,10 +27,8 @@ jobs:
           python -m pip install uv
           uv sync --frozen
           npm --prefix ui ci --registry=https://registry.npmjs.org
-      - name: Report frontend dependency advisories
-        run: |
-          npm --prefix ui audit --json > /tmp/vodloft-ui-audit.json || true
-          python -c 'import json; report=json.load(open("/tmp/vodloft-ui-audit.json")); print(json.dumps({"metadata":report.get("metadata"),"vulnerabilities":report.get("vulnerabilities",{})},separators=(",",":")))'
+      - name: Check frontend dependency advisories
+        run: npm --prefix ui audit --audit-level=moderate --registry=https://registry.npmjs.org
       - name: Verify architecture, lifecycle, and WireLoft upgrade
         run: |
           uv run --frozen pytest tests/unit/test_vodloft_architecture.py tests/unit/test_vodloft_prototype.py tests/unit/test_vodloft_upgrade.py -q
@@ -70,29 +68,3 @@ jobs:
           docker logs vodloft-acceptance 2>&1 | python -c 'import sys; assert "secret-fixture-token" not in sys.stdin.read()'
           docker exec vodloft-acceptance cat /var/log/nginx/access.log /var/log/nginx/error.log | python -c 'import sys; assert "secret-fixture-token" not in sys.stdin.read()'
 
-  dependency_patch:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: Resolve and verify patched UI dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-          cp ui/package-lock.json /tmp/vodloft-original-lock.json
-          node --input-type=module -e 'import fs from "node:fs"; const p=JSON.parse(fs.readFileSync("ui/package.json")); p.dependencies["react-router-dom"]="^7.18.4"; p.devDependencies.vite="7.3.6"; fs.writeFileSync("ui/package.json",JSON.stringify(p,null,2)+"\n");'
-          npm --prefix ui install --package-lock-only --registry=https://registry.npmjs.org
-          npm --prefix ui audit fix --package-lock-only --registry=https://registry.npmjs.org || true
-          python - <<'PY'
-          import json
-          old=json.load(open("/tmp/vodloft-original-lock.json"))
-          new=json.load(open("ui/package-lock.json"))
-          patch={"package":json.load(open("ui/package.json")),"packages":{k:v for k,v in new["packages"].items() if old["packages"].get(k)!=v},"deleted":[k for k in old["packages"] if k not in new["packages"]]}
-          print("VODLOFT_NPM_PATCH="+json.dumps(patch,separators=(",",":")))
-          PY
-          npm --prefix ui ci --registry=https://registry.npmjs.org
-          npm --prefix ui audit --audit-level=moderate --registry=https://registry.npmjs.org
-          npm run build
