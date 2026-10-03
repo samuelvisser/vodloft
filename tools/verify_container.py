@@ -1,5 +1,6 @@
 """Check a freshly started VodLoft container through its public HTTP interface."""
 import argparse
+import base64
 import hashlib
 import http.cookiejar
 import json
@@ -40,7 +41,7 @@ def verify(base: str, password: str, timeout: int):
         assert request(asset), f'Empty production asset: {asset}'
     request('/api/auth/status', expected=401)
     request('/api/auth/login', method='POST', body={
-        'username': 'admin', 'passwordHash': hashlib.sha256(password.encode()).hexdigest()}, expected=204)
+        'username': 'admin', 'passwordHash': base64.urlsafe_b64encode(hashlib.sha256(password.encode()).digest()).decode().rstrip('=')}, expected=204)
     assert json.loads(request('/api/auth/status'))['authenticated']
     request('/api/onboarding/complete', method='POST')
     assert json.loads(request('/api/vodloft/me'))['role'] == 'admin'
