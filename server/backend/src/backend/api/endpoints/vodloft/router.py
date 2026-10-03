@@ -40,7 +40,7 @@ from task_manager.scheduler.db import TaskOperation
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/vodloft", tags=["VodLoft library"])
-_download_slots = threading.BoundedSemaphore(5)
+_download_slots = threading.BoundedSemaphore(get_settings().download_settings.max_concurrent_downloads)
 _source_slots: dict[str, threading.BoundedSemaphore] = {}
 _domain_slots: dict[int, threading.BoundedSemaphore] = {}
 _connection_slots: dict[int, threading.BoundedSemaphore] = {}
@@ -982,6 +982,7 @@ def _execute_leased_download(job_id: int) -> None:
                 preferred_format=spec.get("preferred_format", "format_1080p"), job_id=job_id,
                 representation=spec.get("representation", {}), metadata=spec.get("metadata", {}),
                 reference=spec["source_reference"],
+                timeout=get_settings().download_settings.download_timeout_seconds,
                 on_progress=lambda percent: _download_progress(job_id, percent),
                 on_stage=lambda stage: _job_stage(job_id, stage), **options)
             _job_stage(job_id, "verifying")
@@ -1109,7 +1110,7 @@ def retry_due_acquisition_jobs() -> None:
     now = datetime.now(timezone.utc)
     with get_session() as session:
         jobs = session.scalars(select(AcquisitionJob).where(
-            AcquisitionJob.state == "failed", AcquisitionJob.attempts < 3,
+            AcquisitionJob.state == "failed", AcquisitionJob.attempts < get_settings().download_settings.max_download_attempts,
             AcquisitionJob.cancel_requested.is_(False))).all()
         ready = []
         for job in jobs:
@@ -1118,7 +1119,7 @@ def retry_due_acquisition_jobs() -> None:
                 continue
             age = now - job.updated_at.replace(tzinfo=job.updated_at.tzinfo or timezone.utc)
             delay = max(300 if job.error_code == "rate_limited" else 0,
-                        30 * (2 ** max(job.attempts - 1, 0)))
+                        get_settings().scheduler.retry_backoff_seconds * (2 ** max(job.attempts - 1, 0)))
             if age < timedelta(seconds=delay):
                 continue
             key = f"{job.item_id}:{job.profile_id}"

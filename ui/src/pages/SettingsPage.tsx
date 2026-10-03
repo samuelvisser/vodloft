@@ -4,10 +4,7 @@ import {useCallback, useEffect, useMemo, useState} from 'react'
 import {type FieldErrors, type FieldPath, useForm} from 'react-hook-form'
 import toast from 'react-hot-toast'
 
-import AdvancedSettingsTab from '../components/Settings/AdvancedSettingsTab'
-import AutomationSettingsTab from '../components/Settings/AutomationSettingsTab'
-import DailyWireSettingsTab from '../components/Settings/DailyWireSettingsTab'
-import DownloadsSettingsTab from '../components/Settings/DownloadsSettingsTab'
+import VodLoftSettingsTab from '../components/Settings/VodLoftSettingsTab'
 import GeneralSettingsTab from '../components/Settings/GeneralSettingsTab'
 import {SettingsLoading} from '../components/Settings/SettingsControls'
 import {saveSettingsRequest, useSettings} from '../lib/settings'
@@ -25,7 +22,7 @@ import './SettingsPage.css'
 import './SettingsEnvironmentOverrides.css'
 
 
-type SettingsTab = 'general' | 'downloads' | 'automation' | 'dailywire' | 'advanced'
+type SettingsTab = 'general' | 'downloads' | 'automation' | 'advanced'
 
 type SettingsTabDefinition = {
     id: SettingsTab
@@ -36,8 +33,7 @@ type SettingsTabDefinition = {
 const SETTINGS_TABS: SettingsTabDefinition[] = [
     {id: 'general', label: 'General', description: 'Application behaviour and sessions'},
     {id: 'downloads', label: 'Downloads', description: 'Storage, naming, processing and verification'},
-    {id: 'automation', label: 'Automation', description: 'Scheduler and episode monitoring'},
-    {id: 'dailywire', label: 'DailyWire', description: 'Account and integration details'},
+    {id: 'automation', label: 'Automation', description: 'Automatic work and acquisition retries'},
     {id: 'advanced', label: 'Advanced', description: 'Encryption files and configuration details'},
 ]
 
@@ -209,7 +205,7 @@ export default function SettingsPage() {
             <div className="settings-page__heading">
                 <div>
                     <h1 id="settings-title">Settings</h1>
-                    <p>Configure how WireLoft downloads, monitors and serves your media.</p>
+                    <p>Configure how VodLoft stores, obtains and serves your media.</p>
                 </div>
                 <div className="settings-source-status" aria-live="polite">
                     <span className="settings-source-badge is-active">config.yml</span>
@@ -249,10 +245,7 @@ export default function SettingsPage() {
                     aria-labelledby={`settings-tab-${activeTab}`}
                 >
                     {activeTab === 'general' ? <GeneralSettingsTab {...tabProps} /> : null}
-                    {activeTab === 'downloads' ? <DownloadsSettingsTab {...tabProps} /> : null}
-                    {activeTab === 'automation' ? <AutomationSettingsTab {...tabProps} /> : null}
-                    {activeTab === 'dailywire' ? <DailyWireSettingsTab {...tabProps} /> : null}
-                    {activeTab === 'advanced' ? <AdvancedSettingsTab {...tabProps} /> : null}
+                    {activeTab !== 'general' ? <VodLoftSettingsTab {...tabProps} tab={activeTab}/> : null}
                 </div>
 
                 {isDirty ? (

@@ -8,7 +8,7 @@ import {hashPasswordForAdminAuth} from '../utils/security/adminAuth'
 import DomainTemplateEditor from '../components/LocalMediaProfile/DomainTemplateEditor'
 
 const URLForm = z.object({url: z.url().startsWith('https://').or(z.url().startsWith('http://')),
-    source_id: z.string(), connection_id: z.string()})
+    source_id: z.string().default(''), connection_id: z.string().default('')})
 type URLFields = z.infer<typeof URLForm>
 type Source = {source_id: string; display_name: string; capabilities: string[];
     configuration_schema: {name: string; label: string; kind: 'text' | 'number' | 'select' | 'secret' | 'credential_file';
@@ -51,7 +51,7 @@ type Catalogue = {source_id: string; items: {hostname: string; display_name: str
 type SearchPage = {items: {reference: Reference; kind: string; title: string; description?: string}[];
     next_cursor: string | null}
 const SearchForm = z.object({query: z.string().min(1).max(200), source_id: z.string().min(1),
-    connection_id: z.string()})
+    connection_id: z.string().default('')})
 type SearchFields = z.infer<typeof SearchForm>
 const ProfileFormSchema = z.object({
     name: z.string().min(1).default(''),
@@ -88,13 +88,14 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
     const [view, setView] = useState<'home' | 'discover' | 'library' | 'management'>(initialView)
     const [me, setMe] = useState<Me | null>(null)
     const [libraryQuery, setLibraryQuery] = useState('')
-    const {register, handleSubmit, formState: {errors}} = useForm<URLFields>({
-        resolver: zodResolver(URLForm), defaultValues: {url: '', source_id: '', connection_id: ''},
+    const urlForm = useForm<z.input<typeof URLForm>, unknown, URLFields>({
+        resolver: zodResolver(URLForm), defaultValues: URLForm.partial({url: true}).parse({}),
     })
-    const {register: registerSearch, handleSubmit: handleSearch, watch: watchSearch,
-        formState: {errors: searchErrors}} = useForm<SearchFields>({
-        resolver: zodResolver(SearchForm), defaultValues: {query: '', source_id: '', connection_id: ''},
+    const {register, formState: {errors}} = urlForm
+    const searchForm = useForm<z.input<typeof SearchForm>, unknown, SearchFields>({
+        resolver: zodResolver(SearchForm), defaultValues: SearchForm.partial({query: true, source_id: true}).parse({}),
     })
+    const {register: registerSearch, watch: watchSearch, formState: {errors: searchErrors}} = searchForm
     const selectedSearchSource = watchSearch('source_id')
     const [sources, setSources] = useState<Source[]>([])
     const [connections, setConnections] = useState<Connection[]>([])
@@ -165,15 +166,23 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
         return () => window.clearInterval(timer)
     }, [view, me?.role])
 
-    const resolve = handleSubmit(async fields => {
+    const resolve = buildServerAwareSubmit(urlForm, async (fields: URLFields) => {
         setBusy(true); setError(null); setPreview(null)
         try {
-            setPreview(await api<Preview>('/resolve', {method: 'POST',
-                body: JSON.stringify({url: fields.url, source_id: fields.source_id || null,
-                    connection_id: fields.connection_id ? Number(fields.connection_id) : null})}))
             setImportConnectionId(fields.connection_id ? Number(fields.connection_id) : null)
-        } catch (e) { setError(String(e)) } finally { setBusy(false) }
-    })
+            return await formRequest('/resolve', 'POST', {url: fields.url, source_id: fields.source_id || null,
+                connection_id: fields.connection_id ? Number(fields.connection_id) : null})
+        } finally { setBusy(false) }
+    }, {onSuccess: result => setPreview(result as Preview), rootOnFieldErrors: true})
+    const search = buildServerAwareSubmit(searchForm, async (fields: SearchFields) => {
+        setBusy(true); setError(null)
+        try {
+            setSearchRequest(fields)
+            const params = new URLSearchParams({query: fields.query, limit: '30'})
+            if (fields.connection_id) params.set('connection_id', fields.connection_id)
+            return await fetch(`${base()}/sources/${encodeURIComponent(fields.source_id)}/search?${params}`, {credentials: 'include'})
+        } finally { setBusy(false) }
+    }, {onSuccess: result => setSearchPage(result as SearchPage), rootOnFieldErrors: true})
     const importPreview = async () => {
         if (!preview) return
         setBusy(true); setError(null)
@@ -309,10 +318,11 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                 {connections.filter(connection => connection.enabled).map(connection => <option key={connection.id} value={connection.id}>
                     {connection.name} ({connection.source_id})</option>)}</select></label>
             <button className="btn btn-primary" type="submit" disabled={busy}>Resolve URL</button>
+            {errors.root && <p role="alert">{errors.root.message}</p>}
         </form>
         {sources.some(source => source.capabilities.includes('search')) && <section style={{marginBottom: 24}}>
             <h2>Search a Source</h2>
-            <form onSubmit={handleSearch(fields => void fetchSearch(fields))}
+            <form onSubmit={search}
                 style={{display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap'}}>
                 <label>Search phrase <input {...registerSearch('query')} />
                     {searchErrors.query && <span role="alert">Enter a search phrase.</span>}</label>
@@ -324,6 +334,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                     {connections.filter(connection => connection.enabled && connection.source_id === selectedSearchSource).map(connection =>
                         <option key={connection.id} value={connection.id}>{connection.name}</option>)}</select></label>
                 <button className="btn" type="submit" disabled={busy}>Search</button>
+                {searchErrors.root && <p role="alert">{searchErrors.root.message}</p>}
             </form>
             {searchPage && <div style={{display: 'grid', gap: 8, marginTop: 12}}>
                 {searchPage.items.map(item => <button type="button" className="btn"
@@ -603,6 +614,10 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                         .then(() => api<Item>(`/library/${selected.id}`).then(setSelected))
                         .then(() => refresh()).catch(e => setError(String(e)))
                 }}>Remove local copy</button>}
+                {me?.role === 'admin' && profileId && <button className="btn" type="button" onClick={() => {
+                    void api(`/library/${selected.id}/local/${profileId}/resume`, {method: 'POST'})
+                        .then(() => setRunResult('Automatic acquisition is allowed again for this profile.')).catch(e => setError(String(e)))
+                }}>Allow automatic acquisition</button>}
                 {(selected.downloaded || selected.capabilities?.includes('stream_lease') ||
                     selected.references?.some(ref => sources.find(source => source.source_id === ref.source_id)?.capabilities.includes('stream_lease'))) &&
                     <LocalPlayer key={`${selected.id}:${referenceId ?? ''}`} item={selected} referenceId={referenceId} onEnded={() => {const next = queue[0]; if (next) {setQueue(current => current.slice(1)); void open(next.id, true)}}} />}

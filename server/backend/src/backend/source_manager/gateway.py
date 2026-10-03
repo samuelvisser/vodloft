@@ -242,7 +242,7 @@ class SourceGateway:
 
     def download(self, source_id: str, url: str, staging: str,
                  preferred_format: str = "format_1080p", job_id: int | None = None,
-                 on_progress=None, on_stage=None,
+                 on_progress=None, on_stage=None, timeout: int = 3600,
                  representation: dict | None = None, metadata: dict | None = None,
                  reference: dict | None = None,
                  **source_options) -> DownloadResult:
@@ -251,7 +251,7 @@ class SourceGateway:
                                                       preferred_format=preferred_format,
                                                       representation=representation or {}, metadata=metadata or {},
                                                       reference=reference,
-                                                      timeout=3600, job_id=job_id,
+                                                      timeout=timeout, job_id=job_id,
                                                       on_progress=on_progress,
                                                       on_stage=on_stage,
                                                       **source_options))
