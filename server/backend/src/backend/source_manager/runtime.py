@@ -224,6 +224,26 @@ def record_failure(source_id: str, action: str, error: Exception) -> None:
         _write_state(root, state)
 
 
+def _verify_release_runtime(command: list[str], manifest: SourceManifest, release: dict) -> None:
+    """Reject a mismatched environment before publication or later activation."""
+    if Version(manifest.version) != Version(release.get("adapter_version", release["version"])):
+        raise ValueError("The installed adapter version does not match the release")
+    if any(name not in manifest.upstream_versions or
+           Version(manifest.upstream_versions[name]) != Version(expected)
+           for name, expected in release.get("upstream_versions", {}).items()):
+        raise ValueError("The installed upstream dependencies do not match the release")
+    if Version(manifest.python_version) not in SpecifierSet(release.get("python_requirement", ">=3.12")):
+        raise ValueError("The installed Python interpreter does not match the release")
+    if release.get("packages"):
+        result = subprocess.run([command[0], "-c",
+            "import importlib.metadata as m,json; print(json.dumps({d.metadata['Name'].lower().replace('_','-'):d.version for d in m.distributions()}))"],
+            text=True, capture_output=True, timeout=10, check=True)
+        installed = json.loads(result.stdout)
+        if any(name not in installed or Version(installed[name]) != Version(version)
+               for name, version in release["packages"].items()):
+            raise ValueError("The installed package inventory does not match the release")
+
+
 def install_bundle(source_id: str, bundle: Path, *, activate: bool = True) -> dict:
     """Install a trusted, digest-pinned wheelhouse without network or app-env writes."""
     sources = registry()
@@ -263,7 +283,9 @@ def install_bundle(source_id: str, bundle: Path, *, activate: bool = True) -> di
                 subprocess.run([str(python), "-m", "pip", "install", "--no-index",
                     "--find-links", str(bundle), f"{package}=={release.get('adapter_version', version)}"],
                     timeout=240, check=True, capture_output=True)
-                _probe([str(python), "-m", module], source_id)
+                staged_command = [str(python), "-m", module]
+                staged_manifest = _probe(staged_command, source_id)
+                _verify_release_runtime(staged_command, staged_manifest, release)
                 (staging / "release.json").write_text(json.dumps(release, sort_keys=True))
                 os.replace(staging, target)
             finally:
@@ -274,12 +296,7 @@ def install_bundle(source_id: str, bundle: Path, *, activate: bool = True) -> di
             raise ValueError("An installed Source runtime is immutable; publish a new bundle version")
         # A previously installed bundle is still probed before a new activation.
         manifest = _probe([str(target / "bin" / "python"), "-m", module], source_id)
-        if manifest.version != release.get("adapter_version", version):
-            raise ValueError("The installed adapter version does not match the release")
-        if any(name not in manifest.upstream_versions or
-               Version(manifest.upstream_versions[name]) != Version(expected)
-               for name, expected in release.get("upstream_versions", {}).items()):
-            raise ValueError("The installed upstream dependencies do not match the release")
+        _verify_release_runtime([str(target / "bin" / "python"), "-m", module], manifest, release)
         if activate:
             _validate_saved_configuration(manifest)
         state = _read_state(root)
@@ -303,6 +320,10 @@ def activate(source_id: str, version: str) -> dict:
     with _locked(root):
         command = [str(root / source_id / version / "bin" / "python"), "-m", sources[source_id]["module"]]
         manifest = _probe(command, source_id)
+        release = json.loads((root / source_id / version / "release.json").read_text())
+        if release.get("source_id") != source_id or release.get("version") != version:
+            raise ValueError("The installed release identity does not match the runtime")
+        _verify_release_runtime(command, manifest, release)
         _validate_saved_configuration(manifest)
         _reconcile_domains(command, manifest)
         state = _read_state(root)

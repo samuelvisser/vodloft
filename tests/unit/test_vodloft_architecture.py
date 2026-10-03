@@ -1504,6 +1504,21 @@ def test_independent_source_bundle_install_health_failure_and_rollback(library, 
     assert runtime.install_bundle('third', second)['manifest']['upstream_versions'] == {'fixture-engine': '2.0'}
     assert runtime.command_for('third')[0] != old_command
     assert Path(old_command[0]).is_file()
+    mismatch = bundle('1.0.0+engine4', '4.0')
+    wrong_release = json.loads((mismatch / 'release.json').read_text())
+    wrong_release['upstream_versions']['fixture-engine'] = '99.0'
+    (mismatch / 'release.json').write_text(json.dumps(wrong_release))
+    with pytest.raises(ValueError, match='upstream dependencies'):
+        runtime.install_bundle('third', mismatch)
+    assert '1.0.0+engine4' not in runtime.status()['installed']['third']
+    saved = tmp_path / 'runtimes' / 'third' / '1.0.0+engine1' / 'release.json'
+    original = saved.read_text()
+    wrong_release['version'] = '1.0.0+engine1'
+    saved.write_text(json.dumps(wrong_release))
+    with pytest.raises(ValueError, match='upstream dependencies'):
+        runtime.activate('third', '1.0.0+engine1')
+    saved.write_text(original)
+    assert runtime.status()['active']['third'] == '1.0.0+engine2'
     bad = bundle('1.0.0+engine3', '3.0', healthy=False)
     with pytest.raises(ValueError, match='health'):
         runtime.install_bundle('third', bad)
