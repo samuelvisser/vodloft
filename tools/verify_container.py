@@ -49,7 +49,7 @@ def verify(base: str, password: str, timeout: int):
     home = json.loads(request('/api/vodloft/home'))
     assert home['recent'] == [] and home['activity'] == []
     sources = json.loads(request('/api/vodloft/sources'))
-    assert {source['source_id'] for source in sources} == {'yt-dlp', 'dailywire'}
+    assert {source['source_id'] for source in sources} == {'yt-dlp', 'dailywire'}, json.loads(request('/api/vodloft/sources/runtimes'))
     assert all(source['version'] == '1.0.0' for source in sources)
     runtime = json.loads(request('/api/vodloft/sources/runtimes'))
     assert runtime['active'] == {'yt-dlp': '1.0.0', 'dailywire': '1.0.0'}
