@@ -98,7 +98,8 @@ def _convert(context):
                 continue
             collection_id = links[old.show_id]
             reference = session.scalar(select(SourceReference).where(SourceReference.item_id == collection_id,
-                SourceReference.source_id == "dailywire"))
+                SourceReference.source_id == "dailywire",
+                SourceReference.connection_key == (connection.id if connection else 0)))
             podcast = isinstance(old, PodcastDownloadProfile)
             count = old.download_episode_count if podcast else 0
             start = old.download_starting_from if podcast else None

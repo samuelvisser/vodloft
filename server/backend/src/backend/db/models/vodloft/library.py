@@ -170,6 +170,7 @@ class CollectionStreamProfile(Base):
     member_roles: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     max_items: Mapped[int] = mapped_column(Integer, default=0)
     feed_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    allow_other_renditions: Mapped[bool] = mapped_column(Boolean, default=False)
     source_reference_id: Mapped[int | None] = mapped_column(ForeignKey('vodloft_source_references.id'), nullable=True)
     local_profile_ids: Mapped[list[int]] = mapped_column(JSON, default=list)
     refresh_minutes: Mapped[int] = mapped_column(Integer, default=60)

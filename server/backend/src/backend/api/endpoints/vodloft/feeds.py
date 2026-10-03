@@ -44,6 +44,7 @@ class StreamProfileInput(BaseModel):
     member_roles: list[str] | None = Field(default=None, max_length=100)
     max_items: int = Field(default=0, ge=0, le=10000)
     feed_title: str | None = Field(default=None, max_length=200)
+    allow_other_renditions: bool = False
     source_reference_id: int | None = None
     local_profile_ids: list[int] = Field(default_factory=list, max_length=100)
     refresh_minutes: int = Field(default=60, ge=15, le=10080)
@@ -251,7 +252,7 @@ def _publish(session, subscription: FeedSubscription, item_id: int) -> Published
     # Publish portable completed files only. Other formats remain playable
     # in the library, without becoming incompatible podcast enclosures.
     extensions = ({'.mp3', '.m4a'} if profile.format == 'audio' else {'.mp4'}) if profile else {'.mp3', '.m4a', '.mp4'}
-    selected_profiles = set(profile.local_profile_ids) if profile else set()
+    selected_profiles = set(profile.local_profile_ids) if profile and not profile.allow_other_renditions else set()
     placements = set(session.scalars(select(ArtifactPlacement.artifact_id).where(
         ArtifactPlacement.profile_id.in_(selected_profiles))).all()) if selected_profiles else set()
     artifact = next((a for a in session.scalars(select(Artifact).where(

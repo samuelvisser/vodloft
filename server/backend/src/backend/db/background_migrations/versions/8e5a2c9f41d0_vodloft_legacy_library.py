@@ -98,7 +98,11 @@ def _copy_downloads(session, item: MediaItem, downloads) -> None:
             os.replace(temporary, destination)
         artifact = session.scalar(select(Artifact).where(Artifact.path == str(destination)))
         if not artifact:
+            reference = session.scalar(select(SourceReference).where(
+                SourceReference.item_id == item.id, SourceReference.source_id == 'dailywire')
+                .order_by(SourceReference.id.desc()))
             artifact = Artifact(item_id=item.id, profile_id=download.local_media_profile_id,
+                source_reference_id=reference.id if reference else None,
                 path=str(destination), size=destination.stat().st_size)
             session.add(artifact)
             session.flush()

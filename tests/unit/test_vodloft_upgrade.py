@@ -49,7 +49,8 @@ def test_wireloft_upgrade_preserves_files_memberships_profiles_feeds_and_history
             download_episode_count=4, download_days_in_past=30, delete_older_episodes=True, ep_id_type_list=['ep', 'aux'])
         stream = RssStreamProfile(show_id=show.id, token='kept-subscription-token', feed_url='old-value', max_items=3,
             overwrite_show_title='Custom podcast title', use_downloads=True, use_dw_stream=False,
-            preferred_format='format_audio_only', prefer_exact_match=False, ep_id_type_list=['ep'])
+            preferred_format='format_audio_only', prefer_exact_match=False, ep_id_type_list=['ep'],
+            live_episode_handoff_ids=[episode.id])
         session.add_all([series, podcast, stream]); session.flush()
         download = EpisodeMediaDownload(media_item_id=episode.id, local_media_profile_id=profile.id,
             download_profile_id=series.id, file_path=str(original), artifact_status='available', downloaded_bytes=original.stat().st_size,
@@ -74,11 +75,12 @@ def test_wireloft_upgrade_preserves_files_memberships_profiles_feeds_and_history
     legacy = importlib.import_module('backend.db.background_migrations.versions.8e5a2c9f41d0_vodloft_legacy_library')
     automation = importlib.import_module('backend.db.background_migrations.versions.a03f7e9bc261_vodloft_automation_conversion')
     policies = importlib.import_module('backend.db.background_migrations.versions.0b87c419ad62_vodloft_membership_policy_conversion')
+    preparation = importlib.import_module('backend.db.background_migrations.versions.c64f8092de17_vodloft_feed_preparation_conversion')
     monkeypatch.setattr(automation.secret_store, 'save', lambda *args: 'fixture-secret')
     from dailywire_authorisation.storage import TokenStore
     monkeypatch.setattr(TokenStore, 'load', lambda *args: None)
     for _ in range(2):
-        legacy._migrate(context); automation._convert(context); policies._convert(context)
+        legacy._migrate(context); automation._convert(context); policies._convert(context); preparation._convert(context)
     with sessions() as session:
         migrated_profile = session.get(DomainLocalMediaProfile, profile_id)
         assert migrated_profile.enabled and not migrated_profile.impairment
@@ -95,6 +97,10 @@ def test_wireloft_upgrade_preserves_files_memberships_profiles_feeds_and_history
         assert len(session.scalars(select(CollectionDownloadProfile)).all()) == 2
         feed = session.scalar(select(CollectionStreamProfile).where(CollectionStreamProfile.name == f'Imported stream profile {stream_id}'))
         assert feed.max_items == 3 and feed.feed_title == 'Custom podcast title' and feed.member_roles == ['episode']
+        assert feed.allow_other_renditions and feed.source_reference_id is not None
+        from backend.db.models.vodloft import LiveAdmission
+        admission = session.scalar(select(LiveAdmission))
+        assert admission.item_id == item_id and admission.state == 'local'
         assert session.scalar(select(FeedSubscription)).token == 'kept-subscription-token'
         artifacts = session.scalars(select(Artifact)).all(); assert len(artifacts) == 1
         assert Path(artifacts[0].path).read_bytes() == original.read_bytes()

@@ -42,7 +42,7 @@ type DownloadPolicy = MembershipPolicy & {id: number; name: string; local_profil
     retain_newest: number | null; retain_days: number | null;
     source_reference_id: number | null; enabled: boolean; refresh_minutes: number; published_after: string | null; published_before: string | null; title_contains: string | null}
 type StreamProfile = MembershipPolicy & {id: number; name: string; format: string; enabled: boolean; max_items: number; feed_title: string | null;
-    source_reference_id: number | null; local_profile_ids: number[]; refresh_minutes: number;
+    source_reference_id: number | null; local_profile_ids: number[]; refresh_minutes: number; allow_other_renditions: boolean;
     include_live: boolean; local_only: boolean;
     published_after?: string | null; published_before?: string | null; title_contains?: string | null}
 type Target = {local_prefix: string; server_prefix: string; id: number; name: string; kind: string; base_url: string; library_id: string; enabled: boolean}
@@ -873,7 +873,7 @@ function DownloadPolicyForm({collection, collectionId, profiles, sourceReference
 }
 
 const StreamProfileSchema = z.object({enabled: z.boolean().default(true), name: z.string().min(1).default('Podcast feed'), format: z.enum(['audio', 'video']).default('audio'),
-    source_reference_id: z.string().default(''), local_profile_ids: z.array(z.number()).default([]), refresh_minutes: z.coerce.number().int().min(15).max(10080).default(60),
+    source_reference_id: z.string().default(''), local_profile_ids: z.array(z.number()).default([]), refresh_minutes: z.coerce.number().int().min(15).max(10080).default(60), allow_other_renditions: z.boolean().default(false),
     selected_groups: z.array(z.string()).nullable().default(null), include_future_groups: z.boolean().default(true), member_roles: z.array(z.string()).nullable().default(null),
     max_items: z.coerce.number().int().min(0).max(10000).default(50), feed_title: z.string().max(200).default(''),
     include_live: z.boolean().default(false), local_only: z.boolean().default(true),
@@ -923,6 +923,7 @@ function StreamProfileForm({collection, collectionId, profiles, sourceReferenceI
                 <input type="checkbox" checked={selectedIds.includes(profile.id)} onChange={event => form.setValue('local_profile_ids', event.target.checked ? [...selectedIds, profile.id] : selectedIds.filter(id => id !== profile.id), {shouldDirty: true})}/>
                 {' '}{profile.name} · {profile.domain}</label>)}
             <p>Select MP3 or M4A audio profiles, or an MP4 video profile, for each member Domain.</p></fieldset>}
+        <label><input type="checkbox" {...register('allow_other_renditions')}/> Allow other portable local renditions when the selected profile is unavailable</label>
         <p>Subscribed feeds refresh automatically. Enclosures appear when portable local files are ready and retain their published bytes. With local files only, live admission also requires an enabled Download Profile.</p>
         {errors.root && <p role="alert">{errors.root.message}</p>}
         <div><button type="submit" className="btn btn-primary" disabled={isSubmitting}>Save Stream Profile</button>{' '}
