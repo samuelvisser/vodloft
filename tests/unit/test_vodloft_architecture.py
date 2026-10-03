@@ -966,6 +966,7 @@ def test_source_progress_updates_job_operation(library, monkeypatch):
         "domain": "example.com", "output_template": "/downloads/progress/{{ title }}.ext"}).json()["id"]
     job_id, _, _ = router.queue_download(item_id, profile_id)
     def download(self, source_id, url, staging, **kwargs):
+        assert kwargs["reference"]["upstream_id"] == "progress"
         kwargs["on_progress"](50)
         assert client.get(f"/api/vodloft/jobs/{job_id}").json()["progress"] == 49
         assert client.get("/api/vodloft/jobs").json()[0]["progress"] == 49
@@ -1555,3 +1556,52 @@ def test_profile_deletion_cancels_queued_work_and_preserves_shared_artifact(libr
     assert vodloft_retention.reconcile(grace_hours=0) == 0
     assert canonical.is_file() and (tmp_path / f'{ids[1]}.mp4').is_file()
     assert not (tmp_path / f'{ids[0]}.mp4').exists()
+
+
+def test_playback_session_enforces_owner_and_withdrawn_source_grant(library, monkeypatch):
+    import base64
+    from backend.api.endpoints.vodloft import playback
+    from backend.security import permissions
+    from backend.db.models.vodloft import SourceConnection
+    from source_contracts import StreamLease
+    client, sessions, _, gateway, _ = library
+    monkeypatch.setattr(playback, 'get_session', sessions)
+    monkeypatch.setattr(playback, 'validate_public_url', lambda url: url)
+    with sessions() as session:
+        connection = SourceConnection(source_id='fixture', name='Account')
+        session.add(connection); session.commit(); connection_id = connection.id
+    snapshot = MediaSnapshot(kind='video', reference=ref('example.com', 'owner'), title='Private account')
+    monkeypatch.setattr(gateway.SourceGateway, 'resolve', lambda *a, **k: snapshot)
+    item_id = client.post('/api/vodloft/import', json={'snapshot': snapshot.model_dump(mode='json'),
+        'connection_id': connection_id}).json()['id']
+    actor = permissions.Principal(key='alice', role='member', connection_ids=[connection_id])
+    monkeypatch.setattr(permissions, 'principal', lambda request: actor)
+    monkeypatch.setattr(playback, 'principal', lambda request: actor)
+    monkeypatch.setattr(gateway.SourceGateway, 'stream_lease', lambda *a, **k: StreamLease(
+        transport='http', url='https://cdn.example.com/media.mp4'))
+    monkeypatch.setattr(gateway.SourceGateway, 'call', lambda *a, **k: {
+        'data': base64.b64encode(b'media').decode(), 'url': k['url'], 'status': 200})
+    watch = client.post(f'/api/vodloft/library/{item_id}/watch')
+    assert watch.status_code == 200, watch.text
+    url = watch.json()['url']
+    assert client.get(url).content == b'media'
+    actor = permissions.Principal(key='bob', role='member', connection_ids=[connection_id])
+    assert client.get(url).status_code == 404
+    actor = permissions.Principal(key='alice', role='member')
+    assert client.get(url).status_code == 403
+    actor = permissions.Principal(key='alice', role='member', connection_ids=[connection_id])
+    with sessions() as session:
+        session.get(SourceConnection, connection_id).enabled = False; session.commit()
+    assert client.get(url).status_code == 403
+
+
+def test_source_rejects_reassigned_download_identity_before_acquisition(monkeypatch, tmp_path):
+    from vodloft_source_ytdlp import worker
+    expected = SourceMediaReference(source_id='yt-dlp', domain='example.com', namespace='Generic',
+        upstream_id='old-upload', url='https://example.com/video')
+    def acquire(url, staging, format, representation, metadata, auth, verify):
+        verify({'id': 'different-upload', 'webpage_url': url, 'extractor_key': 'Generic'})
+        pytest.fail('Changed upstream identity must not be downloaded')
+    monkeypatch.setattr(worker, 'acquire_media', acquire)
+    with pytest.raises(ValueError, match='different media'):
+        worker.download(expected.url, str(tmp_path), reference=expected.model_dump())

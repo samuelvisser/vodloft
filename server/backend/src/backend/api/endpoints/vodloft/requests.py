@@ -127,6 +127,11 @@ def _approve(request_id: int) -> RequestResponse:
         if not demand or demand.state not in {"pending", "approved"}:
             raise HTTPException(409, "This request cannot be approved")
         item_id, profile_id, reference_id = demand.item_id, demand.profile_id, demand.reference_id
+        owner = session.get(LocalUser, demand.user_key) if demand.user_key != "admin" else None
+        reference = session.get(SourceReference, reference_id)
+        if demand.user_key != "admin" and (not owner or not owner.enabled or not reference or (
+                reference.connection_id is not None and reference.connection_id not in owner.connection_ids)):
+            raise HTTPException(403, "The requesting account no longer has Source access")
     job_id, state, _ = queue_download(item_id, profile_id, reference_id=reference_id,
                                      request_id=request_id)
     if state == "suppressed":

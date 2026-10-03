@@ -216,8 +216,12 @@ def search(query: str, cursor: str | None = None, limit: int = 30,
 
 def download(url: str, staging: str, preferred_format: str = "format_1080p",
              token: str | None = None, representation: dict | None = None,
-             metadata: dict | None = None) -> DownloadResult:
+             metadata: dict | None = None, reference: dict | None = None) -> DownloadResult:
     snapshot = resolve(url, token=token)
+    expected = SourceMediaReference.model_validate(reference) if reference else None
+    if expected and any(getattr(expected, field) != getattr(snapshot.reference, field)
+                        for field in ("source_id", "domain", "namespace", "upstream_id")):
+        raise ValueError("The Source URL now identifies different media")
     if snapshot.kind == "collection":
         raise ValueError("Download a playable item, not a Collection")
     parsed = urlsplit(url)
@@ -297,7 +301,7 @@ def main():
                         request.get("access_token"))
     elif operation == "download":
         result = download(request["url"], request["staging"], request.get("preferred_format", "format_1080p"),
-                          request.get("access_token"), request.get("representation"), request.get("metadata"))
+                          request.get("access_token"), request.get("representation"), request.get("metadata"), request.get("reference"))
     elif operation == "legacy_call":
         result = legacy_call(request)
     elif operation == "stream_lease":

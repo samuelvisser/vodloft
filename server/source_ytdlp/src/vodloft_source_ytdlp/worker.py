@@ -159,9 +159,16 @@ def entries(url: str, cursor: str | None = None, limit: int = 50,
 
 def download(url: str, staging: str, preferred_format: str = "format_1080p",
              cookies: str | None = None, scratch: str | None = None,
-             representation: dict | None = None, metadata: dict | None = None) -> DownloadResult:
+             representation: dict | None = None, metadata: dict | None = None,
+             reference: dict | None = None) -> DownloadResult:
+    expected = SourceMediaReference.model_validate(reference) if reference else None
+    def verify(info):
+        actual = _reference(info, url)
+        if expected and any(getattr(expected, field) != getattr(actual, field)
+                            for field in ("source_id", "domain", "namespace", "upstream_id")):
+            raise ValueError("The Source URL now identifies different media")
     with _cookie_options(cookies, scratch) as auth:
-        return acquire_media(url, staging, preferred_format, representation, metadata, auth)
+        return acquire_media(url, staging, preferred_format, representation, metadata, auth, verify)
 
 
 def stream_lease(url: str, cookies: str | None = None, scratch: str | None = None) -> StreamLease:
@@ -243,7 +250,7 @@ def main() -> None:
                          request.get("cookies"), request.get("scratch"))
     elif operation == "download":
         result = download(request["url"], request["staging"], request.get("preferred_format", "format_1080p"),
-                          request.get("cookies"), request.get("scratch"), request.get("representation"), request.get("metadata"))
+                          request.get("cookies"), request.get("scratch"), request.get("representation"), request.get("metadata"), request.get("reference"))
     elif operation == "stream_lease":
         result = stream_lease(request["url"], request.get("cookies"), request.get("scratch"))
     elif operation == "stream_fetch":

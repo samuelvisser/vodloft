@@ -102,7 +102,7 @@ class _EffectiveMetadata(PostProcessor):
 
 def download(url: str, staging: str, preferred_format: str,
              representation: dict | None = None, metadata: dict | None = None,
-             authentication: dict | None = None) -> DownloadResult:
+             authentication: dict | None = None, verify_reference=None) -> DownloadResult:
     destination = Path(staging).resolve()
     destination.mkdir(parents=True, exist_ok=True)
     policy = RepresentationPolicy.model_validate(representation or {})
@@ -114,6 +114,8 @@ def download(url: str, staging: str, preferred_format: str,
     try:
         with yt_dlp.YoutubeDL(config) as ydl:
             info = ydl.extract_info(url, download=False)
+            if verify_reference:
+                verify_reference(info)
             if not info or info.get("_type") in {"playlist", "multi_video"}:
                 raise UnsupportedRepresentation("Choose one playable media item")
             formats = info.get("requested_formats") or [info]

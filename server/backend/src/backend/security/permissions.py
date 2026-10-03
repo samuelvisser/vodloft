@@ -74,6 +74,8 @@ def allowed_api(actor: Principal, method: str, path: str) -> bool:
     if not path.startswith(prefix + "/"):
         return False
     path = path[len(prefix):]
+    if method in {"GET", "HEAD"} and re.fullmatch(r"/stream/[A-Za-z0-9_-]+(?:/segment/[a-f0-9]+)?", path):
+        return True  # Playback handlers enforce ownership and current Source grants.
     if method == "GET":
         return (path in {"/me", "/home", "/library", "/profiles", "/domains", "/sources",
             "/sources/domains", "/sources/connections", "/requests", "/integrations"} or

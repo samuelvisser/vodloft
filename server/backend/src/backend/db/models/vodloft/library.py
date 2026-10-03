@@ -319,6 +319,7 @@ class PlaybackSession(Base):
     __tablename__ = "vodloft_playback_sessions"
     id: Mapped[int] = mapped_column(primary_key=True)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    user_key: Mapped[str] = mapped_column(String(80), default="admin", server_default="admin")
     item_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_items.id", ondelete="CASCADE"))
     source_id: Mapped[str] = mapped_column(String(64))
     reference_id: Mapped[int | None] = mapped_column(ForeignKey("vodloft_source_references.id"), nullable=True)

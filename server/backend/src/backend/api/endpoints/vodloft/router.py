@@ -957,6 +957,7 @@ def _execute_leased_download(job_id: int) -> None:
             result = gateway.download(source_id, url, staging,
                 preferred_format=spec.get("preferred_format", "format_1080p"), job_id=job_id,
                 representation=spec.get("representation", {}), metadata=spec.get("metadata", {}),
+                reference=spec["source_reference"],
                 on_progress=lambda percent: _download_progress(job_id, percent), **options)
             _job_stage(job_id, "verifying")
             source_file = Path(staging, result.filename).resolve()
@@ -1237,6 +1238,9 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
                 "output_template": profile.output_template, "profile_id": profile.id,
                 "profile_revision": profile.updated_at.isoformat() if profile.updated_at else None,
                 "source_id": reference.source_id, "reference_id": reference.id,
+                "source_reference": {"source_id": reference.source_id, "domain": domain.hostname,
+                    "namespace": reference.namespace, "upstream_id": reference.upstream_id,
+                    "url": reference.url},
                 "source_command": selected_command, "runtime_version": runtime_version,
                 "connection_id": reference.connection_id, "queued_at": datetime.now(timezone.utc).isoformat(),
                 "values": values}

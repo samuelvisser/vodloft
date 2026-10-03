@@ -17,7 +17,7 @@ from sqlalchemy import delete, select
 
 from backend.db import get_session
 from backend.db.models.vodloft import (Artifact, MediaItem, PlaybackSegment,
-    PlaybackSession, SourceReference)
+    PlaybackSession, SourceReference, SourceConnection)
 from backend.source_manager.gateway import SourceGateway, SourceInvocationError, validate_public_url
 from backend.source_manager.runtime import runtime_root
 from backend.api.endpoints.vodloft.connections import source_options
@@ -52,7 +52,7 @@ def _unseal(value: str):
     return json.loads(Fernet(_key()).decrypt(value.encode()))
 
 
-def _session(token: str):
+def _session(token: str, request: Request):
     if len(token) > 128:
         raise HTTPException(404, "Playback session not found")
     with get_session() as db:
@@ -60,6 +60,16 @@ def _session(token: str):
             PlaybackSession.token_hash == hashlib.sha256(token.encode()).hexdigest()))
         if not session or session.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
             raise HTTPException(404, "Playback session expired")
+        actor = principal(request)
+        if session.user_key != actor.key:
+            raise HTTPException(404, "Playback session not found")
+        if session.reference_id:
+            reference = db.get(SourceReference, session.reference_id)
+            if not reference or not actor.can_use_connection(reference.connection_id):
+                raise HTTPException(403, "Playback Source access was withdrawn")
+            connection = db.get(SourceConnection, reference.connection_id) if reference.connection_id else None
+            if connection and not connection.enabled:
+                raise HTTPException(403, "Playback Source connection is disabled")
         return session.id, session.source_id, session.transport, _unseal(session.lease_ciphertext)
 
 
@@ -81,6 +91,7 @@ def watch(item_id: int, request: Request, reference_id: int | None = None):
             token = secrets.token_urlsafe(36)
             expires_at = datetime.now(timezone.utc) + timedelta(hours=2)
             db.add(PlaybackSession(token_hash=hashlib.sha256(token.encode()).hexdigest(),
+                user_key=principal(request).key,
                 item_id=item_id, source_id="local", reference_id=None,
                 transport="file", lease_ciphertext=_seal({"path": str(path)}),
                 expires_at=expires_at))
@@ -106,6 +117,7 @@ def watch(item_id: int, request: Request, reference_id: int | None = None):
     lease_data["_command"] = gateway.commands.get(source_id)
     with get_session() as db:
         db.add(PlaybackSession(token_hash=hashlib.sha256(token.encode()).hexdigest(),
+            user_key=principal(request).key,
             item_id=item_id, source_id=source_id, reference_id=selected_id,
             transport=lease.transport, lease_ciphertext=_seal(lease_data),
             expires_at=expires_at))
@@ -225,7 +237,7 @@ def _refresh_child(source_id: str, lease: dict, descriptor: dict) -> dict:
 
 
 def _serve(token: str, request: Request, segment_id: str | None = None):
-    session_id, source_id, transport, lease = _session(token)
+    session_id, source_id, transport, lease = _session(token, request)
     if transport == "file":
         if segment_id:
             raise HTTPException(404, "Playback segment not found")
