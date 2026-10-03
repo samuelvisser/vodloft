@@ -1918,8 +1918,10 @@ def test_feed_scheduler_reuses_failed_job_and_preserves_retry_budget(library, mo
     router._run_download(job_id)
     assert feeds.prepare_stream_profile(stream_id, dispatch=False)['queued_job_ids'] == []
     dispatched = []
-    monkeypatch.setattr(router.threading, 'Thread', lambda **kwargs: SimpleNamespace(
-        start=lambda: dispatched.append(kwargs['args'][0])))
+    thread_factory = router.threading.Thread
+    def record_dispatch(**kwargs):
+        return SimpleNamespace(start=lambda: dispatched.append(kwargs['args'][0]))
+    monkeypatch.setattr(router.threading, 'Thread', record_dispatch)
     router.retry_due_acquisition_jobs()
     assert dispatched == []
     with sessions() as session:
@@ -1929,7 +1931,9 @@ def test_feed_scheduler_reuses_failed_job_and_preserves_retry_budget(library, mo
         session.commit()
     router.retry_due_acquisition_jobs()
     assert dispatched == [job_id]
+    monkeypatch.setattr(router.threading, 'Thread', thread_factory)
     router._run_download(job_id)
+    monkeypatch.setattr(router.threading, 'Thread', record_dispatch)
     assert feeds.prepare_stream_profile(stream_id, dispatch=False)['queued_job_ids'] == []
     with sessions() as session:
         jobs = session.scalars(select(AcquisitionJob)).all()
