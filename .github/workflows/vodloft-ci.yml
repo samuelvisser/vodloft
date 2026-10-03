@@ -1,0 +1,41 @@
+name: VodLoft acceptance
+"on":
+  push:
+    branches: [main, codex/vodloft-wireloft-prototype]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: vodloft-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Install locked backend and UI dependencies
+        run: |
+          python -m pip install uv
+          uv sync --frozen
+          npm --prefix ui ci --registry=https://registry.npmjs.org
+      - name: Verify architecture, lifecycle, and WireLoft upgrade
+        run: |
+          uv run --frozen pytest tests/unit/test_vodloft_architecture.py tests/unit/test_vodloft_prototype.py tests/unit/test_vodloft_upgrade.py -q
+      - name: Build production UI
+        run: npm run build
+      - name: Build independent Source wheels
+        run: |
+          uv build --wheel server/source_contracts
+          uv build --wheel server/source_media
+          uv build --wheel server/source_ytdlp
+          uv build --wheel server/dailywire_api
+          uv build --wheel server/source_dailywire
