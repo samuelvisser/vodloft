@@ -67,6 +67,28 @@ class LibraryDetailResponse(LibraryItemResponse):
     member_roles: list[str] = Field(default_factory=list)
 
 
+class ExpansionIssueResponse(BaseModel):
+    item_id: int
+    reason: str
+
+
+class CollectionExpansionResponse(BaseModel):
+    refreshed_ids: list[int]
+    skipped: list[ExpansionIssueResponse]
+
+
+class LibraryRefreshResponse(LibraryItemResponse):
+    model_config = ConfigDict(from_attributes=True, alias_generator=AliasGenerator(
+        validation_alias=lambda name: name if name == 'nested_expansion' else AliasPath('base', name)))
+    nested_expansion: CollectionExpansionResponse
+
+
+@dataclass(frozen=True)
+class LibraryRefreshSource:
+    base: LibraryItemResponse
+    nested_expansion: CollectionExpansionResponse
+
+
 class ContinueResponse(LibraryItemResponse):
     seconds: float
 

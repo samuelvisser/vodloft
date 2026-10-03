@@ -25,7 +25,8 @@ from sqlalchemy.exc import IntegrityError
 
 from backend.db import get_session
 from backend.api.models.vodloft import (ActivityResponse, ContinueResponse, HomeResponse, IssueResponse,
-    LibraryDetailResponse, LibraryItemResponse, LibraryItemSource, ReferenceResponse)
+    CollectionExpansionResponse, LibraryDetailResponse, LibraryItemResponse, LibraryItemSource,
+    LibraryRefreshResponse, LibraryRefreshSource)
 from backend.db.models.vodloft import (
     AcquisitionJob, Artifact, ArtifactPlacement, CollectionDownloadProfile, CollectionEntry, CollectionScan, CollectionStreamProfile, LiveAdmission, Domain, FeedSubscription, FileFinalization, LegacyMediaLink, LibraryRequest, MediaDemand, MediaSuppression, MediaItem, MediaServerExport, MovieExtraParent, PlaybackProgress, PublishedEntry, SourceConnection, SourceDomain, SourceReference, SourceSnapshot,
 )
@@ -546,6 +547,9 @@ def refresh_collection(collection_id: int, reference_id: int | None = None,
             return
         with get_session() as session:
             parent = _reference_for(session, parent_id, reference_id=parent_reference_id)
+            if not parent:
+                skipped.append({'item_id': parent_id, 'reason': 'The selected Source account is unavailable'})
+                return
             children = []
             for entry in session.scalars(select(CollectionEntry).where(
                 CollectionEntry.collection_id == parent_id).order_by(CollectionEntry.position)).all():
@@ -577,7 +581,8 @@ def refresh_collection(collection_id: int, reference_id: int | None = None,
             expand(child_id, child_reference_id, depth + 1)
 
     expand(collection_id, reference_id, 0)
-    return result | {"nested_expansion": {"refreshed_ids": refreshed, "skipped": skipped}}
+    return LibraryRefreshResponse.model_validate(LibraryRefreshSource(base=result,
+        nested_expansion=CollectionExpansionResponse(refreshed_ids=refreshed, skipped=skipped)))
 
 
 def _refresh_collection_one(collection_id: int, reference_id: int | None = None):
