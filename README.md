@@ -1,51 +1,77 @@
 # VodLoft 1.0
 
-VodLoft is a WireLoft-derived local web media manager. Its generic library has separately packaged yt-dlp and Daily Wire Sources; the FastAPI and React layers use a versioned Source contract, Domain-based profiles, durable acquisition jobs and downstream delivery records. This 1.0 release is an administrator-operated prototype.
+VodLoft builds a local web-media library from WireLoft. It separates websites (**Domains**), independently installed acquisition adapters (**Sources**), canonical media, Collection membership, local renditions, and downstream media-server delivery.
 
-## Baseline and migration
+The 1.0 prototype includes yt-dlp and The Daily Wire Sources; Videos, Movies, shared Movie Extras, and nested Collections; automatic collection acquisition; a browser player; portable podcast/video RSS feeds; local accounts and approval requests; and Plex, Jellyfin, and Audiobookshelf integrations.
 
-The implementation was built from WireLoft `develop` commit `7853ee7bdf1137111193932fe9da7e8243442bd5` (27 September 2026), retaining its application structure. The GitHub branch contains a snapshot of that derived tree because the available GitHub Actions token could not push WireLoft's workflow files/history. The former VodLoft main branch is preserved at `archive/pre-wireloft-rebuild-2026-09-27`.
+## Start with Docker
 
-Alembic migrations add the normalized library alongside inherited WireLoft tables. A background migration maps existing Shows, Episodes, Movies and shared Movie Extras into that library. It also copies available legacy files into VodLoft-owned playback paths while preserving the originals. Existing Daily Wire pages remain available during the transition.
-
-## Run locally
-
-Python 3.13, uv, Node.js and FFmpeg are required. From the repository root:
+Clone this branch and run from its root:
 
 ```sh
-uv sync
+git clone --branch codex/vodloft-wireloft-prototype https://github.com/samuelvisser/VodLoft.git
+cd VodLoft
+docker compose up --build -d
+```
+
+Open **http://localhost:8080** and complete the welcome screen. Set `WL_ADMIN_AUTH__PASSWORD` in the Compose environment before sharing the server. The administrator signs in as `admin`. Without a configured administrator password, the installation operates in local, unrestricted administrator mode.
+
+Compose persists configuration, SQLite, secrets, Source bundles, and Source runtimes in `./config`, and media in `./downloads`. The image builds the production UI, applies database migrations, and installs both bundled Sources in separate Python environments. FFmpeg is included. No paid Font Awesome credentials are needed.
+
+## Use the library
+
+1. In **Discover**, paste a public media, channel, show, or playlist URL. Select a Source/account when more than one can handle it. Sources with search expose search previews. Review the result and import it explicitly.
+2. In **Management**, create a **Local Media Profile** for the Domain. Choose applicable media types, video/audio quality, languages, fallback behavior, subtitles, container, codecs, chapters, artwork, metadata, output template, and delivery targets. Initial profiles are supplied for YouTube and The Daily Wire.
+3. Download individual items or attach a **Collection Download Profile**. Choose Local Media Profiles, a Source/account reference, backfill, groups/roles, future-group inclusion, date/title filters, refresh interval, and retention. Partial upstream scans preserve known members. Nested Collections expand only through bounded explicit expansion.
+4. Use **Library** for item details, metadata edits, Source history, Movie Extras, profiles, local playback, and upstream playback where supported. The player supports queues, resume, speed, chapters, and subtitle tracks. **Home** shows continue-watching, recent items, activity, and acquisition/delivery issues.
+5. Attach a **Collection Stream Profile** for an audio or video feed. Choose portable local renditions or have VodLoft prepare them through the normal acquisition queue. A subscription publishes stable enclosure bytes behind a revocable URL; changing an upstream item or local rendition does not change already published bytes. Feed URLs support HEAD and byte ranges.
+6. Add a media-server target, test it, and select it on a Local Media Profile. VodLoft publishes server-compatible files and metadata, requests scanning, and records actual downstream item availability. Audiobookshelf supports shared-folder delivery or RSS-pull delivery, explicit local-to-remote user mapping, and a progress import that never rewinds local progress.
+7. Create local **member** or **manager** accounts, grant Source connections and server targets, and choose subscription permission, request quota, and automatic approval. Members request acquisitions; managers can approve/reject requests and manage library metadata. Local accounts, upstream accounts, and media-server identities remain separate.
+
+A shared Movie Extra can belong to multiple Movies and have a different upstream role under each parent. Explicit parent/type edits survive Source refreshes.
+
+## Source installation and updates
+
+Management shows installed adapter/upstream versions, connection schemas, runtime history, automatic-update policy, stable/beta channels, pins, manual checks, and rollback. Accounts use the fields declared by each Source, including secret and credential-file fields or interactive authentication challenges. Secrets remain scoped to the selected connection.
+
+Mounted wheelhouses are verified and installed independently. Signed HTTPS release catalogues can be configured with an operator-trusted Ed25519 public key. A failed install, protocol/schema mismatch, health check, or incompatible saved configuration leaves the previous runtime active. Queued/running acquisitions and upstream playback sessions retain the runtime they started with.
+
+See [Source authoring and releases](docs/SOURCE_AUTHORING.md) for third-party registration, wheelhouse building, signing, interpreter selection, and catalogue configuration. Adding a registered third Source does not require core or frontend changes.
+
+## Upgrade from WireLoft
+
+The implementation preserves WireLoft Git ancestry at commit `7853ee7bdf1137111193932fe9da7e8243442bd5`. The former VodLoft code is retained on `archive/pre-wireloft-rebuild-2026-09-27`; the original WireLoft baseline is retained on `archive/wireloft-baseline-7853ee7b`.
+
+Back up the database, configuration, secrets, and media first. Point `WL_DATABASE_PATH` to the existing WireLoft database filename and retain its existing media mount/path. The Docker entrypoint performs schema migrations; background migrations then import Shows, Episodes, Movies, shared Extras, account references, profiles, memberships, feed policies, live admissions, and usable files. Original files remain available while owned playback copies are prepared. Scheduled work waits for background migrations.
+
+See [Backups and upgrades](docs/wiki/Backups-and-Upgrades.md). Do not start two application instances against the same SQLite/media directories.
+
+## Development
+
+Use Python 3.13, uv, Node.js 22, and FFmpeg. From the repository root:
+
+```sh
+uv sync --frozen
 npm install
 uv run backend-api db upgrade
 uv run backend-api run --host 127.0.0.1 --port 5001
 ```
 
-In a second terminal run `npm run dev`. Open the Vite URL, sign in if an admin password is configured, and select **Web media library**. The Source subprocesses use the current Python interpreter in this development setup. The Docker image installs them into separate, digest-checked Python environments on first start.
+In a second terminal, run `npm run dev` and open the Vite URL. Development Sources can use the workspace interpreter; production Docker requires isolated installed runtimes.
 
-For Docker deployment, set `WL_ADMIN_AUTH__PASSWORD` and run `docker compose up --build`. Configuration, database, Source runtimes, encrypted secrets and trusted update bundles persist under `/config`; media and feed enclosures persist under `/downloads`.
+```sh
+uv run --frozen pytest tests/unit/test_vodloft_architecture.py tests/unit/test_vodloft_prototype.py tests/unit/test_vodloft_upgrade.py -q
+npm run build
+uv run backend-api db history
+uv run backend-api background-migrations history
+```
 
-## Library workflow
+## Verification and operating limits
 
-1. Add a public URL or search a Source that advertises search, then review its normalized preview. Import is explicit. Domain, Source, account connection, canonical media identity, Collection membership and local artifacts are stored separately. If an item has multiple Source or account references, select the one to use; Collection Download Profiles retain that selection. Source history records changed upstream metadata and its runtime version so an administrator can restore an earlier snapshot without losing their own title or description edits.
-2. Create a Local Media Profile for the item's Domain, choose video or MP3 audio, an output path template and optional delivery targets. A profile remains valid if the selected Source implementation changes.
-3. Download a playable item directly, or create a Collection Download Profile with selected Local Media Profiles, a backfill rule, date/title filters and refresh interval. Newest-N backfill uses publication dates, falling back to Collection position for undated entries. Mixed-domain Collections report members without an applicable profile. Paged Source enumeration records an incomplete checkpoint when upstream scanning stops, and resumes it only with the same Source runtime and connection. Nested Collections can be explicitly expanded up to two levels and 20 children from the library view, with cycle detection and a bounded API limit of three levels and 25 children. Refresh an individual item separately to hydrate its details.
-4. Watch or listen through the web player. A high-entropy playback session binds to a local artifact or a private upstream Stream Lease and pins its Source runtime. HLS manifests and child requests are proxied through opaque VodLoft URLs; upstream credentials never appear in the page. Progress appears on Home. Home, Discover, Library and Management are separate views of the web media workspace.
-5. Create an audio or video Collection Stream Profile with optional publication-date and title filters. Its revocable feed publishes only compatible local renditions and preserves bytes behind each enclosure URL until the subscription is revoked; revocation removes its published copies.
-6. Connect a Jellyfin, Plex or Audiobookshelf podcast library. VodLoft maps its visible file path to the server path, requests a scan after publication and records the server item identity when discovered. Verification searches a bounded set of result pages in the chosen library. Jellyfin receives an `.nfo` and optional artwork sidecar; Plex detects its scanner, agent and machine identity before choosing an NFO, personal-media or local-assets presentation; Audiobookshelf records the episode ID and supports an explicit, non-rewinding progress import.
+[The acceptance record](docs/DESIGN_ACCEPTANCE.md) maps the design's acceptance scenarios and feature areas to code and reproducible checks. GitHub Actions runs the VodLoft regression suite, the production UI build, independent Source wheel builds, and a production-container HTTP/media-processing smoke test.
 
-Artifacts keep a Source/account/format representation key. Compatible Local Media Profiles can share one canonical artifact and have separate presentation copies. Direct downloads and Collection policies create independent demand records. Retention can release a presentation and eventually its canonical file when no demand remains, while preserving active local playback and published feed copies. Intentional removal suppresses automatic re-creation until resumed.
+Plex, Jellyfin, and Audiobookshelf have adapter and lifecycle fixture coverage; a real deployment still needs the operator's server credentials, reachable mounts, and compatible server-library settings. Provider access depends on supported public URLs and the upstream account's entitlement. The bundled adapters guard Python network access; deployment-level egress controls are needed to constrain native helpers. A Source process is not an operating-system sandbox.
 
-Collection Stream Profiles can admit live items. A local-only live policy needs a compatible enabled Download Profile. Admission persists through the upstream live-to-archive transition; web playback can use the upstream lease while a local archive is being obtained. Podcast feed enclosures continue to require a compatible local copy.
+The inherited WireLoft test suite contains baseline failures and references to removed migration files. It is separate from the VodLoft acceptance suite and is not reported as passing. Interactive visual verification was blocked by this workspace's browser restrictions; production asset/build and HTTP checks are recorded separately.
 
-The Source manager accepts versioned wheelhouse bundles from `/config/source-bundles/<source-id>/<version>/`. It rejects undeclared wheels, verifies each digest, installs in an independent environment, checks protocol compatibility and health, then activates the newest eligible release according to the automatic update channel and pin. A previous runtime remains available for rollback. A queued acquisition freezes its Source command and profile specification, claims a database lease, and reports stages and bounded byte-transfer progress through TaskOperations. Source manifests declare constrained text, number, choice, secret and credential-file connection fields; secrets are stored as scoped encrypted references and passed only to the selected Source process. The yt-dlp Source accepts an optional Netscape `cookies.txt` file for sites requiring an account. The worker uses a temporary credential file in an operation scratch directory that the gateway removes even if the worker fails or is canceled. Trusted administrators control the mounted bundle directory; a digest in a manifest does not authenticate an untrusted publisher. An additional adapter can be registered by an operator-owned JSON file in `VODLOFT_SOURCE_REGISTRY`, for example `{"sources":{"example":{"module":"example_source.worker","package":"example-source"}}}`; it still requires a trusted installed package or verified wheelhouse.
-
-## Prototype scope and integration notes
-
-The inherited Daily Wire screens and task metadata calls use a Source-worker compatibility adapter. The inherited downloader and device authorization flow still operate through their WireLoft packages. The generic Download Profile supports declared audio/video format choices; language, subtitle, chapter and codec policy are not exposed as complete controls yet. Auth challenges are typed in the Source contract, but the initial Sources use their existing connection fields and Daily Wire device sign-in. Public-network guarding covers Python socket clients in bundled Sources; native helpers need a deployment egress policy. Upstream HLS is best-effort if signed child URLs expire during a long session; the player can start a new session.
-
-Media-server matching uses the chosen library, mapped paths and bounded scans. The three integration flows have fixture coverage but were not exercised against live Plex, Jellyfin and Audiobookshelf instances in this workspace. Plex may need a compatible library scanner and local-asset setting; inspect the connection test before exporting. Audiobookshelf uses shared-folder podcast delivery and an explicit progress pull for the administrator. RSS-pull ownership and general bidirectional multiuser progress synchronization are not part of this prototype. Automatic Source installation accepts trusted, digest-checked mounted wheelhouse bundles; it does not fetch untrusted releases from the internet. Multiuser requests, quotas and role permissions are outside this single-administrator release.
-
-## Verification
-
-`uv run pytest -q tests/unit/test_vodloft_prototype.py tests/unit/test_vodloft_architecture.py` covers identity, mixed-domain scheduling, date and newest-N filters, account scoping, playback leases and opaque HLS children, immutable RSS enclosures, live admission, shared-artifact retention, cancellation, leases, safe Collection removal, bounded nested expansion, path finalization recovery, Source registration, snapshot repair, media-server discovery/mapping, credential files, download progress and bundle rejection. The targeted suite passes 52 tests. `npm run build`, `backend-api db history` and `backend-api background-migrations history` verify the frontend and migration chains. A fresh database was upgraded to the current head.
-
-The full inherited WireLoft suite is not clean at this pinned baseline: two modules import migration files absent from the checkout; earlier baseline verification with those excluded reported 175 failures and 700 passes, including tests built for older WireLoft fields. Those failures are not represented as passing VodLoft acceptance tests.
+User guides start at [the wiki home](docs/wiki/Home.md).
