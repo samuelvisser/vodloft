@@ -700,6 +700,12 @@ def home(request: Request):
             .order_by(AcquisitionJob.updated_at.desc()).limit(10)).all()
         exports = session.scalars(select(MediaServerExport).where(MediaServerExport.state == "failed")
             .order_by(MediaServerExport.updated_at.desc()).limit(10)).all()
+        actor = principal(request)
+        exports = [export for export in exports if actor.can_use_target(export.target_id)]
+        if not actor.manages_library:
+            owned = set(session.scalars(select(LibraryRequest.job_id).where(LibraryRequest.user_key == actor.key)).all())
+            active = [job for job in active if job.id in owned]
+            failures = [job for job in failures if job.id in owned]
         return {"continue": [{**_serialize(session, session.get(MediaItem, p.item_id)),
             "seconds": p.seconds} for p in progress if session.get(MediaItem, p.item_id)],
             "recent": [_serialize(session, item) for item in recent],

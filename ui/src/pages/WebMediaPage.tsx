@@ -19,7 +19,7 @@ type Connection = {id: number; source_id: string; name: string; has_secret: bool
     settings: Record<string, string | number>; secret_fields: string[]}
 type Reference = {source_id: string; domain: string; namespace: string; upstream_id: string; url: string}
 type Preview = {kind: string; title: string; description?: string; artwork_url?: string; reference: Reference; entries: {title: string; position: number}[]; enumeration_complete: boolean}
-type Item = {id: number; title: string; description?: string; kind: string; domain: string; downloaded: boolean;
+type Item = {parent_id?: number | null; extra_type?: string | null; chapters?: {title: string; start: number; end?: number}[]; id: number; title: string; description?: string; kind: string; domain: string; downloaded: boolean;
     capabilities?: string[] | null; playback_type?: string; artwork_url?: string; entries?: Item[]; extras?: Item[];
     is_live?: boolean | null; formats?: {code: string; description?: string; audio_only: boolean; height?: number}[];
     references?: {id: number; source_id: string; connection_id: number | null; namespace: string; upstream_id: string}[]}
@@ -33,15 +33,16 @@ type RemoteItem = {id: number; kind: string; name: string; state: string; url: s
     remote_episode_id: string | null}
 type SourceHistory = {id: number; source_id: string; connection_id: number | null;
     runtime_version: string; created_at: string; metadata: {title?: string; description?: string}}
-type Profile = {id: number; name: string; domain: string; preferred_format: string; output_template: string; applicable_kinds: string[]; enabled: boolean}
+type Representation = {languages: string[]; subtitles: string[]; container: ProfileFields['container']; video_codec: ProfileFields['video_codec']; audio_codec: ProfileFields['audio_codec']; chapters: boolean; artwork: boolean; embed_metadata: boolean; language_fallback: boolean}
+type Profile = {representation: Representation; delivery_target_ids: number[]; impairment: string | null; id: number; name: string; domain: string; preferred_format: string; output_template: string; applicable_kinds: string[]; enabled: boolean}
 type DownloadPolicy = {id: number; name: string; local_profile_ids: number[]; backfill: string; newest_count: number;
     retain_newest: number | null; retain_days: number | null;
-    source_reference_id: number | null; enabled: boolean}
+    source_reference_id: number | null; enabled: boolean; refresh_minutes: number; published_after: string | null; published_before: string | null; title_contains: string | null}
 type StreamProfile = {id: number; name: string; format: string; enabled: boolean;
     include_live: boolean; local_only: boolean;
     published_after?: string | null; published_before?: string | null; title_contains?: string | null}
-type Target = {id: number; name: string; kind: string; base_url: string; library_id: string; enabled: boolean}
-type RuntimeState = {active: Record<string, string>; installed: Record<string, string[]>;
+type Target = {local_prefix: string; server_prefix: string; id: number; name: string; kind: string; base_url: string; library_id: string; enabled: boolean}
+type RuntimeState = {history: {source_id: string; action: string; at: string; state?: string; message?: string; version?: string}[]; active: Record<string, string>; installed: Record<string, string[]>;
     policy: Record<string, {automatic: boolean; pinned_version: string | null; channel: string}>}
 type Catalogue = {source_id: string; items: {hostname: string; display_name: string}[]; exhaustive: boolean}
 type SearchPage = {items: {reference: Reference; kind: string; title: string; description?: string}[];
@@ -50,7 +51,7 @@ const SearchForm = z.object({query: z.string().min(1).max(200), source_id: z.str
     connection_id: z.string()})
 type SearchFields = z.infer<typeof SearchForm>
 const ProfileFormSchema = z.object({
-    name: z.string().min(1),
+    name: z.string().min(1).default(''),
     preferred_format: z.enum(['format_720p', 'format_1080p', 'format_4k', 'format_audio_only']),
     output_template: z.string().min(16),
     languages: z.string().default('').refine(value => value.split(',').map(code => code.trim()).filter(Boolean)
@@ -62,10 +63,14 @@ const ProfileFormSchema = z.object({
     audio_codec: z.enum(['source', 'aac', 'mp3', 'opus']).default('source'),
     chapters: z.boolean().default(true), artwork: z.boolean().default(false),
     embed_metadata: z.boolean().default(true), language_fallback: z.boolean().default(true),
+    applicable_kinds: z.array(z.enum(['video', 'movie', 'movie_extra'])).min(1).default(['video', 'movie', 'movie_extra']), enabled: z.boolean().default(true),
 })
 type ProfileFields = z.input<typeof ProfileFormSchema>
 
 const base = () => `${(window as any).appConfig?.API_URL || '/api'}/vodloft`
+function formRequest(path: string, method: string, values: unknown) {
+    return fetch(`${base()}${path}`, {method, credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(values)})
+}
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
     const response = await fetch(`${base()}${path}`, {credentials: 'include', ...options,
         headers: {'Content-Type': 'application/json', ...options?.headers}})
@@ -102,6 +107,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
     const [exports, setExports] = useState<Export[]>([])
     const [remoteItems, setRemoteItems] = useState<RemoteItem[]>([])
     const [sourceHistory, setSourceHistory] = useState<SourceHistory[] | null>(null)
+    const [managedProfiles, setManagedProfiles] = useState<Profile[]>([])
     const [profiles, setProfiles] = useState<Profile[]>([])
     const [downloadPolicies, setDownloadPolicies] = useState<DownloadPolicy[]>([])
     const [streamProfiles, setStreamProfiles] = useState<StreamProfile[]>([])
@@ -122,6 +128,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
     useEffect(() => {
         void api<Source[]>('/sources').then(setSources).catch(e => setError(String(e)))
         void api<Connection[]>('/sources/connections').then(setConnections).catch(e => setError(String(e)))
+        void api<Profile[]>('/profiles').then(setManagedProfiles).catch(e => setError(String(e)))
         void api<Target[]>('/integrations').then(setTargets).catch(e => setError(String(e)))
         void api<Me>('/me').then(actor => {
             setMe(actor)
@@ -365,7 +372,8 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                             pinned_version: runtimes?.policy[source.source_id]?.pinned_version ?? null,
                             channel: event.target.value})})
                         .then(() => api<RuntimeState>('/sources/runtimes').then(setRuntimes)).catch(e => setError(String(e)))}>
-                    <option value="stable">Stable</option><option value="beta">Beta</option></select></label>
+                    <option value="stable">Stable</option><option value="beta">Beta</option></select></label>{' '}
+                <label>Pin version <select value={runtimes?.policy[source.source_id]?.pinned_version ?? ''} onChange={event => void api(`/sources/${encodeURIComponent(source.source_id)}/policy`, {method: 'PUT', body: JSON.stringify({automatic: runtimes?.policy[source.source_id]?.automatic ?? true, channel: runtimes?.policy[source.source_id]?.channel ?? 'stable', pinned_version: event.target.value || null})}).then(() => api<RuntimeState>('/sources/runtimes').then(setRuntimes)).catch(e => setError(String(e)))}><option value="">Follow channel</option>{Array.from(new Set([runtimes?.active[source.source_id], ...(runtimes?.installed[source.source_id] ?? [])])).filter(Boolean).map(version => <option key={version} value={version}>{version}</option>)}</select></label>
             </p>)}
             <button className="btn" type="button" onClick={() => void api<unknown>('/sources/runtimes/check', {method: 'POST'})
                 .then(() => api<RuntimeState>('/sources/runtimes').then(setRuntimes)).catch(e => setError(String(e)))}>Check Source bundles</button>
@@ -382,6 +390,19 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                 <option key={`${c.source_id}:${domain.hostname}`} value={domain.hostname}>{domain.display_name}</option>))}</datalist>
             {prepareDomain.trim() && <DomainProfileForm key={prepareDomain.trim()} domain={prepareDomain.trim()}
                 targets={targets} onCreated={profile => setProfiles(current => [...current, profile])} />}
+            <h3>Local Media Profiles</h3>
+            {managedProfiles.map(profile => <div key={profile.id} style={{marginBottom: 16}}>
+                <p>{profile.name} · {profile.domain} · {profile.enabled ? 'Enabled' : 'Disabled'}
+                    {profile.impairment && <span role="alert"> · {profile.impairment}</span>}</p>
+                <DomainProfileForm initial={profile} domain={profile.domain} targets={targets}
+                    onCreated={() => void api<Profile[]>('/profiles').then(setManagedProfiles)}/>{' '}
+                <button className="btn" type="button" onClick={() => {
+                    if (!window.confirm('Delete this profile? Shared files and download history are retained.')) return
+                    void api(`/profiles/${profile.id}`, {method: 'DELETE'}).then(() => api<Profile[]>('/profiles').then(setManagedProfiles)).catch(e => setError(String(e)))
+                }}>Delete profile</button>
+            </div>)}
+            <details><summary>Source update history</summary>{runtimes?.history?.slice().reverse().map((entry, index) =>
+                <p key={index}>{new Date(entry.at).toLocaleString()} · {entry.source_id} · {entry.action} {entry.version} {entry.state} {entry.message}</p>)}</details>
             <h3>Source connections</h3>
             {connections.map(connection => <div key={connection.id} style={{marginBottom: 12}}>{connection.name} · {connection.source_id}
                 {connection.has_secret ? ' · credential stored' : ' · anonymous'}
@@ -393,6 +414,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                     .then(updated => setConnections(current => current.map(item =>
                         item.id === updated.id ? updated : item))).catch(e => setError(String(e)))}>
                     {connection.enabled ? 'Disable' : 'Enable'}</button>
+                <ConnectionForm initial={connection} sources={sources} onCreated={updated => setConnections(current => current.map(item => item.id === updated.id ? updated : item))}/>{' '}
                 {connection.enabled && sources.find(source => source.source_id === connection.source_id)?.capabilities.includes('authentication') &&
                     <ConnectionAuthentication connection={connection} onUpdated={() => {
                         void api<Connection[]>('/sources/connections').then(setConnections)
@@ -400,9 +422,12 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
             </div>)}
             <ConnectionForm sources={sources} onCreated={connection => setConnections(current => [...current, connection])}/>
             <h3>Media servers</h3>
-            {targets.map(target => <p key={target.id}>{target.name} · {target.kind} · library {target.library_id}{' '}
+            {targets.map(target => <div key={target.id}>{target.name} · {target.kind} · library {target.library_id}{' '}
                 <button type="button" className="btn" onClick={() => void api<unknown>(`/integrations/${target.id}/test`, {method: 'POST'})
-                    .then(result => setRunResult(JSON.stringify(result))).catch(e => setError(String(e)))}>Test connection</button></p>)}
+                    .then(result => setRunResult(JSON.stringify(result))).catch(e => setError(String(e)))}>Test connection</button>{' '}
+                <TargetForm initial={target} onCreated={updated => setTargets(current => current.map(value => value.id === updated.id ? updated : value))}/>
+                {!target.enabled && ' · disabled'}
+            </div>)}
             <TargetForm onCreated={target => setTargets(current => [...current, target])}/>
             <h3>Recent downloads</h3>
             {jobs.length === 0 && <p>No download jobs yet.</p>}
@@ -455,11 +480,11 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                     </option>)}
                 </select>
             </label>}
-            <MetadataForm key={selected.id} item={selected} onSaved={updated => {
+            {me?.manages_library && <MetadataForm key={selected.id} item={selected} items={items} onSaved={updated => {
                 setSelected(previous => previous?.id === updated.id ? {...previous, ...updated} : previous)
                 void refresh()
-            }}/>
-            <div style={{margin: '12px 0'}}>
+            }}/>}
+            {me?.role === 'admin' && <div style={{margin: '12px 0'}}>
                 <button className="btn" type="button" onClick={() => void api<SourceHistory[]>(
                     `/library/${selected.id}/source-history`).then(setSourceHistory).catch(e => setError(String(e)))}>
                     Source history</button>
@@ -476,11 +501,11 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                         }}>Restore</button>
                     </p>)}
                 </div>}
-            </div>
-            {selected.kind === 'collection' && <div style={{display: 'flex', gap: 10, marginBottom: 16}}>
-                <button className="btn" type="button" disabled={busy || !referenceId}
+            </div>}
+            {selected.kind === 'collection' && me?.manages_library && <div style={{display: 'flex', gap: 10, marginBottom: 16}}>
+                <button className="btn" type="button" disabled={me?.role !== 'admin' || busy || !referenceId}
                     onClick={() => void refreshCollection(selected.id)}>Refresh collection</button>
-                <button className="btn" type="button" disabled={busy || !referenceId}
+                <button className="btn" type="button" disabled={me?.role !== 'admin' || busy || !referenceId}
                     onClick={() => void refreshCollection(selected.id, 2)}>Expand nested collections (2 levels, 20 max)</button>
                 <button className="btn" type="button" disabled={busy} onClick={() => {
                     if (!window.confirm('Remove this collection and its feeds? Shared local media will remain available.')) return
@@ -490,19 +515,25 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
             </div>}
             {selected.kind === 'collection' && <section>
                 <h3>Collection downloads</h3>
-                {downloadPolicies.map(policy => <p key={policy.id}>{policy.name} · {policy.backfill}
+                {downloadPolicies.map(policy => <div key={policy.id}>{policy.name} · {policy.backfill}
                     {policy.retain_newest && ` · keep newest ${policy.retain_newest}`}
                     {policy.retain_days && ` · ${policy.retain_days} days`}{' '}
-                    <button type="button" className="btn" onClick={() => void runDownloadPolicy(policy.id)}>Run now</button></p>)}
-                <DownloadPolicyForm collectionId={selected.id} profiles={profiles}
+                    {me?.role === 'admin' && <><button type="button" className="btn" onClick={() => void runDownloadPolicy(policy.id)}>Run now</button>{' '}
+                    <DownloadPolicyForm initial={policy} collectionId={selected.id} profiles={profiles} sourceReferenceId={referenceId} references={selected.references ?? []} onCreated={updated => setDownloadPolicies(current => current.map(value => value.id === updated.id ? updated : value))}/>{' '}
+                    <button type="button" className="btn" onClick={() => void api(`/download-profiles/${policy.id}`, {method: 'DELETE'}).then(() => setDownloadPolicies(current => current.filter(value => value.id !== policy.id))).catch(e => setError(String(e)))}>Delete</button></>}</div>)}
+                {me?.role === 'admin' && <DownloadPolicyForm collectionId={selected.id} profiles={profiles}
                     sourceReferenceId={referenceId} references={selected.references ?? []}
-                    onCreated={policy => setDownloadPolicies(previous => [...previous, policy])}/>
+                    onCreated={policy => setDownloadPolicies(previous => [...previous, policy])}/>}
                 <h3>Collection feeds</h3>
-                {streamProfiles.map(profile => <p key={profile.id}>{profile.name} · {profile.format}
+                {streamProfiles.map(profile => <div key={profile.id}>{profile.name} · {profile.format}
                     {profile.include_live && ' · live admission'}{' '}
-                    <button type="button" className="btn" onClick={() => void createStreamFeed(profile.id)}>Get feed</button></p>)}
-                <StreamProfileForm collectionId={selected.id}
-                    onCreated={profile => setStreamProfiles(previous => [...previous, profile])}/>
+                    {me?.can_subscribe && <><button type="button" className="btn" onClick={() => void createStreamFeed(profile.id)}>Get feed</button>{' '}
+                    <button type="button" className="btn" onClick={() => void api<{url: string}>(`/stream-profiles/${profile.id}/feed/rotate`, {method: 'POST'}).then(result => {setFeedUrl(result.url); setRunResult('Old feed URL revoked.')}).catch(e => setError(String(e)))}>Rotate URL</button>{' '}
+                    <button type="button" className="btn" onClick={() => void api(`/stream-profiles/${profile.id}/feed`, {method: 'DELETE'}).then(() => {setFeedUrl(null); setRunResult('Feed revoked.')}).catch(e => setError(String(e)))}>Revoke my feed</button></>}{' '}
+                    {me?.role === 'admin' && <><StreamProfileForm initial={profile} collectionId={selected.id} onCreated={updated => setStreamProfiles(current => current.map(value => value.id === updated.id ? updated : value))}/>{' '}
+                    <button type="button" className="btn" onClick={() => void api(`/stream-profiles/${profile.id}`, {method: 'DELETE'}).then(() => setStreamProfiles(current => current.filter(value => value.id !== profile.id))).catch(e => setError(String(e)))}>Delete profile</button></>}</div>)}
+                {me?.role === 'admin' && <StreamProfileForm collectionId={selected.id}
+                    onCreated={profile => setStreamProfiles(previous => [...previous, profile])}/>}
                 {runResult && <p role="status">{runResult}</p>}
             </section>}
             {feedUrl && <p><a href={feedUrl} target="_blank" rel="noreferrer">{feedUrl}</a></p>}
@@ -516,7 +547,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                                     {method: 'POST'}).then(() => setRunResult('Audiobookshelf progress imported.'))
                                     .catch(e => setError(String(e)))}>Import progress</button>}</p>)}
                 </div>}
-                <button className="btn" type="button" disabled={busy || !referenceId}
+                <button className="btn" type="button" disabled={me?.role !== 'admin' || busy || !referenceId}
                     onClick={() => void refreshDetails(selected.id)}>Refresh details</button>
                 <div style={{marginBottom: 16}}>
                     <label>Local Media Profile{' '}
@@ -532,29 +563,30 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                     </label>
                     {outputPreview && <p>Output: <code>{outputPreview}</code></p>}
                 </div>
-                <DomainProfileForm domain={selected.domain} formats={selected.formats} targets={targets} onCreated={profile => {
+                {me?.role === 'admin' && <DomainProfileForm domain={selected.domain} formats={selected.formats} targets={targets} onCreated={profile => {
                     setProfiles(previous => [...previous, profile]); setProfileId(profile.id)
                     void showOutputPreview(profile.id, selected.id, profile)
-                }}/>
+                }}/> }
                 <button className="btn btn-primary" type="button" disabled={!profileId || !referenceId ||
                     selected.capabilities !== null && selected.capabilities !== undefined && !selected.capabilities.includes('download') ||
                     !!job && !['failed', 'available'].includes(job.state)}
-                        onClick={() => void download(selected.id)}>{selected.downloaded ? 'Download again' : 'Download'}</button>
+                        onClick={() => void download(selected.id)}>{me?.role !== 'admin' ? 'Request download' : selected.downloaded ? 'Download again' : 'Download'}</button>
+                {runResult && <p role="status">{runResult}</p>}
                 {selected.capabilities && !selected.capabilities.includes('download') &&
                     <p>This Source does not advertise a download for this item.</p>}
                 {job && <p role="status">Download: {job.state}{job.progress !== undefined ? ` · ${job.progress}%` : ''}
                     {job.error_code ? ` · ${job.error_code.replace(/_/g, ' ')}` : ''}
                     {job.failed_stage ? ` during ${job.failed_stage}` : ''}
                     {job.error ? ` · ${job.error}` : ''}</p>}
-                {job && ['queued', 'resolving', 'downloading', 'verifying'].includes(job.state) &&
+                {me?.role === 'admin' && job && ['queued', 'resolving', 'downloading', 'processing', 'verifying'].includes(job.state) &&
                     <button className="btn" type="button" disabled={job.cancel_requested}
                         onClick={() => void api<Job>(`/jobs/${job.id}/cancel`, {method: 'POST'})
                             .then(() => setJob(previous => previous ? {...previous, cancel_requested: true} : null))
                             .catch(e => setError(String(e)))}>Cancel download</button>}
-                {job && ['failed', 'canceled'].includes(job.state) &&
+                {me?.role === 'admin' && job && ['failed', 'canceled'].includes(job.state) &&
                     <button className="btn" type="button" onClick={() => void api<Job>(`/jobs/${job.id}/retry`, {method: 'POST'})
                         .then(next => setJob({...job, ...next})).catch(e => setError(String(e)))}>Retry download</button>}
-                {selected.downloaded && profileId && <button className="btn" type="button" onClick={() => {
+                {me?.role === 'admin' && selected.downloaded && profileId && <button className="btn" type="button" onClick={() => {
                     if (!window.confirm('Remove this local representation and pause automatic downloads for it?')) return
                     void api(`/library/${selected.id}/local/${profileId}`, {method: 'DELETE'})
                         .then(() => api<Item>(`/library/${selected.id}`).then(setSelected))
@@ -632,18 +664,19 @@ function LocalPlayer({item, referenceId}: {item: Item; referenceId: number | nul
     </div>
 }
 
-function DomainProfileForm({domain, formats, targets, onCreated}: {domain: string; formats?: Item['formats'];
-    targets: Target[]; onCreated: (profile: Profile) => void}) {
+function DomainProfileForm({domain, formats, targets, initial, onCreated}: {domain: string; formats?: Item['formats'];
+    targets: Target[]; initial?: Profile; onCreated: (profile: Profile) => void}) {
     const [expanded, setExpanded] = useState(false)
-    const [error, setError] = useState<string | null>(null)
-    const [deliveryIds, setDeliveryIds] = useState<number[]>([])
+    const [deliveryIds, setDeliveryIds] = useState<number[]>(initial?.delivery_target_ids ?? [])
     const form = useForm<ProfileFields, unknown, z.output<typeof ProfileFormSchema>>({
         resolver: zodResolver(ProfileFormSchema),
         defaultValues: {...ProfileFormSchema.partial({name: true, output_template: true, preferred_format: true}).parse({}),
             name: `${domain} video`, preferred_format: 'format_1080p',
-            output_template: '/downloads/{{ domain }}/{{ title }} - {{ id }}.ext'},
+            output_template: '/downloads/{{ domain }}/{{ title }} - {{ id }}.ext',
+            ...(initial ? {...initial, preferred_format: initial.preferred_format as ProfileFields['preferred_format'], applicable_kinds: initial.applicable_kinds as z.output<typeof ProfileFormSchema>['applicable_kinds'], ...initial.representation,
+                languages: initial.representation.languages.join(', '), subtitles: initial.representation.subtitles.join(', ')} : {})},
     })
-    const {register, handleSubmit, formState: {errors, isSubmitting}, reset, setValue, watch} = form
+    const {register, formState: {errors, isSubmitting}, setValue, watch} = form
     const audioOnly = watch('preferred_format') === 'format_audio_only'
     useEffect(() => {
         const container = watch('container')
@@ -654,25 +687,21 @@ function DomainProfileForm({domain, formats, targets, onCreated}: {domain: strin
         if (formats?.length && !formats.some(format => format.code === 'format_1080p'))
             setValue('preferred_format', formats[0].code as ProfileFields['preferred_format'])
     }, [formats, setValue])
-    const submit = handleSubmit(async values => {
-        setError(null)
-        try {
-            const profile = await api<Profile>('/profiles', {method: 'POST',
-                body: JSON.stringify({name: values.name, preferred_format: values.preferred_format,
-                    output_template: values.output_template, domain, applicable_kinds: ['video', 'movie', 'movie_extra'],
-                    representation: {languages: values.languages.split(',').map(code => code.trim()).filter(Boolean),
-                        subtitles: audioOnly ? [] : values.subtitles.split(',').map(code => code.trim()).filter(Boolean),
-                        container: values.container, video_codec: audioOnly ? 'source' : values.video_codec,
-                        audio_codec: values.audio_codec, chapters: values.chapters, artwork: values.artwork,
-                        embed_metadata: values.embed_metadata, language_fallback: values.language_fallback},
-                    delivery_target_ids: deliveryIds})})
-            onCreated(profile); setExpanded(false); reset()
-        } catch (e) { setError(String(e)) }
-    })
+    const submit = buildServerAwareSubmit(form, (values: z.output<typeof ProfileFormSchema>) => formRequest(
+        initial ? `/profiles/${initial.id}` : '/profiles', initial ? 'PUT' : 'POST', {
+            name: values.name, domain, preferred_format: values.preferred_format, output_template: values.output_template,
+            applicable_kinds: values.applicable_kinds, enabled: values.enabled, delivery_target_ids: deliveryIds,
+            representation: {languages: values.languages.split(',').map(code => code.trim()).filter(Boolean),
+                subtitles: audioOnly ? [] : values.subtitles.split(',').map(code => code.trim()).filter(Boolean),
+                container: values.container, video_codec: audioOnly ? 'source' : values.video_codec, audio_codec: values.audio_codec,
+                chapters: values.chapters, artwork: values.artwork, embed_metadata: values.embed_metadata, language_fallback: values.language_fallback},
+        }), {successStatuses: [200, 201], onSuccess: result => {onCreated(result as Profile); setExpanded(false)}})
     if (!expanded) return <button type="button" className="btn" style={{marginRight: 12}}
-                                  onClick={() => setExpanded(true)}>Create Local Media Profile</button>
+                                  onClick={() => setExpanded(true)}>{initial ? 'Edit profile' : 'Create Local Media Profile'}</button>
     return <form onSubmit={submit} style={{display: 'grid', maxWidth: 640, gap: 10, marginBottom: 16}}>
-        <h3>New profile for {domain}</h3>
+        <h3>{initial ? 'Edit profile' : 'New profile'} for {domain}</h3>
+        <label><input type="checkbox" {...register('enabled')}/> Enabled</label>
+        <fieldset><legend>Media types</legend>{['video', 'movie', 'movie_extra'].map(kind => <label key={kind} style={{marginRight: 12}}><input type="checkbox" value={kind} {...register('applicable_kinds')}/> {kind.replace('_', ' ')}</label>)}</fieldset>
         <label>Name <input {...register('name')} />{errors.name && <span role="alert">{errors.name.message}</span>}</label>
         <label>Preferred format <select {...register('preferred_format')}>
             {(formats?.length ? formats : [
@@ -705,14 +734,15 @@ function DomainProfileForm({domain, formats, targets, onCreated}: {domain: strin
             <label key={target.id} style={{display: 'block'}}><input type="checkbox" checked={deliveryIds.includes(target.id)}
                 onChange={event => setDeliveryIds(current => event.target.checked ? [...current, target.id] :
                     current.filter(id => id !== target.id))} /> {target.name} ({target.kind})</label>)}</fieldset>}
-        {error && <p role="alert">{error}</p>}
+        {errors.root && <p role="alert">{errors.root.message}</p>}
         <div><button type="submit" className="btn btn-primary" disabled={isSubmitting}>Save profile</button>{' '}
             <button type="button" className="btn" onClick={() => setExpanded(false)}>Cancel</button></div>
     </form>
 }
 
 const DownloadPolicySchema = z.object({
-    name: z.string().min(1),
+    enabled: z.boolean().default(true),
+    name: z.string().min(1).default('New episodes'),
     backfill: z.enum(['newest', 'all', 'date_range', 'metadata_only']).default('newest'),
     newest_count: z.coerce.number().int().min(1).max(1000).default(10),
     refresh_minutes: z.coerce.number().int().min(15).max(10080).default(60),
@@ -722,36 +752,31 @@ const DownloadPolicySchema = z.object({
 })
 type PolicyFields = z.input<typeof DownloadPolicySchema>
 
-function DownloadPolicyForm({collectionId, profiles, sourceReferenceId, references, onCreated}: {
+function DownloadPolicyForm({collectionId, profiles, sourceReferenceId, references, initial, onCreated}: {
     collectionId: number; profiles: Profile[]; sourceReferenceId: number | null;
-    references: NonNullable<Item['references']>; onCreated: (profile: DownloadPolicy) => void}) {
+    references: NonNullable<Item['references']>; initial?: DownloadPolicy; onCreated: (profile: DownloadPolicy) => void}) {
     const [expanded, setExpanded] = useState(false)
-    const [selectedIds, setSelectedIds] = useState<number[]>([])
-    const [error, setError] = useState<string | null>(null)
-    const {register, handleSubmit, formState: {errors, isSubmitting}} = useForm<PolicyFields, unknown, z.output<typeof DownloadPolicySchema>>({
+    const [selectedIds, setSelectedIds] = useState<number[]>(initial?.local_profile_ids ?? [])
+    const form = useForm<PolicyFields, unknown, z.output<typeof DownloadPolicySchema>>({
         resolver: zodResolver(DownloadPolicySchema),
-        defaultValues: {name: 'New episodes', backfill: 'newest', newest_count: 10, refresh_minutes: 60,
-            published_after: '', published_before: '', title_contains: '',
-            retain_newest: '', retain_days: ''},
+        defaultValues: {...DownloadPolicySchema.partial({name: true}).parse({}), name: 'New episodes',
+            ...(initial ? {...initial, backfill: initial.backfill as z.output<typeof DownloadPolicySchema>['backfill'], published_after: initial.published_after ?? '', published_before: initial.published_before ?? '', title_contains: initial.title_contains ?? '', retain_newest: initial.retain_newest?.toString() ?? '', retain_days: initial.retain_days?.toString() ?? ''} : {})},
     })
-    if (!expanded) return <button className="btn" type="button" onClick={() => setExpanded(true)}>Create Download Profile</button>
-    return <form onSubmit={handleSubmit(async values => {
-        if (!selectedIds.length) { setError('Select at least one Local Media Profile.'); return }
-        if (!sourceReferenceId && references.length > 1) { setError('Select a Source account above.'); return }
-        setError(null)
-        try {
-            const created = await api<DownloadPolicy>(`/library/${collectionId}/download-profiles`, {
-                method: 'POST', body: JSON.stringify({...values,
-                    published_after: values.published_after || null,
-                    published_before: values.published_before || null,
-                    title_contains: values.title_contains || null,
-                    retain_newest: values.retain_newest ? Number(values.retain_newest) : null,
-                    retain_days: values.retain_days ? Number(values.retain_days) : null,
-                    local_profile_ids: selectedIds, source_reference_id: sourceReferenceId,
-                    enabled: true})})
-            onCreated(created); setExpanded(false)
-        } catch (e) { setError(String(e)) }
-    })} style={{display: 'grid', gap: 10, maxWidth: 620, margin: '12px 0'}}>
+    const {register, formState: {errors, isSubmitting}} = form
+    const submit = buildServerAwareSubmit(form, (values: z.output<typeof DownloadPolicySchema>) => {
+        if (!selectedIds.length) throw new Error('Select at least one Local Media Profile.')
+        const reference = initial?.source_reference_id ?? sourceReferenceId
+        if (!reference && references.length > 1) throw new Error('Select a Source account above.')
+        return formRequest(initial ? `/download-profiles/${initial.id}` : `/library/${collectionId}/download-profiles`, initial ? 'PUT' : 'POST', {
+            ...values, published_after: values.published_after || null, published_before: values.published_before || null,
+            title_contains: values.title_contains || null, retain_newest: values.retain_newest ? Number(values.retain_newest) : null,
+            retain_days: values.retain_days ? Number(values.retain_days) : null, local_profile_ids: selectedIds,
+            source_reference_id: reference, enabled: values.enabled,
+        })
+    }, {successStatuses: [200, 201], onSuccess: result => {onCreated(result as DownloadPolicy); setExpanded(false)}})
+    if (!expanded) return <button className="btn" type="button" onClick={() => setExpanded(true)}>{initial ? 'Edit Download Profile' : 'Create Download Profile'}</button>
+    return <form onSubmit={submit} style={{display: 'grid', gap: 10, maxWidth: 620, margin: '12px 0'}}>
+        <label><input type="checkbox" {...register('enabled')}/> Enabled</label>
         <label>Name <input {...register('name')} />{errors.name && <span role="alert">{errors.name.message}</span>}</label>
         <label>Backfill <select {...register('backfill')}><option value="newest">Newest N</option>
             <option value="all">All imported members</option><option value="date_range">Date range</option>
@@ -768,13 +793,13 @@ function DownloadPolicyForm({collectionId, profiles, sourceReferenceId, referenc
                 onChange={event => setSelectedIds(current => event.target.checked ? [...current, profile.id] :
                     current.filter(id => id !== profile.id))} /> {profile.name} · {profile.domain} · {profile.preferred_format}</label>)}</fieldset>
         {profiles.length === 0 && <p>Create a Local Media Profile on a playable member first.</p>}
-        {error && <p role="alert">{error}</p>}
+        {errors.root && <p role="alert">{errors.root.message}</p>}
         <div><button type="submit" className="btn btn-primary" disabled={isSubmitting}>Save Download Profile</button>{' '}
             <button type="button" className="btn" onClick={() => setExpanded(false)}>Cancel</button></div>
     </form>
 }
 
-const StreamProfileSchema = z.object({name: z.string().min(1), format: z.enum(['audio', 'video']).default('audio'),
+const StreamProfileSchema = z.object({enabled: z.boolean().default(true), name: z.string().min(1).default('Podcast feed'), format: z.enum(['audio', 'video']).default('audio'),
     include_live: z.boolean().default(false), local_only: z.boolean().default(true),
     published_after: z.string().default(''), published_before: z.string().default(''),
     title_contains: z.string().max(200).default('')}).refine(
@@ -782,24 +807,21 @@ const StreamProfileSchema = z.object({name: z.string().min(1), format: z.enum(['
         {path: ['published_before'], message: 'End date must follow start date'})
 type StreamFields = z.input<typeof StreamProfileSchema>
 
-function StreamProfileForm({collectionId, onCreated}: {collectionId: number; onCreated: (profile: StreamProfile) => void}) {
+function StreamProfileForm({collectionId, initial, onCreated}: {collectionId: number; initial?: StreamProfile; onCreated: (profile: StreamProfile) => void}) {
     const [expanded, setExpanded] = useState(false)
-    const [error, setError] = useState<string | null>(null)
-    const {register, handleSubmit, formState: {errors, isSubmitting}} = useForm<StreamFields, unknown, z.output<typeof StreamProfileSchema>>({
-        resolver: zodResolver(StreamProfileSchema), defaultValues: {name: 'Podcast feed', format: 'audio',
-            published_after: '', published_before: '', title_contains: '', include_live: false, local_only: true},
+    const form = useForm<StreamFields, unknown, z.output<typeof StreamProfileSchema>>({
+        resolver: zodResolver(StreamProfileSchema), defaultValues: {...StreamProfileSchema.partial({name: true}).parse({}), name: 'Podcast feed',
+            ...(initial ? {...initial, format: initial.format as 'audio' | 'video', published_after: initial.published_after ?? '', published_before: initial.published_before ?? '', title_contains: initial.title_contains ?? ''} : {})},
     })
-    if (!expanded) return <button className="btn" type="button" onClick={() => setExpanded(true)}>Create Stream Profile</button>
-    return <form onSubmit={handleSubmit(async values => {
-        setError(null)
-        try {
-            onCreated(await api<StreamProfile>(`/library/${collectionId}/stream-profiles`, {method: 'POST',
-                body: JSON.stringify({...values, published_after: values.published_after || null,
-                    published_before: values.published_before || null,
-                    title_contains: values.title_contains || null, enabled: true})}))
-            setExpanded(false)
-        } catch (e) { setError(String(e)) }
-    })} style={{display: 'grid', gap: 10, maxWidth: 500, margin: '12px 0'}}>
+    const {register, formState: {errors, isSubmitting}} = form
+    const submit = buildServerAwareSubmit(form, (values: z.output<typeof StreamProfileSchema>) => formRequest(
+        initial ? `/stream-profiles/${initial.id}` : `/library/${collectionId}/stream-profiles`, initial ? 'PUT' : 'POST', {
+            ...values, published_after: values.published_after || null, published_before: values.published_before || null,
+            title_contains: values.title_contains || null,
+        }), {successStatuses: [200, 201], onSuccess: result => {onCreated(result as StreamProfile); setExpanded(false)}})
+    if (!expanded) return <button className="btn" type="button" onClick={() => setExpanded(true)}>{initial ? 'Edit Stream Profile' : 'Create Stream Profile'}</button>
+    return <form onSubmit={submit} style={{display: 'grid', gap: 10, maxWidth: 500, margin: '12px 0'}}>
+        <label><input type="checkbox" {...register('enabled')}/> Enabled</label>
         <label>Name <input {...register('name')} />{errors.name && <span role="alert">{errors.name.message}</span>}</label>
         <label>Rendition <select {...register('format')}><option value="audio">Podcast audio</option>
             <option value="video">Video feed</option></select></label>
@@ -810,7 +832,7 @@ function StreamProfileForm({collectionId, onCreated}: {collectionId: number; onC
         <label><input type="checkbox" {...register('include_live')} /> Include live items</label>
         <label><input type="checkbox" {...register('local_only')} /> Require an enabled Download Profile before admitting live items</label>
         <p>Podcast feed enclosures appear when a compatible local file is ready. Admitted live items can play upstream in the web player while an archive downloads.</p>
-        {error && <p role="alert">{error}</p>}
+        {errors.root && <p role="alert">{errors.root.message}</p>}
         <div><button type="submit" className="btn btn-primary" disabled={isSubmitting}>Save Stream Profile</button>{' '}
             <button type="button" className="btn" onClick={() => setExpanded(false)}>Cancel</button></div>
     </form>
@@ -818,27 +840,27 @@ function StreamProfileForm({collectionId, onCreated}: {collectionId: number; onC
 
 const TargetSchema = z.object({
     kind: z.enum(['jellyfin', 'plex', 'audiobookshelf']).default('jellyfin'),
-    name: z.string().min(1), base_url: z.url(), library_id: z.string().min(1),
-    local_prefix: z.string().startsWith('/'), server_prefix: z.string().startsWith('/'), api_key: z.string().min(1),
+    name: z.string().min(1).default(''), base_url: z.url().default(''), library_id: z.string().min(1).default(''),
+    local_prefix: z.string().startsWith('/').default('/downloads'), server_prefix: z.string().startsWith('/').default('/media'), api_key: z.string().default(''), enabled: z.boolean().default(true),
 })
 type TargetFields = z.input<typeof TargetSchema>
 
-function TargetForm({onCreated}: {onCreated: (target: Target) => void}) {
+function TargetForm({initial, onCreated}: {initial?: Target; onCreated: (target: Target) => void}) {
     const [expanded, setExpanded] = useState(false)
-    const [error, setError] = useState<string | null>(null)
-    const {register, handleSubmit, formState: {errors, isSubmitting}, reset} = useForm<TargetFields, unknown, z.output<typeof TargetSchema>>({
-        resolver: zodResolver(TargetSchema), defaultValues: {kind: 'jellyfin', name: '', base_url: '',
-            library_id: '', local_prefix: '/downloads', server_prefix: '/media', api_key: ''},
+    const form = useForm<TargetFields, unknown, z.output<typeof TargetSchema>>({
+        resolver: zodResolver(TargetSchema), defaultValues: {...TargetSchema.parse({}),
+            ...(initial ? {...initial, kind: initial.kind as z.output<typeof TargetSchema>['kind']} : {})},
     })
-    if (!expanded) return <button type="button" className="btn" onClick={() => setExpanded(true)}>Connect media server</button>
-    return <form onSubmit={handleSubmit(async values => {
-        setError(null)
-        try {
-            onCreated(await api<Target>('/integrations', {method: 'POST',
-                body: JSON.stringify({...values, enabled: true})}))
-            reset(); setExpanded(false)
-        } catch (e) { setError(String(e)) }
-    })} style={{display: 'grid', gap: 10, maxWidth: 600}}>
+    const {register, formState: {errors, isSubmitting}} = form
+    const submit = buildServerAwareSubmit(form, (values: z.output<typeof TargetSchema>) => {
+        if (!initial && !values.api_key) throw new Error('An API token is required for a new connection.')
+        return formRequest(initial ? `/integrations/${initial.id}` : '/integrations', initial ? 'PUT' : 'POST', {
+            ...values, api_key: values.api_key || undefined,
+        })
+    }, {successStatuses: [200, 201], onSuccess: result => {onCreated(result as Target); setExpanded(false)}})
+    if (!expanded) return <button type="button" className="btn" onClick={() => setExpanded(true)}>{initial ? 'Edit connection' : 'Connect media server'}</button>
+    return <form onSubmit={submit} style={{display: 'grid', gap: 10, maxWidth: 600}}>
+        <label><input type="checkbox" {...register('enabled')}/> Enabled</label>
         <label>Server <select {...register('kind')}><option value="jellyfin">Jellyfin</option>
             <option value="plex">Plex</option><option value="audiobookshelf">Audiobookshelf podcast library</option></select></label>
         <label>Name <input {...register('name')} />{errors.name && <span role="alert">{errors.name.message}</span>}</label>
@@ -847,14 +869,14 @@ function TargetForm({onCreated}: {onCreated: (target: Target) => void}) {
         <label>Library ID <input {...register('library_id')} /></label>
         <label>VodLoft folder <input {...register('local_prefix')} /></label>
         <label>Server's view of that folder <input {...register('server_prefix')} /></label>
-        <label>API token <input type="password" autoComplete="off" {...register('api_key')} /></label>
-        {error && <p role="alert">{error}</p>}
+        <label>API token {initial && '(leave blank to keep the stored token)'} <input type="password" autoComplete="off" {...register('api_key')} /></label>
+        {errors.root && <p role="alert">{errors.root.message}</p>}
         <div><button className="btn btn-primary" disabled={isSubmitting}>Save connection</button>{' '}
             <button type="button" className="btn" onClick={() => setExpanded(false)}>Cancel</button></div>
     </form>
 }
 
-const ConnectionSchema = z.object({source_id: z.string().min(1), name: z.string().min(1),
+const ConnectionSchema = z.object({source_id: z.string().min(1).default(''), name: z.string().min(1).default(''), enabled: z.boolean().default(true),
     configuration: z.record(z.string(), z.string()).default({})})
 type ConnectionFields = z.input<typeof ConnectionSchema>
 
@@ -896,28 +918,29 @@ function RequestsView({me, items, onOpen}: {me: Me; items: Item[]; onOpen: (id: 
 
 type LocalAccount = {key: string; username: string; role: 'member' | 'manager'; enabled: boolean;
     can_subscribe: boolean; auto_approve: boolean; request_quota: number; connection_ids: number[]; target_ids: number[]}
-const AccountSchema = z.object({username: z.string().regex(/^[a-z0-9][a-z0-9_.-]{0,79}$/),
-    password: z.string().min(7), role: z.enum(['member', 'manager']).default('member'),
+const AccountSchema = z.object({username: z.string().regex(/^[a-z0-9][a-z0-9_.-]{0,79}$/).default(''),
+    password: z.string().default('').refine(value => !value || value.length >= 7, 'Use at least seven characters'), enabled: z.boolean().default(true), role: z.enum(['member', 'manager']).default('member'),
     request_quota: z.number().int().min(1).max(10000).default(10),
     can_subscribe: z.boolean().default(true), auto_approve: z.boolean().default(false)})
 type AccountFields = z.input<typeof AccountSchema>
 
 function UsersManagement({connections, targets}: {connections: Connection[]; targets: Target[]}) {
     const [users, setUsers] = useState<LocalAccount[]>([])
+    const [editing, setEditing] = useState<LocalAccount | null>(null)
     const [expanded, setExpanded] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [connectionIds, setConnectionIds] = useState<number[]>([])
     const [targetIds, setTargetIds] = useState<number[]>([])
     const form = useForm<AccountFields, unknown, z.output<typeof AccountSchema>>({
-        resolver: zodResolver(AccountSchema), defaultValues: {...AccountSchema.partial({username: true, password: true}).parse({}), username: '', password: ''}})
+        resolver: zodResolver(AccountSchema), defaultValues: AccountSchema.parse({})})
     useEffect(() => {void api<LocalAccount[]>('/users').then(setUsers).catch(e => setError(String(e)))}, [])
     const submit = buildServerAwareSubmit(form, async (values: z.output<typeof AccountSchema>) => {
         const {password, ...settings} = values
-        return fetch(`${base()}/users`, {method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({...settings, passwordHash: await hashPasswordForAdminAuth(password),
-                connection_ids: connectionIds, target_ids: targetIds})})
-    }, {successStatuses: [201], onSuccess: async result => {
-        setUsers(current => [...current, result as LocalAccount]); setExpanded(false); form.reset()
+        if (!editing && !password) throw new Error('A password is required for a new local account.')
+        return formRequest(editing ? `/users/${editing.key}` : '/users', editing ? 'PUT' : 'POST', {...settings, passwordHash: password ? await hashPasswordForAdminAuth(password) : undefined, connection_ids: connectionIds, target_ids: targetIds})
+    }, {successStatuses: [200, 201], onSuccess: async result => {
+        const updated = result as LocalAccount
+        setUsers(current => editing ? current.map(value => value.key === updated.key ? updated : value) : [...current, updated]); setEditing(null); setExpanded(false); form.reset()
         setConnectionIds([]); setTargetIds([])
     }, fallbackField: 'username', fieldAlias: {passwordHash: 'password'}})
     return <section><h3>Local accounts</h3>
@@ -925,11 +948,13 @@ function UsersManagement({connections, targets}: {connections: Connection[]; tar
             <button type="button" className="btn" onClick={() => void api<LocalAccount>(`/users/${user.key}`,
                 {method: 'PUT', body: JSON.stringify({...user, enabled: !user.enabled})})
                 .then(updated => setUsers(current => current.map(value => value.key === updated.key ? updated : value)))
-                .catch(e => setError(String(e)))}>{user.enabled ? 'Disable account' : 'Enable account'}</button></p>)}
-        {!expanded ? <button type="button" className="btn" onClick={() => setExpanded(true)}>Add local account</button> :
+                .catch(e => setError(String(e)))}>{user.enabled ? 'Disable account' : 'Enable account'}</button>{' '}
+            <button type="button" className="btn" onClick={() => {setEditing(user); form.reset({...user, password: ''}); setConnectionIds(user.connection_ids); setTargetIds(user.target_ids); setExpanded(true)}}>Edit account</button></p>)}
+        {!expanded ? <button type="button" className="btn" onClick={() => {setEditing(null); form.reset(); setConnectionIds([]); setTargetIds([]); setExpanded(true)}}>Add local account</button> :
             <form onSubmit={submit} style={{display: 'grid', maxWidth: 560, gap: 10}}>
                 <label>Username <input {...form.register('username')} autoComplete="off"/></label>
-                <label>Password <input type="password" {...form.register('password')} autoComplete="new-password"/></label>
+                <label>Password {editing && '(leave blank to keep it)'} <input type="password" {...form.register('password')} autoComplete="new-password"/></label>
+                <label><input type="checkbox" {...form.register('enabled')}/> Enabled</label>
                 <label>Role <select {...form.register('role')}><option value="member">Member</option><option value="manager">Library manager</option></select></label>
                 <label>Open request quota <input type="number" {...form.register('request_quota', {valueAsNumber: true})} min={1} max={10000}/></label>
                 <label><input type="checkbox" {...form.register('auto_approve')}/> Automatically approve requests</label>
@@ -986,96 +1011,95 @@ function ConnectionAuthentication({connection, onUpdated}: {connection: Connecti
     </div>
 }
 
-function ConnectionForm({sources, onCreated}: {sources: Source[]; onCreated: (connection: Connection) => void}) {
+function ConnectionForm({sources, initial, onCreated}: {sources: Source[]; initial?: Connection; onCreated: (connection: Connection) => void}) {
     const [expanded, setExpanded] = useState(false)
-    const [error, setError] = useState<string | null>(null)
     const [fileSecrets, setFileSecrets] = useState<Record<string, string>>({})
+    const [removeFields, setRemoveFields] = useState<string[]>([])
     const [readingFile, setReadingFile] = useState(false)
-    const {register, handleSubmit, watch, formState: {errors, isSubmitting}, reset} = useForm<ConnectionFields, unknown, z.output<typeof ConnectionSchema>>({
-        resolver: zodResolver(ConnectionSchema),
-        shouldUnregister: true,
-        defaultValues: {source_id: '', name: '', configuration: {}},
+    const form = useForm<ConnectionFields, unknown, z.output<typeof ConnectionSchema>>({
+        resolver: zodResolver(ConnectionSchema), defaultValues: {...ConnectionSchema.parse({}),
+            ...(initial ? {source_id: initial.source_id, name: initial.name, enabled: initial.enabled,
+                configuration: Object.fromEntries(Object.entries(initial.settings).map(([key, value]) => [key, String(value)]))} : {})},
     })
+    const {register, watch, formState: {errors, isSubmitting}} = form
     const selected = sources.find(source => source.source_id === watch('source_id'))
-    useEffect(() => setFileSecrets({}), [selected?.source_id])
-    if (!expanded) return <button type="button" className="btn" onClick={() => setExpanded(true)}>Add Source connection</button>
-    return <form onSubmit={handleSubmit(async values => {
-        setError(null)
-        try {
-            const schema = sources.find(source => source.source_id === values.source_id)?.configuration_schema ?? []
-            const settings: Record<string, string | number> = {}
-            const secrets: Record<string, string> = {}
-            for (const field of schema) {
-                const value = field.kind === 'credential_file' ? fileSecrets[field.name] ?? '' :
-                    values.configuration[field.name]?.trim() ?? ''
-                if (field.required && !value) {setError(`${field.label} is required.`); return}
-                if (!value) continue
-                if (field.kind === 'secret' || field.kind === 'credential_file') secrets[field.name] = value
-                else if (field.kind === 'number') {
-                    const number = Number(value)
-                    if (!Number.isFinite(number)) {setError(`${field.label} must be a number.`); return}
-                    settings[field.name] = number
-                } else settings[field.name] = value
-            }
-            onCreated(await api<Connection>('/sources/connections', {method: 'POST',
-                body: JSON.stringify({source_id: values.source_id, name: values.name,
-                    settings, secrets, enabled: true})}))
-            reset(); setFileSecrets({}); setExpanded(false)
-        } catch (e) { setError(String(e)) }
-    })} style={{display: 'grid', gap: 10, maxWidth: 500}}>
-        <label>Source <select {...register('source_id')}><option value="">Select Source</option>
-            {sources.map(source => <option key={source.source_id} value={source.source_id}>{source.display_name}</option>)}</select>
-            {errors.source_id && <span role="alert">{errors.source_id.message}</span>}</label>
-        <label>Connection name <input {...register('name')} />{errors.name && <span role="alert">{errors.name.message}</span>}</label>
-        {selected?.configuration_schema.map(field => <label key={field.name}>{field.label}
-            {field.kind === 'credential_file' ? <input type="file" accept=".txt,text/plain" required={field.required}
-                onChange={event => { const file = event.target.files?.[0];
+    const submit = buildServerAwareSubmit(form, (values: z.output<typeof ConnectionSchema>) => {
+        const settings: Record<string, string | number> = {}
+        const secrets: Record<string, string> = {}
+        for (const field of selected?.configuration_schema ?? []) {
+            const value = field.kind === 'credential_file' ? fileSecrets[field.name] ?? '' : values.configuration[field.name]?.trim() ?? ''
+            const kept = initial?.secret_fields.includes(field.name) && !removeFields.includes(field.name)
+            if (field.required && !value && !kept) throw new Error(`${field.label} is required.`)
+            if (!value) continue
+            if (field.kind === 'secret' || field.kind === 'credential_file') secrets[field.name] = value
+            else if (field.kind === 'number') {
+                const number = Number(value)
+                if (!Number.isFinite(number)) throw new Error(`${field.label} must be a number.`)
+                settings[field.name] = number
+            } else settings[field.name] = value
+        }
+        return formRequest(initial ? `/sources/connections/${initial.id}` : '/sources/connections', initial ? 'PUT' : 'POST', {
+            source_id: values.source_id, name: values.name, enabled: values.enabled, settings, secrets,
+            remove_secret_fields: removeFields,
+        })
+    }, {successStatuses: [200, 201], onSuccess: result => {onCreated(result as Connection); setExpanded(false); setFileSecrets({}); setRemoveFields([])}, fieldAlias: {settings: 'configuration', secrets: 'configuration'}})
+    if (!expanded) return <button className="btn" type="button" onClick={() => setExpanded(true)}>{initial ? 'Edit account' : 'Add Source connection'}</button>
+    return <form onSubmit={submit} style={{display: 'grid', gap: 10, maxWidth: 560, margin: '12px 0'}}>
+        {initial ? <p>{initial.source_id}</p> : <label>Source <select {...register('source_id')}><option value="">Select Source</option>
+            {sources.map(source => <option key={source.source_id} value={source.source_id}>{source.display_name}</option>)}</select></label>}
+        <label>Name <input {...register('name')}/></label>
+        <label><input type="checkbox" {...register('enabled')}/> Enabled</label>
+        {selected?.configuration_schema.map(field => <div key={field.name}><label>{field.label}
+            {field.kind === 'credential_file' ? <input type="file" accept=".txt,text/plain" disabled={removeFields.includes(field.name)}
+                onChange={event => {
+                    const file = event.target.files?.[0]
                     if (!file) {setFileSecrets(current => ({...current, [field.name]: ''})); return}
-                    if (file.size > 1024 * 1024) {
-                        setFileSecrets(current => ({...current, [field.name]: ''}))
-                        setError('Credential files must be at most 1 MiB.'); return
-                    }
+                    if (file.size > 1024 * 1024) {form.setError('root', {message: 'Credential files must be at most 1 MiB.'}); return}
                     setReadingFile(true)
                     void file.text().then(content => setFileSecrets(current => ({...current, [field.name]: content})))
-                        .catch(() => setError('Could not read the credential file.'))
-                        .finally(() => setReadingFile(false))
-                }} /> : field.kind === 'select' ? <select {...register(`configuration.${field.name}`)}>
-                <option value="">Choose an option</option>
-                {field.options.map(option => <option key={option} value={option}>{option}</option>)}
-            </select> : <input type={field.kind === 'secret' ? 'password' : field.kind === 'number' ? 'number' : 'text'}
-                autoComplete={field.kind === 'secret' ? 'off' : undefined}
-                required={field.required} {...register(`configuration.${field.name}`)} />}
-        </label>)}
-        {error && <p role="alert">{error}</p>}
+                        .catch(() => form.setError('root', {message: 'Could not read the credential file.'})).finally(() => setReadingFile(false))
+                }}/> : field.kind === 'select' ? <select {...register(`configuration.${field.name}`)}><option value="">Choose an option</option>
+                {field.options.map(option => <option key={option}>{option}</option>)}</select> :
+                <input type={field.kind === 'secret' ? 'password' : field.kind === 'number' ? 'number' : 'text'}
+                    autoComplete="off" disabled={removeFields.includes(field.name)} {...register(`configuration.${field.name}`)}/>}
+        </label>{initial?.secret_fields.includes(field.name) && <label style={{display: 'block'}}>
+            <input type="checkbox" checked={removeFields.includes(field.name)} onChange={event => {
+                setRemoveFields(current => event.target.checked ? [...current, field.name] : current.filter(key => key !== field.name))
+                form.setValue(`configuration.${field.name}`, ''); setFileSecrets(current => ({...current, [field.name]: ''}))
+            }}/> Remove stored credential (leave the field blank to keep it)</label>}</div>)}
+        {Object.entries(errors).map(([key, value]) => <p role="alert" key={key}>{String(value?.message ?? 'Check the configuration fields')}</p>)}
         <div><button className="btn btn-primary" disabled={isSubmitting || readingFile}>Save connection</button>{' '}
-            <button type="button" className="btn" onClick={() => setExpanded(false)}>Cancel</button></div>
+            <button className="btn" type="button" onClick={() => setExpanded(false)}>Cancel</button></div>
     </form>
 }
 
-const MetadataSchema = z.object({title: z.string().max(500), description: z.string().max(10000)})
-type MetadataFields = z.infer<typeof MetadataSchema>
+const MetadataSchema = z.object({title: z.string().max(500).default(''), description: z.string().max(10000).default(''),
+    kind: z.enum(['collection', 'video', 'movie', 'movie_extra']).default('video'), parent_id: z.string().default(''),
+    extra_type: z.enum(['trailer', 'interview', 'behind_the_scenes', 'deleted_scene', 'featurette', 'other']).default('other')})
+type MetadataFields = z.input<typeof MetadataSchema>
 
-function MetadataForm({item, onSaved}: {item: Item; onSaved: (updated: Item) => void}) {
+function MetadataForm({item, items, onSaved}: {item: Item; items: Item[]; onSaved: (updated: Item) => void}) {
     const [expanded, setExpanded] = useState(false)
-    const [error, setError] = useState<string | null>(null)
-    const {register, handleSubmit, formState: {errors, isSubmitting}} = useForm<MetadataFields>({
-        resolver: zodResolver(MetadataSchema),
-        defaultValues: {title: item.title, description: item.description ?? ''},
-    })
-    if (!expanded) return <button type="button" className="btn" onClick={() => setExpanded(true)}>Edit library metadata</button>
-    return <form onSubmit={handleSubmit(async values => {
-        setError(null)
-        try {
-            onSaved(await api<Item>(`/library/${item.id}/metadata`, {method: 'PUT',
-                body: JSON.stringify(values)}))
-            setExpanded(false)
-        } catch (e) { setError(String(e)) }
-    })} style={{display: 'grid', gap: 10, maxWidth: 640, marginBottom: 16}}>
-        <label>Display title <input {...register('title')} />{errors.title && <span role="alert">{errors.title.message}</span>}</label>
-        <label>Description <textarea {...register('description')} rows={4} />
-            {errors.description && <span role="alert">{errors.description.message}</span>}</label>
-        {error && <p role="alert">{error}</p>}
+    const form = useForm<MetadataFields, unknown, z.output<typeof MetadataSchema>>({resolver: zodResolver(MetadataSchema),
+        defaultValues: {...MetadataSchema.parse({}), title: item.title, description: item.description ?? '', kind: item.kind as z.output<typeof MetadataSchema>['kind'], parent_id: item.parent_id?.toString() ?? '', extra_type: (item.extra_type ?? 'other') as z.output<typeof MetadataSchema>['extra_type']}})
+    const {register, watch, formState: {errors, isSubmitting}} = form
+    const submit = buildServerAwareSubmit(form, (values: z.output<typeof MetadataSchema>) => formRequest(`/library/${item.id}/metadata`, 'PUT', {
+        title: values.title || null, description: values.description || null,
+        kind: item.kind === 'collection' ? undefined : values.kind,
+        parent_id: values.kind === 'movie_extra' ? Number(values.parent_id) || null : null,
+        extra_type: values.kind === 'movie_extra' ? values.extra_type : null,
+    }), {onSuccess: result => {onSaved(result as Item); setExpanded(false)}})
+    if (!expanded) return <button className="btn" type="button" onClick={() => setExpanded(true)}>Edit library metadata</button>
+    return <form onSubmit={submit} style={{display: 'grid', gap: 10, maxWidth: 640, marginBottom: 16}}>
+        <label>Display title <input {...register('title')}/></label>
+        <label>Description <textarea {...register('description')} rows={4}/></label>
+        {item.kind !== 'collection' && <label>Classification <select {...register('kind')}><option value="video">Video</option><option value="movie">Movie</option><option value="movie_extra">Movie Extra</option></select></label>}
+        {watch('kind') === 'movie_extra' && <><label>Parent Movie <select {...register('parent_id')}><option value="">Unassigned</option>
+            {items.filter(candidate => candidate.kind === 'movie' && candidate.id !== item.id).map(movie => <option key={movie.id} value={movie.id}>{movie.title}</option>)}</select></label>
+            <label>Extra type <select {...register('extra_type')}>{['trailer', 'interview', 'behind_the_scenes', 'deleted_scene', 'featurette', 'other'].map(kind => <option key={kind} value={kind}>{kind.replace(/_/g, ' ')}</option>)}</select></label></>}
+        <p>Clear the title or description to restore the latest Source value.</p>
+        {Object.entries(errors).map(([key, value]) => <p role="alert" key={key}>{String(value?.message ?? 'Check the fields')}</p>)}
         <div><button className="btn btn-primary" disabled={isSubmitting}>Save metadata</button>{' '}
-            <button type="button" className="btn" onClick={() => setExpanded(false)}>Cancel</button></div>
+            <button className="btn" type="button" onClick={() => setExpanded(false)}>Cancel</button></div>
     </form>
 }

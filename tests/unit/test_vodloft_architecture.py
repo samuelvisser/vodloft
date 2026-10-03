@@ -1605,3 +1605,35 @@ def test_source_rejects_reassigned_download_identity_before_acquisition(monkeypa
     monkeypatch.setattr(worker, 'acquire_media', acquire)
     with pytest.raises(ValueError, match='different media'):
         worker.download(expected.url, str(tmp_path), reference=expected.model_dump())
+
+
+def test_management_edits_keep_secrets_and_feed_rotation_revokes_old_url(library, monkeypatch):
+    from backend.api.endpoints.vodloft.connections import source_options
+    from backend.api.endpoints.vodloft.integrations import _token
+    from backend.db.models.vodloft import MediaServerTarget
+    client, sessions, _, gateway, _ = library
+    connection = client.post('/api/vodloft/sources/connections', json={
+        'source_id': 'fixture', 'name': 'Old name', 'secrets': {'access_token': 'private-token'}}).json()
+    edited = client.put(f"/api/vodloft/sources/connections/{connection['id']}", json={
+        'source_id': 'fixture', 'name': 'New name', 'settings': {}, 'enabled': True})
+    assert edited.status_code == 200 and edited.json()['has_secret']
+    with sessions() as session:
+        assert source_options(session, 'fixture', connection['id'])['access_token'] == 'private-token'
+    removed = client.put(f"/api/vodloft/sources/connections/{connection['id']}", json={
+        'source_id': 'fixture', 'name': 'New name', 'remove_secret_fields': ['access_token']})
+    assert removed.status_code == 200 and not removed.json()['has_secret']
+    target = client.post('/api/vodloft/integrations', json={'kind': 'jellyfin', 'name': 'Server',
+        'base_url': 'http://media-server:8096', 'library_id': 'library', 'local_prefix': '/downloads',
+        'server_prefix': '/media', 'api_key': 'server-secret'}).json()
+    updated = client.put(f"/api/vodloft/integrations/{target['id']}", json={**target, 'name': 'Updated', 'enabled': False})
+    assert updated.status_code == 200 and 'server-secret' not in updated.text
+    with sessions() as session:
+        assert _token(session.get(MediaServerTarget, target['id'])) == 'server-secret'
+    snapshot = MediaSnapshot(kind='collection', reference=ref('example.com', 'rotate'), title='Rotatable')
+    monkeypatch.setattr(gateway.SourceGateway, 'resolve', lambda *a, **k: snapshot)
+    item_id = client.post('/api/vodloft/import', json={'snapshot': snapshot.model_dump(mode='json')}).json()['id']
+    profile = client.post(f'/api/vodloft/library/{item_id}/stream-profiles', json={'name': 'Feed'}).json()
+    old = client.post(f"/api/vodloft/stream-profiles/{profile['id']}/feed").json()['url']
+    assert client.post(f"/api/vodloft/stream-profiles/{profile['id']}/feed").json()['url'] == old
+    rotated = client.post(f"/api/vodloft/stream-profiles/{profile['id']}/feed/rotate").json()['url']
+    assert client.get(old).status_code == 404 and client.get(rotated).status_code == 200

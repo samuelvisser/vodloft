@@ -23,6 +23,7 @@ class ConnectionInput(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     settings: dict[str, str | int | float] = Field(default_factory=dict)
     secrets: dict[str, str] = Field(default_factory=dict)
+    remove_secret_fields: list[str] = Field(default_factory=list)
     enabled: bool = True
 
 
@@ -132,6 +133,9 @@ def _configuration(data: ConnectionInput, *, existing: SourceConnection | None =
     fields = {field.name: field for field in _validate_source(data.source_id).configuration_schema}
     if set(data.settings) - fields.keys() or set(data.secrets) - fields.keys():
         raise HTTPException(422, "Source connection contains an undeclared setting")
+    if any(key not in fields or fields[key].kind not in {"secret", "credential_file"}
+           for key in data.remove_secret_fields) or set(data.remove_secret_fields) & data.secrets.keys():
+        raise HTTPException(422, "Choose distinct declared credential fields to remove")
     if set(data.settings) & set(data.secrets):
         raise HTTPException(422, "Source setting has an invalid type")
     for key, value in data.settings.items():
@@ -155,7 +159,7 @@ def _configuration(data: ConnectionInput, *, existing: SourceConnection | None =
             value = data.settings.get(key)
         else:
             value = data.secrets.get(key) or (
-                (existing.secret_references or {}).get(key) if existing else None)
+                (existing.secret_references or {}).get(key) if existing and key not in data.remove_secret_fields else None)
         if value is None or value == "":
             raise HTTPException(422, f"Required Source setting is missing: {key}")
     return data.settings, {key: value for key, value in data.secrets.items() if value}
@@ -191,10 +195,13 @@ def update_connection(connection_id: int, data: ConnectionInput):
         connection.name, connection.enabled = data.name, data.enabled
         connection.settings = settings
         previous = dict(connection.secret_references or {})
+        removed = [previous.pop(key) for key in data.remove_secret_fields if key in previous]
         for key, value in supplied_secrets.items():
             previous[key] = secret_store.save(value, previous.get(key))
         connection.secret_references = previous
         session.commit()
+        for reference in removed:
+            secret_store.remove(reference)
         return _serialize(connection)
 
 

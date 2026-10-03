@@ -88,7 +88,7 @@ def allowed_api(actor: Principal, method: str, path: str) -> bool:
     if method == "PUT" and re.fullmatch(r"/library/\d+/progress", path):
         return True
     if method in {"POST", "DELETE"} and re.fullmatch(
-            r"/(?:stream-profiles/\d+|library/\d+)/feed", path):
+            r"/(?:stream-profiles/\d+|library/\d+)/feed(?:/rotate)?", path):
         return actor.can_subscribe
     if method == "DELETE" and re.fullmatch(r"/requests/\d+", path):
         return True

@@ -194,6 +194,19 @@ def revoke_profile(profile_id: int, request: Request):
     return {"revoked": True}
 
 
+@api_router.post("/stream-profiles/{profile_id}/feed/rotate")
+def rotate_profile_feed(profile_id: int, request: Request):
+    with get_session() as session:
+        subscription = session.scalar(select(FeedSubscription).where(
+            FeedSubscription.stream_profile_id == profile_id,
+            FeedSubscription.user_key == principal(request).key))
+        if not subscription:
+            raise HTTPException(404, "Stream Profile feed not found")
+        subscription.token = secrets.token_urlsafe(32)
+        session.commit()
+        return {"url": str(request.url_for("vodloft_feed", token=subscription.token))}
+
+
 def _publish(session, subscription: FeedSubscription, item_id: int) -> PublishedEntry | None:
     existing = session.scalar(select(PublishedEntry).where(
         PublishedEntry.subscription_id == subscription.id, PublishedEntry.item_id == item_id))

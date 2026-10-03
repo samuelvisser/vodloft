@@ -17,7 +17,7 @@ from xml.etree import ElementTree
 
 from cryptography.fernet import Fernet
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 
 from backend.db import get_session
@@ -58,6 +58,22 @@ class TargetInput(BaseModel):
         return value.rstrip("/") or "/"
 
 
+class TargetUpdate(TargetInput):
+    api_key: str | None = Field(default=None, min_length=1)
+
+
+class TargetResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    kind: str
+    name: str
+    base_url: str
+    library_id: str
+    local_prefix: str
+    server_prefix: str
+    enabled: bool
+
+
 def _key() -> bytes:
     root = runtime_root().parent
     root.mkdir(parents=True, exist_ok=True)
@@ -76,11 +92,8 @@ def _token(target: MediaServerTarget) -> str:
     return Fernet(_key()).decrypt(target.secret_ciphertext.encode()).decode()
 
 
-def _serialize(target: MediaServerTarget) -> dict:
-    return {"id": target.id, "kind": target.kind, "name": target.name,
-        "base_url": target.base_url, "library_id": target.library_id,
-        "local_prefix": target.local_prefix, "server_prefix": target.server_prefix,
-        "enabled": target.enabled}
+def _serialize(target: MediaServerTarget) -> TargetResponse:
+    return TargetResponse.model_validate(target)
 
 
 @router.get("/integrations")
@@ -101,14 +114,15 @@ def add_target(data: TargetInput):
 
 
 @router.put("/integrations/{target_id}")
-def update_target(target_id: int, data: TargetInput):
+def update_target(target_id: int, data: TargetUpdate):
     with get_session() as session:
         target = session.get(MediaServerTarget, target_id)
         if not target:
             raise HTTPException(404, "Integration not found")
         for key, value in data.model_dump(exclude={"api_key"}).items():
             setattr(target, key, value)
-        target.secret_ciphertext = Fernet(_key()).encrypt(data.api_key.encode()).decode()
+        if data.api_key:
+            target.secret_ciphertext = Fernet(_key()).encrypt(data.api_key.encode()).decode()
         session.commit()
         return _serialize(target)
 
