@@ -276,7 +276,8 @@ def install_bundle(source_id: str, bundle: Path, *, activate: bool = True) -> di
         manifest = _probe([str(target / "bin" / "python"), "-m", module], source_id)
         if manifest.version != release.get("adapter_version", version):
             raise ValueError("The installed adapter version does not match the release")
-        if any(manifest.upstream_versions.get(name) != expected
+        if any(name not in manifest.upstream_versions or
+               Version(manifest.upstream_versions[name]) != Version(expected)
                for name, expected in release.get("upstream_versions", {}).items()):
             raise ValueError("The installed upstream dependencies do not match the release")
         if activate:

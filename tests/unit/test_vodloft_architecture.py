@@ -1492,6 +1492,9 @@ def test_independent_source_bundle_install_health_failure_and_rollback(library, 
         return folder
 
     first = bundle('1.0.0+engine1', '1.0')
+    release = json.loads((first / 'release.json').read_text())
+    release['upstream_versions']['fixture-engine'] = '1.00'
+    (first / 'release.json').write_text(json.dumps(release))
     assert runtime.install_bundle('third', first)['active'] is True
     old_command = runtime.command_for('third')[0]
     second = bundle('1.0.0+engine2', '2.0')

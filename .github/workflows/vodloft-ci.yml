@@ -65,6 +65,7 @@ jobs:
             docker exec vodloft-acceptance python -c 'from pathlib import Path; from backend.source_manager.runtime import install_bundle, status; installed=status(); print(installed); [install_bundle(source, Path("/config/source-bundles") / source / "1.0.0") for source in ("yt-dlp", "dailywire") if source not in installed["active"]]'
             exit 1
           fi
+          docker exec vodloft-acceptance python -c 'from pathlib import Path; from config import get_settings; assert get_settings().download_settings.download_root == Path("/downloads")'
           docker exec vodloft-acceptance /config/source-runtimes/yt-dlp/1.0.0/bin/python /app/tools/verify_media_pipeline.py
           docker logs vodloft-acceptance 2>&1 | python -c 'import sys; assert "secret-fixture-token" not in sys.stdin.read()'
           docker exec vodloft-acceptance cat /var/log/nginx/access.log /var/log/nginx/error.log | python -c 'import sys; assert "secret-fixture-token" not in sys.stdin.read()'

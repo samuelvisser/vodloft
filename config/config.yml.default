@@ -20,6 +20,9 @@ crypto:
   defaultSecretFile: /config/wl_secret.key
 
 downloadSettings:
+  # Keep all acquired media and immutable feed copies on the persistent mount.
+  downloadRoot: /downloads
+
   # Default behavior for downloads: direct or temporary.
   downloadMode: direct
 
