@@ -270,7 +270,7 @@ def _write_artwork(path: Path, item: MediaItem, source_id: str | None) -> None:
 
 
 def _presentation_numbers(session, item_id: int) -> tuple[int | None, int | None]:
-    entry = session.scalar(select(CollectionEntry).where(CollectionEntry.item_id == item_id)
+    entry = session.scalar(select(CollectionEntry).where(CollectionEntry.item_id == item_id, CollectionEntry.active.is_(True))
         .order_by(CollectionEntry.id))
     if not entry:
         return None, None
@@ -343,7 +343,7 @@ def scan_export(export_id: int) -> None:
                 capabilities = discover(target)
                 if target.kind == "jellyfin":
                     membership = session.scalar(select(CollectionEntry).where(
-                        CollectionEntry.item_id == item.id).order_by(CollectionEntry.id))
+                        CollectionEntry.item_id == item.id, CollectionEntry.active.is_(True)).order_by(CollectionEntry.id))
                     collection = session.get(MediaItem, membership.collection_id) if membership else None
                     _write_nfo(Path(placement.path), item, export,
                         collection.user_title or collection.title if collection else None)
@@ -356,7 +356,7 @@ def scan_export(export_id: int) -> None:
                     export.presentation_strategy = capabilities["presentation"]
                     if export.presentation_strategy == "nfo":
                         membership = session.scalar(select(CollectionEntry).where(
-                            CollectionEntry.item_id == item.id).order_by(CollectionEntry.id))
+                            CollectionEntry.item_id == item.id, CollectionEntry.active.is_(True)).order_by(CollectionEntry.id))
                         collection = session.get(MediaItem, membership.collection_id) if membership else None
                         _write_nfo(Path(placement.path), item, export,
                             collection.user_title or collection.title if collection else None)

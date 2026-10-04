@@ -93,12 +93,16 @@ class SourceSnapshot(Base):
 
 class CollectionEntry(Base):
     __tablename__ = "vodloft_collection_entries"
-    __table_args__ = (UniqueConstraint("collection_id", "source_id", "occurrence_key",
-                                      name="uq_vodloft_collection_source_occurrence"),)
+    __table_args__ = (UniqueConstraint("collection_id", "source_id", "connection_key", "occurrence_key",
+                                      name="uq_vodloft_collection_connection_occurrence"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     collection_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_items.id", ondelete="CASCADE"))
     item_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_items.id", ondelete="CASCADE"))
     source_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    connection_id: Mapped[int | None] = mapped_column(ForeignKey("vodloft_source_connections.id"), nullable=True)
+    connection_key: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1", nullable=False)
+    last_seen_scan_key: Mapped[str | None] = mapped_column(String(36), nullable=True)
     occurrence_key: Mapped[str | None] = mapped_column(String, nullable=True)
     position: Mapped[int] = mapped_column(Integer)
     group: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -149,6 +153,19 @@ class CollectionDownloadProfile(Base):
 
 class CollectionScan(Base):
     __tablename__ = "vodloft_collection_scans"
+    scan_key: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    source_reference_id: Mapped[int | None] = mapped_column(ForeignKey("vodloft_source_references.id"), nullable=True)
+    active_reference_id: Mapped[int | None] = mapped_column(ForeignKey("vodloft_source_references.id"), nullable=True, unique=True)
+    mode: Mapped[str] = mapped_column(String(16), default="full", server_default="full")
+    status: Mapped[str] = mapped_column(String(16), default="partial", server_default="partial")
+    lease_owner: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    command_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    connection_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    removed_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    operation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
     id: Mapped[int] = mapped_column(primary_key=True)
     collection_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_items.id", ondelete="CASCADE"))
     source_id: Mapped[str] = mapped_column(String)

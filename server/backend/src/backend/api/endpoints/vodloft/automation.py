@@ -4,7 +4,7 @@ import logging
 import threading
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
 
@@ -15,6 +15,8 @@ from backend.api.endpoints.vodloft.router import queue_download, _run_download, 
 
 logger = logging.getLogger(__name__)
 from backend.services.vodloft_collections import known_groups, matches_membership, source_memberships
+from backend.security.permissions import principal
+
 router = APIRouter(prefix="/vodloft", tags=["VodLoft collection automation"])
 
 
@@ -125,7 +127,7 @@ def schedule_profile(profile_id: int, *, dispatch: bool = True) -> dict:
         parent = _reference_for(session, policy.collection_id, reference_id=policy.source_reference_id)
         if not parent:
             raise HTTPException(409, "Select an available Source/account reference for this Collection")
-        entries = source_memberships(session, policy.collection_id, parent.source_id)
+        entries = source_memberships(session, policy.collection_id, parent.source_id, parent.connection_id)
         excluded = [{"item_id": entry.item_id, "reason": "Group or member role does not match the Download Profile"}
             for entry in entries if not matches_membership(entry, policy)]
         entries = [entry for entry in entries if matches_membership(entry, policy)]
@@ -222,14 +224,17 @@ def run_profile(profile_id: int):
 
 
 @router.get("/library/{collection_id}/scans")
-def scans(collection_id: int):
+def scans(collection_id: int, request: Request):
     with get_session() as session:
         return [{"id": s.id, "source_id": s.source_id, "complete": s.complete,
-                 "entry_count": s.entry_count, "error": s.error,
+                 "entry_count": s.entry_count, "error": s.error, "removed_count": s.removed_count,
+                 "status": s.status, "mode": s.mode, "connection_id": s.connection_id,
+                 "operation_id": s.operation_id, "source_reference_id": s.source_reference_id,
                  "has_checkpoint": bool(s.next_cursor), "runtime_version": s.runtime_version,
                  "created_at": s.created_at}
                 for s in session.scalars(select(CollectionScan).where(
-                    CollectionScan.collection_id == collection_id).order_by(CollectionScan.id.desc()).limit(50)).all()]
+                    CollectionScan.collection_id == collection_id).order_by(CollectionScan.id.desc()).limit(50)).all()
+                if principal(request).can_use_connection(s.connection_id)]
 
 
 def refresh_due_collections() -> None:
@@ -246,7 +251,18 @@ def refresh_due_collections() -> None:
         session.commit()
     for profile_id, collection_id, reference_id in due:
         try:
-            refresh_collection(collection_id, reference_id=reference_id)
-            schedule_profile(profile_id)
+            from backend.services.vodloft_sync import enqueue
+            enqueue(collection_id, reference_id, full=None, source="SYSTEM")
         except Exception:
             logger.exception("Collection %s automatic refresh failed", collection_id)
+
+
+def collection_sync_finished(result) -> None:
+    from backend.api.endpoints.vodloft.feeds import reconcile_live_admissions
+    reconcile_live_admissions(result.collection_id)
+    with get_session() as session:
+        policy_ids = list(session.scalars(select(CollectionDownloadProfile.id).where(
+            CollectionDownloadProfile.collection_id == result.collection_id,
+            CollectionDownloadProfile.enabled.is_(True))))
+    for policy_id in policy_ids:
+        schedule_profile(policy_id)

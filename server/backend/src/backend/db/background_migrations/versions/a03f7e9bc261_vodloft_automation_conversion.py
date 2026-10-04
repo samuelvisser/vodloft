@@ -12,7 +12,7 @@ from sqlalchemy import select
 from backend.db import get_session
 from backend.db.models import DownloadProfileBase, PodcastDownloadProfile, RssStreamProfile, Show
 from backend.db.models.media_item import Episode, Movie, MovieExtraSource
-from backend.db.models.vodloft import (Artifact, CollectionDownloadProfile, CollectionStreamProfile,
+from backend.db.models.vodloft import (Artifact, CollectionEntry, CollectionDownloadProfile, CollectionStreamProfile,
     FeedSubscription, LegacyMediaLink, MediaDemand, SourceConnection, SourceReference)
 from backend.source_manager import secrets as secret_store
 from backend.source_manager.runtime import command_for
@@ -56,6 +56,10 @@ def _convert(context):
                     SourceReference.connection_id.is_(None))).all():
                 if (upstream.namespace, upstream.upstream_id, upstream.item_id) in aliases:
                     upstream.connection_id, upstream.connection_key = connection.id, connection.id
+                    for entry in session.scalars(select(CollectionEntry).where(
+                            CollectionEntry.collection_id == upstream.item_id,
+                            CollectionEntry.source_id == "dailywire", CollectionEntry.connection_key == 0)).all():
+                        entry.connection_id, entry.connection_key = connection.id, connection.id
         session.flush()
         groups = {}
         for upstream in session.scalars(select(SourceReference).where(SourceReference.source_id == "dailywire")).all():

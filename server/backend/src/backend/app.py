@@ -84,7 +84,8 @@ async def application_lifespan(app: FastAPI):
         recover_acquisition_jobs()
 
         def collection_automation_loop():
-            from backend.api.endpoints.vodloft.automation import refresh_due_collections
+            from backend.api.endpoints.vodloft.automation import refresh_due_collections, collection_sync_finished
+            from backend.services.vodloft_sync import dispatch_queued
             from backend.source_manager.runtime import check_updates
             from backend.api.endpoints.vodloft.feeds import prepare_subscribed_feeds
             from backend.api.endpoints.vodloft.integrations import reconcile_exports, reconcile_feed_deliveries
@@ -94,6 +95,7 @@ async def application_lifespan(app: FastAPI):
             from task_manager.scheduler.scheduler import scheduled_work_is_paused
             while not automation_stop.wait(15):
                 if not scheduled_work_is_paused():
+                    dispatch_queued(on_complete=collection_sync_finished)
                     automatic = (check_updates, refresh_due_collections, prepare_subscribed_feeds, retry_due_acquisition_jobs) if get_settings().scheduler.enabled else ()
                     for sweep in (*automatic, recover_acquisition_jobs, reconcile_exports,
                                   reconcile_feed_deliveries, expire_sessions, reconcile_retention):

@@ -15,6 +15,9 @@ from backend.source_manager import secrets as secret_store
 from backend.source_manager.gateway import SourceGateway
 from backend.security.permissions import principal
 
+from backend.source_manager.connections import (source_options, _authentication,
+    _save_authentication, _validated_authentication)
+
 router = APIRouter(prefix="/vodloft", tags=["VodLoft Source connections"])
 
 
@@ -36,31 +39,12 @@ def _serialize(connection: SourceConnection) -> dict:
             "settings": connection.settings or {}, "enabled": connection.enabled}
 
 
-def _authentication(connection: SourceConnection) -> dict:
-    value = secret_store.read(connection.authentication_reference)
-    return json.loads(value) if value else {}
-
-
-def _save_authentication(connection: SourceConnection, value: dict) -> None:
-    connection.authentication_reference = secret_store.save(json.dumps(value), connection.authentication_reference)
 
 
 def _public_authentication(value: dict) -> dict:
     return {"status": value.get("status", "expired"), "challenge": value.get("challenge"),
         "interval": value.get("interval", 5)}
 
-
-def _validated_authentication(source_id: str, result: dict) -> dict:
-    result = AuthenticationResult.model_validate(result).model_dump(mode="json")
-    fields = {field.name: field for field in _validate_source(source_id).configuration_schema}
-    if set(result["configuration"]) - set(fields):
-        raise ValueError("Source authentication returned undeclared configuration")
-    challenge = result.get("challenge")
-    if challenge and challenge.get("verification_url"):
-        parsed = urlsplit(challenge["verification_url"])
-        if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
-            raise ValueError("Invalid Source authentication verification URL")
-    return result
 
 
 @router.post("/sources/connections/{connection_id}/authenticate")

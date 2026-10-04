@@ -302,7 +302,7 @@ def reconcile_live_admissions(collection_id: int) -> None:
             CollectionStreamProfile.enabled.is_(True),
             CollectionStreamProfile.include_live.is_(True))).all()
         entries = session.scalars(select(CollectionEntry).where(
-            CollectionEntry.collection_id == collection_id)).all()
+            CollectionEntry.collection_id == collection_id, CollectionEntry.active.is_(True))).all()
         policies = session.scalars(select(CollectionDownloadProfile).where(
             CollectionDownloadProfile.collection_id == collection_id,
             CollectionDownloadProfile.enabled.is_(True))).all()
@@ -431,7 +431,7 @@ def prepare_stream_profile(profile_id: int, *, dispatch: bool = True) -> dict:
         parent = _reference_for(session, profile.collection_id, reference_id=profile.source_reference_id)
         if not parent:
             raise HTTPException(409, 'The selected Collection Source/account is unavailable')
-        entries = source_memberships(session, profile.collection_id, parent.source_id)
+        entries = source_memberships(session, profile.collection_id, parent.source_id, parent.connection_id)
         collection_reference_id = profile.source_reference_id
         def newest(entry):
             published = session.get(MediaItem, entry.item_id).published_at
@@ -511,7 +511,7 @@ def prepare_subscribed_feeds():
         session.commit()
     for collection_id, reference_id in dict.fromkeys(due):
         try:
-            refresh_collection(collection_id, reference_id=reference_id)
+            refresh_collection(collection_id, reference_id=reference_id, full_scan=None)
         except Exception:
             # Offline Sources never invalidate existing enclosures.
             logger.warning('Feed Collection %s could not refresh through its selected Source', collection_id)
@@ -547,7 +547,7 @@ def feed(token: str, request: Request):
         SubElement(channel, "description").text = collection.description or collection.title
         SubElement(channel, "link").text = str(request.base_url)
         memberships = session.scalars(select(CollectionEntry).where(
-            CollectionEntry.collection_id == collection.id).order_by(CollectionEntry.position)).all()
+            CollectionEntry.collection_id == collection.id, CollectionEntry.active.is_(True)).order_by(CollectionEntry.position)).all()
         if profile and profile.max_items:
             memberships.sort(key=lambda entry: (
                 session.get(MediaItem, entry.item_id).published_at.timestamp()

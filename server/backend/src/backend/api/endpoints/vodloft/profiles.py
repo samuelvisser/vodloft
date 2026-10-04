@@ -195,7 +195,7 @@ def template_preview(data: TemplatePreviewInput):
         item = session.get(MediaItem, data.item_id) if data.item_id else None
         if data.item_id and (not item or not website or item.domain_id != website.id or item.kind != data.kind):
             raise HTTPException(422, "Choose an example from this Domain and media type")
-        membership = session.scalar(select(CollectionEntry).where(CollectionEntry.item_id == item.id)) if item else None
+        membership = session.scalar(select(CollectionEntry).where(CollectionEntry.item_id == item.id, CollectionEntry.active.is_(True))) if item else None
         collection = session.get(MediaItem, membership.collection_id) if membership else None
         reference = session.scalar(select(SourceReference).where(SourceReference.item_id == item.id)) if item else None
         if item and reference:

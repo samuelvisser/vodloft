@@ -36,7 +36,7 @@ from backend.source_manager.gateway import SourceGateway, SourceInvocationError,
 from backend.source_manager.runtime import command_for
 from backend.services import vodloft_finalization
 from backend.source_manager import runtime as source_runtime
-from backend.api.endpoints.vodloft.connections import source_options
+from backend.source_manager.connections import source_options
 from backend.security.permissions import principal, require_connection
 from config import get_settings
 from source_contracts import MediaSnapshot, NormalizedSnapshot, SourceMediaReference, RepresentationPolicy
@@ -49,7 +49,8 @@ _source_slots: dict[str, threading.BoundedSemaphore] = {}
 _domain_slots: dict[int, threading.BoundedSemaphore] = {}
 _connection_slots: dict[int, threading.BoundedSemaphore] = {}
 _source_slots_lock = threading.Lock()
-_MISSING = object()
+from backend.services.vodloft_imports import (store_snapshot, LibraryImportError,
+    domain_for as _domain, upsert as _upsert, _MISSING)
 _JOB_PROGRESS = {"queued": 0, "resolving": 10, "downloading": 35,
                  "processing": 65, "verifying": 75, "finalizing": 90,
                  "available": 100, "failed": 100, "canceled": 100}
@@ -498,105 +499,24 @@ def import_media(request: ImportRequest, http_request: Request):
 def _import_snapshot(snapshot: MediaSnapshot, connection_id: int | None = None,
                      *, scan_error: str | None = None, next_cursor: str | None = None,
                      runtime_version: str | None = None, existing_item_id: int | None = None) -> LibraryItemResponse:
+    try:
+        item_id = store_snapshot(snapshot, connection_id, scan_error=scan_error,
+            next_cursor=next_cursor, runtime_version=runtime_version, existing_item_id=existing_item_id)
+    except LibraryImportError as exc:
+        raise HTTPException(exc.status_code, exc.detail) from exc
     with get_session() as session:
-        item = _upsert(session, snapshot.reference, snapshot.kind, snapshot.title,
-                       snapshot.description if "description" in snapshot.model_fields_set else _MISSING,
-                       snapshot.duration if "duration" in snapshot.model_fields_set else _MISSING,
-                       snapshot.artwork_url if "artwork_url" in snapshot.model_fields_set else _MISSING,
-                       connection_id,
-                       published_at=snapshot.published_at if "published_at" in snapshot.model_fields_set else _MISSING,
-                       capabilities=snapshot.capabilities if "capabilities" in snapshot.model_fields_set else _MISSING,
-                       is_live=snapshot.is_live if "is_live" in snapshot.model_fields_set else _MISSING,
-                       formats=snapshot.formats if "formats" in snapshot.model_fields_set else _MISSING,
-                       normalized_metadata=snapshot.model_dump(mode="json", include={
-                           "artwork", "chapters", "tracks", "author", "movie_year"}, exclude_unset=True),
-                       existing_item_id=existing_item_id)
-        session.flush()
-        metadata_snapshot = snapshot.model_dump(mode="json", exclude={"reference", "entries", "extras"},
-                                                exclude_unset=True)
-        previous = session.scalar(select(SourceSnapshot).where(
-            SourceSnapshot.item_id == item.id,
-            SourceSnapshot.source_id == snapshot.reference.source_id,
-            SourceSnapshot.connection_id == connection_id).order_by(SourceSnapshot.id.desc()))
-        if not previous or previous.metadata_snapshot != metadata_snapshot:
-            try:
-                source_version = runtime_version or command_for(snapshot.reference.source_id)[1]
-            except (ValueError, RuntimeError):
-                source_version = "configured"
-            session.add(SourceSnapshot(item_id=item.id, source_id=snapshot.reference.source_id,
-                connection_id=connection_id, runtime_version=source_version,
-                metadata_snapshot=metadata_snapshot))
-        if snapshot.kind == "collection" and existing_item_id is None:
-            for entry in snapshot.entries:
-                child = _upsert(session, entry.reference, entry.kind, entry.title,
-                                connection_id=connection_id,
-                                published_at=entry.published_at if "published_at" in entry.model_fields_set else _MISSING,
-                                capabilities=entry.capabilities if "capabilities" in entry.model_fields_set else _MISSING,
-                                is_live=entry.is_live if "is_live" in entry.model_fields_set else _MISSING)
-                session.flush()
-                if child.id == item.id:
-                    continue
-                identity = (CollectionEntry.occurrence_key == entry.occurrence_id
-                            if entry.occurrence_id else
-                            (CollectionEntry.item_id == child.id) & CollectionEntry.occurrence_key.is_(None))
-                membership = session.scalar(select(CollectionEntry).where(
-                    CollectionEntry.collection_id == item.id,
-                    CollectionEntry.source_id == snapshot.reference.source_id, identity))
-                if membership:
-                    membership.item_id = child.id
-                    membership.position = entry.position
-                    for field in ("group", "episode_number", "role"):
-                        if field in entry.model_fields_set:
-                            setattr(membership, field, getattr(entry, field))
-                else:
-                    session.add(CollectionEntry(collection_id=item.id, item_id=child.id,
-                        source_id=snapshot.reference.source_id,
-                        position=entry.position, group=entry.group,
-                        episode_number=entry.episode_number, role=entry.role,
-                        occurrence_key=entry.occurrence_id))
-            # An incomplete scan must never infer removal. This prototype leaves
-            # old members in place even after a complete scan until policy exists.
-            session.add(CollectionScan(collection_id=item.id, source_id=snapshot.reference.source_id,
-                complete=snapshot.enumeration_complete, entry_count=len(snapshot.entries),
-                connection_id=connection_id, next_cursor=next_cursor,
-                runtime_version=runtime_version, error=scan_error))
-        if snapshot.kind == "movie" and existing_item_id is None:
-            for extra in snapshot.extras:
-                child = _upsert(session, extra.reference, "movie_extra", extra.title,
-                                connection_id=connection_id,
-                                capabilities=extra.capabilities if "capabilities" in extra.model_fields_set else _MISSING)
-                if child.user_kind and child.user_kind != "movie_extra":
-                    continue
-                child.kind = "movie_extra"
-                if child.user_parent_ids is None:
-                    child.parent_id = child.parent_id or item.id
-                if child.user_extra_type is None:
-                    child.extra_type = extra.extra_type or "other"
-                session.flush()
-                membership = session.scalar(select(MovieExtraParent).where(
-                    MovieExtraParent.movie_id == item.id, MovieExtraParent.extra_id == child.id))
-                if child.user_parent_ids is None or item.id in child.user_parent_ids:
-                    role = child.user_extra_type or extra.extra_type or "other"
-                    if not membership:
-                        session.add(MovieExtraParent(movie_id=item.id, extra_id=child.id, extra_type=role))
-                    else:
-                        membership.extra_type = role
-        session.flush()
-        result = _serialize(session, item)
-        imported_item_id = item.id
-        session.commit()
+        result = _serialize(session, session.get(MediaItem, item_id))
     if snapshot.kind == "collection" and existing_item_id is None:
         from backend.api.endpoints.vodloft.feeds import reconcile_live_admissions
-        reconcile_live_admissions(imported_item_id)
+        reconcile_live_admissions(item_id)
     return result
-
 
 @router.post("/library/{collection_id}/refresh")
 def refresh_collection(collection_id: int, reference_id: int | None = None,
-                       expand_depth: int = 0, max_nested: int = 20):
+                       expand_depth: int = 0, max_nested: int = 20, full_scan: bool | None = True):
     if not 0 <= expand_depth <= 3 or not 1 <= max_nested <= 25:
         raise HTTPException(422, "Choose up to three nested levels and 25 nested Collections")
-    result = _refresh_collection_one(collection_id, reference_id)
+    result = _refresh_collection_one(collection_id, reference_id, full=full_scan)
     if not expand_depth:
         return result
 
@@ -614,7 +534,10 @@ def refresh_collection(collection_id: int, reference_id: int | None = None,
                 return
             children = []
             for entry in session.scalars(select(CollectionEntry).where(
-                CollectionEntry.collection_id == parent_id).order_by(CollectionEntry.position)).all():
+                CollectionEntry.collection_id == parent_id, CollectionEntry.active.is_(True),
+                or_(CollectionEntry.source_id.is_(None),
+                    (CollectionEntry.source_id == parent.source_id) &
+                    (CollectionEntry.connection_key == (parent.connection_id or 0)))).order_by(CollectionEntry.position)).all():
                 child = session.get(MediaItem, entry.item_id)
                 if not child or child.kind != "collection":
                     continue
@@ -635,7 +558,7 @@ def refresh_collection(collection_id: int, reference_id: int | None = None,
                 skipped.append({"item_id": child_id, "reason": "No unambiguous Source reference in this account"})
                 continue
             try:
-                _refresh_collection_one(child_id, child_reference_id)
+                _refresh_collection_one(child_id, child_reference_id, full=full_scan)
             except HTTPException as exc:
                 skipped.append({"item_id": child_id, "reason": f"Nested Source could not refresh ({exc.status_code})"})
                 continue
@@ -647,71 +570,18 @@ def refresh_collection(collection_id: int, reference_id: int | None = None,
         nested_expansion=CollectionExpansionResponse(refreshed_ids=refreshed, skipped=skipped)))
 
 
-def _refresh_collection_one(collection_id: int, reference_id: int | None = None):
+def _refresh_collection_one(collection_id: int, reference_id: int | None = None, *, full: bool | None = True):
+    from backend.services.vodloft_sync import synchronize, CollectionSyncError, CollectionSyncBusy
+    try:
+        synchronize(collection_id, reference_id, full=full)
+    except CollectionSyncBusy as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except CollectionSyncError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    from backend.api.endpoints.vodloft.feeds import reconcile_live_admissions
+    reconcile_live_admissions(collection_id)
     with get_session() as session:
-        collection = session.get(MediaItem, collection_id)
-        if not collection or collection.kind != "collection":
-            raise HTTPException(404, "Collection not found")
-        reference = _reference_for(session, collection_id, reference_id=reference_id)
-        if not reference:
-            raise HTTPException(409, "Select an available Source reference for this Collection")
-        source_id, url = reference.source_id, reference.url
-        connection_id = reference.connection_id
-        options = source_options(session, source_id, connection_id)
-    try:
-        gateway = SourceGateway()
-        snapshot = gateway.resolve(source_id, url, **options)
-    except Exception as exc:
-        raise _source_problem(exc, "Collection Source is unavailable") from exc
-    if snapshot.kind != "collection":
-        raise HTTPException(409, "Source no longer identifies this URL as a collection")
-    runtime_version = None
-    try:
-        runtime_version = command_for(source_id)[1]
-    except (ValueError, RuntimeError):
-        runtime_version = "configured"
-    entries, cursor = [], None
-    with get_session() as session:
-        previous = session.scalar(select(CollectionScan).where(
-            CollectionScan.collection_id == collection_id,
-            CollectionScan.source_id == source_id,
-            CollectionScan.connection_id == connection_id,
-        ).order_by(CollectionScan.id.desc()))
-        if (previous and not previous.complete and previous.next_cursor and
-            previous.runtime_version == runtime_version):
-            cursor = previous.next_cursor
-    resumed = cursor is not None
-    try:
-        paged = next((m for m in gateway.manifests() if m.source_id == source_id), None)
-        if paged and "enumerate_pages" in paged.capabilities:
-            complete = False
-            seen_cursors = set()
-            # Nested Collections are traversed only by explicit bounded expansion.
-            for _ in range(100):
-                page = gateway.entries(source_id, url, cursor=cursor, limit=50, **options)
-                entries.extend(page.entries)
-                if page.complete:
-                    complete = True
-                    cursor = None
-                    break
-                if not page.next_cursor or page.next_cursor in seen_cursors:
-                    break
-                cursor = page.next_cursor
-                seen_cursors.add(cursor)
-            snapshot = snapshot.model_copy(update={"entries": entries,
-                "enumeration_complete": complete})
-            return _import_snapshot(snapshot, connection_id, next_cursor=cursor,
-                runtime_version=runtime_version)
-    except Exception:
-        logger.exception("Collection %s enumeration stopped before completion", collection_id)
-        snapshot = snapshot.model_copy(update={"entries": entries or snapshot.entries,
-            "enumeration_complete": False})
-        return _import_snapshot(snapshot, connection_id,
-            scan_error="Collection enumeration stopped before completion",
-            next_cursor=cursor if entries or not resumed else None,
-            runtime_version=runtime_version)
-    return _import_snapshot(snapshot, connection_id, runtime_version=runtime_version)
-
+        return _serialize(session, session.get(MediaItem, collection_id))
 
 @router.post("/library/{item_id}/refresh-details")
 def refresh_details(item_id: int, reference_id: int | None = None):
@@ -746,7 +616,7 @@ def refresh_details(item_id: int, reference_id: int | None = None):
 def library(include_members: bool = False):
     with get_session() as session:
         items = session.scalars(select(MediaItem).order_by(MediaItem.created_at.desc())).all()
-        members = set(session.scalars(select(CollectionEntry.item_id)).all())
+        members = set(session.scalars(select(CollectionEntry.item_id).where(CollectionEntry.active.is_(True))).all())
         return [_serialize(session, item) for item in items if include_members or
                 (item.id not in members and (item.kind != "movie_extra" or item.parent_id is None))]
 
@@ -810,7 +680,7 @@ def save_playback_progress(item_id: int, data: PlaybackInput, request: Request):
 
 
 @router.get("/library/{item_id}")
-def library_item(item_id: int, request: Request) -> LibraryDetailResponse:
+def library_item(item_id: int, request: Request, reference_id: int | None = None) -> LibraryDetailResponse:
     with get_session() as session:
         item = session.get(MediaItem, item_id)
         if not item:
@@ -818,8 +688,17 @@ def library_item(item_id: int, request: Request) -> LibraryDetailResponse:
         references = [reference for reference in session.scalars(
             select(SourceReference).where(SourceReference.item_id == item_id)).all()
             if principal(request).can_use_connection(reference.connection_id)]
-        members = session.scalars(select(CollectionEntry).where(
-            CollectionEntry.collection_id == item_id).order_by(CollectionEntry.position)).all() if item.kind == 'collection' else []
+        chosen = next((r for r in references if r.id == reference_id), None) if reference_id is not None else None
+        if reference_id is not None and not chosen:
+            raise HTTPException(404, "Source reference not found")
+        member_query = select(CollectionEntry).where(CollectionEntry.collection_id == item_id,
+            CollectionEntry.active.is_(True))
+        if chosen:
+            member_query = member_query.where(or_(CollectionEntry.source_id.is_(None),
+                (CollectionEntry.source_id == chosen.source_id) &
+                (CollectionEntry.connection_key == (chosen.connection_id or 0))))
+        members = [m for m in session.scalars(member_query.order_by(CollectionEntry.position)).all()
+            if principal(request).can_use_connection(m.connection_id)] if item.kind == 'collection' else []
         extras = session.scalars(select(MovieExtraParent).where(
             MovieExtraParent.movie_id == item_id)).all() if item.kind == 'movie' else []
         view = replace(_library_source(session, item), references=references,
@@ -1302,7 +1181,9 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
         parent_reference = _reference_for(session, collection_id, reference_id=collection_reference_id) if collection_id else None
         membership = session.scalar(select(CollectionEntry).where(CollectionEntry.collection_id == collection_id,
             CollectionEntry.item_id == item_id,
-            or_(CollectionEntry.source_id == parent_reference.source_id, CollectionEntry.source_id.is_(None)))
+            CollectionEntry.active.is_(True), or_(CollectionEntry.source_id.is_(None),
+                (CollectionEntry.source_id == parent_reference.source_id) &
+                (CollectionEntry.connection_key == (parent_reference.connection_id or 0))))
             .order_by(CollectionEntry.id)) if parent_reference else None
         values = template_values(item, domain, reference, membership=membership,
             collection=(session.get(MediaItem, collection_id).user_title or
@@ -1560,3 +1441,45 @@ def play_version(item_id: int, filename: str):
     if not path.is_file():
         raise HTTPException(404, "Representation not found")
     return FileResponse(path, media_type=mimetypes.guess_type(path.name)[0] or "application/octet-stream")
+
+
+class CollectionSyncInput(BaseModel):
+    reference_id: int | None = Field(default=None, gt=0)
+    full_scan: bool = True
+    expand_depth: int = Field(default=0, ge=0, le=3)
+    max_nested: int = Field(default=20, ge=1, le=25)
+
+
+@router.post("/library/{collection_id}/sync", status_code=202)
+def enqueue_collection_sync(collection_id: int, data: CollectionSyncInput, request: Request):
+    from backend.services.vodloft_sync import enqueue, CollectionSyncError
+    if not principal(request).manages_library:
+        raise HTTPException(403, "A library manager must refresh Collection membership")
+    with get_session() as session:
+        reference = _reference_for(session, collection_id, reference_id=data.reference_id)
+        if not reference:
+            raise HTTPException(422, "Select an available Source/account reference")
+        require_connection(request, reference.connection_id)
+        reference_id = reference.id
+    try:
+        operation_id = enqueue(collection_id, reference_id, full=data.full_scan,
+            expand_depth=data.expand_depth, max_nested=data.max_nested)
+    except CollectionSyncError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"operation_id": operation_id, "state": "queued", "collection_id": collection_id}
+
+
+@router.post("/library/{collection_id}/scans/{scan_id}/cancel", status_code=204)
+def cancel_collection_sync(collection_id: int, scan_id: int, request: Request):
+    from backend.services.vodloft_sync import cancel_scan, CollectionSyncError
+    if not principal(request).manages_library:
+        raise HTTPException(403, "A library manager must cancel Collection refreshes")
+    with get_session() as session:
+        scan = session.get(CollectionScan, scan_id)
+        if not scan or scan.collection_id != collection_id:
+            raise HTTPException(404, "Collection scan not found")
+        require_connection(request, scan.connection_id)
+    try:
+        cancel_scan(collection_id, scan_id)
+    except CollectionSyncError as exc:
+        raise HTTPException(404, str(exc)) from exc
