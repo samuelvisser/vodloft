@@ -7,6 +7,7 @@ import argparse
 import base64
 import hashlib
 import json
+import re
 from pathlib import Path
 from urllib.parse import quote, urlsplit
 
@@ -31,11 +32,35 @@ def sign_bundle(bundle: Path, url_base: str, private_key_file: Path, output: Pat
         if actual != expected:
             raise ValueError('A wheel digest changed after the release was built')
         wheels[filename] = {'sha256': actual, 'url': url_base.rstrip('/') + '/' + quote(filename)}
+    native_executables = {}
+    native_directory = bundle / 'native' / 'bin'
+    declared_native = manifest.get('native_executables', {})
+    if (not isinstance(declared_native, dict) or len(declared_native) > 16 or
+            (bundle / 'native').is_symlink() or native_directory.is_symlink() or
+            native_directory.exists() and not native_directory.is_dir()):
+        raise ValueError('Invalid native helper inventory')
+    actual_native = {path.name for path in native_directory.iterdir()} if native_directory.is_dir() else set()
+    if actual_native != set(declared_native):
+        raise ValueError('The native helper files differ from their declared release')
+    for filename, expected in declared_native.items():
+        if not isinstance(filename, str) or not re.fullmatch(r'[a-zA-Z0-9_-]{1,64}', filename):
+            raise ValueError('Invalid native helper filename')
+        path = native_directory / filename
+        if path.is_symlink() or not path.is_file():
+            raise ValueError('Native helpers must be regular bundled files')
+        with path.open('rb') as handle:
+            actual = hashlib.file_digest(handle, 'sha256').hexdigest()
+        if actual != expected:
+            raise ValueError('A native helper digest changed after the release was built')
+        native_executables[filename] = {'sha256': actual,
+            'url': url_base.rstrip('/') + '/native/bin/' + quote(filename)}
     allowed = {'version', 'adapter_version', 'channel', 'upstream_versions', 'protocol_version',
         'metadata_schema_version', 'packages', 'python_requirement', 'native_helpers',
         'configuration_version', 'catalogue_revision'}
     release = {key: value for key, value in manifest.items() if key in allowed}
     release['wheels'] = wheels
+    if 'native_executables' in manifest:
+        release['native_executables'] = native_executables
     key = serialization.load_pem_private_key(private_key_file.read_bytes(), password=None)
     if not isinstance(key, Ed25519PrivateKey):
         raise ValueError('Use an Ed25519 private signing key')

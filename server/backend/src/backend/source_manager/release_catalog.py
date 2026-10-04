@@ -115,7 +115,7 @@ def _verified_releases(source_id: str, config: dict) -> list[dict]:
         if (not isinstance(release, dict) or not {"version", "channel", "wheels"} <= set(release) or
             set(release) - {"version", "channel", "wheels", "adapter_version", "upstream_versions",
                 "protocol_version", "metadata_schema_version", "packages", "configuration_version",
-                "catalogue_revision", "python_requirement", "native_helpers"} or
+                "catalogue_revision", "python_requirement", "native_helpers", "native_executables"} or
             not isinstance(release["version"], str) or not _VERSION.fullmatch(release["version"]) or
             release["channel"] not in ("stable", "beta") or
             not isinstance(release["wheels"], dict) or not 1 <= len(release["wheels"]) <= 40):
@@ -126,6 +126,15 @@ def _verified_releases(source_id: str, config: dict) -> list[dict]:
                 set(wheel) != {"url", "sha256"} or not isinstance(wheel["sha256"], str) or
                 not _DIGEST.fullmatch(wheel["sha256"])):
                 raise ValueError("Invalid signed Source wheel")
+        native_executables = release.get("native_executables", {})
+        if not isinstance(native_executables, dict) or len(native_executables) > 16:
+            raise ValueError("Invalid signed Source native executable inventory")
+        for name, executable in native_executables.items():
+            if (not isinstance(name, str) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", name) or
+                    not isinstance(executable, dict) or set(executable) != {"url", "sha256"} or
+                    not isinstance(executable["url"], str) or not isinstance(executable["sha256"], str) or
+                    not _DIGEST.fullmatch(executable["sha256"])):
+                raise ValueError("Invalid signed Source native executable")
     return document["releases"]
 
 
@@ -165,8 +174,18 @@ def install_remote_updates() -> list[dict]:
                         raise ValueError("Source wheel digest mismatch")
                     (bundle / filename).write_bytes(content)
                     wheels[filename] = descriptor["sha256"]
+                native_executables = {}
+                for name, descriptor in selected.get("native_executables", {}).items():
+                    content = _fetch_https(descriptor["url"], 256 * 1024 * 1024)
+                    if hashlib.sha256(content).hexdigest() != descriptor["sha256"]:
+                        raise ValueError("Source native executable digest mismatch")
+                    helpers = bundle / "native" / "bin"
+                    helpers.mkdir(parents=True, exist_ok=True)
+                    (helpers / name).write_bytes(content)
+                    native_executables[name] = descriptor["sha256"]
+                extra = {"native_executables": native_executables} if "native_executables" in selected else {}
                 (bundle / "release.json").write_text(json.dumps({**selected,
-                    "source_id": source_id, "wheels": wheels}))
+                    "source_id": source_id, "wheels": wheels, **extra}))
                 results.append(install_bundle(source_id, bundle, activate=policy["automatic"]))
         except Exception as error:
             from .runtime import record_failure

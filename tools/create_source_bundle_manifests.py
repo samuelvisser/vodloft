@@ -1,6 +1,7 @@
 """Digest and dependency manifests for independently released Source wheelhouses."""
 import hashlib
 import json
+import re
 import sys
 import zipfile
 from email.parser import Parser
@@ -24,6 +25,22 @@ def create_manifest(bundle: Path, source_id: str, release_version: str, adapter_
         'channel': channel, 'protocol_version': PROTOCOL_VERSION, 'metadata_schema_version': METADATA_SCHEMA_VERSION,
         'python_requirement': python_requirement, 'packages': packages, 'wheels': wheels,
         'upstream_versions': {name: packages[name] for name in ('yt-dlp', 'dailywire-api') if name in packages}}
+    native_directory = bundle / 'native' / 'bin'
+    if (bundle / 'native').is_symlink() or native_directory.is_symlink():
+        raise ValueError('Native helpers must be regular bundled files')
+    if native_directory.exists():
+        if not native_directory.is_dir():
+            raise ValueError('The native helper path must be a directory')
+        executables = {}
+        for path in sorted(native_directory.iterdir()):
+            if path.is_symlink() or not path.is_file() or not re.fullmatch(r'[a-zA-Z0-9_-]{1,64}', path.name):
+                raise ValueError('Invalid native helper file')
+            with path.open('rb') as handle:
+                executables[path.name] = hashlib.file_digest(handle, 'sha256').hexdigest()
+        if len(executables) > 16:
+            raise ValueError('A release may contain at most 16 native helpers')
+        if executables:
+            release['native_executables'] = executables
     (bundle / 'release.json').write_text(json.dumps(release, indent=2, sort_keys=True) + '\n')
     return release
 

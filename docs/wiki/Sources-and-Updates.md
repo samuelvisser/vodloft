@@ -8,6 +8,8 @@ A Source connection stores an upstream account's settings and encrypted secret r
 
 A library item may have references from different Sources/accounts. Select the intended reference explicitly. VodLoft does not silently switch to another account when the selected one fails.
 
+Sources can supply their own Python environment and native tools in an immutable release bundle. New operations use the active release; queued downloads and existing upstream playback sessions keep the release and bundled tools they started with. A helper or health-check failure keeps the previous Source active. Publisher setup and bundle formats are documented in [Source authoring](../SOURCE_AUTHORING.md).
+
 Choose automatic updates, stable/beta channel, and an optional pinned release. **Check Source bundles** checks trusted mounted wheelhouses and configured signed catalogues. Manual activation and rollback use installed immutable versions.
 
 A failed update retains the previous active runtime. Queued/running acquisitions and current upstream playback sessions continue using their original runtime. New operations use the activated version.

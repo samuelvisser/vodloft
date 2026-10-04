@@ -269,6 +269,7 @@ def record_failure(source_id: str, action: str, error: Exception) -> None:
 
 def _verify_release_runtime(command: list[str], manifest: SourceManifest, release: dict) -> None:
     """Reject a mismatched environment before publication or later activation."""
+    _verify_native_executables(Path(command[0]).parent.parent, release)
     if Version(manifest.version) != Version(release.get("adapter_version", release["version"])):
         raise ValueError("The installed adapter version does not match the release")
     if any(name not in manifest.upstream_versions or
@@ -285,6 +286,30 @@ def _verify_release_runtime(command: list[str], manifest: SourceManifest, releas
         if any(name not in installed or Version(installed[name]) != Version(version)
                for name, version in release["packages"].items()):
             raise ValueError("The installed package inventory does not match the release")
+
+
+def _verify_native_executables(root: Path, release: dict) -> dict[str, str]:
+    declared = release.get("native_executables", {})
+    if not isinstance(declared, dict) or len(declared) > 16:
+        raise ValueError("Invalid Source native executable inventory")
+    directory = root / "native" / "bin"
+    if ((root / "native").is_symlink() or directory.is_symlink() or
+            directory.exists() and not directory.is_dir()):
+        raise ValueError("Source native executables must be regular bundled files")
+    actual = {path.name for path in directory.iterdir()} if directory.is_dir() else set()
+    if actual != set(declared):
+        raise ValueError("Source bundle contains undeclared or missing native executables")
+    for name, digest in declared.items():
+        if (not isinstance(name, str) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", name) or
+                not isinstance(digest, str) or not re.fullmatch(r"[a-f0-9]{64}", digest)):
+            raise ValueError("Invalid Source native executable entry")
+        path = directory / name
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("Source native executables must be regular bundled files")
+        with path.open("rb") as handle:
+            if hashlib.file_digest(handle, "sha256").hexdigest() != digest:
+                raise ValueError("Source native executable digest mismatch")
+    return declared
 
 
 def install_bundle(source_id: str, bundle: Path, *, activate: bool = True) -> dict:
@@ -313,6 +338,7 @@ def install_bundle(source_id: str, bundle: Path, *, activate: bool = True) -> di
             raise ValueError("Invalid wheel entry")
         if hashlib.sha256((bundle / filename).read_bytes()).hexdigest() != digest:
             raise ValueError("Source wheel digest mismatch")
+    native_executables = _verify_native_executables(bundle, release)
     root = runtime_root()
     target = root / source_id / version
     with _locked(root):
@@ -326,6 +352,13 @@ def install_bundle(source_id: str, bundle: Path, *, activate: bool = True) -> di
                 subprocess.run([str(python), "-m", "pip", "install", "--no-index",
                     "--find-links", str(bundle), f"{package}=={release.get('adapter_version', version)}"],
                     timeout=240, check=True, capture_output=True)
+                if native_executables:
+                    helpers = staging / "native" / "bin"
+                    helpers.mkdir(parents=True, exist_ok=True)
+                    for name in native_executables:
+                        destination = helpers / name
+                        shutil.copyfile(bundle / "native" / "bin" / name, destination)
+                        destination.chmod(0o755)
                 staged_command = [str(python), "-m", module]
                 staged_manifest = _probe(staged_command, source_id)
                 _verify_release_runtime(staged_command, staged_manifest, release)

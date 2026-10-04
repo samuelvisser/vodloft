@@ -62,6 +62,8 @@ The builder creates adapter/contract/helper wheels, downloads dependency wheels 
 
 Third-party publishers can use `create_manifest` in `tools/create_source_bundle_manifests.py` after preparing their complete wheelhouse. Native wheels must match the target platform and Python version. Helper lookup prefers the pinned Source runtime's `native/bin`, then its wheel-installed `bin` entry points, then the host's `PATH`. Manifest probes, helper-version checks, health checks, and real operations all use this same environment. Host executables remain available as a fallback; a Source can supply its own helper version independently of the core application. Wheel console scripts are relocated when a runtime is atomically published.
 
+To bundle an independent native helper, place a regular executable file at `native/bin/<helper-name>` **before** creating the release manifest. The manifest builder records its SHA-256 digest under `native_executables`. Helper names contain letters, numbers, underscores, or hyphens; symlinks and undeclared files are rejected. Supply executables compatible with the target platform and any required libraries, for example a self-contained FFmpeg build. The installer verifies the exact helper inventory, copies it into the runtime, sets executable permissions, and runs the declared helper/health checks before activation. Do not modify an installed runtime; publish a new release version instead.
+
 ## Mounted installation
 
 Copy a trusted immutable wheelhouse to:
@@ -70,11 +72,12 @@ Copy a trusted immutable wheelhouse to:
 /config/source-bundles/<source-id>/<release-version>/
   release.json
   *.whl
+  native/bin/<helper-name>  # optional digest-pinned helpers
 ```
 
 Use **Management → Check Source bundles**. Automatic policy activates the newest eligible stable/beta release, respecting a pin. Manual activation and rollback select installed versions. A failed digest, install, health, protocol/schema, interpreter, helper, or saved-configuration check retains the previous active runtime.
 
-The runtime verifies exact wheel membership as well as digests, installs without package-index access, probes the adapter, and atomically publishes the runtime. Digest checks do not authenticate an untrusted mounted publisher: the mount and registry must be controlled by the operator.
+The runtime verifies exact wheel and native-helper membership as well as digests, installs without package-index access, probes the adapter, and atomically publishes the runtime. Native helper digests are checked again during activation and rollback. Digest checks do not authenticate an untrusted mounted publisher: the mount and registry must be controlled by the operator.
 
 Runtime state is persisted under `VODLOFT_SOURCE_RUNTIME_ROOT`, normally `/config/source-runtimes`; bundles use `VODLOFT_SOURCE_BUNDLE_DIR`, normally `/config/source-bundles`.
 
@@ -98,7 +101,7 @@ uv run --frozen python tools/publish_source_catalogue.py \
   --output dist/yt-dlp-catalogue.json
 ```
 
-The command verifies local wheel digests and emits a signed catalogue plus the public trust key. It does not upload files. Publish the wheels at the specified HTTPS base and the catalogue at an HTTPS URL. Use `--existing` when appending a release; the prior catalogue's signature is checked.
+The command verifies local wheel and native-helper digests and emits a signed catalogue plus the public trust key. It does not upload files. Publish the wheels at the specified HTTPS base, optional executables under its `native/bin/` directory, and the catalogue at an HTTPS URL. Use `--existing` when appending a release; the prior catalogue's signature is checked.
 
 Set `VODLOFT_SOURCE_RELEASE_CATALOGS` to a JSON **file path** whose contents are:
 
@@ -111,10 +114,10 @@ Set `VODLOFT_SOURCE_RELEASE_CATALOGS` to a JSON **file path** whose contents are
 }
 ```
 
-Catalogue HTTPS requests reject private addresses and embedded credentials, pin the resolved public address, limit redirects and response sizes, verify the signature, and then verify each downloaded wheel's digest. No public publisher or trust key is configured automatically. Operators explicitly choose their publishers.
+Catalogue HTTPS requests reject private addresses and embedded credentials, pin the resolved public address, limit redirects and response sizes, verify the signature, and then verify each downloaded wheel and native executable's digest. No public publisher or trust key is configured automatically. Operators explicitly choose their publishers.
 
 ## Jobs, playback, and trust
 
-An acquisition freezes its command, runtime version, Source/account reference, profile policy, and output specification when queued. Upstream playback similarly retains its selected runtime and representation. Installing/activating a newer Source affects new operations; old environments remain available while pinned work drains and for rollback.
+An acquisition freezes its command, runtime version, Source/account reference, profile policy, and output specification when queued. Upstream playback similarly retains its selected runtime and representation. Bundled native helpers follow this same pinned runtime. Installing/activating a newer Source affects new operations; old environments remain available while pinned work drains and for rollback.
 
 Private credentials, upstream signed URLs, and Source diagnostics must not be emitted in public responses or logs. Built-in Python network guards are defense in depth, not an operating-system sandbox. Apply deployment egress restrictions if native-helper network access must be constrained.

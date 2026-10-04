@@ -34,7 +34,7 @@ Tests below live in `tests/unit/test_vodloft_architecture.py` unless another fil
 | Plex/Jellyfin/Audiobookshelf | Actual server discovery/scans, path mapping, metadata/artwork, persisted downstream IDs and availability, compatible Plex strategy, ABS episode mapping and explicit non-rewinding progress import. |
 | Audiobookshelf RSS pull | Owned feed subscription/delivery, remote podcast/episode availability, independent file retention, explicit verified listener tokens. |
 | Local accounts and requests | Admin/member/manager boundaries, Source/target grants, subscription permission, quotas, optional automatic approval, approval/rejection/withdrawal, independent progress. |
-| Source release lifecycle | Independent locked wheelhouses, package/digest inventories, own interpreters, helpers/health, signed HTTPS publisher/catalogues, stable/beta, pin/manual/rollback, saved-schema validation and draining pinned work. |
+| Source release lifecycle | Independent locked wheelhouses, package/digest inventories, own interpreters, signed digest-pinned native executables, pinned helper lookup/health, signed HTTPS publisher/catalogues, stable/beta, pin/manual/rollback, saved-schema validation and draining pinned work. |
 | Product workspace | Home, Discover, Library, Management, Settings, Source-independent welcome screen, generic connection/challenge forms, request/user/integration/feed controls. |
 | WireLoft upgrade | Alembic schema chain plus background conversion of populated Shows/Episodes/Movies/Extras, profiles, account references, feeds/live flags, files, original Git history. `test_vodloft_upgrade.py` exercises a populated pinned database. |
 
