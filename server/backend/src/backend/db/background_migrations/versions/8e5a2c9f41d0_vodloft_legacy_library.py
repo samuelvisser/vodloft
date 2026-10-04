@@ -145,6 +145,7 @@ def _migrate(context) -> None:
                     CollectionEntry.collection_id == collection.id, CollectionEntry.item_id == child.id))
                 if not membership:
                     session.add(CollectionEntry(collection_id=collection.id, item_id=child.id,
+                        source_id="dailywire",
                         position=position, group=episode.season.name if episode.season else None,
                         episode_number=episode.dw_episode_number))
                 _copy_downloads(session, child, episode.downloads)

@@ -531,7 +531,8 @@ def _import_snapshot(snapshot: MediaSnapshot, connection_id: int | None = None,
                             if entry.occurrence_id else
                             (CollectionEntry.item_id == child.id) & CollectionEntry.occurrence_key.is_(None))
                 membership = session.scalar(select(CollectionEntry).where(
-                    CollectionEntry.collection_id == item.id, identity))
+                    CollectionEntry.collection_id == item.id,
+                    CollectionEntry.source_id == snapshot.reference.source_id, identity))
                 if membership:
                     membership.item_id = child.id
                     membership.position = entry.position
@@ -540,6 +541,7 @@ def _import_snapshot(snapshot: MediaSnapshot, connection_id: int | None = None,
                             setattr(membership, field, getattr(entry, field))
                 else:
                     session.add(CollectionEntry(collection_id=item.id, item_id=child.id,
+                        source_id=snapshot.reference.source_id,
                         position=entry.position, group=entry.group,
                         episode_number=entry.episode_number, role=entry.role,
                         occurrence_key=entry.occurrence_id))

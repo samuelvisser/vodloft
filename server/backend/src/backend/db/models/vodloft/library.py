@@ -91,10 +91,12 @@ class SourceSnapshot(Base):
 
 class CollectionEntry(Base):
     __tablename__ = "vodloft_collection_entries"
-    __table_args__ = (UniqueConstraint("collection_id", "occurrence_key", name="uq_vodloft_collection_entry_occurrence"),)
+    __table_args__ = (UniqueConstraint("collection_id", "source_id", "occurrence_key",
+                                      name="uq_vodloft_collection_source_occurrence"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     collection_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_items.id", ondelete="CASCADE"))
     item_id: Mapped[int] = mapped_column(ForeignKey("vodloft_media_items.id", ondelete="CASCADE"))
+    source_id: Mapped[str | None] = mapped_column(String, nullable=True)
     occurrence_key: Mapped[str | None] = mapped_column(String, nullable=True)
     position: Mapped[int] = mapped_column(Integer)
     group: Mapped[str | None] = mapped_column(String, nullable=True)
