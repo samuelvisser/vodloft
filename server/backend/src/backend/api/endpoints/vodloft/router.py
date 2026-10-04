@@ -177,6 +177,13 @@ def _upsert(session, reference: SourceMediaReference, kind: str, title: str,
         SourceReference.upstream_id == reference.upstream_id,
         SourceReference.connection_key == (connection_id or 0),
     ))
+    reference_capabilities = sorted(capabilities) if capabilities is not _MISSING and capabilities is not None else None
+    reference_formats = [format.model_dump(mode="json") for format in formats] if formats is not _MISSING else None
+    if source:
+        if capabilities is not _MISSING:
+            source.capabilities = reference_capabilities
+        if formats is not _MISSING:
+            source.formats = reference_formats
     if existing_item_id is not None:
         item = session.get(MediaItem, existing_item_id)
         if not item:
@@ -202,7 +209,8 @@ def _upsert(session, reference: SourceMediaReference, kind: str, title: str,
             session.add(SourceReference(item_id=item.id, domain_id=domain.id,
                 source_id=reference.source_id, namespace=reference.namespace,
                 upstream_id=reference.upstream_id, url=reference.url,
-                connection_id=connection_id, connection_key=connection_id or 0))
+                connection_id=connection_id, connection_key=connection_id or 0,
+                capabilities=reference_capabilities, formats=reference_formats))
         # Attaching an acquisition Source does not replace the chosen metadata.
         # Its verified snapshot is recorded separately by the import operation.
         return item
@@ -251,7 +259,8 @@ def _upsert(session, reference: SourceMediaReference, kind: str, title: str,
         session.add(SourceReference(item_id=item.id, domain_id=domain.id,
             source_id=reference.source_id, namespace=reference.namespace,
             upstream_id=reference.upstream_id, url=reference.url,
-            connection_id=connection_id, connection_key=connection_id or 0))
+            connection_id=connection_id, connection_key=connection_id or 0,
+            capabilities=reference_capabilities, formats=reference_formats))
     if normalized_metadata is not None:
         item.normalized_metadata = {**(item.normalized_metadata or {}), **normalized_metadata}
     return item
@@ -734,12 +743,12 @@ def refresh_details(item_id: int, reference_id: int | None = None):
 
 
 @router.get("/library")
-def library():
+def library(include_members: bool = False):
     with get_session() as session:
         items = session.scalars(select(MediaItem).order_by(MediaItem.created_at.desc())).all()
         members = set(session.scalars(select(CollectionEntry.item_id)).all())
-        return [_serialize(session, item) for item in items if item.id not in members and
-                (item.kind != "movie_extra" or item.parent_id is None)]
+        return [_serialize(session, item) for item in items if include_members or
+                (item.id not in members and (item.kind != "movie_extra" or item.parent_id is None))]
 
 
 @router.get("/home")
@@ -1233,8 +1242,6 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
             raise HTTPException(404, "Playable media item not found")
         if not Path(get_settings().download_settings.download_root).resolve().is_dir():
             raise HTTPException(503, "Download storage is unavailable")
-        if item.capabilities is not None and "download" not in item.capabilities:
-            raise HTTPException(409, "The Source does not advertise download for this media item")
         if profile_id is not None:
             suppressed = session.scalar(select(MediaSuppression).where(
                 MediaSuppression.item_id == item_id, MediaSuppression.profile_id == profile_id))
@@ -1269,6 +1276,8 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
                                    collection_reference_id=collection_reference_id)
         if not reference:
             raise HTTPException(409, "Select an available Source and account reference for this item")
+        if reference.capabilities is not None and "download" not in reference.capabilities:
+            raise HTTPException(409, "The selected Source account does not advertise download for this media item")
         query = select(DomainLocalMediaProfile).where(
             DomainLocalMediaProfile.domain_id == item.domain_id,
             DomainLocalMediaProfile.enabled.is_(True),
@@ -1278,7 +1287,7 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
         profile = next((p for p in session.scalars(query).all() if item.kind in p.applicable_kinds), None)
         if not profile:
             raise HTTPException(409, "Create and select a Local Media Profile for this Domain and media type")
-        if item.formats and profile.preferred_format not in {fmt.get("code") for fmt in item.formats}:
+        if reference.formats and profile.preferred_format not in {fmt.get("code") for fmt in reference.formats}:
             raise HTTPException(409, "The Source does not offer this item's requested format")
         representation_key = hashlib.sha256(json.dumps({
             "source_id": reference.source_id, "namespace": reference.namespace,

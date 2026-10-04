@@ -58,6 +58,8 @@ class ReferenceResponse(BaseModel):
     connection_id: int | None
     namespace: str
     upstream_id: str
+    capabilities: list[str] | None = None
+    formats: list[FormatDescriptor] | None = None
 
 
 class LibraryDetailResponse(LibraryItemResponse):

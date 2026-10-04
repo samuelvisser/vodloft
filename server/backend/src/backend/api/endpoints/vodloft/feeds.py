@@ -374,9 +374,11 @@ def reconcile_live_admissions(collection_id: int) -> None:
                         AcquisitionJob.item_id == item.id,
                         AcquisitionJob.reference_id == admission.source_reference_id)
                         .order_by(AcquisitionJob.id.desc()))
+                    admitted_reference = session.get(SourceReference, admission.source_reference_id)
                     admission.state = ("failed" if profile.local_only and not candidate or
                         job and job.state in {"failed", "canceled"} else
-                        "upstream" if item.capabilities is None or "stream_lease" in item.capabilities
+                        "upstream" if admitted_reference and (admitted_reference.capabilities is None or
+                            "stream_lease" in admitted_reference.capabilities)
                         else "waiting")
                     if profile.local_only and candidate and admission.state != "failed":
                         queued.append((item.id, candidate))

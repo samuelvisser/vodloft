@@ -24,7 +24,8 @@ type Item = {parent_id?: number | null; parent_ids?: number[]; extra_type?: stri
     member_groups?: string[]; member_roles?: string[];
     capabilities?: string[] | null; playback_type?: string; artwork_url?: string; artwork_available?: boolean; entries?: Item[]; extras?: Item[];
     is_live?: boolean | null; formats?: {code: string; description?: string; audio_only: boolean; height?: number}[];
-    references?: {id: number; source_id: string; connection_id: number | null; namespace: string; upstream_id: string}[]}
+    references?: {id: number; source_id: string; connection_id: number | null; namespace: string; upstream_id: string;
+        capabilities?: string[] | null; formats?: Item['formats'] | null}[]}
 type Home = {continue: (Item & {seconds: number})[]; recent: Item[];
     activity: {id: number; item_id: number; state: string}[]; issues: {kind: string; id: number}[]}
 type Job = {id: number; state: string; error?: string; cancel_requested?: boolean;
@@ -102,6 +103,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
     const [connections, setConnections] = useState<Connection[]>([])
     const [importConnectionId, setImportConnectionId] = useState<number | null>(null)
     const [items, setItems] = useState<Item[]>([])
+    const [allItems, setAllItems] = useState<Item[]>([])
     const [home, setHome] = useState<Home | null>(null)
     const [preview, setPreview] = useState<Preview | null>(null)
     const [searchPage, setSearchPage] = useState<SearchPage | null>(null)
@@ -130,6 +132,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
     const [error, setError] = useState<string | null>(null)
 
     const refresh = () => Promise.all([api<Item[]>('/library').then(setItems),
+        api<Item[]>('/library?include_members=true').then(setAllItems),
         api<Home>('/home').then(setHome)]).catch(e => setError(String(e)))
     useEffect(() => {
         void api<Source[]>('/sources').then(setSources).catch(e => setError(String(e)))
@@ -348,7 +351,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
             {preview.kind === 'collection' && <p>{preview.entries.length} preview entries
                 {!preview.enumeration_complete && ' (more entries are available)'}</p>}
             <ImportPreviewForm key={`${preview.reference.source_id}:${preview.reference.domain}:${preview.reference.namespace}:${preview.reference.upstream_id}:${importConnectionId}`}
-                preview={preview} connectionId={importConnectionId} items={items}
+                preview={preview} connectionId={importConnectionId} items={allItems}
                 canLink={!!me?.manages_library} busy={busy} onImported={importPreview}/>
         </section>}
         </>}
@@ -499,7 +502,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                     </option>)}
                 </select>
             </label>}
-            {me?.manages_library && <MetadataForm key={selected.id} item={selected} items={items} onSaved={updated => {
+            {me?.manages_library && <MetadataForm key={selected.id} item={selected} items={allItems} onSaved={updated => {
                 setSelected(previous => previous?.id === updated.id ? {...previous, ...updated} : previous)
                 void refresh()
             }}/>}
@@ -584,7 +587,9 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                     </label>
                     {outputPreview && <p>Output: <code>{outputPreview}</code></p>}
                 </div>
-                {me?.role === 'admin' && <DomainProfileForm domain={selected.domain} formats={selected.formats} targets={targets} onCreated={profile => {
+                {me?.role === 'admin' && <DomainProfileForm domain={selected.domain}
+                    formats={selected.references?.find(reference => reference.id === referenceId)?.formats ?? []}
+                    targets={targets} onCreated={profile => {
                     setProfiles(previous => [...previous, profile]); setProfileId(profile.id)
                     void showOutputPreview(profile.id, selected.id, profile)
                 }}/> }
@@ -617,8 +622,9 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                     void api(`/library/${selected.id}/local/${profileId}/resume`, {method: 'POST'})
                         .then(() => setRunResult('Automatic acquisition is allowed again for this profile.')).catch(e => setError(String(e)))
                 }}>Allow automatic acquisition</button>}
-                {(selected.downloaded || selected.capabilities?.includes('stream_lease') ||
-                    selected.references?.some(ref => sources.find(source => source.source_id === ref.source_id)?.capabilities.includes('stream_lease'))) &&
+                {(selected.downloaded || selected.references?.some(ref => ref.capabilities
+                    ? ref.capabilities.includes('stream_lease')
+                    : sources.find(source => source.source_id === ref.source_id)?.capabilities.includes('stream_lease'))) &&
                     <LocalPlayer key={`${selected.id}:${referenceId ?? ''}`} item={selected} referenceId={referenceId} onEnded={() => {const next = queue[0]; if (next) {setQueue(current => current.slice(1)); void open(next.id, true)}}} />}
             </>}
             {queue.length > 0 && <div><h3>Up next</h3><ol>{queue.map((entry, index) => <li key={`${entry.id}:${index}`}>{entry.title}</li>)}</ol>

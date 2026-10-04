@@ -8,6 +8,8 @@ Choose a Source/account reference explicitly when an item has several. Refreshin
 
 To add another Source to an existing item, resolve its URL in **Discover**, select the existing item under **Library identity**, and confirm that it is the same edit, language, and edition. Library managers can link verified references from the same content Domain. Linking preserves metadata, memberships, Movie relationships, and local files; the new Source's snapshot appears in Source history. A generic Video reference can also point to a Movie or Movie Extra you have classified. Choose the new reference explicitly for playback or acquisition. Refresh a linked Collection from that reference to discover its members. A reference already assigned to another item reports a conflict; it is never silently reassigned. Different editions and alternate uploads remain separate items.
 
+The identity selector includes playable Collection members and Movie Extras as well as top-level library items. Formats and capabilities belong to each Source/account reference: one Source may supply metadata while another supplies the playable or downloadable representation. Choosing another reference uses its availability information, without changing the selected item's title or library classification.
+
 A Movie's Extras are strong parent relationships rather than ordinary playlist entries. A shared extra can belong to multiple Movies. Its upstream role may differ by Movie; editing the parent list or extra type preserves your choices during subsequent refreshes.
 
 Refresh Collections to discover members. A failed or partial scan keeps previously known entries and exposes its incomplete checkpoint. Nested Collections expand explicitly with depth/count limits and cycle detection.

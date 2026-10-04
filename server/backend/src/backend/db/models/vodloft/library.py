@@ -75,6 +75,8 @@ class SourceReference(Base):
     url: Mapped[str] = mapped_column(String)
     connection_id: Mapped[int | None] = mapped_column(ForeignKey("vodloft_source_connections.id"), nullable=True)
     connection_key: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    capabilities: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    formats: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
 
 
 class SourceSnapshot(Base):
