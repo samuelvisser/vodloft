@@ -1299,8 +1299,11 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
                          if (profile.representation or {}).get("embed_metadata", True) else {},
         }, sort_keys=True).encode()).hexdigest()
         domain = session.get(Domain, item.domain_id)
+        parent_reference = _reference_for(session, collection_id, reference_id=collection_reference_id) if collection_id else None
         membership = session.scalar(select(CollectionEntry).where(CollectionEntry.collection_id == collection_id,
-            CollectionEntry.item_id == item_id)) if collection_id else None
+            CollectionEntry.item_id == item_id,
+            or_(CollectionEntry.source_id == parent_reference.source_id, CollectionEntry.source_id.is_(None)))
+            .order_by(CollectionEntry.id)) if parent_reference else None
         values = template_values(item, domain, reference, membership=membership,
             collection=(session.get(MediaItem, collection_id).user_title or
                         session.get(MediaItem, collection_id).title) if collection_id else "")

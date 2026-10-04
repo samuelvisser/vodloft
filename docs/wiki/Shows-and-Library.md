@@ -16,6 +16,8 @@ Refresh Collections to discover members. A failed or partial scan keeps previous
 
 When several Sources describe the same Collection, each Source's occurrence IDs and memberships are kept separately. Matching titles or occurrence IDs from another Source do not confirm that two playable items are the same edition; link those items explicitly when appropriate.
 
+Collection acquisition, feed filtering, future-group choices, and output numbering follow the selected Source's memberships. A disabled or ambiguous Collection reference requires an explicit selection before scheduling; it does not silently substitute another Source's entries.
+
 The browser player can use a local file or an upstream session. It supports queues, resume, playback speed, chapter navigation, and available subtitle tracks. An upstream session keeps its chosen delivery and Source runtime if a local download finishes while it is playing.
 
 Removing a Collection removes its policies and membership, while preserving canonical items and files still required elsewhere. See [Downloads and file integrity](Downloads-and-File-Integrity.md) before removing local media.

@@ -14,7 +14,7 @@ from backend.db.models.vodloft import CollectionDownloadProfile, CollectionEntry
 from backend.api.endpoints.vodloft.router import queue_download, _run_download, refresh_collection, _reference_for
 
 logger = logging.getLogger(__name__)
-from backend.services.vodloft_collections import known_groups, matches_membership
+from backend.services.vodloft_collections import known_groups, matches_membership, source_memberships
 router = APIRouter(prefix="/vodloft", tags=["VodLoft collection automation"])
 
 
@@ -76,7 +76,7 @@ def create_profile(collection_id: int, data: DownloadPolicyInput):
             if not (local := session.get(DomainLocalMediaProfile, profile_id)) or local.deleted:
                 raise HTTPException(422, f"Local Media Profile {profile_id} does not exist")
         profile = CollectionDownloadProfile(collection_id=collection_id,
-            known_groups=known_groups(session, collection_id),
+            known_groups=known_groups(session, collection_id, reference.id),
             **(data.model_dump() | {"source_reference_id": reference.id,
                                     "local_profile_ids": list(dict.fromkeys(data.local_profile_ids))}))
         session.add(profile)
@@ -96,8 +96,8 @@ def update_profile(profile_id: int, data: DownloadPolicyInput):
         for local_id in set(data.local_profile_ids):
             if not (local := session.get(DomainLocalMediaProfile, local_id)) or local.deleted:
                 raise HTTPException(422, f"Local Media Profile {local_id} does not exist")
-        if profile.selected_groups != data.selected_groups:
-            profile.known_groups = known_groups(session, profile.collection_id)
+        if profile.selected_groups != data.selected_groups or profile.source_reference_id != reference.id:
+            profile.known_groups = known_groups(session, profile.collection_id, reference.id)
         for key, value in data.model_dump().items():
             setattr(profile, key, value)
         profile.source_reference_id = reference.id
@@ -122,8 +122,10 @@ def schedule_profile(profile_id: int, *, dispatch: bool = True) -> dict:
         policy = session.get(CollectionDownloadProfile, profile_id)
         if not policy or not policy.enabled:
             raise HTTPException(404, "Enabled Download Profile not found")
-        entries = session.scalars(select(CollectionEntry).where(
-            CollectionEntry.collection_id == policy.collection_id).order_by(CollectionEntry.position)).all()
+        parent = _reference_for(session, policy.collection_id, reference_id=policy.source_reference_id)
+        if not parent:
+            raise HTTPException(409, "Select an available Source/account reference for this Collection")
+        entries = source_memberships(session, policy.collection_id, parent.source_id)
         excluded = [{"item_id": entry.item_id, "reason": "Group or member role does not match the Download Profile"}
             for entry in entries if not matches_membership(entry, policy)]
         entries = [entry for entry in entries if matches_membership(entry, policy)]
@@ -151,8 +153,13 @@ def schedule_profile(profile_id: int, *, dispatch: bool = True) -> dict:
             if item.kind == "collection":
                 skipped.append({"item_id": item.id, "reason": "Nested Collection requires an explicit subscription"})
                 continue
-            if item.capabilities is not None and "download" not in item.capabilities:
-                skipped.append({"item_id": item.id, "reason": "Source does not advertise download for this item"})
+            reference = _reference_for(session, item.id, collection_id=policy.collection_id,
+                collection_reference_id=parent.id)
+            if not reference:
+                skipped.append({"item_id": item.id, "reason": "No member reference in the selected Source/account"})
+                continue
+            if reference.capabilities is not None and "download" not in reference.capabilities:
+                skipped.append({"item_id": item.id, "reason": "Selected Source account does not advertise download for this item"})
                 continue
             if policy.title_contains and policy.title_contains.casefold() not in (item.user_title or item.title).casefold():
                 skipped.append({"item_id": item.id, "reason": "Title does not match the Download Profile filter"})
@@ -173,8 +180,8 @@ def schedule_profile(profile_id: int, *, dispatch: bool = True) -> dict:
                 continue
             candidates = [p for p in local_profiles if p and p.enabled and not p.deleted and not p.impairment and
                           p.domain_id == item.domain_id and item.kind in p.applicable_kinds]
-            supported = [p for p in candidates if not item.formats or
-                p.preferred_format in {fmt.get("code") for fmt in item.formats}]
+            supported = [p for p in candidates if not reference.formats or
+                p.preferred_format in {fmt.get("code") for fmt in reference.formats}]
             if not candidates:
                 skipped.append({"item_id": item.id, "reason": "No applicable Local Media Profile for the item's Domain"})
             elif not supported:

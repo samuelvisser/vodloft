@@ -24,7 +24,7 @@ from backend.db.models.vodloft import (AcquisitionJob, Artifact, CollectionDownl
     PublishedEntry, SourceReference, MediaServerTarget, ArtifactPlacement, MediaDemand)
 from backend.db.models.local_media_profile import DomainLocalMediaProfile
 from config import get_settings
-from backend.services.vodloft_collections import known_groups, matches_membership
+from backend.services.vodloft_collections import known_groups, matches_membership, source_memberships
 
 api_router = APIRouter(prefix="/vodloft", tags=["VodLoft feeds"])
 public_router = APIRouter(prefix="/feeds/vodloft", tags=["VodLoft feeds"])
@@ -102,7 +102,7 @@ def create_stream_profile(collection_id: int, data: StreamProfileInput):
             raise HTTPException(404, "Collection not found")
         reference_id = _validate_preparation(session, collection_id, data)
         profile = CollectionStreamProfile(collection_id=collection_id,
-            known_groups=known_groups(session, collection_id),
+            known_groups=known_groups(session, collection_id, reference_id),
             **(data.model_dump() | {'source_reference_id': reference_id}))
         session.add(profile)
         session.commit()
@@ -124,8 +124,8 @@ def update_stream_profile(profile_id: int, data: StreamProfileInput):
             FeedSubscription.stream_profile_id == profile_id))
         if published and profile.format != data.format:
             raise HTTPException(409, "Revoke this feed before changing its representation")
-        if profile.selected_groups != data.selected_groups:
-            profile.known_groups = known_groups(session, profile.collection_id)
+        if profile.selected_groups != data.selected_groups or profile.source_reference_id != reference_id:
+            profile.known_groups = known_groups(session, profile.collection_id, reference_id)
         for key, value in (data.model_dump() | {'source_reference_id': reference_id}).items():
             setattr(profile, key, value)
         collection_id = profile.collection_id
@@ -308,7 +308,7 @@ def reconcile_live_admissions(collection_id: int) -> None:
             CollectionDownloadProfile.enabled.is_(True))).all()
         for profile in profiles:
             for entry in entries:
-                if not matches_membership(entry, profile):
+                if not matches_membership(entry, profile, session=session):
                     continue
                 item = session.get(MediaItem, entry.item_id)
                 admission = session.scalar(select(LiveAdmission).where(
@@ -331,7 +331,7 @@ def reconcile_live_admissions(collection_id: int) -> None:
                     for a in session.scalars(select(Artifact).where(Artifact.item_id == item.id)).all())
                 candidate = None
                 for policy in policies:
-                    if not matches_membership(entry, policy) or policy.backfill == "metadata_only" or (
+                    if not matches_membership(entry, policy, session=session) or policy.backfill == "metadata_only" or (
                         policy.title_contains and policy.title_contains.casefold() not in
                             (item.user_title or item.title).casefold()):
                         continue
@@ -428,8 +428,10 @@ def prepare_stream_profile(profile_id: int, *, dispatch: bool = True) -> dict:
             raise HTTPException(404, 'Enabled Stream Profile not found')
         if profile.local_only:
             return {'queued_job_ids': [], 'skipped': [], 'considered': 0}
-        entries = session.scalars(select(CollectionEntry).where(
-            CollectionEntry.collection_id == profile.collection_id)).all()
+        parent = _reference_for(session, profile.collection_id, reference_id=profile.source_reference_id)
+        if not parent:
+            raise HTTPException(409, 'The selected Collection Source/account is unavailable')
+        entries = source_memberships(session, profile.collection_id, parent.source_id)
         collection_reference_id = profile.source_reference_id
         def newest(entry):
             published = session.get(MediaItem, entry.item_id).published_at
@@ -555,7 +557,7 @@ def feed(token: str, request: Request):
         for membership in memberships:
             if profile and profile.max_items and published_count >= profile.max_items:
                 break
-            if profile and not matches_membership(membership, profile):
+            if profile and not matches_membership(membership, profile, session=session):
                 continue
             if membership.item_id in seen:
                 continue
