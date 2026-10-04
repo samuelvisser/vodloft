@@ -130,6 +130,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
     const [feedUrl, setFeedUrl] = useState<string | null>(null)
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const selectedReference = selected?.references?.find(reference => reference.id === referenceId)
 
     const refresh = () => Promise.all([api<Item[]>('/library').then(setItems),
         api<Item[]>('/library?include_members=true').then(setAllItems),
@@ -588,17 +589,18 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                     {outputPreview && <p>Output: <code>{outputPreview}</code></p>}
                 </div>
                 {me?.role === 'admin' && <DomainProfileForm domain={selected.domain}
-                    formats={selected.references?.find(reference => reference.id === referenceId)?.formats ?? []}
+                    formats={selectedReference?.formats ?? []}
                     targets={targets} onCreated={profile => {
                     setProfiles(previous => [...previous, profile]); setProfileId(profile.id)
                     void showOutputPreview(profile.id, selected.id, profile)
                 }}/> }
                 <button className="btn btn-primary" type="button" disabled={!profileId || !referenceId ||
-                    selected.capabilities !== null && selected.capabilities !== undefined && !selected.capabilities.includes('download') ||
+                    selectedReference?.capabilities !== null && selectedReference?.capabilities !== undefined &&
+                        !selectedReference.capabilities.includes('download') ||
                     !!job && !['failed', 'available'].includes(job.state)}
                         onClick={() => void download(selected.id)}>{me?.role !== 'admin' ? 'Request download' : selected.downloaded ? 'Download again' : 'Download'}</button>
                 {runResult && <p role="status">{runResult}</p>}
-                {selected.capabilities && !selected.capabilities.includes('download') &&
+                {selectedReference?.capabilities && !selectedReference.capabilities.includes('download') &&
                     <p>This Source does not advertise a download for this item.</p>}
                 {job && <p role="status">Download: {job.state}{job.progress !== undefined ? ` · ${job.progress}%` : ''}
                     {job.error_code ? ` · ${job.error_code.replace(/_/g, ' ')}` : ''}
