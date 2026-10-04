@@ -125,6 +125,8 @@ class ResolveRequest(BaseModel):
 class ImportRequest(BaseModel):
     snapshot: NormalizedSnapshot
     connection_id: int | None = None
+    existing_item_id: int | None = Field(default=None, gt=0)
+    confirm_same_edition: bool = False
 
 
 class DownloadRequest(BaseModel):
@@ -160,7 +162,8 @@ def _upsert(session, reference: SourceMediaReference, kind: str, title: str,
             description=_MISSING, duration=_MISSING,
             artwork_url=_MISSING, connection_id: int | None = None,
             published_at=_MISSING, capabilities=_MISSING,
-            is_live=_MISSING, formats=_MISSING, normalized_metadata: dict | None = None) -> MediaItem:
+            is_live=_MISSING, formats=_MISSING, normalized_metadata: dict | None = None,
+            existing_item_id: int | None = None) -> MediaItem:
     domain = _domain(session, reference.domain)
     supported = session.scalar(select(SourceDomain).where(
         SourceDomain.source_id == reference.source_id, SourceDomain.domain_id == domain.id))
@@ -174,6 +177,35 @@ def _upsert(session, reference: SourceMediaReference, kind: str, title: str,
         SourceReference.upstream_id == reference.upstream_id,
         SourceReference.connection_key == (connection_id or 0),
     ))
+    if existing_item_id is not None:
+        item = session.get(MediaItem, existing_item_id)
+        if not item:
+            raise HTTPException(404, "The existing library item was not found")
+        effective_kind = item.user_kind or item.kind
+        if item.domain_id != domain.id:
+            raise HTTPException(422, "Link a reference from the same content Domain")
+        if effective_kind != kind and not (kind == "video" and effective_kind in {"movie", "movie_extra"}):
+            raise HTTPException(422, "The reference and existing item have incompatible media types")
+        # Confirmation may add a new reference, but must never move an identity
+        # already used by another canonical item, account, job, or artifact.
+        related = session.scalars(select(SourceReference).where(
+            SourceReference.source_id == reference.source_id,
+            SourceReference.domain_id == domain.id,
+            or_((SourceReference.namespace == reference.namespace) &
+                (SourceReference.upstream_id == reference.upstream_id),
+                SourceReference.url == reference.url))).all()
+        if any(candidate.item_id != item.id for candidate in related):
+            raise HTTPException(409, "This Source reference already belongs to another library item")
+        if source:
+            source.url = reference.url
+        else:
+            session.add(SourceReference(item_id=item.id, domain_id=domain.id,
+                source_id=reference.source_id, namespace=reference.namespace,
+                upstream_id=reference.upstream_id, url=reference.url,
+                connection_id=connection_id, connection_key=connection_id or 0))
+        # Attaching an acquisition Source does not replace the chosen metadata.
+        # Its verified snapshot is recorded separately by the import operation.
+        return item
     if source:
         item = session.get(MediaItem, source.item_id)
         item.title = title
@@ -436,6 +468,11 @@ def resolve(request: ResolveRequest, http_request: Request):
 @router.post("/import")
 def import_media(request: ImportRequest, http_request: Request):
     require_connection(http_request, request.connection_id)
+    if request.existing_item_id is not None:
+        if not principal(http_request).manages_library:
+            raise HTTPException(403, "A library manager must confirm shared media identity")
+        if not request.confirm_same_edition:
+            raise HTTPException(422, "Confirm that this is the same edit, language, and edition")
     snapshot = request.snapshot
     # Re-resolve the original URL instead of trusting client-supplied metadata or identity.
     try:
@@ -446,12 +483,12 @@ def import_media(request: ImportRequest, http_request: Request):
         raise HTTPException(422, str(exc)) from exc
     except Exception as exc:
         raise _source_problem(exc, "Source could not verify this media") from exc
-    return _import_snapshot(snapshot, request.connection_id)
+    return _import_snapshot(snapshot, request.connection_id, existing_item_id=request.existing_item_id)
 
 
 def _import_snapshot(snapshot: MediaSnapshot, connection_id: int | None = None,
                      *, scan_error: str | None = None, next_cursor: str | None = None,
-                     runtime_version: str | None = None) -> dict:
+                     runtime_version: str | None = None, existing_item_id: int | None = None) -> LibraryItemResponse:
     with get_session() as session:
         item = _upsert(session, snapshot.reference, snapshot.kind, snapshot.title,
                        snapshot.description if "description" in snapshot.model_fields_set else _MISSING,
@@ -463,7 +500,8 @@ def _import_snapshot(snapshot: MediaSnapshot, connection_id: int | None = None,
                        is_live=snapshot.is_live if "is_live" in snapshot.model_fields_set else _MISSING,
                        formats=snapshot.formats if "formats" in snapshot.model_fields_set else _MISSING,
                        normalized_metadata=snapshot.model_dump(mode="json", include={
-                           "artwork", "chapters", "tracks", "author", "movie_year"}, exclude_unset=True))
+                           "artwork", "chapters", "tracks", "author", "movie_year"}, exclude_unset=True),
+                       existing_item_id=existing_item_id)
         session.flush()
         metadata_snapshot = snapshot.model_dump(mode="json", exclude={"reference", "entries", "extras"},
                                                 exclude_unset=True)
@@ -479,7 +517,7 @@ def _import_snapshot(snapshot: MediaSnapshot, connection_id: int | None = None,
             session.add(SourceSnapshot(item_id=item.id, source_id=snapshot.reference.source_id,
                 connection_id=connection_id, runtime_version=source_version,
                 metadata_snapshot=metadata_snapshot))
-        if snapshot.kind == "collection":
+        if snapshot.kind == "collection" and existing_item_id is None:
             for entry in snapshot.entries:
                 child = _upsert(session, entry.reference, entry.kind, entry.title,
                                 connection_id=connection_id,
@@ -511,7 +549,7 @@ def _import_snapshot(snapshot: MediaSnapshot, connection_id: int | None = None,
                 complete=snapshot.enumeration_complete, entry_count=len(snapshot.entries),
                 connection_id=connection_id, next_cursor=next_cursor,
                 runtime_version=runtime_version, error=scan_error))
-        if snapshot.kind == "movie":
+        if snapshot.kind == "movie" and existing_item_id is None:
             for extra in snapshot.extras:
                 child = _upsert(session, extra.reference, "movie_extra", extra.title,
                                 connection_id=connection_id,
@@ -536,7 +574,7 @@ def _import_snapshot(snapshot: MediaSnapshot, connection_id: int | None = None,
         result = _serialize(session, item)
         imported_item_id = item.id
         session.commit()
-    if snapshot.kind == "collection":
+    if snapshot.kind == "collection" and existing_item_id is None:
         from backend.api.endpoints.vodloft.feeds import reconcile_live_admissions
         reconcile_live_admissions(imported_item_id)
     return result

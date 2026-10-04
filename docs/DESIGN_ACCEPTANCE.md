@@ -24,7 +24,7 @@ Tests below live in `tests/unit/test_vodloft_architecture.py` unless another fil
 | Design area | Implementation |
 | --- | --- |
 | Source/core/integration separation | `server/source_contracts`, `server/source_ytdlp`, `server/source_dailywire`, `server/source_media`; core `backend/source_manager`; separate downstream export lifecycle. AST checks enforce contract/gateway and inherited API dependency boundaries. |
-| Domain support and canonical library | `backend/db/models/vodloft`; Source/account-scoped references, normalized snapshots, independent membership, Source history and user edits. |
+| Domain support and canonical library | `backend/db/models/vodloft`; Source/account-scoped references, manager-confirmed cross-Source identity linking, normalized snapshots, independent membership, Source history and user edits. |
 | Movies and shared Extras | Strong `MovieExtraParent` links, per-parent roles, generic parent-list editing, explicit user overrides retained across Source refresh. |
 | Local Media Profiles and templates | Domain/type applicability; quality, language/fallback, subtitles, container/codecs, artwork/chapters/tags, selected targets; Jinja AST validation, sanitized rooted output, CodeMirror completion and scoped previews. |
 | Collection acquisition | Source/account selection, backfill, dates/title, groups/roles/future groups, mixed Domains, pagination, explicit bounded nesting, retention, suppression and retry budget. |

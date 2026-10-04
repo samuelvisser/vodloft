@@ -184,15 +184,10 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
             return await fetch(`${base()}/sources/${encodeURIComponent(fields.source_id)}/search?${params}`, {credentials: 'include'})
         } finally { setBusy(false) }
     }, {onSuccess: result => setSearchPage(result as SearchPage), rootOnFieldErrors: true})
-    const importPreview = async () => {
-        if (!preview) return
-        setBusy(true); setError(null)
-        try {
-            const item = await api<Item>('/import', {method: 'POST',
-                body: JSON.stringify({snapshot: preview, connection_id: importConnectionId})})
-            setPreview(null); await refresh()
-            await open(item.id)
-        } catch (e) { setError(String(e)) } finally { setBusy(false) }
+    const importPreview = async (item: Item) => {
+        setPreview(null)
+        await refresh()
+        await open(item.id)
     }
     const fetchSearch = async (fields: SearchFields, cursor?: string) => {
         setBusy(true); setError(null)
@@ -352,7 +347,9 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
             {preview.description && <p>{preview.description.slice(0, 350)}</p>}
             {preview.kind === 'collection' && <p>{preview.entries.length} preview entries
                 {!preview.enumeration_complete && ' (more entries are available)'}</p>}
-            <button className="btn btn-primary" type="button" disabled={busy} onClick={() => void importPreview()}>Add to library</button>
+            <ImportPreviewForm key={`${preview.reference.source_id}:${preview.reference.domain}:${preview.reference.namespace}:${preview.reference.upstream_id}:${importConnectionId}`}
+                preview={preview} connectionId={importConnectionId} items={items}
+                canLink={!!me?.manages_library} busy={busy} onImported={importPreview}/>
         </section>}
         </>}
         {view === 'home' && home && <section style={{marginBottom: 24}} aria-label="Home">
@@ -641,6 +638,54 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
         </section>}
         </>}
     </section>
+}
+
+const ImportPreviewSchema = z.object({
+    existing_item_id: z.string().regex(/^(?:[1-9]\d*)?$/).default(''),
+    confirm_same_edition: z.boolean().default(false),
+}).refine(values => !values.existing_item_id || values.confirm_same_edition, {
+    message: 'Confirm that both references describe the same edit, language, and edition.',
+    path: ['confirm_same_edition'],
+})
+
+function ImportPreviewForm({preview, connectionId, items, canLink, busy, onImported}: {
+    preview: Preview; connectionId: number | null; items: Item[]; canLink: boolean; busy: boolean;
+    onImported: (item: Item) => Promise<void>;
+}) {
+    const form = useForm<z.input<typeof ImportPreviewSchema>, unknown, z.output<typeof ImportPreviewSchema>>({
+        resolver: zodResolver(ImportPreviewSchema), defaultValues: ImportPreviewSchema.parse({}),
+    })
+    const {register, watch, formState: {errors, isSubmitting}} = form
+    const existingId = watch('existing_item_id')
+    const candidates = items.filter(item => item.domain === preview.reference.domain.replace(/\.$/, '').toLowerCase() &&
+        (item.kind === preview.kind || (preview.kind === 'video' && ['movie', 'movie_extra'].includes(item.kind))))
+    const submit = buildServerAwareSubmit(form, values => formRequest('/import', 'POST', {
+        snapshot: preview, connection_id: connectionId,
+        existing_item_id: canLink && values.existing_item_id ? Number(values.existing_item_id) : null,
+        confirm_same_edition: canLink && values.confirm_same_edition,
+    }), {onSuccess: result => onImported(result as Item)})
+    return <form onSubmit={submit}>
+        <fieldset disabled={busy || isSubmitting} style={{border: 0, padding: 0}}>
+            {canLink && candidates.length > 0 && <>
+                <label>Library identity <select {...register('existing_item_id', {
+                    onChange: () => form.setValue('confirm_same_edition', false),
+                })}>
+                    <option value="">Import using this Source's identity</option>
+                    {candidates.map(item => <option key={item.id} value={item.id}>{item.title} · {item.kind} · #{item.id}</option>)}
+                </select></label>
+                {existingId && <div style={{margin: '12px 0'}}>
+                    <label><input type="checkbox" {...register('confirm_same_edition')}/>{' '}
+                        I confirm this is the same edit, language, and edition as the selected item.</label>
+                    <p>Link this Source to the existing item. Its metadata, memberships, Movie relationships, and local files are preserved.
+                        Different editions and alternate uploads should have separate library identities.</p>
+                    {errors.confirm_same_edition && <p role="alert">{errors.confirm_same_edition.message}</p>}
+                </div>}
+                {errors.existing_item_id && <p role="alert">{errors.existing_item_id.message}</p>}
+            </>}
+            <button className="btn btn-primary" type="submit">{isSubmitting ? 'Saving…' : existingId ? 'Link Source to item' : 'Add to library'}</button>
+        </fieldset>
+        {errors.root && <p role="alert">{errors.root.message}</p>}
+    </form>
 }
 
 function MediaArtwork({item, shape}: {item: Item; shape: 'square' | 'portrait' | 'landscape'}) {
