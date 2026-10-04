@@ -60,7 +60,7 @@ uv run --frozen python tools/build_source_bundles.py dist/source-bundles \
 
 The builder creates adapter/contract/helper wheels, downloads dependency wheels using locked hashes, and writes `release.json` with the adapter version, release version, channel, protocol/schema versions, Python minor compatibility, package inventory, upstream versions, and SHA-256 wheel digests. It refuses to overwrite an existing release directory.
 
-Third-party publishers can use `create_manifest` in `tools/create_source_bundle_manifests.py` after preparing their complete wheelhouse. Native wheels must match the target platform and Python version. Native helper executables must be installed separately on the host.
+Third-party publishers can use `create_manifest` in `tools/create_source_bundle_manifests.py` after preparing their complete wheelhouse. Native wheels must match the target platform and Python version. Helper lookup prefers the pinned Source runtime's `native/bin`, then its wheel-installed `bin` entry points, then the host's `PATH`. Manifest probes, helper-version checks, health checks, and real operations all use this same environment. Host executables remain available as a fallback; a Source can supply its own helper version independently of the core application. Wheel console scripts are relocated when a runtime is atomically published.
 
 ## Mounted installation
 

@@ -93,6 +93,45 @@ def command_for(source_id: str) -> tuple[list[str], str]:
     return [sys.executable, "-m", module], "bundled"
 
 
+def command_environment(command: list[str]) -> dict[str, str]:
+    """Select helpers from the command's pinned runtime, never its active alias."""
+    environment = os.environ.copy()
+    executable = Path(command[0])
+    if not executable.is_absolute():
+        executable = Path(shutil.which(command[0]) or command[0]).absolute()
+    # Do not resolve the Python symlink: its parent identifies the Source venv,
+    # while its target may be the interpreter shared with the core application.
+    binary_directory = executable.parent
+    prefix = binary_directory.parent
+    helper_directory = prefix / "native" / "bin"
+    directories = [str(helper_directory)] if helper_directory.is_dir() else []
+    directories.append(str(binary_directory))
+    if environment.get("PATH"):
+        directories.append(environment["PATH"])
+    environment["PATH"] = os.pathsep.join(directories)
+    environment.pop("PYTHONHOME", None)
+    if (prefix / "pyvenv.cfg").is_file():
+        environment["VIRTUAL_ENV"] = str(prefix)
+    return environment
+
+
+def _relocate_entry_points(staging: Path, target: Path) -> None:
+    """Keep wheel-installed console helpers valid after atomic publication."""
+    old_python = str(staging / "bin" / "python").encode()
+    new_python = str(target / "bin" / "python").encode()
+    for script in (staging / "bin").iterdir():
+        if script.is_symlink() or not script.is_file():
+            continue
+        with script.open("rb") as handle:
+            header = handle.read(4096)
+        if not header.startswith(b"#!") or old_python not in b"".join(header.splitlines(keepends=True)[:4]):
+            continue
+        content = script.read_bytes()
+        lines = content.splitlines(keepends=True)
+        script.write_bytes(b"".join(line.replace(old_python, new_python) if index < 4 else line
+                                    for index, line in enumerate(lines)))
+
+
 def status() -> dict:
     root = runtime_root()
     state = _read_state(root)
@@ -104,8 +143,9 @@ def status() -> dict:
 
 
 def _probe(command: list[str], source_id: str) -> SourceManifest:
+    environment = command_environment(command)
     result = subprocess.run(command, input='{"operation":"manifest"}', text=True,
-        capture_output=True, timeout=20, check=True)
+        capture_output=True, timeout=20, check=True, env=environment)
     manifest = SourceManifest.model_validate_json(result.stdout)
     if (manifest.source_id != source_id or manifest.protocol_version != PROTOCOL_VERSION or
             manifest.metadata_schema_version != METADATA_SCHEMA_VERSION):
@@ -113,15 +153,18 @@ def _probe(command: list[str], source_id: str) -> SourceManifest:
     if "domain_catalogue" in manifest.capabilities:
         _catalogue(command, source_id)
     python_version = subprocess.run([command[0], "-c", "import platform; print(platform.python_version())"],
-        text=True, capture_output=True, timeout=10, check=True).stdout.strip()
+        text=True, capture_output=True, timeout=10, check=True, env=environment).stdout.strip()
     if Version(python_version) not in SpecifierSet(manifest.python_requirement):
         raise ValueError("The Source requires a different Python interpreter")
     helper_versions = {}
     for helper in manifest.native_helpers:
-        if not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", helper) or not shutil.which(helper):
+        if not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", helper):
+            raise ValueError("Invalid Source native helper name")
+        executable = shutil.which(helper, path=environment["PATH"])
+        if not executable:
             raise ValueError("A required Source native helper is unavailable")
-        version_result = subprocess.run([helper, '-version' if helper in {'ffmpeg', 'ffprobe'} else '--version'],
-            text=True, capture_output=True, timeout=10, check=True)
+        version_result = subprocess.run([executable, '-version' if helper in {'ffmpeg', 'ffprobe'} else '--version'],
+            text=True, capture_output=True, timeout=10, check=True, env=environment)
         output = (version_result.stdout or version_result.stderr).splitlines()
         helper_versions[helper] = output[0][:300] if output else 'available'
 
@@ -129,7 +172,7 @@ def _probe(command: list[str], source_id: str) -> SourceManifest:
     # checks must prove their dependencies before receiving real jobs.
     if "health" in manifest.capabilities:
         health = subprocess.run(command, input='{"operation":"health"}', text=True,
-            capture_output=True, timeout=20, check=True)
+            capture_output=True, timeout=20, check=True, env=environment)
         if json.loads(health.stdout).get("healthy") is not True:
             raise ValueError("The Source runtime health check failed")
     return manifest.model_copy(update={'python_version': python_version, 'helper_versions': helper_versions})
@@ -137,7 +180,7 @@ def _probe(command: list[str], source_id: str) -> SourceManifest:
 
 def _catalogue(command: list[str], source_id: str) -> DomainCatalogue:
     result = subprocess.run(command, input='{"operation":"domains"}', text=True,
-        capture_output=True, timeout=20, check=True)
+        capture_output=True, timeout=20, check=True, env=command_environment(command))
     catalogue = DomainCatalogue.model_validate_json(result.stdout)
     if any(domain.source_id != source_id for domain in catalogue.items):
         raise ValueError("Domain catalogue returned another Source's identity")
@@ -237,7 +280,7 @@ def _verify_release_runtime(command: list[str], manifest: SourceManifest, releas
     if release.get("packages"):
         result = subprocess.run([command[0], "-c",
             "import importlib.metadata as m,json; print(json.dumps({d.metadata['Name'].lower().replace('_','-'):d.version for d in m.distributions()}))"],
-            text=True, capture_output=True, timeout=10, check=True)
+            text=True, capture_output=True, timeout=10, check=True, env=command_environment(command))
         installed = json.loads(result.stdout)
         if any(name not in installed or Version(installed[name]) != Version(version)
                for name, version in release["packages"].items()):
@@ -287,6 +330,7 @@ def install_bundle(source_id: str, bundle: Path, *, activate: bool = True) -> di
                 staged_manifest = _probe(staged_command, source_id)
                 _verify_release_runtime(staged_command, staged_manifest, release)
                 (staging / "release.json").write_text(json.dumps(release, sort_keys=True))
+                _relocate_entry_points(staging, target)
                 os.replace(staging, target)
             finally:
                 if staging.exists():

@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 from pydantic import TypeAdapter
 
 from source_contracts import CollectionPage, DomainCatalogue, DownloadEvent, DownloadResult, MediaSnapshot, NormalizedSnapshot, SourceError, SourceManifest, SourceMatch, SourceSearchPage, StreamLease
-from .runtime import command_for, registry
+from .runtime import command_environment, command_for, registry
 
 _running: dict[int, subprocess.Popen] = {}
 _canceled: set[int] = set()
@@ -103,7 +103,7 @@ class SourceGateway:
             process = subprocess.Popen(command, stdin=subprocess.PIPE,
                 stdout=output_file if output_file is not None else subprocess.PIPE,
                 stderr=subprocess.DEVNULL if output_file is not None else subprocess.PIPE,
-                text=True, start_new_session=True)
+                text=True, start_new_session=True, env=command_environment(command))
         except BaseException:
             if output_file is not None:
                 output_file.close()
