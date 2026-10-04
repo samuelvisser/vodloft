@@ -269,7 +269,7 @@ def record_failure(source_id: str, action: str, error: Exception) -> None:
 
 def _verify_release_runtime(command: list[str], manifest: SourceManifest, release: dict) -> None:
     """Reject a mismatched environment before publication or later activation."""
-    _verify_native_executables(Path(command[0]).parent.parent, release)
+    _verify_native_executables(Path(command[0]).parent.parent, release, require_executable=True)
     if ("configuration_version" in release and manifest.configuration_version != release["configuration_version"] or
             "catalogue_revision" in release and manifest.catalogue_revision != release["catalogue_revision"] or
             "native_helpers" in release and sorted(manifest.native_helpers) != sorted(release["native_helpers"])):
@@ -292,7 +292,7 @@ def _verify_release_runtime(command: list[str], manifest: SourceManifest, releas
             raise ValueError("The installed package inventory does not match the release")
 
 
-def _verify_native_executables(root: Path, release: dict) -> dict[str, str]:
+def _verify_native_executables(root: Path, release: dict, *, require_executable: bool = False) -> dict[str, str]:
     declared = release.get("native_executables", {})
     if not isinstance(declared, dict) or len(declared) > 16:
         raise ValueError("Invalid Source native executable inventory")
@@ -310,6 +310,8 @@ def _verify_native_executables(root: Path, release: dict) -> dict[str, str]:
         path = directory / name
         if path.is_symlink() or not path.is_file():
             raise ValueError("Source native executables must be regular bundled files")
+        if require_executable and not os.access(path, os.X_OK):
+            raise ValueError("An installed Source native helper is not executable")
         with path.open("rb") as handle:
             if hashlib.file_digest(handle, "sha256").hexdigest() != digest:
                 raise ValueError("Source native executable digest mismatch")
@@ -364,7 +366,7 @@ def install_bundle(source_id: str, bundle: Path, *, activate: bool = True) -> di
                         shutil.copyfile(bundle / "native" / "bin" / name, destination)
                         destination.chmod(0o755)
                 staged_command = [str(python), "-m", module]
-                _verify_native_executables(staging, release)
+                _verify_native_executables(staging, release, require_executable=True)
                 staged_manifest = _probe(staged_command, source_id)
                 _verify_release_runtime(staged_command, staged_manifest, release)
                 (staging / "release.json").write_text(json.dumps(release, sort_keys=True))
@@ -377,7 +379,7 @@ def install_bundle(source_id: str, bundle: Path, *, activate: bool = True) -> di
         if saved_release.is_file() and json.loads(saved_release.read_text()) != release:
             raise ValueError("An installed Source runtime is immutable; publish a new bundle version")
         # A previously installed bundle is still probed before a new activation.
-        _verify_native_executables(target, release)
+        _verify_native_executables(target, release, require_executable=True)
         manifest = _probe([str(target / "bin" / "python"), "-m", module], source_id)
         _verify_release_runtime([str(target / "bin" / "python"), "-m", module], manifest, release)
         if activate:
@@ -405,7 +407,7 @@ def activate(source_id: str, version: str) -> dict:
         release = json.loads((root / source_id / version / "release.json").read_text())
         if release.get("source_id") != source_id or release.get("version") != version:
             raise ValueError("The installed release identity does not match the runtime")
-        _verify_native_executables(root / source_id / version, release)
+        _verify_native_executables(root / source_id / version, release, require_executable=True)
         manifest = _probe(command, source_id)
         _verify_release_runtime(command, manifest, release)
         _validate_saved_configuration(manifest)
