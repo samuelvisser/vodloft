@@ -1,0 +1,13 @@
+[project]
+name = "vodloft-source-ytdlp"
+version = "1.0.0"
+requires-python = ">=3.12"
+dependencies = ["source-contracts", "vodloft-source-media", "yt-dlp>=2025.1.1"]
+
+[tool.uv.sources]
+source-contracts = { workspace = true }
+vodloft-source-media = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.8.17,<0.9.0"]
+build-backend = "uv_build"

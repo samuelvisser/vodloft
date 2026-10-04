@@ -1,22 +1,71 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-mkdir -p /config /downloads
-if [[ ! -f "${VODLOFT_CONFIG}" ]]; then
-    cp /app/config/config.yml.default "${VODLOFT_CONFIG}"
+CONFIG_FILE="${WL_CONFIG_FILE:-/config/config.yml}"
+DATABASE_PATH="${WL_DATABASE_PATH:-/config/vodloft.db}"
+# Matches downloadSettings.downloadRoot in config/config.yml.default; not an
+# env var since download_root is set via that file (see its header comment).
+DOWNLOAD_ROOT=/downloads
+KEYRING_DATA_HOME="${XDG_DATA_HOME:-/config/keyring/data}"
+KEYRING_CONFIG_HOME="${XDG_CONFIG_HOME:-/config/keyring/config}"
+
+# Make sure every directory backed by a volume mount actually exists. The
+# database file itself is created by Alembic when migrations run below.
+mkdir -p \
+    "$(dirname "$CONFIG_FILE")" \
+    "$(dirname "$DATABASE_PATH")" \
+    "$DOWNLOAD_ROOT" \
+    /config/source-bundles \
+    "$KEYRING_DATA_HOME" \
+    "$KEYRING_CONFIG_HOME"
+
+# Seed a default config.yml on first run (mirrors config/config.yml.default).
+if [ ! -f "$CONFIG_FILE" ] && [ -f /app/config/config.yml.default ]; then
+    cp /app/config/config.yml.default "$CONFIG_FILE"
+    echo "[entrypoint] Seeded default config at $CONFIG_FILE"
 fi
 
-backend-api db upgrade head
-backend-api serve --host 127.0.0.1 --port 8000 &
-backend_pid=$!
+# The UI fetches /config.json at startup for the API base URL. Regenerate it
+# on every boot so it always matches how this container is being served,
+# while still allowing an override via API_URL.
+cat > /usr/share/nginx/html/config.json <<EOF
+{"API_URL": "${API_URL:-/api}"}
+EOF
 
-nginx -g 'daemon off;' &
-nginx_pid=$!
+run_supervised() {
+    echo "[entrypoint] Starting VodLoft backend on 127.0.0.1:5001"
+    backend-api run --host 127.0.0.1 --port 5001 &
+    backend_pid=$!
 
-shutdown() {
-    kill -TERM "$backend_pid" "$nginx_pid" 2>/dev/null || true
-    wait "$backend_pid" "$nginx_pid" 2>/dev/null || true
+    echo "[entrypoint] Starting nginx on :80 (UI + /api proxy)"
+    nginx -g 'daemon off;' &
+    nginx_pid=$!
+
+    shutdown() {
+        trap - TERM INT
+        kill -TERM "$backend_pid" "$nginx_pid" 2>/dev/null || true
+        wait "$backend_pid" "$nginx_pid" 2>/dev/null || true
+    }
+    trap shutdown TERM INT
+
+    # If either process exits, tear the other down and stop the container so
+    # Docker's restart policy can bring it back up cleanly.
+    wait -n
+    exit_code=$?
+    shutdown
+    exit "$exit_code"
 }
-trap shutdown EXIT INT TERM
 
-wait -n "$backend_pid" "$nginx_pid"
+if [ "$#" -eq 0 ]; then
+    echo "[entrypoint] Applying database migrations"
+    backend-api db upgrade
+    # The bundled wheelhouses are copied only when absent; operators may add
+    # newer digest-pinned bundles to this trusted persistent directory later.
+    cp -an /app/source-bundles/. /config/source-bundles/
+    python -c 'from backend.source_manager.runtime import install_bundled_updates; install_bundled_updates()'
+    run_supervised
+else
+    # Escape hatch for one-off maintenance, e.g.:
+    #   docker compose run --rm vodloft backend-api db current
+    exec "$@"
+fi

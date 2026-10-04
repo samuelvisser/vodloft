@@ -1,0 +1,153 @@
+.movie-kicker-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.movie-upcoming-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border: 1px solid rgba(15, 23, 42, 0.18);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.82);
+    color: #0f172a;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    backdrop-filter: blur(6px);
+}
+
+.movie-hero .movie-expected-release {
+    margin-top: 8px;
+    color: var(--text);
+    font-weight: 700;
+    opacity: 0.92;
+}
+
+.movie-download-unavailable {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border: 1px solid rgba(71, 85, 105, 0.25);
+    border-radius: 10px;
+    background: rgba(148, 163, 184, 0.1);
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.movie-media-download-control {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 7px;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.movie-media-download-control.is-panel {
+    width: 100%;
+    margin-top: 12px;
+}
+
+.movie-media-download-control.is-panel .progress-button-root,
+.movie-media-download-control.is-panel .movie-media-downloaded {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.movie-media-download-control.is-panel .progress-button-root {
+    width: 100%;
+}
+
+.movie-media-downloaded {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 34px;
+    padding-inline: 6px;
+    box-sizing: border-box;
+    color: #22a95e;
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1.25;
+}
+
+.movie-media-downloaded > span {
+    min-width: 0;
+}
+
+.movie-download-log-button {
+    flex: 0 0 auto;
+}
+
+.movie-extra-actions {
+    align-items: center;
+    min-width: 0;
+}
+
+.movie-extra-actions .btn-icon {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+}
+
+.movie-extra-actions .movie-media-download-control {
+    flex: 0 0 auto;
+    width: fit-content;
+    min-width: 0;
+    max-width: 100%;
+    margin: 0;
+}
+
+.movie-extra-actions .progress-button-root {
+    flex: 0 1 auto;
+    width: max-content;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.movie-extra-actions .progress-button {
+    min-height: 34px;
+    padding-block: 6px;
+    font-size: 12px;
+}
+
+.movie-media-download-control.is-panel .progress-button-root.is-progress,
+.movie-extra-actions .progress-button-root.is-progress {
+    min-width: 150px;
+}
+
+.movie-extra-actions .movie-media-downloaded {
+    flex: 0 0 auto;
+    width: fit-content;
+    min-width: max-content;
+    max-width: none;
+    justify-content: flex-start;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.movie-extra-actions .movie-media-downloaded > span {
+    min-width: 0;
+    white-space: nowrap;
+}
+
+@media (prefers-color-scheme: dark) {
+    .movie-upcoming-badge {
+        border-color: rgba(255, 255, 255, 0.2);
+        background: rgba(15, 23, 42, 0.78);
+        color: #f8fafc;
+    }
+
+    .movie-download-unavailable {
+        border-color: rgba(255, 255, 255, 0.14);
+        background: rgba(255, 255, 255, 0.05);
+    }
+}

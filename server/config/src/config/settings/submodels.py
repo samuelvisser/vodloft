@@ -1,0 +1,414 @@
+from __future__ import annotations
+
+import os
+import re
+from enum import StrEnum
+from pathlib import Path
+from typing import Optional
+from urllib.parse import urlparse
+
+from pydantic import Field, SecretStr, field_validator, model_validator
+
+from config.config import PROJECT_ROOT
+from config.security.passwords import derive_admin_password_client_value, hash_password_scrypt
+from config.settings.base import SubmodelBase
+
+
+_METADATA_REFRESH_INTERVAL_PATTERN = re.compile(r"^(?P<amount>[1-9]\d*)(?P<unit>[smhd])$", re.IGNORECASE)
+_METADATA_REFRESH_INTERVAL_UNIT_SECONDS = {
+    "s": 1,
+    "m": 60,
+    "h": 60 * 60,
+    "d": 60 * 60 * 24,
+}
+
+
+def _validate_http_url(value: str) -> str:
+    value = value.strip()
+    try:
+        parsed = urlparse(value)
+    except ValueError as exc:
+        raise ValueError("Must be a complete http:// or https:// URL") from exc
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("Must be a complete http:// or https:// URL")
+    return value
+
+
+def _validate_non_empty_path(value):
+    if isinstance(value, str) and not value.strip():
+        raise ValueError("Path cannot be empty")
+    return value
+
+
+def parse_metadata_refresh_intervals(value: str) -> tuple[int, ...]:
+    """Parse increasing comma-separated metadata refresh offsets into seconds."""
+    if not isinstance(value, str):
+        raise ValueError("Metadata refresh intervals must be a comma-separated string")
+
+    tokens = [token.strip().lower() for token in value.split(",")]
+    if not tokens or any(not token for token in tokens):
+        raise ValueError(
+            "Metadata refresh intervals must be comma-separated values such as 5m,15m,1h"
+        )
+
+    offsets: list[int] = []
+    for token in tokens:
+        match = _METADATA_REFRESH_INTERVAL_PATTERN.fullmatch(token)
+        if match is None:
+            raise ValueError(
+                "Metadata refresh intervals must use positive s, m, h, or d values such as 5m,1h,1d"
+            )
+
+        offset = (
+            int(match.group("amount"))
+            * _METADATA_REFRESH_INTERVAL_UNIT_SECONDS[match.group("unit").lower()]
+        )
+        if offsets and offset <= offsets[-1]:
+            raise ValueError("Metadata refresh intervals must be unique and strictly increasing")
+        offsets.append(offset)
+
+    return tuple(offsets)
+
+
+def normalize_metadata_refresh_intervals(value: str) -> str:
+    """Validate and normalize a metadata refresh interval setting."""
+    parse_metadata_refresh_intervals(value)
+    return ",".join(token.strip().lower() for token in value.split(","))
+
+
+class OAuthSettings(SubmodelBase):
+    issuer: str = Field(..., min_length=1, description="Issuer URL for OAuth authentication")
+    audience: str = Field(..., min_length=1, description="Audience URL for OAuth authentication")
+    client_id: str = Field(..., min_length=1, description="Client ID for OAuth authentication")
+    scope: str = Field(..., min_length=1, description="Scope for OAuth authentication")
+
+    _validate_issuer = field_validator("issuer")(_validate_http_url)
+    _validate_audience = field_validator("audience")(_validate_http_url)
+
+
+class TimeoutSettings(SubmodelBase):
+    min_fast_request_ms: int = Field(
+        ...,
+        ge=0,
+        description="Minimum time in milliseconds for a fast request",
+    )
+    max_fast_requests: int = Field(
+        ...,
+        ge=1,
+        description="Maximum number of fast requests allowed",
+    )
+    min_slow_request_ms: int = Field(
+        ...,
+        ge=0,
+        description="Milliseconds to wait after max fast requests where made",
+    )
+
+
+class CryptoSettings(SubmodelBase):
+    secret_key: Optional[str] = Field(default=None, description="Literal secret key material for Fernet (base64 or raw text)")
+    secret_key_file: Optional[Path] = Field(default=None, description="Path to a file containing the secret key")
+    default_secret_file: Path = Field(..., description="Default path if no explicit key or file is provided", frozen=True)
+
+    _validate_secret_key_file = field_validator(
+        "secret_key_file", mode="before"
+    )(_validate_non_empty_path)
+    _validate_default_secret_file = field_validator(
+        "default_secret_file", mode="before"
+    )(_validate_non_empty_path)
+
+
+class SessionSettings(SubmodelBase):
+    ttl_seconds: int = Field(
+        ...,
+        ge=60,
+        description="Time in seconds the session stays valid",
+    )
+
+
+class DailyWireAPISettings(SubmodelBase):
+    middleware_api: str = Field(..., min_length=1, description="Middleware API base URL")
+    stream_api: str = Field(..., min_length=1, description="Stream API base URL")
+
+    _validate_middleware_api = field_validator("middleware_api")(_validate_http_url)
+    _validate_stream_api = field_validator("stream_api")(_validate_http_url)
+
+
+class MovieMetadataSettings(SubmodelBase):
+    """Third-party metadata settings used to enrich movies when first added."""
+
+    tmdb_read_access_token: Optional[SecretStr] = Field(
+        default=None,
+        description="TMDB API Read Access Token used for one-time movie release-date lookups",
+    )
+    tmdb_api_base_url: str = Field(
+        default="https://api.themoviedb.org/3",
+        min_length=1,
+        description="TMDB API base URL",
+    )
+    language: str = Field(default="en-US", min_length=1, description="TMDB metadata language")
+    request_timeout_seconds: float = Field(
+        default=10.0,
+        ge=1,
+        description="Timeout for TMDB API requests",
+    )
+    max_retries: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        description="Maximum retries for transient TMDB API failures",
+    )
+
+    _validate_tmdb_api_base_url = field_validator("tmdb_api_base_url")(_validate_http_url)
+
+    @field_validator("tmdb_read_access_token", mode="before")
+    @classmethod
+    def _normalize_tmdb_token(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, SecretStr):
+            return value
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
+
+
+class AdminAuthSettings(SubmodelBase):
+    password_hash: Optional[str] = None
+
+    # Ephemeral input (never dumped, never repr) – only used to get plaintext password
+    password: Optional[str] = Field(
+        default=None,
+        exclude=True,
+        repr=False,
+    )
+
+    @property
+    def enabled(self) -> bool:
+        return self.password_hash is not None
+
+    @field_validator("password", mode="before")
+    @classmethod
+    def _normalize_password(cls, v: Optional[str]):
+        if v is None:
+            return None
+        if isinstance(v, str) and v.strip().lower() in ["false", "0", ""]:
+            return None
+        return v
+
+    @model_validator(mode="after")
+    def _finalize_password(self):
+        # If admin_password_hash already set to a scrypt hash string, keep it
+        if self.password_hash and self.password_hash.startswith("scrypt$"):
+            pass
+        else:
+            # Check env-provided precomputed hash
+            env_hash = os.environ.get("WL_ADMIN_AUTH__PASSWORD_HASH")
+            if isinstance(env_hash, str) and env_hash.startswith("scrypt$"):
+                self.password_hash = env_hash
+            else:
+                # Compute from plaintext sources
+                plain = self.password or self._normalize_password(os.environ.get("WL_ADMIN_AUTH__PASSWORD"))
+                if plain:
+                    client_val = derive_admin_password_client_value(plain)
+                    self.password_hash = hash_password_scrypt(client_val)
+                    os.environ["WL_ADMIN_AUTH__PASSWORD_HASH"] = str(self.password_hash)
+                else:
+                    self.password_hash = None
+
+        # scrub plaintext from memory and environment
+        self.password = None
+        os.environ.pop("WL_ADMIN_AUTH__PASSWORD", None)
+
+        return self
+
+
+class SchedulerSettings(SubmodelBase):
+    enabled: bool = Field(..., description="Enable the internal APScheduler-based scheduler")
+    max_workers: int = Field(
+        ...,
+        ge=1,
+        description="Max concurrent jobs in the thread pool executor",
+    )
+    stalled_task_timeout_minutes: int = Field(
+        ...,
+        ge=1,
+        description="Cancel tasks and operations that make no progress for this many minutes",
+    )
+    default_max_retries: int = Field(
+        ...,
+        ge=0,
+        description="Default maximum retries per task if not specified by task or schedule",
+    )
+    retry_backoff_seconds: float = Field(
+        ...,
+        ge=0,
+        description="Base seconds for exponential backoff between retries",
+    )
+
+
+class RepeatingTaskSettings(SubmodelBase):
+    cron_schedule: str = Field(..., min_length=1, description="Cron schedule string for repeating tasks")
+
+
+class TrackNewEpisodeSchedule(SubmodelBase):
+    find_episodes_cron_enabled: bool = Field(
+        default=True,
+        description="Enable the cron schedule for finding new episodes",
+    )
+    find_episodes_cron: str = Field(..., min_length=1, description="Cron schedule string for finding new episodes")
+    monitor_pending_episode_cron_enabled: bool = Field(
+        default=True,
+        description="Enable the cron schedule for monitoring pending episodes",
+    )
+    monitor_pending_episode_cron: str = Field(
+        ...,
+        min_length=1,
+        description="Cron schedule string for monitoring an episode that exists but is not yet fully published",
+    )
+    monitor_no_usable_media_episode_cron_enabled: bool = Field(
+        default=True,
+        description="Enable the cron schedule for rechecking episodes quarantined without usable media",
+    )
+    monitor_no_usable_media_episode_cron: str = Field(
+        ...,
+        min_length=1,
+        description="Cron schedule for rechecking episodes quarantined without usable media",
+    )
+    metadata_refresh_intervals: str = Field(
+        ...,
+        min_length=1,
+        description="Comma-separated offsets after publication for refreshing finalized episode metadata",
+    )
+
+    @field_validator("metadata_refresh_intervals")
+    @classmethod
+    def _validate_metadata_refresh_intervals(cls, value: str) -> str:
+        return normalize_metadata_refresh_intervals(value)
+
+
+class EpisodeStatusTiming(SubmodelBase):
+    published_final_after_minutes: int = Field(
+        ...,
+        ge=0,
+        description="Minutes after publishedAt after which a current published-countdown snapshot is treated as published final",
+    )
+    dw_processing_max_minutes: int = Field(
+        default=60,
+        ge=0,
+        description="Maximum minutes after publishedAt an episode may remain in the Daily Wire processing signature",
+    )
+    no_usable_media_delete_after_minutes: int = Field(
+        default=4 * 60,
+        ge=0,
+        description="Minutes an episode may remain in no_usable_media before a current Daily Wire 404 may be deleted",
+    )
+
+
+class FilenameRestrictionMode(StrEnum):
+    UNRESTRICTED = "unrestricted"
+    WINDOWS = "windows"
+    RESTRICTED = "restricted"
+
+
+class DownloadMode(StrEnum):
+    DIRECT = "direct"
+    TEMPORARY = "temporary"
+
+
+class ThumbnailMode(StrEnum):
+    NO_THUMBNAIL = "no_thumbnail"
+    EMBED = "embed"
+    SIDECAR = "sidecar"
+    EMBED_AND_SIDECAR = "embed_and_sidecar"
+
+
+class DownloadSettings(SubmodelBase):
+    verify_downloads_cron_enabled: bool = Field(
+        default=True,
+        description="Enable the cron schedule for verifying downloads",
+    )
+    verify_downloads_cron: str = Field(
+        default="0 */2 * * *",
+        min_length=1,
+        description="Cron schedule for verifying downloads",
+    )
+    max_concurrent_downloads: int = Field(
+        default=5,
+        ge=1,
+        description="Maximum number of concurrent downloads",
+    )
+    max_download_attempts: int = Field(
+        default=3,
+        ge=1,
+        description="Maximum number of download attempts",
+    )
+    download_timeout_seconds: int = Field(
+        default=600,
+        ge=1,
+        description="Timeout in seconds for each download",
+    )
+    download_root: Path = Field(
+        default=PROJECT_ROOT / "downloads",
+        description="Directory on disk that the '/downloads/' prefix of output templates maps to",
+    )
+    download_mode: DownloadMode = Field(
+        default=DownloadMode.DIRECT,
+        description="Whether downloads are written directly to their destination or staged in a temporary directory first",
+    )
+    thumbnail_mode: ThumbnailMode = Field(
+        default=ThumbnailMode.EMBED,
+        description="Whether downloaded media embeds its thumbnail, writes a sidecar image, does both, or stores no thumbnail",
+    )
+    download_show_assets: bool = Field(
+        default=True,
+        description="Download show posters, backgrounds and square artwork to the shared show directory; Local Media Profiles can override this default",
+    )
+    temporary_download_root: Path = Field(
+        default_factory=lambda data: data["download_root"] / ".wireloft-temp",
+        description="Directory used to stage complete downloads before publishing them to the download root",
+    )
+    rss_cache_root: Path = Field(
+        default_factory=lambda data: data["download_root"] / ".wireloft-rss-cache",
+        description="Directory used as the root for media cached while fulfilling RSS requests",
+    )
+    rss_cache_retention_seconds: int = Field(
+        default=7 * 24 * 60 * 60,
+        ge=1,
+        description="Seconds an RSS cache entry remains valid since it was last served",
+    )
+    filename_restriction_mode: FilenameRestrictionMode = Field(
+        default=FilenameRestrictionMode.WINDOWS,
+        description="Filename compatibility mode: minimal restrictions, Windows-compatible, or restricted ASCII",
+    )
+    remux_video_to_mp4: bool = Field(
+        default=True,
+        description="Repackage downloaded HLS video into an .mp4 file instead of leaving it as raw .ts. "
+                    "This is a fast, lossless container change (no re-encoding) and requires ffmpeg to be "
+                    "installed and on PATH.",
+    )
+    ffmpeg_path: str = Field(
+        default="ffmpeg",
+        min_length=1,
+        description="Path to the ffmpeg binary used for remuxing video to mp4",
+    )
+
+    _validate_download_root = field_validator(
+        "download_root", mode="before"
+    )(_validate_non_empty_path)
+    _validate_temporary_download_root = field_validator(
+        "temporary_download_root", mode="before"
+    )(_validate_non_empty_path)
+    _validate_rss_cache_root = field_validator(
+        "rss_cache_root", mode="before"
+    )(_validate_non_empty_path)
+
+
+class FileWatcherSettings(SubmodelBase):
+    enabled: bool = Field(..., description="Enable the file watcher that keeps downloaded episode files in sync with the database")
+    scan_cron_enabled: bool = Field(
+        default=True,
+        description="Enable the cron schedule for the periodic file watcher scan",
+    )
+    scan_cron: str = Field(..., min_length=1, description="Cron schedule for the periodic file watcher scan")
+    verify_file_size: bool = Field(..., description="Flag a download as corrupted when its file is empty or smaller than the size recorded when it finished downloading")

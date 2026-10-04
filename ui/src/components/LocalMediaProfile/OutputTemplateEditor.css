@@ -1,0 +1,530 @@
+.output-template-code-editor {
+    overflow: hidden;
+    border: 1px solid #c8d3e3;
+    border-radius: 11px;
+    background: #fbfdff;
+    box-shadow: 0 8px 24px rgba(35, 71, 123, 0.08);
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.output-template-code-editor:hover {
+    border-color: #60a5fa;
+}
+
+.output-template-code-editor:focus-within {
+    border-color: #60a5fa;
+    box-shadow: 0 8px 24px rgba(35, 71, 123, 0.1), 0 0 0 3px rgba(14, 165, 233, 0.2);
+}
+
+.output-template-code-editor[aria-invalid="true"] {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+
+.output-template-code-editor .cm-editor,
+.output-template-code-editor .cm-gutters {
+    background: #fbfdff;
+    color: var(--text);
+}
+
+.output-template-code-editor .cm-content {
+    padding: 10px 0;
+    line-height: 1.65;
+}
+
+.output-template-code-editor .cm-line {
+    padding: 0 14px;
+}
+
+.output-template-code-editor .cm-scroller {
+    min-height: 96px;
+}
+
+.output-template-code-editor .cm-focused {
+    outline: none;
+}
+
+.output-template-code-editor .cm-placeholder {
+    color: var(--muted);
+}
+
+.output-template-code-editor .cm-jinja-brace {
+    color: #be185d;
+}
+
+.output-template-code-editor .cm-jinja-keyword {
+    color: #7c3aed;
+    font-weight: 600;
+}
+
+.output-template-code-editor .cm-jinja-variable {
+    color: #0369a1;
+}
+
+.output-template-code-editor .cm-jinja-string {
+    color: #9a5b00;
+}
+
+.output-template-code-editor .cm-jinja-literal {
+    color: #b45309;
+}
+
+.output-template-code-editor .cm-jinja-operator {
+    color: #334155;
+}
+
+.output-template-code-editor .cm-jinja-comment {
+    color: #64748b;
+    font-style: italic;
+}
+
+/* Let the autocomplete grow to fit its descriptions, but never beyond the viewport.
+   Keep CodeMirror's single-line completion behavior and ellipsis once that limit is reached. */
+.output-template-code-editor .cm-tooltip.cm-tooltip-autocomplete,
+.output-template-code-editor .cm-tooltip.cm-tooltip-autocomplete > ul {
+    width: max-content !important;
+    max-width: calc(100vw - 16px) !important;
+}
+
+.output-template-field {
+    width: 100%;
+    min-width: 0;
+}
+
+.template-workbench {
+    width: 1250px;
+    max-width: calc(100vw - 308px);
+    display: grid;
+    gap: 12px;
+    padding: 20px;
+    border: 1px solid #d8e1ee;
+    border-radius: 16px;
+    background: #f3f7fc;
+}
+
+.template-workbench h3,
+.template-workbench h4,
+.template-workbench p {
+    margin: 0;
+}
+
+.template-workbench h3 {
+    font-size: 16px;
+}
+
+.template-workbench h4 {
+    font-size: 14px;
+}
+
+.template-editor-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.template-editor-heading > div {
+    display: grid;
+    gap: 4px;
+}
+
+.template-editor-heading label {
+    font-weight: 600;
+}
+
+.template-editor-heading p {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.template-editor-heading code {
+    padding: 1px 5px;
+    border-radius: 5px;
+    background: rgba(148, 163, 184, 0.16);
+}
+
+.template-language-badge {
+    flex: 0 0 auto;
+    padding: 3px 8px;
+    border: 1px solid #c8d3e3;
+    border-radius: 999px;
+    background: #e8eff9;
+    color: #315f9f;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+.template-workbench-divider {
+    height: 1px;
+    margin: 5px 0 3px;
+    background: #d8e1ee;
+}
+
+.template-preview-area {
+    display: grid;
+    gap: 12px;
+}
+
+.template-playground-heading {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.template-playground-heading > div:first-child {
+    display: grid;
+    gap: 4px;
+}
+
+.template-playground-heading p,
+.template-preview-status {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.template-source-label {
+    display: grid;
+    flex: 0 1 280px;
+    gap: 5px;
+    min-width: 190px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.template-source-label .input {
+    width: 100%;
+    min-width: 0;
+    border-color: #cbd5e3;
+    background: #ffffff;
+}
+
+.template-preview-output {
+    display: grid;
+    gap: 5px;
+    padding: 13px 15px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: #edf4ff;
+}
+
+.template-preview-output.has-error {
+    border-color: rgba(239, 68, 68, 0.38);
+    background: rgba(239, 68, 68, 0.06);
+}
+
+.template-preview-output-label {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.template-preview-output code {
+    overflow-wrap: anywhere;
+    color: var(--text);
+    font-size: 13px;
+}
+
+.template-test-values {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+}
+
+.template-test-values-toggle {
+    justify-self: end;
+}
+
+.template-preview-live-note {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.template-test-values-content {
+    display: grid;
+    grid-column: 1 / -1;
+    gap: 10px;
+}
+
+.template-test-values-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.template-test-values-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.template-test-values-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.template-test-values-grid label {
+    display: grid;
+    min-width: 0;
+    gap: 5px;
+}
+
+.template-test-values-grid label > span {
+    display: flex;
+    align-items: baseline;
+    min-width: 0;
+    gap: 6px;
+}
+
+.template-test-values-grid small {
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.btn-small {
+    padding: 5px 8px;
+    font-size: 12px;
+}
+
+.template-workbench .btn-small {
+    border-color: #cbd5e3;
+    background: #ffffff;
+    color: #142039;
+}
+
+.output-template-help {
+    margin-top: 2px;
+}
+
+.output-template-help .read-more-content {
+    display: grid;
+    gap: 12px;
+}
+
+/* Nested variable ReadMore blocks should keep the global half-line paragraph spacing.
+   The outer help block uses a grid gap; applying that same gap again would double the spacing. */
+.output-template-variable-reference .read-more-content {
+    display: block;
+}
+
+.output-template-help h4,
+.output-template-help p,
+.output-template-variable-reference {
+    margin: 0;
+}
+
+.output-template-guidance {
+    display: grid;
+    gap: 10px;
+}
+
+.output-template-variable-reference {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px 18px;
+}
+
+.output-template-variable-reference > div {
+    display: grid;
+    grid-template-columns: minmax(130px, auto) 1fr;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+}
+
+.output-template-variable-reference dt,
+.output-template-variable-reference dd {
+    min-width: 0;
+    margin: 0;
+}
+
+.output-template-variable-reference code {
+    overflow-wrap: anywhere;
+    color: var(--text);
+}
+
+@media (max-width: 900px) {
+    .template-workbench {
+        max-width: calc(100vw - 32px);
+    }
+}
+
+@media (max-width: 600px) {
+    .template-workbench {
+        padding: 14px;
+    }
+
+    .template-playground-heading {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .template-source-label {
+        flex-basis: auto;
+        min-width: 0;
+    }
+
+    .template-test-values-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .template-test-values-toggle {
+        justify-self: stretch;
+    }
+
+    .template-test-values {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .output-template-variable-reference {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .output-template-variable-reference > div {
+        grid-template-columns: minmax(120px, auto) 1fr;
+    }
+}
+
+@media (max-width: 560px) {
+    .template-workbench {
+        max-width: calc(100vw - 24px);
+    }
+}
+
+@media (prefers-color-scheme: dark) {
+    .output-template-code-editor .cm-selectionBackground,
+    .output-template-code-editor .cm-content ::selection {
+        background: rgba(96, 165, 250, 0.3) !important;
+    }
+
+    .output-template-code-editor .cm-cursor,
+    .output-template-code-editor .cm-dropCursor {
+        border-left-color: #f8fafc;
+    }
+
+    .output-template-code-editor .cm-jinja-brace {
+        color: #f472b6;
+    }
+
+    .output-template-code-editor .cm-jinja-keyword {
+        color: #c4b5fd;
+    }
+
+    .output-template-code-editor .cm-jinja-variable {
+        color: #7dd3fc;
+    }
+
+    .output-template-code-editor .cm-jinja-string {
+        color: #fbbf24;
+    }
+
+    .output-template-code-editor .cm-jinja-literal {
+        color: #fb923c;
+    }
+
+    .output-template-code-editor .cm-jinja-operator {
+        color: #cbd5e1;
+    }
+
+    .output-template-code-editor .cm-jinja-comment {
+        color: #94a3b8;
+    }
+
+    .template-workbench {
+        border-color: #33435b;
+        background: #152034;
+    }
+
+    .output-template-code-editor,
+    .output-template-code-editor .cm-editor,
+    .output-template-code-editor .cm-gutters {
+        border-color: #40506a;
+        background: #111b2c;
+    }
+
+    .output-template-code-editor {
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    }
+
+    .output-template-code-editor .cm-tooltip-autocomplete {
+        border-color: #43516a;
+        background: #172235;
+        color: #eef4ff;
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+    }
+
+    .output-template-code-editor .cm-tooltip-autocomplete > ul {
+        background: #172235;
+        color: #eef4ff;
+    }
+
+    .output-template-code-editor .cm-tooltip-autocomplete > ul > li {
+        color: #eef4ff;
+    }
+
+    .output-template-code-editor .cm-tooltip-autocomplete > ul > li[aria-selected] {
+        background: #2563eb;
+        color: #ffffff;
+    }
+
+    .output-template-code-editor .cm-tooltip-autocomplete .cm-completionDetail {
+        color: #aebbd0;
+    }
+
+    .output-template-code-editor .cm-tooltip-autocomplete .cm-completionIcon {
+        color: #9ec3ff;
+        opacity: 1;
+    }
+
+    .output-template-code-editor .cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+    .output-template-code-editor .cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionIcon {
+        color: #ffffff;
+    }
+
+    .output-template-code-editor .cm-tooltip.cm-completionInfo {
+        border: 1px solid #43516a;
+        background: #172235 !important;
+        color: #eef4ff !important;
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+    }
+
+    .output-template-code-editor .cm-tooltip.cm-completionInfo * {
+        color: inherit !important;
+    }
+
+    .template-workbench-divider {
+        background: #34445c;
+    }
+
+    .template-source-label .input {
+        border-color: #43516a;
+        background: #172235;
+    }
+
+    .template-preview-output {
+        background: #1d3152;
+    }
+
+    .template-workbench .btn-small {
+        border-color: #43516a;
+        background: #223047;
+        color: #eef4ff;
+    }
+
+    .template-language-badge {
+        border-color: #43516a;
+        background: #223047;
+        color: #9ec3ff;
+    }
+}

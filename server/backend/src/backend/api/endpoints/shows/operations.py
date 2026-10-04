@@ -1,0 +1,149 @@
+from __future__ import annotations
+
+from collections.abc import Sequence
+
+from backend.db.models import Episode, Show
+from task_manager.scheduler.operation_factory import OperationDefinition
+from task_manager.scheduler.operations import OperationTargetSpec
+
+
+_FETCH_EPISODES_TASK_KEY = "fetch_new_episodes"
+_REFRESH_METADATA_TASK_KEY = "refresh_episode_metadata"
+_RENAME_FILE_TASK_KEY = "rename_show_profile_files"
+_REDOWNLOAD_TASK_KEY = "redownload_show_episodes_worker"
+_DELETE_DOWNLOADS_TASK_KEY = "delete_show_downloads_worker"
+
+
+class _ShowOperation(OperationDefinition[Show]):
+    resource_type = "show"
+
+    def context(self) -> dict[str, object]:
+        return {
+            "show_slug": self.resource.slug,
+            "show_title": self.resource.title,
+        }
+
+
+class ShowIndexOperation(_ShowOperation):
+    kind = "show.index"
+    task = _FETCH_EPISODES_TASK_KEY
+
+    def task_kwargs(self) -> dict[str, object]:
+        return {"initial_index": True}
+
+
+class ShowSyncOperation(_ShowOperation):
+    kind = "show.sync"
+    task = _FETCH_EPISODES_TASK_KEY
+
+
+class ShowMetadataRefreshOperation(_ShowOperation):
+    kind = "show.refresh_metadata"
+
+    def __init__(self, show: Show, episodes: Sequence[Episode]) -> None:
+        super().__init__(show)
+        self.episodes = tuple(episodes)
+
+    def targets(self) -> tuple[OperationTargetSpec, ...]:
+        return tuple(
+            OperationTargetSpec(
+                task_key=_REFRESH_METADATA_TASK_KEY,
+                resource_type="episode",
+                resource_id=episode.id,
+                task_kwargs={"refresh": True},
+                slot_key=f"episode:{episode.id}",
+            )
+            for episode in self.episodes
+        )
+
+    def context(self) -> dict[str, object]:
+        return {
+            **super().context(),
+            "episodes_requested": len(self.episodes),
+        }
+
+
+class ShowFileRenameOperation(_ShowOperation):
+    kind = "show.rename_files"
+
+    def __init__(
+        self,
+        show: Show,
+        *,
+        local_media_profile_ids: Sequence[int],
+    ) -> None:
+        super().__init__(show)
+        self.local_media_profile_ids = tuple(
+            dict.fromkeys(int(profile_id) for profile_id in local_media_profile_ids)
+        )
+
+    def targets(self) -> tuple[OperationTargetSpec, ...]:
+        return tuple(
+            OperationTargetSpec(
+                task_key=_RENAME_FILE_TASK_KEY,
+                resource_type="show",
+                resource_id=self.resource.id,
+                task_kwargs={"local_media_profile_id": profile_id},
+                slot_key=f"profile:{profile_id}",
+            )
+            for profile_id in self.local_media_profile_ids
+        )
+
+    def context(self) -> dict[str, object]:
+        return {
+            **super().context(),
+            "local_media_profiles_requested": len(self.local_media_profile_ids),
+        }
+
+
+class _ShowDownloadMaintenanceOperation(_ShowOperation):
+    def __init__(
+        self,
+        show: Show,
+        *,
+        local_media_profile_id: int | None,
+        selected_profile_count: int,
+    ) -> None:
+        super().__init__(show)
+        self.local_media_profile_id = local_media_profile_id
+        self.selected_profile_count = selected_profile_count
+
+    def task_kwargs(self) -> dict[str, object]:
+        return {"local_media_profile_id": self.local_media_profile_id}
+
+    def context(self) -> dict[str, object]:
+        return {
+            **super().context(),
+            "local_media_profiles_requested": self.selected_profile_count,
+        }
+
+
+class ShowDeleteDownloadsOperation(_ShowDownloadMaintenanceOperation):
+    kind = "show.delete_downloads"
+    task = _DELETE_DOWNLOADS_TASK_KEY
+
+    def __init__(
+        self,
+        show: Show,
+        *,
+        local_media_profile_id: int | None,
+        selected_profile_count: int,
+        disabled_profile_count: int,
+    ) -> None:
+        super().__init__(
+            show,
+            local_media_profile_id=local_media_profile_id,
+            selected_profile_count=selected_profile_count,
+        )
+        self.disabled_profile_count = disabled_profile_count
+
+    def task_kwargs(self) -> dict[str, object]:
+        return {
+            **super().task_kwargs(),
+            "download_profiles_disabled": self.disabled_profile_count,
+        }
+
+
+class ShowRedownloadOperation(_ShowDownloadMaintenanceOperation):
+    kind = "show.redownload_episodes"
+    task = _REDOWNLOAD_TASK_KEY

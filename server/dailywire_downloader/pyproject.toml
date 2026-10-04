@@ -1,0 +1,15 @@
+[project]
+name = "dailywire-downloader"
+version = "1.0.1"
+description = "Standalone HLS / direct-file media downloader used by Wireloft (no yt-dlp)"
+authors = [{ name = "Samuël Visser", email = "samuvisser@gmail.com" }]
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "source-contracts",]
+
+[project.scripts]
+dailywire-downloader = "dailywire_downloader.__main__:main"
+
+[build-system]
+requires = ["uv_build>=0.8.17,<0.9.0"]
+build-backend = "uv_build"

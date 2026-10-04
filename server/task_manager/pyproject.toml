@@ -1,10 +1,20 @@
 [project]
 name = "task-manager"
-version = "0.1.0"
-description = "Provider-independent background task and scheduling primitives for VodLoft"
+version = "1.1.0"
+description = "Task scheduling and event management system for WireLoft."
+authors = [{ name = "Samuël Visser", email = "samuvisser@gmail.com" }]
 requires-python = ">=3.13,<3.14"
 dependencies = [
-    "APScheduler>=3.11,<4",
+    "source-contracts",
+  "APScheduler>=3.11.0,<4.0",
+  "pyventus>=0.7.2",
+  "SQLAlchemy>=2.0.43,<3.0",
+  "backend",
+  "dailywire-api",
+  "dailywire-downloader",
+  "config",
+  "controller",
+  "dailywire-authorisation",
 ]
 
 [build-system]

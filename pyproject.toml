@@ -1,14 +1,19 @@
 [project]
 name = "VodLoft"
-version = "0.1.0"
+version = "1.0.0"
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "backend",
     "config",
     "controller",
-    "media-profiles",
+    "dailywire-api",
+    "dailywire-authorisation",
+    "dailywire-downloader",
     "task-manager",
-    "ytdlp-client",
+    "source-contracts",
+    "vodloft-source-ytdlp",
+    "vodloft-source-dailywire",
+    "vodloft-source-media",
 ]
 
 [tool.uv.workspace]
@@ -18,14 +23,22 @@ members = ["server/*"]
 backend = { workspace = true }
 config = { workspace = true }
 controller = { workspace = true }
-media-profiles = { workspace = true }
+dailywire-api = { workspace = true }
+dailywire-authorisation = { workspace = true }
+dailywire-downloader = { workspace = true }
 task-manager = { workspace = true }
-ytdlp-client = { workspace = true }
+source-contracts = { workspace = true }
+vodloft-source-ytdlp = { workspace = true }
+vodloft-source-dailywire = { workspace = true }
+vodloft-source-media = { workspace = true }
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "pytest>=8.4,<9",
+    "pytest-socket>=0.7,<1",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]
+addopts = ["--strict-markers", "--disable-socket", "--allow-unix-socket"]

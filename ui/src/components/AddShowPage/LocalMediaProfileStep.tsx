@@ -1,0 +1,170 @@
+import {useEffect, useRef} from 'react'
+import {useForm} from 'react-hook-form'
+import {zodResolver} from '@hookform/resolvers/zod'
+import DailywireShowCard from './DailywireShowCard'
+import LocalMediaProfileCommonFields from '../LocalMediaProfile/LocalMediaProfileCommonFields'
+import ShowLocalMediaProfileFields from '../LocalMediaProfile/ShowLocalMediaProfileFields'
+import IndexingValuesEditorButton from '../LocalMediaProfile/IndexingValuesEditorButton'
+import ShowLocalMediaProfileOutputTemplate from '../LocalMediaProfile/ShowLocalMediaProfileOutputTemplate'
+import {useLocalMediaProfiles} from '../../lib/queries'
+import {ShowLocalMediaProfileRead} from '../../types/schemas/local_media_profile'
+import {
+    LocalMediaProfileCreateUnionIn,
+    LocalMediaProfileCreateUnionSchema,
+    LocalMediaProfileUpdateUnionSchema,
+    LocalMediaProfileUpsertIn,
+    LocalMediaProfileUpsertOut,
+    LocalMediaProfileUpsertSchema,
+} from '../../types/schemas/show_as_bundle'
+import LocalMediaProfileCard from '../LocalMediaProfile/LocalMediaProfileCard'
+import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
+import {getZodDefaults} from '../../utils/defaultZod'
+import {isShowLocalMediaProfileAvailableFor, type ShowLocalMediaProfileContext} from '../../types/local_media_profile'
+
+
+type Props = {
+    value: Partial<LocalMediaProfileUpsertIn>
+    onChange: (v: Partial<LocalMediaProfileUpsertIn>) => void
+    onSubmit: (v: LocalMediaProfileUpsertOut) => void
+    onBack: () => void
+    onContinue: () => void
+    onCancel: () => void
+    showSlug?: string
+    showType: ShowLocalMediaProfileContext
+}
+
+export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubmitParent, onBack, onContinue, onCancel, showSlug, showType}: Props) {
+    const profilesQuery = useLocalMediaProfiles()
+    const profiles: ShowLocalMediaProfileRead[] | undefined = profilesQuery.data?.filter(
+        (profile): profile is ShowLocalMediaProfileRead =>
+            profile.type === 'show' && isShowLocalMediaProfileAvailableFor(profile, showType),
+    )
+    const profilesError = profilesQuery.isError ? ((profilesQuery.error)?.message ?? 'Failed to load media profiles') : null
+    const createDefaults = getZodDefaults(LocalMediaProfileCreateUnionSchema)
+    const updateDefaults = getZodDefaults(LocalMediaProfileUpdateUnionSchema)
+
+    const form = useForm<LocalMediaProfileUpsertIn>({
+        resolver: zodResolver(LocalMediaProfileUpsertSchema),
+        mode: 'onBlur',
+        shouldFocusError: true,
+        defaultValues: {...createDefaults, ...value},
+    })
+    const {watch, getValues, formState: {isSubmitting}} = form
+
+    useEffect(() => {
+        const subscription = watch(() => {
+            onChange(getValues())
+        })
+        return () => subscription.unsubscribe()
+    }, [watch, getValues, onChange])
+
+    const snapshotRef = useRef<Pick<
+        LocalMediaProfileCreateUnionIn,
+        'name' | 'showScope' | 'outputTemplate' | 'preferredFormat' | 'indexingValues'
+    > | null>(null)
+
+    const watchedOp = watch('op')
+    const watchedSlug = watch('slug')
+
+    const handleSelect = (profile: ShowLocalMediaProfileRead) => {
+        const selected = watchedOp === 'update_by_slug' && watchedSlug === profile.slug
+        if (selected) {
+            form.reset({
+                ...createDefaults,
+                ...(snapshotRef.current ?? {}),
+            } as LocalMediaProfileUpsertIn)
+            snapshotRef.current = null
+            return
+        }
+
+        if (watchedOp !== 'update_by_slug') {
+            snapshotRef.current = {
+                name: watch('name'),
+                showScope: watch('showScope'),
+                outputTemplate: watch('outputTemplate'),
+                preferredFormat: watch('preferredFormat'),
+                indexingValues: watch('indexingValues'),
+            }
+        }
+
+        form.reset({
+            ...updateDefaults,
+            id: profile.id,
+            slug: profile.slug,
+            name: profile.name,
+            showScope: profile.showScope,
+            outputTemplate: profile.outputTemplate,
+            preferredFormat: profile.preferredFormat,
+            indexingValues: profile.indexingValues,
+        } as LocalMediaProfileUpsertIn)
+    }
+
+    const onSubmit = buildServerAwareSubmit(form, async (dataIn: LocalMediaProfileUpsertIn) => {
+        const dataOut = LocalMediaProfileUpsertSchema.parse(dataIn)
+        onSubmitParent(dataOut)
+        onContinue()
+    }, {
+        fallbackField: 'name',
+        rootClientValidationMessage: 'Please fix the highlighted fields.',
+    })
+
+    return (
+        <form className="form form-fluid" onSubmit={onSubmit} noValidate>
+            <div className="wizard-sticky-region">
+                <div className="wizard-main">
+                    <div className="form-row">
+                        <label>Choose a media profile</label>
+                        <div className="card-grid" role="list">
+                            {profilesQuery.isPending ? (
+                                <div role="listitem" className="card">Loading profiles...</div>
+                            ) : !profiles || profiles.length === 0 ? (
+                                <div role="listitem" className="card">{profilesError ?? 'No profiles found'}</div>
+                            ) : (
+                                profiles.map((profile) => {
+                                    const selected = watchedOp === 'update_by_slug' && watchedSlug === profile.slug
+                                    return (
+                                        <LocalMediaProfileCard
+                                            key={profile.slug}
+                                            profile={profile}
+                                            selected={selected}
+                                            onClick={() => handleSelect(profile)}
+                                        />
+                                    )
+                                })
+                            )}
+                        </div>
+                    </div>
+
+                    <hr className="divider" aria-hidden="true"/>
+                    <div className="divider-label" aria-hidden="true">
+                        {watchedOp === 'update_by_slug' ? 'Update current profile' : 'Or create a new profile'}
+                    </div>
+
+                    <LocalMediaProfileCommonFields form={form}/>
+                    <ShowLocalMediaProfileFields form={form}/>
+                    <div className="form-row">
+                        <label>Indexing values</label>
+                        <IndexingValuesEditorButton form={form}/>
+                        <div className="help">
+                            Configure optional named number sequences for use with <code>custom_index</code> in the output template.
+                        </div>
+                    </div>
+                </div>
+
+                {showSlug ? (
+                    <aside className="wizard-aside" aria-label="Selected show details">
+                        <DailywireShowCard showSlug={showSlug}/>
+                    </aside>
+                ) : null}
+            </div>
+
+            <ShowLocalMediaProfileOutputTemplate form={form}/>
+
+            <div className="actions">
+                <button type="button" className="btn" onClick={onBack}>Back</button>
+                <input type="submit" className="btn btn-primary" value="Continue" disabled={isSubmitting}/>
+                <button type="button" className="btn" onClick={onCancel}>Cancel</button>
+            </div>
+        </form>
+    )
+}
