@@ -30,11 +30,13 @@ Compose persists configuration, SQLite, secrets, Source bundles, and Source runt
 
 A shared Movie Extra can belong to multiple Movies and have a different upstream role under each parent. Explicit parent/type edits survive Source refreshes.
 
+To link another Source to an existing item, resolve its URL, select the library identity, and explicitly confirm the same edit, language, and edition. The selector includes Collection members and Movie Extras. Linking preserves metadata and local files; acquisition uses the selected reference's formats and capabilities. Collections keep each Source's occurrences and apply their selected Source's groups, ordering, and policies.
+
 ## Source installation and updates
 
 Management shows installed adapter/upstream versions, connection schemas, runtime history, automatic-update policy, stable/beta channels, pins, manual checks, and rollback. Accounts use the fields declared by each Source, including secret and credential-file fields or interactive authentication challenges. Secrets remain scoped to the selected connection.
 
-Mounted wheelhouses are verified and installed independently. Signed HTTPS release catalogues can be configured with an operator-trusted Ed25519 public key. A failed install, protocol/schema mismatch, health check, or incompatible saved configuration leaves the previous runtime active. Queued/running acquisitions and upstream playback sessions retain the runtime they started with.
+Mounted wheelhouses and optional native executables are verified and installed independently. Signed HTTPS release catalogues can be configured with an operator-trusted Ed25519 public key. Release identity includes dependency/artifact digests, compatible Python, configuration schema, Domain catalogue, and helper requirements. A failed install, protocol/schema mismatch, health check, or incompatible saved configuration leaves the previous runtime active. Queued/running acquisitions and upstream playback sessions retain the runtime and bundled helpers they started with.
 
 See [Source authoring and releases](docs/SOURCE_AUTHORING.md) for third-party registration, wheelhouse building, signing, interpreter selection, and catalogue configuration. Adding a registered third Source does not require core or frontend changes.
 
@@ -68,7 +70,7 @@ uv run backend-api background-migrations history
 
 ## Verification and operating limits
 
-[The acceptance record](docs/DESIGN_ACCEPTANCE.md) maps the design's acceptance scenarios and feature areas to code and reproducible checks. GitHub Actions runs the VodLoft regression suite, the production UI build, independent Source wheel builds, and a production-container HTTP/media-processing smoke test.
+[The acceptance record](docs/DESIGN_ACCEPTANCE.md) maps the design's acceptance scenarios and feature areas to code and reproducible checks. The acceptance workflow is **manual only**; pushing this implementation does not launch it. It is available for the follow-up regression suite, dependency check, production UI build, independent Source builds, and production-container HTTP/media-processing checks. The final implementation edits were reviewed as code; further tests and GitHub Actions were deferred at the user's request.
 
 Plex, Jellyfin, and Audiobookshelf have adapter and lifecycle fixture coverage; a real deployment still needs the operator's server credentials, reachable mounts, and compatible server-library settings. Provider access depends on supported public URLs and the upstream account's entitlement. The bundled adapters guard Python network access; deployment-level egress controls are needed to constrain native helpers. A Source process is not an operating-system sandbox.
 

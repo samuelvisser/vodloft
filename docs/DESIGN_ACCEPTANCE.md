@@ -50,11 +50,15 @@ uv run backend-api db history
 uv run backend-api background-migrations history
 ```
 
-`.github/workflows/vodloft-ci.yml` runs the regression suite, dependency advisory check, production frontend build, and independent Source wheel builds. It builds the actual Docker image, starts a fresh authenticated installation, checks production assets/API/library and both isolated Sources, verifies the persistent media root, runs real FFmpeg AAC/M4A processing with edited tags and chapters, and checks backend/nginx logs for bearer-token leakage. Only extraction/HTTP transfer use a deterministic audio fixture in that media check; FFmpeg and the installed Source's normal processing path run unchanged.
+`.github/workflows/vodloft-ci.yml` is **manual only**. No acceptance Actions were started for the final implementation pass, and pushes/PRs do not trigger it. When explicitly run later, it runs the regression suite, dependency advisory check, production frontend build, and independent Source wheel builds. It builds the actual Docker image, starts a fresh authenticated installation, checks production assets/API/library and both isolated Sources, verifies the persistent media root, runs real FFmpeg AAC/M4A processing with edited tags and chapters, and checks backend/nginx logs for bearer-token leakage. Only extraction/HTTP transfer use a deterministic audio fixture in that media check; FFmpeg and the installed Source's normal processing path run unchanged.
 
 The schema chain ends at `2be60a847fc1`; the background chain ends at `c64f8092de17`. The populated upgrade check compares against the actual current head rather than a fixed obsolete revision.
 
 ## Verification boundaries
+
+Earlier verification passed 80 targeted architecture/prototype/upgrade checks, a production frontend build, independent Source installation, the fresh production-container HTTP checks, real AAC/M4A processing with edited tags/chapters, and token-log checks. The patched frontend dependency lock was also built and reported zero npm advisories. Those results predate the final edits; they are not a claim that the final branch has passed all checks.
+
+The code completion pass added explicit cross-Source identity confirmation, native-helper bundles and pinned environments, complete release declarations, Source-scoped Collection occurrences and policies, and per-reference formats/capabilities. These changes, their schema migrations, and the two newest playback/outage acceptance cases await the follow-up test pass. Tests were deliberately not executed during this final pass, as requested.
 
 The deterministic suite and container checks are reproducible. Interactive visual verification could not be completed because the workspace browser blocked the local application. The three downstream adapters have fixture coverage, not a claim of live-server validation without server credentials/mounts. Operator configuration and account entitlements remain necessary for those deployments.
 
