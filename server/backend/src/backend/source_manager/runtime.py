@@ -270,6 +270,10 @@ def record_failure(source_id: str, action: str, error: Exception) -> None:
 def _verify_release_runtime(command: list[str], manifest: SourceManifest, release: dict) -> None:
     """Reject a mismatched environment before publication or later activation."""
     _verify_native_executables(Path(command[0]).parent.parent, release)
+    if ("configuration_version" in release and manifest.configuration_version != release["configuration_version"] or
+            "catalogue_revision" in release and manifest.catalogue_revision != release["catalogue_revision"] or
+            "native_helpers" in release and sorted(manifest.native_helpers) != sorted(release["native_helpers"])):
+        raise ValueError("The installed Source declarations do not match the release identity")
     if Version(manifest.version) != Version(release.get("adapter_version", release["version"])):
         raise ValueError("The installed adapter version does not match the release")
     if any(name not in manifest.upstream_versions or
@@ -360,6 +364,7 @@ def install_bundle(source_id: str, bundle: Path, *, activate: bool = True) -> di
                         shutil.copyfile(bundle / "native" / "bin" / name, destination)
                         destination.chmod(0o755)
                 staged_command = [str(python), "-m", module]
+                _verify_native_executables(staging, release)
                 staged_manifest = _probe(staged_command, source_id)
                 _verify_release_runtime(staged_command, staged_manifest, release)
                 (staging / "release.json").write_text(json.dumps(release, sort_keys=True))
@@ -372,6 +377,7 @@ def install_bundle(source_id: str, bundle: Path, *, activate: bool = True) -> di
         if saved_release.is_file() and json.loads(saved_release.read_text()) != release:
             raise ValueError("An installed Source runtime is immutable; publish a new bundle version")
         # A previously installed bundle is still probed before a new activation.
+        _verify_native_executables(target, release)
         manifest = _probe([str(target / "bin" / "python"), "-m", module], source_id)
         _verify_release_runtime([str(target / "bin" / "python"), "-m", module], manifest, release)
         if activate:
@@ -396,10 +402,11 @@ def activate(source_id: str, version: str) -> dict:
         raise ValueError("Unknown Source runtime")
     with _locked(root):
         command = [str(root / source_id / version / "bin" / "python"), "-m", sources[source_id]["module"]]
-        manifest = _probe(command, source_id)
         release = json.loads((root / source_id / version / "release.json").read_text())
         if release.get("source_id") != source_id or release.get("version") != version:
             raise ValueError("The installed release identity does not match the runtime")
+        _verify_native_executables(root / source_id / version, release)
+        manifest = _probe(command, source_id)
         _verify_release_runtime(command, manifest, release)
         _validate_saved_configuration(manifest)
         _reconcile_domains(command, manifest)

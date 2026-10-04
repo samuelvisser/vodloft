@@ -7,11 +7,12 @@ import zipfile
 from email.parser import Parser
 from pathlib import Path
 
-from source_contracts import PROTOCOL_VERSION, METADATA_SCHEMA_VERSION
+from source_contracts import PROTOCOL_VERSION, METADATA_SCHEMA_VERSION, SourceManifest
 
 
 def create_manifest(bundle: Path, source_id: str, release_version: str, adapter_package: str,
-                    python_requirement: str = '>=3.12', channel: str = 'stable'):
+                    python_requirement: str = '>=3.12', channel: str = 'stable',
+                    source_manifest: SourceManifest | None = None):
     wheels, packages = {}, {}
     for path in sorted(bundle.glob('*.whl')):
         wheels[path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -25,6 +26,12 @@ def create_manifest(bundle: Path, source_id: str, release_version: str, adapter_
         'channel': channel, 'protocol_version': PROTOCOL_VERSION, 'metadata_schema_version': METADATA_SCHEMA_VERSION,
         'python_requirement': python_requirement, 'packages': packages, 'wheels': wheels,
         'upstream_versions': {name: packages[name] for name in ('yt-dlp', 'dailywire-api') if name in packages}}
+    if source_manifest is not None:
+        if source_manifest.source_id != source_id:
+            raise ValueError('The Source manifest belongs to another adapter')
+        release.update(configuration_version=source_manifest.configuration_version,
+            catalogue_revision=source_manifest.catalogue_revision,
+            native_helpers=source_manifest.native_helpers)
     native_directory = bundle / 'native' / 'bin'
     if (bundle / 'native').is_symlink() or native_directory.is_symlink():
         raise ValueError('Native helpers must be regular bundled files')

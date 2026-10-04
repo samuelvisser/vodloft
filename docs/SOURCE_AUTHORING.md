@@ -58,11 +58,13 @@ uv run --frozen python tools/build_source_bundles.py dist/source-bundles \
   --source yt-dlp --release-version 1.0.0+extractor.20260819 --channel stable
 ```
 
-The builder creates adapter/contract/helper wheels, downloads dependency wheels using locked hashes, and writes `release.json` with the adapter version, release version, channel, protocol/schema versions, Python minor compatibility, package inventory, upstream versions, and SHA-256 wheel digests. It refuses to overwrite an existing release directory.
+The builder creates adapter/contract/helper wheels, downloads dependency wheels using locked hashes, reads the installed adapter's manifest in a disposable environment, and writes `release.json` with the adapter version, release version, channel, protocol/schema versions, configuration-schema version, Domain-catalogue revision, native-helper requirements, Python minor compatibility, package inventory, upstream versions, and SHA-256 artifact digests. These declarations are checked again before runtime activation. It refuses to overwrite an existing release directory.
 
 Third-party publishers can use `create_manifest` in `tools/create_source_bundle_manifests.py` after preparing their complete wheelhouse. Native wheels must match the target platform and Python version. Helper lookup prefers the pinned Source runtime's `native/bin`, then its wheel-installed `bin` entry points, then the host's `PATH`. Manifest probes, helper-version checks, health checks, and real operations all use this same environment. Host executables remain available as a fallback; a Source can supply its own helper version independently of the core application. Wheel console scripts are relocated when a runtime is atomically published.
 
 To bundle an independent native helper, place a regular executable file at `native/bin/<helper-name>` **before** creating the release manifest. The manifest builder records its SHA-256 digest under `native_executables`. Helper names contain letters, numbers, underscores, or hyphens; symlinks and undeclared files are rejected. Supply executables compatible with the target platform and any required libraries, for example a self-contained FFmpeg build. The installer verifies the exact helper inventory, copies it into the runtime, sets executable permissions, and runs the declared helper/health checks before activation. Do not modify an installed runtime; publish a new release version instead.
+
+The built-in builder accepts `--native-bin /path/to/helpers --source <source-id>` to copy such helpers into a new release before its manifest is generated. Third-party builders can pass their typed `SourceManifest` to `create_manifest` to record the same release declarations.
 
 ## Mounted installation
 
