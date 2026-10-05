@@ -254,6 +254,7 @@ class DownloadEvent(BaseModel):
 
 class SourceError(BaseModel):
     code: Literal["unsupported_operation", "unavailable", "authentication_required", "rate_limited",
-                  "invalid_url", "unsupported_format", "insufficient_disk", "runtime_error"]
+                  "invalid_url", "unsupported_format", "insufficient_disk", "extraction_failed",
+                  "runtime_error"]
     message: str
     challenge: AuthenticationChallenge | None = None
