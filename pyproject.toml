@@ -13,6 +13,7 @@ dependencies = [
     "source-contracts",
     "vodloft-source-ytdlp",
     "vodloft-source-dailywire",
+    "vodloft-source-npo",
     "vodloft-source-media",
 ]
 
@@ -30,6 +31,7 @@ task-manager = { workspace = true }
 source-contracts = { workspace = true }
 vodloft-source-ytdlp = { workspace = true }
 vodloft-source-dailywire = { workspace = true }
+vodloft-source-npo = { workspace = true }
 vodloft-source-media = { workspace = true }
 
 [dependency-groups]
