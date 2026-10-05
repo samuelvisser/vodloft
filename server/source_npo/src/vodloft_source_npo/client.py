@@ -177,12 +177,16 @@ class NPOClient:
 
     @staticmethod
     def _session_valid(session: dict) -> bool:
-        expires = session.get("tokenExpiresAt")
-        return bool(session) and (
-            not isinstance(expires, (int, float)) or float(expires) > time.time() + 30
-        )
+        try:
+            expires = float(session.get("tokenExpiresAt") or 0)
+        except (TypeError, ValueError):
+            return False
+        return bool(session) and expires > time.time() + 30
 
-    def login(self) -> dict:
+    def login(self, *, force: bool = False) -> dict:
+        if force:
+            self.cookies.clear()
+            self._authenticated = False
         if self._authenticated:
             session = self._session()
             if self._session_valid(session):
@@ -316,19 +320,10 @@ class NPOClient:
             return str(body.get("message") or body.get("error") or "")
         return str(data.get("message") or "")
 
-    def playback(self, product_id: str, referrer_url: str) -> Playback:
-        if not re.fullmatch(r"[A-Za-z0-9_.:-]{2,160}", product_id):
-            raise ValueError("Invalid NPO product ID")
-        if self.email:
-            self.login()
-        jwt = self._player_token(product_id, authenticated=False)
-        payload = json.dumps({
-            "profileName": "hls",
-            "referrerUrl": referrer_url,
-        }).encode()
+    def _stream_link(self, jwt: str, payload: dict) -> dict:
         _, body = self._request(
             f"{PLAYER_API}/stream-link",
-            data=payload,
+            data=json.dumps(payload).encode(),
             headers={
                 "Authorization": jwt,
                 "Content-Type": "application/json",
@@ -340,17 +335,15 @@ class NPOClient:
         data = self._decode_json(body)
         if not isinstance(data, dict):
             raise ApiUnavailable("NPO player returned an invalid response")
-        if data.get("status"):
-            message = self._playback_error(data).casefold()
-            if any(word in message for word in ("subscription", "abonnement", "premium", "login", "account")):
-                raise AuthenticationRequired("NPO account with access to this media is required")
-            raise MediaUnavailable("NPO player could not provide this media")
+        return data
 
+    @staticmethod
+    def _playback_from_response(data: dict, transport: str) -> Playback | None:
         stream = data.get("stream")
         if isinstance(stream, str):
             stream = {"streamURL": stream}
         if not isinstance(stream, dict):
-            raise ApiUnavailable("NPO player response has no stream")
+            return None
         if stream.get("drm"):
             raise DRMProtected("NPO returned DRM-protected playback")
         url = stream.get("streamURL") or stream.get("url")
@@ -359,10 +352,60 @@ class NPOClient:
             raise ApiUnavailable("NPO player returned an invalid stream URL")
         return Playback(
             url=url,
-            transport="hls" if parsed.path.lower().endswith(".m3u8") else "http",
+            transport=transport,
             headers={
                 "User-Agent": USER_AGENT,
                 "Origin": NPO_ORIGIN,
                 "Referer": f"{NPO_ORIGIN}/",
             },
         )
+
+    def playback(self, product_id: str, referrer_url: str) -> Playback:
+        if not re.fullmatch(r"[A-Za-z0-9_.:-]{2,160}", product_id):
+            raise ValueError("Invalid NPO product ID")
+
+        for attempt in range(2):
+            if self.email:
+                self.login(force=attempt > 0)
+            jwt = self._player_token(product_id, authenticated=False)
+
+            # Prefer an unencrypted HLS representation. If NPO no longer
+            # exposes one, probe its normal browser DASH profile so we can
+            # distinguish DRM from a generic site/API failure.
+            hls = self._stream_link(jwt, {
+                "profileName": "hls",
+                "referrerUrl": referrer_url,
+            })
+            if not hls.get("status"):
+                playback = self._playback_from_response(hls, "hls")
+                if playback:
+                    return playback
+            else:
+                message = self._playback_error(hls).casefold()
+                needs_account = any(word in message for word in (
+                    "subscription", "abonnement", "premium", "login", "account"))
+                if needs_account:
+                    if self.email and attempt == 0:
+                        continue
+                    raise AuthenticationRequired(
+                        "NPO account with access to this media is required")
+
+            dash = self._stream_link(jwt, {
+                "profileName": "dash",
+                "drmType": "widevine",
+                "referrerUrl": referrer_url,
+            })
+            if not dash.get("status"):
+                playback = self._playback_from_response(dash, "dash")
+                if playback:
+                    return playback
+            else:
+                message = self._playback_error(dash).casefold()
+                if any(word in message for word in (
+                        "subscription", "abonnement", "premium", "login", "account")):
+                    if self.email and attempt == 0:
+                        continue
+                    raise AuthenticationRequired(
+                        "NPO account with access to this media is required")
+            raise MediaUnavailable("NPO player could not provide this media")
+        raise AuthenticationRequired("NPO account with access to this media is required")
