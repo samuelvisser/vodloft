@@ -8,6 +8,8 @@ const items: NavItem[] = [
     {path: '/discover', label: 'Discover / Add', icon: faIcon('fas', 'magnifying-glass')},
     {path: '/library', label: 'Library', icon: faIcon('fas', 'book-open')},
     {path: '/management', label: 'Management', icon: faIcon('fas', 'layer-group')},
+    {path: '/tasks', label: 'Tasks', icon: faIcon('fas', 'clipboard-list')},
+    {path: '/logs', label: 'Logs', icon: faIcon('fas', 'file-lines')},
     {path: '/settings', label: 'Settings', icon: faIcon('fas', 'gear')},
 ]
 
