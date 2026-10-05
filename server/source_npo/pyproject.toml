@@ -1,0 +1,12 @@
+[project]
+name = "vodloft-source-npo"
+version = "1.0.0"
+requires-python = ">=3.12"
+dependencies = ["source-contracts"]
+
+[tool.uv.sources]
+source-contracts = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.8.17,<0.9.0"]
+build-backend = "uv_build"

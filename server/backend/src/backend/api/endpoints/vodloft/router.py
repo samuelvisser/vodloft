@@ -113,8 +113,12 @@ def _source_problem(exc: Exception, fallback: str) -> HTTPException:
                   "invalid_url": 422, "unsupported_operation": 422,
                   "unsupported_format": 409, "insufficient_disk": 503,
                   "unavailable": 503}.get(exc.code, 502)
-        return HTTPException(status, str(exc),
-            headers={"X-VodLoft-Source-Error": exc.code})
+        headers = {"X-VodLoft-Source-Error": exc.code}
+        if exc.source_id:
+            headers["X-VodLoft-Source"] = exc.source_id
+        if exc.operation:
+            headers["X-VodLoft-Source-Operation"] = exc.operation
+        return HTTPException(status, str(exc), headers=headers)
     return HTTPException(502, fallback, headers={"X-VodLoft-Source-Error": "runtime_error"})
 
 

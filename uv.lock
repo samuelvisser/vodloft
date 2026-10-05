@@ -926,6 +926,7 @@ dependencies = [
     { name = "task-manager" },
     { name = "vodloft-source-dailywire" },
     { name = "vodloft-source-media" },
+    { name = "vodloft-source-npo" },
     { name = "vodloft-source-ytdlp" },
 ]
 
@@ -948,6 +949,7 @@ requires-dist = [
     { name = "task-manager", editable = "server/task_manager" },
     { name = "vodloft-source-dailywire", editable = "server/source_dailywire" },
     { name = "vodloft-source-media", editable = "server/source_media" },
+    { name = "vodloft-source-npo", editable = "server/source_npo" },
     { name = "vodloft-source-ytdlp", editable = "server/source_ytdlp" },
 ]
 
@@ -990,6 +992,19 @@ dependencies = [
 requires-dist = [
     { name = "source-contracts", editable = "server/source_contracts" },
     { name = "yt-dlp", specifier = ">=2025.1.1" },
+]
+
+[[package]]
+name = "vodloft-source-npo"
+version = "1.0.0"
+source = { editable = "server/source_npo" }
+dependencies = [
+    { name = "source-contracts" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "source-contracts", editable = "server/source_contracts" },
 ]
 
 [[package]]

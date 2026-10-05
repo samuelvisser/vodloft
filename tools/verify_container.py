@@ -49,11 +49,12 @@ def verify(base: str, password: str, timeout: int):
     home = json.loads(request('/api/vodloft/home'))
     assert home['recent'] == [] and home['activity'] == []
     sources = json.loads(request('/api/vodloft/sources'))
-    assert {source['source_id'] for source in sources} == {'yt-dlp', 'dailywire'}, json.loads(request('/api/vodloft/sources/runtimes'))
-    assert all(source['version'] == '1.0.0' for source in sources)
+    assert {source['source_id'] for source in sources} == {'yt-dlp', 'dailywire', 'npo'}, json.loads(request('/api/vodloft/sources/runtimes'))
+    assert {source['source_id']: source['version'] for source in sources} == {
+        'yt-dlp': '1.0.1', 'dailywire': '1.0.0', 'npo': '1.0.0'}
     runtime = json.loads(request('/api/vodloft/sources/runtimes'))
-    assert runtime['active'] == {'yt-dlp': '1.0.0', 'dailywire': '1.0.0'}
-    for source in ('yt-dlp', 'dailywire'):
+    assert runtime['active'] == {'yt-dlp': '1.0.1', 'dailywire': '1.0.0', 'npo': '1.0.0'}
+    for source in ('yt-dlp', 'dailywire', 'npo'):
         verified = next(event['manifest'] for event in reversed(runtime['history'])
             if event.get('source_id') == source and event.get('manifest'))
         assert verified['python_version'] and verified['helper_versions']['ffmpeg']
@@ -62,7 +63,7 @@ def verify(base: str, password: str, timeout: int):
     request('/api/vodloft/stream/secret-fixture-token', expected=404)
     request('/api/auth/logout', method='POST', expected=204)
     request('/api/vodloft/library', expected=401)
-    print('Container acceptance passed: authentication, production assets, library, and both isolated Sources.')
+    print('Container acceptance passed: authentication, production assets, library, and all isolated Sources.')
 
 
 if __name__ == '__main__':

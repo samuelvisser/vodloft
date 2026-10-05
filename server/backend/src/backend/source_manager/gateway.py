@@ -22,9 +22,12 @@ _running_lock = threading.Lock()
 
 
 class SourceInvocationError(RuntimeError):
-    def __init__(self, code: str, message: str):
+    def __init__(self, code: str, message: str, *, source_id: str | None = None,
+                 operation: str | None = None):
         super().__init__(message)
         self.code = code
+        self.source_id = source_id
+        self.operation = operation
 
 
 _PUBLIC_ERRORS = {
@@ -37,6 +40,21 @@ _PUBLIC_ERRORS = {
     "insufficient_disk": "Insufficient staging disk space",
     "runtime_error": "The Source runtime failed",
 }
+
+
+def _public_error(source_id: str, operation: str, code: str) -> str:
+    if code == "runtime_error":
+        action = {
+            "match": "while checking URL support",
+            "resolve": "while extracting this URL",
+            "entries": "while reading this Collection",
+            "download": "while extracting media for download",
+            "stream_lease": "while extracting upstream playback",
+        }.get(operation, "while processing this request")
+        return f"{source_id} Source failed {action}"
+    return _PUBLIC_ERRORS[code]
+
+
 _SNAPSHOT = TypeAdapter(NormalizedSnapshot)
 
 
@@ -198,13 +216,15 @@ class SourceGateway:
         if process.returncode:
             # The worker's stderr may contain upstream URLs or credentials.
             raise SourceInvocationError("runtime_error",
-                f"{source_id} could not {operation} this media (exit {process.returncode})")
+                f"{source_id} could not {operation} this media (exit {process.returncode})",
+                source_id=source_id, operation=operation)
         result = json.loads(stdout)
         if isinstance(result, dict) and "error" in result:
             error = SourceError.model_validate(result["error"])
             # Source output is untrusted and can include access tokens in an
             # exception string. Expose only protocol-defined public wording.
-            raise SourceInvocationError(error.code, _PUBLIC_ERRORS[error.code])
+            raise SourceInvocationError(error.code, _public_error(source_id, operation, error.code),
+                source_id=source_id, operation=operation)
         return result
 
     def manifests(self) -> list[SourceManifest]:

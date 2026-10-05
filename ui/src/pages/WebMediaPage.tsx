@@ -57,6 +57,7 @@ type RuntimeState = {history: {source_id: string; action: string; at: string; st
 type Catalogue = {source_id: string; items: {hostname: string; display_name: string}[]; exhaustive: boolean}
 type SearchPage = {items: {reference: Reference; kind: string; title: string; description?: string}[];
     next_cursor: string | null}
+type SourceFailure = {code: string; sourceId: string | null; operation: string | null}
 const SearchForm = z.object({query: z.string().min(1).max(200), source_id: z.string().min(1),
     connection_id: z.string().default('')})
 type SearchFields = z.infer<typeof SearchForm>
@@ -123,6 +124,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
     const [busy, setBusy] = useState(false)
     const [workingAction, setWorkingAction] = useState<'resolve' | 'search' | 'inspect' | 'metadata' | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const [sourceFailure, setSourceFailure] = useState<SourceFailure | null>(null)
     const selectedReference = selected?.references?.find(reference => reference.id === referenceId)
 
     const refresh = () => Promise.all([api<Item[]>('/library').then(setItems),
@@ -176,13 +178,21 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
 
     const resolve = buildServerAwareSubmit(urlForm, async (fields: URLFields) => {
         setWorkingAction('resolve')
-        setBusy(true); setError(null); setPreview(null)
+        setBusy(true); setError(null); setPreview(null); setSourceFailure(null)
         try {
             setImportConnectionId(fields.connection_id ? Number(fields.connection_id) : null)
-            return await formRequest('/resolve', 'POST', {url: fields.url, source_id: fields.source_id || null,
+            const response = await formRequest('/resolve', 'POST', {url: fields.url, source_id: fields.source_id || null,
                 connection_id: fields.connection_id ? Number(fields.connection_id) : null})
+            if (!response.ok) {
+                setSourceFailure({
+                    code: response.headers.get('X-VodLoft-Source-Error') || '',
+                    sourceId: response.headers.get('X-VodLoft-Source'),
+                    operation: response.headers.get('X-VodLoft-Source-Operation'),
+                })
+            }
+            return response
         } finally { setBusy(false); setWorkingAction(null) }
-    }, {onSuccess: result => setPreview(result as Preview), rootOnFieldErrors: true})
+    }, {onSuccess: result => {setSourceFailure(null); setPreview(result as Preview)}, rootOnFieldErrors: true})
     const search = buildServerAwareSubmit(searchForm, async (fields: SearchFields) => {
         setWorkingAction('search')
         setBusy(true); setError(null)
@@ -316,7 +326,13 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                     {connection.name} ({connection.source_id})</option>)}</select></label>
             <ProgressButton definition={operations.vodloft_source_resolve} label="Resolve URL" active={busy && urlForm.formState.isSubmitting}
                 disabled={busy} onClick={() => void resolve()}/>
-            {errors.root && <p role="alert">{errors.root.message}</p>}
+            {errors.root && <div role="alert">
+                <p>{errors.root.message}</p>
+                {sourceFailure?.code === 'runtime_error' && sourceFailure.operation === 'resolve' && <p>
+                    {sourceFailure.sourceId || 'The selected Source'} failed while interpreting the upstream site.
+                    {' '}This is a Source/extractor failure; it does not mean the media itself is unavailable.
+                </p>}
+            </div>}
         </form>
         <DomainBrowser busy={busy} connections={connections} onPreview={previewSearchResult} onAddURL={(sourceId, connectionId) => {
             setPreview(null)
