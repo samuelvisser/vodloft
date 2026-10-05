@@ -292,11 +292,12 @@ class NPOClient:
                         includePremiumContent=True)
 
     def search(self, query: str, search_type: str):
-        if self.email:
-            self.login()
+        session = self.login() if self.email else {}
+        premium = session.get("hasSubscription") is not None if session else False
         return self.api("search-collection-items", searchType=search_type,
                         partyId=1, searchQuery=query,
-                        subscriptionType="premium" if self.email else "anonymous",
+                        subscriptionType="premium" if premium else "anonymous",
+                        profileid="premium" if premium else None,
                         includePremiumContent=True)
 
     def _player_token(self, product_id: str, *, authenticated: bool = False) -> str:
