@@ -5,11 +5,11 @@
 > very much is though if you're interested
 
 
-# VodLoft 1.0
+# VodLoft 0.1
 
 VodLoft builds a local web-media library from WireLoft. It separates websites (**Domains**), independently installed acquisition adapters (**Sources**), canonical media, Collection membership, local renditions, and downstream media-server delivery.
 
-The 1.0 prototype includes yt-dlp and The Daily Wire Sources; Videos, Movies, shared Movie Extras, and nested Collections; automatic collection acquisition; a browser player; portable podcast/video RSS feeds; local accounts and approval requests; and Plex, Jellyfin, and Audiobookshelf integrations.
+The 0.1 prototype includes yt-dlp and The Daily Wire Sources; Videos, Movies, shared Movie Extras, and nested Collections; automatic collection acquisition; a browser player; portable podcast/video RSS feeds; local accounts and approval requests; and Plex, Jellyfin, and Audiobookshelf integrations.
 
 ## Start with Docker
 
