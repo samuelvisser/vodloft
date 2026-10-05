@@ -22,6 +22,10 @@ class _BulkMediaDownloadOperation(OperationDefinition[None]):
         return "Downloads"
 
     def targets(self) -> tuple[OperationTargetSpec, ...]:
+        if self.action == "retry":
+            # Retry is represented by dependencies on the real media.download
+            # operations. Other bulk actions still own direct row-level workers.
+            return ()
         return tuple(
             OperationTargetSpec(
                 task_key=_BULK_ACTION_TASK_KEY,
