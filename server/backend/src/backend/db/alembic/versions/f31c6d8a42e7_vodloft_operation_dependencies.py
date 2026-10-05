@@ -84,8 +84,63 @@ def _upgrade_operation_dependencies() -> None:
         ["definition_id", "status", "resource_type", "resource_id", "started_at", "id"],
     )
 
+    op.create_index(
+        "ix_media_items_episode_show_published_id",
+        "media_items_episode",
+        ["show_id", "published_date", "id"],
+    )
+    op.create_index(
+        "ix_media_items_episode_show_publish_status",
+        "media_items_episode",
+        ["show_id", "publish_status"],
+    )
+    op.create_index(
+        "ix_media_items_episode_season_index_id",
+        "media_items_episode",
+        ["season_id", "index", "id"],
+    )
+    op.create_index(
+        "ix_media_items_episode_unfinished_metadata_status",
+        "media_items_episode",
+        ["publish_status"],
+        sqlite_where=sa.text("metadata_is_final = 0"),
+    )
+    op.create_index(
+        "ix_media_download_history_download_occurred_id",
+        "media_download_history",
+        ["media_download_id", "occurred_at", "id"],
+    )
+    op.create_index(
+        "ix_media_downloads_local_profile_id",
+        "media_downloads",
+        ["local_media_profile_id", "id"],
+    )
+    if op.get_bind().dialect.name == "sqlite":
+        op.execute(sa.text("PRAGMA optimize"))
+
 
 def _downgrade_operation_dependencies() -> None:
+    op.drop_index("ix_media_downloads_local_profile_id", table_name="media_downloads")
+    op.drop_index(
+        "ix_media_download_history_download_occurred_id",
+        table_name="media_download_history",
+    )
+    op.drop_index(
+        "ix_media_items_episode_unfinished_metadata_status",
+        table_name="media_items_episode",
+    )
+    op.drop_index(
+        "ix_media_items_episode_season_index_id",
+        table_name="media_items_episode",
+    )
+    op.drop_index(
+        "ix_media_items_episode_show_publish_status",
+        table_name="media_items_episode",
+    )
+    op.drop_index(
+        "ix_media_items_episode_show_published_id",
+        table_name="media_items_episode",
+    )
     op.drop_index(
         "ix_task_runs_definition_status_resource_started_id",
         table_name="task_runs",
