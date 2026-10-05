@@ -75,7 +75,7 @@ def _walk_records(value) -> list[dict]:
         if seen > 30000:
             break
         if isinstance(current, dict):
-            if any(key in current for key in ("productId", "guid", "slug", "series", "season")):
+            if any(key in current for key in ("productId", "externalId", "guid", "slug", "series", "season")):
                 result.append(current)
             stack.extend(current.values())
         elif isinstance(current, list):
@@ -111,7 +111,7 @@ def parse(url: str, html: str) -> CrawledPage:
 
     # Keep a narrow last-resort extraction for pages whose hydration object is
     # serialized inside another script rather than __NEXT_DATA__.
-    if not any(record.get("productId") for record in records):
+    if not any(record.get("productId") or record.get("externalId") for record in records):
         for product_id in re.findall(r'"productId"\s*:\s*"([A-Za-z0-9_.:-]{2,160})"', html):
             records.append({"productId": product_id})
 
@@ -149,7 +149,8 @@ def program(url: str, client: NPOClient) -> dict:
     crawled = page(url, client)
     path_slug = next((part for part in reversed(urlsplit(url).path.split("/"))
                       if part and part not in {"afspelen", "start", "serie", "video"}), "")
-    candidates = [record for record in crawled.records if record.get("productId")]
+    candidates = [record for record in crawled.records
+                  if record.get("productId") or record.get("externalId")]
     if not candidates:
         raise CrawlError("NPO page contains no playable media identity")
 
@@ -196,8 +197,8 @@ def series(url: str, client: NPOClient) -> tuple[dict, list[dict]]:
         if root_page is None:
             root_page = crawled
         for record in crawled.records:
-            if record.get("productId"):
-                product_id = str(record["productId"])
+            if record.get("productId") or record.get("externalId"):
+                product_id = str(record.get("productId") or record.get("externalId"))
                 programs.setdefault(product_id, {
                     **record,
                     "_crawler_url": _program_url(record, current),
@@ -238,8 +239,8 @@ def search(query: str, client: NPOClient, limit: int = 30) -> list[dict]:
         title = str(record.get("title") or record.get("mainTitle") or "")
         if needle not in title.casefold():
             continue
-        kind = "program" if record.get("productId") else "series"
-        identity = str(record.get("productId") or record.get("guid") or record.get("slug") or "")
+        kind = "program" if record.get("productId") or record.get("externalId") else "series"
+        identity = str(record.get("productId") or record.get("externalId") or record.get("guid") or record.get("slug") or "")
         if not identity or (kind, identity) in seen:
             continue
         seen.add((kind, identity))
