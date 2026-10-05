@@ -42,6 +42,15 @@ def test_source_contract_and_generic_gateway_keep_package_boundary():
         assert not any(name.startswith(("backend", "config", "dailywire_authorisation"))
                        for name in imports), path
 
+    # Provider-specific NPO behavior is entirely inside its Source package.
+    for path in (root / "source_npo" / "src" / "vodloft_source_npo").rglob("*.py"):
+        imports = [alias.name for node in ast.walk(ast.parse(path.read_text()))
+                   if isinstance(node, ast.Import) for alias in node.names]
+        imports.extend(node.module or "" for node in ast.walk(ast.parse(path.read_text()))
+                       if isinstance(node, ast.ImportFrom))
+        assert not any(name.startswith(("backend", "config", "yt_dlp", "dailywire"))
+                       for name in imports), path
+
 
 def test_signed_release_catalogue_rejects_tampering_and_stages_exact_wheels(monkeypatch, tmp_path):
     import base64
@@ -753,6 +762,125 @@ def test_ytdlp_unexpected_extractor_failure_is_not_media_unavailable():
     expected = ExtractorError("Media is unavailable", expected=True)
     error = worker._source_error(expected)
     assert error.code == "unavailable"
+
+
+def test_npo_source_prefers_api_and_falls_back_to_bounded_crawler(monkeypatch):
+    from vodloft_source_npo import worker
+
+    program = {
+        "productId": "NPO_TEST_1", "guid": "program-guid", "slug": "episode-one",
+        "title": "Episode one", "firstBroadcastDate": 1760000000,
+        "series": {"slug": "een-huis-vol", "title": "Een huis vol"},
+        "season": {"slug": "seizoen-1", "seasonKey": 1},
+        "programKey": 1,
+    }
+
+    class ApiClient:
+        def series_detail(self, slug):
+            assert slug == "een-huis-vol"
+            return {"guid": "series-guid", "slug": slug, "title": "Een huis vol",
+                    "type": "timeless_series"}
+        def series_seasons(self, slug, series_type):
+            assert series_type == "timeless_series"
+            return [{"guid": "season-guid", "slug": "seizoen-1", "seasonKey": 1}]
+        def programs_by_season(self, guid):
+            assert guid == "season-guid"
+            return [program]
+        def programs_by_series(self, guid, limit=250):
+            raise AssertionError("season API should be preferred")
+
+    monkeypatch.setattr(worker, "_client", lambda *args: ApiClient())
+    monkeypatch.setattr(worker.crawler, "series",
+        lambda *args: (_ for _ in ()).throw(AssertionError("crawler should not run")))
+    snapshot = worker.resolve("https://npo.nl/start/serie/een-huis-vol")
+    assert snapshot.kind == "collection"
+    assert snapshot.reference.upstream_id == "series-guid"
+    assert snapshot.entries[0].reference.upstream_id == "NPO_TEST_1"
+    assert snapshot.entries[0].group == "1"
+
+    class BrokenApi(ApiClient):
+        def series_detail(self, slug):
+            raise worker.ApiUnavailable("fixture API outage")
+
+    monkeypatch.setattr(worker, "_client", lambda *args: BrokenApi())
+    monkeypatch.setattr(worker.crawler, "series", lambda url, client: (
+        {"guid": "crawler-series", "slug": "een-huis-vol", "title": "Crawler title"},
+        [{**program, "productId": "NPO_CRAWLER_1"}],
+    ))
+    fallback = worker.resolve("https://npo.nl/start/serie/een-huis-vol")
+    assert fallback.title == "Crawler title"
+    assert fallback.reference.upstream_id == "crawler-series"
+    assert fallback.entries[0].reference.upstream_id == "NPO_CRAWLER_1"
+
+
+def test_npo_login_and_drm_handling_keep_credentials_private(monkeypatch):
+    import time
+    from vodloft_source_npo.client import DRMProtected, NPOClient
+
+    client = NPOClient("member@example.com", "super-secret")
+    session_calls = 0
+    posted = []
+
+    def fake_request(url, **kwargs):
+        nonlocal session_calls
+        data = kwargs.get("data")
+        if url.endswith("/api/auth/session"):
+            session_calls += 1
+            value = {} if session_calls == 1 else {
+                "tokenExpiresAt": time.time() + 3600, "hasSubscription": True}
+            return url, json.dumps(value).encode()
+        if url.endswith("/api/auth/csrf"):
+            return url, b'{"csrfToken":"csrf-token"}'
+        if url.endswith("/api/auth/signin/npo-id"):
+            return "https://id.npo.nl/account/login", (
+                b'<input name="ReturnUrl" value="/callback">'
+                b'<input name="__RequestVerificationToken" value="verify">')
+        if url == "https://id.npo.nl/account/login":
+            posted.append(data.decode())
+            return "https://npo.nl/start/api/auth/session", b"ok"
+        raise AssertionError(url)
+
+    monkeypatch.setattr(client, "_request", fake_request)
+    session = client.login()
+    assert session["hasSubscription"] is True
+    assert posted and "EmailAddress=member%40example.com" in posted[0]
+    assert "Password=super-secret" in posted[0]
+    assert "super-secret" not in json.dumps(session)
+
+    anonymous = NPOClient()
+    monkeypatch.setattr(anonymous, "_player_token", lambda *args, **kwargs: "jwt")
+    monkeypatch.setattr(anonymous, "_request", lambda *args, **kwargs: (
+        "https://prod.npoplayer.nl/stream-link",
+        json.dumps({"stream": {
+            "streamURL": "https://cdn.example/media.mpd",
+            "drm": {"licenseUrl": "https://license.example/widevine"},
+        }}).encode(),
+    ))
+    with pytest.raises(DRMProtected):
+        anonymous.playback("NPO_TEST_1", "https://npo.nl/start/video/test")
+
+
+def test_npo_crawler_reads_next_data_and_same_series_links():
+    from vodloft_source_npo import crawler
+
+    html = """
+    <html><head>
+      <meta property="og:title" content="Een huis vol">
+      <script id="__NEXT_DATA__" type="application/json">
+        {"props":{"pageProps":{"program":{"productId":"NPO_1","slug":"episode-one",
+        "title":"Episode one","series":{"slug":"een-huis-vol"},
+        "season":{"slug":"seizoen-1"}}}}}
+      </script>
+    </head><body>
+      <a href="/start/serie/een-huis-vol/seizoen-1/episode-one/afspelen">episode</a>
+      <a href="https://example.com/not-allowed">outside</a>
+    </body></html>
+    """
+    page = crawler.parse("https://npo.nl/start/serie/een-huis-vol", html)
+    assert page.title == "Een huis vol"
+    assert any(record.get("productId") == "NPO_1" for record in page.records)
+    assert page.links == [
+        "https://npo.nl/start/serie/een-huis-vol/seizoen-1/episode-one/afspelen"]
 
 
 def test_ytdlp_collection_page_has_bounded_cursor(monkeypatch):
