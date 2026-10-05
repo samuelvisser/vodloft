@@ -5,10 +5,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.models import DownloadProfileBase, LocalMediaProfileBase, MediaDownloadBase
+from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import complete_operation, queue_operation_target_dispatch
+from task_manager.tasks.media_download_operations import attach_redownload_dependencies
 
-from .operations import LocalMediaProfileDeleteDownloadsOperation
+from .operations import (
+    LocalMediaProfileDeleteDownloadsOperation,
+    LocalMediaProfileRedownloadOperation,
+)
 
 
 def request_local_media_profile_download_delete(
@@ -76,5 +81,53 @@ def request_local_media_profile_download_delete(
         "queued": bool(download_ids),
         "downloads_queued": len(download_ids),
         "download_profiles_disabled": disabled_download_profiles,
+        "operation_id": operation.id,
+    }
+
+
+
+def request_local_media_profile_redownload(
+    s: Session,
+    local_media_profile_slug: str,
+) -> dict[str, bool | int | str]:
+    profile = (
+        s.query(LocalMediaProfileBase)
+        .filter_by(slug=local_media_profile_slug)
+        .one_or_none()
+    )
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Media profile not found")
+
+    downloads = tuple(s.scalars(
+        select(MediaDownloadBase)
+        .where(
+            MediaDownloadBase.local_media_profile_id == profile.id,
+            MediaDownloadBase.artifact_status != MediaDownloadArtifactStatus.ABSENT.value,
+        )
+        .order_by(MediaDownloadBase.id.asc())
+    ))
+    download_ids = tuple(download.id for download in downloads)
+
+    operation = create_operation(
+        s,
+        LocalMediaProfileRedownloadOperation(
+            profile,
+            media_download_ids=download_ids,
+        ),
+    )
+    if not download_ids:
+        complete_operation(
+            s,
+            operation.id,
+            summary=f"No downloaded media use {profile.name}",
+            data={"downloads_requested": 0, "downloads_completed": 0},
+        )
+    else:
+        attach_redownload_dependencies(s, operation, downloads)
+
+    s.flush()
+    return {
+        "queued": bool(download_ids),
+        "downloads_queued": len(download_ids),
         "operation_id": operation.id,
     }
