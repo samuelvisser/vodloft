@@ -29,6 +29,8 @@ SOURCE_ID = "dailywire"
 _CAPABILITIES = {"health", "resolve_url", "inspect_media", "enumerate_collection", "enumerate_pages",
     "download", "domain_catalogue", "search", "browse", "stream_lease", "authentication", "connection_capabilities"}
 
+_METADATA_CAPABILITIES = {"resolve_url", "inspect_media"}
+
 # The old WireLoft workflows retain their richer record shape while all of
 # their upstream requests execute inside this independently installed Source.
 _LEGACY_METHODS = frozenset({"get_show_page", "get_catalog", "get_square_show_thumbnails",
@@ -96,13 +98,13 @@ def resolve(url: str, max_entries: int = 100, token: str | None = None) -> Media
         entries = [EntrySnapshot(reference=_reference("episode", e.slug, e.dw_id, e.sharing_url),
                                  title=e.title, position=index, published_at=e.published_date,
                                  episode_number=e.episode_number or None,
-                                 capabilities={"download"} if getattr(e, "is_downloadable", True) else set())
+                                 capabilities=_METADATA_CAPABILITIES | ({"download"} if getattr(e, "is_downloadable", True) else set()))
                    for index, e in enumerate(record.latest_episodes[:max_entries], 1)]
         return MediaSnapshot(kind="collection", reference=_reference("show", record.slug, record.dw_id,
             record.sharing_url), title=record.title, description=record.description,
             artwork_url=record.thumbnail_portrait_path or record.background_image_path,
             entries=entries, enumeration_complete=False,
-            capabilities={"enumerate_collection"})
+            capabilities=_METADATA_CAPABILITIES | {"enumerate_collection"})
     if kind in ("episode", "episodes"):
         record = client.get_episode_details(slug)
         return MediaSnapshot(kind="video", reference=_reference("episode", record.slug, record.dw_id,
@@ -112,7 +114,7 @@ def resolve(url: str, max_entries: int = 100, token: str | None = None) -> Media
             formats=([{"code": "format_audio_only", "audio_only": True, "container": "mp3"}]
                 if record.audio_url else []) + ([{"code": "format_1080p", "height": 1080}]
                 if record.video_url else []),
-            capabilities=({"download"} if record.is_downloadable else set()) |
+            capabilities=_METADATA_CAPABILITIES | ({"download"} if record.is_downloadable else set()) |
                          ({"stream_lease"} if record.video_url else set()))
     movie = _client(token, movie=True)
     if kind in ("videos", "movies"):
@@ -120,13 +122,13 @@ def resolve(url: str, max_entries: int = 100, token: str | None = None) -> Media
         extras = [EntrySnapshot(reference=_reference("clips", extra.slug,
             extra.dw_id or extra.slug, extra.sharing_url), title=extra.title,
             position=index, kind="movie_extra", extra_type=extra.movie_extra_type,
-            capabilities={"download"})
+            capabilities=_METADATA_CAPABILITIES | {"download"})
             for index, extra in enumerate(record.movie_extras, 1)]
         return MediaSnapshot(kind="movie", reference=_reference("videos", record.slug, record.dw_id,
             record.sharing_url), title=record.title, description=record.description,
             duration=record.duration, artwork_url=record.thumbnail_portrait_path,
             extras=extras, formats=[{"code": "format_1080p", "height": 1080}],
-            capabilities={"download", "stream_lease"})
+            capabilities=_METADATA_CAPABILITIES | {"download", "stream_lease"})
     if kind in ("clips", "clip"):
         detail = movie.get_movie_extra_playback(slug)
         record = detail.metadata
@@ -135,7 +137,7 @@ def resolve(url: str, max_entries: int = 100, token: str | None = None) -> Media
             description=record.description, duration=record.duration,
             artwork_url=record.thumbnail_landscape_path,
             formats=[{"code": "format_1080p", "height": 1080}],
-            capabilities={"download", "stream_lease"})
+            capabilities=_METADATA_CAPABILITIES | {"download", "stream_lease"})
     raise ValueError("Unsupported Daily Wire media URL")
 
 
@@ -171,7 +173,7 @@ def entries(url: str, cursor: str | None = None, limit: int = 50,
             title=e.title, position=index, published_at=e.published_date,
             role=_member_role(e),
             episode_number=e.episode_number or None,
-            capabilities={"download"} if getattr(e, "is_downloadable", True) else set())
+            capabilities=_METADATA_CAPABILITIES | ({"download"} if getattr(e, "is_downloadable", True) else set()))
             for index, e in enumerate(show.latest_episodes[:limit], 1)],
             complete=False)
     if cursor and len(cursor) > 4096:
@@ -194,7 +196,7 @@ def entries(url: str, cursor: str | None = None, limit: int = 50,
         title=e.title, position=position + index, group=season.name,
         role=_member_role(e, season),
         published_at=e.published_date, episode_number=e.episode_number or None,
-        capabilities={"download"} if getattr(e, "is_downloadable", True) else set())
+        capabilities=_METADATA_CAPABILITIES | ({"download"} if getattr(e, "is_downloadable", True) else set()))
         for index, e in enumerate(result.items, 1)]
     position += len(result.items)
     if result.has_next and result.next_page_url:

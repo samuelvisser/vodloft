@@ -25,6 +25,7 @@ from vodloft_source_media import download as acquire_media, UnsupportedRepresent
 
 _CAPABILITIES = {"health", "resolve_url", "inspect_media", "enumerate_collection", "enumerate_pages",
     "download", "domain_catalogue", "stream_lease", "search", "connection_capabilities"}
+_METADATA_CAPABILITIES = {"resolve_url", "inspect_media"}
 _SEARCH_PREFIXES = {"youtube.com": "ytsearch", "soundcloud.com": "scsearch"}
 
 
@@ -96,7 +97,7 @@ def resolve(url: str, *, max_entries: int = 100, cookies: str | None = None,
         entries.append(EntrySnapshot(
             reference=_reference(entry, url, strict=True), title=str(entry.get("title") or entry.get("id") or "Untitled"),
             position=position, kind="collection" if entry.get("_type") == "playlist" else "video",
-            capabilities={"enumerate_collection"} if entry.get("_type") == "playlist" else {"download"},
+            capabilities=_METADATA_CAPABILITIES | ({"enumerate_collection"} if entry.get("_type") == "playlist" else {"download"}),
             **({"published_at": published} if (published := _published(entry)) else {}),
         ))
     thumbnails = info.get("thumbnails") or []
@@ -133,7 +134,7 @@ def resolve(url: str, *, max_entries: int = 100, cookies: str | None = None,
         kind=kind, reference=_reference(info, url),
         title=str(info.get("title") or info.get("id") or "Untitled"),
         entries=entries, enumeration_complete=len(raw_entries) <= max_entries,
-        capabilities={"enumerate_collection"} if kind == "collection" else {"download", "stream_lease"}, **optional,
+        capabilities=_METADATA_CAPABILITIES | ({"enumerate_collection"} if kind == "collection" else {"download", "stream_lease"}), **optional,
     )
 
 
@@ -155,7 +156,7 @@ def entries(url: str, cursor: str | None = None, limit: int = 50,
         title=str(item.get("title") or item.get("id") or "Untitled"),
         position=offset + position + 1,
         kind="collection" if item.get("_type") == "playlist" else "video",
-        capabilities={"enumerate_collection"} if item.get("_type") == "playlist" else {"download"},
+        capabilities=_METADATA_CAPABILITIES | ({"enumerate_collection"} if item.get("_type") == "playlist" else {"download"}),
         **({"published_at": published} if (published := _published(item)) else {}))
         for position, item in enumerate(raw[:limit]) if item]
     has_more = len(raw) > limit

@@ -121,6 +121,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
     const [outputPreview, setOutputPreview] = useState<string | null>(null)
     const [feedUrl, setFeedUrl] = useState<string | null>(null)
     const [busy, setBusy] = useState(false)
+    const [workingAction, setWorkingAction] = useState<'resolve' | 'search' | 'inspect' | 'metadata' | null>(null)
     const [error, setError] = useState<string | null>(null)
     const selectedReference = selected?.references?.find(reference => reference.id === referenceId)
 
@@ -148,12 +149,13 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                 setJob(next)
                 if (next.state === 'available') {
                     void refresh()
-                    if (selected) void api<Item>(`/library/${selected.id}`).then(setSelected)
+                    if (selected) void api<Item>(`/library/${selected.id}${referenceId ? `?reference_id=${referenceId}` : ''}`)
+                        .then(item => setSelected(current => current?.id === item.id ? item : current))
                 }
             }).catch(e => setError(String(e)))
         }, 2500)
         return () => window.clearInterval(timer)
-    }, [job?.id, job?.state, selected?.id])
+    }, [job?.id, job?.state, selected?.id, referenceId])
     useEffect(() => {
         if (view !== 'management' || me?.role !== 'admin') return
         const update = () => void Promise.all([api<Job[]>('/jobs').then(setJobs),
@@ -173,21 +175,23 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
     }, [selected?.id, referenceId])
 
     const resolve = buildServerAwareSubmit(urlForm, async (fields: URLFields) => {
+        setWorkingAction('resolve')
         setBusy(true); setError(null); setPreview(null)
         try {
             setImportConnectionId(fields.connection_id ? Number(fields.connection_id) : null)
             return await formRequest('/resolve', 'POST', {url: fields.url, source_id: fields.source_id || null,
                 connection_id: fields.connection_id ? Number(fields.connection_id) : null})
-        } finally { setBusy(false) }
+        } finally { setBusy(false); setWorkingAction(null) }
     }, {onSuccess: result => setPreview(result as Preview), rootOnFieldErrors: true})
     const search = buildServerAwareSubmit(searchForm, async (fields: SearchFields) => {
+        setWorkingAction('search')
         setBusy(true); setError(null)
         try {
             setSearchRequest(fields)
             const params = new URLSearchParams({query: fields.query, limit: '30'})
             if (fields.connection_id) params.set('connection_id', fields.connection_id)
             return await fetch(`${base()}/sources/${encodeURIComponent(fields.source_id)}/search?${params}`, {credentials: 'include'})
-        } finally { setBusy(false) }
+        } finally { setBusy(false); setWorkingAction(null) }
     }, {onSuccess: result => setSearchPage(result as SearchPage), rootOnFieldErrors: true})
     const importPreview = async (item: Item) => {
         setPreview(null)
@@ -195,6 +199,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
         await open(item.id)
     }
     const fetchSearch = async (fields: SearchFields, cursor?: string) => {
+        setWorkingAction('search')
         setBusy(true); setError(null)
         try {
             const params = new URLSearchParams({query: fields.query, limit: '30'})
@@ -204,9 +209,10 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
             setSearchPage(previous => cursor && previous ? {
                 items: [...previous.items, ...result.items], next_cursor: result.next_cursor} : result)
             setSearchRequest(fields)
-        } catch (e) { setError(String(e)) } finally { setBusy(false) }
+        } catch (e) { setError(String(e)) } finally { setBusy(false); setWorkingAction(null) }
     }
     const previewSearchResult = async (reference: Reference, connectionOverride?: number | null) => {
+        setWorkingAction('inspect')
         setBusy(true); setError(null)
         try {
             const connectionId = connectionOverride !== undefined ? connectionOverride : searchRequest?.connection_id ? Number(searchRequest.connection_id) : null
@@ -214,7 +220,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
             setPreview(await api<Preview>(`/sources/${encodeURIComponent(reference.source_id)}/media`, {method: 'POST',
                 body: JSON.stringify({reference, connection_id: connectionId})}))
             setImportConnectionId(connectionId)
-        } catch (e) { setError(String(e)) } finally { setBusy(false) }
+        } catch (e) { setError(String(e)) } finally { setBusy(false); setWorkingAction(null) }
     }
     const open = async (id: number, keepQueue = false) => {
         if (!keepQueue) setQueue([])
@@ -251,13 +257,15 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
         catch (e) { setError(String(e)) }
     }
     const refreshDetails = async (id: number) => {
+        setWorkingAction('metadata')
         setBusy(true); setError(null)
         try {
             const params = referenceId ? `?reference_id=${referenceId}` : ''
             await api<Item>(`/library/${id}/refresh-details${params}`, {method: 'POST'})
-            setSelected(await api<Item>(`/library/${id}`))
+            const updated = await api<Item>(`/library/${id}${params}`)
+            setSelected(current => current?.id === updated.id ? updated : current)
             await refresh()
-        } catch (e) { setError(String(e)) } finally { setBusy(false) }
+        } catch (e) { setError(String(e)) } finally { setBusy(false); setWorkingAction(null) }
     }
     const runDownloadPolicy = async (policyId: number) => {
         setError(null)
@@ -327,11 +335,13 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                 <label>Connection <select disabled={busy} {...registerSearch('connection_id', {onChange: () => {setSearchPage(null); setSearchRequest(null)}})}><option value="">Anonymous</option>
                     {connections.filter(connection => connection.enabled && connection.source_id === selectedSearchSource).map(connection =>
                         <option key={connection.id} value={connection.id}>{connection.name}</option>)}</select></label>
-                <button className="btn" type="submit" disabled={busy}>Search</button>
+                <ProgressButton definition={operations.vodloft_source_search} label="Search" disabled={busy}
+                    active={busy && workingAction === 'search'} onClick={() => void search()}/>
                 {searchErrors.root && <p role="alert">{searchErrors.root.message}</p>}
             </form>
             {searchPage && <div style={{display: 'grid', gap: 8, marginTop: 12}}>
                 {searchPage.items.map(item => <button type="button" className="btn"
+                    disabled={busy}
                     key={`${item.reference.source_id}:${item.reference.upstream_id}`}
                     onClick={() => void previewSearchResult(item.reference)} style={{textAlign: 'left'}}>
                     {item.title} · {item.kind} · {item.reference.domain} · {item.reference.source_id}</button>)}
@@ -498,7 +508,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
             <p>{selected.kind} · {selected.domain}</p>
             {selected.is_live && <p role="status">Live now</p>}
             {(selected.references?.length ?? 0) > 1 && <label>Source account{' '}
-                <select value={referenceId ?? ''} onChange={event => {
+                <select disabled={busy} value={referenceId ?? ''} onChange={event => {
                     const referenceId = Number(event.target.value) || null; setReferenceId(referenceId)
                     void api<Item>(`/library/${selected.id}${referenceId ? `?reference_id=${referenceId}` : ''}`).then(setSelected).catch(e => setError(String(e)))
                 }}>
@@ -577,8 +587,11 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                                     {method: 'POST'}).then(() => setRunResult('Audiobookshelf progress imported.'))
                                     .catch(e => setError(String(e)))}>Import progress</button>}</p>)}
                 </div>}
-                <button className="btn" type="button" disabled={me?.role !== 'admin' || busy || !referenceId}
-                    onClick={() => void refreshDetails(selected.id)}>Refresh details</button>
+                <ProgressButton definition={operations.vodloft_metadata_refresh} resourceId={selected.id}
+                    label="Refresh details" active={busy && workingAction === 'metadata'}
+                    disabled={!me?.manages_library || busy || !referenceId ||
+                        !selectedReference?.effective_capabilities.some(capability => ['inspect_media', 'resolve_url'].includes(capability))}
+                    onClick={() => void refreshDetails(selected.id)}/>
                 <div style={{marginBottom: 16}}>
                     <label>Local Media Profile{' '}
                         <select value={profileId ?? ''} onChange={event => {
@@ -682,6 +695,8 @@ function ImportPreviewForm({preview, connectionId, items, canLink, canAutomate, 
     const {register, watch, formState: {errors, isSubmitting}} = form
     const existingId = watch('existing_item_id')
     const backfill = watch('backfill')
+    const canDownload = preview.kind !== 'collection' && !!preview.capabilities?.includes('download')
+    const canConfigureAutomation = canAutomate && !!preview.capabilities?.includes('enumerate_collection')
     const candidates = items.filter(item => item.domain === preview.reference.domain &&
         (item.kind === preview.kind || (preview.kind === 'video' && ['movie', 'movie_extra'].includes(item.kind))))
     const kind = candidates.find(item => item.id === Number(existingId))?.kind ?? preview.kind
@@ -713,7 +728,7 @@ function ImportPreviewForm({preview, connectionId, items, canLink, canAutomate, 
                     {errors.confirm_same_edition && <p role="alert">{errors.confirm_same_edition.message}</p>}
                 </div>}
             </>}
-            {(preview.kind !== 'collection' || canAutomate) && <div style={{margin: '16px 0'}}>
+            {(canDownload || (preview.kind === 'collection' && canConfigureAutomation)) && <div style={{margin: '16px 0'}}>
                 <h3>Local Media Profiles</h3>
                 <p>{preview.kind === 'collection' ? 'Choose profiles for each member Domain. Unmatched members will be skipped with an explanation.' : 'Choose the local representations to request, or leave them unchecked to save metadata only.'}</p>
                 {eligible.length === 0 && <p>No compatible enabled profiles. You can save metadata and create a profile in Management.</p>}
@@ -723,7 +738,9 @@ function ImportPreviewForm({preview, connectionId, items, canLink, canAutomate, 
                 </label>)}
                 {errors.local_profile_ids && <p role="alert">{errors.local_profile_ids.message}</p>}
             </div>}
-            {preview.kind === 'collection' && canAutomate && <div className="vodloft-fields">
+            {preview.kind !== 'collection' && !canDownload && <p>Downloads are unavailable for this Source/account preview. You can save its metadata.</p>}
+            {preview.kind === 'collection' && canAutomate && !canConfigureAutomation && <p>This Source/account cannot enumerate the Collection. You can save its metadata without automatic downloads.</p>}
+            {preview.kind === 'collection' && canConfigureAutomation && <div className="vodloft-fields">
                 <label>Collection backfill <select {...register('backfill')}>
                     <option value="metadata_only">Metadata only — no automatic downloads</option>
                     <option value="newest">Newest N items</option><option value="date_range">Publication date range</option>
