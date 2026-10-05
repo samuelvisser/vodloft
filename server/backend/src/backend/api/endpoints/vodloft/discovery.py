@@ -131,7 +131,7 @@ def source_browse(source_id: str, data: BrowseInput, request: Request):
     require_connection(request, data.connection_id)
     try:
         with tracked('vodloft_source_browse', 'Browse Domain', user_key=principal(request).key,
-                source_id=source_id, connection_id=data.connection_id) as work_key:
+                source_id=source_id, connection_id=data.connection_id, domain=data.domain) as work_key:
             browse_request = SourceBrowseRequest(domain=data.domain, category_id=data.category_id, limit=data.limit)
             return discovery.browse(source_id, browse_request.model_copy(update={'cursor': data.cursor}),
                 connection_id=data.connection_id, job_id=work_key)
@@ -163,7 +163,7 @@ def inspect_media(source_id: str, data: InspectInput, request: Request):
         with get_session() as session:
             options = source_options(session, source_id, data.connection_id)
         with tracked('vodloft_source_resolve', 'Inspect media preview', user_key=principal(request).key,
-                source_id=source_id, connection_id=data.connection_id) as work_key:
+                source_id=source_id, connection_id=data.connection_id, domain=data.reference.domain) as work_key:
             snapshot = SourceGateway().inspect(source_id, data.reference, job_id=work_key, **options)
             with get_session() as session:
                 policy = effective(session, source_id, snapshot.reference.domain, data.connection_id, snapshot.capabilities)
@@ -206,7 +206,10 @@ def stored_entries(source_id: str, reference_id: int, request: Request, cursor: 
     with get_session() as session:
         reference, connection_id = _stored_reference(session, source_id, reference_id, 'collection', request)
     try:
-        return discovery.entries(source_id, reference.url, connection_id=connection_id, cursor=cursor, limit=limit)
+        with tracked('vodloft_source_entries', 'Preview Collection members', user_key=principal(request).key,
+                source_id=source_id, connection_id=connection_id, domain=reference.domain) as work_key:
+            return discovery.entries(source_id, reference.url, connection_id=connection_id, cursor=cursor,
+                limit=limit, job_id=work_key)
     except (ValueError, RuntimeError) as exc:
         return _failure(exc)
 

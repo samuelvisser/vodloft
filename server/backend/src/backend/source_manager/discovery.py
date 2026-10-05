@@ -159,7 +159,7 @@ def browse(source_id: str, request: SourceBrowseRequest, *, connection_id: int |
 
 
 def entries(source_id: str, url: str, *, connection_id: int | None = None,
-            cursor: str | None = None, limit: int = 50):
+            cursor: str | None = None, limit: int = 50, job_id: int | None = None):
     """Preview membership; continuation never crosses a runtime or account."""
     from urllib.parse import urlsplit
     gateway = SourceGateway()
@@ -171,7 +171,7 @@ def entries(source_id: str, url: str, *, connection_id: int | None = None,
     if 'enumerate_collection' not in policy.effective_capabilities:
         raise SourceInvocationError('unsupported_operation', policy.capability_reasons['enumerate_collection'])
     scope = _scope(gateway, source_id, connection_id, options, 'entries', {'url': url, 'limit': limit})
-    result = gateway.entries(source_id, url, cursor=_unwrap(cursor, scope), limit=limit, **options)
+    result = gateway.entries(source_id, url, cursor=_unwrap(cursor, scope), limit=limit, job_id=job_id, **options)
     if any(entry.reference.source_id != source_id for entry in result.entries):
         raise SourceInvocationError('runtime_error', 'Source returned invalid membership provenance')
     return result.model_copy(update={'next_cursor': _wrap(result.next_cursor, scope, cursor)})

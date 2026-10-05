@@ -13,6 +13,7 @@ from pydantic import TypeAdapter
 from source_contracts import (CollectionPage, DomainCatalogue, DownloadEvent, DownloadResult, MediaSnapshot,
     NormalizedSnapshot, SourceError, SourceManifest, SourceMatch, SourceSearchPage, StreamLease,
     SourceBrowseRequest, SourceBrowsePage, SourceConnectionStatus, SourceMediaReference)
+from source_contracts import PROTOCOL_VERSION, METADATA_SCHEMA_VERSION
 from .runtime import command_environment, command_for, registry
 
 _running: dict[int, subprocess.Popen] = {}
@@ -211,7 +212,7 @@ class SourceGateway:
         for source_id in self.commands:
             try:
                 manifest = SourceManifest.model_validate(self.call(source_id, "manifest", timeout=15))
-                if manifest.protocol_version == 1 and manifest.source_id == source_id:
+                if manifest.protocol_version == PROTOCOL_VERSION and manifest.metadata_schema_version == METADATA_SCHEMA_VERSION and manifest.source_id == source_id:
                     manifests.append(manifest)
             except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired):
                 continue
@@ -284,6 +285,9 @@ class SourceGateway:
         if any(getattr(reference, field) != getattr(snapshot.reference, field)
                for field in ("source_id", "domain", "namespace", "upstream_id")):
             raise SourceInvocationError("unavailable", "The Source no longer resolves this media identity")
+        related = snapshot.entries if snapshot.kind == 'collection' else snapshot.extras if snapshot.kind == 'movie' else []
+        if any(entry.reference.source_id != source_id for entry in related):
+            raise SourceInvocationError('runtime_error', 'Source returned invalid related media provenance')
         return snapshot
 
     def connection_status(self, source_id: str, **source_options) -> SourceConnectionStatus:

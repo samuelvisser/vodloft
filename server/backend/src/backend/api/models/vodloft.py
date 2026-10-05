@@ -141,11 +141,11 @@ class LibraryItemSource:
 
     @property
     def title(self) -> str:
-        return self.item.user_title or self.item.title
+        return self.item.effective_title
 
     @property
     def description(self) -> str | None:
-        return self.item.user_description if self.item.user_description is not None else self.item.description
+        return self.item.effective_description
 
     @property
     def downloaded(self) -> bool:

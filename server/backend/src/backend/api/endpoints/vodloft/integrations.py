@@ -236,7 +236,7 @@ def _write_nfo(path: Path, item: MediaItem, export: MediaServerExport,
     kind = "movie" if item.kind in ("movie", "movie_extra") else "episodedetails"
     root = ElementTree.Element(kind)
     ElementTree.SubElement(root, "title").text = item.user_title or item.title
-    ElementTree.SubElement(root, "plot").text = item.user_description or item.description or ""
+    ElementTree.SubElement(root, "plot").text = item.effective_description or ""
     ElementTree.SubElement(root, "uniqueid", type="vodloft").text = str(item.id)
     if item.published_at:
         ElementTree.SubElement(root, "year").text = str(item.published_at.year)
@@ -696,7 +696,7 @@ def reconcile_feed_delivery(delivery_id: int):
                     remote = json.loads(_request(target, 'POST', '/api/podcasts', {
                         'libraryId': target.library_id, 'folderId': delivery.folder_id, 'path': delivery.server_path,
                         'media': {'metadata': {'title': collection.user_title or collection.title,
-                            'description': collection.user_description or collection.description or '',
+                            'description': collection.effective_description or '',
                             'feedUrl': delivery.feed_url}, 'autoDownloadEpisodes': True,
                             'autoDownloadSchedule': '*/15 * * * *'},
                     }))

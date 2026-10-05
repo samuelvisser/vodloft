@@ -16,6 +16,7 @@ from datetime import datetime, timezone, timedelta
 from dataclasses import dataclass, replace
 from contextlib import nullcontext
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import Query, APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse
@@ -114,7 +115,7 @@ def _source_problem(exc: Exception, fallback: str) -> HTTPException:
                   "unavailable": 503}.get(exc.code, 502)
         return HTTPException(status, str(exc),
             headers={"X-VodLoft-Source-Error": exc.code})
-    return HTTPException(502, fallback)
+    return HTTPException(502, fallback, headers={"X-VodLoft-Source-Error": "runtime_error"})
 
 
 class ResolveRequest(BaseModel):
@@ -278,8 +279,10 @@ def source_entries(source_id: str, request: ResolveRequest, http_request: Reques
     source_manifest(source_id)
     require_connection(http_request, request.connection_id)
     try:
-        return source_discovery.entries(source_id, request.url, connection_id=request.connection_id,
-            cursor=cursor, limit=limit)
+        with tracked('vodloft_source_entries', 'Preview Collection members', user_key=principal(http_request).key,
+                source_id=source_id, connection_id=request.connection_id, domain=urlsplit(request.url).hostname) as work_key:
+            return source_discovery.entries(source_id, request.url, connection_id=request.connection_id,
+                cursor=cursor, limit=limit, job_id=work_key)
     except (ValueError, RuntimeError) as exc:
         from backend.api.endpoints.vodloft.discovery import _failure
         return _failure(exc)
@@ -291,7 +294,7 @@ def source_search(source_id: str, query: str, http_request: Request, cursor: str
     require_connection(http_request, connection_id)
     try:
         with tracked('vodloft_source_search', 'Search Source', user_key=principal(http_request).key,
-                source_id=source_id, connection_id=connection_id) as work_key:
+                source_id=source_id, connection_id=connection_id, domain=domain) as work_key:
             return source_discovery.search(source_id, query, domain=domain,
                 connection_id=connection_id, cursor=cursor, limit=limit, job_id=work_key)
     except ValueError as exc:
@@ -384,7 +387,7 @@ def resolve(request: ResolveRequest, http_request: Request):
         with get_session() as session:
             options = source_options(session, source_id, request.connection_id)
         with tracked('vodloft_source_resolve', 'Resolve URL preview', user_key=principal(http_request).key,
-                source_id=source_id, connection_id=request.connection_id) as work_key:
+                source_id=source_id, connection_id=request.connection_id, domain=urlsplit(request.url).hostname) as work_key:
             snapshot = gateway.resolve(source_id, request.url, job_id=work_key, **options)
             with get_session() as session:
                 policy = effective(session, source_id, snapshot.reference.domain, request.connection_id, snapshot.capabilities)
@@ -416,8 +419,8 @@ def _validate_import_snapshot(request: ImportRequest, http_request: Request) -> 
         with get_session() as session:
             options = source_options(session, snapshot.reference.source_id, request.connection_id)
         with tracked('vodloft_source_resolve', 'Verify import reference', user_key=principal(http_request).key,
-                source_id=snapshot.reference.source_id, connection_id=request.connection_id) as work_key:
-            verified = SourceGateway().resolve(snapshot.reference.source_id, snapshot.reference.url, job_id=work_key, **options)
+                source_id=snapshot.reference.source_id, connection_id=request.connection_id, domain=snapshot.reference.domain) as work_key:
+            verified = SourceGateway().inspect(snapshot.reference.source_id, snapshot.reference, job_id=work_key, **options)
         if verified.kind != snapshot.kind or any(getattr(verified.reference, field) != getattr(snapshot.reference, field)
                 for field in ('source_id', 'domain', 'namespace', 'upstream_id')):
             raise HTTPException(409, 'Source media changed; resolve and review it again')
@@ -534,8 +537,10 @@ def refresh_details(item_id: int, request: Request, reference_id: int | None = N
         options = source_options(session, source_id, connection_id)
     try:
         with tracked('vodloft_metadata_refresh', 'Refresh media metadata', user_key=principal(request).key,
-                source_id=source_id, connection_id=connection_id, item_id=item_id) as work_key:
-            snapshot = SourceGateway().resolve(source_id, url, job_id=work_key, **options)
+                source_id=source_id, connection_id=connection_id, item_id=item_id, domain=expected[0]) as work_key:
+            source_reference = SourceMediaReference(source_id=source_id, domain=expected[0],
+                namespace=expected[1], upstream_id=expected[2], url=url)
+            snapshot = SourceGateway().inspect(source_id, source_reference, job_id=work_key, **options)
             if snapshot.kind == 'collection' or (snapshot.reference.domain, snapshot.reference.namespace, snapshot.reference.upstream_id) != expected:
                 raise HTTPException(409, 'Source changed the item identity; add the URL as new media')
             return _import_snapshot(snapshot, connection_id)
@@ -809,7 +814,8 @@ def _run_download(job_id: int) -> None:
             if not job or job.lease_owner != owner or job.cancel_requested or job.state == 'canceled':
                 return
             reference = session.get(SourceReference, job.reference_id)
-            acquired = try_acquire(reference.source_id, reference.domain_id, reference.connection_id)
+            acquired = try_acquire(reference.source_id,
+                session.get(Domain, reference.domain_id).hostname, reference.connection_id)
         if acquired is None:
             acquired = []
             return
@@ -862,7 +868,7 @@ def _representation_key(session, item: MediaItem, reference: SourceReference, pr
             "format": profile.preferred_format, "media_type": item.kind,
             "representation": RepresentationPolicy.model_validate(profile.representation or {}).model_dump(),
             "metadata": {"title": item.user_title or item.title,
-                         "description": item.user_description or item.description or ""}
+                         "description": item.effective_description or ""}
                          if (profile.representation or {}).get("embed_metadata", True) else {},
     }, sort_keys=True).encode()).hexdigest()
 
@@ -899,7 +905,7 @@ def _execute_leased_download(job_id: int) -> None:
                 return
             spec.update(preferred_format=profile.preferred_format,
                 representation=RepresentationPolicy.model_validate(profile.representation or {}).model_dump(),
-                metadata={'title': item.user_title or item.title, 'description': item.user_description or item.description or ''},
+                metadata={'title': item.user_title or item.title, 'description': item.effective_description or ''},
                 output_template=profile.output_template,
                 profile_revision=profile.updated_at.isoformat() if profile.updated_at else None,
                 representation_key=_representation_key(session, item, reference, profile),
@@ -1215,7 +1221,7 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
         spec = {"preferred_format": profile.preferred_format,
                 "representation": RepresentationPolicy.model_validate(profile.representation or {}).model_dump(),
                 "metadata": {"title": item.user_title or item.title,
-                             "description": item.user_description or item.description or ""},
+                             "description": item.effective_description or ""},
                 "representation_key": representation_key,
                 "output_template": profile.output_template, "profile_id": profile.id,
                 "profile_revision": profile.updated_at.isoformat() if profile.updated_at else None,

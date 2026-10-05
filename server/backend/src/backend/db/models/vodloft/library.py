@@ -70,6 +70,16 @@ class MediaItem(Base):
     user_extra_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
+    @property
+    def effective_title(self) -> str:
+        return self.user_title if self.user_title is not None else self.title
+
+    @property
+    def effective_description(self) -> str | None:
+        # An empty override intentionally clears the description; only None
+        # delegates to the latest upstream snapshot.
+        return self.user_description if self.user_description is not None else self.description
+
 
 class SourceReference(Base):
     __tablename__ = "vodloft_source_references"

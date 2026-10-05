@@ -401,7 +401,8 @@ def _expand(collection_id: int, reference_id: int, depth: int, max_nested: int, 
             try:
                 with get_session() as session:
                     reference = session.get(SourceReference, child_reference)
-                    child_slots = try_acquire(reference.source_id, reference.domain_id, reference.connection_id)
+                    child_slots = try_acquire(reference.source_id,
+                        session.get(Domain, reference.domain_id).hostname, reference.connection_id)
                 if child_slots is None:
                     issues.append({'item_id': child_id, 'reason': 'Nested Source/account is busy; resume the refresh later'})
                     continue
@@ -444,7 +445,8 @@ def dispatch_queued(on_complete=None) -> None:
         with get_session() as session:
             operation = session.get(TaskOperation, operation_id)
             reference = session.get(SourceReference, (operation.context or {}).get('source_reference_id')) if operation else None
-            upstream = try_acquire(reference.source_id, reference.domain_id, reference.connection_id) if reference else []
+            upstream = try_acquire(reference.source_id,
+                session.get(Domain, reference.domain_id).hostname, reference.connection_id) if reference else []
             if upstream is None:
                 _dispatch_slots.release()
                 continue

@@ -236,6 +236,7 @@ export const frontendOperationDefinitions = {
   vodloft_source_resolve: {invalidate: invalidateVodloft, kind: 'vodloft_source_resolve', resourceType: 'vodloft_discovery', label: 'Resolve preview'},
   vodloft_source_browse: {invalidate: invalidateVodloft, kind: 'vodloft_source_browse', resourceType: 'vodloft_discovery', label: 'Browse Source'},
   vodloft_source_search: {invalidate: invalidateVodloft, kind: 'vodloft_source_search', resourceType: 'vodloft_discovery', label: 'Search Source'},
+  vodloft_source_entries: {invalidate: invalidateVodloft, kind: 'vodloft_source_entries', resourceType: 'vodloft_discovery', label: 'Preview Collection members'},
   vodloft_acquisition: {
     invalidate: invalidateVodloft, kind: 'vodloft_acquisition', resourceType: 'vodloft_media', label: 'Download',
     success: (operation) => operation.result?.summary || `Downloaded ${operation.title}`,

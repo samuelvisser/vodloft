@@ -8,13 +8,17 @@ from backend.db import get_session
 from backend.source_manager.gateway import SourceInvocationError, cancel_running_job, clear_canceled_job
 from task_manager.scheduler.db import TaskOperation
 from backend.source_manager.concurrency import try_acquire, release
+from backend.source_manager.discovery import canonical_domain
 
-READ_KINDS = {'vodloft_source_resolve', 'vodloft_source_browse', 'vodloft_source_search', 'vodloft_metadata_refresh'}
+READ_KINDS = {'vodloft_source_resolve', 'vodloft_source_browse', 'vodloft_source_search',
+    'vodloft_source_entries', 'vodloft_metadata_refresh'}
 
 
 @contextmanager
-def tracked(kind, title, *, user_key, source_id, connection_id, item_id=None):
-    acquired = try_acquire(source_id, None, connection_id)
+def tracked(kind, title, *, user_key, source_id, connection_id, item_id=None, domain=None):
+    with get_session() as session:
+        domain = canonical_domain(session, source_id, domain) if domain else None
+    acquired = try_acquire(source_id, domain, connection_id)
     if acquired is None:
         raise SourceInvocationError('rate_limited', 'This Source/account is busy; try again after its current work')
     try:

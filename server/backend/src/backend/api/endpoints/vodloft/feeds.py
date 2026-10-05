@@ -583,7 +583,7 @@ def feed(token: str, request: Request):
             published_count += 1
             node = SubElement(channel, "item")
             SubElement(node, "title").text = media.user_title or media.title
-            SubElement(node, "description").text = media.user_description or media.description or ''
+            SubElement(node, "description").text = media.effective_description or ''
             SubElement(node, "guid", isPermaLink="false").text = f"urn:vodloft:feed:{subscription.id}:media:{media.id}"
             published_at = media.published_at or entry.created_at
             SubElement(node, "pubDate").text = format_datetime(published_at.replace(tzinfo=published_at.tzinfo or timezone.utc))
