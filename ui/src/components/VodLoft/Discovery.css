@@ -1,0 +1,13 @@
+.vodloft-discovery { margin: 24px 0; }
+.vodloft-fields { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin: 12px 0; }
+.vodloft-fields label { display: flex; flex-direction: column; gap: 6px; }
+.vodloft-fields input, .vodloft-fields select { font-size: 1rem; min-height: 38px; max-width: 100%; }
+.vodloft-domain-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin: 16px 0; }
+.vodloft-domain-grid .btn, .vodloft-result-grid .btn { text-align: left; white-space: normal; display: flex; flex-direction: column; align-items: start; gap: 6px; padding: 14px; }
+.vodloft-domain-grid .is-selected { outline: 2px solid currentColor; outline-offset: 1px; }
+.vodloft-domain-detail, .vodloft-import-review { border: 1px solid rgba(128,128,128,.35); border-radius: 10px; padding: 18px; margin-top: 20px; }
+.vodloft-result-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin: 16px 0; }
+.vodloft-scan-history { overflow-x: auto; margin: 16px 0; }
+.vodloft-scan-history table { width: 100%; text-align: left; border-collapse: collapse; }
+.vodloft-scan-history td, .vodloft-scan-history th { padding: 8px; border-bottom: 1px solid rgba(128,128,128,.25); }
+@media (max-width: 540px) { .vodloft-fields label { width: 100%; } .vodloft-fields input, .vodloft-fields select { width: 100%; } }

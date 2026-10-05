@@ -218,7 +218,30 @@ function invalidateMediaDownloadCollection(
   )
 }
 
+function invalidateVodloft(_queryClient: QueryClient, _operation: TaskOperationRead, _invalidations: InvalidationCollector) {
+  window.dispatchEvent(new Event('vodloft:changed'))
+}
+
 export const frontendOperationDefinitions = {
+  vodloft_collection_sync: {
+    invalidate: invalidateVodloft, kind: 'vodloft_collection_sync', resourceType: 'vodloft_media', label: 'Collection refresh',
+    success: (operation) => operation.result?.summary || `Refreshed ${operation.title}`,
+    partial: (operation) => operation.message || 'Refresh paused with a saved continuation',
+    failed: (operation) => operation.error || 'Collection refresh failed; known members were preserved',
+  },
+  vodloft_metadata_refresh: {
+    invalidate: invalidateVodloft, kind: 'vodloft_metadata_refresh', resourceType: 'vodloft_media', label: 'Metadata refresh',
+    success: (operation) => operation.result?.summary || 'Metadata refreshed',
+  },
+  vodloft_source_resolve: {invalidate: invalidateVodloft, kind: 'vodloft_source_resolve', resourceType: 'vodloft_discovery', label: 'Resolve preview'},
+  vodloft_source_browse: {invalidate: invalidateVodloft, kind: 'vodloft_source_browse', resourceType: 'vodloft_discovery', label: 'Browse Source'},
+  vodloft_source_search: {invalidate: invalidateVodloft, kind: 'vodloft_source_search', resourceType: 'vodloft_discovery', label: 'Search Source'},
+  vodloft_source_entries: {invalidate: invalidateVodloft, kind: 'vodloft_source_entries', resourceType: 'vodloft_discovery', label: 'Preview Collection members'},
+  vodloft_acquisition: {
+    invalidate: invalidateVodloft, kind: 'vodloft_acquisition', resourceType: 'vodloft_media', label: 'Download',
+    success: (operation) => operation.result?.summary || `Downloaded ${operation.title}`,
+    failed: (operation) => operation.error || `Download failed for ${operation.title}`,
+  },
   'show.index': {
     kind: 'show.index',
     resourceType: 'show',

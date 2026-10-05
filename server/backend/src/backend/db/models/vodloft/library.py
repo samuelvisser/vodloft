@@ -26,9 +26,13 @@ class SourceDomain(Base):
     source_id: Mapped[str] = mapped_column(String)
     domain_id: Mapped[int] = mapped_column(ForeignKey("vodloft_domains.id"))
     support: Mapped[str] = mapped_column(String(20), default="verified")
+    aliases: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    capabilities: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    catalogue_revision: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class SourceConnection(Base):
+    scope_revision: Mapped[int] = mapped_column(Integer, default=1, server_default='1')
     __tablename__ = "vodloft_source_connections"
     id: Mapped[int] = mapped_column(primary_key=True)
     source_id: Mapped[str] = mapped_column(String)
@@ -37,6 +41,10 @@ class SourceConnection(Base):
     secret_references: Mapped[dict] = mapped_column(JSON, default=dict)
     authentication_reference: Mapped[str | None] = mapped_column(String(64), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    capabilities: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    domain_capabilities: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    authenticated: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    last_capability_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class MediaItem(Base):
@@ -61,6 +69,16 @@ class MediaItem(Base):
     user_parent_ids: Mapped[list[int] | None] = mapped_column(JSON, nullable=True)
     user_extra_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+    @property
+    def effective_title(self) -> str:
+        return self.user_title if self.user_title is not None else self.title
+
+    @property
+    def effective_description(self) -> str | None:
+        # An empty override intentionally clears the description; only None
+        # delegates to the latest upstream snapshot.
+        return self.user_description if self.user_description is not None else self.description
 
 
 class SourceReference(Base):
@@ -163,6 +181,10 @@ class CollectionScan(Base):
     command_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     connection_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     removed_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    failure_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    error_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     operation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 

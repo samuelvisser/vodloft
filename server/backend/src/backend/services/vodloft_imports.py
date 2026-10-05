@@ -41,6 +41,13 @@ def upsert(session, reference: SourceMediaReference, kind: str, title: str,
     if not supported:
         session.add(SourceDomain(source_id=reference.source_id, domain_id=domain.id, support="verified"))
         session.flush()
+    elif supported.support != "verified":
+        supported.support = "verified"
+    from backend.db.models.local_media_profile import DomainLocalMediaProfile
+    for profile in session.scalars(select(DomainLocalMediaProfile).where(
+            DomainLocalMediaProfile.domain_id == domain.id,
+            DomainLocalMediaProfile.impairment == 'Installed Sources no longer advertise support for this Domain')):
+        profile.impairment = None
     source = session.scalar(select(SourceReference).where(
         SourceReference.source_id == reference.source_id,
         SourceReference.domain_id == domain.id,
@@ -163,6 +170,10 @@ def store_snapshot(snapshot: MediaSnapshot, connection_id: int | None = None,
     scan_key = scan_key or str(uuid.uuid4())
     with get_session() as session:
         if lease_scan_id is not None:
+            from backend.source_manager.connections import connection_fingerprint
+            scan = session.get(CollectionScan, lease_scan_id)
+            if not scan or scan.connection_fingerprint != connection_fingerprint(session, scan.source_id, scan.connection_id, lock=True):
+                raise LibraryImportError(409, 'Source account changed during the scan; known members were preserved')
             changed = session.execute(update(CollectionScan).where(
                 CollectionScan.id == lease_scan_id, CollectionScan.lease_owner == lease_owner,
                 CollectionScan.active_reference_id.is_not(None)).values(
@@ -239,7 +250,13 @@ def store_snapshot(snapshot: MediaSnapshot, connection_id: int | None = None,
             removed = reconcile_members(session, item.id, snapshot.reference.source_id,
                 connection_id, scan_key) if reconcile and snapshot.enumeration_complete else 0
             if record_scan:
+                root_reference = session.scalar(select(SourceReference).where(
+                    SourceReference.item_id == item.id, SourceReference.source_id == snapshot.reference.source_id,
+                    SourceReference.namespace == snapshot.reference.namespace,
+                    SourceReference.upstream_id == snapshot.reference.upstream_id,
+                    SourceReference.connection_key == (connection_id or 0)))
                 session.add(CollectionScan(collection_id=item.id, source_id=snapshot.reference.source_id,
+                    source_reference_id=root_reference.id,
                     scan_key=scan_key, complete=snapshot.enumeration_complete,
                     status="complete" if snapshot.enumeration_complete else "partial",
                     entry_count=len(snapshot.entries), removed_count=removed,

@@ -68,8 +68,17 @@ def require_connection(request: Request, connection_id: int | None) -> None:
 def allowed_api(actor: Principal, method: str, path: str) -> bool:
     if actor.role == "admin":
         return True
+    if path.startswith('/api/source/'):
+        path = path.replace('/api/source/', '/api/vodloft/sources/', 1)
+    elif path == '/api/sources' or path.startswith('/api/sources/'):
+        path = path.replace('/api/sources', '/api/vodloft/sources', 1)
+    elif path == '/api/library/import':
+        path = '/api/vodloft/import/confirm'
     if method == "GET" and path in {"/api/onboarding/status", "/api/meta"}:
         return True
+    if (method == 'GET' and (path == '/api/operations' or re.fullmatch(r'/api/operations/[A-Za-z0-9-]+', path)) or
+        method == 'POST' and re.fullmatch(r'/api/operations/[A-Za-z0-9-]+/(?:seen|cancel|restart)', path)):
+        return True  # Operation handlers enforce Source grants, ownership and control roles.
     prefix = "/api/vodloft"
     if not path.startswith(prefix + "/"):
         return False
@@ -83,10 +92,10 @@ def allowed_api(actor: Principal, method: str, path: str) -> bool:
         return True  # Handlers verify the granted server and the user's explicit identity.
     if method == "GET":
         return (path in {"/me", "/home", "/library", "/profiles", "/domains", "/sources",
-            "/sources/domains", "/sources/connections", "/requests", "/integrations"} or
-            bool(re.fullmatch(r"/(?:library/\d+(?:/(?:progress|artwork|integrations|stream-profiles|download-profiles|history))?|jobs/\d+|sources/[^/]+/(?:manifest|domains|search)|stream-profiles/\d+/admissions)", path)))
-    if method == "POST" and (path in {"/resolve", "/import"} or re.fullmatch(
-            r"/(?:library/\d+/(?:watch|requests)|sources/[^/]+/(?:match|entries))", path)):
+            "/sources/domains", "/discover/domains", "/sources/connections", "/requests", "/integrations"} or
+            bool(re.fullmatch(r"/(?:library/\d+(?:/(?:progress|artwork|integrations|stream-profiles|download-profiles|history|scans|operations))?|jobs/\d+|sources/[^/]+/(?:manifest|domains|search|capabilities|downloads/\d+(?:/progress)?|media/(?:collection|video|movie|movie_extra)/\d+|media/collections/\d+/entries)|stream-profiles/\d+/admissions)", path)))
+    if method == "POST" and (path in {"/resolve", "/import", "/import/confirm"} or re.fullmatch(
+            r"/(?:library/\d+/(?:watch|requests)|sources/[^/]+/(?:match|entries|browse|media|resolve|streams/resolve))", path)):
         return True
     if method == "POST" and re.fullmatch(r"/profiles/\d+/preview", path):
         return True
@@ -100,5 +109,6 @@ def allowed_api(actor: Principal, method: str, path: str) -> bool:
     if actor.manages_library:
         return (method == "POST" and bool(re.fullmatch(r"/requests/\d+/(?:approve|reject)", path)) or
                 method == "PUT" and bool(re.fullmatch(r"/library/\d+/metadata", path)) or
-                method == "DELETE" and bool(re.fullmatch(r"/library/\d+", path)))
+                method == "DELETE" and bool(re.fullmatch(r"/library/\d+", path)) or
+                method == "POST" and bool(re.fullmatch(r"/library/\d+/(?:sync|refresh|refresh-details|scans/\d+/cancel|operations/[A-Za-z0-9-]+/(?:cancel|resume))", path)))
     return False

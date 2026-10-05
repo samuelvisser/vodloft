@@ -82,6 +82,8 @@ async def application_lifespan(app: FastAPI):
         reconcile_vodloft_files()
         from backend.api.endpoints.vodloft.router import recover_acquisition_jobs
         recover_acquisition_jobs()
+        from backend.services.vodloft_operations import recover_interrupted_reads
+        recover_interrupted_reads()
 
         def collection_automation_loop():
             from backend.api.endpoints.vodloft.automation import refresh_due_collections, collection_sync_finished
@@ -229,6 +231,10 @@ def create_app() -> FastAPI:
     from backend.api.endpoints.vodloft.connections import router as vodloft_connections_router
     from backend.api.endpoints.vodloft.playback import router as vodloft_playback_router
     from backend.api.endpoints.vodloft.requests import router as vodloft_requests_router
+    from backend.api.endpoints.vodloft.discovery import router as vodloft_discovery_router
+    from backend.api.endpoints.vodloft.import_review import router as vodloft_import_review_router
+    from backend.api.endpoints.vodloft.operations import router as vodloft_operations_router
+    from backend.api.endpoints.vodloft.standard_api import router as vodloft_standard_api_router
 
     # Public auth endpoints
     app.include_router(auth_router, prefix="/api")
@@ -240,6 +246,10 @@ def create_app() -> FastAPI:
     app.include_router(vodloft_connections_router, prefix="/api")
     app.include_router(vodloft_playback_router, prefix="/api")
     app.include_router(vodloft_requests_router, prefix="/api")
+    app.include_router(vodloft_discovery_router, prefix="/api")
+    app.include_router(vodloft_import_review_router, prefix="/api")
+    app.include_router(vodloft_operations_router, prefix="/api")
+    app.include_router(vodloft_standard_api_router, prefix="/api")
     app.include_router(vodloft_feeds_public)
 
     # WireLoft's shared infrastructure remains; all media workflows use the

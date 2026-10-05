@@ -121,3 +121,14 @@
         background: rgba(255, 255, 255, 0.16);
     }
 }
+.progress-button-fill.is-indeterminate {
+    width: 35%;
+    animation: progress-button-working 1.8s ease-in-out infinite;
+}
+@keyframes progress-button-working {
+    from { transform: translateX(-110%); }
+    to { transform: translateX(310%); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .progress-button-fill.is-indeterminate { width: 100%; animation: none; opacity: .25; }
+}

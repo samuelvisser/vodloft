@@ -20,11 +20,16 @@ from dailywire_api.dw_api.client import ByNextPage, ByShowSeason, ByPodcastSeaso
 from dailywire_api.dw_api.movie import MovieMiddlewareClient
 from source_contracts import (CollectionPage, DomainDescriptor, DownloadResult, EntrySnapshot,
                               MediaSnapshot, SourceError, SourceManifest, SourceMatch, SourceMediaReference, StreamLease,
-                              SourceSearchItem, SourceSearchPage)
+                              SourceSearchItem, SourceSearchPage, SourceBrowseRequest, SourceBrowsePage, SourceBrowseCategory,
+                              SourceConnectionStatus)
 from source_contracts.network import install_public_network_guard, fetch_stream
 from vodloft_source_media import download as acquire_media, UnsupportedRepresentation, lease_expiry
 
 SOURCE_ID = "dailywire"
+_CAPABILITIES = {"health", "resolve_url", "inspect_media", "enumerate_collection", "enumerate_pages",
+    "download", "domain_catalogue", "search", "browse", "stream_lease", "authentication", "connection_capabilities"}
+
+_METADATA_CAPABILITIES = {"resolve_url", "inspect_media"}
 
 # The old WireLoft workflows retain their richer record shape while all of
 # their upstream requests execute inside this independently installed Source.
@@ -93,13 +98,13 @@ def resolve(url: str, max_entries: int = 100, token: str | None = None) -> Media
         entries = [EntrySnapshot(reference=_reference("episode", e.slug, e.dw_id, e.sharing_url),
                                  title=e.title, position=index, published_at=e.published_date,
                                  episode_number=e.episode_number or None,
-                                 capabilities={"download"} if getattr(e, "is_downloadable", True) else set())
+                                 capabilities=_METADATA_CAPABILITIES | ({"download"} if getattr(e, "is_downloadable", True) else set()))
                    for index, e in enumerate(record.latest_episodes[:max_entries], 1)]
         return MediaSnapshot(kind="collection", reference=_reference("show", record.slug, record.dw_id,
             record.sharing_url), title=record.title, description=record.description,
             artwork_url=record.thumbnail_portrait_path or record.background_image_path,
             entries=entries, enumeration_complete=False,
-            capabilities={"enumerate_collection"})
+            capabilities=_METADATA_CAPABILITIES | {"enumerate_collection"})
     if kind in ("episode", "episodes"):
         record = client.get_episode_details(slug)
         return MediaSnapshot(kind="video", reference=_reference("episode", record.slug, record.dw_id,
@@ -109,7 +114,7 @@ def resolve(url: str, max_entries: int = 100, token: str | None = None) -> Media
             formats=([{"code": "format_audio_only", "audio_only": True, "container": "mp3"}]
                 if record.audio_url else []) + ([{"code": "format_1080p", "height": 1080}]
                 if record.video_url else []),
-            capabilities=({"download"} if record.is_downloadable else set()) |
+            capabilities=_METADATA_CAPABILITIES | ({"download"} if record.is_downloadable else set()) |
                          ({"stream_lease"} if record.video_url else set()))
     movie = _client(token, movie=True)
     if kind in ("videos", "movies"):
@@ -117,13 +122,13 @@ def resolve(url: str, max_entries: int = 100, token: str | None = None) -> Media
         extras = [EntrySnapshot(reference=_reference("clips", extra.slug,
             extra.dw_id or extra.slug, extra.sharing_url), title=extra.title,
             position=index, kind="movie_extra", extra_type=extra.movie_extra_type,
-            capabilities={"download"})
+            capabilities=_METADATA_CAPABILITIES | {"download"})
             for index, extra in enumerate(record.movie_extras, 1)]
         return MediaSnapshot(kind="movie", reference=_reference("videos", record.slug, record.dw_id,
             record.sharing_url), title=record.title, description=record.description,
             duration=record.duration, artwork_url=record.thumbnail_portrait_path,
             extras=extras, formats=[{"code": "format_1080p", "height": 1080}],
-            capabilities={"download", "stream_lease"})
+            capabilities=_METADATA_CAPABILITIES | {"download", "stream_lease"})
     if kind in ("clips", "clip"):
         detail = movie.get_movie_extra_playback(slug)
         record = detail.metadata
@@ -132,7 +137,7 @@ def resolve(url: str, max_entries: int = 100, token: str | None = None) -> Media
             description=record.description, duration=record.duration,
             artwork_url=record.thumbnail_landscape_path,
             formats=[{"code": "format_1080p", "height": 1080}],
-            capabilities={"download", "stream_lease"})
+            capabilities=_METADATA_CAPABILITIES | {"download", "stream_lease"})
     raise ValueError("Unsupported Daily Wire media URL")
 
 
@@ -168,7 +173,7 @@ def entries(url: str, cursor: str | None = None, limit: int = 50,
             title=e.title, position=index, published_at=e.published_date,
             role=_member_role(e),
             episode_number=e.episode_number or None,
-            capabilities={"download"} if getattr(e, "is_downloadable", True) else set())
+            capabilities=_METADATA_CAPABILITIES | ({"download"} if getattr(e, "is_downloadable", True) else set()))
             for index, e in enumerate(show.latest_episodes[:limit], 1)],
             complete=False)
     if cursor and len(cursor) > 4096:
@@ -191,7 +196,7 @@ def entries(url: str, cursor: str | None = None, limit: int = 50,
         title=e.title, position=position + index, group=season.name,
         role=_member_role(e, season),
         published_at=e.published_date, episode_number=e.episode_number or None,
-        capabilities={"download"} if getattr(e, "is_downloadable", True) else set())
+        capabilities=_METADATA_CAPABILITIES | ({"download"} if getattr(e, "is_downloadable", True) else set()))
         for index, e in enumerate(result.items, 1)]
     position += len(result.items)
     if result.has_next and result.next_page_url:
@@ -204,30 +209,58 @@ def entries(url: str, cursor: str | None = None, limit: int = 50,
     return CollectionPage(entries=snapshots, next_cursor=encoded, complete=False)
 
 
-def search(query: str, cursor: str | None = None, limit: int = 30,
-           token: str | None = None) -> SourceSearchPage:
-    if (not query.strip() or len(query) > 200 or not 1 <= limit <= 50 or
-        cursor is not None and (not cursor.isdecimal() or len(cursor) > 6)):
-        raise ValueError("Invalid Source search")
-    offset = int(cursor or "0")
-    if offset > 10000:
-        raise ValueError("Search result limit exceeded")
+def _catalogue_items(token: str | None, query: str = "", category_id: str | None = None):
     catalog = _client(token).get_catalog()
     needle = query.casefold().strip()
     items = []
-    for show in catalog.shows:
-        if needle in f"{show.title} {show.author_name or ''}".casefold():
-            items.append(SourceSearchItem(kind="collection", title=show.title,
-                description=show.description, artwork_url=show.thumbnail_portrait_path,
-                reference=_reference("show", show.slug, show.dw_id)))
-    for movie in catalog.movies:
-        if needle in f"{movie.title} {movie.author_name or ''}".casefold():
-            items.append(SourceSearchItem(kind="movie", title=movie.title,
-                description=movie.description, artwork_url=movie.thumbnail_portrait_path,
-                reference=_reference("videos", movie.slug, movie.dw_id)))
+    if category_id in (None, "all", "collections"):
+        for show in catalog.shows:
+            if needle in f"{show.title} {show.author_name or ''}".casefold():
+                items.append(SourceSearchItem(kind="collection", title=show.title,
+                    description=show.description, artwork_url=show.thumbnail_portrait_path,
+                    reference=_reference("show", show.slug, show.dw_id)))
+    if category_id in (None, "all", "movies"):
+        for movie in catalog.movies:
+            if needle in f"{movie.title} {movie.author_name or ''}".casefold():
+                items.append(SourceSearchItem(kind="movie", title=movie.title,
+                    description=movie.description, artwork_url=movie.thumbnail_portrait_path,
+                    reference=_reference("videos", movie.slug, movie.dw_id)))
     items.sort(key=lambda item: (item.title.casefold(), item.reference.upstream_id))
-    page = items[offset:offset + limit]
-    return SourceSearchPage(items=page,
+    return items
+
+
+def _offset(cursor: str | None) -> int:
+    if cursor is not None and (not cursor.isdecimal() or len(cursor) > 6):
+        raise ValueError("Invalid Source catalogue cursor")
+    offset = int(cursor or "0")
+    if offset > 10000:
+        raise ValueError("Source catalogue result limit exceeded")
+    return offset
+
+
+def browse(domain: str, category_id: str | None = None, cursor: str | None = None,
+           limit: int = 30, token: str | None = None) -> SourceBrowsePage:
+    request = SourceBrowseRequest(domain=domain, category_id=category_id, cursor=cursor, limit=limit)
+    if request.domain not in {"dailywire.com", "www.dailywire.com"} or category_id not in {None, "all", "collections", "movies"}:
+        raise ValueError("Unsupported Source operation: Domain or category cannot be browsed")
+    offset = _offset(cursor)
+    items = _catalogue_items(token, category_id=category_id)
+    return SourceBrowsePage(domain="dailywire.com", categories=[
+        SourceBrowseCategory(id="all", title="All media"),
+        SourceBrowseCategory(id="collections", title="Collections"),
+        SourceBrowseCategory(id="movies", title="Movies")], items=items[offset:offset + limit],
+        next_cursor=str(offset + limit) if offset + limit < len(items) else None)
+
+
+def search(query: str, cursor: str | None = None, limit: int = 30,
+           token: str | None = None, domain: str | None = None) -> SourceSearchPage:
+    if not query.strip() or len(query) > 200 or not 1 <= limit <= 50:
+        raise ValueError("Invalid Source search")
+    if domain is not None and domain not in {"dailywire.com", "www.dailywire.com"}:
+        raise ValueError("Unsupported Source operation: Domain cannot be searched")
+    offset = _offset(cursor)
+    items = _catalogue_items(token, query=query)
+    return SourceSearchPage(items=items[offset:offset + limit],
         next_cursor=str(offset + limit) if offset + limit < len(items) else None)
 
 
@@ -283,13 +316,13 @@ def main():
     request = json.load(sys.stdin)
     operation = request["operation"]
     if operation in ("resolve", "download", "entries", "search", "legacy_call", "stream_lease", "stream_fetch",
-                     "auth_start", "auth_poll", "auth_refresh"):
+                     "auth_start", "auth_poll", "auth_refresh", "browse", "media", "connection_status"):
         install_public_network_guard()
     if operation == "manifest":
-        result = SourceManifest(source_id=SOURCE_ID, display_name="Daily Wire API",
-            version="1.0.0", upstream_versions={"dailywire-api": "0.2.1", "yt-dlp": yt_dlp.version.__version__},
-            native_helpers=["ffmpeg"], capabilities={"health", "resolve_url", "enumerate_collection", "enumerate_pages", "download", "domain_catalogue", "search", "stream_lease", "authentication"},
-            exhaustive_domain_catalogue=True,
+        result = SourceManifest(source_id=SOURCE_ID, display_name="The Daily Wire API",
+            version="1.0.1", upstream_versions={"dailywire-api": "0.2.1", "yt-dlp": yt_dlp.version.__version__},
+            native_helpers=["ffmpeg"], capabilities=_CAPABILITIES,
+            exhaustive_domain_catalogue=True, catalogue_revision="2",
             configuration_schema=[{"name": "access_token", "label": "Access token", "kind": "secret",
                                    "required": False}])
     elif operation == "health":
@@ -297,11 +330,15 @@ def main():
         if result["healthy"]:
             subprocess.run(["ffmpeg", "-version"], timeout=10, check=True, capture_output=True)
     elif operation == "domains":
-        result = {"items": [DomainDescriptor(hostname="dailywire.com", display_name="Daily Wire",
-            source_id=SOURCE_ID).model_dump()], "next_cursor": None, "exhaustive": True,
-            "supports_url_resolution_outside_catalog": False, "catalog_revision": "1"}
-    elif operation == "resolve":
-        result = resolve(request["url"], request.get("max_entries", 100), request.get("access_token"))
+        offset, limit = int(request.get("cursor") or 0), int(request.get("limit", 200))
+        if not 0 <= offset <= 1 or not 1 <= limit <= 500:
+            raise ValueError("Invalid Domain continuation or page limit")
+        descriptors = [DomainDescriptor(hostname="dailywire.com", display_name="The Daily Wire",
+            source_id=SOURCE_ID, aliases=["www.dailywire.com"], capabilities=_CAPABILITIES).model_dump(mode="json")]
+        result = {"items": descriptors[offset:offset + limit], "next_cursor": None, "exhaustive": True,
+            "supports_url_resolution_outside_catalog": False, "catalog_revision": "2"}
+    elif operation in {"resolve", "media"}:
+        result = resolve(request.get("url") or request["reference"]["url"], request.get("max_entries", 100), request.get("access_token"))
     elif operation == "match":
         parsed = urlsplit(request["url"])
         parts = parsed.path.strip("/").split("/")
@@ -315,7 +352,15 @@ def main():
                          request.get("access_token"))
     elif operation == "search":
         result = search(request["query"], request.get("cursor"), request.get("limit", 30),
-                        request.get("access_token"))
+                        request.get("access_token"), request.get("domain"))
+    elif operation == "browse":
+        result = browse(request["domain"], request.get("category_id"), request.get("cursor"),
+                        request.get("limit", 30), request.get("access_token"))
+    elif operation == "connection_status":
+        token = request.get("access_token")
+        if token:
+            _client(token).get_user_info()
+        result = SourceConnectionStatus(capabilities=_CAPABILITIES, authenticated=bool(token))
     elif operation == "download":
         result = download(request["url"], request["staging"], request.get("preferred_format", "format_1080p"),
                           request.get("access_token"), request.get("representation"), request.get("metadata"), request.get("reference"))

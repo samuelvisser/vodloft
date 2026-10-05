@@ -2,9 +2,23 @@
 
 This record follows the supplied **VodLoft Technical Architecture Design**. The application is derived from WireLoft commit `7853ee7bdf1137111193932fe9da7e8243442bd5`, whose original ancestry is preserved in Git.
 
+## Latest requested implementation: sections 5, 8 and 12
+
+The following sections are implemented in code on `codex/vodloft-wireloft-prototype`. This records implementation coverage, not a completed runtime acceptance pass.
+
+| Design section | Implemented behavior | Main implementation |
+| --- | --- | --- |
+| 5 — Versioned Source contract | Independent `source-contracts` 1.0.1; four-type discriminated snapshots; omission-preserving metadata; Source-owned Domain aliases/browse categories/account capabilities; standard public Source routes plus optional discovery/auth/progress/cancel routes; typed errors; effective Source → Domain → Connection → item capability policy; read-only previews separated from reviewed import. | `source_contracts`, `source_manager/{gateway,capabilities,connections,discovery}`, `api/endpoints/vodloft/{discovery,standard_api,import_review}`. |
+| 8 — Discovery, synchronization and execution | Add URL plus optional Source search/browse; distinct library search; lightweight enumeration and separate hydration; per-page durable scan checkpoints including failures before the first page; Source/account-scoped memberships; incremental refresh and daily full reconciliation; exhaustive completion required for retirement; runtime/account cursor validation; bounded nested expansion with each child's Domain limits; explicit backfill; TaskOperations; immutable first-dispatch profile specification; staging, leases, scoped concurrency, typed stage failures, bounded backoff, real process cancellation and recovery. Busy acquisitions remain durably queued without holding download slots. | `services/{vodloft_sync,vodloft_imports,vodloft_operations}`, `source_manager/concurrency`, acquisition router, schema migrations `6e7a9d13c2f0` through `e4b209c7316a`. |
+| 12 — Frontend design | Home/Discover/Library/Management; Domain filtering and optional category/search browsing; visible Source/account override; preview/identity/profile/backfill/review-confirm flow; RHF/Zod forms; generic configuration and auth controls; capability-based actions; preserved template editor; TaskOperation progress buttons, indeterminate progress, scan history, cancellation and resume. | `WebMediaPage`, `components/VodLoft/{DomainBrowser,CollectionSyncControls}`, `lib/vodloftApi`, `ProgressButton`, operation definitions. |
+
+Static Python syntax checks and the frontend TypeScript check (`tsc --noEmit`) passed for this implementation pass. Alembic history has one schema head, `e4b209c7316a`; the locked workspace previously resolved with `uv lock --offline` and this follow-up changed no dependencies. New runtime tests, migration execution, frontend production build and visual/live-account checks remain deferred at the user's request. No GitHub Actions were run.
+
+The final follow-up also preserves intentionally cleared descriptions in acquisition, RSS and downstream metadata; validates metadata schema compatibility and related-reference provenance; tracks and cancels Collection preview reads; and shares canonical Domain concurrency limits across discovery, synchronization and downloads. Built-in lightweight entries retain metadata inspection capabilities, with a local-only migration for existing references/history. Import controls honor effective capabilities, show the selected account, discard a stale URL/Source/account preview, and show search/metadata-refresh progress.
+
 ## Required scenarios
 
-Tests below live in `tests/unit/test_vodloft_architecture.py` unless another file is named. Fixture Sources isolate deterministic lifecycle checks from provider account/network availability.
+Tests below live in `tests/unit/test_vodloft_architecture.py` unless another file is named. Fixture Sources isolate deterministic lifecycle checks from provider account/network availability. This table identifies existing regression cases; earlier results do not validate the new section 5/8/12 changes until these cases are updated where necessary and rerun.
 
 | Design scenario | Implemented behavior | Regression evidence |
 | --- | --- | --- |
@@ -13,7 +27,7 @@ Tests below live in `tests/unit/test_vodloft_architecture.py` unless another fil
 | 3. One canonical item belongs to multiple Collections | Canonical identity and Collection occurrences are stored separately; compatible profiles reuse acquired bytes. | `test_shared_media_partial_scan_download_and_playback` in `test_vodloft_prototype.py`; `test_stable_collection_occurrences_survive_reordering`; `test_compatible_profiles_share_one_artifact_without_crossing_source_accounts`. |
 | 4. Partial scans never delete known members | Bounded pages, persistent runtime/account cursor scope, incomplete checkpoints, preserved membership. | `test_paged_collection_refresh_keeps_known_members_on_partial_failure`; shared-media prototype test. |
 | 5. Failed update retains previous active release | Exact wheel/digest verification, staged installation, protocol/schema/interpreter/package/health/configuration checks, atomic activation, rollback. | `test_bad_source_bundle_digest_never_activates`; `test_independent_source_bundle_install_health_failure_and_rollback`; `test_source_update_failure_isolated_to_one_release`; signed-catalogue and publisher round-trip tests. |
-| 6. Queued/running jobs pin their runtime | Frozen command/reference/profile specification and a renewable database lease. | `test_running_job_keeps_queued_source_runtime_command`; `test_profile_representation_is_frozen_and_partitions_artifact_reuse`; `test_job_lease_prevents_duplicate_execution`. |
+| 6. Queued/running jobs pin their runtime | Queued command/reference/account scope, profile frozen at first dispatch, reproducible running/retry specification and a renewable database lease. | `test_running_job_keeps_queued_source_runtime_command`; `test_profile_representation_is_frozen_and_partitions_artifact_reuse` (needs first-dispatch expectation review); `test_job_lease_prevents_duplicate_execution`. |
 | 7. Upstream disappearance preserves local media | Canonical items/artifacts remain available independently of later Collection enumeration. | `test_upstream_disappearance_and_server_outage_preserve_local_acquisition`. |
 | 8. Local arrival does not interrupt upstream playback | Playback-session transport, lease, representation, and worker command remain pinned; new sessions may choose local. | `test_upstream_session_stays_pinned_when_local_file_arrives`; `test_hls_child_renews_signed_uri_and_keeps_one_representation`. |
 | 9. Integration outage does not fail acquisition | Separate persisted export state, scan/availability verification, retry lifecycle. | `test_upstream_disappearance_and_server_outage_preserve_local_acquisition`; media-server matching and RSS-pull lifecycle tests. |
@@ -52,13 +66,15 @@ uv run backend-api background-migrations history
 
 `.github/workflows/vodloft-ci.yml` is **manual only**. No acceptance Actions were started for the final implementation pass, and pushes/PRs do not trigger it. When explicitly run later, it runs the regression suite, dependency advisory check, production frontend build, and independent Source wheel builds. It builds the actual Docker image, starts a fresh authenticated installation, checks production assets/API/library and both isolated Sources, verifies the persistent media root, runs real FFmpeg AAC/M4A processing with edited tags and chapters, and checks backend/nginx logs for bearer-token leakage. Only extraction/HTTP transfer use a deterministic audio fixture in that media check; FFmpeg and the installed Source's normal processing path run unchanged.
 
-The schema chain ends at `2be60a847fc1`; the background chain ends at `c64f8092de17`. The populated upgrade check compares against the actual current head rather than a fixed obsolete revision.
+The schema chain ends at `e4b209c7316a`; the background chain ends at `c64f8092de17`. The populated upgrade check compares against the actual current head rather than a fixed obsolete revision.
 
 ## Verification boundaries
 
 Earlier verification passed 80 targeted architecture/prototype/upgrade checks, a production frontend build, independent Source installation, the fresh production-container HTTP checks, real AAC/M4A processing with edited tags/chapters, and token-log checks. The patched frontend dependency lock was also built and reported zero npm advisories. Those results predate the final edits; they are not a claim that the final branch has passed all checks.
 
-The code completion pass added explicit cross-Source identity confirmation, native-helper bundles and pinned environments, complete release declarations, Source-scoped Collection occurrences and policies, and per-reference formats/capabilities. These changes, their schema migrations, and the two newest playback/outage acceptance cases await the follow-up test pass. Tests were deliberately not executed during this final pass, as requested.
+The later implementation passes added explicit cross-Source identity confirmation, native-helper bundles and pinned environments, release declarations, Source/account-scoped Collection occurrences and policies, per-reference formats/capabilities, and the section 5/8/12 behavior above. These changes, their schema migrations, and the newest playback/outage acceptance cases await the follow-up test pass. Tests were deliberately not executed during this implementation pass, as requested.
+
+This record does not claim full-design compliance. Known broader gaps from the prior audit remain outside this request: the explicit presentation-mode choice in section 7 and Download Profile controls for live acquisition in section 11. Those need their own implementation and validation before claiming the entire 1.0 design is fulfilled.
 
 The deterministic suite and container checks are reproducible. Interactive visual verification could not be completed because the workspace browser blocked the local application. The three downstream adapters have fixture coverage, not a claim of live-server validation without server credentials/mounts. Operator configuration and account entitlements remain necessary for those deployments.
 

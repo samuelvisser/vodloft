@@ -1,11 +1,20 @@
 """Versioned transport contracts; independent of the VodLoft application."""
 
 from datetime import datetime
+import re
 from typing import Annotated, Literal
 from pydantic import BaseModel, Field, field_validator
 
 PROTOCOL_VERSION = 1
 METADATA_SCHEMA_VERSION = 1
+
+
+def normalized_hostname(value: str) -> str:
+    hostname = value.strip().rstrip('.').lower().encode('idna').decode('ascii')
+    if len(hostname) > 253 or not re.fullmatch(
+            r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+', hostname):
+        raise ValueError('Enter a website Domain such as example.com')
+    return hostname
 
 
 class ConfigurationField(BaseModel):
@@ -20,7 +29,8 @@ class ConfigurationField(BaseModel):
     def safe_transport_name(cls, value: str) -> str:
         if value in {"operation", "url", "query", "staging", "cursor", "limit", "timeout",
                      "job_id", "source_id", "preferred_format", "max_entries", "scratch",
-                     "private_state", "representation", "metadata", "reference"}:
+                     "private_state", "representation", "metadata", "reference",
+                     "domain", "category_id", "connection_id", "media_kind"}:
             raise ValueError("Configuration field collides with a protocol argument")
         return value
 
@@ -69,6 +79,16 @@ class DomainDescriptor(BaseModel):
     aliases: list[str] = Field(default_factory=list)
     capabilities: set[str] | None = None
 
+    @field_validator('hostname')
+    @classmethod
+    def canonical_hostname(cls, value):
+        return normalized_hostname(value)
+
+    @field_validator('aliases')
+    @classmethod
+    def canonical_aliases(cls, values):
+        return list(dict.fromkeys(normalized_hostname(value) for value in values))
+
 
 class DomainCatalogue(BaseModel):
     items: list[DomainDescriptor] = Field(default_factory=list, max_length=5000)
@@ -85,6 +105,11 @@ class SourceMediaReference(BaseModel):
     upstream_id: str
     url: str
 
+    @field_validator('domain')
+    @classmethod
+    def canonical_domain(cls, value):
+        return normalized_hostname(value)
+
 
 class SourceMatch(BaseModel):
     source_id: str
@@ -97,7 +122,7 @@ class EntrySnapshot(BaseModel):
     reference: SourceMediaReference
     title: str
     position: int
-    kind: Literal["collection", "video", "movie_extra"] = "video"
+    kind: Literal["collection", "video", "movie", "movie_extra"] = "video"
     group: str | None = None
     episode_number: str | None = None
     extra_type: str | None = None
@@ -155,7 +180,7 @@ class MediaSnapshot(BaseModel):
     movie_year: int | None = Field(default=None, ge=1880, le=2200)
     entries: list[EntrySnapshot] = Field(default_factory=list)
     extras: list[EntrySnapshot] = Field(default_factory=list)
-    enumeration_complete: bool = True
+    enumeration_complete: bool = False
 
 
 class CollectionSnapshot(MediaSnapshot):
@@ -197,8 +222,50 @@ class SourceSearchItem(BaseModel):
 
 
 class SourceSearchPage(BaseModel):
-    items: list[SourceSearchItem]
+    items: list[SourceSearchItem] = Field(max_length=50)
     next_cursor: str | None = None
+
+
+class SourceBrowseRequest(BaseModel):
+    domain: str
+    category_id: str | None = Field(default=None, max_length=128)
+    cursor: str | None = Field(default=None, max_length=8192)
+    limit: int = Field(default=30, ge=1, le=50)
+
+    @field_validator('domain')
+    @classmethod
+    def canonical_domain(cls, value):
+        return normalized_hostname(value)
+
+
+class SourceBrowseCategory(BaseModel):
+    """Source-owned category identity and label; no provider logic or UI code."""
+    id: str = Field(min_length=1, max_length=128)
+    title: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+
+
+class SourceBrowsePage(BaseModel):
+    domain: str
+    categories: list[SourceBrowseCategory] = Field(default_factory=list, max_length=100)
+    items: list[SourceSearchItem] = Field(default_factory=list, max_length=50)
+    next_cursor: str | None = None
+
+    @field_validator('domain')
+    @classmethod
+    def canonical_domain(cls, value):
+        return normalized_hostname(value)
+
+
+class SourceConnectionStatus(BaseModel):
+    capabilities: set[str] | None = None
+    authenticated: bool | None = None
+    domain_capabilities: dict[str, set[str]] = Field(default_factory=dict)
+
+    @field_validator('domain_capabilities')
+    @classmethod
+    def canonical_domains(cls, values):
+        return {normalized_hostname(hostname): capabilities for hostname, capabilities in values.items()}
 
 
 class StreamLease(BaseModel):

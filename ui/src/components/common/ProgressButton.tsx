@@ -65,6 +65,7 @@ export default function ProgressButton({
         resourceId ?? null,
     )
     const isActive = starting || active || operation !== undefined
+    const indeterminate = progress === undefined && (operation?.progress == null || operation.context?.tracks_progress === false)
     const resolvedProgress = clampProgress(progress ?? operation?.progress)
     const resolvedActiveLabel = activeLabel
         ?? (starting && operation === undefined
@@ -73,7 +74,7 @@ export default function ProgressButton({
                 ? 'Queued…'
                 : operation?.status === 'WAITING'
                     ? operation.message || 'Waiting…'
-                    : `${resolvedProgress}%`)
+                    : indeterminate ? operation?.message || 'Working…' : `${resolvedProgress}%`)
     const showCancel = isActive && onCancel !== undefined
     const controls = Number(Boolean(retry)) + Number(showCancel)
     const rootClassName = [
@@ -95,12 +96,12 @@ export default function ProgressButton({
                     role="progressbar"
                     aria-valuemin={0}
                     aria-valuemax={100}
-                    aria-valuenow={resolvedProgress}
+                    aria-valuenow={indeterminate ? undefined : resolvedProgress}
                     aria-label={`${accessibleLabel}: ${resolvedActiveLabel}`}
                 >
                     <span
-                        className="progress-button-fill"
-                        style={{width: `${resolvedProgress}%`}}
+                        className={`progress-button-fill${indeterminate ? ' is-indeterminate' : ''}`}
+                        style={indeterminate ? undefined : {width: `${resolvedProgress}%`}}
                         aria-hidden="true"
                     />
                     <span className="progress-button-label">{resolvedActiveLabel}</span>
