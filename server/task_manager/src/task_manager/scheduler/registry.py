@@ -157,6 +157,12 @@ def get_task(key: str) -> Tuple[TaskMeta, Callable[..., Awaitable[Any]]]:
     return _REGISTRY[key]
 
 
+def task_tracks_progress(key: str) -> bool:
+    """Return whether a registered task exposes determinate execution progress."""
+    registered = _REGISTRY.get(key)
+    return True if registered is None else bool(registered[0].tracks_progress)
+
+
 def all_definitions() -> list[TaskMeta]:
     return [meta for meta, _ in _REGISTRY.values()]
 
