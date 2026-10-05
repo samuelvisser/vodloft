@@ -397,6 +397,18 @@ def test_source_authentication_error_is_distinct_from_app_login(library, monkeyp
     assert response.headers["X-VodLoft-Source-Error"] == "authentication_required"
     assert response.json()["detail"] == "Authorization is required"
 
+    def extractor_failure(*args, **kwargs):
+        raise gateway.SourceInvocationError("runtime_error",
+            "fixture Source failed while extracting this URL",
+            source_id="fixture", operation="resolve")
+    monkeypatch.setattr(gateway.SourceGateway, "resolve", extractor_failure)
+    response = client.post("/api/vodloft/import", json={"snapshot": snapshot.model_dump(mode="json")})
+    assert response.status_code == 502
+    assert response.headers["X-VodLoft-Source-Error"] == "runtime_error"
+    assert response.headers["X-VodLoft-Source"] == "fixture"
+    assert response.headers["X-VodLoft-Source-Operation"] == "resolve"
+    assert response.json()["detail"] == "fixture Source failed while extracting this URL"
+
 
 def test_collection_policy_pins_account_and_matches_child_reference(library, monkeypatch):
     client, sessions, router, gateway, automation = library
@@ -726,6 +738,21 @@ def test_dailywire_pages_keep_season_group_and_opaque_cursor(monkeypatch):
     assert first.next_cursor and not first.complete and second.complete
     assert [first.entries[0].position, second.entries[0].position] == [1, 2]
     assert second.entries[0].group == "2026" and second.entries[0].published_at == date
+
+
+def test_ytdlp_unexpected_extractor_failure_is_not_media_unavailable():
+    from yt_dlp.utils import DownloadError, ExtractorError
+    from vodloft_source_ytdlp import worker
+
+    unexpected = DownloadError(
+        "ERROR: parser failed; please report this issue on https://github.com/yt-dlp/yt-dlp/issues")
+    error = worker._source_error(unexpected)
+    assert error.code == "runtime_error"
+    assert error.message == "yt-dlp extractor failed"
+
+    expected = ExtractorError("Media is unavailable", expected=True)
+    error = worker._source_error(expected)
+    assert error.code == "unavailable"
 
 
 def test_ytdlp_collection_page_has_bounded_cursor(monkeypatch):
