@@ -23,11 +23,13 @@ const KEY_SEASONS_META_PREFIX = SHOW_CACHE_PREFIX + 'seasons-meta:'
 type CacheMetadata = {
   version: number
   fetchedAt: number
+  total?: number
 }
 
 type MemoryEntry<T> = {
   data: T
   fetchedAt: number
+  total?: number
 }
 
 const episodeMemoryCache = new Map<string, MemoryEntry<EpisodeReadView[]>>()
@@ -80,7 +82,15 @@ function parseCacheMetadata(raw: string | null): CacheMetadata | undefined {
   const record = value as Record<string, unknown>
   if (record.version !== SHOW_CACHE_VERSION) return undefined
   if (typeof record.fetchedAt !== 'number' || !Number.isFinite(record.fetchedAt)) return undefined
-  return {version: SHOW_CACHE_VERSION, fetchedAt: record.fetchedAt}
+  if (
+    record.total !== undefined
+    && (typeof record.total !== 'number' || !Number.isInteger(record.total) || record.total < 0)
+  ) return undefined
+  return {
+    version: SHOW_CACHE_VERSION,
+    fetchedAt: record.fetchedAt,
+    total: record.total as number | undefined,
+  }
 }
 
 function showCacheKey(prefix: string, showSlug: string) {
@@ -107,8 +117,8 @@ function seasonsMetadataKey(showSlug: string) {
   return showCacheKey(KEY_SEASONS_META_PREFIX, showSlug)
 }
 
-function cacheMetadata(fetchedAt: number): CacheMetadata {
-  return {version: SHOW_CACHE_VERSION, fetchedAt}
+function cacheMetadata(fetchedAt: number, total?: number): CacheMetadata {
+  return {version: SHOW_CACHE_VERSION, fetchedAt, total}
 }
 
 function compactEpisodes(data: EpisodeReadView[]): EpisodeReadView[] {
@@ -155,7 +165,11 @@ export function loadEpisodesFromStorage(showSlug?: string): EpisodeReadView[] | 
   const cached = parseStored(safeGetItem(episodesStorageKey(showSlug)), EpisodeReadViewSchema.array())
   if (cached !== undefined) {
     const fetchedAt = getEpisodesCacheFetchedAt(showSlug) ?? 0
-    episodeMemoryCache.set(showSlug, {data: cached, fetchedAt})
+    episodeMemoryCache.set(showSlug, {
+      data: cached,
+      fetchedAt,
+      total: parseCacheMetadata(safeGetItem(episodesMetadataKey(showSlug)))?.total,
+    })
     return cached
   }
 
@@ -183,6 +197,7 @@ export function saveEpisodesToStorage(
   showSlug: string,
   data: EpisodeReadView[] | undefined,
   fetchedAt?: number,
+  total?: number,
 ) {
   if (data === undefined) {
     removeEpisodesFromStorage(showSlug)
@@ -191,15 +206,46 @@ export function saveEpisodesToStorage(
 
   const existing = episodeMemoryCache.get(showSlug)
   const effectiveFetchedAt = fetchedAt ?? existing?.fetchedAt ?? Date.now()
-  if (existing?.data === data && existing.fetchedAt === effectiveFetchedAt) return
+  const effectiveTotal = total ?? existing?.total
+  if (
+    existing?.data === data
+    && existing.fetchedAt === effectiveFetchedAt
+    && existing.total === effectiveTotal
+  ) return
 
-  episodeMemoryCache.set(showSlug, {data, fetchedAt: effectiveFetchedAt})
+  episodeMemoryCache.set(showSlug, {data, fetchedAt: effectiveFetchedAt, total: effectiveTotal})
 
   const persisted = safeSetItem(episodesStorageKey(showSlug), JSON.stringify(compactEpisodes(data)))
   if (persisted) {
-    safeSetItem(episodesMetadataKey(showSlug), JSON.stringify(cacheMetadata(effectiveFetchedAt)))
+    safeSetItem(
+      episodesMetadataKey(showSlug),
+      JSON.stringify(cacheMetadata(effectiveFetchedAt, effectiveTotal)),
+    )
     safeRemoveItem(legacyEpisodesStorageKey(showSlug))
   }
+}
+
+export function loadEpisodePreviewFromStorage(showSlug?: string): EpisodeReadView[] | undefined {
+  return loadEpisodesFromStorage(showSlug)
+}
+
+export function getEpisodePreviewFetchedAt(showSlug: string): number | undefined {
+  return getEpisodesCacheFetchedAt(showSlug)
+}
+
+export function getEpisodePreviewTotal(showSlug: string): number | undefined {
+  const memory = episodeMemoryCache.get(showSlug)
+  if (memory?.total !== undefined) return memory.total
+  return parseCacheMetadata(safeGetItem(episodesMetadataKey(showSlug)))?.total
+}
+
+export function saveEpisodePreviewToStorage(
+  showSlug: string,
+  data: EpisodeReadView[] | undefined,
+  fetchedAt?: number,
+  total?: number,
+) {
+  saveEpisodesToStorage(showSlug, data, fetchedAt, total)
 }
 
 export function removeEpisodesFromStorage(showSlug: string) {
@@ -207,6 +253,10 @@ export function removeEpisodesFromStorage(showSlug: string) {
   safeRemoveItem(episodesStorageKey(showSlug))
   safeRemoveItem(episodesMetadataKey(showSlug))
   safeRemoveItem(legacyEpisodesStorageKey(showSlug))
+}
+
+export function removeEpisodePreviewFromStorage(showSlug: string) {
+  removeEpisodesFromStorage(showSlug)
 }
 
 export function loadSeasonsFromStorage(showSlug?: string): SeasonRead[] | undefined {
