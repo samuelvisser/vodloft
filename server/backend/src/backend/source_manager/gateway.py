@@ -40,7 +40,7 @@ _PUBLIC_ERRORS = {
 
 
 def _public_error(source_id: str, operation: str, code: str) -> str:
-    if code == "extraction_failed":
+    if code == "runtime_error":
         action = {
             "match": "while checking URL support",
             "resolve": "while extracting this URL",
@@ -48,7 +48,7 @@ def _public_error(source_id: str, operation: str, code: str) -> str:
             "download": "while extracting media for download",
             "stream_lease": "while extracting upstream playback",
         }.get(operation, "while processing this request")
-        return f"{source_id} extractor failed {action}"
+        return f"{source_id} Source failed {action}"
     return _PUBLIC_ERRORS[code]
 
 
