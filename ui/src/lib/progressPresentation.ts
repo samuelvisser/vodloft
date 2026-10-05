@@ -2,17 +2,17 @@ import type {ProgressPresentation} from '../types/progress'
 import {faIcon} from '../icons/faIcon'
 
 const WAITS: Record<string, [string, string]> = {
-    daily_wire_request_cooldown: ['Cooldown', 'Waiting for The Daily Wire request cooldown. The operation will resume automatically.'],
-    daily_wire_request_queue: ['API queue', 'Waiting for a turn to request The Daily Wire.'],
-    request_spacing: ['Waiting', 'Waiting for the next permitted API request.'],
-    upstream_retry: ['Retry wait', 'The server requested a delay before retrying.'],
+    source_request_cooldown: ['Cooldown', 'Waiting for a Source request cooldown. The operation will resume automatically.'],
+    source_request_queue: ['Source queue', 'Waiting for a turn to request the Source.'],
+    request_spacing: ['Waiting', 'Waiting for the next permitted Source request.'],
+    upstream_retry: ['Retry wait', 'The upstream service requested a delay before retrying.'],
     retry_backoff: ['Retry wait', 'Waiting before retrying the network request.'],
     download_capacity: ['Queued', 'Waiting for an available media download slot.'],
     sidecar_capacity: ['Asset queue', 'Waiting for an auxiliary download slot.'],
     processing_capacity: ['Processing queue', 'Waiting for a local processing slot.'],
     custom_indexes: ['Preparing...', 'Waiting for Custom Index assignments.'],
     previous_attempt: ['Restarting', 'Waiting for the previous download to stop and clean up.'],
-    publication_delay: ['Delayed', 'Waiting for the post-publication safety delay before downloading.'],
+    publication_delay: ['Delayed', 'Waiting for the configured publication safety delay before downloading.'],
 }
 
 export function waitingPresentation(
