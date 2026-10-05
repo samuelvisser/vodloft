@@ -214,6 +214,17 @@ class NPOClient:
             limit=_MAX_HTML,
         )
 
+        # NextAuth deployments may either redirect to NPO ID directly or
+        # return the login URL in a small JSON document.
+        try:
+            sign_in_result = self._decode_json(login_body)
+        except ApiUnavailable:
+            sign_in_result = None
+        if isinstance(sign_in_result, dict) and isinstance(sign_in_result.get("url"), str):
+            login_url = sign_in_result["url"]
+            self._validate_url(login_url)
+            final_url, login_body = self._request(login_url, limit=_MAX_HTML)
+
         if urlsplit(final_url).hostname in {"npo.nl", "www.npo.nl"}:
             try:
                 session = self._decode_json(login_body)
