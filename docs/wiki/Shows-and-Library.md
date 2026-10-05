@@ -6,9 +6,13 @@ VodLoft supports **Videos**, **Movies**, **Movie Extras**, and **Collections**. 
 
 Adding media follows a reviewed flow: resolve a URL or result, preview its identity, reuse an existing identity or import it, select compatible Local Media Profiles, configure Collection backfill where applicable, then review and confirm. Reimporting a known identity reuses it. Collection backfill can be metadata-only, newest N, a date range, or the full archive; downloading the archive requires explicit confirmation. A metadata-only import queues no downloads. Other selections follow your account's request/approval policy. Reading previews or browsing does not silently import media.
 
+The preview and confirmation show the selected Source account. Changing the URL, Source or account clears the previous preview so it must be resolved again. Download and automation choices are available only when supported by that preview's effective capabilities. Search and metadata refresh show progress while the Source works.
+
 **Library** provides item details, references, available formats, Source snapshots, local files, playback, and Collection policies. Downloading, upstream playback and Collection synchronization follow the backend's effective Source/Domain/account/item capabilities and show its explanations when unavailable. Local files remain playable when upstream access is unavailable.
 
 Choose a Source/account reference explicitly when an item has several. Refreshing details updates upstream information while preserving your title, description, and classification edits. Source history lets you restore an earlier upstream snapshot without erasing those edits.
+
+An intentionally empty description stays empty in local-file metadata, feeds and media-server exports as well as the library display.
 
 To add another Source to an existing item, resolve its URL in **Discover**, select the existing item under **Library identity**, and confirm that it is the same edit, language, and edition. Library managers can link verified references from the same content Domain. Linking preserves metadata, memberships, Movie relationships, and local files; the new Source's snapshot appears in Source history. A generic Video reference can also point to a Movie or Movie Extra you have classified. Choose the new reference explicitly for playback or acquisition. Refresh a linked Collection from that reference to discover its members. A reference already assigned to another item reports a conflict; it is never silently reassigned. Different editions and alternate uploads remain separate items.
 

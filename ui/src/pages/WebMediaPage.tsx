@@ -304,14 +304,14 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
         <h2>Add media</h2>
         <form onSubmit={resolve} style={{display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end', marginBottom: 24}}>
             <label style={{flex: '1 1 340px'}}>Media URL
-                <input type="url" disabled={busy} {...register('url')} placeholder="https://…" style={{width: '100%'}} />
+                <input type="url" disabled={busy} {...register('url', {onChange: () => setPreview(null)})} placeholder="https://…" style={{width: '100%'}} />
                 {errors.url && <span role="alert">Enter a public HTTP or HTTPS URL.</span>}
             </label>
             <label>Source
-                <select disabled={busy} {...register('source_id', {onChange: () => urlForm.setValue('connection_id', '')})}><option value="">Automatic</option>
+                <select disabled={busy} {...register('source_id', {onChange: () => {urlForm.setValue('connection_id', ''); setPreview(null)}})}><option value="">Automatic</option>
                     {sources.map(source => <option disabled={source.runtime_state !== 'available'} value={source.source_id} key={source.source_id}>{source.display_name}{source.runtime_state !== 'available' ? ' (unavailable)' : ''}</option>)}</select>
             </label>
-            <label>Connection <select disabled={busy} {...register('connection_id')}><option value="">Anonymous</option>
+            <label>Connection <select disabled={busy} {...register('connection_id', {onChange: () => setPreview(null)})}><option value="">Anonymous</option>
                 {connections.filter(connection => connection.enabled && (!selectedURLSource || connection.source_id === selectedURLSource)).map(connection => <option key={connection.id} value={connection.id}>
                     {connection.name} ({connection.source_id})</option>)}</select></label>
             <ProgressButton definition={operations.vodloft_source_resolve} label="Resolve URL" active={busy && urlForm.formState.isSubmitting}
@@ -319,6 +319,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
             {errors.root && <p role="alert">{errors.root.message}</p>}
         </form>
         <DomainBrowser busy={busy} connections={connections} onPreview={previewSearchResult} onAddURL={(sourceId, connectionId) => {
+            setPreview(null)
             urlForm.setValue('source_id', sourceId); urlForm.setValue('connection_id', connectionId ? String(connectionId) : '')
             urlForm.setFocus('url')
         }}/>
@@ -351,12 +352,13 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
             </div>}
         </section>}
         {preview && <section style={{marginBottom: 32}}><h2>{preview.title}</h2>
-            <p>{preview.kind} · {preview.reference.domain} · {preview.reference.source_id}</p>
+            <p>{preview.kind} · {preview.reference.domain} · {preview.reference.source_id} · {importConnectionId === null ? 'Anonymous' : connections.find(connection => connection.id === importConnectionId)?.name ?? `Connection #${importConnectionId}`}</p>
             {preview.description && <p>{preview.description.slice(0, 350)}</p>}
             {preview.kind === 'collection' && <p>{preview.entries?.length ?? 0} preview entries
                 {!preview.enumeration_complete && ' (enumeration is incomplete)'}</p>}
             <ImportPreviewForm key={`${preview.reference.source_id}:${preview.reference.domain}:${preview.reference.namespace}:${preview.reference.upstream_id}:${importConnectionId}`}
                 preview={preview} connectionId={importConnectionId} items={allItems}
+                connectionLabel={importConnectionId === null ? 'Anonymous' : connections.find(connection => connection.id === importConnectionId)?.name ?? `Connection #${importConnectionId}`}
                 canLink={!!me?.manages_library} canAutomate={me?.role === 'admin'} profiles={managedProfiles}
                 busy={busy} onImported={async (item, message) => {await importPreview(item); setRunResult(message)}}/>
         </section>}
@@ -684,8 +686,9 @@ const ImportPreviewSchema = z.object({
     if (values.published_after && values.published_before && values.published_after > values.published_before) issue('published_before', 'End date must follow the start date.')
 })
 
-function ImportPreviewForm({preview, connectionId, items, canLink, canAutomate, profiles, busy, onImported}: {
+function ImportPreviewForm({preview, connectionId, connectionLabel, items, canLink, canAutomate, profiles, busy, onImported}: {
     preview: Preview; connectionId: number | null; items: Item[]; canLink: boolean; canAutomate: boolean;
+    connectionLabel: string;
     profiles: Profile[]; busy: boolean; onImported: (item: Item, message: string) => Promise<void>;
 }) {
     const form = useForm<z.input<typeof ImportPreviewSchema>, unknown, z.output<typeof ImportPreviewSchema>>({
@@ -764,7 +767,7 @@ function ImportPreviewForm({preview, connectionId, items, canLink, canAutomate, 
         </fieldset>
         {review && <section className="vodloft-import-review" aria-label="Review import">
             <h3>Review and confirm</h3>
-            <p><strong>{preview.title}</strong> · {kind} · {preview.reference.domain} · {preview.reference.source_id}</p>
+            <p><strong>{preview.title}</strong> · {kind} · {preview.reference.domain} · {preview.reference.source_id} · {connectionLabel}</p>
             <p>{existingId ? `Link to Library item #${existingId}` : 'Reuse this Source’s existing identity when present; otherwise import.'}</p>
             <p>{review.local_profile_ids.length && (preview.kind !== 'collection' || review.backfill !== 'metadata_only')
                 ? `Profiles: ${eligible.filter(p => review.local_profile_ids.includes(String(p.id))).map(p => p.name).join(', ')}`

@@ -27,6 +27,8 @@ Keep omitted metadata distinct from an explicit `null` or empty list. Core store
 
 Capabilities narrow through **Source → Domain → Connection → Media item**. An omitted capability set inherits the broader declaration; an explicit empty set grants no operations. A `DomainDescriptor` supplies normalized canonical hostnames, Source-owned aliases, support status and optional capabilities. `SourceConnectionStatus` can narrow capabilities for an account and individual Domains. Core returns effective capabilities and explanations; neither core policy nor the frontend interprets provider-specific extension data.
 
+Lightweight entries should retain `inspect_media` or `resolve_url` where supported so users can hydrate their metadata later. Download permission and metadata-read permission are independent: an item can remain inspectable while downloading is unavailable. Built-in Sources declare these read capabilities on both complete snapshots and lightweight entries.
+
 Browse replies contain `SourceBrowseCategory` labels/IDs and normalized result previews. They are data, never executable UI components. An unsupported optional operation returns the typed `unsupported_operation` error. Configuration fields support constrained text, number, select, secret, and credential-file inputs. Field names must remain within the generic contract. Activation validates enabled saved connections against the new schema before switching versions.
 
 ## Public Source API
@@ -53,6 +55,8 @@ The standard routes and the product's `/api/vodloft/sources` aliases share the s
 | `POST /api/source/{source}/streams/resolve` | Owned opaque playback session; private Source leases remain in core. |
 
 Authentication routes use the same generic challenge/status contract. The connection verification route is `POST /api/sources/connections/{connection_id}/capabilities`. Unsupported Source operations return a public typed error envelope alongside the normal form error message.
+
+Collection previews, search, browsing, URL resolution and metadata hydration create read-only TaskOperations. Cancellation terminates the associated Source process. Discovery, synchronization and acquisition share limits for the canonical Domain and selected Source/account; a nested Collection acquires its own Domain's limits. An occupied download slot leaves the acquisition durably queued rather than blocking a worker while holding another slot. Scan failures before the first page are recorded with a stage, public error code and bounded retry budget.
 
 Discovery continuation tokens are encrypted and bound to operation, Source/runtime manifest, account revision, Domain/category/query and page limit. Changing credentials or settings invalidates the old scope; renewal of tokens for the same authorized account preserves it. Collection synchronization stores a durable checkpoint under the same runtime/account ownership rules and restarts a bounded scan after an incompatible change.
 
