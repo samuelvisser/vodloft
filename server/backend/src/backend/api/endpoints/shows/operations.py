@@ -146,4 +146,24 @@ class ShowDeleteDownloadsOperation(_ShowDownloadMaintenanceOperation):
 
 class ShowRedownloadOperation(_ShowDownloadMaintenanceOperation):
     kind = "show.redownload_episodes"
-    task = _REDOWNLOAD_TASK_KEY
+
+    def __init__(
+        self,
+        show: Show,
+        *,
+        local_media_profile_id: int | None,
+        selected_profile_count: int,
+        download_count: int,
+    ) -> None:
+        super().__init__(
+            show,
+            local_media_profile_id=local_media_profile_id,
+            selected_profile_count=selected_profile_count,
+        )
+        self.download_count = int(download_count)
+
+    def context(self) -> dict[str, object]:
+        return {
+            **super().context(),
+            "downloads_requested": self.download_count,
+        }
