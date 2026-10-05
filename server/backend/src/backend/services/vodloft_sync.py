@@ -343,7 +343,12 @@ def enqueue(collection_id: int, reference_id: int | None = None, *, full: bool |
             raise CollectionSyncError('Select a Source/account reference for this Collection')
         if source == 'SYSTEM' and full is None:
             pending = session.scalar(select(CollectionScan).where(CollectionScan.active_reference_id == reference.id))
-            scope_unchanged = pending and pending.connection_fingerprint == account_fingerprint(session, reference.source_id, reference.connection_id)
+            try:
+                current_runtime = command_for(reference.source_id)[1]
+            except (ValueError, RuntimeError):
+                current_runtime = None
+            scope_unchanged = pending and pending.runtime_version == current_runtime and (
+                pending.connection_fingerprint == account_fingerprint(session, reference.source_id, reference.connection_id))
             if scope_unchanged and pending.status == 'failed' and (pending.retry_at is None or _utc(pending.retry_at) > datetime.now(timezone.utc)):
                 return pending.operation_id
         for operation in session.scalars(select(TaskOperation).where(
@@ -394,7 +399,16 @@ def _expand(collection_id: int, reference_id: int, depth: int, max_nested: int, 
                 issues.append({'item_id': child_id, 'reason': 'No unambiguous account reference or nested limit reached'})
                 continue
             try:
-                result = synchronize(child_id, child_reference, full=True, operation_id=operation_id, defer_terminal=True)
+                with get_session() as session:
+                    reference = session.get(SourceReference, child_reference)
+                    child_slots = try_acquire(reference.source_id, reference.domain_id, reference.connection_id)
+                if child_slots is None:
+                    issues.append({'item_id': child_id, 'reason': 'Nested Source/account is busy; resume the refresh later'})
+                    continue
+                try:
+                    result = synchronize(child_id, child_reference, full=True, operation_id=operation_id, defer_terminal=True)
+                finally:
+                    release(child_slots)
                 refreshed.append(child_id)
                 if not result.complete:
                     issues.append({'item_id': child_id, 'reason': result.error or 'Nested continuation saved'})
@@ -450,6 +464,10 @@ def dispatch_queued(on_complete=None) -> None:
             try:
                 result = synchronize(collection_id, context['source_reference_id'],
                     full=context.get('full_scan'), operation_id=operation_id, defer_terminal=True)
+                # Nested Collections can belong to another Domain. Release the
+                # parent's slots so each child acquires its own scoped limits.
+                release(upstream)
+                upstream = []
                 issues = []
                 if context.get('expand_depth') and result.complete:
                     issues = _expand(collection_id, context['source_reference_id'],
@@ -479,13 +497,33 @@ def dispatch_queued(on_complete=None) -> None:
                         operation.status, operation.error = 'FAILED', 'Collection refresh could not start; check the selected Source/account'
                         pending = session.scalar(select(CollectionScan).where(
                             CollectionScan.active_reference_id == context.get('source_reference_id')))
+                        reference = session.get(SourceReference, context.get('source_reference_id'))
+                        if pending is None and reference:
+                            try:
+                                runtime_version = command_for(reference.source_id)[1]
+                            except (ValueError, RuntimeError):
+                                runtime_version = None
+                            # Failures before resolution still own a durable scan
+                            # record and the same bounded automatic retry budget.
+                            pending = CollectionScan(collection_id=collection_id,
+                                source_reference_id=reference.id, active_reference_id=reference.id,
+                                source_id=reference.source_id, connection_id=reference.connection_id,
+                                connection_fingerprint=account_fingerprint(session, reference.source_id, reference.connection_id),
+                                runtime_version=runtime_version, scan_key=str(uuid.uuid4()), mode='full',
+                                status='failed', complete=False, entry_count=0, attempts=0, failure_count=0)
+                            session.add(pending)
                         if pending and pending.operation_id != operation_id:
                             pending.operation_id, pending.status = operation_id, 'failed'
                             pending.error, pending.error_code = operation.error, exc.code if isinstance(exc, SourceInvocationError) else 'unavailable'
+                            pending.attempts = (pending.attempts or 0) + 1
                             pending.failure_count = (pending.failure_count or 0) + 1
                             pending.retry_at = (datetime.now(timezone.utc) + timedelta(seconds=min(3600, 300 * 2 ** pending.failure_count))) if (
                                 pending.failure_count < 5 and pending.error_code in {'unavailable', 'rate_limited', 'runtime_error'}) else None
                             pending.updated_at = datetime.now(timezone.utc)
+                            session.flush()
+                            operation.context = {**(operation.context or {}), 'scan_id': pending.id,
+                                'stage': 'resolving', 'error_code': pending.error_code}
+                            operation.message = f'Collection resolving stopped ({pending.error_code}); known members were preserved'
                         operation.finished_at = datetime.now(timezone.utc)
                         session.commit()
             finally:

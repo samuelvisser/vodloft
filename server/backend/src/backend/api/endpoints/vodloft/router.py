@@ -35,7 +35,7 @@ from backend.api.endpoints.vodloft.profiles import output_path_from_spec, templa
 from backend.source_manager.gateway import SourceGateway, SourceInvocationError, cancel_running_job, clear_canceled_job, validate_public_url
 from backend.source_manager.runtime import command_for
 from backend.source_manager.capabilities import effective, reference_capabilities
-from backend.source_manager.concurrency import upstream_slots
+from backend.source_manager.concurrency import try_acquire, release
 from backend.source_manager import discovery as source_discovery
 from backend.services import vodloft_finalization
 from backend.services.vodloft_operations import tracked
@@ -797,18 +797,27 @@ def _run_download(job_id: int) -> None:
     heartbeat = threading.Thread(target=_heartbeat_job, args=(job_id, owner, stop),
                                  daemon=True, name=f"vodloft-lease-{job_id}")
     heartbeat.start()
+    acquired, download_slot = [], False
     try:
-        with _download_slots:
-            with get_session() as session:
-                job = session.get(AcquisitionJob, job_id)
-                if not job:
-                    return
-                reference = session.get(SourceReference, job.reference_id)
-                source_id, domain_id, connection_id = (
-                    reference.source_id, reference.domain_id, reference.connection_id)
-            with upstream_slots(source_id, domain_id, connection_id):
-                _execute_leased_download(job_id)
+        # Busy work stays durably queued. Do not hold a global download slot
+        # or a lease heartbeat while waiting for another account's transfer.
+        if not _download_slots.acquire(blocking=False):
+            return
+        download_slot = True
+        with get_session() as session:
+            job = session.get(AcquisitionJob, job_id)
+            if not job or job.lease_owner != owner or job.cancel_requested or job.state == 'canceled':
+                return
+            reference = session.get(SourceReference, job.reference_id)
+            acquired = try_acquire(reference.source_id, reference.domain_id, reference.connection_id)
+        if acquired is None:
+            acquired = []
+            return
+        _execute_leased_download(job_id)
     finally:
+        release(acquired)
+        if download_slot:
+            _download_slots.release()
         stop.set()
         heartbeat.join(timeout=1)
         with get_session() as session:
