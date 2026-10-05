@@ -10,7 +10,7 @@ from html.parser import HTMLParser
 from http.cookiejar import CookieJar
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
-from urllib.request import HTTPCookieProcessor, Request, build_opener
+from urllib.request import HTTPRedirectHandler, HTTPCookieProcessor, Request, build_opener
 
 NPO_ORIGIN = "https://npo.nl"
 START_API = f"{NPO_ORIGIN}/start/api"
@@ -55,6 +55,21 @@ class Playback:
     headers: dict[str, str]
 
 
+def _validate_npo_service_url(url: str) -> str:
+    parsed = urlsplit(url)
+    host = (parsed.hostname or "").lower()
+    if (parsed.scheme != "https" or host not in _API_HOSTS or
+            parsed.username is not None or parsed.password is not None):
+        raise ValueError("NPO Source refused an unexpected network destination")
+    return url
+
+
+class _SafeRedirects(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        _validate_npo_service_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 class _HiddenInputs(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
@@ -76,15 +91,13 @@ class NPOClient:
         self.email = email.strip() if email else None
         self.password = password
         self.cookies = CookieJar()
-        self.opener = build_opener(HTTPCookieProcessor(self.cookies))
+        self.opener = build_opener(HTTPCookieProcessor(self.cookies), _SafeRedirects())
         self._authenticated = False
 
     @staticmethod
     def _validate_url(url: str, hosts: set[str] = _API_HOSTS) -> str:
-        parsed = urlsplit(url)
-        host = (parsed.hostname or "").lower()
-        if (parsed.scheme != "https" or host not in hosts or
-                parsed.username is not None or parsed.password is not None):
+        _validate_npo_service_url(url)
+        if (urlsplit(url).hostname or "").lower() not in hosts:
             raise ValueError("NPO Source refused an unexpected network destination")
         return url
 
@@ -264,8 +277,11 @@ class NPOClient:
                         includePremiumContent=True)
 
     def search(self, query: str, search_type: str):
+        if self.email:
+            self.login()
         return self.api("search-collection-items", searchType=search_type,
-                        partyId=1, searchQuery=query, subscriptionType="anonymous",
+                        partyId=1, searchQuery=query,
+                        subscriptionType="premium" if self.email else "anonymous",
                         includePremiumContent=True)
 
     def _player_token(self, product_id: str, *, authenticated: bool = False) -> str:
