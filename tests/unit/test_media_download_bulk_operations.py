@@ -3,10 +3,23 @@ from __future__ import annotations
 import pytest
 
 
+def test_bulk_retry_media_download_operation_is_dependency_only():
+    from backend.api.endpoints.media_downloads.operations import BulkRetryMediaDownloadsOperation
+
+    definition = BulkRetryMediaDownloadsOperation([8, 3, 8])
+
+    assert definition.kind == "media_download.bulk_retry"
+    assert definition.resource_type == "media_download"
+    assert definition.resource_id is None
+    assert definition.title == "Downloads"
+    assert definition.context() == {"downloads_requested": 2}
+    assert definition.media_download_ids == (8, 3)
+    assert definition.targets() == ()
+
+
 @pytest.mark.parametrize(
     ("operation_name", "kind", "action"),
     [
-        ("BulkRetryMediaDownloadsOperation", "media_download.bulk_retry", "retry"),
         ("BulkCancelMediaDownloadsOperation", "media_download.bulk_cancel", "cancel"),
         ("BulkDeleteMediaDownloadsOperation", "media_download.bulk_delete", "delete"),
     ],
