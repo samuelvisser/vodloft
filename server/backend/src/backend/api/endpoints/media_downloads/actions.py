@@ -7,9 +7,11 @@ from sqlalchemy.orm import Session
 from backend.api.models.media_download import MediaDownloadAPIRead
 from backend.db import get_session
 from backend.db.models.media_download import MediaDownloadBase
+from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.services.media_download_actions import (
     retry_media_download_action,
     delete_media_download_artifact_action,
+    delete_unavailable_media_download_action,
     cancel_media_download_action as _cancel_download,
 )
 from task_manager.scheduler.operation_factory import create_operation
@@ -49,6 +51,25 @@ def queue_bulk_media_download_operation(
             status_code=404,
             detail=f"Media download {missing_ids[0]} not found",
         )
+
+    if operation.action == "delete_unavailable":
+        non_deletable_ids = [
+            media_download_id
+            for media_download_id in ids
+            if downloads_by_id[media_download_id].artifact_status
+            not in {
+                MediaDownloadArtifactStatus.ABSENT.value,
+                MediaDownloadArtifactStatus.MISSING.value,
+            }
+        ]
+        if non_deletable_ids:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Media download {non_deletable_ids[0]} has an available "
+                    "or corrupted artifact and cannot be deleted"
+                ),
+            )
 
     queued_operation = create_operation(s, operation)
     if operation.action == "retry":
