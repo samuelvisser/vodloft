@@ -86,11 +86,32 @@ def _items(value) -> list[dict]:
         return [item for item in value if isinstance(item, dict)]
     if not isinstance(value, dict):
         return []
-    for key in ("items", "results", "data", "programs", "seasons"):
+    for key in ("items", "results", "programs", "seasons"):
         found = value.get(key)
         if isinstance(found, list):
             return [item for item in found if isinstance(item, dict)]
+    data = value.get("data")
+    if isinstance(data, (dict, list)):
+        nested = _items(data)
+        if nested:
+            return nested
     return []
+
+
+def _record(value, *, playable: bool = False) -> dict | None:
+    if not isinstance(value, dict):
+        return None
+    required = "productId" if playable else None
+    if (required and value.get(required)) or (
+            not required and any(value.get(key) for key in ("guid", "slug", "title"))):
+        return value
+    for key in ("data", "item", "program", "series"):
+        candidate = value.get(key)
+        if isinstance(candidate, dict):
+            found = _record(candidate, playable=playable)
+            if found:
+                return found
+    return None
 
 
 def _description(value) -> str | None:
@@ -214,8 +235,8 @@ def _sort_programs(programs: list[dict]) -> list[dict]:
 def _series_data(url: str, client: NPOClient) -> tuple[dict, list[dict], bool]:
     slug = _series_slug(url)
     try:
-        detail = client.series_detail(slug)
-        if not isinstance(detail, dict):
+        detail = _record(client.series_detail(slug))
+        if detail is None:
             raise ApiUnavailable("NPO series detail has an unknown shape")
         programs: list[dict] = []
         series_type = detail.get("type")
@@ -247,8 +268,8 @@ def _series_data(url: str, client: NPOClient) -> tuple[dict, list[dict], bool]:
 def _playable_data(url: str, client: NPOClient) -> tuple[dict, bool]:
     slug = _program_slug(url)
     try:
-        detail = client.program_detail(slug)
-        if not isinstance(detail, dict) or not detail.get("productId"):
+        detail = _record(client.program_detail(slug), playable=True)
+        if detail is None:
             raise ApiUnavailable("NPO program detail has an unknown shape")
         return detail, True
     except (ApiUnavailable, MediaUnavailable):
@@ -606,7 +627,7 @@ def main() -> None:
         try:
             parts = _parts(request["url"])
             supported = len(parts) >= 2 and parts[0] == "start" and (
-                parts[1] in {"serie", "video", "afspelen", "live"})
+                parts[1] in {"serie", "video", "afspelen"})
         except ValueError:
             supported = False
         result = SourceMatch(
