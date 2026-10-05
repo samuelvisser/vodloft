@@ -2,7 +2,7 @@
 name = "vodloft-source-dailywire"
 version = "1.0.1"
 requires-python = ">=3.12"
-dependencies = ["source-contracts", "dailywire-api", "vodloft-source-media", "yt-dlp>=2025.1.1"]
+dependencies = ["source-contracts>=1.0.1,<2", "dailywire-api", "vodloft-source-media", "yt-dlp>=2025.1.1"]
 
 [tool.uv.sources]
 source-contracts = { workspace = true }

@@ -27,7 +27,8 @@ def _failure(exc):
     if isinstance(exc, SourceInvocationError):
         error = SourceError(code=exc.code, message=str(exc))
         status = {'unsupported_operation': 422, 'authentication_required': 409,
-            'rate_limited': 429, 'unavailable': 503}.get(exc.code, 502)
+            'rate_limited': 429, 'unavailable': 503, 'invalid_url': 422,
+            'unsupported_format': 409, 'insufficient_disk': 503}.get(exc.code, 502)
     elif isinstance(exc, ValueError) and not isinstance(exc, ValidationError):
         error = SourceError(code='invalid_url', message=str(exc))
         status = 422
@@ -155,7 +156,7 @@ class InspectInput(BaseModel):
     connection_id: int | None = Field(default=None, gt=0)
 
 
-@router.post('/sources/{source_id}/media', response_model=NormalizedSnapshot)
+@router.post('/sources/{source_id}/media', response_model=NormalizedSnapshot, response_model_exclude_unset=True)
 def inspect_media(source_id: str, data: InspectInput, request: Request):
     require_connection(request, data.connection_id)
     try:
@@ -176,10 +177,16 @@ class ResolveInput(BaseModel):
     connection_id: int | None = Field(default=None, gt=0)
 
 
-@router.post('/sources/{source_id}/resolve', response_model=NormalizedSnapshot)
+@router.post('/sources/{source_id}/resolve', response_model=NormalizedSnapshot, response_model_exclude_unset=True)
 def source_resolve(source_id: str, data: ResolveInput, request: Request):
     from backend.api.endpoints.vodloft.router import ResolveRequest, resolve
-    return resolve(ResolveRequest(url=data.url, source_id=source_id, connection_id=data.connection_id), request)
+    try:
+        return resolve(ResolveRequest(url=data.url, source_id=source_id, connection_id=data.connection_id), request)
+    except HTTPException as exc:
+        code = (exc.headers or {}).get('X-VodLoft-Source-Error')
+        if code:
+            return _failure(SourceInvocationError(code, exc.detail))
+        raise
 
 
 def _stored_reference(session, source_id: str, reference_id: int, kind: str, request: Request):
@@ -204,7 +211,7 @@ def stored_entries(source_id: str, reference_id: int, request: Request, cursor: 
         return _failure(exc)
 
 
-@router.get('/sources/{source_id}/media/{kind}/{reference_id}', response_model=NormalizedSnapshot)
+@router.get('/sources/{source_id}/media/{kind}/{reference_id}', response_model=NormalizedSnapshot, response_model_exclude_unset=True)
 def stored_media(source_id: str, kind: str, reference_id: int, request: Request):
     with get_session() as session:
         reference, connection_id = _stored_reference(session, source_id, reference_id, kind, request)

@@ -1,11 +1,12 @@
 """Private account configuration shared by Source operations and background work."""
 import json
+import hashlib
 import time
 from urllib.parse import urlsplit
 from source_contracts import AuthenticationResult
 from backend.db.models.vodloft import SourceConnection
 from backend.source_manager import secrets as secret_store
-from backend.source_manager.gateway import SourceGateway
+from backend.source_manager.gateway import SourceGateway, SourceInvocationError
 
 
 def _validate_source(source_id: str):
@@ -21,7 +22,9 @@ def _authentication(connection: SourceConnection) -> dict:
 
 
 
-def _save_authentication(connection: SourceConnection, value: dict) -> None:
+def _save_authentication(connection: SourceConnection, value: dict, *, rotate_scope: bool = True) -> None:
+    if rotate_scope or value.get('status') != 'authorized':
+        connection.scope_revision = (connection.scope_revision or 1) + 1
     connection.authentication_reference = secret_store.save(json.dumps(value), connection.authentication_reference)
     connection.capabilities = None
     connection.domain_capabilities = {}
@@ -52,7 +55,7 @@ def source_options(session, source_id: str, connection_id: int | None) -> dict:
         return {}
     connection = session.get(SourceConnection, connection_id)
     if not connection or not connection.enabled or connection.source_id != source_id:
-        raise ValueError("The selected Source connection is unavailable")
+        raise SourceInvocationError('unavailable', "The selected Source connection is unavailable")
     options = dict(connection.settings or {})
     options.update({key: secret_store.read(reference) for key, reference in
         (connection.secret_references or {}).items()})
@@ -63,11 +66,18 @@ def source_options(session, source_id: str, connection_id: int | None) -> dict:
             renewed = _validated_authentication(source_id, gateway.call(source_id, "auth_refresh",
                 timeout=35, private_state=auth["private_state"]))
             renewed["_command"] = auth.get("_command")
-            _save_authentication(connection, renewed)
+            _save_authentication(connection, renewed, rotate_scope=False)
             session.commit()
             auth = renewed
         if auth["status"] != "authorized":
-            raise ValueError("This Source account needs authentication again")
+            raise SourceInvocationError('authentication_required', "This Source account needs authentication again")
         options.update(auth["configuration"])
     return options
 
+
+def connection_fingerprint(session, source_id, connection_id, *, lock=False):
+    connection = session.get(SourceConnection, connection_id, with_for_update=True if lock else None) if connection_id is not None else None
+    # A token renewal keeps one account context. Changing account settings,
+    # credentials or authentication increments its revision and invalidates cursors.
+    return hashlib.sha256(json.dumps([source_id, connection_id,
+        connection.scope_revision if connection else None]).encode()).hexdigest()

@@ -133,6 +133,7 @@ def clear_authentication(connection_id: int):
             raise HTTPException(404, "Source connection not found")
         secret_store.remove(connection.authentication_reference)
         connection.authentication_reference = None
+        connection.scope_revision += 1
         connection.capabilities, connection.domain_capabilities = None, {}
         connection.authenticated, connection.last_capability_check_at = None, None
         session.commit()
@@ -209,6 +210,7 @@ def update_connection(connection_id: int, data: ConnectionInput):
             raise HTTPException(404, "Source connection not found")
         settings, supplied_secrets = _configuration(data, existing=connection)
         connection.name, connection.enabled = data.name, data.enabled
+        connection.scope_revision += 1
         connection.capabilities = None
         connection.domain_capabilities = {}
         connection.authenticated = None
@@ -239,5 +241,4 @@ def delete_connection(connection_id: int):
         session.commit()
     for reference in references:
         secret_store.remove(reference)
-
 

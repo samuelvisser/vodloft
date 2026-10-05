@@ -6,12 +6,13 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 
-from backend.api.endpoints.vodloft.router import ImportRequest, import_media
+from backend.api.endpoints.vodloft.router import ImportRequest, _validate_import_snapshot, _import_snapshot
 from backend.api.models.vodloft import LibraryItemResponse
 from backend.db import get_session
 from backend.db.models.local_media_profile import DomainLocalMediaProfile
-from backend.db.models.vodloft import CollectionDownloadProfile, Domain, LibraryRequest, SourceReference
+from backend.db.models.vodloft import CollectionDownloadProfile, Domain, LibraryRequest, MediaItem, SourceReference
 from backend.security.permissions import principal, require_connection
+from backend.source_manager.capabilities import effective
 
 router = APIRouter(prefix='/vodloft', tags=['VodLoft import review'])
 
@@ -62,25 +63,30 @@ def confirm_import(data: ConfirmImportInput, request: Request, background: Backg
         raise HTTPException(403, 'An administrator must configure automatic Collection downloads')
     # Validate choices before importing anything. The import re-resolves identity
     # and metadata, and request_media remains authoritative for quotas and grants.
+    snapshot = _validate_import_snapshot(data, request)
     with get_session() as session:
+        identity = session.get(MediaItem, data.existing_item_id) if data.existing_item_id else session.scalar(
+            select(MediaItem).join(SourceReference, SourceReference.item_id == MediaItem.id)
+            .join(Domain, Domain.id == SourceReference.domain_id).where(
+                Domain.hostname == snapshot.reference.domain, SourceReference.source_id == snapshot.reference.source_id,
+                SourceReference.namespace == snapshot.reference.namespace, SourceReference.upstream_id == snapshot.reference.upstream_id))
+        target_kind = identity.kind if identity else snapshot.kind
+        policy = effective(session, snapshot.reference.source_id, snapshot.reference.domain, data.connection_id, snapshot.capabilities)
+        required = 'enumerate_collection' if snapshot.kind == 'collection' and choices.backfill != 'metadata_only' else 'download' if snapshot.kind != 'collection' and choices.local_profile_ids else None
+        if required and required not in policy.effective_capabilities:
+            raise HTTPException(409, policy.capability_reasons[required])
         for profile_id in choices.local_profile_ids:
             profile = session.get(DomainLocalMediaProfile, profile_id)
             domain = session.get(Domain, profile.domain_id) if profile else None
             if not profile or profile.deleted or not profile.enabled or profile.impairment or (
-                snapshot.kind != 'collection' and (domain.hostname != snapshot.reference.domain or snapshot.kind not in profile.applicable_kinds)):
+                snapshot.kind != 'collection' and (domain.hostname != snapshot.reference.domain or target_kind not in profile.applicable_kinds)):
                 raise HTTPException(422, 'Choose compatible, enabled Local Media Profiles')
         if snapshot.kind != 'collection' and choices.local_profile_ids:
             active = session.scalar(select(func.count()).select_from(LibraryRequest).where(
                 LibraryRequest.user_key == actor.key, LibraryRequest.state.in_(['pending', 'approved'])))
             if active + len(choices.local_profile_ids) > actor.request_quota:
                 raise HTTPException(429, 'The local account has insufficient open request quota')
-    imported = import_media(ImportRequest(snapshot=snapshot, connection_id=data.connection_id,
-        existing_item_id=data.existing_item_id, confirm_same_edition=data.confirm_same_edition), request)
-    if imported.kind != snapshot.kind:
-        # Explicitly reclassified existing identities must use their own profile
-        # applicability. Metadata-only linking remains supported.
-        if choices.local_profile_ids:
-            raise HTTPException(409, 'The existing identity has another Media Type; select its profiles in Library')
+    imported = _import_snapshot(snapshot, data.connection_id, existing_item_id=data.existing_item_id)
     with get_session() as session:
         reference = session.scalar(select(SourceReference).join(Domain, Domain.id == SourceReference.domain_id).where(
             SourceReference.item_id == imported.id, SourceReference.source_id == snapshot.reference.source_id,
@@ -90,6 +96,7 @@ def confirm_import(data: ConfirmImportInput, request: Request, background: Backg
         if not reference:
             raise HTTPException(409, 'Source media changed during confirmation; resolve and review again')
         reference_id = reference.id
+        can_enumerate = 'enumerate_collection' in effective(session, reference.source_id, snapshot.reference.domain, reference.connection_id, reference.capabilities).effective_capabilities
     result = ConfirmImportResponse(item=imported, message='Media saved to Library')
     if imported.kind == 'collection':
         if choices.backfill != 'metadata_only':
@@ -107,7 +114,7 @@ def confirm_import(data: ConfirmImportInput, request: Request, background: Backg
                 policy_id = existing.id if existing else None
             result.download_profile_id = policy_id or create_profile(imported.id, policy_input).id
             result.message = 'Collection saved; the selected backfill will run after synchronization'
-        if actor.manages_library:
+        if actor.manages_library and can_enumerate:
             from backend.services.vodloft_sync import enqueue
             result.operation_id = enqueue(imported.id, reference_id, full=True)
             if not result.download_profile_id:

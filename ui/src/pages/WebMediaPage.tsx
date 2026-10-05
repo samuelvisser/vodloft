@@ -15,7 +15,7 @@ import {vodloftBase as base, vodloftApi as api, vodloftFormRequest as formReques
 const URLForm = z.object({url: z.url().startsWith('https://').or(z.url().startsWith('http://')),
     source_id: z.string().default(''), connection_id: z.string().default('')})
 type URLFields = z.infer<typeof URLForm>
-type Source = {source_id: string; display_name: string; capabilities: string[];
+type Source = {runtime_state: 'available' | 'unavailable'; source_id: string; display_name: string; capabilities: string[];
     configuration_schema: {name: string; label: string; kind: 'text' | 'number' | 'select' | 'secret' | 'credential_file';
         required: boolean; options: string[]}[]}
 type Me = {key: string; username: string; role: string; manages_library: boolean; can_subscribe: boolean; auto_approve: boolean; request_quota: number}
@@ -32,7 +32,7 @@ type Item = {parent_id?: number | null; parent_ids?: number[]; extra_type?: stri
     references?: {id: number; source_id: string; connection_id: number | null; namespace: string; upstream_id: string;
         effective_capabilities: string[]; capability_reasons: Record<string, string>; capabilities?: string[] | null; formats?: Item['formats'] | null}[]}
 type Home = {continue: (Item & {seconds: number})[]; recent: Item[];
-    activity: {id: number; item_id: number; state: string}[]; issues: {kind: string; id: number}[]}
+    activity: {id: number; item_id: number; state: string}[]; issues: {kind: string; id: number; item_id?: number | null; message?: string | null}[]}
 type Job = {id: number; state: string; error?: string; cancel_requested?: boolean;
     error_code?: string; failed_stage?: string; operation_id?: string; progress?: number;
     title?: string; attempts?: number; item_id?: number}
@@ -89,6 +89,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
         resolver: zodResolver(SearchForm), defaultValues: SearchForm.partial({query: true, source_id: true}).parse({}),
     })
     const {register: registerSearch, watch: watchSearch, formState: {errors: searchErrors}} = searchForm
+    const selectedURLSource = urlForm.watch('source_id')
     const selectedSearchSource = watchSearch('source_id')
     const [sources, setSources] = useState<Source[]>([])
     const [connections, setConnections] = useState<Connection[]>([])
@@ -161,6 +162,15 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
         const timer = window.setInterval(update, 10000)
         return () => window.clearInterval(timer)
     }, [view, me?.role])
+    useEffect(() => {
+        const update = () => {
+            void refresh()
+            if (selected) void api<Item>(`/library/${selected.id}${referenceId ? `?reference_id=${referenceId}` : ''}`)
+                .then(item => setSelected(current => current?.id === item.id ? item : current)).catch(e => setError(String(e)))
+        }
+        window.addEventListener('vodloft:changed', update)
+        return () => window.removeEventListener('vodloft:changed', update)
+    }, [selected?.id, referenceId])
 
     const resolve = buildServerAwareSubmit(urlForm, async (fields: URLFields) => {
         setBusy(true); setError(null); setPreview(null)
@@ -286,21 +296,21 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
         <h2>Add media</h2>
         <form onSubmit={resolve} style={{display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end', marginBottom: 24}}>
             <label style={{flex: '1 1 340px'}}>Media URL
-                <input type="url" {...register('url')} placeholder="https://…" style={{width: '100%'}} />
+                <input type="url" disabled={busy} {...register('url')} placeholder="https://…" style={{width: '100%'}} />
                 {errors.url && <span role="alert">Enter a public HTTP or HTTPS URL.</span>}
             </label>
             <label>Source
-                <select {...register('source_id')}><option value="">Automatic</option>
-                    {sources.map(source => <option value={source.source_id} key={source.source_id}>{source.display_name}</option>)}</select>
+                <select disabled={busy} {...register('source_id', {onChange: () => urlForm.setValue('connection_id', '')})}><option value="">Automatic</option>
+                    {sources.map(source => <option disabled={source.runtime_state !== 'available'} value={source.source_id} key={source.source_id}>{source.display_name}{source.runtime_state !== 'available' ? ' (unavailable)' : ''}</option>)}</select>
             </label>
-            <label>Connection <select {...register('connection_id')}><option value="">Anonymous</option>
-                {connections.filter(connection => connection.enabled).map(connection => <option key={connection.id} value={connection.id}>
+            <label>Connection <select disabled={busy} {...register('connection_id')}><option value="">Anonymous</option>
+                {connections.filter(connection => connection.enabled && (!selectedURLSource || connection.source_id === selectedURLSource)).map(connection => <option key={connection.id} value={connection.id}>
                     {connection.name} ({connection.source_id})</option>)}</select></label>
             <ProgressButton definition={operations.vodloft_source_resolve} label="Resolve URL" active={busy && urlForm.formState.isSubmitting}
                 disabled={busy} onClick={() => void resolve()}/>
             {errors.root && <p role="alert">{errors.root.message}</p>}
         </form>
-        <DomainBrowser connections={connections} onPreview={previewSearchResult} onAddURL={(sourceId, connectionId) => {
+        <DomainBrowser busy={busy} connections={connections} onPreview={previewSearchResult} onAddURL={(sourceId, connectionId) => {
             urlForm.setValue('source_id', sourceId); urlForm.setValue('connection_id', connectionId ? String(connectionId) : '')
             urlForm.setFocus('url')
         }}/>
@@ -308,13 +318,13 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
             <h2>Search a Source</h2>
             <form onSubmit={search}
                 style={{display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap'}}>
-                <label>Search phrase <input {...registerSearch('query')} />
+                <label>Search phrase <input disabled={busy} {...registerSearch('query')} />
                     {searchErrors.query && <span role="alert">Enter a search phrase.</span>}</label>
-                <label>Source <select {...registerSearch('source_id')}><option value="">Choose Source</option>
+                <label>Source <select disabled={busy} {...registerSearch('source_id', {onChange: () => {searchForm.setValue('connection_id', ''); setSearchPage(null); setSearchRequest(null)}})}><option value="">Choose Source</option>
                     {sources.filter(source => source.capabilities.includes('search')).map(source =>
                         <option key={source.source_id} value={source.source_id}>{source.display_name}</option>)}</select>
                     {searchErrors.source_id && <span role="alert">Choose a searchable Source.</span>}</label>
-                <label>Connection <select {...registerSearch('connection_id')}><option value="">Anonymous</option>
+                <label>Connection <select disabled={busy} {...registerSearch('connection_id', {onChange: () => {setSearchPage(null); setSearchRequest(null)}})}><option value="">Anonymous</option>
                     {connections.filter(connection => connection.enabled && connection.source_id === selectedSearchSource).map(connection =>
                         <option key={connection.id} value={connection.id}>{connection.name}</option>)}</select></label>
                 <button className="btn" type="submit" disabled={busy}>Search</button>
@@ -353,6 +363,8 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                     <MediaArtwork item={item} shape={item.kind === 'movie' ? 'portrait' : 'landscape'}/>{item.title}{item.downloaded ? ' · Local' : ''}</button>)}</div>
             <h2>Activity</h2>
             <p>{home.activity.length} active downloads · {home.issues.length} issues</p>
+            {home.issues.map(issue => <p key={`${issue.kind}:${issue.id}`}>{issue.kind.replace(/_/g, ' ')} · {issue.message || 'Needs attention'}{' '}
+                {issue.item_id && <button className="btn" type="button" onClick={() => void open(issue.item_id!)}>Open item</button>}</p>)}
             {home.issues.length > 0 && <button className="btn" type="button"
                 onClick={() => setView('management')}>Review issues</button>}
         </section>}
@@ -361,7 +373,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
             {me && <ListeningAccounts me={me} targets={targets}/>}
             {me?.role === 'admin' && <>
             <h3>Installed Sources</h3>
-            {sources.map(source => <p key={source.source_id}>{source.display_name} · {source.capabilities.join(', ')}
+            {sources.map(source => <p key={source.source_id}>{source.display_name} · {source.runtime_state} · {source.capabilities.join(', ')}
                 {runtimes?.active[source.source_id] && ` · runtime ${runtimes.active[source.source_id]}`}{' '}
                 <button className="btn" type="button" onClick={() => void api<unknown>(
                     `/sources/${encodeURIComponent(source.source_id)}/rollback`, {method: 'POST'})
@@ -522,7 +534,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                 <CollectionSyncControls collectionId={selected.id} referenceId={referenceId}
                     canSync={!!selectedReference?.effective_capabilities.includes('enumerate_collection')}
                     reason={selectedReference?.capability_reasons.enumerate_collection}
-                    onRefreshed={() => {void api<Item>(`/library/${selected.id}?reference_id=${referenceId}`).then(setSelected); void refresh()}}/>
+                    onRefreshed={() => {void api<Item>(`/library/${selected.id}?reference_id=${referenceId}`).then(item => setSelected(current => current?.id === item.id ? item : current)); void refresh()}}/>
                 <button className="btn" type="button" disabled={busy} onClick={() => {
                     if (!window.confirm('Remove this collection and its feeds? Shared local media will remain available.')) return
                     void api<unknown>(`/library/${selected.id}`, {method: 'DELETE'})
@@ -587,10 +599,13 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                     setProfiles(previous => [...previous, profile]); setProfileId(profile.id)
                     void showOutputPreview(profile.id, selected.id, profile)
                 }}/> }
-                <button className="btn btn-primary" type="button" disabled={!profileId || !referenceId ||
+                <ProgressButton definition={operations.vodloft_acquisition} resourceId={selected.id}
+                    active={!!job && ['queued', 'resolving', 'downloading', 'processing', 'verifying', 'finalizing'].includes(job.state)}
+                    progress={job?.progress} activeLabel={job ? `${job.state}${job.progress !== undefined ? ` · ${job.progress}%` : ''}` : undefined}
+                    disabled={!profileId || !referenceId ||
                     !selectedReference?.effective_capabilities.includes('download') ||
-                    !!job && !['failed', 'available'].includes(job.state)}
-                        onClick={() => void download(selected.id)}>{me?.role !== 'admin' ? 'Request download' : selected.downloaded ? 'Download again' : 'Download'}</button>
+                    !!job && !['failed', 'canceled', 'available'].includes(job.state)}
+                    onClick={() => void download(selected.id)} label={me?.role !== 'admin' ? 'Request download' : selected.downloaded ? 'Download again' : 'Download'}/>
                 {runResult && <p role="status">{runResult}</p>}
                 {selectedReference && !selectedReference.effective_capabilities.includes('download') &&
                     <p>{selectedReference.capability_reasons.download}</p>}

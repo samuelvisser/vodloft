@@ -32,6 +32,7 @@ class SourceDomain(Base):
 
 
 class SourceConnection(Base):
+    scope_revision: Mapped[int] = mapped_column(Integer, default=1, server_default='1')
     __tablename__ = "vodloft_source_connections"
     id: Mapped[int] = mapped_column(primary_key=True)
     source_id: Mapped[str] = mapped_column(String)

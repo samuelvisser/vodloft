@@ -10,7 +10,7 @@ import './Discovery.css'
 
 export type DiscoveryReference = {source_id: string; domain: string; namespace: string; upstream_id: string; url: string}
 type Result = {reference: DiscoveryReference; kind: string; title: string; description?: string | null}
-type Policy = {effective_capabilities: string[]; capability_reasons: Record<string, string>}
+type Policy = {scopeKey?: string; effective_capabilities: string[]; capability_reasons: Record<string, string>}
 type Domain = {id: number; hostname: string; display_name: string;
     sources: (Policy & {source_id: string; display_name: string; support: string; aliases: string[]})[]}
 type DomainPage = {items: Domain[]; next_cursor: string | null; exhaustive: boolean}
@@ -19,7 +19,8 @@ const FilterSchema = z.object({query: z.string().max(200).default('')})
 const ScopeSchema = z.object({source_id: z.string().default(''), connection_id: z.string().default(''), category_id: z.string().default('')})
 const SearchSchema = z.object({query: z.string().trim().min(1).max(200).default('')})
 
-export default function DomainBrowser({connections, onPreview, onAddURL}: {
+export default function DomainBrowser({connections, onPreview, onAddURL, busy = false}: {
+    busy?: boolean;
     connections: {id: number; source_id: string; name: string; enabled: boolean}[];
     onPreview: (reference: DiscoveryReference, connectionId: number | null) => Promise<void>;
     onAddURL: (sourceId: string, connectionId: number | null) => void;
@@ -33,7 +34,7 @@ export default function DomainBrowser({connections, onPreview, onAddURL}: {
     const [domains, setDomains] = useState<DomainPage | null>(null)
     const [domainQuery, setDomainQuery] = useState('')
     const [domain, setDomain] = useState<Domain | null>(null)
-    const [policy, setPolicy] = useState<Policy | null>(null)
+    const [savedPolicy, setPolicy] = useState<Policy | null>(null)
     const [page, setPage] = useState<BrowsePage | null>(null)
     const [categories, setCategories] = useState<NonNullable<BrowsePage['categories']>>([])
     const [mode, setMode] = useState<'browse' | 'search'>('browse')
@@ -46,6 +47,8 @@ export default function DomainBrowser({connections, onPreview, onAddURL}: {
     const sourceId = scope.watch('source_id') || ''
     const connectionId = Number(scope.watch('connection_id')) || null
     const categoryId = scope.watch('category_id') || ''
+    const scopeKey = `${domain?.hostname}:${sourceId}:${connectionId}`
+    const policy = savedPolicy?.scopeKey === scopeKey ? savedPolicy : null
 
     const loadDomains = async (query: string, cursor?: string) => {
         domainAbort.current?.abort()
@@ -96,7 +99,7 @@ export default function DomainBrowser({connections, onPreview, onAddURL}: {
         void api<Policy>(`/sources/${encodeURIComponent(sourceId)}/capabilities?${params}`, {signal: controller.signal})
             .then(result => {
                 if (controller.signal.aborted) return
-                setPolicy(result)
+                setPolicy({...result, scopeKey})
                 if (result.effective_capabilities.includes('browse')) void loadResults('browse')
                 else setLoading(false)
             }).catch(e => {if (!controller.signal.aborted) {setError(String(e)); setLoading(false)}})
@@ -125,7 +128,7 @@ export default function DomainBrowser({connections, onPreview, onAddURL}: {
         </form>
         <div className="vodloft-domain-grid">
             {domains?.items.map(value => <button className={`btn ${domain?.id === value.id ? 'is-selected' : ''}`}
-                type="button" key={value.id} aria-pressed={domain?.id === value.id} onClick={() => chooseDomain(value)}>
+                type="button" disabled={busy || previewing} key={value.id} aria-pressed={domain?.id === value.id} onClick={() => chooseDomain(value)}>
                 <strong>{value.display_name}</strong><span>{value.hostname}</span>
                 <small>{value.sources.map(source => source.display_name).join(', ')}</small>
             </button>)}
@@ -136,13 +139,13 @@ export default function DomainBrowser({connections, onPreview, onAddURL}: {
         {domain && <section className="vodloft-domain-detail">
             <h3>{domain.display_name}</h3>
             <div className="vodloft-fields">
-                <label>Source <select {...scope.register('source_id', {onChange: () => {
+                <label>Source <select disabled={busy || previewing} {...scope.register('source_id', {onChange: () => {
                     scope.setValue('connection_id', ''); scope.setValue('category_id', '')
                 }})}>{domain.sources.map(source => <option key={source.source_id} value={source.source_id}>{source.display_name}</option>)}</select></label>
-                <label>Connection <select {...scope.register('connection_id')}><option value="">Anonymous</option>
+                <label>Connection <select disabled={busy || previewing} {...scope.register('connection_id', {onChange: () => scope.setValue('category_id', '')})}><option value="">Anonymous</option>
                     {connections.filter(c => c.enabled && c.source_id === sourceId).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select></label>
-                <button className="btn" type="button" onClick={() => onAddURL(sourceId, connectionId)}>Add a URL with this Source</button>
+                <button className="btn" type="button" disabled={busy || previewing} onClick={() => onAddURL(sourceId, connectionId)}>Add a URL with this Source</button>
             </div>
             <p>{domain.hostname} · {selectedSource?.display_name} · {selectedSource?.support.replace(/_/g, ' ')}</p>
             {policy && !policy.effective_capabilities.includes('browse') && <p>{policy.capability_reasons.browse}. Add a URL{policy.effective_capabilities.includes('search') ? ' or search this Domain' : ''}.</p>}
@@ -159,7 +162,7 @@ export default function DomainBrowser({connections, onPreview, onAddURL}: {
             </form>}
             {loading && <p role="status">Working with {selectedSource?.display_name}…</p>}
             {page && <div className="vodloft-result-grid">
-                {page.items.map((item, index) => <button className="btn" type="button" disabled={previewing || loading}
+                {page.items.map((item, index) => <button className="btn" type="button" disabled={previewing || loading || busy}
                     key={`${item.reference.namespace}:${item.reference.upstream_id}:${index}`} onClick={() => {
                         setPreviewing(true)
                         void onPreview(item.reference, connectionId).finally(() => setPreviewing(false))

@@ -122,7 +122,7 @@ class EntrySnapshot(BaseModel):
     reference: SourceMediaReference
     title: str
     position: int
-    kind: Literal["collection", "video", "movie_extra"] = "video"
+    kind: Literal["collection", "video", "movie", "movie_extra"] = "video"
     group: str | None = None
     episode_number: str | None = None
     extra_type: str | None = None

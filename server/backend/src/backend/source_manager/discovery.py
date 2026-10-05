@@ -12,7 +12,7 @@ from backend.db import get_session
 from backend.db.models.vodloft import Domain, SourceDomain
 from backend.source_manager import secrets
 from backend.source_manager.capabilities import effective, manifest_for
-from backend.source_manager.connections import source_options
+from backend.source_manager.connections import source_options, connection_fingerprint
 from backend.source_manager.gateway import SourceGateway, SourceInvocationError
 
 _refreshed = 0.0
@@ -87,10 +87,13 @@ def _scope(gateway, source_id, connection_id, options, operation, arguments):
     if not command:
         raise SourceInvocationError('unavailable', 'The selected Source runtime is unavailable')
     # Digests scope continuation to credentials without storing/exposing them.
+    with get_session() as session:
+        account_scope = connection_fingerprint(session, source_id, connection_id)
+    manifest = manifest_for(source_id, gateway)
     return {'operation': operation, 'source_id': source_id, 'connection_id': connection_id,
         'runtime': hashlib.sha256(json.dumps({'command': command,
-            'manifest': manifest_for(source_id, gateway).model_dump(mode='json')}).encode()).hexdigest(),
-        'connection': hashlib.sha256(json.dumps(options, sort_keys=True).encode()).hexdigest(),
+            'manifest': manifest.model_dump(mode='json') if manifest else None}).encode()).hexdigest(),
+        'connection': account_scope,
         'arguments': arguments}
 
 
@@ -106,9 +109,17 @@ def _unwrap(cursor, scope):
     return value['cursor']
 
 
-def _wrap(cursor, scope):
+def _wrap(cursor, scope, previous=None):
+    if not cursor:
+        return None
+    history = []
+    if previous:
+        prior = json.loads(secrets.open_payload(previous))
+        history = prior.get('history', []) + [hashlib.sha256(prior['cursor'].encode()).hexdigest()]
+    if hashlib.sha256(cursor.encode()).hexdigest() in history:
+        raise SourceInvocationError('runtime_error', 'Source returned a repeated discovery continuation')
     return secrets.seal_payload(json.dumps({'purpose': 'source-discovery', 'scope': scope,
-        'cursor': cursor}).encode()) if cursor else None
+        'cursor': cursor, 'history': history[-32:]}).encode())
 
 
 def search(source_id: str, query: str, *, domain: str | None = None, connection_id: int | None = None,
@@ -126,7 +137,7 @@ def search(source_id: str, query: str, *, domain: str | None = None, connection_
     result = gateway.search(source_id, query, domain=domain, cursor=_unwrap(cursor, scope), limit=limit, job_id=job_id, **options)
     if any(item.reference.source_id != source_id or domain is not None and item.reference.domain != domain for item in result.items):
         raise SourceInvocationError('runtime_error', 'Source returned invalid search provenance')
-    return result.model_copy(update={'next_cursor': _wrap(result.next_cursor, scope)})
+    return result.model_copy(update={'next_cursor': _wrap(result.next_cursor, scope, cursor)})
 
 
 def browse(source_id: str, request: SourceBrowseRequest, *, connection_id: int | None = None, job_id: int | None = None):
@@ -144,7 +155,7 @@ def browse(source_id: str, request: SourceBrowseRequest, *, connection_id: int |
         'domain': domain, 'cursor': _unwrap(request.cursor, scope)}), job_id=job_id, **options)
     if result.domain != domain or any(item.reference.source_id != source_id for item in result.items):
         raise SourceInvocationError('runtime_error', 'Source returned invalid browse provenance')
-    return result.model_copy(update={'next_cursor': _wrap(result.next_cursor, scope)})
+    return result.model_copy(update={'next_cursor': _wrap(result.next_cursor, scope, request.cursor)})
 
 
 def entries(source_id: str, url: str, *, connection_id: int | None = None,
@@ -163,4 +174,4 @@ def entries(source_id: str, url: str, *, connection_id: int | None = None,
     result = gateway.entries(source_id, url, cursor=_unwrap(cursor, scope), limit=limit, **options)
     if any(entry.reference.source_id != source_id for entry in result.entries):
         raise SourceInvocationError('runtime_error', 'Source returned invalid membership provenance')
-    return result.model_copy(update={'next_cursor': _wrap(result.next_cursor, scope)})
+    return result.model_copy(update={'next_cursor': _wrap(result.next_cursor, scope, cursor)})

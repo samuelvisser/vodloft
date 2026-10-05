@@ -17,32 +17,37 @@ def tracked(kind, title, *, user_key, source_id, connection_id, item_id=None):
     acquired = try_acquire(source_id, None, connection_id)
     if acquired is None:
         raise SourceInvocationError('rate_limited', 'This Source/account is busy; try again after its current work')
-    operation_id = str(uuid.uuid4())
-    # Use a separate negative range from durable Collection scan IDs.
-    work_key = -(int(uuid.uuid4().hex[:14], 16) + 2 ** 32)
-    with get_session() as session:
-        session.add(TaskOperation(id=operation_id, kind=kind, source='UI',
-            resource_type='vodloft_media' if item_id is not None else 'vodloft_discovery', resource_id=item_id,
-            title=title[:255], status='RUNNING', progress=None, message='Working with Source…',
-            started_at=datetime.now(timezone.utc), context={'tracks_progress': False, 'user_key': user_key,
-                'source_id': source_id, 'connection_id': connection_id, 'source_job_key': work_key}))
-        session.commit()
-    error = None
     try:
-        yield work_key
-    except BaseException as exc:
-        error = f'Source work stopped ({exc.code})' if isinstance(exc, SourceInvocationError) else 'Source work could not complete'
-        raise
-    finally:
+        operation_id = str(uuid.uuid4())
+        # Use a separate negative range from durable Collection scan IDs.
+        work_key = -(int(uuid.uuid4().hex[:14], 16) + 2 ** 32)
         with get_session() as session:
-            operation = session.get(TaskOperation, operation_id)
-            if operation and operation.status != 'CANCELED':
-                operation.status = 'FAILED' if error else 'SUCCEEDED'
-                operation.progress, operation.error = (None if error else 100), error
-                operation.message = error or 'Source work completed'
-                operation.finished_at = datetime.now(timezone.utc)
-                session.commit()
-        clear_canceled_job(work_key)
+            session.add(TaskOperation(id=operation_id, kind=kind, source='UI',
+                resource_type='vodloft_media' if item_id is not None else 'vodloft_discovery', resource_id=item_id,
+                title=title[:255], status='RUNNING', progress=None, message='Working with Source…',
+                started_at=datetime.now(timezone.utc), context={'tracks_progress': False, 'user_key': user_key,
+                    'source_id': source_id, 'connection_id': connection_id, 'source_job_key': work_key}))
+            session.commit()
+        error = None
+        try:
+            yield work_key
+        except BaseException as exc:
+            error = f'Source work stopped ({exc.code})' if isinstance(exc, SourceInvocationError) else 'Source work could not complete'
+            raise
+        finally:
+            with get_session() as session:
+                operation = session.get(TaskOperation, operation_id)
+                canceled = bool(operation and operation.status == 'CANCELED')
+                if operation and operation.status != 'CANCELED':
+                    operation.status = 'FAILED' if error else 'SUCCEEDED'
+                    operation.progress, operation.error = (None if error else 100), error
+                    operation.message = error or 'Source work completed'
+                    operation.finished_at = datetime.now(timezone.utc)
+                    session.commit()
+            clear_canceled_job(work_key)
+            if canceled and error is None:
+                raise SourceInvocationError('unavailable', 'Source work was canceled')
+    finally:
         release(acquired)
 
 

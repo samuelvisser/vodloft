@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from backend.db import get_session
 from backend.db.models.vodloft import CollectionEntry, CollectionScan, Domain, MediaItem, SourceConnection, SourceReference
 from backend.services.vodloft_imports import reconcile_members, store_snapshot
-from backend.source_manager.connections import source_options
+from backend.source_manager.connections import source_options, connection_fingerprint as account_fingerprint
 from backend.source_manager.gateway import SourceGateway, SourceInvocationError, cancel_running_job, clear_canceled_job
 from backend.source_manager.runtime import command_for
 from backend.source_manager.concurrency import try_acquire, release
@@ -68,6 +68,8 @@ def _lease(session, scan_id: int, owner: str) -> CollectionScan:
     if not changed.rowcount:
         raise CollectionSyncBusy('This scan was canceled or another worker owns it')
     scan = session.get(CollectionScan, scan_id, populate_existing=True)
+    if scan.connection_fingerprint != account_fingerprint(session, scan.source_id, scan.connection_id, lock=True):
+        raise SourceInvocationError('unavailable', 'Source account changed; restart this bounded scan')
     operation = session.get(TaskOperation, scan.operation_id)
     if operation and operation.status == 'CANCELED':
         raise CollectionSyncBusy('Collection refresh was canceled')
@@ -124,6 +126,7 @@ def synchronize(collection_id: int, reference_id: int | None = None, *,
         source_id, url, connection_id, reference_id = reference.source_id, reference.url, reference.connection_id, reference.id
         expected = (session.get(Domain, reference.domain_id).hostname, reference.namespace, reference.upstream_id)
         options = source_options(session, source_id, connection_id)
+        connection_fingerprint = account_fingerprint(session, source_id, connection_id)
         title = item.user_title or item.title
     gateway = gateway or SourceGateway()
     command = gateway.commands.get(source_id)
@@ -143,7 +146,6 @@ def synchronize(collection_id: int, reference_id: int | None = None, *,
         pass
     command_fingerprint = _fingerprint({'command': command, 'runtime': runtime_version,
         'protocol': manifest.protocol_version, 'catalogue_revision': manifest.catalogue_revision})
-    connection_fingerprint = _fingerprint(options)
     owner, now = str(uuid.uuid4()), datetime.now(timezone.utc)
     with get_session() as session:
         scan = session.scalar(select(CollectionScan).where(CollectionScan.active_reference_id == reference_id))
@@ -192,6 +194,9 @@ def synchronize(collection_id: int, reference_id: int | None = None, *,
         scan.error_code, scan.retry_at = None, None
         scan.attempts = (scan.attempts or 0) + 1
         try:
+            session.flush()
+            operation = session.get(TaskOperation, scan.operation_id)
+            operation.context = {**(operation.context or {}), 'stage': 'resolving'}
             session.commit()
         except IntegrityError as exc:
             raise CollectionSyncBusy('Another worker started this Source/account refresh') from exc
@@ -211,7 +216,9 @@ def synchronize(collection_id: int, reference_id: int | None = None, *,
         seen_cursors, complete = set(), False
         for _ in range(budget):
             with get_session() as session:
-                _lease(session, scan_id, owner)
+                scan = _lease(session, scan_id, owner)
+                operation = session.get(TaskOperation, scan.operation_id)
+                operation.context = {**(operation.context or {}), 'stage': 'enumerating'}
                 session.commit()
             if 'enumerate_pages' in manifest.capabilities:
                 page = gateway.entries(source_id, url, cursor=cursor, limit=50, job_id=-scan_id, **options)
@@ -265,7 +272,7 @@ def synchronize(collection_id: int, reference_id: int | None = None, *,
                 (300 if reason == 'rate_limited' else 60) * 2 ** min(scan.failure_count - 1, 6)))) if (
                 not canceled and reason in {'unavailable', 'rate_limited', 'runtime_error'} and scan.failure_count < 5) else None
             scan.status, scan.error = ('canceled', 'Collection refresh canceled') if canceled else (
-                'failed', f'Collection enumeration stopped ({reason}); known members were preserved')
+                'failed', f"Collection {(session.get(TaskOperation, scan.operation_id).context or {}).get('stage', 'resolving')} stopped ({reason}); known members were preserved")
             # Retry a full scan only at the last committed cursor. Incremental
             # scans start again from the beginning to pick up new leading items.
             if canceled or mode != 'full':
@@ -336,7 +343,8 @@ def enqueue(collection_id: int, reference_id: int | None = None, *, full: bool |
             raise CollectionSyncError('Select a Source/account reference for this Collection')
         if source == 'SYSTEM' and full is None:
             pending = session.scalar(select(CollectionScan).where(CollectionScan.active_reference_id == reference.id))
-            if pending and pending.status == 'failed' and (pending.retry_at is None or _utc(pending.retry_at) > datetime.now(timezone.utc)):
+            scope_unchanged = pending and pending.connection_fingerprint == account_fingerprint(session, reference.source_id, reference.connection_id)
+            if scope_unchanged and pending.status == 'failed' and (pending.retry_at is None or _utc(pending.retry_at) > datetime.now(timezone.utc)):
                 return pending.operation_id
         for operation in session.scalars(select(TaskOperation).where(
                 TaskOperation.kind == 'vodloft_collection_sync', TaskOperation.resource_id == collection_id,
@@ -463,12 +471,21 @@ def dispatch_queued(on_complete=None) -> None:
                         on_complete(result)
                     except Exception:
                         logger.warning('Collection follow-up scheduling needs a later sweep for item %s', collection_id)
-            except Exception:
+            except Exception as exc:
                 # Do not expose upstream exceptions, URLs or account values.
                 with get_session() as session:
                     operation = session.get(TaskOperation, operation_id)
                     if operation and operation.status != 'CANCELED':
                         operation.status, operation.error = 'FAILED', 'Collection refresh could not start; check the selected Source/account'
+                        pending = session.scalar(select(CollectionScan).where(
+                            CollectionScan.active_reference_id == context.get('source_reference_id')))
+                        if pending and pending.operation_id != operation_id:
+                            pending.operation_id, pending.status = operation_id, 'failed'
+                            pending.error, pending.error_code = operation.error, exc.code if isinstance(exc, SourceInvocationError) else 'unavailable'
+                            pending.failure_count = (pending.failure_count or 0) + 1
+                            pending.retry_at = (datetime.now(timezone.utc) + timedelta(seconds=min(3600, 300 * 2 ** pending.failure_count))) if (
+                                pending.failure_count < 5 and pending.error_code in {'unavailable', 'rate_limited', 'runtime_error'}) else None
+                            pending.updated_at = datetime.now(timezone.utc)
                         operation.finished_at = datetime.now(timezone.utc)
                         session.commit()
             finally:

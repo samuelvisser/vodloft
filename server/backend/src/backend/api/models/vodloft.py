@@ -108,9 +108,10 @@ class ActivityResponse(BaseModel):
 
 
 class IssueResponse(BaseModel):
-    kind: Literal['acquisition', 'delivery']
+    kind: Literal['acquisition', 'delivery', 'collection_sync']
     id: int
     item_id: int | None = None
+    message: str | None = None
 
 
 class HomeResponse(BaseModel):

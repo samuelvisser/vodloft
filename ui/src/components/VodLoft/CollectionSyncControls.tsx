@@ -63,13 +63,17 @@ export default function CollectionSyncControls({collectionId, referenceId, canSy
             <button className="btn" type="button" onClick={() => setShowHistory(current => !current)}>{showHistory ? 'Hide scan history' : 'Scan history'}</button>
         </div>
         {!canSync && referenceId && <p>{reason || 'This Source/account cannot enumerate this Collection.'}</p>}
-        {latest && !active && <p role="status">{latest.message}{latest.error && ` · ${latest.error}`}
+        {latest && !active && <p role="status">{latest.status.toLowerCase()} · {latest.message}{latest.error && ` · ${latest.error}`}
             {['FAILED', 'PARTIAL', 'CANCELED'].includes(latest.status) && canSync && <>{' '}
                 <button type="button" className="btn" onClick={() => void control(latest.id, 'resume')}>Resume refresh</button></>}</p>}
+        {latest && Array.isArray(latest.result?.data?.nested_issues) && latest.result.data.nested_issues.length > 0 &&
+            <details><summary>Nested Collection issues</summary>{(latest.result.data.nested_issues as {item_id: number; reason: string}[])
+                .map((issue, index) => <p key={`${issue.item_id}:${index}`}>Collection #{issue.item_id}: {issue.reason}</p>)}</details>}
         {showHistory && <div className="vodloft-scan-history"><table><thead><tr>
-            <th>Started</th><th>Source</th><th>Scan</th><th>Members</th><th>Removed memberships</th><th>State</th>
+            <th>Started</th><th>Source</th><th>Scan</th><th>Attempts</th><th>Members</th><th>Removed memberships</th><th>State</th>
         </tr></thead><tbody>{scans.filter(scan => !referenceId || scan.source_reference_id === referenceId).map(scan => <tr key={scan.id}>
             <td>{new Date(scan.created_at).toLocaleString()}</td><td>{scan.source_id} {scan.runtime_version}</td><td>{scan.mode}</td>
+            <td>{scan.attempts}</td>
             <td>{scan.entry_count}</td><td>{scan.removed_count}</td><td>{scan.status}{scan.has_checkpoint && ' · continuation saved'}
                 {scan.error && <p>{scan.error}</p>}{scan.retry_at && <p>Retry after {new Date(scan.retry_at).toLocaleString()}</p>}</td>
         </tr>)}</tbody></table><p>Only complete scans retire missing memberships. Local media stays available.</p></div>}

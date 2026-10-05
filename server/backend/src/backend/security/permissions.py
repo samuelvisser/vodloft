@@ -68,6 +68,12 @@ def require_connection(request: Request, connection_id: int | None) -> None:
 def allowed_api(actor: Principal, method: str, path: str) -> bool:
     if actor.role == "admin":
         return True
+    if path.startswith('/api/source/'):
+        path = path.replace('/api/source/', '/api/vodloft/sources/', 1)
+    elif path == '/api/sources' or path.startswith('/api/sources/'):
+        path = path.replace('/api/sources', '/api/vodloft/sources', 1)
+    elif path == '/api/library/import':
+        path = '/api/vodloft/import/confirm'
     if method == "GET" and path in {"/api/onboarding/status", "/api/meta"}:
         return True
     if (method == 'GET' and (path == '/api/operations' or re.fullmatch(r'/api/operations/[A-Za-z0-9-]+', path)) or

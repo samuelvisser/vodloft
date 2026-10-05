@@ -13,13 +13,13 @@ import tempfile
 import threading
 import uuid
 from datetime import datetime, timezone, timedelta
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from contextlib import nullcontext
 from pathlib import Path
 
 from fastapi import Query, APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse
-from pydantic import BaseModel, Field
+from pydantic import AliasGenerator, AliasPath, BaseModel, ConfigDict, Field
 from sqlalchemy import delete, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
@@ -40,10 +40,10 @@ from backend.source_manager import discovery as source_discovery
 from backend.services import vodloft_finalization
 from backend.services.vodloft_operations import tracked
 from backend.source_manager import runtime as source_runtime
-from backend.source_manager.connections import source_options
+from backend.source_manager.connections import source_options, connection_fingerprint
 from backend.security.permissions import principal, require_connection
 from config import get_settings
-from source_contracts import MediaSnapshot, NormalizedSnapshot, SourceMediaReference, RepresentationPolicy
+from source_contracts import ConfigurationField, MediaSnapshot, NormalizedSnapshot, SourceManifest, SourceMediaReference, RepresentationPolicy
 from task_manager.scheduler.db import TaskOperation
 
 logger = logging.getLogger(__name__)
@@ -192,9 +192,41 @@ def _serialize(session, item: MediaItem) -> LibraryItemResponse:
     return LibraryItemResponse.model_validate(_library_source(session, item))
 
 
-@router.get("/sources")
+@dataclass(frozen=True)
+class InstalledSource:
+    source_id: str
+    manifest: SourceManifest | None
+
+    @property
+    def display_name(self):
+        return self.manifest.display_name if self.manifest else self.source_id
+
+    @property
+    def runtime_state(self):
+        return 'available' if self.manifest else 'unavailable'
+
+
+def _installed_source_alias(name):
+    return name if name in {'source_id', 'display_name', 'runtime_state', 'manifest'} else AliasPath('manifest', name)
+
+
+class InstalledSourceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, alias_generator=AliasGenerator(validation_alias=_installed_source_alias))
+    source_id: str
+    display_name: str
+    runtime_state: str
+    manifest: SourceManifest | None
+    version: str | None = None
+    capabilities: set[str] = Field(default_factory=set)
+    configuration_schema: list[ConfigurationField] = Field(default_factory=list)
+
+
+@router.get("/sources", response_model=list[InstalledSourceResponse])
 def sources():
-    return [manifest.model_dump() for manifest in SourceGateway().manifests()]
+    gateway = SourceGateway()
+    manifests = {manifest.source_id: manifest for manifest in gateway.manifests()}
+    return [InstalledSourceResponse.model_validate(InstalledSource(source_id, manifests.get(source_id)))
+            for source_id in gateway.commands]
 
 
 @router.get("/sources/domains")
@@ -312,7 +344,7 @@ def rollback_source(source_id: str):
         raise HTTPException(409, str(exc)) from exc
 
 
-@router.post("/resolve", response_model=NormalizedSnapshot)
+@router.post("/resolve", response_model=NormalizedSnapshot, response_model_exclude_unset=True)
 def resolve(request: ResolveRequest, http_request: Request):
     require_connection(http_request, request.connection_id)
     try:
@@ -366,6 +398,11 @@ def resolve(request: ResolveRequest, http_request: Request):
 
 @router.post("/import")
 def import_media(request: ImportRequest, http_request: Request):
+    snapshot = _validate_import_snapshot(request, http_request)
+    return _import_snapshot(snapshot, request.connection_id, existing_item_id=request.existing_item_id)
+
+
+def _validate_import_snapshot(request: ImportRequest, http_request: Request) -> MediaSnapshot:
     require_connection(http_request, request.connection_id)
     if request.existing_item_id is not None:
         if not principal(http_request).manages_library:
@@ -377,7 +414,9 @@ def import_media(request: ImportRequest, http_request: Request):
     try:
         with get_session() as session:
             options = source_options(session, snapshot.reference.source_id, request.connection_id)
-        verified = SourceGateway().resolve(snapshot.reference.source_id, snapshot.reference.url, **options)
+        with tracked('vodloft_source_resolve', 'Verify import reference', user_key=principal(http_request).key,
+                source_id=snapshot.reference.source_id, connection_id=request.connection_id) as work_key:
+            verified = SourceGateway().resolve(snapshot.reference.source_id, snapshot.reference.url, job_id=work_key, **options)
         if verified.kind != snapshot.kind or any(getattr(verified.reference, field) != getattr(snapshot.reference, field)
                 for field in ('source_id', 'domain', 'namespace', 'upstream_id')):
             raise HTTPException(409, 'Source media changed; resolve and review it again')
@@ -388,7 +427,7 @@ def import_media(request: ImportRequest, http_request: Request):
         raise HTTPException(422, str(exc)) from exc
     except Exception as exc:
         raise _source_problem(exc, "Source could not verify this media") from exc
-    return _import_snapshot(snapshot, request.connection_id, existing_item_id=request.existing_item_id)
+    return snapshot
 
 
 def _import_snapshot(snapshot: MediaSnapshot, connection_id: int | None = None,
@@ -531,6 +570,9 @@ def home(request: Request) -> HomeResponse:
             .order_by(MediaServerExport.updated_at.desc()).limit(10)).all()
         actor = principal(request)
         exports = [export for export in exports if actor.can_use_target(export.target_id)]
+        scan_failures = [scan for scan in session.scalars(select(CollectionScan).where(
+            CollectionScan.status == 'failed', CollectionScan.active_reference_id.is_not(None))
+            .order_by(CollectionScan.updated_at.desc()).limit(10)) if actor.can_use_connection(scan.connection_id)]
         if not actor.manages_library:
             owned = set(session.scalars(select(LibraryRequest.job_id).where(LibraryRequest.user_key == actor.key)).all())
             active = [job for job in active if job.id in owned]
@@ -540,8 +582,9 @@ def home(request: Request) -> HomeResponse:
             for p in progress if session.get(MediaItem, p.item_id)],
             recent=[_serialize(session, item) for item in recent],
             activity=[ActivityResponse.model_validate(job) for job in active],
-            issues=[IssueResponse(kind='acquisition', id=job.id, item_id=job.item_id) for job in failures] +
-                   [IssueResponse(kind='delivery', id=export.id) for export in exports])
+            issues=[IssueResponse(kind='acquisition', id=job.id, item_id=job.item_id, message=job.error) for job in failures] +
+                   [IssueResponse(kind='delivery', id=export.id) for export in exports] +
+                   [IssueResponse(kind='collection_sync', id=scan.id, item_id=scan.collection_id, message=scan.error) for scan in scan_failures])
 
 
 @router.get("/library/{item_id}/progress")
@@ -801,6 +844,19 @@ def _heartbeat_job(job_id: int, owner: str, stop: threading.Event) -> None:
             logger.exception("Acquisition job %s lease heartbeat failed", job_id)
 
 
+def _representation_key(session, item: MediaItem, reference: SourceReference, profile: DomainLocalMediaProfile) -> str:
+    return hashlib.sha256(json.dumps({
+            "source_id": reference.source_id, "namespace": reference.namespace,
+            "upstream_id": reference.upstream_id, "connection_key": reference.connection_key,
+            "connection_scope": connection_fingerprint(session, reference.source_id, reference.connection_id),
+            "format": profile.preferred_format, "media_type": item.kind,
+            "representation": RepresentationPolicy.model_validate(profile.representation or {}).model_dump(),
+            "metadata": {"title": item.user_title or item.title,
+                         "description": item.user_description or item.description or ""}
+                         if (profile.representation or {}).get("embed_metadata", True) else {},
+    }, sort_keys=True).encode()).hexdigest()
+
+
 def _execute_leased_download(job_id: int) -> None:
     with get_session() as session:
         job = session.get(AcquisitionJob, job_id)
@@ -818,6 +874,34 @@ def _execute_leased_download(job_id: int) -> None:
         connection_id = reference.connection_id
         profile_id = job.profile_id
         spec = dict(job.execution_spec or {})
+        if job.attempts == 0:
+            # Queueing records intent and provenance. Freeze the current profile
+            # only when this worker actually dispatches the first attempt.
+            profile = session.get(DomainLocalMediaProfile, profile_id)
+            item = session.get(MediaItem, item_id)
+            if not profile or profile.deleted or not profile.enabled or profile.impairment or (
+                    profile.domain_id != item.domain_id or item.kind not in profile.applicable_kinds):
+                job.state, job.active_key = 'failed', None
+                job.error_code, job.failed_stage = 'unavailable', 'resolving'
+                job.error = 'The Local Media Profile is disabled, impaired or no longer applicable'
+                _sync_operation(session, job)
+                session.commit()
+                return
+            spec.update(preferred_format=profile.preferred_format,
+                representation=RepresentationPolicy.model_validate(profile.representation or {}).model_dump(),
+                metadata={'title': item.user_title or item.title, 'description': item.user_description or item.description or ''},
+                output_template=profile.output_template,
+                profile_revision=profile.updated_at.isoformat() if profile.updated_at else None,
+                representation_key=_representation_key(session, item, reference, profile),
+                dispatched_at=datetime.now(timezone.utc).isoformat())
+            # Retain the selected occurrence's ordering and Collection context,
+            # while using current effective item metadata for the output path.
+            current_values = template_values(item, session.get(Domain, item.domain_id), reference,
+                collection=spec['values'].get('collection', ''))
+            for field in ('group', 'episode_number'):
+                current_values[field] = spec['values'].get(field, '')
+            spec['values'] = current_values
+            job.execution_spec = spec
         job.state = "resolving"
         job.attempts += 1
         _sync_operation(session, job)
@@ -825,6 +909,8 @@ def _execute_leased_download(job_id: int) -> None:
     root = Path(get_settings().download_settings.download_root).resolve() / "vodloft"
     try:
         with get_session() as session:
+            if spec['connection_scope'] != connection_fingerprint(session, source_id, connection_id):
+                raise SourceInvocationError('authentication_required', 'This job\'s Source account changed; create a new request with the intended account')
             options = source_options(session, source_id, connection_id)
         if not root.parent.is_dir():
             raise OSError("Download storage is unavailable")
@@ -1002,7 +1088,7 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
                    policy_id: int | None = None, request_id: int | None = None,
                    stream_profile_id: int | None = None,
                    force: bool = False) -> tuple[int | None, str, bool]:
-    """Freeze a Domain profile for one playable item; null means already satisfied."""
+    """Record acquisition intent; null means the current representation is satisfied."""
     with get_session() as session:
         item = session.get(MediaItem, item_id)
         if not item or item.kind == "collection":
@@ -1057,15 +1143,7 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
             raise HTTPException(409, "Create and select a Local Media Profile for this Domain and media type")
         if reference.formats and profile.preferred_format not in {fmt.get("code") for fmt in reference.formats}:
             raise HTTPException(409, "The Source does not offer this item's requested format")
-        representation_key = hashlib.sha256(json.dumps({
-            "source_id": reference.source_id, "namespace": reference.namespace,
-            "upstream_id": reference.upstream_id, "connection_key": reference.connection_key,
-            "format": profile.preferred_format, "media_type": item.kind,
-            "representation": RepresentationPolicy.model_validate(profile.representation or {}).model_dump(),
-            "metadata": {"title": item.user_title or item.title,
-                         "description": item.user_description or item.description or ""}
-                         if (profile.representation or {}).get("embed_metadata", True) else {},
-        }, sort_keys=True).encode()).hexdigest()
+        representation_key = _representation_key(session, item, reference, profile)
         domain = session.get(Domain, item.domain_id)
         parent_reference = _reference_for(session, collection_id, reference_id=collection_reference_id) if collection_id else None
         membership = session.scalar(select(CollectionEntry).where(CollectionEntry.collection_id == collection_id,
@@ -1137,6 +1215,7 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
                     "url": reference.url},
                 "source_command": selected_command, "runtime_version": runtime_version,
                 "connection_id": reference.connection_id, "queued_at": datetime.now(timezone.utc).isoformat(),
+                "connection_scope": connection_fingerprint(session, reference.source_id, reference.connection_id),
                 "values": values}
         if not force and (policy_id or stream_profile_id):
             previous = session.scalar(select(AcquisitionJob).where(
