@@ -273,13 +273,13 @@ def _source_error(exc: Exception) -> SourceError:
     elif isinstance(exc, UnsupportedRepresentation):
         code, message = "unsupported_format", "The requested representation is unavailable"
     elif isinstance(exc, ExtractorError):
-        code = "unavailable" if exc.expected else "extraction_failed"
+        code = "unavailable" if exc.expected else "runtime_error"
         message = "Source operation failed" if exc.expected else "yt-dlp extractor failed"
     elif isinstance(exc, DownloadError):
         # yt-dlp adds this text only to unexpected extractor failures. Inspect
         # it for classification, but never expose the upstream diagnostic.
         unexpected = "please report this issue on" in str(exc).casefold()
-        code = "extraction_failed" if unexpected else "unavailable"
+        code = "runtime_error" if unexpected else "unavailable"
         message = "yt-dlp extractor failed" if unexpected else "Source operation failed"
     elif isinstance(exc, ValueError):
         code = "unsupported_operation" if str(exc).startswith("Unsupported Source operation") else "invalid_url"
