@@ -5,6 +5,7 @@ import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import {faIcon} from '../../icons/faIcon'
 
+import ActionConfirmDialogue from '../../components/ActionConfirmDialogue/ActionConfirmDialogue'
 import ProgressBar from '../../components/common/ProgressBar'
 import ProgressButton from '../../components/common/ProgressButton'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
@@ -191,6 +192,11 @@ export default function MoviePage() {
         'movie',
         localMovie?.id ?? null,
     )
+    const redownloadOperation = useActiveOperation(
+        'movie.redownload_media',
+        'movie',
+        localMovie?.id ?? null,
+    )
     const videoProfiles = useMemo(
         () => profiles?.filter((profile) => profile.type === 'movie') || [],
         [profiles],
@@ -199,6 +205,7 @@ export default function MoviePage() {
     const [submitting, setSubmitting] = useState<string | null>(null)
     const [addingMovie, setAddingMovie] = useState(false)
     const [confirmDelete, setConfirmDelete] = useState(false)
+    const [redownloadConfirm, setRedownloadConfirm] = useState(false)
     const [deleting, setDeleting] = useState(false)
     const [retryingMetadata, setRetryingMetadata] = useState(false)
     const [refreshingExtrasStarting, setRefreshingExtrasStarting] = useState(false)
@@ -460,6 +467,10 @@ export default function MoviePage() {
         ? extraDownloadsBySlug.get(featuredTrailer.slug)
         : undefined
     const controlBusy = downloadControlBusy !== null
+    const hasRedownloadableMedia = (downloads ?? []).some(
+        (download) => download.artifactStatus !== 'absent',
+    )
+    const redownloadBusy = redownloadOperation !== undefined
 
     return (
         <section className="view movie-detail-view" aria-labelledby="movie-title">
@@ -504,6 +515,18 @@ export default function MoviePage() {
                     <button type="button" className="btn" onClick={() => void refreshMovieExtras()} disabled={refreshingExtras}>
                         <FontAwesomeIcon icon={faIcon('fas', 'rotate')} spin={refreshingExtras}/>
                         {refreshingExtras ? 'Refreshing extras…' : 'Refresh extras'}
+                    </button>
+                )}
+                {localMovie && (
+                    <button
+                        type="button"
+                        className="btn"
+                        onClick={() => setRedownloadConfirm(true)}
+                        disabled={redownloadBusy || !hasRedownloadableMedia}
+                        title={!hasRedownloadableMedia ? 'This movie has no previously downloaded media.' : undefined}
+                    >
+                        <FontAwesomeIcon icon={faIcon('fas', 'arrows-rotate')} spin={redownloadBusy}/>
+                        {redownloadBusy ? 'Re-downloading media…' : 'Delete and re-download all media'}
                     </button>
                 )}
                 {localMovie?.releaseDateLookupStatus === 'error' && (
@@ -662,6 +685,25 @@ export default function MoviePage() {
             )}
 
             <DownloadLogDialog row={logDownload} onClose={() => setLogDownloadId(null)}/>
+
+            <ActionConfirmDialogue
+                open={redownloadConfirm && Boolean(localMovie)}
+                operationDefinition={frontendOperationDefinitions['movie.redownload_media']}
+                requestPath={`/movies/${encodeURIComponent(slug || '')}/redownload-media`}
+                resourceLabel={movie.title}
+                title="Delete and re-download all media"
+                onDismiss={() => setRedownloadConfirm(false)}
+                icon={faIcon('fas', 'arrows-rotate')}
+                iconTone="danger"
+                confirmLabel="Delete and re-download"
+                disabled={redownloadBusy || !hasRedownloadableMedia}
+            >
+                <p>
+                    Delete every previously downloaded file for "{movie.title}", including the main movie
+                    and movie extras, and download those files again. Media that has never been downloaded
+                    will not be added by this action.
+                </p>
+            </ActionConfirmDialogue>
 
             <ConfirmDialog
                 open={confirmDelete && Boolean(localMovie)}
