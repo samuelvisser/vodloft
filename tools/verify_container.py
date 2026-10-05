@@ -50,9 +50,10 @@ def verify(base: str, password: str, timeout: int):
     assert home['recent'] == [] and home['activity'] == []
     sources = json.loads(request('/api/vodloft/sources'))
     assert {source['source_id'] for source in sources} == {'yt-dlp', 'dailywire'}, json.loads(request('/api/vodloft/sources/runtimes'))
-    assert all(source['version'] == '1.0.0' for source in sources)
+    assert {source['source_id']: source['version'] for source in sources} == {
+        'yt-dlp': '1.0.1', 'dailywire': '1.0.0'}
     runtime = json.loads(request('/api/vodloft/sources/runtimes'))
-    assert runtime['active'] == {'yt-dlp': '1.0.0', 'dailywire': '1.0.0'}
+    assert runtime['active'] == {'yt-dlp': '1.0.1', 'dailywire': '1.0.0'}
     for source in ('yt-dlp', 'dailywire'):
         verified = next(event['manifest'] for event in reversed(runtime['history'])
             if event.get('source_id') == source and event.get('manifest'))
