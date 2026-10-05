@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from math import isfinite
 from typing import Any, Iterable, Sequence
 from uuid import uuid4
 
@@ -12,17 +13,20 @@ from backend.db.core import get_session
 from task_manager.scheduler.db import (
     TaskDefinition,
     TaskOperation,
+    TaskOperationDependency,
     TaskOperationRun,
     TaskOperationTarget,
     TaskRun,
 )
-from task_manager.scheduler.operation_control import run_cancel_requested
+from task_manager.scheduler.operation_control import operation_cancel_requested, run_cancel_requested
+from task_manager.scheduler.registry import task_tracks_progress
 from task_manager.scheduler.transactional import queue_task_after_commit
-from task_manager.scheduler.types import OperationSource, OperationStatus, TaskStatus
-
-
-TASK_RUN_WAIT_STATE_META_KEY = "_operation_wait_state"
-TASK_RUN_PROGRESS_META_KEY = "_progress_meta"
+from task_manager.scheduler.types import (
+    OperationDependencyCancelPolicy,
+    OperationSource,
+    OperationStatus,
+    TaskStatus,
+)
 
 _ACTIVE_OPERATION_STATUSES = {
     OperationStatus.QUEUED.value,
@@ -40,6 +44,87 @@ _ACTIVE_TASK_STATUSES = {
     TaskStatus.RUNNING,
     TaskStatus.RETRY_SCHEDULED,
 }
+
+OPERATION_ADMISSION_WAIT_CONTEXT_KEY = "_admission_wait_state"
+
+
+def set_operation_admission_wait(
+        operation: TaskOperation,
+        *,
+        reason: str,
+        message: str | None = None,
+        until: datetime | None = None,
+) -> None:
+    """Persist a pre-execution wait owned by the high-level operation.
+
+    Admission waits are orchestration state: no worker has started yet, so they
+    deliberately live on TaskOperation. Once admitted, ordinary TaskRun
+    wait_state reporting takes over.
+    """
+    if not reason:
+        raise ValueError("Operation admission wait reason cannot be empty")
+
+    wait_state: dict[str, Any] = {"reason": reason}
+    if message:
+        wait_state["message"] = message
+    if until is not None:
+        normalized = (
+            until.replace(tzinfo=timezone.utc)
+            if until.tzinfo is None
+            else until.astimezone(timezone.utc)
+        )
+        wait_state["until"] = normalized.timestamp()
+
+    operation.context = {
+        **(operation.context or {}),
+        OPERATION_ADMISSION_WAIT_CONTEXT_KEY: wait_state,
+    }
+
+
+def clear_operation_admission_wait(operation: TaskOperation) -> None:
+    context = dict(operation.context or {})
+    context.pop(OPERATION_ADMISSION_WAIT_CONTEXT_KEY, None)
+    operation.context = context or None
+
+
+def operation_admission_wait_state(
+        operation: TaskOperation,
+        *,
+        now: datetime | None = None,
+) -> dict[str, Any] | None:
+    """Return the active pre-execution wait, ignoring waits whose deadline passed."""
+    if not isinstance(operation.context, dict):
+        return None
+    value = operation.context.get(OPERATION_ADMISSION_WAIT_CONTEXT_KEY)
+    if not isinstance(value, dict):
+        return None
+
+    reason = value.get("reason")
+    if not isinstance(reason, str) or not reason:
+        return None
+
+    wait_state: dict[str, Any] = {"reason": reason}
+    message = value.get("message")
+    if isinstance(message, str) and message:
+        wait_state["message"] = message
+
+    until = value.get("until")
+    if until is not None:
+        if isinstance(until, bool) or not isinstance(until, (int, float)):
+            return None
+        current = now or datetime.now(timezone.utc)
+        if float(until) <= current.timestamp():
+            return None
+        wait_state["until"] = float(until)
+
+    return wait_state
+
+
+def _has_operation_admission_wait(operation: TaskOperation) -> bool:
+    return (
+        isinstance(operation.context, dict)
+        and OPERATION_ADMISSION_WAIT_CONTEXT_KEY in operation.context
+    )
 
 
 @dataclass(frozen=True)
@@ -59,6 +144,27 @@ class OperationTargetSpec:
 
 
 @dataclass(frozen=True)
+class OperationDependencySpec:
+    child_operation_id: str
+    slot_key: str | None = None
+    weight: float = 1.0
+    required: bool = True
+    cancel_policy: str = OperationDependencyCancelPolicy.DETACH.value
+    context: dict[str, Any] = field(default_factory=dict)
+
+    def resolved_slot_key(self) -> str:
+        return self.slot_key or f"operation:{self.child_operation_id}"
+
+    def validate(self) -> None:
+        if not isfinite(float(self.weight)) or float(self.weight) <= 0:
+            raise ValueError("Operation dependency weight must be finite and positive")
+        try:
+            OperationDependencyCancelPolicy(self.cancel_policy)
+        except ValueError as exc:
+            raise ValueError(f"Unknown operation dependency cancel policy: {self.cancel_policy}") from exc
+
+
+@dataclass(frozen=True)
 class OperationSnapshot:
     id: str
     kind: str
@@ -68,6 +174,7 @@ class OperationSnapshot:
     title: str
     status: str
     progress: int | None
+    completion_progress: int | None
     progress_current: int
     progress_total: int
     message: str | None
@@ -91,6 +198,7 @@ def create_operation(
         resource_id: int | None,
         title: str,
         targets: Sequence[OperationTargetSpec],
+        dependencies: Sequence[OperationDependencySpec] = (),
         context: dict[str, Any] | None = None,
 ) -> TaskOperation:
     """Create one durable high-level operation and its logical worker targets."""
@@ -103,6 +211,7 @@ def create_operation(
         title=title,
         status=OperationStatus.QUEUED.value,
         progress=0,
+        completion_progress=0,
         context=dict(context or {}),
     )
     session.add(operation)
@@ -123,7 +232,15 @@ def create_operation(
         created_targets.append(target)
     session.flush()
 
-    # A UI request may overlap work WireLoft already started automatically. Link
+    if dependencies:
+        add_operation_dependencies(
+            session,
+            operation.id,
+            dependencies,
+            refresh=False,
+        )
+
+    # A UI request may overlap work VodLoft already started automatically. Link
     # compatible active runs immediately so the existing worker can satisfy the
     # operation instead of forcing the UI to maintain a separate correlation ID.
     for target in created_targets:
@@ -176,6 +293,96 @@ def queue_operation_target_dispatch(
     return True
 
 
+def add_operation_dependencies(
+        session: Session,
+        parent_operation_id: str,
+        dependencies: Sequence[OperationDependencySpec],
+        *,
+        refresh: bool = True,
+) -> tuple[TaskOperationDependency, ...]:
+    """Attach independently meaningful child operations to one parent.
+
+    Dependency rows are the durable manifest for composite work. They contain
+    only orchestration facts; the child operation remains the source of truth
+    for its own execution state, progress, result and errors.
+    """
+    parent = session.get(TaskOperation, parent_operation_id)
+    if parent is None:
+        raise ValueError("Parent operation does not exist")
+
+    created: list[TaskOperationDependency] = []
+    for spec in dependencies:
+        spec.validate()
+        child = session.get(TaskOperation, spec.child_operation_id)
+        if child is None:
+            raise ValueError(f"Child operation '{spec.child_operation_id}' does not exist")
+        if child.id == parent.id:
+            raise ValueError("An operation cannot depend on itself")
+        if _operation_depends_on(session, child.id, parent.id):
+            raise ValueError("TaskOperation dependencies must form an acyclic graph")
+
+        slot_key = spec.resolved_slot_key()
+        existing = session.scalar(
+            select(TaskOperationDependency).where(
+                TaskOperationDependency.parent_operation_id == parent.id,
+                TaskOperationDependency.slot_key == slot_key,
+            )
+        )
+        if existing is not None:
+            if existing.child_operation_id != child.id:
+                raise ValueError(f"Dependency slot '{slot_key}' already points to another operation")
+            created.append(existing)
+            continue
+
+        duplicate_child = session.scalar(
+            select(TaskOperationDependency).where(
+                TaskOperationDependency.parent_operation_id == parent.id,
+                TaskOperationDependency.child_operation_id == child.id,
+            )
+        )
+        if duplicate_child is not None:
+            raise ValueError("The same child operation cannot be attached twice")
+
+        dependency = TaskOperationDependency(
+            parent_operation=parent,
+            child_operation=child,
+            slot_key=slot_key,
+            weight=float(spec.weight),
+            required=bool(spec.required),
+            cancel_policy=spec.cancel_policy,
+            context=dict(spec.context or {}),
+        )
+        session.add(dependency)
+        created.append(dependency)
+
+    session.flush()
+    if refresh:
+        refresh_operation(session, parent.id)
+    return tuple(created)
+
+
+def _operation_depends_on(
+        session: Session,
+        operation_id: str,
+        possible_descendant_id: str,
+) -> bool:
+    """Return whether operation_id already reaches possible_descendant_id."""
+    frontier = {operation_id}
+    visited: set[str] = set()
+    while frontier:
+        if possible_descendant_id in frontier:
+            return True
+        visited.update(frontier)
+        children = set(session.scalars(
+            select(TaskOperationDependency.child_operation_id).where(
+                TaskOperationDependency.parent_operation_id.in_(frontier),
+                TaskOperationDependency.child_operation_id.is_not(None),
+            )
+        ))
+        frontier = {child_id for child_id in children if child_id and child_id not in visited}
+    return False
+
+
 def complete_operation(
         session: Session,
         operation_id: str,
@@ -190,11 +397,14 @@ def complete_operation(
     now = datetime.now(timezone.utc)
     operation.status = OperationStatus.SUCCEEDED.value
     operation.progress = 100
+    operation.completion_progress = 100
     operation.message = summary
     operation.result = {"summary": summary, "data": dict(data or {})}
     operation.error = None
     operation.started_at = operation.started_at or now
     operation.finished_at = now
+    session.flush()
+    _refresh_operation_tree(session, (operation.id,))
     return operation
 
 
@@ -210,7 +420,7 @@ def link_run_to_operations(
 
     Explicit operation IDs are infrastructure context passed by the dispatcher.
     Independently, compatible active targets are discovered by task/resource and
-    task inputs, allowing automatic WireLoft work to satisfy an overlapping UI
+    task inputs, allowing automatic VodLoft work to satisfy an overlapping UI
     request without any worker-specific request-ID plumbing.
 
     The executor commits this lightweight association before refreshing aggregate
@@ -235,7 +445,7 @@ def link_run_to_operations(
                 targets[target.id] = target
 
     auto_statement = (
-        select(TaskOperationTarget)
+        select(TaskOperationTarget, TaskOperation)
         .join(TaskOperation, TaskOperation.id == TaskOperationTarget.operation_id)
         .where(
             TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES),
@@ -244,7 +454,9 @@ def link_run_to_operations(
             TaskOperationTarget.resource_id == run.resource_id,
         )
     )
-    for target in session.scalars(auto_statement):
+    for target, operation in session.execute(auto_statement):
+        if operation_cancel_requested(operation):
+            continue
         if _run_matches_target_inputs(run, target):
             targets[target.id] = target
 
@@ -265,24 +477,113 @@ def refresh_operations_for_run(session: Session, task_run_id: int) -> None:
             )
         )
     )
-    for operation_id in operation_ids:
-        refresh_operation(session, operation_id)
+    _refresh_operation_tree(session, operation_ids)
 
 
 def refresh_operation(session: Session, operation_id: str) -> TaskOperation | None:
-    operation = _load_operation_with_runs(session, operation_id)
-    if operation is None:
-        return None
-    return _refresh_loaded_operation(operation)
+    refreshed = _refresh_operation_tree(session, (operation_id,))
+    return refreshed.get(operation_id)
+
+
+def _refresh_operation_tree(
+        session: Session,
+        operation_ids: Iterable[str],
+) -> dict[str, TaskOperation]:
+    """Refresh operations and every transitive parent dependency exactly once."""
+    # Flush here before populate_existing=True would reset it
+    session.flush()
+
+    queue = list(dict.fromkeys(str(value) for value in operation_ids if value))
+    visited: set[str] = set()
+    refreshed: dict[str, TaskOperation] = {}
+
+    while queue:
+        operation_id = queue.pop(0)
+        if operation_id in visited:
+            continue
+        visited.add(operation_id)
+
+        operation = _load_operation_with_runs(session, operation_id)
+        if operation is None:
+            continue
+        refreshed[operation_id] = _refresh_loaded_operation(operation)
+        session.flush()
+
+        parent_ids = session.scalars(
+            select(TaskOperationDependency.parent_operation_id).where(
+                TaskOperationDependency.child_operation_id == operation_id
+            )
+        )
+        queue.extend(parent_id for parent_id in parent_ids if parent_id not in visited)
+
+    return refreshed
 
 
 def _refresh_loaded_operation(operation: TaskOperation) -> TaskOperation:
-    # A user cancellation is an explicit terminal decision. Do not let linked
-    # worker state turn the operation back into RUNNING while cooperative
-    # cancellation is still propagating through an already executing worker.
+    cancel_requested = operation_cancel_requested(operation)
+    download_cleanup_active = (
+        operation.kind == "media.download"
+        and any(
+            link.task_run is not None
+            and _task_status(link.task_run.status) == TaskStatus.RUNNING
+            and run_cancel_requested(link.task_run)
+            for target in operation.targets
+            for link in target.run_links
+        )
+    )
+
+    # A cancellation marker survives an aggregate refresh that loaded the old
+    # RUNNING/WAITING state just before cancel_operation committed. Generic and
+    # composite operations are terminal immediately. media.download deliberately
+    # remains RUNNING only while a worker that received the cancellation request
+    # is cooperatively cleaning up.
+    if cancel_requested and not download_cleanup_active:
+        operation.status = OperationStatus.CANCELED.value
+        operation.completion_progress = 100
+        if isinstance(operation.result, dict):
+            summary = operation.result.get("summary")
+            if isinstance(summary, str) and summary:
+                operation.message = summary
+        operation.error = None
+        operation.finished_at = operation.finished_at or datetime.now(timezone.utc)
+        return operation
+
+    # Preserve older terminal cancellations that predate the marker too.
     if operation.status == OperationStatus.CANCELED.value and operation.finished_at is not None:
         return operation
 
+    if operation.dependencies:
+        return _refresh_composite_operation(operation)
+    return _refresh_direct_operation(operation)
+
+
+def _target_tracks_progress(target: TaskOperationTarget) -> bool:
+    return task_tracks_progress(target.task_key)
+
+
+def _direct_progress_is_determinate(targets: Sequence[TaskOperationTarget]) -> bool:
+    # Multiple opaque tasks still provide useful aggregate completion progress:
+    # 3/10 finished is determinate even when none of the individual workers can
+    # report an in-task percentage.
+    return len(targets) > 1 or any(_target_tracks_progress(target) for target in targets)
+
+
+def _composite_progress_is_determinate(
+        targets: Sequence[TaskOperationTarget],
+        dependencies: Sequence[TaskOperationDependency],
+) -> bool:
+    total_units = len(targets) + len(dependencies)
+    if total_units > 1:
+        return True
+    if targets:
+        return _target_tracks_progress(targets[0])
+    if dependencies:
+        child = dependencies[0].child_operation
+        return child is None or child.progress is not None
+    return False
+
+
+def _refresh_direct_operation(operation: TaskOperation) -> TaskOperation:
     targets = list(operation.targets)
     if not targets:
         return operation
@@ -292,13 +593,19 @@ def _refresh_loaded_operation(operation: TaskOperation) -> TaskOperation:
     terminal_runs = [run for run in linked_runs if _task_status(run.status) in _TERMINAL_TASK_STATUSES]
 
     total = len(targets)
+    operation.completion_progress = int(
+        sum(_run_completion_progress(run) for run in effective_runs if run is not None) / total
+    ) if total else 0
+
     worker_progress_runs = [
         run
         for run in linked_runs
         if _task_status(run.status) not in _TERMINAL_TASK_STATUSES
         and _run_reports_worker_progress(run)
     ]
-    if worker_progress_runs:
+    if not _direct_progress_is_determinate(targets) and len(terminal_runs) < total:
+        operation.progress = None
+    elif worker_progress_runs:
         progress_total = 0
         for run in effective_runs:
             if run is None:
@@ -310,8 +617,6 @@ def _refresh_loaded_operation(operation: TaskOperation) -> TaskOperation:
                 progress_total += max(0, min(100, int(run.progress or 0)))
         operation.progress = int(progress_total / total) if total else 0
     else:
-        # Workers that have not reported granular progress fall back to logical
-        # target completion, which is the generic TaskOperation behavior.
         operation.progress = int((len(terminal_runs) / total) * 100) if total else 0
 
     starts = [run.started_at for run in linked_runs if run.started_at is not None]
@@ -319,12 +624,25 @@ def _refresh_loaded_operation(operation: TaskOperation) -> TaskOperation:
         operation.started_at = min(starts)
 
     if not linked_runs:
-        operation.status = OperationStatus.QUEUED.value
-        operation.message = "Queued"
+        admission_wait = operation_admission_wait_state(operation)
+        if admission_wait is not None:
+            operation.status = OperationStatus.WAITING.value
+            message = admission_wait.get("message")
+            operation.message = message if isinstance(message, str) and message else "Waiting"
+        else:
+            if _has_operation_admission_wait(operation):
+                clear_operation_admission_wait(operation)
+            operation.status = OperationStatus.QUEUED.value
+            operation.message = "Queued"
         operation.finished_at = None
         return operation
 
     if len(terminal_runs) < total:
+        if operation.kind == "media.download" and operation_cancel_requested(operation):
+            operation.status = OperationStatus.RUNNING.value
+            operation.message = "Canceling download"
+            operation.finished_at = None
+            return operation
         operation.finished_at = None
         operation.error = None
         wait_state = next(
@@ -332,19 +650,33 @@ def _refresh_loaded_operation(operation: TaskOperation) -> TaskOperation:
                 state
                 for run in reversed(linked_runs)
                 if _task_status(run.status) not in _TERMINAL_TASK_STATUSES
-                for state in (_run_wait_state(run),)
+                for state in (run.wait_state,)
                 if state is not None
             ),
             None,
         )
-        if wait_state is not None:
+        active_runs = [run for run in linked_runs if _task_status(run.status) not in _TERMINAL_TASK_STATUSES]
+        all_blocked = active_runs and all(run.wait_state is not None for run in active_runs)
+        running_runs = [
+            run for run in active_runs
+            if _task_status(run.status) == TaskStatus.RUNNING
+        ]
+        if wait_state is not None and all_blocked:
             operation.status = OperationStatus.WAITING.value
             message = wait_state.get("message")
             operation.message = message if isinstance(message, str) and message else "Waiting"
+        elif not running_runs:
+            # SCHEDULED/QUEUED TaskRuns can be durable reservations that have not
+            # entered an executor yet. Do not present them as active execution.
+            operation.status = OperationStatus.QUEUED.value
+            if total == 1:
+                operation.message = linked_runs[-1].message or "Queued"
+            else:
+                operation.message = f"{len(terminal_runs)}/{total} tasks finished; queued"
         else:
             operation.status = OperationStatus.RUNNING.value
             if total == 1:
-                operation.message = linked_runs[-1].message or "Running"
+                operation.message = running_runs[-1].message or "Running"
             else:
                 operation.message = f"{len(terminal_runs)}/{total} tasks finished"
         return operation
@@ -357,7 +689,7 @@ def _refresh_loaded_operation(operation: TaskOperation) -> TaskOperation:
     if succeeded == total:
         operation.status = OperationStatus.SUCCEEDED.value
         operation.error = None
-    elif succeeded > 0:
+    elif succeeded > 0 or any((run.result or {}).get("outcome") == "partial" for run in terminal_runs):
         operation.status = OperationStatus.PARTIAL.value
         operation.error = _first_terminal_error(terminal_runs)
     elif failed > 0:
@@ -368,12 +700,188 @@ def _refresh_loaded_operation(operation: TaskOperation) -> TaskOperation:
         operation.error = _first_terminal_error(terminal_runs)
 
     operation.progress = 100
+    operation.completion_progress = 100
     operation.result = _aggregate_results(terminal_runs, succeeded, failed, canceled, total)
     summary = operation.result.get("summary") if isinstance(operation.result, dict) else None
     operation.message = str(summary or operation.message or "Finished")
     finishes = [run.finished_at for run in terminal_runs if run.finished_at is not None]
     operation.finished_at = max(finishes) if finishes else datetime.now(timezone.utc)
     return operation
+
+
+def _refresh_composite_operation(operation: TaskOperation) -> TaskOperation:
+    """Aggregate direct targets and independent child TaskOperations.
+
+    Parent progress is orchestration progress, so dependency weights and child
+    completion_progress drive it. A child remains independently visible because
+    its own display progress and lifecycle stay on that child operation.
+    """
+    targets = list(operation.targets)
+    dependencies = list(operation.dependencies)
+    effective_runs = [_effective_run_for_target(target) for target in targets]
+
+    total_weight = float(len(targets)) + sum(float(dep.weight) for dep in dependencies)
+    completed_weight = sum(
+        _run_completion_progress(run)
+        for run in effective_runs
+        if run is not None
+    ) / 100.0
+
+    for dependency in dependencies:
+        child = dependency.child_operation
+        if child is None or child.status not in _ACTIVE_OPERATION_STATUSES:
+            fraction = 1.0
+        else:
+            fraction = max(0.0, min(1.0, float(child.completion_progress or 0) / 100.0))
+        completed_weight += float(dependency.weight) * fraction
+
+    aggregate_progress = int(100 * completed_weight / total_weight) if total_weight else 0
+    aggregate_progress = max(0, min(100, aggregate_progress))
+    operation.progress = (
+        aggregate_progress
+        if _composite_progress_is_determinate(targets, dependencies)
+        else None
+    )
+    operation.completion_progress = aggregate_progress
+
+    starts = [
+        run.started_at for run in effective_runs
+        if run is not None and run.started_at is not None
+    ]
+    starts.extend(
+        dep.child_operation.started_at
+        for dep in dependencies
+        if dep.child_operation is not None and dep.child_operation.started_at is not None
+    )
+    if starts:
+        operation.started_at = min(starts)
+
+    target_terminal = [
+        run is not None and _task_status(run.status) in _TERMINAL_TASK_STATUSES
+        for run in effective_runs
+    ]
+    dependency_terminal = [
+        dep.child_operation is None
+        or dep.child_operation.status not in _ACTIVE_OPERATION_STATUSES
+        for dep in dependencies
+    ]
+    terminal_count = sum(target_terminal) + sum(dependency_terminal)
+    total_count = len(targets) + len(dependencies)
+
+    if terminal_count < total_count:
+        operation.finished_at = None
+        operation.error = None
+
+        active_direct = [
+            run for run in effective_runs
+            if run is not None and _task_status(run.status) not in _TERMINAL_TASK_STATUSES
+        ]
+        active_children = [
+            dep.child_operation for dep in dependencies
+            if dep.child_operation is not None
+            and dep.child_operation.status in _ACTIVE_OPERATION_STATUSES
+        ]
+        has_started = bool(active_direct) or any(
+            child.status in {OperationStatus.RUNNING.value, OperationStatus.WAITING.value}
+            for child in active_children
+        )
+        all_blocked = bool(active_direct or active_children) and all(
+            run.wait_state is not None for run in active_direct
+        ) and all(
+            child.status in {OperationStatus.QUEUED.value, OperationStatus.WAITING.value}
+            for child in active_children
+        )
+
+        if all_blocked and any(child.status == OperationStatus.WAITING.value for child in active_children):
+            operation.status = OperationStatus.WAITING.value
+            waiting_child = next(
+                (child for child in active_children if child.status == OperationStatus.WAITING.value),
+                None,
+            )
+            operation.message = waiting_child.message if waiting_child and waiting_child.message else "Waiting"
+        elif not has_started:
+            operation.status = OperationStatus.QUEUED.value
+            operation.message = "Queued"
+        else:
+            operation.status = OperationStatus.RUNNING.value
+            operation.message = f"{terminal_count}/{total_count} operations finished"
+        return operation
+
+    required_statuses: list[str] = []
+    result_payloads: list[dict[str, Any]] = []
+    errors: list[str] = []
+    finishes: list[datetime] = []
+
+    for run in effective_runs:
+        if run is None:
+            required_statuses.append(OperationStatus.FAILED.value)
+            errors.append("Required task was never created")
+            continue
+        status = _task_status(run.status)
+        required_statuses.append(
+            OperationStatus.SUCCEEDED.value if status == TaskStatus.SUCCEEDED
+            else OperationStatus.FAILED.value if status == TaskStatus.FAILED
+            else OperationStatus.CANCELED.value
+        )
+        if isinstance(run.result, dict):
+            result_payloads.append(run.result)
+        if run.finished_at is not None:
+            finishes.append(run.finished_at)
+        if run.last_error:
+            errors.append(run.last_error)
+        elif status == TaskStatus.CANCELED and run.message:
+            errors.append(run.message)
+
+    for dependency in dependencies:
+        child = dependency.child_operation
+        if child is not None:
+            if isinstance(child.result, dict):
+                result_payloads.append(child.result)
+            if child.finished_at is not None:
+                finishes.append(child.finished_at)
+        if not dependency.required:
+            continue
+        if child is None:
+            required_statuses.append(OperationStatus.FAILED.value)
+            errors.append("Required child operation was removed")
+            continue
+        required_statuses.append(child.status)
+        if child.status != OperationStatus.SUCCEEDED.value and child.error:
+            errors.append(child.error)
+
+    succeeded = sum(status == OperationStatus.SUCCEEDED.value for status in required_statuses)
+    failed = sum(status == OperationStatus.FAILED.value for status in required_statuses)
+    canceled = sum(status == OperationStatus.CANCELED.value for status in required_statuses)
+    partial = sum(status == OperationStatus.PARTIAL.value for status in required_statuses)
+    required_total = len(required_statuses)
+
+    if required_total == 0 or succeeded == required_total:
+        operation.status = OperationStatus.SUCCEEDED.value
+        operation.error = None
+    elif partial or succeeded > 0:
+        operation.status = OperationStatus.PARTIAL.value
+        operation.error = errors[0] if errors else None
+    elif failed > 0:
+        operation.status = OperationStatus.FAILED.value
+        operation.error = errors[0] if errors else None
+    else:
+        operation.status = OperationStatus.CANCELED.value
+        operation.error = errors[0] if errors else None
+
+    operation.progress = 100
+    operation.completion_progress = 100
+    operation.result = _aggregate_composite_results(
+        result_payloads,
+        succeeded=succeeded,
+        failed=failed + partial,
+        canceled=canceled,
+        total=required_total,
+    )
+    summary = operation.result.get("summary") if isinstance(operation.result, dict) else None
+    operation.message = str(summary or "Finished")
+    operation.finished_at = max(finishes) if finishes else datetime.now(timezone.utc)
+    return operation
+
 
 
 def mark_interrupted_operations_for_recovery(
@@ -391,10 +899,14 @@ def mark_interrupted_operations_for_recovery(
     )
     for operation_id in operation_ids:
         operation = session.get(TaskOperation, operation_id)
-        if operation is None or operation.status not in _ACTIVE_OPERATION_STATUSES:
+        if (
+            operation is None
+            or operation.status not in _ACTIVE_OPERATION_STATUSES
+            or operation_cancel_requested(operation)
+        ):
             continue
         operation.status = OperationStatus.QUEUED.value
-        operation.message = "Recovering after WireLoft restart"
+        operation.message = "Recovering after VodLoft restart"
         operation.finished_at = None
         operation.error = None
 
@@ -411,11 +923,13 @@ def recover_pending_operations() -> int:
             session.scalars(
                 select(TaskOperation)
                 .where(TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES))
-                .options(_operation_run_graph())
+                .options(*_operation_run_graph())
             )
         )
         recoveries: list[tuple[str, str, str, int | None, str, dict[str, Any]]] = []
         for operation in operations:
+            if operation_cancel_requested(operation):
+                continue
             for target in operation.targets:
                 if not target.recover_on_restart:
                     continue
@@ -465,7 +979,7 @@ def list_operations(
 ) -> list[OperationSnapshot]:
     session = get_session()
     try:
-        statement = select(TaskOperation).options(_operation_run_graph())
+        statement = select(TaskOperation).options(*_operation_run_graph())
         if source is not None:
             statement = statement.where(TaskOperation.source == source)
         if resource_type is not None:
@@ -529,21 +1043,38 @@ def _operation_progress_meta(
         effective_runs: Sequence[TaskRun | None],
 ) -> dict[str, Any] | None:
     """Expose structured worker progress only when it has one unambiguous source."""
-    if operation.status not in _ACTIVE_OPERATION_STATUSES or len(effective_runs) != 1:
+    if operation.status not in _ACTIVE_OPERATION_STATUSES:
         return None
+    if operation.dependencies:
+        return None
+    if len(effective_runs) != 1:
+        active = [run for run in effective_runs if run is not None and _task_status(run.status) not in _TERMINAL_TASK_STATUSES]
+        waits = [run.wait_state for run in active]
+        return {"wait_state": waits[0]} if waits and all(waits) else None
     run = effective_runs[0]
-    if run is None or not isinstance(run.meta, dict):
-        return None
-    progress_meta = run.meta.get(TASK_RUN_PROGRESS_META_KEY)
-    return dict(progress_meta) if isinstance(progress_meta, dict) else None
+    if run is None:
+        admission_wait = operation_admission_wait_state(operation)
+        return {"wait_state": admission_wait} if admission_wait is not None else None
+    result = dict(run.progress_metadata or {})
+    if run_cancel_requested(run):
+        result["canceling"] = True
+    wait_state = run.wait_state
+    if wait_state is not None:
+        result["wait_state"] = wait_state
+    return result or None
 
 
 def _operation_snapshot(operation: TaskOperation) -> OperationSnapshot:
     targets = list(operation.targets)
+    dependencies = list(operation.dependencies)
     effective_runs = [_effective_run_for_target(target) for target in targets]
     terminal_count = sum(
         run is not None and _task_status(run.status) in _TERMINAL_TASK_STATUSES
         for run in effective_runs
+    ) + sum(
+        dependency.child_operation is None
+        or dependency.child_operation.status not in _ACTIVE_OPERATION_STATUSES
+        for dependency in dependencies
     )
     return OperationSnapshot(
         id=operation.id,
@@ -554,8 +1085,9 @@ def _operation_snapshot(operation: TaskOperation) -> OperationSnapshot:
         title=operation.title,
         status=operation.status,
         progress=operation.progress,
+        completion_progress=operation.completion_progress,
         progress_current=terminal_count,
-        progress_total=len(targets),
+        progress_total=len(targets) + len(dependencies),
         message=operation.message,
         result=operation.result,
         context=operation.context,
@@ -572,7 +1104,9 @@ def _operation_run_graph():
     return (
         selectinload(TaskOperation.targets)
         .selectinload(TaskOperationTarget.run_links)
-        .selectinload(TaskOperationRun.task_run)
+        .selectinload(TaskOperationRun.task_run),
+        selectinload(TaskOperation.dependencies)
+        .selectinload(TaskOperationDependency.child_operation),
     )
 
 
@@ -580,7 +1114,7 @@ def _load_operation_with_runs(session: Session, operation_id: str) -> TaskOperat
     return session.scalar(
         select(TaskOperation)
         .where(TaskOperation.id == operation_id)
-        .options(_operation_run_graph())
+        .options(*_operation_run_graph())
         .execution_options(populate_existing=True)
     )
 
@@ -643,16 +1177,14 @@ def _run_reports_worker_progress(run: TaskRun) -> bool:
     return isinstance(run.progress, int) and run.progress > 0
 
 
-def _run_wait_state(run: TaskRun) -> dict[str, Any] | None:
-    if not isinstance(run.meta, dict):
-        return None
-    wait_state = run.meta.get(TASK_RUN_WAIT_STATE_META_KEY)
-    if not isinstance(wait_state, dict):
-        return None
-    reason = wait_state.get("reason")
-    if not isinstance(reason, str) or not reason:
-        return None
-    return wait_state
+def _run_completion_progress(run: TaskRun) -> int:
+    if _task_status(run.status) in _TERMINAL_TASK_STATUSES:
+        return 100
+    if run.reported_completion_progress is not None:
+        return run.reported_completion_progress
+    if _run_reports_worker_progress(run):
+        return max(0, min(99, int(run.progress or 0)))
+    return 0
 
 
 def _link_target_to_run(session: Session, target: TaskOperationTarget, run: TaskRun) -> None:
@@ -718,6 +1250,29 @@ def _aggregate_results(
     else:
         summary = f"Completed {total} tasks"
     return {"summary": summary, "data": aggregate_data}
+
+
+def _aggregate_composite_results(
+        results: Sequence[dict[str, Any]],
+        *,
+        succeeded: int,
+        failed: int,
+        canceled: int,
+        total: int,
+) -> dict[str, Any]:
+    """Aggregate orchestration outcomes without interpreting child domain data."""
+    data: dict[str, Any] = {
+        "completed": succeeded,
+        "failed": failed,
+        "canceled": canceled,
+        "total": total,
+    }
+    summary = (
+        f"Completed {total} operations"
+        if not failed and not canceled
+        else f"{succeeded}/{total} operations completed"
+    )
+    return {"summary": summary, "data": data}
 
 
 def _first_terminal_error(runs: Sequence[TaskRun]) -> str | None:
