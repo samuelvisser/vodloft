@@ -14,6 +14,7 @@ from backend.services.media_download_actions import (
 )
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import queue_operation_target_dispatch
+from task_manager.tasks.media_download_operations import attach_redownload_dependencies
 from .operations import _BulkMediaDownloadOperation
 
 
@@ -36,10 +37,13 @@ def queue_bulk_media_download_operation(
     if not ids:
         raise HTTPException(status_code=422, detail="At least one media download is required")
 
-    existing_ids = set(s.scalars(
-        select(MediaDownloadBase.id).where(MediaDownloadBase.id.in_(ids))
+    downloads = list(s.scalars(
+        select(MediaDownloadBase)
+        .where(MediaDownloadBase.id.in_(ids))
+        .order_by(MediaDownloadBase.id.asc())
     ))
-    missing_ids = [media_download_id for media_download_id in ids if media_download_id not in existing_ids]
+    downloads_by_id = {download.id: download for download in downloads}
+    missing_ids = [media_download_id for media_download_id in ids if media_download_id not in downloads_by_id]
     if missing_ids:
         raise HTTPException(
             status_code=404,
@@ -47,12 +51,19 @@ def queue_bulk_media_download_operation(
         )
 
     queued_operation = create_operation(s, operation)
-    for media_download_id in ids:
-        queue_operation_target_dispatch(
+    if operation.action == "retry":
+        attach_redownload_dependencies(
             s,
-            queued_operation.id,
-            f"media_download:{media_download_id}",
+            queued_operation,
+            tuple(downloads_by_id[media_download_id] for media_download_id in ids),
         )
+    else:
+        for media_download_id in ids:
+            queue_operation_target_dispatch(
+                s,
+                queued_operation.id,
+                f"media_download:{media_download_id}",
+            )
 
     return {
         "queued": True,
