@@ -487,7 +487,9 @@ def _acquire(playback: Playback, staging: str, preferred_format: str,
     command += ["-progress", "pipe:1", "-nostats", str(output)]
 
     _emit_progress(0)
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    # Discard FFmpeg stderr so signed upstream URLs can never be reflected into
+    # Source diagnostics and so an error stream cannot back-pressure the worker.
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                text=True, bufsize=1)
     last = 0
     assert process.stdout is not None
@@ -503,7 +505,6 @@ def _acquire(playback: Playback, staging: str, preferred_format: str,
         if percent >= last + 2:
             last = percent
             _emit_progress(percent)
-    stderr = process.stderr.read(64 * 1024) if process.stderr else ""
     returncode = process.wait()
     if returncode != 0:
         # Never return FFmpeg diagnostics: signed stream URLs can occur there.
