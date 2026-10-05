@@ -6,6 +6,11 @@ import {z} from 'zod'
 import {buildServerAwareSubmit} from '../utils/buildServerAwareSubmit'
 import {hashPasswordForAdminAuth} from '../utils/security/adminAuth'
 import DomainTemplateEditor from '../components/LocalMediaProfile/DomainTemplateEditor'
+import DomainBrowser from '../components/VodLoft/DomainBrowser'
+import CollectionSyncControls from '../components/VodLoft/CollectionSyncControls'
+import ProgressButton from '../components/common/ProgressButton'
+import {frontendOperationDefinitions as operations} from '../lib/operationDefinitions'
+import {vodloftBase as base, vodloftApi as api, vodloftFormRequest as formRequest} from '../lib/vodloftApi'
 
 const URLForm = z.object({url: z.url().startsWith('https://').or(z.url().startsWith('http://')),
     source_id: z.string().default(''), connection_id: z.string().default('')})
@@ -16,16 +21,16 @@ type Source = {source_id: string; display_name: string; capabilities: string[];
 type Me = {key: string; username: string; role: string; manages_library: boolean; can_subscribe: boolean; auto_approve: boolean; request_quota: number}
 type MediaRequest = {id: number; item_id: number; user_key: string; profile_id: number; state: string; job_id: number | null; reason: string | null}
 type Connection = {id: number; source_id: string; name: string; has_secret: boolean; enabled: boolean;
-    authentication_status?: string | null;
+    authentication_status?: string | null; authenticated?: boolean | null; last_capability_check_at?: string | null;
     settings: Record<string, string | number>; secret_fields: string[]}
 type Reference = {source_id: string; domain: string; namespace: string; upstream_id: string; url: string}
-type Preview = {kind: string; title: string; description?: string; artwork_url?: string; reference: Reference; entries: {title: string; position: number}[]; enumeration_complete: boolean}
+type Preview = {capabilities?: string[]; kind: string; title: string; description?: string; artwork_url?: string; reference: Reference; entries: {title: string; position: number}[]; enumeration_complete: boolean}
 type Item = {parent_id?: number | null; parent_ids?: number[]; extra_type?: string | null; chapters?: {title: string; start: number; end?: number}[]; id: number; title: string; description?: string; kind: string; domain: string; downloaded: boolean;
     member_groups?: string[]; member_roles?: string[];
     capabilities?: string[] | null; playback_type?: string; artwork_url?: string; artwork_available?: boolean; entries?: Item[]; extras?: Item[];
     is_live?: boolean | null; formats?: {code: string; description?: string; audio_only: boolean; height?: number}[];
     references?: {id: number; source_id: string; connection_id: number | null; namespace: string; upstream_id: string;
-        capabilities?: string[] | null; formats?: Item['formats'] | null}[]}
+        effective_capabilities: string[]; capability_reasons: Record<string, string>; capabilities?: string[] | null; formats?: Item['formats'] | null}[]}
 type Home = {continue: (Item & {seconds: number})[]; recent: Item[];
     activity: {id: number; item_id: number; state: string}[]; issues: {kind: string; id: number}[]}
 type Job = {id: number; state: string; error?: string; cancel_requested?: boolean;
@@ -71,20 +76,6 @@ const ProfileFormSchema = z.object({
     applicable_kinds: z.array(z.enum(['video', 'movie', 'movie_extra'])).min(1).default(['video', 'movie', 'movie_extra']), enabled: z.boolean().default(true),
 })
 type ProfileFields = z.input<typeof ProfileFormSchema>
-
-const base = () => `${(window as any).appConfig?.API_URL || '/api'}/vodloft`
-function formRequest(path: string, method: string, values: unknown) {
-    return fetch(`${base()}${path}`, {method, credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(values)})
-}
-async function api<T>(path: string, options?: RequestInit): Promise<T> {
-    const response = await fetch(`${base()}${path}`, {credentials: 'include', ...options,
-        headers: {'Content-Type': 'application/json', ...options?.headers}})
-    if (!response.ok) {
-        const body = await response.json().catch(() => null)
-        throw new Error(body?.detail || `HTTP ${response.status}`)
-    }
-    return response.status === 204 ? undefined as T : response.json() as Promise<T>
-}
 
 export default function WebMediaPage({initialView = 'home'}: {initialView?: 'home' | 'discover' | 'library' | 'management'}) {
     const [view, setView] = useState<'home' | 'discover' | 'library' | 'management'>(initialView)
@@ -205,13 +196,14 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
             setSearchRequest(fields)
         } catch (e) { setError(String(e)) } finally { setBusy(false) }
     }
-    const previewSearchResult = async (reference: Reference) => {
+    const previewSearchResult = async (reference: Reference, connectionOverride?: number | null) => {
         setBusy(true); setError(null)
         try {
-            setPreview(await api<Preview>('/resolve', {method: 'POST', body: JSON.stringify({
-                url: reference.url, source_id: reference.source_id,
-                connection_id: searchRequest?.connection_id ? Number(searchRequest.connection_id) : null})}))
-            setImportConnectionId(searchRequest?.connection_id ? Number(searchRequest.connection_id) : null)
+            const connectionId = connectionOverride !== undefined ? connectionOverride : searchRequest?.connection_id ? Number(searchRequest.connection_id) : null
+            setPreview(null)
+            setPreview(await api<Preview>(`/sources/${encodeURIComponent(reference.source_id)}/media`, {method: 'POST',
+                body: JSON.stringify({reference, connection_id: connectionId})}))
+            setImportConnectionId(connectionId)
         } catch (e) { setError(String(e)) } finally { setBusy(false) }
     }
     const open = async (id: number, keepQueue = false) => {
@@ -247,19 +239,6 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
             }
         }
         catch (e) { setError(String(e)) }
-    }
-    const refreshCollection = async (id: number, expandDepth = 0) => {
-        setBusy(true); setError(null)
-        try {
-            const params = new URLSearchParams()
-            if (referenceId) params.set('reference_id', String(referenceId))
-            if (expandDepth) params.set('expand_depth', String(expandDepth))
-            const result = await api<Item & {nested_expansion?: {refreshed_ids: number[]; skipped: {item_id: number; reason: string}[]}}>(
-                `/library/${id}/refresh?${params}`, {method: 'POST'})
-            if (result.nested_expansion) setRunResult(`${result.nested_expansion.refreshed_ids.length} nested collections refreshed; ${result.nested_expansion.skipped.length} skipped.`)
-            setSelected(await api<Item>(`/library/${id}`))
-            await refresh()
-        } catch (e) { setError(String(e)) } finally { setBusy(false) }
     }
     const refreshDetails = async (id: number) => {
         setBusy(true); setError(null)
@@ -317,9 +296,14 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
             <label>Connection <select {...register('connection_id')}><option value="">Anonymous</option>
                 {connections.filter(connection => connection.enabled).map(connection => <option key={connection.id} value={connection.id}>
                     {connection.name} ({connection.source_id})</option>)}</select></label>
-            <button className="btn btn-primary" type="submit" disabled={busy}>Resolve URL</button>
+            <ProgressButton definition={operations.vodloft_source_resolve} label="Resolve URL" active={busy && urlForm.formState.isSubmitting}
+                disabled={busy} onClick={() => void resolve()}/>
             {errors.root && <p role="alert">{errors.root.message}</p>}
         </form>
+        <DomainBrowser connections={connections} onPreview={previewSearchResult} onAddURL={(sourceId, connectionId) => {
+            urlForm.setValue('source_id', sourceId); urlForm.setValue('connection_id', connectionId ? String(connectionId) : '')
+            urlForm.setFocus('url')
+        }}/>
         {sources.some(source => source.capabilities.includes('search')) && <section style={{marginBottom: 24}}>
             <h2>Search a Source</h2>
             <form onSubmit={search}
@@ -340,7 +324,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                 {searchPage.items.map(item => <button type="button" className="btn"
                     key={`${item.reference.source_id}:${item.reference.upstream_id}`}
                     onClick={() => void previewSearchResult(item.reference)} style={{textAlign: 'left'}}>
-                    {item.title} · {item.kind} · {item.reference.domain}</button>)}
+                    {item.title} · {item.kind} · {item.reference.domain} · {item.reference.source_id}</button>)}
                 {searchPage.items.length === 0 && <p>No results from this Source.</p>}
                 {searchPage.next_cursor && searchRequest && <button className="btn" type="button" disabled={busy}
                     onClick={() => void fetchSearch(searchRequest, searchPage.next_cursor || undefined)}>More results</button>}
@@ -353,7 +337,8 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                 {!preview.enumeration_complete && ' (more entries are available)'}</p>}
             <ImportPreviewForm key={`${preview.reference.source_id}:${preview.reference.domain}:${preview.reference.namespace}:${preview.reference.upstream_id}:${importConnectionId}`}
                 preview={preview} connectionId={importConnectionId} items={allItems}
-                canLink={!!me?.manages_library} busy={busy} onImported={importPreview}/>
+                canLink={!!me?.manages_library} canAutomate={me?.role === 'admin'} profiles={managedProfiles}
+                busy={busy} onImported={async (item, message) => {await importPreview(item); setRunResult(message)}}/>
         </section>}
         </>}
         {view === 'home' && home && <section style={{marginBottom: 24}} aria-label="Home">
@@ -428,6 +413,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
             <h3>Source connections</h3>
             {connections.map(connection => <div key={connection.id} style={{marginBottom: 12}}>{connection.name} · {connection.source_id}
                 {connection.has_secret ? ' · credential stored' : ' · anonymous'}
+                {connection.authenticated !== null && connection.authenticated !== undefined && (connection.authenticated ? ' · account verified' : ' · account needs authentication')}
                 {!connection.enabled && ' · disabled'}{' '}
                 <button className="btn" type="button" onClick={() => void api<Connection>(
                     `/sources/connections/${connection.id}`, {method: 'PUT', body: JSON.stringify({
@@ -437,6 +423,10 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                         item.id === updated.id ? updated : item))).catch(e => setError(String(e)))}>
                     {connection.enabled ? 'Disable' : 'Enable'}</button>
                 <ConnectionForm initial={connection} sources={sources} onCreated={updated => setConnections(current => current.map(item => item.id === updated.id ? updated : item))}/>{' '}
+                {connection.enabled && sources.find(source => source.source_id === connection.source_id)?.capabilities.includes('connection_capabilities') &&
+                    <button className="btn" type="button" onClick={() => void api(`/sources/connections/${connection.id}/capabilities`, {method: 'POST'})
+                        .then(() => api<Connection[]>('/sources/connections').then(setConnections))
+                        .catch(e => setError(String(e)))}>Verify account capabilities</button>}
                 {connection.enabled && sources.find(source => source.source_id === connection.source_id)?.capabilities.includes('authentication') &&
                     <ConnectionAuthentication connection={connection} onUpdated={() => {
                         void api<Connection[]>('/sources/connections').then(setConnections)
@@ -496,7 +486,10 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
             <p>{selected.kind} · {selected.domain}</p>
             {selected.is_live && <p role="status">Live now</p>}
             {(selected.references?.length ?? 0) > 1 && <label>Source account{' '}
-                <select value={referenceId ?? ''} onChange={event => setReferenceId(Number(event.target.value) || null)}>
+                <select value={referenceId ?? ''} onChange={event => {
+                    const referenceId = Number(event.target.value) || null; setReferenceId(referenceId)
+                    void api<Item>(`/library/${selected.id}${referenceId ? `?reference_id=${referenceId}` : ''}`).then(setSelected).catch(e => setError(String(e)))
+                }}>
                     <option value="">Choose a Source account</option>
                     {selected.references?.map(reference => <option key={reference.id} value={reference.id}>
                         {reference.source_id} · {connections.find(c => c.id === reference.connection_id)?.name ?? 'Anonymous'}
@@ -526,10 +519,10 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                 </div>}
             </div>}
             {selected.kind === 'collection' && me?.manages_library && <div style={{display: 'flex', gap: 10, marginBottom: 16}}>
-                <button className="btn" type="button" disabled={me?.role !== 'admin' || busy || !referenceId}
-                    onClick={() => void refreshCollection(selected.id)}>Refresh collection</button>
-                <button className="btn" type="button" disabled={me?.role !== 'admin' || busy || !referenceId}
-                    onClick={() => void refreshCollection(selected.id, 2)}>Expand nested collections (2 levels, 20 max)</button>
+                <CollectionSyncControls collectionId={selected.id} referenceId={referenceId}
+                    canSync={!!selectedReference?.effective_capabilities.includes('enumerate_collection')}
+                    reason={selectedReference?.capability_reasons.enumerate_collection}
+                    onRefreshed={() => {void api<Item>(`/library/${selected.id}?reference_id=${referenceId}`).then(setSelected); void refresh()}}/>
                 <button className="btn" type="button" disabled={busy} onClick={() => {
                     if (!window.confirm('Remove this collection and its feeds? Shared local media will remain available.')) return
                     void api<unknown>(`/library/${selected.id}`, {method: 'DELETE'})
@@ -595,13 +588,12 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                     void showOutputPreview(profile.id, selected.id, profile)
                 }}/> }
                 <button className="btn btn-primary" type="button" disabled={!profileId || !referenceId ||
-                    selectedReference?.capabilities !== null && selectedReference?.capabilities !== undefined &&
-                        !selectedReference.capabilities.includes('download') ||
+                    !selectedReference?.effective_capabilities.includes('download') ||
                     !!job && !['failed', 'available'].includes(job.state)}
                         onClick={() => void download(selected.id)}>{me?.role !== 'admin' ? 'Request download' : selected.downloaded ? 'Download again' : 'Download'}</button>
                 {runResult && <p role="status">{runResult}</p>}
-                {selectedReference?.capabilities && !selectedReference.capabilities.includes('download') &&
-                    <p>This Source does not advertise a download for this item.</p>}
+                {selectedReference && !selectedReference.effective_capabilities.includes('download') &&
+                    <p>{selectedReference.capability_reasons.download}</p>}
                 {job && <p role="status">Download: {job.state}{job.progress !== undefined ? ` · ${job.progress}%` : ''}
                     {job.error_code ? ` · ${job.error_code.replace(/_/g, ' ')}` : ''}
                     {job.failed_stage ? ` during ${job.failed_stage}` : ''}
@@ -624,9 +616,7 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
                     void api(`/library/${selected.id}/local/${profileId}/resume`, {method: 'POST'})
                         .then(() => setRunResult('Automatic acquisition is allowed again for this profile.')).catch(e => setError(String(e)))
                 }}>Allow automatic acquisition</button>}
-                {(selected.downloaded || selected.references?.some(ref => ref.capabilities
-                    ? ref.capabilities.includes('stream_lease')
-                    : sources.find(source => source.source_id === ref.source_id)?.capabilities.includes('stream_lease'))) &&
+                {(selected.downloaded || selectedReference?.effective_capabilities.includes('stream_lease')) &&
                     <LocalPlayer key={`${selected.id}:${referenceId ?? ''}`} item={selected} referenceId={referenceId} onEnded={() => {const next = queue[0]; if (next) {setQueue(current => current.slice(1)); void open(next.id, true)}}} />}
             </>}
             {queue.length > 0 && <div><h3>Up next</h3><ol>{queue.map((entry, index) => <li key={`${entry.id}:${index}`}>{entry.title}</li>)}</ol>
@@ -651,47 +641,108 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
 const ImportPreviewSchema = z.object({
     existing_item_id: z.string().regex(/^(?:[1-9]\d*)?$/).default(''),
     confirm_same_edition: z.boolean().default(false),
-}).refine(values => !values.existing_item_id || values.confirm_same_edition, {
-    message: 'Confirm that both references describe the same edit, language, and edition.',
-    path: ['confirm_same_edition'],
+    local_profile_ids: z.array(z.string()).default([]),
+    backfill: z.enum(['metadata_only', 'newest', 'date_range', 'all']).default('metadata_only'),
+    newest_count: z.coerce.number<number>().int().min(1).max(1000).default(10),
+    published_after: z.string().default(''), published_before: z.string().default(''),
+    refresh_minutes: z.coerce.number<number>().int().min(15).max(10080).default(60),
+    confirm_archive: z.boolean().default(false),
+}).superRefine((values, context) => {
+    const issue = (field: string, message: string) => context.addIssue({code: 'custom', path: [field], message})
+    if (values.existing_item_id && !values.confirm_same_edition) issue('confirm_same_edition', 'Confirm the same edit, language, and edition.')
+    if (values.backfill !== 'metadata_only' && !values.local_profile_ids.length) issue('local_profile_ids', 'Choose at least one Local Media Profile.')
+    if (values.backfill === 'all' && !values.confirm_archive) issue('confirm_archive', 'Confirm downloading the entire archive.')
+    if (values.backfill === 'date_range' && !values.published_after && !values.published_before) issue('published_after', 'Choose a publication date.')
+    if (values.published_after && values.published_before && values.published_after > values.published_before) issue('published_before', 'End date must follow the start date.')
 })
 
-function ImportPreviewForm({preview, connectionId, items, canLink, busy, onImported}: {
-    preview: Preview; connectionId: number | null; items: Item[]; canLink: boolean; busy: boolean;
-    onImported: (item: Item) => Promise<void>;
+function ImportPreviewForm({preview, connectionId, items, canLink, canAutomate, profiles, busy, onImported}: {
+    preview: Preview; connectionId: number | null; items: Item[]; canLink: boolean; canAutomate: boolean;
+    profiles: Profile[]; busy: boolean; onImported: (item: Item, message: string) => Promise<void>;
 }) {
     const form = useForm<z.input<typeof ImportPreviewSchema>, unknown, z.output<typeof ImportPreviewSchema>>({
         resolver: zodResolver(ImportPreviewSchema), defaultValues: ImportPreviewSchema.parse({}),
     })
+    const [review, setReview] = useState<z.output<typeof ImportPreviewSchema> | null>(null)
     const {register, watch, formState: {errors, isSubmitting}} = form
     const existingId = watch('existing_item_id')
-    const candidates = items.filter(item => item.domain === preview.reference.domain.replace(/\.$/, '').toLowerCase() &&
+    const backfill = watch('backfill')
+    const candidates = items.filter(item => item.domain === preview.reference.domain &&
         (item.kind === preview.kind || (preview.kind === 'video' && ['movie', 'movie_extra'].includes(item.kind))))
-    const submit = buildServerAwareSubmit(form, values => formRequest('/import', 'POST', {
+    const kind = candidates.find(item => item.id === Number(existingId))?.kind ?? preview.kind
+    const eligible = profiles.filter(profile => profile.enabled && !profile.impairment && (preview.kind === 'collection'
+        ? profile.applicable_kinds.length > 0 : profile.domain === preview.reference.domain && profile.applicable_kinds.includes(kind)))
+    const submit = buildServerAwareSubmit(form, (values: z.output<typeof ImportPreviewSchema>) => formRequest('/import/confirm', 'POST', {
         snapshot: preview, connection_id: connectionId,
         existing_item_id: canLink && values.existing_item_id ? Number(values.existing_item_id) : null,
         confirm_same_edition: canLink && values.confirm_same_edition,
-    }), {onSuccess: result => onImported(result as Item)})
-    return <form onSubmit={submit}>
-        <fieldset disabled={busy || isSubmitting} style={{border: 0, padding: 0}}>
+        choices: {...values, local_profile_ids: values.local_profile_ids.map(Number),
+            published_after: values.published_after || null, published_before: values.published_before || null},
+    }), {onSuccess: result => {
+        const value = result as {item: Item; message: string}
+        return onImported(value.item, value.message)
+    }})
+    return <form onSubmit={review ? submit : form.handleSubmit(values => setReview(values))}>
+        <fieldset disabled={busy || isSubmitting || !!review} style={{border: 0, padding: 0}}>
             {canLink && candidates.length > 0 && <>
                 <label>Library identity <select {...register('existing_item_id', {
-                    onChange: () => form.setValue('confirm_same_edition', false),
+                    onChange: () => {form.setValue('confirm_same_edition', false); form.setValue('local_profile_ids', [])},
                 })}>
-                    <option value="">Import using this Source's identity</option>
+                    <option value="">Reuse matching Source identity or import a new item</option>
                     {candidates.map(item => <option key={item.id} value={item.id}>{item.title} · {item.kind} · #{item.id}</option>)}
                 </select></label>
                 {existingId && <div style={{margin: '12px 0'}}>
                     <label><input type="checkbox" {...register('confirm_same_edition')}/>{' '}
-                        I confirm this is the same edit, language, and edition as the selected item.</label>
-                    <p>Link this Source to the existing item. Its metadata, memberships, Movie relationships, and local files are preserved.
-                        Different editions and alternate uploads should have separate library identities.</p>
+                        Same edit, language, and edition as the selected item.</label>
+                    <p>Different editions and alternate uploads need separate library identities.</p>
                     {errors.confirm_same_edition && <p role="alert">{errors.confirm_same_edition.message}</p>}
                 </div>}
-                {errors.existing_item_id && <p role="alert">{errors.existing_item_id.message}</p>}
             </>}
-            <button className="btn btn-primary" type="submit">{isSubmitting ? 'Saving…' : existingId ? 'Link Source to item' : 'Add to library'}</button>
+            {(preview.kind !== 'collection' || canAutomate) && <div style={{margin: '16px 0'}}>
+                <h3>Local Media Profiles</h3>
+                <p>{preview.kind === 'collection' ? 'Choose profiles for each member Domain. Unmatched members will be skipped with an explanation.' : 'Choose the local representations to request, or leave them unchecked to save metadata only.'}</p>
+                {eligible.length === 0 && <p>No compatible enabled profiles. You can save metadata and create a profile in Management.</p>}
+                {eligible.map(profile => <label key={profile.id} style={{display: 'block', margin: '8px 0'}}>
+                    <input type="checkbox" value={String(profile.id)} {...register('local_profile_ids')}/>{' '}
+                    {profile.name} · {profile.domain} · {profile.preferred_format}
+                </label>)}
+                {errors.local_profile_ids && <p role="alert">{errors.local_profile_ids.message}</p>}
+            </div>}
+            {preview.kind === 'collection' && canAutomate && <div className="vodloft-fields">
+                <label>Collection backfill <select {...register('backfill')}>
+                    <option value="metadata_only">Metadata only — no automatic downloads</option>
+                    <option value="newest">Newest N items</option><option value="date_range">Publication date range</option>
+                    <option value="all">Entire archive</option>
+                </select></label>
+                {backfill === 'newest' && <label>Newest count <input type="number" {...register('newest_count')}/>
+                    {errors.newest_count && <span role="alert">{errors.newest_count.message}</span>}</label>}
+                {backfill === 'date_range' && <>
+                    <label>Published after <input type="date" {...register('published_after')}/>
+                        {errors.published_after && <span role="alert">{errors.published_after.message}</span>}</label>
+                    <label>Published before <input type="date" {...register('published_before')}/>
+                        {errors.published_before && <span role="alert">{errors.published_before.message}</span>}</label>
+                </>}
+                {backfill !== 'metadata_only' && <label>Refresh every (minutes) <input type="number" {...register('refresh_minutes')}/>
+                    {errors.refresh_minutes && <span role="alert">{errors.refresh_minutes.message}</span>}</label>}
+                {backfill === 'all' && <label><span><input type="checkbox" {...register('confirm_archive')}/>{' '}
+                    Download the entire archive with the selected profiles.</span>
+                    {errors.confirm_archive && <span role="alert">{errors.confirm_archive.message}</span>}</label>}
+            </div>}
+            {!review && <button className="btn btn-primary" type="submit">Review import</button>}
         </fieldset>
+        {review && <section className="vodloft-import-review" aria-label="Review import">
+            <h3>Review and confirm</h3>
+            <p><strong>{preview.title}</strong> · {kind} · {preview.reference.domain} · {preview.reference.source_id}</p>
+            <p>{existingId ? `Link to Library item #${existingId}` : 'Reuse this Source’s existing identity when present; otherwise import.'}</p>
+            <p>{review.local_profile_ids.length && (preview.kind !== 'collection' || review.backfill !== 'metadata_only')
+                ? `Profiles: ${eligible.filter(p => review.local_profile_ids.includes(String(p.id))).map(p => p.name).join(', ')}`
+                : 'Metadata only. No downloads will be requested.'}</p>
+            {preview.kind === 'collection' && <p>Backfill: {review.backfill === 'newest' ? `newest ${review.newest_count}`
+                : review.backfill === 'date_range' ? `${review.published_after || 'beginning'} to ${review.published_before || 'present'}` : review.backfill.replace(/_/g, ' ')}.
+                {review.backfill !== 'metadata_only' && ` Refresh every ${review.refresh_minutes} minutes.`}</p>}
+            <button className="btn" type="button" disabled={isSubmitting} onClick={() => setReview(null)}>Edit choices</button>{' '}
+            <button className="btn btn-primary" type="submit" disabled={busy || isSubmitting}>{isSubmitting ? 'Saving…' : 'Confirm and add'}</button>
+        </section>}
         {errors.root && <p role="alert">{errors.root.message}</p>}
     </form>
 }

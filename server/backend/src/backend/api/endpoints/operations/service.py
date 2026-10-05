@@ -48,6 +48,14 @@ def mark_operation_seen(operation_id: str) -> TaskOperationRead | None:
 
 def cancel_operation(operation_id: str) -> TaskOperationRead | None:
     operation = get_task_operation(operation_id)
+    if operation is not None and operation.kind in {'vodloft_source_resolve', 'vodloft_source_browse', 'vodloft_source_search', 'vodloft_metadata_refresh'}:
+        from backend.services.vodloft_operations import cancel
+        cancel(operation_id)
+        return get_operation(operation_id)
+    if operation is not None and operation.kind == 'vodloft_collection_sync':
+        from backend.services.vodloft_sync import cancel_operation as cancel_sync
+        cancel_sync(operation_id)
+        return get_operation(operation_id)
     if operation is not None and operation.kind == "vodloft_acquisition":
         from backend.api.endpoints.vodloft.router import cancel_job
         cancel_job(operation.context["job_id"])
@@ -57,6 +65,9 @@ def cancel_operation(operation_id: str) -> TaskOperationRead | None:
 
 def restart_operation(operation_id: str) -> TaskOperationRead | None:
     operation = get_task_operation(operation_id)
+    if operation is not None and operation.kind == 'vodloft_collection_sync':
+        from backend.services.vodloft_sync import restart_operation as restart_sync
+        return get_operation(restart_sync(operation_id))
     if operation is not None and operation.kind == "vodloft_acquisition":
         from backend.api.endpoints.vodloft.router import retry_job
         retry_job(operation.context["job_id"])

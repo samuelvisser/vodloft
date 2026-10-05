@@ -170,6 +170,10 @@ class CollectionScan(Base):
     command_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     connection_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     removed_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    failure_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    error_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     operation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 

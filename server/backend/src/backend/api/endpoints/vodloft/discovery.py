@@ -18,6 +18,7 @@ from backend.source_manager import discovery, secrets
 from backend.source_manager.capabilities import EffectiveCapabilities, effective, manifest_for
 from backend.source_manager.connections import source_options
 from backend.source_manager.gateway import SourceGateway, SourceInvocationError
+from backend.services.vodloft_operations import tracked
 
 router = APIRouter(prefix='/vodloft', tags=['VodLoft discovery'])
 
@@ -121,14 +122,18 @@ def domains(query: str = Query(default='', max_length=200), cursor: str | None =
 
 class BrowseInput(SourceBrowseRequest):
     connection_id: int | None = Field(default=None, gt=0)
+    cursor: str | None = Field(default=None, max_length=32768)
 
 
 @router.post('/sources/{source_id}/browse', response_model=SourceBrowsePage)
 def source_browse(source_id: str, data: BrowseInput, request: Request):
     require_connection(request, data.connection_id)
     try:
-        return discovery.browse(source_id, SourceBrowseRequest.model_validate(data.model_dump(exclude={'connection_id'})),
-            connection_id=data.connection_id)
+        with tracked('vodloft_source_browse', 'Browse Domain', user_key=principal(request).key,
+                source_id=source_id, connection_id=data.connection_id) as work_key:
+            browse_request = SourceBrowseRequest(domain=data.domain, category_id=data.category_id, limit=data.limit)
+            return discovery.browse(source_id, browse_request.model_copy(update={'cursor': data.cursor}),
+                connection_id=data.connection_id, job_id=work_key)
     except (ValueError, RuntimeError) as exc:
         return _failure(exc)
 
@@ -156,10 +161,12 @@ def inspect_media(source_id: str, data: InspectInput, request: Request):
     try:
         with get_session() as session:
             options = source_options(session, source_id, data.connection_id)
-        snapshot = SourceGateway().inspect(source_id, data.reference, **options)
-        with get_session() as session:
-            policy = effective(session, source_id, snapshot.reference.domain, data.connection_id, snapshot.capabilities)
-        return snapshot.model_copy(update={'capabilities': set(policy.effective_capabilities)})
+        with tracked('vodloft_source_resolve', 'Inspect media preview', user_key=principal(request).key,
+                source_id=source_id, connection_id=data.connection_id) as work_key:
+            snapshot = SourceGateway().inspect(source_id, data.reference, job_id=work_key, **options)
+            with get_session() as session:
+                policy = effective(session, source_id, snapshot.reference.domain, data.connection_id, snapshot.capabilities)
+            return snapshot.model_copy(update={'capabilities': set(policy.effective_capabilities)})
     except (ValueError, RuntimeError) as exc:
         return _failure(exc)
 

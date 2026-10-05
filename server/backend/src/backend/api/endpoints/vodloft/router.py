@@ -35,8 +35,10 @@ from backend.api.endpoints.vodloft.profiles import output_path_from_spec, templa
 from backend.source_manager.gateway import SourceGateway, SourceInvocationError, cancel_running_job, clear_canceled_job, validate_public_url
 from backend.source_manager.runtime import command_for
 from backend.source_manager.capabilities import effective, reference_capabilities
+from backend.source_manager.concurrency import upstream_slots
 from backend.source_manager import discovery as source_discovery
 from backend.services import vodloft_finalization
+from backend.services.vodloft_operations import tracked
 from backend.source_manager import runtime as source_runtime
 from backend.source_manager.connections import source_options
 from backend.security.permissions import principal, require_connection
@@ -47,10 +49,6 @@ from task_manager.scheduler.db import TaskOperation
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/vodloft", tags=["VodLoft library"])
 _download_slots = threading.BoundedSemaphore(get_settings().download_settings.max_concurrent_downloads)
-_source_slots: dict[str, threading.BoundedSemaphore] = {}
-_domain_slots: dict[int, threading.BoundedSemaphore] = {}
-_connection_slots: dict[int, threading.BoundedSemaphore] = {}
-_source_slots_lock = threading.Lock()
 from backend.services.vodloft_imports import (store_snapshot, LibraryImportError,
     domain_for as _domain, upsert as _upsert, _MISSING)
 _JOB_PROGRESS = {"queued": 0, "resolving": 10, "downloading": 35,
@@ -259,8 +257,10 @@ def source_search(source_id: str, query: str, http_request: Request, cursor: str
                   limit: int = 30, connection_id: int | None = None, domain: str | None = None):
     require_connection(http_request, connection_id)
     try:
-        return source_discovery.search(source_id, query, domain=domain,
-            connection_id=connection_id, cursor=cursor, limit=limit)
+        with tracked('vodloft_source_search', 'Search Source', user_key=principal(http_request).key,
+                source_id=source_id, connection_id=connection_id) as work_key:
+            return source_discovery.search(source_id, query, domain=domain,
+                connection_id=connection_id, cursor=cursor, limit=limit, job_id=work_key)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     except RuntimeError as exc:
@@ -350,14 +350,16 @@ def resolve(request: ResolveRequest, http_request: Request):
     try:
         with get_session() as session:
             options = source_options(session, source_id, request.connection_id)
-        snapshot = gateway.resolve(source_id, request.url, **options)
-        with get_session() as session:
-            policy = effective(session, source_id, snapshot.reference.domain, request.connection_id, snapshot.capabilities)
-        return snapshot.model_copy(update={"capabilities": set(policy.effective_capabilities)})
+        with tracked('vodloft_source_resolve', 'Resolve URL preview', user_key=principal(http_request).key,
+                source_id=source_id, connection_id=request.connection_id) as work_key:
+            snapshot = gateway.resolve(source_id, request.url, job_id=work_key, **options)
+            with get_session() as session:
+                policy = effective(session, source_id, snapshot.reference.domain, request.connection_id, snapshot.capabilities)
+            return snapshot.model_copy(update={"capabilities": set(policy.effective_capabilities)})
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     except Exception as exc:
-        logger.info("Source %s could not resolve URL", source_id, exc_info=True)
+        logger.info("Source %s could not resolve URL (%s)", source_id, type(exc).__name__)
         raise _source_problem(exc,
             f"{source_id} could not resolve this URL; choose another Source explicitly if appropriate") from exc
 
@@ -375,7 +377,13 @@ def import_media(request: ImportRequest, http_request: Request):
     try:
         with get_session() as session:
             options = source_options(session, snapshot.reference.source_id, request.connection_id)
-        snapshot = SourceGateway().resolve(snapshot.reference.source_id, snapshot.reference.url, **options)
+        verified = SourceGateway().resolve(snapshot.reference.source_id, snapshot.reference.url, **options)
+        if verified.kind != snapshot.kind or any(getattr(verified.reference, field) != getattr(snapshot.reference, field)
+                for field in ('source_id', 'domain', 'namespace', 'upstream_id')):
+            raise HTTPException(409, 'Source media changed; resolve and review it again')
+        snapshot = verified
+    except HTTPException:
+        raise
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     except Exception as exc:
@@ -471,7 +479,7 @@ def _refresh_collection_one(collection_id: int, reference_id: int | None = None,
         return _serialize(session, session.get(MediaItem, collection_id))
 
 @router.post("/library/{item_id}/refresh-details")
-def refresh_details(item_id: int, reference_id: int | None = None):
+def refresh_details(item_id: int, request: Request, reference_id: int | None = None):
     """Hydrate one playable item after lightweight Collection enumeration."""
     with get_session() as session:
         item = session.get(MediaItem, item_id)
@@ -480,23 +488,21 @@ def refresh_details(item_id: int, reference_id: int | None = None):
         reference = _reference_for(session, item_id, reference_id=reference_id)
         if not reference:
             raise HTTPException(409, "Select an available Source reference for this item")
-        source_id, url = reference.source_id, reference.url
-        connection_id = reference.connection_id
+        require_connection(request, reference.connection_id)
+        source_id, connection_id, url = reference.source_id, reference.connection_id, reference.url
+        expected = (session.get(Domain, reference.domain_id).hostname, reference.namespace, reference.upstream_id)
         options = source_options(session, source_id, connection_id)
     try:
-        snapshot = SourceGateway().resolve(source_id, url, **options)
+        with tracked('vodloft_metadata_refresh', 'Refresh media metadata', user_key=principal(request).key,
+                source_id=source_id, connection_id=connection_id, item_id=item_id) as work_key:
+            snapshot = SourceGateway().resolve(source_id, url, job_id=work_key, **options)
+            if snapshot.kind == 'collection' or (snapshot.reference.domain, snapshot.reference.namespace, snapshot.reference.upstream_id) != expected:
+                raise HTTPException(409, 'Source changed the item identity; add the URL as new media')
+            return _import_snapshot(snapshot, connection_id)
+    except HTTPException:
+        raise
     except Exception as exc:
-        raise _source_problem(exc, "Source could not refresh this item") from exc
-    if snapshot.kind == "collection" or snapshot.reference.source_id != source_id:
-        raise HTTPException(409, "Source no longer identifies this URL as the same playable item")
-    with get_session() as session:
-        old = session.get(SourceReference, reference.id)
-        domain = session.get(Domain, old.domain_id)
-        if (snapshot.reference.domain != domain.hostname or
-            snapshot.reference.namespace != old.namespace or
-            snapshot.reference.upstream_id != old.upstream_id):
-            raise HTTPException(409, "Source changed the item identity; add the URL as new media")
-    return _import_snapshot(snapshot, connection_id)
+        raise _source_problem(exc, 'Source could not refresh this item') from exc
 
 
 @router.get("/library")
@@ -756,12 +762,7 @@ def _run_download(job_id: int) -> None:
                 reference = session.get(SourceReference, job.reference_id)
                 source_id, domain_id, connection_id = (
                     reference.source_id, reference.domain_id, reference.connection_id)
-            with _source_slots_lock:
-                source_slot = _source_slots.setdefault(source_id, threading.BoundedSemaphore(3))
-                domain_slot = _domain_slots.setdefault(domain_id, threading.BoundedSemaphore(2))
-                connection_slot = (_connection_slots.setdefault(connection_id, threading.BoundedSemaphore(1))
-                                   if connection_id else nullcontext())
-            with source_slot, domain_slot, connection_slot:
+            with upstream_slots(source_id, domain_id, connection_id):
                 _execute_leased_download(job_id)
     finally:
         stop.set()

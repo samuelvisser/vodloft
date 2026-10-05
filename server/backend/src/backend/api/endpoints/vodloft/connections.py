@@ -1,13 +1,12 @@
 """Source accounts and anonymous connection contexts."""
 
-import json
 import time
-from urllib.parse import urlsplit
+from dataclasses import dataclass
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import AliasGenerator, AliasPath, BaseModel, ConfigDict, Field
 from sqlalchemy import select
-from source_contracts import AuthenticationResult
 
 from backend.db import get_session
 from backend.db.models.vodloft import SourceConnection, SourceReference
@@ -30,17 +29,46 @@ class ConnectionInput(BaseModel):
     enabled: bool = True
 
 
-def _serialize(connection: SourceConnection) -> dict:
-    auth = _authentication(connection)
-    return {"id": connection.id, "source_id": connection.source_id,
-            "name": connection.name, "has_secret": bool(connection.secret_references) or auth.get("status") == "authorized",
-            "authentication_status": auth.get("status"),
-            "capabilities": connection.capabilities, "domain_capabilities": connection.domain_capabilities,
-            "authenticated": connection.authenticated, "last_capability_check_at": connection.last_capability_check_at,
-            "secret_fields": sorted(connection.secret_references or {}),
-            "settings": connection.settings or {}, "enabled": connection.enabled}
+@dataclass(frozen=True)
+class ConnectionView:
+    connection: SourceConnection
+    authentication: dict
+
+    @property
+    def has_secret(self):
+        return bool(self.connection.secret_references) or self.authentication.get('status') == 'authorized'
+
+    @property
+    def secret_fields(self):
+        return sorted(self.connection.secret_references or {})
 
 
+def _connection_alias(name):
+    if name in {'has_secret', 'secret_fields'}:
+        return name
+    if name == 'authentication_status':
+        return AliasPath('authentication', 'status')
+    return AliasPath('connection', name)
+
+
+class ConnectionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, alias_generator=AliasGenerator(validation_alias=_connection_alias))
+    id: int
+    source_id: str
+    name: str
+    has_secret: bool
+    authentication_status: str | None = None
+    secret_fields: list[str]
+    settings: dict[str, str | int | float]
+    enabled: bool
+    capabilities: list[str] | None
+    domain_capabilities: dict[str, list[str]]
+    authenticated: bool | None
+    last_capability_check_at: datetime | None
+
+
+def _serialize(connection: SourceConnection) -> ConnectionResponse:
+    return ConnectionResponse.model_validate(ConnectionView(connection, _authentication(connection)))
 
 
 def _public_authentication(value: dict) -> dict:

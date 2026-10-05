@@ -88,7 +88,8 @@ def _scope(gateway, source_id, connection_id, options, operation, arguments):
         raise SourceInvocationError('unavailable', 'The selected Source runtime is unavailable')
     # Digests scope continuation to credentials without storing/exposing them.
     return {'operation': operation, 'source_id': source_id, 'connection_id': connection_id,
-        'runtime': hashlib.sha256(json.dumps(command).encode()).hexdigest(),
+        'runtime': hashlib.sha256(json.dumps({'command': command,
+            'manifest': manifest_for(source_id, gateway).model_dump(mode='json')}).encode()).hexdigest(),
         'connection': hashlib.sha256(json.dumps(options, sort_keys=True).encode()).hexdigest(),
         'arguments': arguments}
 
@@ -111,7 +112,7 @@ def _wrap(cursor, scope):
 
 
 def search(source_id: str, query: str, *, domain: str | None = None, connection_id: int | None = None,
-           cursor: str | None = None, limit: int = 30):
+           cursor: str | None = None, limit: int = 30, job_id: int | None = None):
     gateway = SourceGateway()
     manifest = manifest_for(source_id, gateway)
     with get_session() as session:
@@ -122,13 +123,13 @@ def search(source_id: str, query: str, *, domain: str | None = None, connection_
         raise SourceInvocationError('unsupported_operation',
             policy.capability_reasons.get('search', 'Source search is unavailable') if policy else 'Source does not advertise search')
     scope = _scope(gateway, source_id, connection_id, options, 'search', {'query': query.strip(), 'domain': domain, 'limit': limit})
-    result = gateway.search(source_id, query, domain=domain, cursor=_unwrap(cursor, scope), limit=limit, **options)
+    result = gateway.search(source_id, query, domain=domain, cursor=_unwrap(cursor, scope), limit=limit, job_id=job_id, **options)
     if any(item.reference.source_id != source_id or domain is not None and item.reference.domain != domain for item in result.items):
         raise SourceInvocationError('runtime_error', 'Source returned invalid search provenance')
     return result.model_copy(update={'next_cursor': _wrap(result.next_cursor, scope)})
 
 
-def browse(source_id: str, request: SourceBrowseRequest, *, connection_id: int | None = None):
+def browse(source_id: str, request: SourceBrowseRequest, *, connection_id: int | None = None, job_id: int | None = None):
     gateway = SourceGateway()
     manifest = manifest_for(source_id, gateway)
     with get_session() as session:
@@ -140,7 +141,7 @@ def browse(source_id: str, request: SourceBrowseRequest, *, connection_id: int |
     scope = _scope(gateway, source_id, connection_id, options, 'browse', {
         'domain': domain, 'category_id': request.category_id, 'limit': request.limit})
     result = gateway.browse(source_id, request.model_copy(update={
-        'domain': domain, 'cursor': _unwrap(request.cursor, scope)}), **options)
+        'domain': domain, 'cursor': _unwrap(request.cursor, scope)}), job_id=job_id, **options)
     if result.domain != domain or any(item.reference.source_id != source_id for item in result.items):
         raise SourceInvocationError('runtime_error', 'Source returned invalid browse provenance')
     return result.model_copy(update={'next_cursor': _wrap(result.next_cursor, scope)})

@@ -228,7 +228,7 @@ def scans(collection_id: int, request: Request):
     with get_session() as session:
         return [{"id": s.id, "source_id": s.source_id, "complete": s.complete,
                  "entry_count": s.entry_count, "error": s.error, "removed_count": s.removed_count,
-                 "status": s.status, "mode": s.mode, "connection_id": s.connection_id,
+                 "status": s.status, "mode": s.mode, "error_code": s.error_code, "retry_at": s.retry_at, "attempts": s.attempts, "connection_id": s.connection_id,
                  "operation_id": s.operation_id, "source_reference_id": s.source_reference_id,
                  "has_checkpoint": bool(s.next_cursor), "runtime_version": s.runtime_version,
                  "created_at": s.created_at}

@@ -224,6 +224,9 @@ class SourceGateway:
             max_entries=max_entries, **source_options))
         if snapshot.reference.source_id != source_id:
             raise SourceInvocationError("runtime_error", "Source returned invalid media provenance")
+        related = snapshot.entries if snapshot.kind == 'collection' else snapshot.extras if snapshot.kind == 'movie' else []
+        if any(entry.reference.source_id != source_id for entry in related):
+            raise SourceInvocationError('runtime_error', 'Source returned invalid related media provenance')
         return snapshot
 
     def match(self, source_id: str, url: str) -> SourceMatch:
@@ -244,8 +247,11 @@ class SourceGateway:
         validate_public_url(url)
         if not 1 <= limit <= 100:
             raise ValueError("Collection page size must be between 1 and 100")
-        return CollectionPage.model_validate(self.call(source_id, "entries", url=url,
+        page = CollectionPage.model_validate(self.call(source_id, "entries", url=url,
             cursor=cursor, limit=limit, timeout=120, **source_options))
+        if any(entry.reference.source_id != source_id for entry in page.entries) or page.complete and page.next_cursor:
+            raise SourceInvocationError('runtime_error', 'Source returned an invalid Collection page')
+        return page
 
     def search(self, source_id: str, query: str, *, cursor: str | None = None,
                limit: int = 30, domain: str | None = None, **source_options) -> SourceSearchPage:
