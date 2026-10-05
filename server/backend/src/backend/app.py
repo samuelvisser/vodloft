@@ -141,10 +141,14 @@ async def _network_aware_http_exception_handler(
 
 
 def create_app() -> FastAPI:
+    from backend.logging_buffer import install_application_log_handler
+    settings = get_settings()
+    install_application_log_handler(settings.log_level)
+
     app = FastAPI(
         title="VodLoft API",
         summary="Local web media library API",
-        version=get_settings().app_version,
+        version=settings.app_version,
         lifespan=application_lifespan,
     )
 
@@ -216,6 +220,8 @@ def create_app() -> FastAPI:
     # Import routers lazily to avoid circular imports during app module import
     from backend.api.endpoints.onboarding.router import router as onboarding_router
     from backend.api.endpoints.operations.router import router as operation_router
+    from backend.api.endpoints.logs.router import router as logs_router
+    from backend.api.endpoints.tasks.router import router as tasks_router
     from backend.api.endpoints.puller.router import router as puller_router
     from backend.api.endpoints.settings.router import router as setting_router
     from backend.api.endpoints.config.router import router as config_router
@@ -244,8 +250,16 @@ def create_app() -> FastAPI:
 
     # WireLoft's shared infrastructure remains; all media workflows use the
     # normalized library and the Source gateway.
-    for shared_router in (onboarding_router, operation_router, puller_router,
-                          setting_router, meta_router, config_router):
+    for shared_router in (
+        onboarding_router,
+        operation_router,
+        puller_router,
+        setting_router,
+        meta_router,
+        config_router,
+        logs_router,
+        tasks_router,
+    ):
         app.include_router(shared_router, prefix="/api")
 
     return app
