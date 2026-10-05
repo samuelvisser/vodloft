@@ -19,8 +19,13 @@ from source_contracts import SourceManifest
 SOURCES = {
     'yt-dlp': ('source_ytdlp', ['source_contracts', 'source_media', 'source_ytdlp']),
     'dailywire': ('source_dailywire', ['source_contracts', 'source_media', 'dailywire_api', 'source_dailywire']),
+    'npo': ('source_npo', ['source_contracts', 'source_npo']),
 }
-MODULES = {'yt-dlp': 'vodloft_source_ytdlp.worker', 'dailywire': 'vodloft_source_dailywire.worker'}
+MODULES = {
+    'yt-dlp': 'vodloft_source_ytdlp.worker',
+    'dailywire': 'vodloft_source_dailywire.worker',
+    'npo': 'vodloft_source_npo.worker',
+}
 
 
 def build(output: Path, source_id: str, release_version: str | None, channel: str,
