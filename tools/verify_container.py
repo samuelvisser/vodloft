@@ -63,7 +63,7 @@ def verify(base: str, password: str, timeout: int):
     request('/api/vodloft/stream/secret-fixture-token', expected=404)
     request('/api/auth/logout', method='POST', expected=204)
     request('/api/vodloft/library', expected=401)
-    print('Container acceptance passed: authentication, production assets, library, and both isolated Sources.')
+    print('Container acceptance passed: authentication, production assets, library, and all isolated Sources.')
 
 
 if __name__ == '__main__':
