@@ -1,4 +1,4 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
 
 from .service import *
 from ...models.episode import *
@@ -55,6 +55,24 @@ def episode_views_by_show_list(show_slug: str, limit: int | None = None):
     """List the compact episode fields needed by show grids and frontend cache warming."""
     with db_session() as s:
         return get_episode_views_by_show_list(s, show_slug, limit)
+
+
+@router.get("/as-view/by-show-slug/{show_slug}/page", response_model=EpisodeAPIReadViewPage)
+def episode_views_by_show_page(
+        show_slug: str,
+        offset: int = Query(default=0, ge=0),
+        limit: int = Query(default=25, ge=1, le=100),
+        season_id: int | None = Query(default=None, ge=1),
+):
+    """Return one compact episode page for a show grid or browser cache preview."""
+    with db_session() as s:
+        return get_episode_views_by_show_page(
+            s,
+            show_slug,
+            offset=offset,
+            limit=limit,
+            season_id=season_id,
+        )
 
 
 @router.post("", response_model=EpisodeAPIRead, status_code=status.HTTP_201_CREATED)
