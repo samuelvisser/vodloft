@@ -1,6 +1,6 @@
 import {keepPreviousData, queryOptions, type QueryClient} from '@tanstack/react-query'
 
-import {EpisodeReadViewPageSchema, EpisodeReadViewSchema} from '../types/schemas/episode'
+import {EpisodeReadViewPageSchema} from '../types/schemas/episode'
 import {SeasonReadSchema} from '../types/schemas/season'
 import {ShowRead, ShowReadSchema} from '../types/schemas/show'
 
@@ -46,22 +46,6 @@ export function showQueryOptions(id: string | undefined, queryClient: QueryClien
       return shows?.find((show) => show.slug === id)
     },
     initialDataUpdatedAt: () => queryClient.getQueryState(showsQueryOptions().queryKey)?.dataUpdatedAt,
-  })
-}
-
-export function episodesQueryOptions(showSlug: string | undefined, limit?: number) {
-  return queryOptions({
-    queryKey: ['episodes', showSlug, limit] as const,
-    queryFn: ({signal}) => {
-      const params = limit ? `?limit=${limit}` : ''
-      return fetchParsed(
-        `${apiBase()}/episodes/as-view/by-show-slug/${encodeURIComponent(showSlug!)}${params}`,
-        EpisodeReadViewSchema.array(),
-        signal,
-      )
-    },
-    placeholderData: keepPreviousData,
-    refetchOnMount: 'always' as const,
   })
 }
 
