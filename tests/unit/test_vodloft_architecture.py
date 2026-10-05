@@ -52,6 +52,13 @@ def test_source_contract_and_generic_gateway_keep_package_boundary():
                        for name in imports), path
 
 
+def test_npo_is_a_registered_independent_source():
+    from backend.source_manager import runtime
+    configured = runtime.registry()["npo"]
+    assert configured["module"] == "vodloft_source_npo.worker"
+    assert configured["package"] == "vodloft-source-npo"
+
+
 def test_signed_release_catalogue_rejects_tampering_and_stages_exact_wheels(monkeypatch, tmp_path):
     import base64
     import hashlib
