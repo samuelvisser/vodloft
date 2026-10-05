@@ -13,6 +13,11 @@ from sqlalchemy.exc import OperationalError
 
 from backend.db.core import get_session
 from task_manager.scheduler.db import *
+from task_manager.scheduler.db.TaskRun import (
+    TASK_RUN_COMPLETION_PROGRESS_META_KEY,
+    TASK_RUN_PROGRESS_META_KEY,
+    TASK_RUN_WAIT_STATE_META_KEY,
+)
 from .types import ResourceType, TaskStatus
 from .registry import get_task
 from .operation_context import operation_context
@@ -24,8 +29,6 @@ from .operation_control import (
     run_cancel_requested,
 )
 from .operations import (
-    TASK_RUN_PROGRESS_META_KEY,
-    TASK_RUN_WAIT_STATE_META_KEY,
     link_run_to_operations,
     refresh_operations_for_run,
 )
@@ -41,6 +44,7 @@ from task_manager.scheduler import scheduler
 
 
 logger = logging.getLogger(__name__)
+_WAIT_UNCHANGED = object()
 
 
 class TaskCancellationRequested(Exception):
@@ -58,16 +62,16 @@ class ProgressUpdater:
     """Generic progress and cooperative-cancellation channel for a TaskRun.
 
     Workers report percentage, message and structured live metadata through
-    ``set``. Long-running libraries may also use the updater itself as a
-    ``should_cancel`` callback; cancellation is then driven by the same durable
-    TaskRun state used for every other worker rather than by worker-specific
-    generation flags.
+    ``set``. Percentage values are discarded when the registered task has
+    ``tracks_progress=False``, while messages, waits and cancellation remain
+    available.
     """
 
     _CANCEL_CHECK_INTERVAL_SECONDS = 0.25
 
-    def __init__(self, run_id: int):
+    def __init__(self, run_id: int, *, tracks_progress: bool = True):
         self.run_id = run_id
+        self.tracks_progress = tracks_progress
         self._last_cancel_check = 0.0
         self._cancelled = False
         self._cancel_reason = "Canceled"
@@ -132,8 +136,15 @@ class ProgressUpdater:
             percent: int,
             message: Optional[str] = None,
             meta: Optional[dict[str, Any]] = None,
+            *,
+            completion_percent: int | None = None,
     ) -> None:
         p = max(0, min(100, int(percent)))
+        completion = (
+            None
+            if completion_percent is None
+            else max(0, min(100, int(completion_percent)))
+        )
 
         # Progress writes deliberately use their own short-lived Session. The
         # executor does not hold a connection while worker code is running, so a
@@ -171,20 +182,25 @@ class ProgressUpdater:
                         )
                         raise TaskCancellationRequested(self._cancel_reason)
 
-                    values: dict[str, Any] = {"progress": p}
+                    values: dict[str, Any] = {
+                        "progress": p if self.tracks_progress else None,
+                    }
                     if message is not None:
                         values["message"] = message
 
-                    if meta is not None:
+                    if meta is not None or (self.tracks_progress and completion is not None):
                         merged_meta = dict(current_meta or {})
-                        current_progress_meta = merged_meta.get(TASK_RUN_PROGRESS_META_KEY)
-                        merged_progress_meta = (
-                            dict(current_progress_meta)
-                            if isinstance(current_progress_meta, dict)
-                            else {}
-                        )
-                        merged_progress_meta.update(meta)
-                        merged_meta[TASK_RUN_PROGRESS_META_KEY] = merged_progress_meta
+                        if meta is not None:
+                            current_progress_meta = merged_meta.get(TASK_RUN_PROGRESS_META_KEY)
+                            merged_progress_meta = (
+                                dict(current_progress_meta)
+                                if isinstance(current_progress_meta, dict)
+                                else {}
+                            )
+                            merged_progress_meta.update(meta)
+                            merged_meta[TASK_RUN_PROGRESS_META_KEY] = merged_progress_meta
+                        if self.tracks_progress and completion is not None:
+                            merged_meta[TASK_RUN_COMPLETION_PROGRESS_META_KEY] = completion
                         values["meta"] = merged_meta
 
                     result = s.execute(
@@ -299,6 +315,7 @@ def _prepare_execution(
         operation_ids: tuple[str, ...],
         operation_slot: str | None,
         worker_callable,
+        tracks_progress: bool,
         kwargs: dict[str, Any],
 ) -> _PreparedExecution | None:
     """Persist the RUNNING attempt, then release its Session before worker code runs."""
@@ -337,7 +354,7 @@ def _prepare_execution(
                 resource_type=ResourceType(resource_type),
                 resource_id=resource_id,
                 status=TaskStatus.RUNNING,
-                progress=0,
+                progress=0 if tracks_progress else None,
                 result=None,
                 attempt_count=0,
                 started_at=datetime.now(timezone.utc),
@@ -349,6 +366,7 @@ def _prepare_execution(
         run_meta = dict(run.meta or {})
         run_meta.pop(TASK_RUN_WAIT_STATE_META_KEY, None)
         run_meta.pop(TASK_RUN_PROGRESS_META_KEY, None)
+        run_meta.pop(TASK_RUN_COMPLETION_PROGRESS_META_KEY, None)
         run.meta = run_meta or None
 
         linked_operation_ids = link_run_to_operations(
@@ -362,6 +380,8 @@ def _prepare_execution(
         run.max_retries = _resolve_max_retries(session, def_key, schedule_id, max_retries)
         run.attempt_count = int(run.attempt_count or 0) + 1
         run.status = TaskStatus.RUNNING
+        if not tracks_progress:
+            run.progress = None
         run.started_at = datetime.now(timezone.utc)
         run.finished_at = None
         run.next_retry_at = None
@@ -506,6 +526,7 @@ def execute_task(
             operation_ids=explicit_operation_ids,
             operation_slot=operation_slot,
             worker_callable=fn,
+            tracks_progress=task_meta.tracks_progress,
             kwargs=dict(kwargs),
         )
     except Exception:
@@ -540,7 +561,10 @@ def execute_task(
         if preparation_pause is not None:
             preparation_pause.release()
 
-    updater = ProgressUpdater(prepared.run_id)
+    updater = ProgressUpdater(
+        prepared.run_id,
+        tracks_progress=task_meta.tracks_progress,
+    )
     worker_result: Any = None
     worker_error: Exception | None = None
     cancellation_reason: str | None = None
