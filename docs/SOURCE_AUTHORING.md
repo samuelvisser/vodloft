@@ -2,7 +2,7 @@
 
 A Source is an operator-trusted adapter process. Core sends one JSON request on stdin and reads one JSON result on stdout. A fresh worker handles each operation. Normalized contracts live in `server/source_contracts`; adapters must not import backend database, configuration, HTTP models, or integration modules.
 
-The built-in packages are `vodloft-source-ytdlp` and `vodloft-source-dailywire`. They share `vodloft-source-media` for acquisition/FFmpeg processing while remaining outside the core process. Source wheels and dependencies are installed in separate immutable environments; updating them does not replace core's dependencies.
+The built-in packages are `vodloft-source-ytdlp`, `vodloft-source-dailywire`, and `vodloft-source-npo`. Provider-specific discovery, authentication and playback logic remains inside its Source distribution. Sources may share generic helpers such as `vodloft-source-media` while remaining outside the core process. Source wheels and dependencies are installed in separate immutable environments; updating them does not replace core's dependencies.
 
 ## Contract
 

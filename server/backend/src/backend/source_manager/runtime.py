@@ -19,9 +19,11 @@ from pathlib import Path
 from source_contracts import PROTOCOL_VERSION, METADATA_SCHEMA_VERSION, DomainCatalogue, SourceManifest
 
 MODULES = {"yt-dlp": "vodloft_source_ytdlp.worker",
-           "dailywire": "vodloft_source_dailywire.worker"}
+           "dailywire": "vodloft_source_dailywire.worker",
+           "npo": "vodloft_source_npo.worker"}
 PACKAGES = {"yt-dlp": "vodloft-source-ytdlp",
-            "dailywire": "vodloft-source-dailywire"}
+            "dailywire": "vodloft-source-dailywire",
+            "npo": "vodloft-source-npo"}
 _last_remote_check = 0.0
 
 

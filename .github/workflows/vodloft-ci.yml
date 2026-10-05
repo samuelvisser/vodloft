@@ -38,6 +38,7 @@ jobs:
           uv build --wheel server/source_contracts
           uv build --wheel server/source_media
           uv build --wheel server/source_ytdlp
+          uv build --wheel server/source_npo
           uv build --wheel server/dailywire_api
           uv build --wheel server/source_dailywire
   container:
@@ -59,7 +60,7 @@ jobs:
           trap 'docker logs vodloft-acceptance; docker rm -f vodloft-acceptance' EXIT
           if ! python tools/verify_container.py http://127.0.0.1:8080 --password acceptance-password; then
             # Startup is complete; reveal an offline traceback for any failed bundled Source.
-            docker exec vodloft-acceptance python -c 'from pathlib import Path; from backend.source_manager.runtime import install_bundle, status; versions={"yt-dlp":"1.0.1","dailywire":"1.0.0"}; installed=status(); print(installed); [install_bundle(source, Path("/config/source-bundles") / source / versions[source]) for source in ("yt-dlp", "dailywire") if source not in installed["active"]]'
+            docker exec vodloft-acceptance python -c 'from pathlib import Path; from backend.source_manager.runtime import install_bundle, status; versions={"yt-dlp":"1.0.1","dailywire":"1.0.0","npo":"1.0.0"}; installed=status(); print(installed); [install_bundle(source, Path("/config/source-bundles") / source / versions[source]) for source in ("yt-dlp", "dailywire", "npo") if source not in installed["active"]]'
             exit 1
           fi
           docker exec vodloft-acceptance python -c 'from pathlib import Path; from config import get_settings; assert get_settings().download_settings.download_root == Path("/downloads")'
