@@ -1,5 +1,7 @@
 """Inherited media download actions shared by API and task workers."""
 
+import os
+
 from fastapi import HTTPException
 
 from backend.db import get_session
@@ -13,6 +15,7 @@ from task_manager.tasks.media_download_operations import (
     dispatch_queued_media_download_operations, get_active_media_download_operation,
     prepare_media_download_artifact,
 )
+from task_manager.tasks.workers.download_attempt import serialize_download_attempt
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 
@@ -122,3 +125,83 @@ def delete_media_download_artifact_action(media_download_id: int, *, missing_ok:
         download.automatic_retry_suppressed = True
         session.commit()
         return True
+
+
+
+_DELETABLE_MEDIA_DOWNLOAD_ARTIFACT_STATUSES = {
+    MediaDownloadArtifactStatus.ABSENT.value,
+    MediaDownloadArtifactStatus.MISSING.value,
+}
+
+
+def delete_unavailable_media_download(session, media_download_id: int) -> None:
+    """Delete a MediaDownload row only after confirming no managed artifact exists."""
+    download = session.get(MediaDownloadBase, media_download_id)
+    if download is None:
+        raise HTTPException(404, "Media download not found")
+    if get_active_media_download_operation(session, media_download_id) is not None:
+        raise HTTPException(409, "This download already has an active operation")
+    if download.artifact_status not in _DELETABLE_MEDIA_DOWNLOAD_ARTIFACT_STATUSES:
+        raise HTTPException(
+            409,
+            "Only downloads without an available artifact can be deleted",
+        )
+
+    # Do not interpret an inaccessible mount as proof that a file vanished.
+    try:
+        os.stat(download.file_path)
+    except FileNotFoundError:
+        recorded_path_exists = False
+    except OSError as exc:
+        raise HTTPException(
+            409,
+            f"Could not verify that the download artifact is absent: {exc}",
+        ) from exc
+    else:
+        recorded_path_exists = True
+
+    if download.artifact_status == MediaDownloadArtifactStatus.MISSING.value:
+        current_path = resolve_media_download_file(session, download)
+        if (
+            recorded_path_exists
+            or current_path is not None
+            or download.artifact_status not in _DELETABLE_MEDIA_DOWNLOAD_ARTIFACT_STATUSES
+        ):
+            raise HTTPException(
+                409,
+                "The download has an available artifact and cannot be deleted",
+            )
+    elif recorded_path_exists:
+        raise HTTPException(
+            409,
+            "The download has an available artifact and cannot be deleted",
+        )
+
+    session.delete(download)
+    session.flush()
+
+
+def delete_unavailable_media_download_action(
+        media_download_id: int,
+        *,
+        missing_ok: bool = False,
+) -> bool:
+    """Delete one confirmed-unavailable MediaDownload row as a serialized action."""
+    with serialize_download_attempt(media_download_id), get_session() as session:
+        try:
+            if session.get(MediaDownloadBase, media_download_id) is None:
+                if missing_ok:
+                    return False
+                raise HTTPException(404, "Media download not found")
+
+            delete_unavailable_media_download(session, media_download_id)
+            session.commit()
+            return True
+        except HTTPException:
+            # A Missing-row recheck may restore the artifact state. Persist that
+            # reconciliation even though deleting the row is rejected.
+            session.commit()
+            raise
+        except Exception:
+            session.rollback()
+            raise
