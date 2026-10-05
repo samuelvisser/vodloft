@@ -225,8 +225,9 @@ class InstalledSourceResponse(BaseModel):
 def sources():
     gateway = SourceGateway()
     manifests = {manifest.source_id: manifest for manifest in gateway.manifests()}
+    source_ids = dict.fromkeys([*source_runtime.registry(), *gateway.commands])
     return [InstalledSourceResponse.model_validate(InstalledSource(source_id, manifests.get(source_id)))
-            for source_id in gateway.commands]
+            for source_id in source_ids]
 
 
 @router.get("/sources/domains")
@@ -246,7 +247,7 @@ def source_domains():
 def source_manifest(source_id: str):
     manifest = next((m for m in SourceGateway().manifests() if m.source_id == source_id), None)
     if not manifest:
-        raise HTTPException(404, "Source runtime is unavailable")
+        raise HTTPException(404, "Source runtime is unavailable", headers={"X-VodLoft-Source-Error": "unavailable"})
     return manifest
 
 

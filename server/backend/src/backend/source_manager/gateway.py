@@ -239,8 +239,11 @@ class SourceGateway:
     def catalogue(self, source_id: str, *, cursor: str | None = None, limit: int = 200) -> dict:
         if not 1 <= limit <= 500:
             raise ValueError("Choose up to 500 Domains per page")
-        return DomainCatalogue.model_validate(self.call(source_id, "domains", cursor=cursor,
-            limit=limit, timeout=20)).model_dump()
+        page = DomainCatalogue.model_validate(self.call(source_id, "domains", cursor=cursor,
+            limit=limit, timeout=20))
+        if len(page.items) > limit:
+            raise SourceInvocationError('runtime_error', 'Source returned too many Domains')
+        return page.model_dump()
 
     def entries(self, source_id: str, url: str, *, cursor: str | None = None,
                 limit: int = 50, **source_options) -> CollectionPage:

@@ -272,6 +272,10 @@ def source_download(source_id: str, data: SourceDownloadInput, request: Request,
         if not reference or reference.source_id != source_id or reference.item_id != data.item_id:
             raise HTTPException(422, 'Source, item, and reference must match')
         require_connection(request, reference.connection_id)
+        domain = session.get(Domain, reference.domain_id).hostname
+        policy = effective(session, source_id, domain, reference.connection_id, reference.capabilities)
+        if 'download' not in policy.effective_capabilities:
+            return _failure(SourceInvocationError('unsupported_operation', policy.capability_reasons['download']))
     return download_item(data.item_id, background, DownloadRequest(profile_id=data.profile_id, reference_id=data.reference_id))
 
 
@@ -300,5 +304,9 @@ def source_stream(source_id: str, data: SourceItemInput, request: Request):
         if not reference or reference.source_id != source_id or reference.item_id != data.item_id:
             raise HTTPException(422, 'Source, item, and reference must match')
         require_connection(request, reference.connection_id)
+        domain = session.get(Domain, reference.domain_id).hostname
+        policy = effective(session, source_id, domain, reference.connection_id, reference.capabilities)
+        if 'stream_lease' not in policy.effective_capabilities:
+            return _failure(SourceInvocationError('unsupported_operation', policy.capability_reasons['stream_lease']))
     # Only the opaque VodLoft playback session reaches the client, never a lease.
     return watch(data.item_id, request, reference_id=data.reference_id)

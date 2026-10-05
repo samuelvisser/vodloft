@@ -328,8 +328,12 @@ def main():
         if result["healthy"]:
             subprocess.run(["ffmpeg", "-version"], timeout=10, check=True, capture_output=True)
     elif operation == "domains":
-        result = {"items": [DomainDescriptor(hostname="dailywire.com", display_name="The Daily Wire",
-            source_id=SOURCE_ID, aliases=["www.dailywire.com"], capabilities=_CAPABILITIES).model_dump(mode="json")], "next_cursor": None, "exhaustive": True,
+        offset, limit = int(request.get("cursor") or 0), int(request.get("limit", 200))
+        if not 0 <= offset <= 1 or not 1 <= limit <= 500:
+            raise ValueError("Invalid Domain continuation or page limit")
+        descriptors = [DomainDescriptor(hostname="dailywire.com", display_name="The Daily Wire",
+            source_id=SOURCE_ID, aliases=["www.dailywire.com"], capabilities=_CAPABILITIES).model_dump(mode="json")]
+        result = {"items": descriptors[offset:offset + limit], "next_cursor": None, "exhaustive": True,
             "supports_url_resolution_outside_catalog": False, "catalog_revision": "2"}
     elif operation in {"resolve", "media"}:
         result = resolve(request.get("url") or request["reference"]["url"], request.get("max_entries", 100), request.get("access_token"))

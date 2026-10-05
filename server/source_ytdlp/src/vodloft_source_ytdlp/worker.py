@@ -17,6 +17,7 @@ import yt_dlp
 from source_contracts import (
     CollectionPage, DownloadResult, EntrySnapshot, MediaSnapshot, SourceError, SourceManifest,
     SourceMatch, SourceMediaReference, StreamLease, SourceSearchItem, SourceSearchPage, SourceConnectionStatus,
+    DomainCatalogue, DomainDescriptor,
 )
 from source_contracts.network import install_public_network_guard, fetch_stream
 from vodloft_source_media import download as acquire_media, UnsupportedRepresentation, lease_expiry
@@ -262,13 +263,17 @@ def main() -> None:
                    "bilibili.com": ("Bilibili", "BiliBili", []),
                    "tiktok.com": ("TikTok", "TikTok", []),
                    "instagram.com": ("Instagram", "Instagram", [])}
-        result = {"items": [{"hostname": domain, "display_name": name, "source_id": "yt-dlp",
-                             "support": "advertised", "aliases": aliases,
-                             "capabilities": sorted(_CAPABILITIES if domain in _SEARCH_PREFIXES else _CAPABILITIES - {"search"})}
-                            for domain, (name, key, aliases) in domains.items() if key in extractors],
-                  "next_cursor": None, "exhaustive": False,
-                  "supports_url_resolution_outside_catalog": True,
-                  "catalog_revision": f"{yt_dlp.version.__version__}:2"}
+        descriptors = [DomainDescriptor(hostname=domain, display_name=name, source_id="yt-dlp",
+            support="advertised", aliases=aliases,
+            capabilities=_CAPABILITIES if domain in _SEARCH_PREFIXES else _CAPABILITIES - {"search"})
+            for domain, (name, key, aliases) in domains.items() if key in extractors]
+        offset, limit = int(request.get("cursor") or 0), int(request.get("limit", 200))
+        if not 0 <= offset <= len(descriptors) or not 1 <= limit <= 500:
+            raise ValueError("Invalid Domain continuation or page limit")
+        result = DomainCatalogue(items=descriptors[offset:offset + limit],
+            next_cursor=str(offset + limit) if offset + limit < len(descriptors) else None,
+            exhaustive=False, supports_url_resolution_outside_catalog=True,
+            catalog_revision=f"{yt_dlp.version.__version__}:2")
     elif operation in {"resolve", "media"}:
         result = resolve(request.get("url") or request["reference"]["url"], max_entries=request.get("max_entries", 100),
                          cookies=request.get("cookies"), scratch=request.get("scratch"))
