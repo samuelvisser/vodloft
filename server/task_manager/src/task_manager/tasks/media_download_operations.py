@@ -25,13 +25,21 @@ from task_manager.scheduler.operation_control import (
     restart_operation as restart_task_operation,
 )
 from task_manager.scheduler.operations import (
+    OperationDependencySpec,
     OperationTargetSpec,
+    add_operation_dependencies,
     create_operation,
     link_run_to_operations,
     operation_target_needs_dispatch,
 )
 from task_manager.scheduler.transactional import queue_task_after_commit
-from task_manager.scheduler.types import OperationSource, OperationStatus, ResourceType, TaskStatus
+from task_manager.scheduler.types import (
+    OperationDependencyCancelPolicy,
+    OperationSource,
+    OperationStatus,
+    ResourceType,
+    TaskStatus,
+)
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 
@@ -252,6 +260,92 @@ def create_media_download_operation(
         _prioritize_queued_operation(session, operation)
     session.flush()
     return operation
+
+
+def attach_redownload_dependencies(
+        session: Session,
+        parent_operation: TaskOperation,
+        downloads: list[MediaDownloadBase] | tuple[MediaDownloadBase, ...],
+) -> tuple[TaskOperation, ...]:
+    """Attach one independently visible media.download operation per artifact.
+
+    Byte weights are captured before destructive preparation. Existing active
+    downloads remain independently owned; children created for this parent may
+    be canceled with it while they remain exclusive to that parent.
+    """
+    unique_downloads = list({download.id: download for download in downloads}.values())
+    if not unique_downloads:
+        return ()
+
+    sizes = {
+        download.id: next(
+            (
+                int(size)
+                for size in (download.downloaded_bytes, download.artifact_size_bytes)
+                if size is not None and size > 0
+            ),
+            None,
+        )
+        for download in unique_downloads
+    }
+    known_sizes = [size for size in sizes.values() if size is not None]
+    fallback_size = max(1, sum(known_sizes) // len(known_sizes)) if known_sizes else 1
+
+    children: list[TaskOperation] = []
+    dependency_specs: list[OperationDependencySpec] = []
+    for download in unique_downloads:
+        active = get_active_media_download_operation(session, download.id)
+        if active is not None:
+            child = active
+            cancel_policy = OperationDependencyCancelPolicy.DETACH.value
+        else:
+            is_redownload = (
+                download.downloaded_at is not None
+                or download.artifact_status in {
+                    MediaDownloadArtifactStatus.AVAILABLE.value,
+                    MediaDownloadArtifactStatus.MISSING.value,
+                    MediaDownloadArtifactStatus.CORRUPTED.value,
+                }
+            )
+            record_media_download_history(
+                session,
+                download.id,
+                MediaDownloadHistoryAction.RETRY_REQUESTED,
+                metadata={
+                    "source": OperationSource.SYSTEM.value,
+                    "parent_operation_id": parent_operation.id,
+                },
+            )
+            prepare_media_download_artifact(session, download)
+            child = create_media_download_operation(
+                session,
+                download,
+                source=OperationSource.SYSTEM.value,
+                is_redownload=is_redownload,
+            )
+            cancel_policy = OperationDependencyCancelPolicy.CANCEL_IF_EXCLUSIVE.value
+
+        weight = sizes.get(download.id) or fallback_size
+        dependency_specs.append(OperationDependencySpec(
+            child_operation_id=child.id,
+            slot_key=f"media_download:{download.id}",
+            weight=float(weight),
+            required=True,
+            cancel_policy=cancel_policy,
+            context={
+                "media_download_id": download.id,
+                "captured_size_bytes": int(weight),
+            },
+        ))
+        children.append(child)
+
+    add_operation_dependencies(
+        session,
+        parent_operation.id,
+        dependency_specs,
+    )
+    dispatch_queued_media_download_operations(session)
+    return tuple(children)
 
 
 def _get_media_download_operation(
