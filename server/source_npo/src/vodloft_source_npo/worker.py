@@ -411,6 +411,10 @@ def search(query: str, cursor: str | None = None, limit: int = 30,
     client = _client(email, password)
     try:
         records = _items(client.search(query, "series")) + _items(client.search(query, "broadcasts"))
+    except AuthenticationRequired:
+        if client.email:
+            raise
+        records = crawler.search(query, client, limit=max(50, offset + limit))
     except (ApiUnavailable, MediaUnavailable):
         records = crawler.search(query, client, limit=max(50, offset + limit))
     normalized = [item for item in (_search_item(record) for record in records) if item]
