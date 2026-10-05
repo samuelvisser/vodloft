@@ -14,6 +14,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import yt_dlp
+from yt_dlp.utils import DownloadError, ExtractorError
 from source_contracts import (
     CollectionPage, DownloadResult, EntrySnapshot, MediaSnapshot, SourceError, SourceManifest,
     SourceMatch, SourceMediaReference, StreamLease,
@@ -206,7 +207,7 @@ def main() -> None:
     if operation in ("resolve", "download", "entries", "stream_lease", "stream_fetch"):
         install_public_network_guard()
     if operation == "manifest":
-        result = SourceManifest(source_id="yt-dlp", display_name="yt-dlp", version="1.0.0", upstream_versions={"yt-dlp": yt_dlp.version.__version__},
+        result = SourceManifest(source_id="yt-dlp", display_name="yt-dlp", version="1.0.1", upstream_versions={"yt-dlp": yt_dlp.version.__version__},
                                 native_helpers=["ffmpeg"], catalogue_revision=yt_dlp.version.__version__,
                                 capabilities={"health", "resolve_url", "enumerate_collection", "enumerate_pages", "download", "domain_catalogue", "stream_lease"},
                                 configuration_schema=[{"name": "cookies", "label": "Netscape cookies.txt",
@@ -261,22 +262,35 @@ def main() -> None:
     print(result.model_dump_json(exclude_unset=True) if hasattr(result, "model_dump_json") else json.dumps(result))
 
 
+def _source_error(exc: Exception) -> SourceError:
+    if isinstance(exc, HTTPError) and exc.code in (401, 403, 429):
+        code = "rate_limited" if exc.code == 429 else "authentication_required"
+        message = "Source rate limit reached" if code == "rate_limited" else "Source authorization is required"
+    elif isinstance(exc, PermissionError):
+        code, message = "authentication_required", "Source authorization is required"
+    elif isinstance(exc, OSError) and exc.errno == errno.ENOSPC:
+        code, message = "insufficient_disk", "Insufficient staging disk space"
+    elif isinstance(exc, UnsupportedRepresentation):
+        code, message = "unsupported_format", "The requested representation is unavailable"
+    elif isinstance(exc, ExtractorError):
+        code = "unavailable" if exc.expected else "runtime_error"
+        message = "Source operation failed" if exc.expected else "yt-dlp extractor failed"
+    elif isinstance(exc, DownloadError):
+        # yt-dlp adds this text only to unexpected extractor failures. Inspect
+        # it for classification, but never expose the upstream diagnostic.
+        unexpected = "please report this issue on" in str(exc).casefold()
+        code = "runtime_error" if unexpected else "unavailable"
+        message = "yt-dlp extractor failed" if unexpected else "Source operation failed"
+    elif isinstance(exc, ValueError):
+        code = "unsupported_operation" if str(exc).startswith("Unsupported Source operation") else "invalid_url"
+        message = "Source operation is unsupported" if code == "unsupported_operation" else "Source URL or media reference is invalid"
+    else:
+        code, message = "unavailable", "Source operation failed"
+    return SourceError(code=code, message=message)
+
+
 if __name__ == "__main__":
     try:
         main()
     except Exception as exc:
-        if isinstance(exc, HTTPError) and exc.code in (401, 403, 429):
-            code = "rate_limited" if exc.code == 429 else "authentication_required"
-            message = "Source rate limit reached" if code == "rate_limited" else "Source authorization is required"
-        elif isinstance(exc, PermissionError):
-            code, message = "authentication_required", "Source authorization is required"
-        elif isinstance(exc, OSError) and exc.errno == errno.ENOSPC:
-            code, message = "insufficient_disk", "Insufficient staging disk space"
-        elif isinstance(exc, UnsupportedRepresentation):
-            code, message = "unsupported_format", "The requested representation is unavailable"
-        elif isinstance(exc, ValueError):
-            code = "unsupported_operation" if str(exc).startswith("Unsupported Source operation") else "invalid_url"
-            message = "Source operation is unsupported" if code == "unsupported_operation" else "Source URL or media reference is invalid"
-        else:
-            code, message = "unavailable", "Source operation failed"
-        print(json.dumps({"error": SourceError(code=code, message=message).model_dump()}))
+        print(json.dumps({"error": _source_error(exc).model_dump()}))
