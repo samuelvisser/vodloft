@@ -2,6 +2,8 @@ import {type QueryClient} from '@tanstack/react-query'
 
 import {PUBLISH_STATUS_LABELS} from '../types/episode'
 import {type TaskOperationRead} from '../types/schemas/operation'
+import {removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from './cache'
+import {episodeQueryKeys} from './showQueryOptions'
 
 export type OperationMessageResolver = (operation: TaskOperationRead) => string
 
@@ -86,7 +88,18 @@ function fileRenameSuccessMessage(operation: TaskOperationRead, title: string): 
   return `File Rename finished for ${title}: ${renamed} ${plural(renamed, 'file')} renamed${unchangedDetail}`
 }
 
-function invalidateShow(
+function invalidateShowEpisodeQueries(
+  queryClient: QueryClient,
+  showSlug: string,
+  invalidations: InvalidationCollector,
+) {
+  removeEpisodePreviewFromStorage(showSlug)
+  invalidations.push(
+    queryClient.invalidateQueries({queryKey: episodeQueryKeys.forShow(showSlug)}),
+  )
+}
+
+function invalidateShowEpisodeData(
   queryClient: QueryClient,
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
@@ -97,11 +110,24 @@ function invalidateShow(
     queryClient.invalidateQueries({queryKey: ['showsView']}),
   )
   if (showSlug) {
-    invalidations.push(
-      queryClient.invalidateQueries({queryKey: ['show', showSlug]}),
-      queryClient.invalidateQueries({queryKey: ['episodes', showSlug]}),
-    )
+    invalidations.push(queryClient.invalidateQueries({queryKey: ['show', showSlug]}))
+    invalidateShowEpisodeQueries(queryClient, showSlug, invalidations)
   }
+}
+
+function invalidateShowStructure(
+  queryClient: QueryClient,
+  operation: TaskOperationRead,
+  invalidations: InvalidationCollector,
+) {
+  invalidateShowEpisodeData(queryClient, operation, invalidations)
+  const showSlug = contextString(operation, 'show_slug')
+  if (!showSlug) return
+
+  removeSeasonsFromStorage(showSlug)
+  invalidations.push(
+    queryClient.invalidateQueries({queryKey: ['seasons', showSlug]}),
+  )
 }
 
 function invalidateShowFiles(
@@ -109,8 +135,11 @@ function invalidateShowFiles(
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
-  invalidateShow(queryClient, operation, invalidations)
+  const showSlug = contextString(operation, 'show_slug')
   invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
+  if (showSlug) {
+    invalidations.push(queryClient.invalidateQueries({queryKey: ['showDownloads', showSlug]}))
+  }
 }
 
 function invalidateShowDownloadDeletion(
@@ -137,10 +166,8 @@ function invalidateEpisode(
     invalidations.push(queryClient.invalidateQueries({queryKey: ['episode', resultEpisodeSlug]}))
   }
   if (showSlug) {
-    invalidations.push(
-      queryClient.invalidateQueries({queryKey: ['episodes', showSlug]}),
-      queryClient.invalidateQueries({queryKey: ['showDownloads', showSlug]}),
-    )
+    invalidateShowEpisodeQueries(queryClient, showSlug, invalidations)
+    invalidations.push(queryClient.invalidateQueries({queryKey: ['showDownloads', showSlug]}))
   }
 }
 
@@ -247,7 +274,7 @@ export const frontendOperationDefinitions = {
     kind: 'show.index',
     resourceType: 'show',
     label: 'Show indexing',
-    invalidate: invalidateShow,
+    invalidate: invalidateShowStructure,
     success: (operation) => {
       const showTitle = contextString(operation, 'show_title') || operation.title
       const count = resultNumber(operation, 'episodes_found')
@@ -260,7 +287,7 @@ export const frontendOperationDefinitions = {
     kind: 'show.sync',
     resourceType: 'show',
     label: 'Sync',
-    invalidate: invalidateShow,
+    invalidate: invalidateShowStructure,
     success: (operation) => {
       const showTitle = contextString(operation, 'show_title') || operation.title
       const count = resultNumber(operation, 'episodes_found') ?? 0
@@ -271,7 +298,7 @@ export const frontendOperationDefinitions = {
     kind: 'show.refresh_metadata',
     resourceType: 'show',
     label: 'Metadata refresh',
-    invalidate: invalidateShow,
+    invalidate: invalidateShowEpisodeData,
     success: (operation) => {
       const showTitle = contextString(operation, 'show_title') || operation.title
       const count = operation.progressTotal
