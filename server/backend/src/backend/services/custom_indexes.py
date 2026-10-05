@@ -18,6 +18,11 @@ from backend.utils.custom_index import (
     indexing_value_definition_keys,
     set_episode_index_assignment,
 )
+from backend.utils.jinja_analysis import (
+    CustomIndexReachabilityComparison,
+    CustomIndexReachabilityStatus,
+    compare_custom_index_reachability,
+)
 from backend.utils.output_template import (
     SHOW_OUTPUT_TEMPLATE_FIELDS,
     SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
@@ -26,6 +31,7 @@ from backend.utils.output_template import (
     render_output_template,
     resolve_episode_output_path_with_index_values,
 )
+from backend.utils.output_template_jinja import create_output_template_environment
 from task_manager.scheduler.operations import (
     OperationTargetSpec, create_operation, queue_operation_target_dispatch,
 )
@@ -53,6 +59,40 @@ def profile_uses_custom_indexes(profile: ShowLocalMediaProfile) -> bool:
     return bool(
         output_template_custom_index_keys(profile.output_template)
         & indexing_value_definition_keys(profile)
+    )
+
+
+def compare_custom_index_assignments(
+    previous_template: str,
+    current_template: str,
+    *,
+    previous_definition_keys: frozenset[str],
+    current_definition_keys: frozenset[str],
+) -> CustomIndexReachabilityComparison:
+    """Compare persisted Custom Index assignment semantics across a profile save."""
+    previous_active = (
+        output_template_custom_index_keys(previous_template)
+        & previous_definition_keys
+    )
+    current_active = (
+        output_template_custom_index_keys(current_template)
+        & current_definition_keys
+    )
+    if previous_active != current_active:
+        return CustomIndexReachabilityComparison(
+            CustomIndexReachabilityStatus.CHANGED,
+            reason="The set of active Custom Index keys changed",
+        )
+    if not current_active or previous_template == current_template:
+        return CustomIndexReachabilityComparison(
+            CustomIndexReachabilityStatus.UNCHANGED,
+        )
+
+    return compare_custom_index_reachability(
+        previous_template,
+        current_template,
+        environment=create_output_template_environment(),
+        keys=current_active,
     )
 
 
