@@ -93,6 +93,10 @@ def _eval(expression, environment, values):
     "{% set a, b = title, kind %}/downloads/{{ a }}-{{ b }}.ext",
     "/downloads/{% for k,v in [('a',1),('b',2)] %}{{k}}-{{v}}/{% endfor %}{{title}}.ext",
     "{% macro label(x) %}{{x}}{% endmacro %}/downloads/{{label(title)}}-{{label(kind)}}.ext",
+    "{% set suffix = ' (' ~ kind ~ ')' if flag %}/downloads/{{ title }}{{ suffix }}.ext",
+    "{% set label = 'A' if flag %}{% if label %}/downloads/{{ label }}/{{ title }}.ext{% else %}/downloads/{{ title }}.ext{% endif %}",
+    "{% set label = 'A' if flag %}/downloads/{{ label|default('fallback') }}/{{ title }}.ext",
+    "{% set label = 'A' if flag %}/downloads/{{ 'missing' if label is undefined else label }}/{{ title }}.ext",
 ])
 def test_symbolic_paths_agree_with_real_jinja(environment, template):
     analysis = analyze_template(template, environment=environment)
@@ -176,7 +180,7 @@ def test_literal_marker_text_cannot_impersonate_a_symbol(environment):
 
 
 def test_analysis_input_names_cannot_be_shadowed_by_template_locals(environment):
-    left = "{% set __wireloft_input_title='wrong' %}{% set x=title %}/downloads/{{ 'a' if flag else 'b' }}/{{x}}.ext"
+    left = "{% set __vodloft_input_title='wrong' %}{% set x=title %}/downloads/{{ 'a' if flag else 'b' }}/{{x}}.ext"
     right = "/downloads/{{ 'a' if flag else 'b' }}/{{title}}.ext"
     assert _compare(left, right, environment) == OutputOverlap.OVERLAP
 
@@ -196,3 +200,112 @@ def test_constant_none_inside_concat_uses_jinja_stringification(environment):
 def test_large_constant_operations_are_bounded_before_evaluation(environment):
     for value in ("'x' * 1000000000", '10 ** 1000000000'):
         assert not analyze_template('/downloads/{{ '+value+' }}.ext', environment=environment).complete
+
+
+def test_custom_index_reachability_ignores_unrelated_output_changes(environment):
+    from backend.utils.jinja_analysis import (
+        CustomIndexReachabilityStatus,
+        compare_custom_index_reachability,
+    )
+
+    saved = (
+        "{% if kind == 'aux' %}{% set n = 'extras' | custom_index %}"
+        "{% else %}{% set n = '' %}{% endif %}"
+        "/downloads/{{ n }}-{{ title }}.ext"
+    )
+    draft = saved.replace("/downloads/", "/downloads/renamed/")
+    result = compare_custom_index_reachability(
+        saved,
+        draft,
+        environment=environment,
+        keys={"extras"},
+    )
+    assert result.status == CustomIndexReachabilityStatus.UNCHANGED
+    assert result.dependencies == {"kind"}
+
+
+def test_custom_index_reachability_detects_assignment_condition_change(environment):
+    from backend.utils.jinja_analysis import (
+        CustomIndexReachabilityStatus,
+        compare_custom_index_reachability,
+    )
+
+    saved = (
+        "{% if kind == 'aux' %}{% set n = 'extras' | custom_index %}"
+        "{% else %}{% set n = '' %}{% endif %}/downloads/{{ n }}.ext"
+    )
+    draft = saved.replace("kind == 'aux'", "kind != 'ep'")
+    result = compare_custom_index_reachability(
+        saved,
+        draft,
+        environment=environment,
+        keys={"extras"},
+    )
+    assert result.status == CustomIndexReachabilityStatus.CHANGED
+
+
+def test_custom_index_reachability_is_unknown_for_short_circuit_effects(environment):
+    from backend.utils.jinja_analysis import (
+        CustomIndexReachabilityStatus,
+        compare_custom_index_reachability,
+    )
+
+    template = "/downloads/{{ flag and ('extras' | custom_index) }}.ext"
+    result = compare_custom_index_reachability(
+        template,
+        template,
+        environment=environment,
+        keys={"extras"},
+    )
+    assert result.status == CustomIndexReachabilityStatus.UNKNOWN
+
+
+def test_inline_conditional_without_else_matches_explicit_empty_output(environment):
+    implicit = "{% set suffix = ' (' ~ kind ~ ')' if flag %}/downloads/{{ title }}{{ suffix }}.ext"
+    explicit = "{% set suffix = ' (' ~ kind ~ ')' if flag else '' %}/downloads/{{ title }}{{ suffix }}.ext"
+    assert _compare(implicit, explicit, environment) == OutputOverlap.OVERLAP
+
+
+def test_inline_conditional_without_else_uses_standard_undefined_under_strict_environment(environment):
+    template = (
+        "{% set value = 'present' if flag %}"
+        "/downloads/{{ value|default('fallback') }}/"
+        "{{ 'undefined' if value is undefined else value }}.ext"
+    )
+    assert environment.from_string(template).render(flag=False) == "/downloads/fallback/undefined.ext"
+
+    analysis = analyze_template(template, environment=environment)
+    assert analysis.complete, analysis.reason
+    expected = (
+        "{% if flag %}/downloads/present/present.ext"
+        "{% else %}/downloads/fallback/undefined.ext{% endif %}"
+    )
+    assert compare_outputs(
+        analysis,
+        analyze_template(expected, environment=environment),
+        environment=environment,
+    ).status == OutputOverlap.OVERLAP
+
+
+def test_inline_conditional_without_else_does_not_coerce_undefined_to_empty_for_operations(environment):
+    implicit = "{% set value = 1 if flag %}/downloads/{{ value + 1 }}.ext"
+    analysis = analyze_template(
+        implicit,
+        environment=environment,
+        known_values={"flag": False},
+    )
+    empty_output = analyze_template("/downloads/.ext", environment=environment)
+    assert compare_outputs(
+        analysis,
+        empty_output,
+        environment=environment,
+    ).status == OutputOverlap.UNKNOWN
+
+
+def test_internal_undefined_filter_cannot_be_used_by_source_templates(environment):
+    result = analyze_template(
+        "/downloads/{{ none | __vodloft_analysis_undefined }}.ext",
+        environment=environment,
+    )
+    assert not result.complete
+    assert result.reason == "An internal analysis filter cannot be used in source templates"
