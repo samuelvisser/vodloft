@@ -229,6 +229,7 @@ def create_app() -> FastAPI:
     from backend.api.endpoints.vodloft.connections import router as vodloft_connections_router
     from backend.api.endpoints.vodloft.playback import router as vodloft_playback_router
     from backend.api.endpoints.vodloft.requests import router as vodloft_requests_router
+    from backend.api.endpoints.vodloft.discovery import router as vodloft_discovery_router
 
     # Public auth endpoints
     app.include_router(auth_router, prefix="/api")
@@ -240,6 +241,7 @@ def create_app() -> FastAPI:
     app.include_router(vodloft_connections_router, prefix="/api")
     app.include_router(vodloft_playback_router, prefix="/api")
     app.include_router(vodloft_requests_router, prefix="/api")
+    app.include_router(vodloft_discovery_router, prefix="/api")
     app.include_router(vodloft_feeds_public)
 
     # WireLoft's shared infrastructure remains; all media workflows use the

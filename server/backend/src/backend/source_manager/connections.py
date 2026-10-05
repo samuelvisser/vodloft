@@ -23,11 +23,18 @@ def _authentication(connection: SourceConnection) -> dict:
 
 def _save_authentication(connection: SourceConnection, value: dict) -> None:
     connection.authentication_reference = secret_store.save(json.dumps(value), connection.authentication_reference)
+    connection.capabilities = None
+    connection.domain_capabilities = {}
+    connection.authenticated = None
+    connection.last_capability_check_at = None
 
 
 
 def _validated_authentication(source_id: str, result: dict) -> dict:
-    result = AuthenticationResult.model_validate(result).model_dump(mode="json")
+    try:
+        result = AuthenticationResult.model_validate(result).model_dump(mode="json")
+    except ValueError:
+        raise ValueError("Source returned an invalid authentication result") from None
     fields = {field.name: field for field in _validate_source(source_id).configuration_schema}
     if set(result["configuration"]) - set(fields):
         raise ValueError("Source authentication returned undeclared configuration")

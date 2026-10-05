@@ -35,6 +35,8 @@ def _serialize(connection: SourceConnection) -> dict:
     return {"id": connection.id, "source_id": connection.source_id,
             "name": connection.name, "has_secret": bool(connection.secret_references) or auth.get("status") == "authorized",
             "authentication_status": auth.get("status"),
+            "capabilities": connection.capabilities, "domain_capabilities": connection.domain_capabilities,
+            "authenticated": connection.authenticated, "last_capability_check_at": connection.last_capability_check_at,
             "secret_fields": sorted(connection.secret_references or {}),
             "settings": connection.settings or {}, "enabled": connection.enabled}
 
@@ -103,6 +105,8 @@ def clear_authentication(connection_id: int):
             raise HTTPException(404, "Source connection not found")
         secret_store.remove(connection.authentication_reference)
         connection.authentication_reference = None
+        connection.capabilities, connection.domain_capabilities = None, {}
+        connection.authenticated, connection.last_capability_check_at = None, None
         session.commit()
 
 
@@ -177,6 +181,10 @@ def update_connection(connection_id: int, data: ConnectionInput):
             raise HTTPException(404, "Source connection not found")
         settings, supplied_secrets = _configuration(data, existing=connection)
         connection.name, connection.enabled = data.name, data.enabled
+        connection.capabilities = None
+        connection.domain_capabilities = {}
+        connection.authenticated = None
+        connection.last_capability_check_at = None
         connection.settings = settings
         previous = dict(connection.secret_references or {})
         removed = [previous.pop(key) for key in data.remove_secret_fields if key in previous]
@@ -205,26 +213,3 @@ def delete_connection(connection_id: int):
         secret_store.remove(reference)
 
 
-def source_options(session, source_id: str, connection_id: int | None) -> dict:
-    if connection_id is None:
-        return {}
-    connection = session.get(SourceConnection, connection_id)
-    if not connection or not connection.enabled or connection.source_id != source_id:
-        raise ValueError("The selected Source connection is unavailable")
-    options = dict(connection.settings or {})
-    options.update({key: secret_store.read(reference) for key, reference in
-        (connection.secret_references or {}).items()})
-    auth = _authentication(connection)
-    if auth.get("status") == "authorized":
-        if auth.get("expires_at") is not None and auth["expires_at"] < time.time() + 60:
-            gateway = SourceGateway({source_id: auth["_command"]}) if auth.get("_command") else SourceGateway()
-            renewed = _validated_authentication(source_id, gateway.call(source_id, "auth_refresh",
-                timeout=35, private_state=auth["private_state"]))
-            renewed["_command"] = auth.get("_command")
-            _save_authentication(connection, renewed)
-            session.commit()
-            auth = renewed
-        if auth["status"] != "authorized":
-            raise ValueError("This Source account needs authentication again")
-        options.update(auth["configuration"])
-    return options

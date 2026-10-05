@@ -20,7 +20,8 @@ from backend.db.models.vodloft import (Artifact, MediaItem, PlaybackSegment,
     PlaybackSession, SourceReference, SourceConnection)
 from backend.source_manager.gateway import SourceGateway, SourceInvocationError, validate_public_url
 from backend.source_manager.runtime import runtime_root
-from backend.api.endpoints.vodloft.connections import source_options
+from backend.source_manager.connections import source_options
+from backend.source_manager.capabilities import reference_capabilities
 from backend.security.permissions import principal
 from config import get_settings
 
@@ -104,6 +105,9 @@ def watch(item_id: int, request: Request, reference_id: int | None = None):
         if len(eligible) != 1:
             raise HTTPException(409, "Select one Source account for upstream playback")
         reference = eligible[0]
+        policy = reference_capabilities(db, reference)
+        if "stream_lease" not in policy.effective_capabilities:
+            raise HTTPException(409, policy.capability_reasons["stream_lease"])
         options = source_options(db, reference.source_id, reference.connection_id)
         source_id, url, selected_id = reference.source_id, reference.url, reference.id
     try:

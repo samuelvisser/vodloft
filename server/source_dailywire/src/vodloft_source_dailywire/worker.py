@@ -20,11 +20,14 @@ from dailywire_api.dw_api.client import ByNextPage, ByShowSeason, ByPodcastSeaso
 from dailywire_api.dw_api.movie import MovieMiddlewareClient
 from source_contracts import (CollectionPage, DomainDescriptor, DownloadResult, EntrySnapshot,
                               MediaSnapshot, SourceError, SourceManifest, SourceMatch, SourceMediaReference, StreamLease,
-                              SourceSearchItem, SourceSearchPage)
+                              SourceSearchItem, SourceSearchPage, SourceBrowseRequest, SourceBrowsePage, SourceBrowseCategory,
+                              SourceConnectionStatus)
 from source_contracts.network import install_public_network_guard, fetch_stream
 from vodloft_source_media import download as acquire_media, UnsupportedRepresentation, lease_expiry
 
 SOURCE_ID = "dailywire"
+_CAPABILITIES = {"health", "resolve_url", "inspect_media", "enumerate_collection", "enumerate_pages",
+    "download", "domain_catalogue", "search", "browse", "stream_lease", "authentication", "connection_capabilities"}
 
 # The old WireLoft workflows retain their richer record shape while all of
 # their upstream requests execute inside this independently installed Source.
@@ -204,30 +207,58 @@ def entries(url: str, cursor: str | None = None, limit: int = 50,
     return CollectionPage(entries=snapshots, next_cursor=encoded, complete=False)
 
 
-def search(query: str, cursor: str | None = None, limit: int = 30,
-           token: str | None = None) -> SourceSearchPage:
-    if (not query.strip() or len(query) > 200 or not 1 <= limit <= 50 or
-        cursor is not None and (not cursor.isdecimal() or len(cursor) > 6)):
-        raise ValueError("Invalid Source search")
-    offset = int(cursor or "0")
-    if offset > 10000:
-        raise ValueError("Search result limit exceeded")
+def _catalogue_items(token: str | None, query: str = "", category_id: str | None = None):
     catalog = _client(token).get_catalog()
     needle = query.casefold().strip()
     items = []
-    for show in catalog.shows:
-        if needle in f"{show.title} {show.author_name or ''}".casefold():
-            items.append(SourceSearchItem(kind="collection", title=show.title,
-                description=show.description, artwork_url=show.thumbnail_portrait_path,
-                reference=_reference("show", show.slug, show.dw_id)))
-    for movie in catalog.movies:
-        if needle in f"{movie.title} {movie.author_name or ''}".casefold():
-            items.append(SourceSearchItem(kind="movie", title=movie.title,
-                description=movie.description, artwork_url=movie.thumbnail_portrait_path,
-                reference=_reference("videos", movie.slug, movie.dw_id)))
+    if category_id in (None, "all", "collections"):
+        for show in catalog.shows:
+            if needle in f"{show.title} {show.author_name or ''}".casefold():
+                items.append(SourceSearchItem(kind="collection", title=show.title,
+                    description=show.description, artwork_url=show.thumbnail_portrait_path,
+                    reference=_reference("show", show.slug, show.dw_id)))
+    if category_id in (None, "all", "movies"):
+        for movie in catalog.movies:
+            if needle in f"{movie.title} {movie.author_name or ''}".casefold():
+                items.append(SourceSearchItem(kind="movie", title=movie.title,
+                    description=movie.description, artwork_url=movie.thumbnail_portrait_path,
+                    reference=_reference("videos", movie.slug, movie.dw_id)))
     items.sort(key=lambda item: (item.title.casefold(), item.reference.upstream_id))
-    page = items[offset:offset + limit]
-    return SourceSearchPage(items=page,
+    return items
+
+
+def _offset(cursor: str | None) -> int:
+    if cursor is not None and (not cursor.isdecimal() or len(cursor) > 6):
+        raise ValueError("Invalid Source catalogue cursor")
+    offset = int(cursor or "0")
+    if offset > 10000:
+        raise ValueError("Source catalogue result limit exceeded")
+    return offset
+
+
+def browse(domain: str, category_id: str | None = None, cursor: str | None = None,
+           limit: int = 30, token: str | None = None) -> SourceBrowsePage:
+    request = SourceBrowseRequest(domain=domain, category_id=category_id, cursor=cursor, limit=limit)
+    if request.domain not in {"dailywire.com", "www.dailywire.com"} or category_id not in {None, "all", "collections", "movies"}:
+        raise ValueError("Unsupported Source operation: Domain or category cannot be browsed")
+    offset = _offset(cursor)
+    items = _catalogue_items(token, category_id=category_id)
+    return SourceBrowsePage(domain="dailywire.com", categories=[
+        SourceBrowseCategory(id="all", title="All media"),
+        SourceBrowseCategory(id="collections", title="Collections"),
+        SourceBrowseCategory(id="movies", title="Movies")], items=items[offset:offset + limit],
+        next_cursor=str(offset + limit) if offset + limit < len(items) else None)
+
+
+def search(query: str, cursor: str | None = None, limit: int = 30,
+           token: str | None = None, domain: str | None = None) -> SourceSearchPage:
+    if not query.strip() or len(query) > 200 or not 1 <= limit <= 50:
+        raise ValueError("Invalid Source search")
+    if domain is not None and domain not in {"dailywire.com", "www.dailywire.com"}:
+        raise ValueError("Unsupported Source operation: Domain cannot be searched")
+    offset = _offset(cursor)
+    items = _catalogue_items(token, query=query)
+    return SourceSearchPage(items=items[offset:offset + limit],
         next_cursor=str(offset + limit) if offset + limit < len(items) else None)
 
 
@@ -283,13 +314,13 @@ def main():
     request = json.load(sys.stdin)
     operation = request["operation"]
     if operation in ("resolve", "download", "entries", "search", "legacy_call", "stream_lease", "stream_fetch",
-                     "auth_start", "auth_poll", "auth_refresh"):
+                     "auth_start", "auth_poll", "auth_refresh", "browse", "media", "connection_status"):
         install_public_network_guard()
     if operation == "manifest":
         result = SourceManifest(source_id=SOURCE_ID, display_name="Daily Wire API",
-            version="1.0.0", upstream_versions={"dailywire-api": "0.2.1", "yt-dlp": yt_dlp.version.__version__},
-            native_helpers=["ffmpeg"], capabilities={"health", "resolve_url", "enumerate_collection", "enumerate_pages", "download", "domain_catalogue", "search", "stream_lease", "authentication"},
-            exhaustive_domain_catalogue=True,
+            version="1.0.1", upstream_versions={"dailywire-api": "0.2.1", "yt-dlp": yt_dlp.version.__version__},
+            native_helpers=["ffmpeg"], capabilities=_CAPABILITIES,
+            exhaustive_domain_catalogue=True, catalogue_revision="2",
             configuration_schema=[{"name": "access_token", "label": "Access token", "kind": "secret",
                                    "required": False}])
     elif operation == "health":
@@ -298,10 +329,10 @@ def main():
             subprocess.run(["ffmpeg", "-version"], timeout=10, check=True, capture_output=True)
     elif operation == "domains":
         result = {"items": [DomainDescriptor(hostname="dailywire.com", display_name="Daily Wire",
-            source_id=SOURCE_ID).model_dump()], "next_cursor": None, "exhaustive": True,
-            "supports_url_resolution_outside_catalog": False, "catalog_revision": "1"}
-    elif operation == "resolve":
-        result = resolve(request["url"], request.get("max_entries", 100), request.get("access_token"))
+            source_id=SOURCE_ID, aliases=["www.dailywire.com"], capabilities=_CAPABILITIES).model_dump(mode="json")], "next_cursor": None, "exhaustive": True,
+            "supports_url_resolution_outside_catalog": False, "catalog_revision": "2"}
+    elif operation in {"resolve", "media"}:
+        result = resolve(request.get("url") or request["reference"]["url"], request.get("max_entries", 100), request.get("access_token"))
     elif operation == "match":
         parsed = urlsplit(request["url"])
         parts = parsed.path.strip("/").split("/")
@@ -315,7 +346,15 @@ def main():
                          request.get("access_token"))
     elif operation == "search":
         result = search(request["query"], request.get("cursor"), request.get("limit", 30),
-                        request.get("access_token"))
+                        request.get("access_token"), request.get("domain"))
+    elif operation == "browse":
+        result = browse(request["domain"], request.get("category_id"), request.get("cursor"),
+                        request.get("limit", 30), request.get("access_token"))
+    elif operation == "connection_status":
+        token = request.get("access_token")
+        if token:
+            _client(token).get_user_info()
+        result = SourceConnectionStatus(capabilities=_CAPABILITIES, authenticated=bool(token))
     elif operation == "download":
         result = download(request["url"], request["staging"], request.get("preferred_format", "format_1080p"),
                           request.get("access_token"), request.get("representation"), request.get("metadata"), request.get("reference"))

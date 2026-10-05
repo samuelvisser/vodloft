@@ -26,6 +26,9 @@ class SourceDomain(Base):
     source_id: Mapped[str] = mapped_column(String)
     domain_id: Mapped[int] = mapped_column(ForeignKey("vodloft_domains.id"))
     support: Mapped[str] = mapped_column(String(20), default="verified")
+    aliases: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    capabilities: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    catalogue_revision: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class SourceConnection(Base):
@@ -37,6 +40,10 @@ class SourceConnection(Base):
     secret_references: Mapped[dict] = mapped_column(JSON, default=dict)
     authentication_reference: Mapped[str | None] = mapped_column(String(64), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    capabilities: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    domain_capabilities: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    authenticated: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    last_capability_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class MediaItem(Base):

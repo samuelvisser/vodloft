@@ -9,6 +9,7 @@ from pydantic import AliasGenerator, AliasPath, BaseModel, ConfigDict, Field, fi
 from source_contracts import Chapter, FormatDescriptor, MediaTrack
 
 from backend.db.models.vodloft import Artifact, Domain, MediaItem, SourceReference
+from backend.source_manager.capabilities import ReferenceCapabilities
 
 
 def _library_alias(name: str):
@@ -52,13 +53,16 @@ class LibraryItemResponse(BaseModel):
 
 
 class ReferenceResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, alias_generator=AliasGenerator(validation_alias=lambda name:
+        name if name in {'effective_capabilities', 'capability_reasons'} else AliasPath('reference', name)))
     id: int
     source_id: str
     connection_id: int | None
     namespace: str
     upstream_id: str
     capabilities: list[str] | None = None
+    effective_capabilities: list[str] = Field(default_factory=list)
+    capability_reasons: dict[str, str] = Field(default_factory=dict)
     formats: list[FormatDescriptor] | None = None
 
 
@@ -124,7 +128,7 @@ class LibraryItemSource:
     seconds: float = 0
     parent_ids: list[int] = field(default_factory=list)
     context_extra_type: str | None = None
-    references: list[SourceReference] = field(default_factory=list)
+    references: list[ReferenceCapabilities] = field(default_factory=list)
     entries: list[LibraryItemResponse] = field(default_factory=list)
     extras: list[LibraryItemResponse] = field(default_factory=list)
     member_groups: list[str] = field(default_factory=list)

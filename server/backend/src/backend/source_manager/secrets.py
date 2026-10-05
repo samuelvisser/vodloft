@@ -52,3 +52,12 @@ def remove(reference: str | None) -> None:
         if not reference.isalnum():
             raise ValueError("Invalid secret reference")
         (_root() / reference).unlink(missing_ok=True)
+
+
+def seal_payload(payload: bytes) -> str:
+    """Opaque private transport context; not a stored account secret reference."""
+    return _cipher().encrypt(payload).decode()
+
+
+def open_payload(token: str, *, ttl: int = 3600) -> bytes:
+    return _cipher().decrypt(token.encode(), ttl=ttl)

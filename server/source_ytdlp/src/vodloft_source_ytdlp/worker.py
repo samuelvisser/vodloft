@@ -11,15 +11,20 @@ from urllib.error import HTTPError
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, quote
 
 import yt_dlp
 from source_contracts import (
     CollectionPage, DownloadResult, EntrySnapshot, MediaSnapshot, SourceError, SourceManifest,
-    SourceMatch, SourceMediaReference, StreamLease,
+    SourceMatch, SourceMediaReference, StreamLease, SourceSearchItem, SourceSearchPage, SourceConnectionStatus,
 )
 from source_contracts.network import install_public_network_guard, fetch_stream
 from vodloft_source_media import download as acquire_media, UnsupportedRepresentation, lease_expiry
+
+
+_CAPABILITIES = {"health", "resolve_url", "inspect_media", "enumerate_collection", "enumerate_pages",
+    "download", "domain_catalogue", "stream_lease", "search", "connection_capabilities"}
+_SEARCH_PREFIXES = {"youtube.com": "ytsearch", "soundcloud.com": "scsearch"}
 
 
 @contextmanager
@@ -157,6 +162,34 @@ def entries(url: str, cursor: str | None = None, limit: int = 50,
                           complete=not has_more)
 
 
+def search(query: str, domain: str | None = None, cursor: str | None = None,
+           limit: int = 30, cookies: str | None = None, scratch: str | None = None) -> SourceSearchPage:
+    domain = domain or "youtube.com"
+    prefix = _SEARCH_PREFIXES.get(domain)
+    if prefix is None:
+        raise ValueError("Unsupported Source operation: Domain cannot be searched")
+    if not 1 <= len(query.strip()) <= 200 or not 1 <= limit <= 50:
+        raise ValueError("Invalid Source search")
+    if cursor is not None and (not cursor.isdecimal() or len(cursor) > 4):
+        raise ValueError("Invalid Source search cursor")
+    offset = int(cursor or "0")
+    if offset > 1000:
+        raise ValueError("Source search limit exceeded")
+    with _cookie_options(cookies, scratch) as auth, yt_dlp.YoutubeDL({"quiet": True,
+            "no_warnings": True, "extract_flat": True, "skip_download": True,
+            "playliststart": offset + 1, "playlistend": offset + limit + 1, **auth}) as ydl:
+        info = ydl.extract_info(f"{prefix}{offset + limit + 1}:{query.strip()}", download=False)
+    raw = list((info or {}).get("entries") or [])
+    fallback = f"https://{domain}/search?q={quote(query, safe='')}"
+    items = [SourceSearchItem(reference=_reference(item, fallback, strict=True),
+        kind="collection" if item.get("_type") == "playlist" else "video",
+        title=str(item.get("title") or item.get("id") or "Untitled"),
+        description=item.get("description"), artwork_url=item.get("thumbnail"))
+        for item in raw[:limit] if item]
+    return SourceSearchPage(items=items,
+        next_cursor=str(offset + limit) if len(raw) > limit else None)
+
+
 def download(url: str, staging: str, preferred_format: str = "format_1080p",
              cookies: str | None = None, scratch: str | None = None,
              representation: dict | None = None, metadata: dict | None = None,
@@ -203,12 +236,12 @@ def stream_lease(url: str, cookies: str | None = None, scratch: str | None = Non
 def main() -> None:
     request = json.load(sys.stdin)
     operation = request["operation"]
-    if operation in ("resolve", "download", "entries", "stream_lease", "stream_fetch"):
+    if operation in ("resolve", "media", "search", "download", "entries", "stream_lease", "stream_fetch"):
         install_public_network_guard()
     if operation == "manifest":
-        result = SourceManifest(source_id="yt-dlp", display_name="yt-dlp", version="1.0.0", upstream_versions={"yt-dlp": yt_dlp.version.__version__},
-                                native_helpers=["ffmpeg"], catalogue_revision=yt_dlp.version.__version__,
-                                capabilities={"health", "resolve_url", "enumerate_collection", "enumerate_pages", "download", "domain_catalogue", "stream_lease"},
+        result = SourceManifest(source_id="yt-dlp", display_name="yt-dlp", version="1.0.1", upstream_versions={"yt-dlp": yt_dlp.version.__version__},
+                                native_helpers=["ffmpeg"], catalogue_revision=f"{yt_dlp.version.__version__}:2",
+                                capabilities=_CAPABILITIES,
                                 configuration_schema=[{"name": "cookies", "label": "Netscape cookies.txt",
                                                        "kind": "credential_file"}])
     elif operation == "health":
@@ -230,13 +263,14 @@ def main() -> None:
                    "tiktok.com": ("TikTok", "TikTok", []),
                    "instagram.com": ("Instagram", "Instagram", [])}
         result = {"items": [{"hostname": domain, "display_name": name, "source_id": "yt-dlp",
-                             "support": "advertised", "aliases": aliases}
+                             "support": "advertised", "aliases": aliases,
+                             "capabilities": sorted(_CAPABILITIES if domain in _SEARCH_PREFIXES else _CAPABILITIES - {"search"})}
                             for domain, (name, key, aliases) in domains.items() if key in extractors],
                   "next_cursor": None, "exhaustive": False,
                   "supports_url_resolution_outside_catalog": True,
-                  "catalog_revision": yt_dlp.version.__version__}
-    elif operation == "resolve":
-        result = resolve(request["url"], max_entries=request.get("max_entries", 100),
+                  "catalog_revision": f"{yt_dlp.version.__version__}:2"}
+    elif operation in {"resolve", "media"}:
+        result = resolve(request.get("url") or request["reference"]["url"], max_entries=request.get("max_entries", 100),
                          cookies=request.get("cookies"), scratch=request.get("scratch"))
     elif operation == "match":
         from yt_dlp.extractor import gen_extractor_classes
@@ -248,6 +282,12 @@ def main() -> None:
     elif operation == "entries":
         result = entries(request["url"], request.get("cursor"), request.get("limit", 50),
                          request.get("cookies"), request.get("scratch"))
+    elif operation == "search":
+        result = search(request["query"], request.get("domain"), request.get("cursor"),
+            request.get("limit", 30), request.get("cookies"), request.get("scratch"))
+    elif operation == "connection_status":
+        with _cookie_options(request.get("cookies"), request.get("scratch")):
+            result = SourceConnectionStatus(capabilities=_CAPABILITIES, authenticated=None)
     elif operation == "download":
         result = download(request["url"], request["staging"], request.get("preferred_format", "format_1080p"),
                           request.get("cookies"), request.get("scratch"), request.get("representation"), request.get("metadata"), request.get("reference"))

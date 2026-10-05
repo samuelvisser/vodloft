@@ -41,6 +41,8 @@ def upsert(session, reference: SourceMediaReference, kind: str, title: str,
     if not supported:
         session.add(SourceDomain(source_id=reference.source_id, domain_id=domain.id, support="verified"))
         session.flush()
+    elif supported.support != "verified":
+        supported.support = "verified"
     source = session.scalar(select(SourceReference).where(
         SourceReference.source_id == reference.source_id,
         SourceReference.domain_id == domain.id,

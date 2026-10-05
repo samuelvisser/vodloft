@@ -10,7 +10,9 @@ import threading
 from urllib.parse import urlsplit
 from pydantic import TypeAdapter
 
-from source_contracts import CollectionPage, DomainCatalogue, DownloadEvent, DownloadResult, MediaSnapshot, NormalizedSnapshot, SourceError, SourceManifest, SourceMatch, SourceSearchPage, StreamLease
+from source_contracts import (CollectionPage, DomainCatalogue, DownloadEvent, DownloadResult, MediaSnapshot,
+    NormalizedSnapshot, SourceError, SourceManifest, SourceMatch, SourceSearchPage, StreamLease,
+    SourceBrowseRequest, SourceBrowsePage, SourceConnectionStatus, SourceMediaReference)
 from .runtime import command_environment, command_for, registry
 
 _running: dict[int, subprocess.Popen] = {}
@@ -218,8 +220,11 @@ class SourceGateway:
     def resolve(self, source_id: str, url: str, max_entries: int = 100,
                 **source_options) -> MediaSnapshot:
         validate_public_url(url)
-        return _SNAPSHOT.validate_python(self.call(source_id, "resolve", url=url,
+        snapshot = _SNAPSHOT.validate_python(self.call(source_id, "resolve", url=url,
             max_entries=max_entries, **source_options))
+        if snapshot.reference.source_id != source_id:
+            raise SourceInvocationError("runtime_error", "Source returned invalid media provenance")
+        return snapshot
 
     def match(self, source_id: str, url: str) -> SourceMatch:
         validate_public_url(url)
@@ -228,8 +233,11 @@ class SourceGateway:
             raise ValueError("Source returned a mismatched identity")
         return result
 
-    def catalogue(self, source_id: str) -> dict:
-        return DomainCatalogue.model_validate(self.call(source_id, "domains", timeout=20)).model_dump()
+    def catalogue(self, source_id: str, *, cursor: str | None = None, limit: int = 200) -> dict:
+        if not 1 <= limit <= 500:
+            raise ValueError("Choose up to 500 Domains per page")
+        return DomainCatalogue.model_validate(self.call(source_id, "domains", cursor=cursor,
+            limit=limit, timeout=20)).model_dump()
 
     def entries(self, source_id: str, url: str, *, cursor: str | None = None,
                 limit: int = 50, **source_options) -> CollectionPage:
@@ -240,11 +248,31 @@ class SourceGateway:
             cursor=cursor, limit=limit, timeout=120, **source_options))
 
     def search(self, source_id: str, query: str, *, cursor: str | None = None,
-               limit: int = 30, **source_options) -> SourceSearchPage:
+               limit: int = 30, domain: str | None = None, **source_options) -> SourceSearchPage:
         if not 1 <= len(query.strip()) <= 200 or not 1 <= limit <= 50:
             raise ValueError("Enter a search phrase and choose up to 50 results")
         return SourceSearchPage.model_validate(self.call(source_id, "search", query=query.strip(),
-            cursor=cursor, limit=limit, timeout=120, **source_options))
+            domain=domain, cursor=cursor, limit=limit, timeout=120, **source_options))
+
+    def browse(self, source_id: str, request: SourceBrowseRequest, **source_options) -> SourceBrowsePage:
+        return SourceBrowsePage.model_validate(self.call(source_id, "browse", timeout=120,
+            **request.model_dump(), **source_options))
+
+    def inspect(self, source_id: str, reference: SourceMediaReference, **source_options) -> MediaSnapshot:
+        if reference.source_id != source_id:
+            raise ValueError("Source and media reference do not match")
+        validate_public_url(reference.url)
+        manifest = next((m for m in self.manifests() if m.source_id == source_id), None)
+        snapshot = (_SNAPSHOT.validate_python(self.call(source_id, "media", reference=reference.model_dump(),
+            **source_options)) if manifest and "inspect_media" in manifest.capabilities else
+            self.resolve(source_id, reference.url, **source_options))
+        if any(getattr(reference, field) != getattr(snapshot.reference, field)
+               for field in ("source_id", "domain", "namespace", "upstream_id")):
+            raise SourceInvocationError("unavailable", "The Source no longer resolves this media identity")
+        return snapshot
+
+    def connection_status(self, source_id: str, **source_options) -> SourceConnectionStatus:
+        return SourceConnectionStatus.model_validate(self.call(source_id, "connection_status", **source_options))
 
     def download(self, source_id: str, url: str, staging: str,
                  preferred_format: str = "format_1080p", job_id: int | None = None,

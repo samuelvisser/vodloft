@@ -195,14 +195,17 @@ def _reconcile_domains(command: list[str], manifest: SourceManifest) -> None:
     from backend.db.models.vodloft import Domain, SourceDomain
     from backend.db.models.local_media_profile import DomainLocalMediaProfile
     from sqlalchemy import select
+    from backend.source_manager.discovery import remember_catalogue
     with get_session() as session:
+        remember_catalogue(session, manifest.source_id, catalogue)
+        session.flush()
         advertised = {domain.hostname.rstrip('.').lower().encode('idna').decode('ascii')
                       for domain in catalogue.items}
         for support in session.scalars(select(SourceDomain).where(SourceDomain.source_id == manifest.source_id)).all():
             domain = session.get(Domain, support.domain_id)
-            if catalogue.exhaustive and domain.hostname not in advertised:
+            if catalogue.exhaustive and not catalogue.next_cursor and domain.hostname not in advertised:
                 support.support = "failing"
-            elif domain.hostname in advertised:
+            elif domain.hostname in advertised and support.support == "failing":
                 support.support = "advertised"
             other = session.scalar(select(SourceDomain.source_id).where(
                 SourceDomain.domain_id == domain.id, SourceDomain.source_id != manifest.source_id,

@@ -34,6 +34,8 @@ from backend.db.models.local_media_profile import DomainLocalMediaProfile
 from backend.api.endpoints.vodloft.profiles import output_path_from_spec, template_values
 from backend.source_manager.gateway import SourceGateway, SourceInvocationError, cancel_running_job, clear_canceled_job, validate_public_url
 from backend.source_manager.runtime import command_for
+from backend.source_manager.capabilities import effective, reference_capabilities
+from backend.source_manager import discovery as source_discovery
 from backend.services import vodloft_finalization
 from backend.source_manager import runtime as source_runtime
 from backend.source_manager.connections import source_options
@@ -149,122 +151,8 @@ class PlaybackInput(BaseModel):
     completed: bool = False
 
 
-def _domain(session, hostname: str) -> Domain:
-    hostname = hostname.rstrip(".").lower().encode("idna").decode("ascii")
-    domain = session.scalar(select(Domain).where(Domain.hostname == hostname))
-    if not domain:
-        domain = Domain(hostname=hostname, display_name=hostname)
-        session.add(domain)
-        session.flush()
-    return domain
 
 
-def _upsert(session, reference: SourceMediaReference, kind: str, title: str,
-            description=_MISSING, duration=_MISSING,
-            artwork_url=_MISSING, connection_id: int | None = None,
-            published_at=_MISSING, capabilities=_MISSING,
-            is_live=_MISSING, formats=_MISSING, normalized_metadata: dict | None = None,
-            existing_item_id: int | None = None) -> MediaItem:
-    domain = _domain(session, reference.domain)
-    supported = session.scalar(select(SourceDomain).where(
-        SourceDomain.source_id == reference.source_id, SourceDomain.domain_id == domain.id))
-    if not supported:
-        session.add(SourceDomain(source_id=reference.source_id, domain_id=domain.id, support="verified"))
-        session.flush()
-    source = session.scalar(select(SourceReference).where(
-        SourceReference.source_id == reference.source_id,
-        SourceReference.domain_id == domain.id,
-        SourceReference.namespace == reference.namespace,
-        SourceReference.upstream_id == reference.upstream_id,
-        SourceReference.connection_key == (connection_id or 0),
-    ))
-    reference_capabilities = sorted(capabilities) if capabilities is not _MISSING and capabilities is not None else None
-    reference_formats = [format.model_dump(mode="json") for format in formats] if formats is not _MISSING else None
-    if source:
-        if capabilities is not _MISSING:
-            source.capabilities = reference_capabilities
-        if formats is not _MISSING:
-            source.formats = reference_formats
-    if existing_item_id is not None:
-        item = session.get(MediaItem, existing_item_id)
-        if not item:
-            raise HTTPException(404, "The existing library item was not found")
-        effective_kind = item.user_kind or item.kind
-        if item.domain_id != domain.id:
-            raise HTTPException(422, "Link a reference from the same content Domain")
-        if effective_kind != kind and not (kind == "video" and effective_kind in {"movie", "movie_extra"}):
-            raise HTTPException(422, "The reference and existing item have incompatible media types")
-        # Confirmation may add a new reference, but must never move an identity
-        # already used by another canonical item, account, job, or artifact.
-        related = session.scalars(select(SourceReference).where(
-            SourceReference.source_id == reference.source_id,
-            SourceReference.domain_id == domain.id,
-            or_((SourceReference.namespace == reference.namespace) &
-                (SourceReference.upstream_id == reference.upstream_id),
-                SourceReference.url == reference.url))).all()
-        if any(candidate.item_id != item.id for candidate in related):
-            raise HTTPException(409, "This Source reference already belongs to another library item")
-        if source:
-            source.url = reference.url
-        else:
-            session.add(SourceReference(item_id=item.id, domain_id=domain.id,
-                source_id=reference.source_id, namespace=reference.namespace,
-                upstream_id=reference.upstream_id, url=reference.url,
-                connection_id=connection_id, connection_key=connection_id or 0,
-                capabilities=reference_capabilities, formats=reference_formats))
-        # Attaching an acquisition Source does not replace the chosen metadata.
-        # Its verified snapshot is recorded separately by the import operation.
-        return item
-    if source:
-        item = session.get(MediaItem, source.item_id)
-        item.title = title
-        if description is not _MISSING:
-            item.description = description
-        if duration is not _MISSING:
-            item.duration = duration
-        if artwork_url is not _MISSING:
-            item.artwork_url = artwork_url
-        if published_at is not _MISSING:
-            item.published_at = published_at
-        if capabilities is not _MISSING:
-            item.capabilities = sorted(capabilities) if capabilities is not None else None
-        if is_live is not _MISSING:
-            item.is_live = is_live
-        if formats is not _MISSING:
-            item.formats = [format.model_dump(mode="json") for format in formats]
-        source.url = reference.url
-    else:
-        related = session.scalar(select(SourceReference).where(
-            SourceReference.source_id == reference.source_id,
-            SourceReference.domain_id == domain.id,
-            SourceReference.namespace == reference.namespace,
-            SourceReference.upstream_id == reference.upstream_id))
-        if not related:
-            related = session.scalar(select(SourceReference).where(
-                SourceReference.source_id == reference.source_id,
-                SourceReference.domain_id == domain.id,
-                SourceReference.url == reference.url))
-        if related:
-            item = session.get(MediaItem, related.item_id)
-        else:
-            item = MediaItem(domain_id=domain.id, kind=kind, title=title,
-                             description=None if description is _MISSING else description,
-                             duration=None if duration is _MISSING else duration,
-                             artwork_url=None if artwork_url is _MISSING else artwork_url,
-                             published_at=None if published_at is _MISSING else published_at,
-                             capabilities=sorted(capabilities) if capabilities is not _MISSING and capabilities is not None else None,
-                             is_live=None if is_live is _MISSING else is_live,
-                             formats=[format.model_dump(mode="json") for format in formats] if formats is not _MISSING else None)
-            session.add(item)
-            session.flush()
-        session.add(SourceReference(item_id=item.id, domain_id=domain.id,
-            source_id=reference.source_id, namespace=reference.namespace,
-            upstream_id=reference.upstream_id, url=reference.url,
-            connection_id=connection_id, connection_key=connection_id or 0,
-            capabilities=reference_capabilities, formats=reference_formats))
-    if normalized_metadata is not None:
-        item.normalized_metadata = {**(item.normalized_metadata or {}), **normalized_metadata}
-    return item
 
 
 def _reference_for(session, item_id: int, *, reference_id: int | None = None,
@@ -333,9 +221,13 @@ def source_manifest(source_id: str):
 
 
 @router.get("/sources/{source_id}/domains")
-def source_domain_page(source_id: str):
+def source_domain_page(source_id: str, cursor: str | None = None, limit: int = Query(default=200, ge=1, le=500)):
     source_manifest(source_id)
-    return SourceGateway().catalogue(source_id)
+    try:
+        return SourceGateway().catalogue(source_id, cursor=cursor, limit=limit)
+    except (ValueError, RuntimeError) as exc:
+        from backend.api.endpoints.vodloft.discovery import _failure
+        return _failure(exc)
 
 
 @router.post("/sources/{source_id}/match")
@@ -355,33 +247,25 @@ def source_entries(source_id: str, request: ResolveRequest, http_request: Reques
     source_manifest(source_id)
     require_connection(http_request, request.connection_id)
     try:
-        with get_session() as session:
-            options = source_options(session, source_id, request.connection_id)
-        return SourceGateway().entries(source_id, request.url, cursor=cursor, limit=limit,
-            **options)
-    except ValueError as exc:
-        raise HTTPException(422, str(exc)) from exc
-    except Exception as exc:
-        raise _source_problem(exc, "Source enumeration is unavailable") from exc
+        return source_discovery.entries(source_id, request.url, connection_id=request.connection_id,
+            cursor=cursor, limit=limit)
+    except (ValueError, RuntimeError) as exc:
+        from backend.api.endpoints.vodloft.discovery import _failure
+        return _failure(exc)
 
 
 @router.get("/sources/{source_id}/search")
 def source_search(source_id: str, query: str, http_request: Request, cursor: str | None = None,
-                  limit: int = 30, connection_id: int | None = None):
-    manifest = source_manifest(source_id)
-    if "search" not in manifest.capabilities:
-        raise HTTPException(422, "This Source does not advertise search")
+                  limit: int = 30, connection_id: int | None = None, domain: str | None = None):
     require_connection(http_request, connection_id)
     try:
-        with get_session() as session:
-            options = source_options(session, source_id, connection_id)
-        return SourceGateway().search(source_id, query, cursor=cursor,
-            limit=limit, **options)
+        return source_discovery.search(source_id, query, domain=domain,
+            connection_id=connection_id, cursor=cursor, limit=limit)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
-    except Exception as exc:
-        raise _source_problem(exc, "Source search is unavailable") from exc
-
+    except RuntimeError as exc:
+        from backend.api.endpoints.vodloft.discovery import _failure
+        return _failure(exc)
 
 @router.get("/sources/runtimes")
 def source_runtimes():
@@ -428,7 +312,7 @@ def rollback_source(source_id: str):
         raise HTTPException(409, str(exc)) from exc
 
 
-@router.post("/resolve")
+@router.post("/resolve", response_model=NormalizedSnapshot)
 def resolve(request: ResolveRequest, http_request: Request):
     require_connection(http_request, request.connection_id)
     try:
@@ -466,7 +350,10 @@ def resolve(request: ResolveRequest, http_request: Request):
     try:
         with get_session() as session:
             options = source_options(session, source_id, request.connection_id)
-        return gateway.resolve(source_id, request.url, **options)
+        snapshot = gateway.resolve(source_id, request.url, **options)
+        with get_session() as session:
+            policy = effective(session, source_id, snapshot.reference.domain, request.connection_id, snapshot.capabilities)
+        return snapshot.model_copy(update={"capabilities": set(policy.effective_capabilities)})
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     except Exception as exc:
@@ -701,7 +588,7 @@ def library_item(item_id: int, request: Request, reference_id: int | None = None
             if principal(request).can_use_connection(m.connection_id)] if item.kind == 'collection' else []
         extras = session.scalars(select(MovieExtraParent).where(
             MovieExtraParent.movie_id == item_id)).all() if item.kind == 'movie' else []
-        view = replace(_library_source(session, item), references=references,
+        view = replace(_library_source(session, item), references=[reference_capabilities(session, r) for r in references],
             entries=[_serialize(session, session.get(MediaItem, member.item_id)) for member in members],
             extras=[LibraryItemResponse.model_validate(replace(
                 _library_source(session, session.get(MediaItem, extra.extra_id)),
@@ -1155,8 +1042,9 @@ def queue_download(item_id: int, profile_id: int | None, *, collection_id: int |
                                    collection_reference_id=collection_reference_id)
         if not reference:
             raise HTTPException(409, "Select an available Source and account reference for this item")
-        if reference.capabilities is not None and "download" not in reference.capabilities:
-            raise HTTPException(409, "The selected Source account does not advertise download for this media item")
+        policy = reference_capabilities(session, reference)
+        if "download" not in policy.effective_capabilities:
+            raise HTTPException(422, policy.capability_reasons["download"])
         query = select(DomainLocalMediaProfile).where(
             DomainLocalMediaProfile.domain_id == item.domain_id,
             DomainLocalMediaProfile.enabled.is_(True),

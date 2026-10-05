@@ -773,7 +773,7 @@ wheels = [
 
 [[package]]
 name = "source-contracts"
-version = "1.0.0"
+version = "1.0.1"
 source = { editable = "server/source_contracts" }
 dependencies = [
     { name = "pydantic" },
@@ -958,7 +958,7 @@ dev = [
 
 [[package]]
 name = "vodloft-source-dailywire"
-version = "1.0.0"
+version = "1.0.1"
 source = { editable = "server/source_dailywire" }
 dependencies = [
     { name = "dailywire-api" },
@@ -992,7 +992,7 @@ requires-dist = [
 
 [[package]]
 name = "vodloft-source-ytdlp"
-version = "1.0.0"
+version = "1.0.1"
 source = { editable = "server/source_ytdlp" }
 dependencies = [
     { name = "source-contracts" },
