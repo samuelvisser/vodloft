@@ -38,6 +38,12 @@ class TaskScheduleRead(ResponseBase):
     max_retries: Optional[int]
 
 
+class TaskRunWaitStateRead(ResponseBase):
+    reason: str
+    message: Optional[str] = None
+    until: Optional[float] = None
+
+
 class TaskRunRead(ResponseBase):
     id: int
     definition_key: str = Field(validation_alias=AliasPath("definition", "key"))
@@ -45,6 +51,7 @@ class TaskRunRead(ResponseBase):
     resource_id: Optional[int]
     status: str
     progress: Optional[int]
+    wait_state: Optional[TaskRunWaitStateRead] = None
     message: Optional[str]
     result: Optional[dict[str, Any]]
     attempt_count: int
@@ -60,9 +67,12 @@ class TaskLedgerEntryRead(ResponseBase):
 
     id: int
     definition_key: str = Field(validation_alias=AliasPath("definition", "key"))
+    definition_title: str = Field(validation_alias=AliasPath("definition", "title"))
     resource_type: str
     resource_id: Optional[int]
     status: str
+    progress: Optional[int]
+    wait_state: Optional[TaskRunWaitStateRead] = None
     message: Optional[str]
     last_error: Optional[str]
     inputs: dict[str, Any] = Field(
@@ -70,9 +80,14 @@ class TaskLedgerEntryRead(ResponseBase):
         validation_alias=AliasPath("meta", "inputs"),
     )
     result: Optional[dict[str, Any]]
+    attempt_count: int
+    max_retries: int
+    next_retry_at: Optional[datetime]
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
     runtime_ms: Optional[int]
+    created_at: datetime
+    updated_at: datetime
 
 
 class TaskLedgerPageRead(ResponseBase):
