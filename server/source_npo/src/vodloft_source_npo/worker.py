@@ -260,6 +260,11 @@ def _series_data(url: str, client: NPOClient) -> tuple[dict, list[dict], bool]:
             if crawled_programs:
                 return {**detail, **crawled_detail}, _sort_programs(crawled_programs), False
         return detail, _sort_programs(programs), True
+    except AuthenticationRequired:
+        if client.email:
+            raise
+        detail, programs = crawler.series(url, client)
+        return detail, _sort_programs(programs), False
     except (ApiUnavailable, MediaUnavailable):
         detail, programs = crawler.series(url, client)
         return detail, _sort_programs(programs), False
@@ -272,6 +277,10 @@ def _playable_data(url: str, client: NPOClient) -> tuple[dict, bool]:
         if detail is None:
             raise ApiUnavailable("NPO program detail has an unknown shape")
         return detail, True
+    except AuthenticationRequired:
+        if client.email:
+            raise
+        return crawler.program(url, client), False
     except (ApiUnavailable, MediaUnavailable):
         return crawler.program(url, client), False
 
