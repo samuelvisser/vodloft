@@ -4,6 +4,7 @@ import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 import {useLocalMediaProfiles} from '../lib/queries'
 import {LocalMediaProfileRead} from "../types/schemas/local_media_profile";
 import {
+import {faIcon} from '../icons/faIcon'
     LocalMediaProfileTypeReg,
     PreferredFormatReg,
     ShowLocalMediaProfileScopeReg,
@@ -22,8 +23,8 @@ function getAvailableForLabel(profile: LocalMediaProfileRead) {
 export default function LocalMediaProfilesPage() {
     const navigate = useNavigate()
     const onAdd = useCallback(() => navigate('/add-local-media-profile'), [navigate])
-    const editIcon: IconProp = ['fas', 'pen-to-square']
-    const deleteIcon: IconProp = ['fas', 'trash']
+    const editIcon: IconProp = faIcon('fas', 'pen-to-square')
+    const deleteIcon: IconProp = faIcon('fas', 'trash')
 
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
 

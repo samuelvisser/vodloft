@@ -4,6 +4,7 @@ import {ACTIVE_DOWNLOAD_STATUSES, MediaDownloadStatusReg} from '../../types/medi
 import {PUBLISH_STATUS_LABELS} from '../../types/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {movieExtraTypeLabel} from '../../utils/movieExtras'
+import {faIcon} from '../../icons/faIcon'
 
 type Props = {
     row: MediaDownloadViewRead | null
@@ -61,7 +62,7 @@ export default function DownloadLogDialog({row, onClose}: Props) {
             >
                 <div className="modal-header">
                     <div className="modal-icon" aria-hidden>
-                        <FontAwesomeIcon icon={['fas', 'file-lines']}/>
+                        <FontAwesomeIcon icon={faIcon('fas', 'file-lines')}/>
                     </div>
                     <h2 id="download-log-title" className="modal-title">
                         {mediaTitle(row)}

@@ -3,8 +3,6 @@ import {Link, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {library} from '@fortawesome/fontawesome-svg-core'
-import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
 import {useShow, useEpisode, useEpisodeDownloads, useLocalMediaProfiles} from '../../lib/queries'
 import {useSettings} from '../../lib/settings'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
@@ -20,10 +18,7 @@ import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
 import {formatBytes, formatDate, formatDurationMinutes} from "../../utils/formatting";
-
-// Ensure icons from the kit are registered (idempotent)
-library.add(fas)
-
+import {faIcon} from '../../icons/faIcon'
 const OPERATION_STARTING_MESSAGE = 'This task is starting...'
 
 function ProfileDownloadRow({
@@ -90,7 +85,7 @@ function ProfileDownloadRow({
             <div className="download-row-state">
                 {!download && (
                     <button className="btn btn-primary" onClick={startDownload} disabled={busy}>
-                        <FontAwesomeIcon icon={['fas', 'download']}/> Download
+                        <FontAwesomeIcon icon={faIcon('fas', 'download')}/> Download
                     </button>
                 )}
                 {download && (status === 'pending' || status === 'downloading') && (
@@ -104,7 +99,7 @@ function ProfileDownloadRow({
                 {download && status === 'downloaded' && (
                     <div className="download-row-done">
                         <span className="download-state-ok">
-                            <FontAwesomeIcon icon={['fas', 'circle-check']}/>{' '}
+                            <FontAwesomeIcon icon={faIcon('fas', 'circle-check')}/>{' '}
                             Downloaded{download.formatDownloaded ? ` (${download.formatDownloaded}` : ''}
                             {download.formatDownloaded && download.downloadedBytes ? `, ${formatBytes(download.downloadedBytes)})` : download.formatDownloaded ? ')' : ''}
                         </span>
@@ -114,11 +109,11 @@ function ProfileDownloadRow({
                 {download && (status === 'error' || status === 'missing' || status === 'corrupted') && (
                     <div className="download-row-error">
                         <span className="download-state-error">
-                            <FontAwesomeIcon icon={['fas', 'circle-exclamation']}/>{' '}
+                            <FontAwesomeIcon icon={faIcon('fas', 'circle-exclamation')}/>{' '}
                             {download.errorMessage || MediaDownloadStatusReg.getLabelLoose(status)}
                         </span>
                         <button className="btn" onClick={retryDownload} disabled={busy}>
-                            <FontAwesomeIcon icon={['fas', 'rotate-right']}/> Retry
+                            <FontAwesomeIcon icon={faIcon('fas', 'rotate-right')}/> Retry
                         </button>
                     </div>
                 )}
@@ -126,7 +121,7 @@ function ProfileDownloadRow({
                     <div className="download-row-error">
                         <span>{MediaDownloadStatusReg.getLabelLoose(status)}</span>
                         <button className="btn" onClick={startDownload} disabled={busy}>
-                            <FontAwesomeIcon icon={['fas', 'download']}/> Download
+                            <FontAwesomeIcon icon={faIcon('fas', 'download')}/> Download
                         </button>
                     </div>
                 )}
@@ -142,7 +137,7 @@ function ProfileDownloadRow({
                     title="View log"
                     aria-label={`View log for ${profile.name}`}
                 >
-                    <FontAwesomeIcon icon={['fas', 'file-lines']}/>
+                    <FontAwesomeIcon icon={faIcon('fas', 'file-lines')}/>
                 </button>
             )}
             <DownloadLogDialog row={showLog ? (download ?? null) : null} onClose={() => setShowLog(false)}/>
@@ -314,7 +309,7 @@ export default function EpisodePage() {
             <article className="episode-details" aria-label="Episode details">
                 <nav className="episode-breadcrumb" aria-label="Breadcrumb">
                     <Link to="/library">Library</Link>
-                    <FontAwesomeIcon icon={['fas', 'chevron-right']} aria-hidden="true"/>
+                    <FontAwesomeIcon icon={faIcon('fas', 'chevron-right')} aria-hidden="true"/>
                     <Link to={`/show/${showId}`}>{show.title}</Link>
                 </nav>
 
@@ -332,7 +327,7 @@ export default function EpisodePage() {
                             items={[
                                 {
                                     label: 'Refresh metadata',
-                                    icon: ['fas', 'arrows-rotate'],
+                                    icon: faIcon('fas', 'arrows-rotate'),
                                     disabled: metadataRefreshBusy,
                                     disabledReason: metadataRefreshStarting
                                         ? OPERATION_STARTING_MESSAGE
@@ -346,7 +341,7 @@ export default function EpisodePage() {
                                 },
                                 ...(earlyDeleteAvailable ? [{
                                     label: 'Early Delete',
-                                    icon: ['fas', 'trash'] as [string, string],
+                                    icon: faIcon('fas', 'trash'),
                                     tone: 'danger' as const,
                                     separatorBefore: true,
                                     disabled: earlyDeleteDisabledReason !== undefined,
@@ -366,14 +361,14 @@ export default function EpisodePage() {
                         </span>
                         <span className="episode-summary-separator" aria-hidden="true"/>
                         <span className="episode-summary-item">
-                            <FontAwesomeIcon icon={['fas', 'calendar']} aria-hidden="true"/>
+                            <FontAwesomeIcon icon={faIcon('fas', 'calendar')} aria-hidden="true"/>
                             <span>Released {formatDate(episode.publishedDate)}</span>
                         </span>
                         {latestDownloadedAt && (
                             <>
                                 <span className="episode-summary-separator" aria-hidden="true"/>
                                 <span className="episode-summary-item">
-                                    <FontAwesomeIcon icon={['fas', 'circle-down']} aria-hidden="true"/>
+                                    <FontAwesomeIcon icon={faIcon('fas', 'circle-down')} aria-hidden="true"/>
                                     <span>Downloaded {formatDate(latestDownloadedAt)}</span>
                                 </span>
                             </>
@@ -420,7 +415,7 @@ export default function EpisodePage() {
                     onDismiss={() => {
                         if (!earlyDeleteBusy) setEarlyDeleteConfirm(false)
                     }}
-                    icon={['fas', 'trash']}
+                    icon={faIcon('fas', 'trash')}
                     iconTone="danger"
                     dismissOnOverlayClick={!earlyDeleteBusy}
                     cancelButton={{disabled: earlyDeleteBusy}}

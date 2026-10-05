@@ -2,8 +2,6 @@ import {useMemo, useRef, useState} from 'react'
 import {useNavigate} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import {library} from '@fortawesome/fontawesome-svg-core'
-import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
 import {Column, DataTable, DataTableAction} from '../components/DataTable/DataTable'
 import DownloadLogDialog from '../components/MediaDownload/DownloadLogDialog'
 import {useActiveOperation} from '../components/OperationNotifier/OperationNotifier'
@@ -19,6 +17,7 @@ import {TaskOperationRead} from '../types/schemas/operation'
 import {getErrorMessageFromResponse} from '../utils/helpers'
 import {movieExtraTypeLabel} from '../utils/movieExtras'
 import './DownloadsPage.css'
+import {faIcon} from '../icons/faIcon'
 
 type StatusFilterOption = {
     value: string
@@ -92,10 +91,6 @@ function bulkOperationLabel(operation: TaskOperationRead | undefined, starting: 
     if (operation.status === 'WAITING') return operation.message || 'Waiting…'
     return `${operation.progress ?? 0}%`
 }
-
-// Ensure icons from the kit are registered (idempotent)
-library.add(fas)
-
 function formatBytes(n: number | null | undefined) {
     if (!n && n !== 0) return '—'
     if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(2)} GiB`
@@ -457,7 +452,7 @@ export default function DownloadsPage() {
                         <ProgressButton
                             definition={frontendOperationDefinitions['media_download.bulk_retry']}
                             label="Retry all"
-                            icon={['fas', 'rotate-right']}
+                            icon={faIcon('fas', 'rotate-right')}
                             onClick={() => void startBulkAction('retry', retryableDownloads)}
                             disabled={bulkOperationActive && !retryAllOperation && bulkActionStarting !== 'retry'}
                             primary={false}
@@ -475,7 +470,7 @@ export default function DownloadsPage() {
                         <ProgressButton
                             definition={frontendOperationDefinitions['media_download.bulk_cancel']}
                             label="Cancel all"
-                            icon={['fas', 'ban']}
+                            icon={faIcon('fas', 'ban')}
                             onClick={() => void startBulkAction('cancel', cancellableDownloads)}
                             disabled={bulkOperationActive && !cancelAllOperation && bulkActionStarting !== 'cancel'}
                             primary={false}
@@ -550,7 +545,7 @@ export default function DownloadsPage() {
                         const actions: DataTableAction<MediaDownloadViewRead>[] = [
                             {
                                 onClick: (r) => setLogRow(r),
-                                icon: ['fas', 'file-lines'],
+                                icon: faIcon('fas', 'file-lines'),
                                 text: 'View log',
                                 classes: 'btn',
                             },
@@ -558,14 +553,14 @@ export default function DownloadsPage() {
                         if (status === 'pending') {
                             actions.push({
                                 onClick: () => void prioritize(row),
-                                icon: ['fas', 'arrow-up'],
+                                icon: faIcon('fas', 'arrow-up'),
                                 text: 'Prioritize',
                                 classes: 'btn',
                             })
                         } else if (isRetryableDownload(row)) {
                             actions.push({
                                 onClick: () => void retry(row),
-                                icon: ['fas', 'rotate-right'],
+                                icon: faIcon('fas', 'rotate-right'),
                                 text: 'Retry',
                                 classes: 'btn',
                             })
@@ -573,7 +568,7 @@ export default function DownloadsPage() {
                         if (isCancellableDownload(row)) {
                             actions.push({
                                 onClick: () => void cancel(row),
-                                icon: ['fas', 'ban'],
+                                icon: faIcon('fas', 'ban'),
                                 text: 'Cancel',
                                 classes: 'btn',
                             })

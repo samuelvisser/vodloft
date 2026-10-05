@@ -1,19 +1,14 @@
 import {NavLink} from 'react-router-dom'
-import {library} from '@fortawesome/fontawesome-svg-core'
-import {fas} from '@awesome.me/kit-83fa1ac5a9/icons'
 import Footer from './Footer'
 import Navbar from './Navbar'
 import type { NavItem } from './navTypes'
-
-// Register the kit's solid icon pack so we can reference icons by [prefix, name]
-library.add(fas)
-
+import {faIcon} from '../../icons/faIcon'
 const items: NavItem[] = [
-    {path: '/', label: 'Home', icon: ['fas', 'house']},
-    {path: '/discover', label: 'Discover / Add', icon: ['fas', 'magnifying-glass']},
-    {path: '/library', label: 'Library', icon: ['fas', 'book-open']},
-    {path: '/management', label: 'Management', icon: ['fas', 'layer-group']},
-    {path: '/settings', label: 'Settings', icon: ['fas', 'gear']},
+    {path: '/', label: 'Home', icon: faIcon('fas', 'house')},
+    {path: '/discover', label: 'Discover / Add', icon: faIcon('fas', 'magnifying-glass')},
+    {path: '/library', label: 'Library', icon: faIcon('fas', 'book-open')},
+    {path: '/management', label: 'Management', icon: faIcon('fas', 'layer-group')},
+    {path: '/settings', label: 'Settings', icon: faIcon('fas', 'gear')},
 ]
 
 export default function Sidebar() {

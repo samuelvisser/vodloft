@@ -3,6 +3,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link, useNavigate, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import {faIcon} from '../../icons/faIcon'
 
 import ProgressBar from '../../components/common/ProgressBar'
 import ProgressButton from '../../components/common/ProgressButton'
@@ -103,7 +104,7 @@ function MovieDownloadControl({
         <div className={`movie-media-download-control${panel ? ' is-panel' : ''}`}>
             {downloaded ? (
                 <span className="movie-media-downloaded" role="status">
-                    <FontAwesomeIcon icon={['fas', 'circle-check']}/>
+                    <FontAwesomeIcon icon={faIcon('fas', 'circle-check')}/>
                     <span>Downloaded{downloadedDetails ? ` (${downloadedDetails})` : ''}</span>
                 </span>
             ) : (
@@ -111,7 +112,7 @@ function MovieDownloadControl({
                     definition={frontendOperationDefinitions['media.download']}
                     resourceId={download?.id ?? null}
                     label={label}
-                    icon={['fas', 'download']}
+                    icon={faIcon('fas', 'download')}
                     onClick={onStart}
                     disabled={disabled}
                     primary={primary}
@@ -138,7 +139,7 @@ function MovieDownloadControl({
                     title="View download log"
                     aria-label={`View download log for ${progressLabel}`}
                 >
-                    <FontAwesomeIcon icon={['fas', 'file-lines']}/>
+                    <FontAwesomeIcon icon={faIcon('fas', 'file-lines')}/>
                 </button>
             )}
         </div>
@@ -465,7 +466,7 @@ export default function MoviePage() {
             <div className="movie-hero" style={hero ? {backgroundImage: `linear-gradient(0deg, var(--bg) 0%, rgba(9,18,33,.15) 72%), url(${hero})`} : undefined}>
                 <div>
                     <div className="movie-kicker-row">
-                        <span className="movie-kicker"><FontAwesomeIcon icon={['fas', 'clapperboard']}/> Movie</span>
+                        <span className="movie-kicker"><FontAwesomeIcon icon={faIcon('fas', 'clapperboard')}/> Movie</span>
                         {isUpcoming && <span className="movie-upcoming-badge">Upcoming</span>}
                     </div>
                     <h1 id="movie-title">{movie.title}</h1>
@@ -479,41 +480,41 @@ export default function MoviePage() {
             <div className="movie-detail-actions">
                 {featuredTrailer?.sharingUrl && (
                     <a className="btn btn-secondary" href={featuredTrailer.sharingUrl} target="_blank" rel="noreferrer">
-                        <FontAwesomeIcon icon={['fas', 'play']}/> Watch trailer
+                        <FontAwesomeIcon icon={faIcon('fas', 'play')}/> Watch trailer
                     </a>
                 )}
                 {movie.sharingUrl && (
                     <a className="btn" href={movie.sharingUrl} target="_blank" rel="noreferrer">
-                        <FontAwesomeIcon icon={['fas', 'arrow-up-right-from-square']}/> Open on Daily Wire
+                        <FontAwesomeIcon icon={faIcon('fas', 'arrow-up-right-from-square')}/> Open on Daily Wire
                     </a>
                 )}
                 {localMovies && !localMovie && (
                     <button type="button" className="btn btn-primary" onClick={() => void addMovie()} disabled={addingMovie || submitting !== null}>
-                        <FontAwesomeIcon icon={['fas', 'plus']}/>
+                        <FontAwesomeIcon icon={faIcon('fas', 'plus')}/>
                         {addingMovie ? 'Adding to WireLoft…' : 'Add to WireLoft'}
                     </button>
                 )}
                 {localMovie && slug && (
                     <Link className="btn" to={`/edit-movie/${encodeURIComponent(slug)}`}>
-                        <FontAwesomeIcon icon={['fas', 'pen-to-square']} />
+                        <FontAwesomeIcon icon={faIcon('fas', 'pen-to-square')} />
                         <span>Edit</span>
                     </Link>
                 )}
                 {localMovie && (
                     <button type="button" className="btn" onClick={() => void refreshMovieExtras()} disabled={refreshingExtras}>
-                        <FontAwesomeIcon icon={['fas', 'rotate']} spin={refreshingExtras}/>
+                        <FontAwesomeIcon icon={faIcon('fas', 'rotate')} spin={refreshingExtras}/>
                         {refreshingExtras ? 'Refreshing extras…' : 'Refresh extras'}
                     </button>
                 )}
                 {localMovie?.releaseDateLookupStatus === 'error' && (
                     <button type="button" className="btn" onClick={() => void retryReleaseMetadata()} disabled={retryingMetadata}>
-                        <FontAwesomeIcon icon={['fas', 'rotate']}/>
+                        <FontAwesomeIcon icon={faIcon('fas', 'rotate')}/>
                         {retryingMetadata ? 'Retrying TMDB…' : 'Retry TMDB lookup'}
                     </button>
                 )}
                 {localMovie && (
                     <button type="button" className="btn btn-danger" onClick={() => setConfirmDelete(true)}>
-                        <FontAwesomeIcon icon={['fas', 'trash']}/> Delete
+                        <FontAwesomeIcon icon={faIcon('fas', 'trash')}/> Delete
                     </button>
                 )}
             </div>
@@ -605,7 +606,7 @@ export default function MoviePage() {
                                     <div className="movie-extra-art">
                                         {thumbnail
                                             ? <img src={thumbnail} alt=""/>
-                                            : <FontAwesomeIcon icon={['fas', 'film']}/>
+                                            : <FontAwesomeIcon icon={faIcon('fas', 'film')}/>
                                         }
                                         <span>{movieExtraTypeLabel(extra.movieExtraType)}</span>
                                     </div>
@@ -619,7 +620,7 @@ export default function MoviePage() {
                                         <div className="movie-extra-actions">
                                             {extra.sharingUrl && (
                                                 <a className="btn btn-icon" href={extra.sharingUrl} target="_blank" rel="noreferrer" aria-label={`Watch ${extra.title}`} title="Watch on Daily Wire">
-                                                    <FontAwesomeIcon icon={['fas', 'play']}/>
+                                                    <FontAwesomeIcon icon={faIcon('fas', 'play')}/>
                                                 </a>
                                             )}
                                             <MovieDownloadControl
@@ -668,7 +669,7 @@ export default function MoviePage() {
                 onDismiss={() => {
                     if (!deleting) setConfirmDelete(false)
                 }}
-                icon={['fas', 'trash']}
+                icon={faIcon('fas', 'trash')}
                 iconTone="danger"
                 dismissOnOverlayClick={!deleting}
                 cancelButton={{disabled: deleting}}
