@@ -249,7 +249,7 @@ class SourceGateway:
             raise ValueError("Collection page size must be between 1 and 100")
         page = CollectionPage.model_validate(self.call(source_id, "entries", url=url,
             cursor=cursor, limit=limit, timeout=120, **source_options))
-        if any(entry.reference.source_id != source_id for entry in page.entries) or page.complete and page.next_cursor:
+        if len(page.entries) > limit or any(entry.reference.source_id != source_id for entry in page.entries) or page.complete and page.next_cursor:
             raise SourceInvocationError('runtime_error', 'Source returned an invalid Collection page')
         return page
 
@@ -257,12 +257,18 @@ class SourceGateway:
                limit: int = 30, domain: str | None = None, **source_options) -> SourceSearchPage:
         if not 1 <= len(query.strip()) <= 200 or not 1 <= limit <= 50:
             raise ValueError("Enter a search phrase and choose up to 50 results")
-        return SourceSearchPage.model_validate(self.call(source_id, "search", query=query.strip(),
+        page = SourceSearchPage.model_validate(self.call(source_id, "search", query=query.strip(),
             domain=domain, cursor=cursor, limit=limit, timeout=120, **source_options))
+        if len(page.items) > limit:
+            raise SourceInvocationError('runtime_error', 'Source returned too many search results')
+        return page
 
     def browse(self, source_id: str, request: SourceBrowseRequest, **source_options) -> SourceBrowsePage:
-        return SourceBrowsePage.model_validate(self.call(source_id, "browse", timeout=120,
+        page = SourceBrowsePage.model_validate(self.call(source_id, "browse", timeout=120,
             **request.model_dump(), **source_options))
+        if len(page.items) > request.limit:
+            raise SourceInvocationError('runtime_error', 'Source returned too many browse results')
+        return page
 
     def inspect(self, source_id: str, reference: SourceMediaReference, **source_options) -> MediaSnapshot:
         if reference.source_id != source_id:

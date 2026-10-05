@@ -317,7 +317,7 @@ def main():
                      "auth_start", "auth_poll", "auth_refresh", "browse", "media", "connection_status"):
         install_public_network_guard()
     if operation == "manifest":
-        result = SourceManifest(source_id=SOURCE_ID, display_name="Daily Wire API",
+        result = SourceManifest(source_id=SOURCE_ID, display_name="The Daily Wire API",
             version="1.0.1", upstream_versions={"dailywire-api": "0.2.1", "yt-dlp": yt_dlp.version.__version__},
             native_helpers=["ffmpeg"], capabilities=_CAPABILITIES,
             exhaustive_domain_catalogue=True, catalogue_revision="2",
@@ -328,7 +328,7 @@ def main():
         if result["healthy"]:
             subprocess.run(["ffmpeg", "-version"], timeout=10, check=True, capture_output=True)
     elif operation == "domains":
-        result = {"items": [DomainDescriptor(hostname="dailywire.com", display_name="Daily Wire",
+        result = {"items": [DomainDescriptor(hostname="dailywire.com", display_name="The Daily Wire",
             source_id=SOURCE_ID, aliases=["www.dailywire.com"], capabilities=_CAPABILITIES).model_dump(mode="json")], "next_cursor": None, "exhaustive": True,
             "supports_url_resolution_outside_catalog": False, "catalog_revision": "2"}
     elif operation in {"resolve", "media"}:

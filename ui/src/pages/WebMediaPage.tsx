@@ -24,7 +24,7 @@ type Connection = {id: number; source_id: string; name: string; has_secret: bool
     authentication_status?: string | null; authenticated?: boolean | null; last_capability_check_at?: string | null;
     settings: Record<string, string | number>; secret_fields: string[]}
 type Reference = {source_id: string; domain: string; namespace: string; upstream_id: string; url: string}
-type Preview = {capabilities?: string[]; kind: string; title: string; description?: string; artwork_url?: string; reference: Reference; entries: {title: string; position: number}[]; enumeration_complete: boolean}
+type Preview = {capabilities?: string[]; kind: string; title: string; description?: string; artwork_url?: string; reference: Reference; entries?: {title: string; position: number}[]; enumeration_complete?: boolean}
 type Item = {parent_id?: number | null; parent_ids?: number[]; extra_type?: string | null; chapters?: {title: string; start: number; end?: number}[]; id: number; title: string; description?: string; kind: string; domain: string; downloaded: boolean;
     member_groups?: string[]; member_roles?: string[];
     capabilities?: string[] | null; playback_type?: string; artwork_url?: string; artwork_available?: boolean; entries?: Item[]; extras?: Item[];
@@ -343,8 +343,8 @@ export default function WebMediaPage({initialView = 'home'}: {initialView?: 'hom
         {preview && <section style={{marginBottom: 32}}><h2>{preview.title}</h2>
             <p>{preview.kind} · {preview.reference.domain} · {preview.reference.source_id}</p>
             {preview.description && <p>{preview.description.slice(0, 350)}</p>}
-            {preview.kind === 'collection' && <p>{preview.entries.length} preview entries
-                {!preview.enumeration_complete && ' (more entries are available)'}</p>}
+            {preview.kind === 'collection' && <p>{preview.entries?.length ?? 0} preview entries
+                {!preview.enumeration_complete && ' (enumeration is incomplete)'}</p>}
             <ImportPreviewForm key={`${preview.reference.source_id}:${preview.reference.domain}:${preview.reference.namespace}:${preview.reference.upstream_id}:${importConnectionId}`}
                 preview={preview} connectionId={importConnectionId} items={allItems}
                 canLink={!!me?.manages_library} canAutomate={me?.role === 'admin'} profiles={managedProfiles}

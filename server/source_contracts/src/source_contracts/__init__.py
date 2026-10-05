@@ -180,7 +180,7 @@ class MediaSnapshot(BaseModel):
     movie_year: int | None = Field(default=None, ge=1880, le=2200)
     entries: list[EntrySnapshot] = Field(default_factory=list)
     extras: list[EntrySnapshot] = Field(default_factory=list)
-    enumeration_complete: bool = True
+    enumeration_complete: bool = False
 
 
 class CollectionSnapshot(MediaSnapshot):
