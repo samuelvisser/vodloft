@@ -157,3 +157,15 @@ def test_source_error_envelope_stays_typed_and_redacted(tmp_path):
     assert error.value.code == "authentication_required"
     assert "Authorization is required" == str(error.value)
     assert "secret-value" not in str(error.value)
+
+
+    worker.write_text("import json,sys\njson.load(sys.stdin)\n"
+        "print(json.dumps({'error': {'code': 'runtime_error',"
+        "'message': 'parser failed; token=secret-value'}}))\n")
+    with pytest.raises(gateway_module.SourceInvocationError) as error:
+        gateway.call("fixture", "resolve")
+    assert error.value.code == "runtime_error"
+    assert error.value.source_id == "fixture"
+    assert error.value.operation == "resolve"
+    assert str(error.value) == "fixture Source failed while extracting this URL"
+    assert "secret-value" not in str(error.value)
