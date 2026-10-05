@@ -8,7 +8,7 @@ import logging
 import os
 import pkgutil
 
-from sqlalchemy import MetaData, create_engine, event
+from sqlalchemy import MetaData, create_engine, event, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -121,6 +121,24 @@ def get_session() -> Session:
     if _SessionLocal is None:
         configure_db()
     return _SessionLocal()
+
+
+
+def begin_write_transaction(session: Session) -> None:
+    """Reserve SQLite's writer slot before a read-then-write scheduler transaction.
+
+    WAL permits concurrent readers, but deferred transactions can fail with
+    SQLITE_BUSY_SNAPSHOT when another writer commits between the read and write.
+    BEGIN IMMEDIATE lets SQLite's busy timeout serialize these short mutations.
+    """
+    if session.in_transaction():
+        raise RuntimeError("Write transaction must begin before the session is used")
+
+    bind = session.get_bind()
+    if bind.dialect.name == "sqlite":
+        session.execute(text("BEGIN IMMEDIATE"))
+    else:
+        session.begin()
 
 
 def get_db_path() -> Path:
