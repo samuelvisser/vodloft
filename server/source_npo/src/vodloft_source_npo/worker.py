@@ -98,12 +98,16 @@ def _items(value) -> list[dict]:
     return []
 
 
+def _product_id(record: dict) -> str | None:
+    value = record.get("productId") or record.get("externalId")
+    return value if isinstance(value, str) and value else None
+
+
 def _record(value, *, playable: bool = False) -> dict | None:
     if not isinstance(value, dict):
         return None
-    required = "productId" if playable else None
-    if (required and value.get(required)) or (
-            not required and any(value.get(key) for key in ("guid", "slug", "title"))):
+    if (playable and _product_id(value)) or (
+            not playable and any(value.get(key) for key in ("guid", "slug", "title"))):
         return value
     for key in ("data", "item", "program", "series"):
         candidate = value.get(key)
@@ -176,7 +180,7 @@ def _program_url(record: dict, fallback: str | None = None) -> str:
 
 
 def _program_reference(record: dict, fallback_url: str | None = None) -> SourceMediaReference:
-    product_id = record.get("productId")
+    product_id = _product_id(record)
     identity = product_id or record.get("guid") or record.get("slug")
     if not isinstance(identity, str) or not identity:
         raise ValueError("NPO program has no stable identity")
@@ -212,14 +216,14 @@ def _program_entry(record: dict, position: int) -> EntrySnapshot:
         group=str(group) if group is not None else None,
         episode_number=str(episode_number) if episode_number is not None else None,
         published_at=_published(record),
-        capabilities=set(_PLAYABLE_CAPABILITIES) if record.get("productId") else None,
+        capabilities=set(_PLAYABLE_CAPABILITIES) if _product_id(record) else None,
     )
 
 
 def _sort_programs(programs: list[dict]) -> list[dict]:
     unique: dict[str, dict] = {}
     for program in programs:
-        identity = program.get("productId") or program.get("guid") or program.get("slug")
+        identity = _product_id(program) or program.get("guid") or program.get("slug")
         if identity:
             unique.setdefault(str(identity), program)
     minimum = datetime.min.replace(tzinfo=timezone.utc)
@@ -373,7 +377,7 @@ def entries(url: str, cursor: str | None = None, limit: int = 50,
 
 
 def _search_item(record: dict) -> SourceSearchItem | None:
-    if record.get("productId"):
+    if _product_id(record):
         try:
             reference = _program_reference(record)
         except ValueError:
