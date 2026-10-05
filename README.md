@@ -1,3 +1,10 @@
+> [!IMPORTANT]  
+> VodLoft is based on [WireLoft]([WireLoft](https://github.com/samuelvisser/wireloft)), which is a mature download manager for The Daily Wire. VodLoft's goal is to expand that same idea to
+> any domain/ website it can. It will use both yt-dlp and other sources to accomplish this.
+> Its still very early days and this project is NOT ready for usage yet. [WireLoft]([WireLoft](https://github.com/samuelvisser/wireloft)) 
+> very much is though if you're interested
+
+
 # VodLoft 1.0
 
 VodLoft builds a local web-media library from WireLoft. It separates websites (**Domains**), independently installed acquisition adapters (**Sources**), canonical media, Collection membership, local renditions, and downstream media-server delivery.
