@@ -48,17 +48,12 @@ export default function DownloadsSettingsTab({
     isFieldExplicit,
     isFieldDirty,
 }: SettingsTabProps) {
-    const temporaryDownloadRoot = (
-        !isFieldExplicit('downloadSettings.temporaryDownloadRoot')
-        && !isFieldDirty('downloadSettings.temporaryDownloadRoot')
-    )
-        ? childPath(draft.downloadSettings.downloadRoot, '.wireloft-temp')
-        : draft.downloadSettings.temporaryDownloadRoot
+    const temporaryDownloadRoot = draft.downloadSettings.temporaryDownloadRoot
     const rssCacheRoot = (
         !isFieldExplicit('downloadSettings.rssCacheRoot')
         && !isFieldDirty('downloadSettings.rssCacheRoot')
     )
-        ? childPath(draft.downloadSettings.downloadRoot, '.wireloft-rss-cache')
+        ? childPath(draft.downloadSettings.downloadRoot, '.vodloft-rss-cache')
         : draft.downloadSettings.rssCacheRoot
 
     return (
@@ -88,7 +83,7 @@ export default function DownloadsSettingsTab({
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.temporaryDownloadRoot = value
                     })}
-                    help="Used whenever the system default or a Local Media Profile is set to save to a temporary folder first. Its default is .wireloft-temp inside the download root, but an explicit path can live elsewhere."
+                    help="Used whenever the system default or a Local Media Profile is set to save to a temporary folder first. By default VodLoft uses the operating system's local temporary storage so remuxing and metadata work do not repeatedly rewrite a network media library."
                     wide
                 />
                 <TextField
@@ -101,12 +96,12 @@ export default function DownloadsSettingsTab({
                         next.downloadSettings.rssCacheRoot = value
                     })}
                     help={
-                        <ReadMore summary="Stores media WireLoft prepares or caches while fulfilling RSS requests.">
+                        <ReadMore summary="Stores media VodLoft prepares or caches while fulfilling RSS requests.">
                             <p>
-                                By default, the cache lives in <code>.wireloft-rss-cache</code> inside the download root.
+                                By default, the cache lives in <code>.vodloft-rss-cache</code> inside the download root.
                             </p>
                             <p>
-                                You may explicitly place it anywhere WireLoft can write, including container-local storage such as <code>/tmp/wireloft-rss-cache</code>. A container-local cache does not need a host volume, but is lost when the container is recreated.
+                                You may explicitly place it anywhere VodLoft can write, including container-local storage such as <code>/tmp/vodloft-rss-cache</code>. A container-local cache does not need a host volume, but is lost when the container is recreated.
                             </p>
                         </ReadMore>
                     }
@@ -141,10 +136,10 @@ export default function DownloadsSettingsTab({
                                 <strong>Save directly to downloads</strong> writes temporary files next to the final media file and reserves the final filename while downloading.
                             </p>
                             <p>
-                                <strong>Save to temporary folder first</strong> keeps all download and remux work in the temporary folder. Only after the media is complete does WireLoft choose an unused final filename and publish it to the destination.
+                                <strong>Save to temporary folder first</strong> keeps all download and remux work in the temporary folder. Only after the media is complete does VodLoft choose an unused final filename and publish it to the destination.
                             </p>
                             <p>
-                                The temporary folder may be on a different filesystem from the media library, including local storage while the library itself is on SMB, NFS, or another network mount. If a cross-filesystem copy is required, WireLoft copies the already-complete media to a hidden <code>.part</code> publication file on the destination filesystem and only then renames it to the final media filename.
+                                The temporary folder may be on a different filesystem from the media library, including local storage while the library itself is on SMB, NFS, or another network mount. If a cross-filesystem copy is required, VodLoft copies the already-complete media to a hidden <code>.part</code> publication file on the destination filesystem and only then renames it to the final media filename.
                             </p>
                             <p>
                                 Temporary mode is particularly useful when the destination folder is used by a media server and you do not want it to pick up partly downloaded or empty media files.
@@ -164,7 +159,7 @@ export default function DownloadsSettingsTab({
                         next.downloadSettings.thumbnailMode = value as ThumbnailMode
                     })}
                     help={
-                        <ReadMore summary="Choose how WireLoft stores the Daily Wire thumbnail for downloaded media.">
+                        <ReadMore summary="Choose how VodLoft stores the Daily Wire thumbnail for downloaded media.">
                             <p><strong>No thumbnail</strong> keeps downloads media-only.</p>
                             <p><strong>Embed in media</strong> stores the thumbnail as cover artwork inside the downloaded media file.</p>
                             <p><strong>Download besides media</strong> writes the image alongside the final media file, using the same basename.</p>
@@ -214,7 +209,7 @@ export default function DownloadsSettingsTab({
 
             <SettingsSection
                 title="Download processing"
-                description="Limits and retry behaviour for downloads started by WireLoft."
+                description="Limits and retry behaviour for downloads started by VodLoft."
             >
                 <NumberField
                     id="settings-download-concurrency"
@@ -285,7 +280,7 @@ export default function DownloadsSettingsTab({
 
             <SettingsDisclosure
                 title="Verification and file watcher"
-                description="Periodic integrity checks and detection of files changed outside WireLoft."
+                description="Periodic integrity checks and detection of files changed outside VodLoft."
             >
                 <CronEditor
                     id="settings-verify-downloads-cron"
@@ -310,7 +305,7 @@ export default function DownloadsSettingsTab({
                     onChange={(checked) => updateDraft((next) => {
                         next.fileWatcher.enabled = checked
                     })}
-                    help="Scans tracked downloads for files missing, renamed or otherwise changed outside WireLoft."
+                    help="Scans tracked downloads for files missing, renamed or otherwise changed outside VodLoft."
                 />
                 <CronEditor
                     id="settings-file-watcher-cron"
@@ -338,7 +333,7 @@ export default function DownloadsSettingsTab({
                     help={
                         <ReadMore summary="Detects truncated or externally replaced files in addition to missing files.">
                             <p>
-                                If this setting is enabled, WireLoft will consider a file whose size is either zero
+                                If this setting is enabled, VodLoft will consider a file whose size is either zero
                                 or smaller than it was when it was first downloaded a corrupt file and treats it as such.
                             </p>
                         </ReadMore>
