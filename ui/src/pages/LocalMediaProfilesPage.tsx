@@ -1,18 +1,24 @@
 import {useCallback, useRef} from 'react'
 import {useNavigate} from 'react-router-dom'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
-import {useLocalMediaProfiles} from '../lib/queries'
+import {useLocalMediaProfilesView} from '../lib/queries'
 import {LocalMediaProfileRead} from "../types/schemas/local_media_profile";
+import {formatBytes} from '../utils/formatting'
 import {
-import {faIcon} from '../icons/faIcon'
     LocalMediaProfileTypeReg,
     PreferredFormatReg,
     ShowLocalMediaProfileScopeReg,
 } from "../types/local_media_profile";
+import {faIcon} from '../icons/faIcon'
 import DataTable, { Column } from '../components/DataTable/DataTable';
 import ConfirmDeleteDialog, { ConfirmDeleteDialogRef } from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
 import PageSubtitle from "../components/common/PageSubtitle";
+import OpaqueOutputTemplateCode from '../components/LocalMediaProfile/OpaqueOutputTemplateCode'
 import './LocalMediaProfilesPage.css'
+
+type LocalMediaProfileOverviewRow = LocalMediaProfileRead & {
+    storageSizeBytes: number
+}
 
 function getAvailableForLabel(profile: LocalMediaProfileRead) {
     return profile.type === 'show'
@@ -28,7 +34,7 @@ export default function LocalMediaProfilesPage() {
 
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
 
-    const columns: Column<LocalMediaProfileRead>[] = [
+    const columns: Column<LocalMediaProfileOverviewRow>[] = [
         {
             header: 'Name',
             cell: (p) => (
@@ -44,9 +50,13 @@ export default function LocalMediaProfilesPage() {
         {
             header: 'Output Path Template',
             cell: (p) => (
-                <span className="mono local-media-profile-output-template" title={p.outputTemplate}>
-                    {p.outputTemplate}
-                </span>
+                <OpaqueOutputTemplateCode
+                    source={p.outputTemplate}
+                    sourceMode="compact"
+                    renderMode="compact"
+                    label={`Output path template for ${p.name}`}
+                    className="local-media-profile-output-template"
+                />
             ),
             width: '100%',
             cellStyle: {maxWidth: 0},
@@ -64,6 +74,13 @@ export default function LocalMediaProfilesPage() {
             cellStyle: {whiteSpace: 'nowrap'},
         },
         {
+            header: 'Storage Used',
+            accessor: (p) => formatBytes(p.storageSizeBytes) || '0 KiB',
+            width: '1%',
+            headerStyle: {whiteSpace: 'nowrap'},
+            cellStyle: {whiteSpace: 'nowrap'},
+        },
+        {
             header: 'Preferred Format',
             accessor: (p) => PreferredFormatReg.getLabelLoose(p.preferredFormat),
             width: '1%',
@@ -72,7 +89,13 @@ export default function LocalMediaProfilesPage() {
         }
     ]
 
-    const {data: profiles, isLoading, error} = useLocalMediaProfiles()
+    const {data: profileViews, isLoading, error} = useLocalMediaProfilesView()
+    const profiles = profileViews?.map(
+        ({profile, statistics}): LocalMediaProfileOverviewRow => ({
+            ...profile,
+            storageSizeBytes: statistics.storageSizeBytes,
+        }),
+    )
 
     return (
         <section className="view" aria-labelledby="profiles-title">
@@ -87,7 +110,7 @@ export default function LocalMediaProfilesPage() {
             </div>
 
             <div className="form-row">
-                <DataTable<LocalMediaProfileRead>
+                <DataTable<LocalMediaProfileOverviewRow>
                     ariaLabel="Existing media profiles"
                     columns={columns}
                     data={profiles}
@@ -104,10 +127,12 @@ export default function LocalMediaProfilesPage() {
                                 <span>{LocalMediaProfileTypeReg.getLabelLoose(p.type)}</span>
                                 <span>{getAvailableForLabel(p)}</span>
                                 <span>{PreferredFormatReg.getLabelLoose(p.preferredFormat)}</span>
+                                <span>{formatBytes(p.storageSizeBytes) || '0 KiB'}</span>
                             </span>
                         </>
                     )}
                     onRowClick={(p) => navigate(`/local-media-profile/${p.slug}`)}
+                    mobileRowActionLabel="View"
                     actions={(p) => [
                         {
                             onClick: () => navigate(`/edit-local-media-profile/${p.slug}`, { state: p }),
@@ -136,7 +161,7 @@ export default function LocalMediaProfilesPage() {
                     const path = `${endpoint}/${p.slug}`
                     return fetch(`${(window as any).appConfig.API_URL}/${path}`, { method: 'DELETE', credentials: 'include' })
                 }}
-                invalidateQueries={[["localMediaProfiles"]]}
+                invalidateQueries={[["localMediaProfiles"], ["localMediaProfilesView"]]}
                 inUseMessage="This media profile is in use, it cannot be deleted"
             />
         </section>
