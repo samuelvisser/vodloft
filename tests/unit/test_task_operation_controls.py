@@ -417,3 +417,133 @@ def test_executor_skips_retry_run_after_cancellation_request(task_database):
         assert canceled.finished_at is not None
     finally:
         session.close()
+
+def test_progress_updater_honors_late_operation_cancellation(task_database):
+    from task_manager.scheduler.executor import ProgressUpdater
+    from task_manager.scheduler.operation_control import (
+        OPERATION_CANCEL_REQUESTED_CONTEXT_KEY,
+    )
+    from task_manager.scheduler.operations import (
+        OperationTargetSpec,
+        create_operation,
+        link_run_to_operations,
+    )
+    from task_manager.scheduler.types import TaskStatus
+
+    session = task_database()
+    definition = _definition(session, "test_late_cancel_owner_worker")
+    operation = create_operation(
+        session,
+        kind="show.test_late_cancel_owner",
+        resource_type="show",
+        resource_id=92,
+        title="Show 92",
+        targets=[
+            OperationTargetSpec(
+                task_key=definition.key,
+                resource_type="episode",
+                resource_id=902,
+            )
+        ],
+    )
+    run = _run(
+        session,
+        definition,
+        resource_id=902,
+        status=TaskStatus.RUNNING,
+        progress=0,
+    )
+    link_run_to_operations(
+        session,
+        run=run,
+        task_key=definition.key,
+        operation_ids=(operation.id,),
+    )
+    operation.context = {
+        **(operation.context or {}),
+        OPERATION_CANCEL_REQUESTED_CONTEXT_KEY: True,
+    }
+    session.commit()
+    run_id = run.id
+    session.close()
+
+    updater = ProgressUpdater(run_id)
+    assert updater() is True
+
+
+def test_executor_rechecks_operation_ownership_after_link(task_database, monkeypatch):
+    import task_manager.scheduler.executor as executor_module
+    from task_manager.scheduler.db import TaskOperation, TaskRun
+    from task_manager.scheduler.operation_control import OPERATION_CANCEL_REQUESTED_CONTEXT_KEY
+    from task_manager.scheduler.operations import OperationTargetSpec, create_operation
+    from task_manager.scheduler.registry import sync_registry_to_db, task
+    from task_manager.scheduler.types import TaskStatus
+
+    calls: list[int | None] = []
+    task_key = "test_operation_handoff_cancel_worker"
+
+    @task(
+        key=task_key,
+        title="Operation handoff cancellation worker",
+        allowed_resource_types=("episode",),
+        default_max_retries=0,
+    )
+    async def handoff_worker(*, resource_id=None, progress=None):
+        calls.append(resource_id)
+
+    sync_registry_to_db()
+
+    session = task_database()
+    operation = create_operation(
+        session,
+        kind="show.test_handoff_cancel",
+        resource_type="show",
+        resource_id=93,
+        title="Show 93",
+        targets=[
+            OperationTargetSpec(
+                task_key=task_key,
+                resource_type="episode",
+                resource_id=903,
+            )
+        ],
+    )
+    operation_id = operation.id
+    session.commit()
+    session.close()
+
+    original_owner_check = executor_module._run_has_active_operation_owner
+
+    def cancel_before_owner_check(session, run_id):
+        operation = session.get(TaskOperation, operation_id)
+        assert operation is not None
+        operation.context = {
+            **(operation.context or {}),
+            OPERATION_CANCEL_REQUESTED_CONTEXT_KEY: True,
+        }
+        session.commit()
+        return original_owner_check(session, run_id)
+
+    monkeypatch.setattr(
+        executor_module,
+        "_run_has_active_operation_owner",
+        cancel_before_owner_check,
+    )
+
+    executor_module.execute_task(
+        def_key=task_key,
+        resource_type="episode",
+        resource_id=903,
+        operation_ids=(operation_id,),
+    )
+
+    assert calls == []
+
+    session = task_database()
+    try:
+        run = session.query(TaskRun).filter_by(resource_id=903).one()
+        assert run.status == TaskStatus.CANCELED
+        assert run.finished_at is not None
+    finally:
+        session.close()
+
