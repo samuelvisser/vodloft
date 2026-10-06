@@ -14,10 +14,11 @@ COPY ui/package.json ui/package-lock.json ./
 # credential-free installs can ignore it while still installing platform
 # optional dependencies required by Vite/Rollup.
 RUN --mount=type=secret,id=npmrc,target=/ui/.npmrc,required=false \
+    --mount=type=cache,id=vodloft-npm,target=/root/.npm,sharing=locked \
     if [ "$WIRELOFT_PRO_ICONS" = "true" ]; then \
-        npm ci --include=optional; \
+        npm ci --include=optional --prefer-offline --no-audit --no-fund; \
     else \
-        npm ci --registry=https://registry.npmjs.org; \
+        npm ci --registry=https://registry.npmjs.org --prefer-offline --no-audit --no-fund; \
     fi
 
 COPY ui/ ./
@@ -47,7 +48,8 @@ WORKDIR /app
 # Use the interpreter already on PATH (matches requires-python 3.13) instead of
 # having uv fetch its own, and keep the venv at a known, fixed location.
 ENV UV_PYTHON_PREFERENCE=only-system \
-    UV_PROJECT_ENVIRONMENT=/app/.venv
+    UV_PROJECT_ENVIRONMENT=/app/.venv \
+    UV_LINK_MODE=copy
 
 COPY pyproject.toml uv.lock ./
 COPY server ./server
@@ -58,11 +60,13 @@ COPY tools ./tools
 # source layout stays on disk. A non-editable install would flatten that
 # layout and break the derived path. uv refreshes the lock here when dependency
 # declarations changed, then installs that resolved environment.
-RUN uv sync --frozen --no-dev
+RUN --mount=type=cache,id=vodloft-uv,target=/root/.cache/uv,sharing=locked \
+    uv sync --frozen --no-dev
 
 # Build trusted offline Source releases. Each runtime installs into its own
 # persistent virtual environment after its wheel digests and contract pass.
-RUN uv run --frozen --no-dev python tools/build_source_bundles.py /app/source-bundles
+RUN --mount=type=cache,id=vodloft-uv,target=/root/.cache/uv,sharing=locked \
+    uv run --frozen --no-dev python tools/build_source_bundles.py /app/source-bundles
 
 # Default config seed, copied into the /config volume on first run if missing
 COPY config/config.yml.default ./config/config.yml.default
