@@ -205,6 +205,29 @@ def _get_local_media_profile_statistics(
     }
 
 
+def get_local_media_profile_views_list(
+    s: Session,
+) -> list[LocalMediaProfileViewAPIRead]:
+    """List Local Media Profiles with statistics from bounded aggregate queries."""
+    profile = with_polymorphic(LocalMediaProfileBase, "*")
+    items = (
+        s.query(profile)
+        .order_by(profile.id)
+        .all()
+    )
+    statistics_by_profile_id = _get_local_media_profile_statistics(
+        s,
+        [item.id for item in items],
+    )
+    return [
+        LocalMediaProfileViewAPIRead(
+            profile=_to_read(item),
+            statistics=statistics_by_profile_id[item.id],
+        )
+        for item in items
+    ]
+
+
 def get_local_media_profile(
     s: Session,
     local_media_profile_slug: str,
