@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from random import choice
 
-from sqlalchemy import func, literal, select, union_all
+from sqlalchemy import and_, func, literal, or_, select, union_all
 from sqlalchemy.orm import Session, contains_eager, joinedload
 
 from backend.api.models.local_media_profile import (
@@ -13,6 +13,10 @@ from backend.api.models.local_media_profile import (
     LocalMediaProfileTemplateVariable,
 )
 from backend.db.models import Episode, Movie, MovieExtra, MovieExtraSource, Season, Show, ShowLocalMediaProfile
+from backend.services.custom_index_preview import (
+    CustomIndexPreviewMode,
+    plan_custom_index_preview,
+)
 from backend.services.custom_indexes import simulate_episode_indexes
 from backend.types.local_media_profile_types import (
     LocalMediaProfileType,
@@ -57,6 +61,7 @@ _EXAMPLE_SHOW_VALUES = {
     "episode_type": "ep",
     "episode_extra_type": "",
     "episode_number": "1",
+    "episode_index": "1",
     "episode_sub_number": "",
     "episode_label": "1",
     "episode_identifier": "ep.1",
@@ -149,6 +154,53 @@ def _show_template_source(episode: Episode) -> LocalMediaProfileTemplateSource:
         label=f"{episode.show.title} — {episode.title}",
         values=episode_output_template_values(episode),
     )
+
+
+def _show_source_anchor_offset(
+    session: Session,
+    show_scope: ShowLocalMediaProfileScope,
+    source_id: str,
+    *,
+    limit: int,
+) -> int | None:
+    """Return a page offset that keeps one selected Episode near the middle of the page."""
+    kind, separator, identifier = source_id.partition(":")
+    if kind != "episode" or not separator or not identifier.isascii() or not identifier.isdigit():
+        return None
+
+    episode = session.scalar(
+        select(Episode)
+        .options(joinedload(Episode.show))
+        .where(Episode.id == int(identifier))
+    )
+    if episode is None or episode.show.type not in _show_type_values(show_scope):
+        return None
+
+    show_title = episode.show.title.lower()
+    before_anchor = or_(
+        func.lower(Show.title) < show_title,
+        and_(func.lower(Show.title) == show_title, Show.id < episode.show_id),
+        and_(
+            func.lower(Show.title) == show_title,
+            Show.id == episode.show_id,
+            Episode.index < episode.index,
+        ),
+        and_(
+            func.lower(Show.title) == show_title,
+            Show.id == episode.show_id,
+            Episode.index == episode.index,
+            Episode.id < episode.id,
+        ),
+    )
+    position = session.scalar(
+        select(func.count())
+        .select_from(Episode)
+        .join(Episode.show)
+        .join(Episode.season)
+        .where(Show.type.in_(_show_type_values(show_scope)))
+        .where(before_anchor)
+    ) or 0
+    return max(0, position - limit // 2)
 
 
 def _show_source_page(
@@ -379,9 +431,19 @@ def get_output_template_source_page(
     search: str | None = None,
     offset: int = 0,
     limit: int = 30,
+    anchor_source_id: str | None = None,
 ) -> LocalMediaProfileTemplateSourcePage:
     """Search every locally stored media item applicable to a Local Media Profile."""
     if profile_type == LocalMediaProfileType.SHOW:
+        if anchor_source_id and not (search or "").strip():
+            anchor_offset = _show_source_anchor_offset(
+                session,
+                show_scope,
+                anchor_source_id,
+                limit=limit,
+            )
+            if anchor_offset is not None:
+                offset = anchor_offset
         sources, has_more = _show_source_page(
             session,
             show_scope,
@@ -419,12 +481,80 @@ def get_output_template_source_page(
     )
 
 
+class _PersistedPreviewAssignmentMissing(Exception):
+    pass
+
+
+def _simulate_show_preview_assignments(
+    session: Session | None,
+    episode: Episode | None,
+    body: LocalMediaProfileTemplatePreview,
+    definitions: frozenset[str],
+) -> dict[str, int]:
+    if session is None or episode is None:
+        return {}
+    episodes = list(session.scalars(
+        select(Episode)
+        .options(joinedload(Episode.show), joinedload(Episode.season))
+        .where(
+            Episode.show_id == episode.show_id,
+            Episode.index <= episode.index,
+        )
+        .order_by(Episode.index.asc(), Episode.id.asc())
+    ).unique().all())
+    return simulate_episode_indexes(
+        episodes,
+        template=body.output_template,
+        definitions=definitions,
+        values_overrides={episode.id: body.values},
+    )[episode.id]
+
+
 def _render_show_preview(
     session: Session | None,
     body: LocalMediaProfileTemplatePreview,
     *,
     index_keys: frozenset[str],
 ) -> tuple[str, frozenset[str], frozenset[str]]:
+    if not index_keys:
+        return (
+            render_output_template(
+                body.output_template,
+                body.values,
+                allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+                allowed_metadata_scopes=SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+            ),
+            frozenset(),
+            frozenset(),
+        )
+
+    profile = (
+        session.get(ShowLocalMediaProfile, body.local_media_profile_id)
+        if (
+            body.indexing_values is None
+            and session is not None
+            and body.local_media_profile_id is not None
+        )
+        else None
+    )
+    definitions = (
+        frozenset(item.key for item in body.indexing_values)
+        if body.indexing_values is not None
+        else indexing_value_definition_keys(profile) if profile is not None else frozenset()
+    )
+    if not index_keys & definitions:
+        return (
+            render_output_template(
+                body.output_template,
+                body.values,
+                allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+                allowed_metadata_scopes=SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+                custom_index_resolver=lambda _key: "",
+            ),
+            definitions,
+            frozenset(),
+        )
+
     source_id = body.source_id or ""
     episode: Episode | None = None
     if session is not None and source_id.startswith("episode:"):
@@ -432,43 +562,52 @@ def _render_show_preview(
             episode = session.get(Episode, int(source_id.split(":", 1)[1]))
         except ValueError:
             episode = None
-
-    profile = (
-        session.get(ShowLocalMediaProfile, body.local_media_profile_id)
-        if session is not None and body.local_media_profile_id is not None else None
+    plan = plan_custom_index_preview(
+        session,
+        draft_template=body.output_template,
+        draft_definition_keys=definitions,
+        episode=episode,
+        local_media_profile_id=body.local_media_profile_id,
+        draft_values=body.values,
+        referenced_keys=index_keys,
     )
-    definitions = (
-        frozenset(item.key for item in body.indexing_values)
-        if body.indexing_values is not None
-        else indexing_value_definition_keys(profile) if profile is not None else frozenset()
+    assignments = (
+        _simulate_show_preview_assignments(session, episode, body, definitions)
+        if plan.mode == CustomIndexPreviewMode.SIMULATE
+        else plan.persisted_assignments
     )
-    assignments: dict[str, int] = {}
-    if session is not None and episode is not None:
-        episodes = list(session.scalars(select(Episode).where(
-            Episode.show_id == episode.show_id, Episode.index <= episode.index,
-        ).order_by(Episode.index.asc())))
-        assignments = simulate_episode_indexes(
-            episodes, template=body.output_template, definitions=definitions,
-            values_overrides={episode.id: body.values},
-        )[episode.id]
-
     provisional: dict[str, int] = {}
 
     def resolve_index(key: str) -> object:
         if key not in definitions:
             return ""
-        if key not in provisional:
-            if key not in assignments:
-                provisional[key] = 1
+        if plan.mode == CustomIndexPreviewMode.USE_PERSISTED and key not in assignments:
+            raise _PersistedPreviewAssignmentMissing(key)
+        if key not in assignments:
+            provisional[key] = 1
         return assignments.get(key, 1)
 
-    output_path = render_output_template(
-        body.output_template,
-        body.values,
-        allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
-        allowed_metadata_scopes=SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
-        custom_index_resolver=resolve_index if index_keys else None,
-    )
+    def render(assignments_for_render: dict[str, int]) -> str:
+        nonlocal assignments
+        assignments = assignments_for_render
+        return render_output_template(
+            body.output_template,
+            body.values,
+            allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+            allowed_metadata_scopes=SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+            custom_index_resolver=resolve_index if index_keys else None,
+        )
+
+    try:
+        output_path = render(assignments)
+    except _PersistedPreviewAssignmentMissing:
+        # Defensive fallback for incomplete/corrupt persisted state. Static
+        # equivalence is only an optimization; it must never change preview
+        # correctness.
+        provisional.clear()
+        output_path = render(
+            _simulate_show_preview_assignments(session, episode, body, definitions)
+        )
     return output_path, definitions, frozenset(provisional)
 
 
