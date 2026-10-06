@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import OperationalError
 
 from backend.db.core import begin_write_transaction, get_session
@@ -56,6 +56,18 @@ class _PreparedExecution:
     run_id: int
     linked_operation_ids: tuple[str, ...]
     call_kwargs: dict[str, Any]
+
+
+def _run_has_active_operation_owner(session, run_id: int) -> bool:
+    """A TaskRun may continue only while at least one linked operation still owns it."""
+    operation_ids = tuple(
+        session.scalars(
+            select(TaskOperationRun.operation_id).where(
+                TaskOperationRun.task_run_id == run_id
+            )
+        )
+    )
+    return not operation_ids or operation_ids_allow_execution(session, operation_ids)
 
 
 class ProgressUpdater:
@@ -111,6 +123,10 @@ class ProgressUpdater:
                     reason if isinstance(reason, str) and reason else "Canceled"
                 )
                 return True, self._cancel_reason
+            if not _run_has_active_operation_owner(s, self.run_id):
+                self._cancelled = True
+                self._cancel_reason = "Owning operation was canceled"
+                return True, self._cancel_reason
             return False, self._cancel_reason
         except Exception:
             # Cancellation checks are deliberately conservative: transient DB
@@ -138,6 +154,7 @@ class ProgressUpdater:
             meta: Optional[dict[str, Any]] = None,
             *,
             completion_percent: int | None = None,
+            wait_state: dict[str, Any] | None | object = _WAIT_UNCHANGED,
     ) -> None:
         p = max(0, min(100, int(percent)))
         completion = (
@@ -182,6 +199,10 @@ class ProgressUpdater:
                             reason if isinstance(reason, str) and reason else "Canceled"
                         )
                         raise TaskCancellationRequested(self._cancel_reason)
+                    if not _run_has_active_operation_owner(s, self.run_id):
+                        self._cancelled = True
+                        self._cancel_reason = "Owning operation was canceled"
+                        raise TaskCancellationRequested(self._cancel_reason)
 
                     values: dict[str, Any] = {
                         "progress": p if self.tracks_progress else None,
@@ -189,7 +210,11 @@ class ProgressUpdater:
                     if message is not None:
                         values["message"] = message
 
-                    if meta is not None or (self.tracks_progress and completion is not None):
+                    if (
+                        meta is not None
+                        or (self.tracks_progress and completion is not None)
+                        or wait_state is not _WAIT_UNCHANGED
+                    ):
                         merged_meta = dict(current_meta or {})
                         if meta is not None:
                             current_progress_meta = merged_meta.get(TASK_RUN_PROGRESS_META_KEY)
@@ -202,11 +227,23 @@ class ProgressUpdater:
                             merged_meta[TASK_RUN_PROGRESS_META_KEY] = merged_progress_meta
                         if self.tracks_progress and completion is not None:
                             merged_meta[TASK_RUN_COMPLETION_PROGRESS_META_KEY] = completion
+                        if wait_state is not _WAIT_UNCHANGED:
+                            if wait_state is None:
+                                merged_meta.pop(TASK_RUN_WAIT_STATE_META_KEY, None)
+                            else:
+                                merged_meta[TASK_RUN_WAIT_STATE_META_KEY] = wait_state
                         values["meta"] = merged_meta
 
                     result = s.execute(
                         update(TaskRun)
-                        .where(TaskRun.id == self.run_id)
+                        .where(
+                            TaskRun.id == self.run_id,
+                            TaskRun.status == TaskStatus.RUNNING,
+                            func.coalesce(
+                                TaskRun.meta[RUN_CANCEL_REQUESTED_META_KEY].as_boolean(),
+                                False,
+                            ).is_(False),
+                        )
                         .values(**values)
                     )
                     if result.rowcount == 0:
@@ -229,8 +266,57 @@ class ProgressUpdater:
         finally:
             s.close()
 
-    def set_wait_state(self, reason: str | None, message: str | None = None) -> None:
+    def complete_transactionally(self, session, result: TaskResult) -> None:
+        """Persist successful worker output and TaskRun completion atomically.
+
+        The guarded update serializes publication against cancellation. A worker
+        cannot publish success after its run or every owning operation was canceled.
+        """
+        if result.outcome != "succeeded":
+            raise ValueError("Transactional completion requires successful output")
+        if not _run_has_active_operation_owner(session, self.run_id):
+            raise DownloadCancelled("Owning operation was canceled before publication committed")
+
+        session.flush()
+        changed = session.execute(
+            update(TaskRun)
+            .where(
+                TaskRun.id == self.run_id,
+                TaskRun.status == TaskStatus.RUNNING,
+                func.coalesce(
+                    TaskRun.meta[RUN_CANCEL_REQUESTED_META_KEY].as_boolean(),
+                    False,
+                ).is_(False),
+            )
+            .values(
+                status=TaskStatus.SUCCEEDED,
+                progress=100,
+                result=result.as_dict(),
+                message=result.summary,
+                last_error=None,
+                next_retry_at=None,
+                finished_at=datetime.now(timezone.utc),
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if changed.rowcount != 1:
+            raise DownloadCancelled("Task was canceled before publication committed")
+        refresh_operations_for_run(session, self.run_id)
+
+    def set_wait_state(
+            self,
+            reason: str | None,
+            message: str | None = None,
+            *,
+            until: float | None = None,
+    ) -> None:
         """Persist transient worker waiting state without changing worker progress."""
+        wait_state = None
+        if reason:
+            wait_state = {"reason": reason, "message": message}
+            if until is not None:
+                wait_state["until"] = until
+
         s = get_session()
         last_operational_error: OperationalError | None = None
         try:
@@ -247,18 +333,25 @@ class ProgressUpdater:
                         if exists is None:
                             return
 
+                    if not _run_has_active_operation_owner(s, self.run_id):
+                        return
+
                     merged_meta = dict(current_meta or {})
-                    if reason:
-                        merged_meta[TASK_RUN_WAIT_STATE_META_KEY] = {
-                            "reason": reason,
-                            "message": message,
-                        }
-                    else:
+                    if wait_state is None:
                         merged_meta.pop(TASK_RUN_WAIT_STATE_META_KEY, None)
+                    else:
+                        merged_meta[TASK_RUN_WAIT_STATE_META_KEY] = wait_state
 
                     result = s.execute(
                         update(TaskRun)
-                        .where(TaskRun.id == self.run_id)
+                        .where(
+                            TaskRun.id == self.run_id,
+                            TaskRun.status == TaskStatus.RUNNING,
+                            func.coalesce(
+                                TaskRun.meta[RUN_CANCEL_REQUESTED_META_KEY].as_boolean(),
+                                False,
+                            ).is_(False),
+                        )
                         .values(meta=merged_meta or None)
                     )
                     if result.rowcount == 0:
@@ -579,18 +672,32 @@ def execute_task(
     cancellation_reason: str | None = None
     started_perf = time.perf_counter()
 
+    # Cancellation can happen after the initial preflight but before the run/link
+    # transaction commits. Re-check ownership at the durable handoff boundary.
+    if prepared.linked_operation_ids:
+        ownership_session = get_session()
+        try:
+            if not _run_has_active_operation_owner(
+                ownership_session,
+                prepared.run_id,
+            ):
+                cancellation_reason = "Owning operation was canceled"
+        finally:
+            ownership_session.close()
+
     try:
-        with operation_context(prepared.linked_operation_ids):
-            if inspect.iscoroutinefunction(fn):
-                worker_result = asyncio.run(
-                    fn(resource_id=resource_id, progress=updater, **prepared.call_kwargs)
-                )
-            else:
-                worker_result = fn(  # type: ignore[arg-type]
-                    resource_id=resource_id,
-                    progress=updater,
-                    **prepared.call_kwargs,
-                )
+        if cancellation_reason is None:
+            with operation_context(prepared.linked_operation_ids):
+                if inspect.iscoroutinefunction(fn):
+                    worker_result = asyncio.run(
+                        fn(resource_id=resource_id, progress=updater, **prepared.call_kwargs)
+                    )
+                else:
+                    worker_result = fn(  # type: ignore[arg-type]
+                        resource_id=resource_id,
+                        progress=updater,
+                        **prepared.call_kwargs,
+                    )
     except (TaskCancellationRequested, DownloadCancelled) as exc:
         cancellation_reason = str(exc) or "Canceled"
     except Exception as exc:
