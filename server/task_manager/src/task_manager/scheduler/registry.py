@@ -11,9 +11,11 @@ from task_manager.scheduler.db import TaskDefinition
 
 
 logger = logging.getLogger(__name__)
-_REGISTRY: Dict[str, Tuple[TaskMeta, Callable[..., Awaitable[Any]]]] = {}
+TaskCallable = Callable[..., Awaitable[Any]]
+_REGISTRY: Dict[str, Tuple[TaskMeta, TaskCallable]] = {}
 TerminalCallback = Callable[..., None]
 RecoveryDispatcher = Callable[[], None]
+_TASK_META_ATTRIBUTE = "_task_meta"
 
 
 @dataclass
@@ -23,9 +25,10 @@ class TriggerMeta:
     cron: Optional[str] = None  # For cron triggers (actual cron expression)
     enabled: bool = True  # Whether this trigger should be registered
     event_name: Optional[str] = None  # For event triggers
-    resource_type: Optional[str] = None  # Resource type for the trigger
+    resource_type: Optional[str] = None  # Fixed resource type, or event payload when None
     resource_id: Optional[int] = None  # Resource ID (0 = global, None = passed via event)
     coalesce: bool = True  # Whether to coalesce multiple pending jobs
+    minimum_interval_ms: Optional[int] = None  # Optional policy minimum for this cron trigger
 
 
 @dataclass
@@ -41,6 +44,17 @@ class TaskMeta:
     terminal_callback: Optional[TerminalCallback] = None
     recovery_dispatcher: Optional[RecoveryDispatcher] = None
     triggers: List[TriggerMeta] = field(default_factory=list)
+
+
+def _attach_task_meta(fn: TaskCallable, meta: TaskMeta) -> None:
+    setattr(fn, _TASK_META_ATTRIBUTE, meta)
+
+
+def _registered_task_meta(fn: TaskCallable, decorator_name: str) -> TaskMeta:
+    meta = getattr(fn, _TASK_META_ATTRIBUTE, None)
+    if not isinstance(meta, TaskMeta):
+        raise ValueError(f"@{decorator_name} must be used after @task decorator")
+    return meta
 
 
 def task(
@@ -61,13 +75,18 @@ def task(
     structured result without forcing the worker to know whether it was started
     by the UI, a cron schedule, or another worker.
 
+    ``tracks_progress=False`` declares that the task has no meaningful
+    percentage while it is active. Its TaskRun/TaskOperation progress remains
+    indeterminate until completion, while messages, waits and cancellation still
+    use the normal execution channel.
+
     ``pauses_scheduled_work`` routes the task through VodLoft's critical
     execution lane. Normal scheduler work remains paused from the first attempt
     through any retries until that TaskRun reaches a terminal state.
 
-    ``executor_alias`` selects an executor within the normal scheduler. This
-    isolates blocking infrastructure work without replacing domain-level queue
-    and concurrency controls.
+    ``executor_alias`` chooses an executor inside the normal scheduler. This
+    is infrastructure isolation, not domain concurrency: task-specific limits
+    still belong to their owning queue/coordinator.
 
     ``terminal_callback`` is an optional infrastructure hook invoked after the
     TaskRun has been durably finalized (success/failure/cancellation, but not
@@ -81,7 +100,7 @@ def task(
     state has been restored, preserving the queue's own concurrency policy.
     """
 
-    def decorator(fn: Callable[..., Awaitable[Any]]):
+    def decorator(fn: TaskCallable):
         meta = TaskMeta(
             key=key,
             title=title,
@@ -97,8 +116,9 @@ def task(
         )
         _REGISTRY[key] = (meta, fn)
 
-        # Allow chaining with trigger decorators
-        fn._task_meta = meta
+        # Allow chaining with trigger decorators without relying on an
+        # undeclared callable attribute in static type checking.
+        _attach_task_meta(fn, meta)
         return fn
 
     return decorator
@@ -110,6 +130,7 @@ def on_cron(
     resource_id: int = 0,
     coalesce: bool = True,
     enabled: bool = True,
+    minimum_interval_ms: Optional[int] = None,
 ):
     """Decorator to add a cron-based trigger to a task.
 
@@ -119,10 +140,10 @@ def on_cron(
         resource_id: Resource ID to run on
         coalesce: Whether to coalesce multiple pending jobs
         enabled: Whether this cron trigger should be registered
+        minimum_interval_ms: Optional minimum interval enforced before registration
     """
-    def decorator(fn: Callable[..., Awaitable[Any]]):
-        if not hasattr(fn, '_task_meta'):
-            raise ValueError(f"@on_cron must be used after @task decorator")
+    def decorator(fn: TaskCallable):
+        meta = _registered_task_meta(fn, "on_cron")
 
         trigger = TriggerMeta(
             trigger_type='cron',
@@ -131,8 +152,9 @@ def on_cron(
             resource_type=resource_type,
             resource_id=resource_id,
             coalesce=coalesce,
+            minimum_interval_ms=minimum_interval_ms,
         )
-        fn._task_meta.triggers.append(trigger)
+        meta.triggers.append(trigger)
         return fn
 
     return decorator
@@ -143,24 +165,24 @@ def on_event(event_name: str, resource_type: Optional[str] = None):
 
     Args:
         event_name: Name of the event to listen for (e.g., "show.added", "episode.published_final")
-        resource_type: Optional resource type filter
+        resource_type: Fixed resource type. When omitted, use the event payload's
+            resource_type (falling back to "show" for older unscoped events).
     """
-    def decorator(fn: Callable[..., Awaitable[Any]]):
-        if not hasattr(fn, '_task_meta'):
-            raise ValueError(f"@on_event must be used after @task decorator")
+    def decorator(fn: TaskCallable):
+        meta = _registered_task_meta(fn, "on_event")
 
         trigger = TriggerMeta(
             trigger_type='event',
             event_name=event_name,
             resource_type=resource_type,
         )
-        fn._task_meta.triggers.append(trigger)
+        meta.triggers.append(trigger)
         return fn
 
     return decorator
 
 
-def get_task(key: str) -> Tuple[TaskMeta, Callable[..., Awaitable[Any]]]:
+def get_task(key: str) -> Tuple[TaskMeta, TaskCallable]:
     return _REGISTRY[key]
 
 
