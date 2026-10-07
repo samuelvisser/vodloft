@@ -205,7 +205,7 @@ def test_settings_service_updates_existing_scalar_without_removing_inline_commen
     assert "logLevel: \"DEBUG\"  # keep this explanation" in text
 
 
-def test_environment_overrides_show_effective_values_and_cannot_be_saved(tmp_path, monkeypatch):
+def test_environment_overrides_are_snapshotted_until_settings_reload(tmp_path, monkeypatch):
     from backend.api.endpoints.settings.service import (
         SettingsManagedByEnvironmentError,
         get_ui_settings,
@@ -221,14 +221,20 @@ def test_environment_overrides_show_effective_values_and_cannot_be_saved(tmp_pat
         encoding="utf-8",
     )
     monkeypatch.delenv("WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS", raising=False)
-
-    # Environment sources are snapshotted with the process settings registry.
-    # Set the deployment override before priming that startup snapshot.
-    monkeypatch.setenv("WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS", "8")
     _point_settings_at(config_path, monkeypatch)
 
-    current = get_ui_settings()
+    initial = get_ui_settings()
     path = "downloadSettings.maxConcurrentDownloads"
+    assert initial.values.download_settings.max_concurrent_downloads == 3
+    assert path not in initial.environment_overrides
+
+    monkeypatch.setenv("WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS", "8")
+    unchanged = get_ui_settings()
+    assert unchanged.values.download_settings.max_concurrent_downloads == 3
+    assert path not in unchanged.environment_overrides
+
+    reload_settings()
+    current = get_ui_settings()
     assert current.values.download_settings.max_concurrent_downloads == 8
     assert current.environment_overrides[path] == "WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS"
 
@@ -244,7 +250,7 @@ def test_environment_overrides_show_effective_values_and_cannot_be_saved(tmp_pat
     reload_settings()
 
 
-def test_timezone_is_managed_by_tz_and_not_wl_timezone(tmp_path, monkeypatch):
+def test_timezone_is_managed_by_tz_after_settings_reload(tmp_path, monkeypatch):
     from backend.api.endpoints.settings.service import (
         SettingsManagedByEnvironmentError,
         get_ui_settings,
@@ -263,6 +269,11 @@ def test_timezone_is_managed_by_tz_and_not_wl_timezone(tmp_path, monkeypatch):
     assert "timezone" not in without_tz.environment_overrides
 
     monkeypatch.setenv("TZ", "Europe/Amsterdam")
+    still_without_tz = get_ui_settings()
+    assert still_without_tz.values.timezone == "America/Nome"
+    assert "timezone" not in still_without_tz.environment_overrides
+
+    reload_settings()
     with_tz = get_ui_settings()
     assert with_tz.values.timezone == "Europe/Amsterdam"
     assert with_tz.environment_overrides["timezone"] == "TZ"
@@ -295,6 +306,37 @@ def test_settings_response_includes_download_storage_inspection(tmp_path, monkey
     }
 
 
+
+def test_startup_cron_validation_issue_is_exposed_and_clears_after_save(tmp_path, monkeypatch):
+    from backend.api.endpoints.settings.service import get_ui_settings, save_ui_settings
+    from backend.api.models.settings import SettingsAPIUpdate
+
+    config_path = tmp_path / "config.yml"
+    config_path.write_text(
+        "newEpisodeSchedule:\n"
+        "  monitorPendingEpisodeCron: \"* * * * *\"\n",
+        encoding="utf-8",
+    )
+    _point_settings_at(config_path, monkeypatch)
+
+    current = get_ui_settings()
+    issue = next(
+        issue
+        for issue in current.validation_issues
+        if issue.field == "newEpisodeSchedule.monitorPendingEpisodeCron"
+    )
+    assert issue.code == "worker_cron_interval_too_short"
+    assert issue.source == "config.yml"
+
+    values = current.values.model_copy(deep=True)
+    values.new_episode_schedule.monitor_pending_episode_cron = "*/2 * * * *"
+    result = save_ui_settings(SettingsAPIUpdate(
+        values=values,
+        changed_fields=["newEpisodeSchedule.monitorPendingEpisodeCron"],
+    ))
+
+    assert not result.validation_issues
+
 def test_settings_get_uses_cached_runtime_state(tmp_path, monkeypatch):
     from backend.api.endpoints.settings import service
 
@@ -311,7 +353,7 @@ def test_settings_get_uses_cached_runtime_state(tmp_path, monkeypatch):
         raise AssertionError("Settings GET must not rescan environment sources")
 
     monkeypatch.setattr(service, "_load_config_document", should_not_read_config)
-    monkeypatch.setattr(service, "_environment_overrides", should_not_scan_environment)
+    monkeypatch.setattr(service, "_environment_sources", should_not_scan_environment)
 
     second = service.get_ui_settings()
 
