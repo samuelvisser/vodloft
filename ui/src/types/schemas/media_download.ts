@@ -35,6 +35,7 @@ export const MediaDownloadReadSchema = z.looseObject({
     filePath: z.string(),
     artifactStatus: z.enum(MediaDownloadArtifactStatus),
     artifactError: z.string().nullable(),
+    artifactSizeBytes: z.int().nullable(),
     automaticRetrySuppressed: z.boolean(),
     downloadedBytes: z.int().nullable(),
     formatDownloaded: z.string().nullable(),
