@@ -222,11 +222,10 @@ def test_environment_overrides_show_effective_values_and_cannot_be_saved(tmp_pat
     )
     monkeypatch.delenv("WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS", raising=False)
 
-    # Prime the process-wide registry with the config.yml value, then add the
-    # deployment override. The Settings response must still show the effective
-    # environment value rather than the cached/configured value.
-    _point_settings_at(config_path, monkeypatch)
+    # Environment sources are snapshotted with the process settings registry.
+    # Set the deployment override before priming that startup snapshot.
     monkeypatch.setenv("WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS", "8")
+    _point_settings_at(config_path, monkeypatch)
 
     current = get_ui_settings()
     path = "downloadSettings.maxConcurrentDownloads"
@@ -294,3 +293,105 @@ def test_settings_response_includes_download_storage_inspection(tmp_path, monkey
     assert current.download_storage.download_root.storage_kind in {
         "local", "remote", "shared_or_virtual", "unknown",
     }
+
+
+def test_settings_get_uses_cached_runtime_state(tmp_path, monkeypatch):
+    from backend.api.endpoints.settings import service
+
+    config_path = tmp_path / "config.yml"
+    config_path.write_text("logLevel: INFO\n", encoding="utf-8")
+    _point_settings_at(config_path, monkeypatch)
+
+    first = service.get_ui_settings()
+
+    def should_not_read_config(_path):
+        raise AssertionError("Settings GET must not reread config.yml")
+
+    def should_not_scan_environment():
+        raise AssertionError("Settings GET must not rescan environment sources")
+
+    monkeypatch.setattr(service, "_load_config_document", should_not_read_config)
+    monkeypatch.setattr(service, "_environment_overrides", should_not_scan_environment)
+
+    second = service.get_ui_settings()
+
+    assert second.values == first.values
+    assert second.configured_fields == first.configured_fields
+    assert second.environment_overrides == first.environment_overrides
+
+
+def test_external_config_change_requires_settings_registry_reload(tmp_path, monkeypatch):
+    from backend.api.endpoints.settings import service
+
+    config_path = tmp_path / "config.yml"
+    config_path.write_text("logLevel: INFO\n", encoding="utf-8")
+    _point_settings_at(config_path, monkeypatch)
+
+    assert service.get_ui_settings().values.log_level == "INFO"
+
+    config_path.write_text("logLevel: DEBUG\n", encoding="utf-8")
+    assert service.get_ui_settings().values.log_level == "INFO"
+
+    reload_settings()
+    assert service.get_ui_settings().values.log_level == "DEBUG"
+
+
+def test_settings_save_updates_live_registry_without_source_reload(tmp_path, monkeypatch):
+    from backend.api.endpoints.settings import service
+    from backend.api.models.settings import SettingsAPIUpdate
+    from config import get_settings
+
+    config_path = tmp_path / "config.yml"
+    config_path.write_text("scheduler:\n  maxWorkers: 15\n", encoding="utf-8")
+    _point_settings_at(config_path, monkeypatch)
+
+    current = service.get_ui_settings()
+    values = current.values.model_copy(deep=True)
+    values.scheduler.max_workers = 17
+
+    result = service.save_ui_settings(SettingsAPIUpdate(
+        values=values,
+        changed_fields=["scheduler.maxWorkers"],
+    ))
+
+    assert result.values.scheduler.max_workers == 17
+    assert get_settings().scheduler.max_workers == 17
+    assert yaml.safe_load(config_path.read_text(encoding="utf-8"))["scheduler"]["maxWorkers"] == 17
+
+
+def test_settings_save_parses_yaml_once_for_multiple_changes(tmp_path, monkeypatch):
+    from backend.api.endpoints.settings import service
+    from backend.api.models.settings import SettingsAPIUpdate
+
+    config_path = tmp_path / "config.yml"
+    config_path.write_text(
+        "scheduler:\n"
+        "  maxWorkers: 15\n"
+        "  defaultMaxRetries: 3\n",
+        encoding="utf-8",
+    )
+    _point_settings_at(config_path, monkeypatch)
+
+    current = service.get_ui_settings()
+    values = current.values.model_copy(deep=True)
+    values.scheduler.max_workers = 17
+    values.scheduler.default_max_retries = 5
+
+    calls = 0
+    original_compose = service.yaml.compose
+
+    def counting_compose(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original_compose(*args, **kwargs)
+
+    monkeypatch.setattr(service.yaml, "compose", counting_compose)
+    service.save_ui_settings(SettingsAPIUpdate(
+        values=values,
+        changed_fields=[
+            "scheduler.maxWorkers",
+            "scheduler.defaultMaxRetries",
+        ],
+    ))
+
+    assert calls == 1
