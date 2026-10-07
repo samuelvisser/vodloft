@@ -5,9 +5,10 @@ import logging
 import os
 import tempfile
 import threading
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 from pydantic.alias_generators import to_snake
@@ -17,12 +18,13 @@ from yaml.nodes import MappingNode, ScalarNode
 from backend.api.models.settings import (
     DownloadStorageInspectionValue,
     FilesystemInspectionValue,
+    SettingFieldPath,
     SettingsAPIRead,
     SettingsAPIUpdate,
     SettingsValues,
     UI_SETTING_PATHS,
 )
-from config import reload_settings
+from config import get_settings, replace_settings
 from backend.utils.filesystem_storage import inspect_filesystem, same_filesystem
 from config.settings.base import get_config_path
 from config.settings.settings import (
@@ -33,7 +35,7 @@ from config.settings.settings import (
 
 
 logger = logging.getLogger(__name__)
-_SETTINGS_FILE_LOCK = threading.Lock()
+_SETTINGS_FILE_LOCK = threading.RLock()
 _MISSING = object()
 
 
@@ -43,6 +45,39 @@ class SettingsPersistenceError(RuntimeError):
 
 class SettingsManagedByEnvironmentError(RuntimeError):
     """Raised when a caller tries to change an environment-managed setting."""
+
+
+@dataclass(frozen=True)
+class _SettingsRuntimeState:
+    settings: AppSettings
+    values: SettingsValues
+    configured_fields: tuple[SettingFieldPath, ...]
+    environment_overrides: dict[str, str]
+    download_storage: DownloadStorageInspectionValue
+    updated_at: datetime | None
+
+
+class _SettingsRuntimeRegistry:
+    """Thread-safe owner of the Settings UI runtime snapshot."""
+
+    def __init__(self) -> None:
+        self._lock = threading.RLock()
+        self._state: _SettingsRuntimeState | None = None
+
+    def get(self) -> _SettingsRuntimeState:
+        with self._lock:
+            settings = get_settings()
+            if self._state is None or self._state.settings is not settings:
+                self._state = _build_runtime_state(settings)
+            return self._state
+
+    def install(self, state: _SettingsRuntimeState) -> None:
+        with self._lock:
+            replace_settings(state.settings)
+            self._state = state
+
+
+_SETTINGS_RUNTIME = _SettingsRuntimeRegistry()
 
 
 def _file_timestamp(path: Path) -> datetime | None:
@@ -69,6 +104,19 @@ def _get_document_value(document: dict[str, Any], path: str) -> Any:
     return current
 
 
+
+def _set_document_value(document: dict[str, Any], path: str, value: Any) -> None:
+    segments = path.split(".")
+    current = document
+    for segment in segments[:-1]:
+        child = current.get(segment)
+        if not isinstance(child, dict):
+            child = {}
+            current[segment] = child
+        current = child
+    current[segments[-1]] = value
+
+
 def _load_config_document(path: Path) -> tuple[str, dict[str, Any]]:
     try:
         text = path.read_text(encoding="utf-8")
@@ -89,12 +137,12 @@ def _load_config_document(path: Path) -> tuple[str, dict[str, Any]]:
     return text, loaded
 
 
-def _configured_fields(document: dict[str, Any]) -> list[str]:
-    return [
-        path
+def _configured_fields(document: dict[str, Any]) -> tuple[SettingFieldPath, ...]:
+    return tuple(
+        cast(SettingFieldPath, path)
         for path in UI_SETTING_PATHS
         if _get_document_value(document, path) is not _MISSING
-    ]
+    )
 
 
 def _environment_variable_name(path: str) -> str:
@@ -198,24 +246,15 @@ def _append_text(text: str, addition: str) -> str:
     return text + addition
 
 
-def _insert_text(text: str, index: int, addition: str) -> str:
-    prefix = "" if index == 0 or text[index - 1] == "\n" else "\n"
-    return text[:index] + prefix + addition + text[index:]
+@dataclass(frozen=True)
+class _TextEdit:
+    start: int
+    end: int
+    replacement: str
 
 
-def _patch_config_scalar(text: str, path: str, value: Any) -> str:
-    """Add or update one scalar setting without rewriting unrelated YAML text.
-
-    UI-exposed fields are at most one mapping below the root. Existing scalar
-    values are replaced by parser mark offsets, preserving comments and the rest
-    of config.yml byte-for-byte. Missing values are inserted only for the field
-    the user actually changed.
-    """
-    serialized = _serialize_yaml_scalar(value)
-    segments = path.split(".")
-    if len(segments) not in {1, 2}:
-        raise SettingsPersistenceError(f"Unsupported settings path: {path}")
-
+def _patch_config_scalars(text: str, changes: dict[str, Any]) -> str:
+    """Apply all Settings scalar edits after parsing the YAML syntax tree once."""
     try:
         root = yaml.compose(text) if text.strip() else None
     except yaml.YAMLError as exc:
@@ -224,45 +263,75 @@ def _patch_config_scalar(text: str, path: str, value: Any) -> str:
     if root is not None and not isinstance(root, MappingNode):
         raise SettingsPersistenceError("config.yml must contain a YAML mapping at its root.")
 
-    if len(segments) == 1:
-        if isinstance(root, MappingNode):
-            existing = _find_mapping_value(root, segments[0])
-            if existing is not None:
-                _key_node, value_node = existing
-                if not isinstance(value_node, ScalarNode):
-                    raise SettingsPersistenceError(f"{path} must be a scalar setting in config.yml.")
-                return text[:value_node.start_mark.index] + serialized + text[value_node.end_mark.index:]
-        return _append_text(text, f"{segments[0]}: {serialized}\n")
+    edits: list[_TextEdit] = []
+    section_insertions: dict[int, list[str]] = {}
+    root_additions: list[str] = []
+    missing_sections: dict[str, list[str]] = {}
 
-    section_name, field_name = segments
-    if isinstance(root, MappingNode):
-        section_entry = _find_mapping_value(root, section_name)
-        if section_entry is not None:
-            _section_key, section_value = section_entry
-            if isinstance(section_value, MappingNode):
-                field_entry = _find_mapping_value(section_value, field_name)
-                if field_entry is not None:
-                    _field_key, field_value = field_entry
-                    if not isinstance(field_value, ScalarNode):
-                        raise SettingsPersistenceError(f"{path} must be a scalar setting in config.yml.")
-                    return text[:field_value.start_mark.index] + serialized + text[field_value.end_mark.index:]
+    for path, value in changes.items():
+        serialized = _serialize_yaml_scalar(value)
+        segments = path.split(".")
+        if len(segments) not in {1, 2}:
+            raise SettingsPersistenceError(f"Unsupported settings path: {path}")
 
-                return _insert_text(
-                    text,
-                    section_value.end_mark.index,
-                    f"  {field_name}: {serialized}\n",
-                )
+        if len(segments) == 1:
+            existing = _find_mapping_value(root, segments[0]) if isinstance(root, MappingNode) else None
+            if existing is None:
+                root_additions.append(f"{segments[0]}: {serialized}\n")
+                continue
+            _key_node, value_node = existing
+            if not isinstance(value_node, ScalarNode):
+                raise SettingsPersistenceError(f"{path} must be a scalar setting in config.yml.")
+            edits.append(_TextEdit(value_node.start_mark.index, value_node.end_mark.index, serialized))
+            continue
 
-            if isinstance(section_value, ScalarNode) and section_value.value in {"", "null", "~"}:
-                return _insert_text(
-                    text,
-                    section_value.end_mark.index,
-                    f"  {field_name}: {serialized}\n",
-                )
+        section_name, field_name = segments
+        section_entry = _find_mapping_value(root, section_name) if isinstance(root, MappingNode) else None
+        if section_entry is None:
+            missing_sections.setdefault(section_name, []).append(
+                f"  {field_name}: {serialized}\n"
+            )
+            continue
 
+        _section_key, section_value = section_entry
+        if isinstance(section_value, ScalarNode) and section_value.value in {"", "null", "~"}:
+            section_insertions.setdefault(section_value.end_mark.index, []).append(
+                f"  {field_name}: {serialized}\n"
+            )
+            continue
+        if not isinstance(section_value, MappingNode):
             raise SettingsPersistenceError(f"{section_name} must be a mapping in config.yml.")
+        if section_value.flow_style:
+            raise SettingsPersistenceError(
+                f"{section_name} must use a block mapping in config.yml before it can be edited in Settings."
+            )
 
-    return _append_text(text, f"{section_name}:\n  {field_name}: {serialized}\n")
+        field_entry = _find_mapping_value(section_value, field_name)
+        if field_entry is not None:
+            _field_key, field_value = field_entry
+            if not isinstance(field_value, ScalarNode):
+                raise SettingsPersistenceError(f"{path} must be a scalar setting in config.yml.")
+            edits.append(_TextEdit(field_value.start_mark.index, field_value.end_mark.index, serialized))
+            continue
+
+        section_insertions.setdefault(section_value.end_mark.index, []).append(
+            f"  {field_name}: {serialized}\n"
+        )
+
+    for index, additions in section_insertions.items():
+        prefix = "" if index == 0 or text[index - 1] == "\n" else "\n"
+        edits.append(_TextEdit(index, index, prefix + "".join(additions)))
+
+    for edit in sorted(edits, key=lambda item: (item.start, item.end), reverse=True):
+        text = text[:edit.start] + edit.replacement + text[edit.end:]
+
+    additions = list(root_additions)
+    for section_name, section_values in missing_sections.items():
+        additions.append(f"{section_name}:\n{''.join(section_values)}")
+    if additions:
+        text = _append_text(text, "".join(additions))
+
+    return text
 
 
 def _value_for_path(values_document: dict[str, Any], path: str) -> Any:
@@ -272,92 +341,130 @@ def _value_for_path(values_document: dict[str, Any], path: str) -> Any:
     return value
 
 
-def _reload_after_file_change() -> None:
-    settings = reload_settings()
-    logging.getLogger().setLevel(getattr(logging, settings.log_level, logging.INFO))
-
-
-def _response() -> SettingsAPIRead:
-    path = get_config_path()
-    _text, document = _load_config_document(path)
-
-    # Build a fresh source-resolved model for the response. The application
-    # registry is intentionally cached, but the Settings API must never show a
-    # lower-priority config.yml value for a field currently supplied by an
-    # environment variable.
-    effective_settings = AppSettings()
-    download_settings = effective_settings.download_settings
+def _download_storage(settings: AppSettings) -> DownloadStorageInspectionValue:
+    download_settings = settings.download_settings
     download_root = inspect_filesystem(download_settings.download_root)
     temporary_root = inspect_filesystem(download_settings.temporary_download_root)
+    return DownloadStorageInspectionValue(
+        download_root=FilesystemInspectionValue(
+            path=str(download_root.path),
+            mount_point=str(download_root.mount_point) if download_root.mount_point is not None else None,
+            filesystem_type=download_root.filesystem_type,
+            storage_kind=download_root.storage_kind,
+        ),
+        temporary_download_root=FilesystemInspectionValue(
+            path=str(temporary_root.path),
+            mount_point=str(temporary_root.mount_point) if temporary_root.mount_point is not None else None,
+            filesystem_type=temporary_root.filesystem_type,
+            storage_kind=temporary_root.storage_kind,
+        ),
+        same_filesystem=same_filesystem(
+            download_settings.download_root,
+            download_settings.temporary_download_root,
+        ),
+    )
 
-    return SettingsAPIRead(
-        values=SettingsValues.from_app_settings(effective_settings),
+
+def _build_runtime_state(settings: AppSettings) -> _SettingsRuntimeState:
+    path = get_config_path()
+    _text, document = _load_config_document(path)
+    return _SettingsRuntimeState(
+        settings=settings,
+        values=SettingsValues.from_app_settings(settings),
         configured_fields=_configured_fields(document),
         environment_overrides=_environment_overrides(),
-        download_storage=DownloadStorageInspectionValue(
-            download_root=FilesystemInspectionValue(
-                path=str(download_root.path),
-                mount_point=str(download_root.mount_point) if download_root.mount_point is not None else None,
-                filesystem_type=download_root.filesystem_type,
-                storage_kind=download_root.storage_kind,
-            ),
-            temporary_download_root=FilesystemInspectionValue(
-                path=str(temporary_root.path),
-                mount_point=str(temporary_root.mount_point) if temporary_root.mount_point is not None else None,
-                filesystem_type=temporary_root.filesystem_type,
-                storage_kind=temporary_root.storage_kind,
-            ),
-            same_filesystem=same_filesystem(
-                download_settings.download_root,
-                download_settings.temporary_download_root,
-            ),
-        ),
+        download_storage=_download_storage(settings),
         updated_at=_file_timestamp(path),
     )
 
 
+def initialize_settings_runtime_state() -> None:
+    """Snapshot Settings metadata once so external source edits require restart."""
+    _SETTINGS_RUNTIME.get()
+
+
+def _runtime_state() -> _SettingsRuntimeState:
+    return _SETTINGS_RUNTIME.get()
+
+
+def _response(state: _SettingsRuntimeState) -> SettingsAPIRead:
+    return SettingsAPIRead(
+        values=state.values,
+        configured_fields=list(state.configured_fields),
+        environment_overrides=dict(state.environment_overrides),
+        download_storage=state.download_storage,
+        updated_at=state.updated_at,
+    )
+
+
 def get_ui_settings() -> SettingsAPIRead:
-    return _response()
+    """Return the current in-memory settings snapshot without rereading sources."""
+    return _response(_runtime_state())
 
 
 def save_ui_settings(body: SettingsAPIUpdate) -> SettingsAPIRead:
     with _SETTINGS_FILE_LOCK:
+        state = _runtime_state()
         path = get_config_path()
-        previous_content: bytes | None = None
-        previous_file_existed = False
-
-        environment_overrides = _environment_overrides()
-        blocked = [field for field in body.changed_fields if field in environment_overrides]
+        blocked = [field for field in body.changed_fields if field in state.environment_overrides]
         if blocked:
-            variables = ", ".join(environment_overrides[field] for field in blocked)
+            variables = ", ".join(state.environment_overrides[field] for field in blocked)
             raise SettingsManagedByEnvironmentError(
                 f"These settings are managed by environment variables: {variables}."
             )
 
         try:
-            previous_file_existed = path.exists()
-            previous_content = path.read_bytes() if previous_file_existed else None
-            text, _document = _load_config_document(path)
-            values_document = body.values.to_config_document()
+            previous_content = path.read_bytes()
+            text = previous_content.decode("utf-8")
+            previous_file_existed = True
+        except FileNotFoundError:
+            previous_content = None
+            text = ""
+            previous_file_existed = False
+        except (OSError, UnicodeDecodeError) as exc:
+            raise SettingsPersistenceError(f"VodLoft could not read {path}.") from exc
 
-            # Only changedFields are touched. Merely opening or saving the page
-            # therefore never expands config.yml with all application defaults.
-            for field_path in body.changed_fields:
-                text = _patch_config_scalar(
-                    text,
-                    field_path,
-                    _value_for_path(values_document, field_path),
-                )
+        values_document = body.values.to_config_document()
+        changes = {
+            field: _value_for_path(values_document, field)
+            for field in body.changed_fields
+        }
 
-            # Validate the complete YAML mapping before replacing the live file.
-            parsed = yaml.safe_load(text) if text.strip() else {}
-            if parsed is not None and not isinstance(parsed, dict):
-                raise SettingsPersistenceError("config.yml must contain a YAML mapping at its root.")
+        try:
+            patched_text = _patch_config_scalars(text, changes)
 
-            _atomic_write(path, text.encode("utf-8"))
-            _reload_after_file_change()
-        except SettingsManagedByEnvironmentError:
-            raise
+            # Revalidate from the current runtime snapshot plus only the accepted
+            # UI changes. This deliberately does not re-read config.yml, .env or
+            # process environment: external source changes take effect on restart.
+            effective_document = state.settings.model_dump(mode="python", by_alias=True)
+            for field, value in changes.items():
+                _set_document_value(effective_document, field, value)
+            effective_settings = AppSettings.model_validate(effective_document)
+
+            _atomic_write(path, patched_text.encode("utf-8"))
+
+            configured_fields = tuple(dict.fromkeys((*state.configured_fields, *body.changed_fields)))
+            storage_fields = {
+                "downloadSettings.downloadRoot",
+                "downloadSettings.temporaryDownloadRoot",
+            }
+            next_state = _SettingsRuntimeState(
+                settings=effective_settings,
+                values=SettingsValues.from_app_settings(effective_settings),
+                configured_fields=configured_fields,
+                environment_overrides=state.environment_overrides,
+                download_storage=(
+                    _download_storage(effective_settings)
+                    if storage_fields.intersection(body.changed_fields)
+                    else state.download_storage
+                ),
+                updated_at=_file_timestamp(path),
+            )
+            _SETTINGS_RUNTIME.install(next_state)
+            logging.getLogger().setLevel(
+                getattr(logging, effective_settings.log_level, logging.INFO)
+            )
+            return _response(next_state)
         except Exception as exc:
             logger.exception("Failed to persist settings to config.yml")
             try:
@@ -365,7 +472,7 @@ def save_ui_settings(body: SettingsAPIUpdate) -> SettingsAPIRead:
                     _atomic_write(path, previous_content)
                 elif not previous_file_existed:
                     path.unlink(missing_ok=True)
-                reload_settings()
+                _SETTINGS_RUNTIME.install(state)
             except Exception:
                 logger.exception("Failed to restore the previous config.yml")
             if isinstance(exc, SettingsPersistenceError):
@@ -374,4 +481,3 @@ def save_ui_settings(body: SettingsAPIUpdate) -> SettingsAPIRead:
                 "VodLoft could not save config.yml. Check the config file and directory permissions."
             ) from exc
 
-        return _response()
