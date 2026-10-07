@@ -37,6 +37,7 @@ class TaskMeta:
     default_max_retries: Optional[int] = None
     tracks_progress: bool = True
     pauses_scheduled_work: bool = False
+    executor_alias: str = "default"
     terminal_callback: Optional[TerminalCallback] = None
     recovery_dispatcher: Optional[RecoveryDispatcher] = None
     triggers: List[TriggerMeta] = field(default_factory=list)
@@ -50,6 +51,7 @@ def task(
     default_max_retries: Optional[int] = None,
     tracks_progress: bool = True,
     pauses_scheduled_work: bool = False,
+    executor_alias: str = "default",
     terminal_callback: Optional[TerminalCallback] = None,
     recovery_dispatcher: Optional[RecoveryDispatcher] = None,
 ):
@@ -59,9 +61,13 @@ def task(
     structured result without forcing the worker to know whether it was started
     by the UI, a cron schedule, or another worker.
 
-    ``pauses_scheduled_work`` routes the task through WireLoft's critical
+    ``pauses_scheduled_work`` routes the task through VodLoft's critical
     execution lane. Normal scheduler work remains paused from the first attempt
     through any retries until that TaskRun reaches a terminal state.
+
+    ``executor_alias`` selects an executor within the normal scheduler. This
+    isolates blocking infrastructure work without replacing domain-level queue
+    and concurrency controls.
 
     ``terminal_callback`` is an optional infrastructure hook invoked after the
     TaskRun has been durably finalized (success/failure/cancellation, but not
@@ -85,6 +91,7 @@ def task(
             default_max_retries=default_max_retries,
             tracks_progress=tracks_progress,
             pauses_scheduled_work=pauses_scheduled_work,
+            executor_alias=executor_alias,
             terminal_callback=terminal_callback,
             recovery_dispatcher=recovery_dispatcher,
         )
