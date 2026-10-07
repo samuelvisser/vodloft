@@ -53,7 +53,7 @@ def test_restart_cancels_every_nonterminal_task_run(task_database):
         recovered = [session.get(TaskRun, run_id) for run_id in run_ids]
         assert all(run is not None for run in recovered)
         assert all(run.status == TaskStatus.CANCELED for run in recovered if run is not None)
-        assert all(run.message == "Interrupted by WireLoft restart" for run in recovered if run is not None)
+        assert all(run.message == "Interrupted by VodLoft restart" for run in recovered if run is not None)
         assert all(run.finished_at is not None for run in recovered if run is not None)
 
         completed = session.get(TaskRun, completed_id)
