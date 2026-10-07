@@ -258,7 +258,7 @@ def test_truncated_file_is_flagged_corrupted(tmp_path):
 
 
 def test_modest_shrinkage_is_tolerated(tmp_path):
-    """A remuxed .mp4 may be smaller than the bytes fetched for its raw stream."""
+    """Small changes stay below the corruption threshold relative to the final artifact."""
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
     session, engine, _show, _episode, download = _db_with_download(tmp_path, write_bytes=b"x" * 1000)
@@ -272,6 +272,28 @@ def test_modest_shrinkage_is_tolerated(tmp_path):
     session.close()
     engine.dispose()
 
+
+
+def test_size_check_uses_final_artifact_size_not_network_bytes(tmp_path):
+    """Transcoding may make the final artifact far smaller than its network transfer."""
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+
+    session, engine, _show, _episode, download = _db_with_download(
+        tmp_path,
+        write_bytes=b"a" * 50,
+    )
+    download.downloaded_bytes = 300
+    session.commit()
+
+    _run(session)
+
+    assert download.artifact_size_bytes == 50
+    assert download.downloaded_bytes == 300
+    assert download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
+    assert download.artifact_error is None
+
+    session.close()
+    engine.dispose()
 
 def test_truncation_check_can_be_disabled(tmp_path, monkeypatch):
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
