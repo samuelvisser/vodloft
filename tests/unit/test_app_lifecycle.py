@@ -189,7 +189,7 @@ def test_controller_cancels_task_runs_interrupted_by_restart(task_database, monk
 
                 assert interrupted is not None
                 assert interrupted.status == TaskStatus.CANCELED
-                assert interrupted.message == "Interrupted by WireLoft restart"
+                assert interrupted.message == "Interrupted by VodLoft restart"
                 assert interrupted.finished_at is not None
                 # Preserve the last recorded percentage as historical context;
                 # it is no longer considered active once the status is canceled.
