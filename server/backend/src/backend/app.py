@@ -143,6 +143,8 @@ async def _network_aware_http_exception_handler(
 def create_app() -> FastAPI:
     from backend.logging_buffer import install_application_log_handler
     settings = get_settings()
+    from backend.api.endpoints.settings.service import initialize_settings_runtime_state
+    initialize_settings_runtime_state()
     install_application_log_handler(settings.log_level)
 
     app = FastAPI(
