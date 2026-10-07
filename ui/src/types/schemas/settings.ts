@@ -88,6 +88,23 @@ const DownloadSettingsSchema = z.object({
     ffmpegPath: z.string(),
 })
 
+
+export const FilesystemStorageKindSchema = z.enum(['local', 'remote', 'shared_or_virtual', 'unknown'])
+export type FilesystemStorageKind = z.infer<typeof FilesystemStorageKindSchema>
+
+const FilesystemInspectionSchema = z.object({
+    path: z.string(),
+    mountPoint: z.string().nullable(),
+    filesystemType: z.string().nullable(),
+    storageKind: FilesystemStorageKindSchema,
+})
+
+const DownloadStorageInspectionSchema = z.object({
+    downloadRoot: FilesystemInspectionSchema,
+    temporaryDownloadRoot: FilesystemInspectionSchema,
+    sameFilesystem: z.boolean().nullable(),
+})
+
 const FileWatcherSettingsSchema = z.object({
     enabled: z.boolean(),
     scanCronEnabled: z.boolean(),
@@ -262,6 +279,7 @@ export const SettingsReadSchema = z.object({
     values: SettingsValuesSchema,
     configuredFields: z.array(SettingsFieldPathSchema),
     environmentOverrides: z.record(z.string(), z.string()),
+    downloadStorage: DownloadStorageInspectionSchema,
     updatedAt: ApiDateTimeSchema.nullable(),
 })
 export type SettingsRead = z.infer<typeof SettingsReadSchema>
