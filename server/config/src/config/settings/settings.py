@@ -5,12 +5,11 @@ import tomllib
 from typing import Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field, computed_field, field_validator, model_validator
-from pydantic_settings import YamlConfigSettingsSource
+from pydantic import Field, computed_field, field_validator
+from pydantic_settings import DotEnvSettingsSource, EnvSettingsSource, YamlConfigSettingsSource
 
 from config.config import PROJECT_ROOT
 from config.settings.base import SettingsBase, normalize_settings_source_keys
-from config.settings.cron_validation import validate_worker_cron_settings
 from config.settings.submodels import *
 
 
@@ -24,10 +23,10 @@ def get_app_version() -> str:
         with manifest.open("rb") as file:
             version = tomllib.load(file).get("project", {}).get("version")
     except (OSError, tomllib.TOMLDecodeError) as exc:
-        raise RuntimeError(f"Could not read WireLoft version from {manifest}") from exc
+        raise RuntimeError(f"Could not read VodLoft version from {manifest}") from exc
 
     if not isinstance(version, str) or not version:
-        raise RuntimeError(f"WireLoft version is missing from {manifest}")
+        raise RuntimeError(f"VodLoft version is missing from {manifest}")
     return version
 
 
@@ -47,7 +46,7 @@ def _environment_value(source, name: str) -> Any:
 
 
 def environment_settings_source_data(source, settings_cls) -> dict[str, Any]:
-    """Return normalized environment settings with WireLoft's TZ exception."""
+    """Return normalized environment settings with VodLoft's TZ exception."""
     data = normalize_settings_source_keys(source(), settings_cls)
 
     # EnvSettingsSource exposes WL_TIMEZONE as ``timezone``. DotEnvSettingsSource
@@ -61,6 +60,18 @@ def environment_settings_source_data(source, settings_cls) -> dict[str, Any]:
         data["timezone"] = timezone
 
     return data
+
+
+def environment_settings_source_documents(
+    settings_cls: type[SettingsBase],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Resolve environment and dotenv source documents for a settings model."""
+    environment_source = EnvSettingsSource(settings_cls=settings_cls)
+    dotenv_source = DotEnvSettingsSource(settings_cls=settings_cls)
+    return (
+        environment_settings_source_data(environment_source, settings_cls),
+        environment_settings_source_data(dotenv_source, settings_cls),
+    )
 
 
 class AppSettings(SettingsBase):
@@ -145,23 +156,6 @@ class AppSettings(SettingsBase):
                 "Must be a valid IANA timezone, such as Europe/Amsterdam"
             ) from exc
         return value
-
-    @model_validator(mode="after")
-    def _validate_worker_cron_minimums(self):
-        validate_worker_cron_settings(
-            min_slow_request_ms=self.dw_timeout.min_slow_request_ms,
-            find_episodes_cron_enabled=self.new_episode_schedule.find_episodes_cron_enabled,
-            find_episodes_cron=self.new_episode_schedule.find_episodes_cron,
-            monitor_pending_episode_cron_enabled=self.new_episode_schedule.monitor_pending_episode_cron_enabled,
-            monitor_pending_episode_cron=self.new_episode_schedule.monitor_pending_episode_cron,
-            monitor_no_usable_media_episode_cron_enabled=self.new_episode_schedule.monitor_no_usable_media_episode_cron_enabled,
-            monitor_no_usable_media_episode_cron=self.new_episode_schedule.monitor_no_usable_media_episode_cron,
-            verify_downloads_cron_enabled=self.download_settings.verify_downloads_cron_enabled,
-            verify_downloads_cron=self.download_settings.verify_downloads_cron,
-            file_watcher_scan_cron_enabled=self.file_watcher.scan_cron_enabled,
-            file_watcher_scan_cron=self.file_watcher.scan_cron,
-        )
-        return self
 
     @classmethod
     def settings_customise_sources(
