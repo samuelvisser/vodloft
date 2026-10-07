@@ -23,8 +23,8 @@ downloadSettings:
   # Keep all acquired media and immutable feed copies on the persistent mount.
   downloadRoot: /downloads
 
-  # Default behavior for downloads: direct or temporary.
-  downloadMode: direct
+  # Stage downloads locally before publishing completed media.
+  downloadMode: temporary
 
   # Thumbnail handling: no_thumbnail, embed, sidecar, or embed_and_sidecar.
   thumbnailMode: embed
