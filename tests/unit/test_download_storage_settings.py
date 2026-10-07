@@ -1,22 +1,22 @@
 from __future__ import annotations
 
 
-def test_system_download_storage_defaults_to_direct_mode():
+def test_system_download_storage_defaults_to_local_temporary_mode():
     from backend.api.models.settings import SettingsValues
     from config.settings.settings import AppSettings
     from config.settings.submodels import DownloadMode, ThumbnailMode
 
     settings = AppSettings()
 
-    assert settings.download_settings.download_mode is DownloadMode.DIRECT
+    assert settings.download_settings.download_mode is DownloadMode.TEMPORARY
     assert settings.download_settings.thumbnail_mode is ThumbnailMode.EMBED
-    assert (
-        settings.download_settings.temporary_download_root
-        == settings.download_settings.download_root / ".wireloft-temp"
+    assert settings.download_settings.temporary_download_root.name == "vodloft-downloads"
+    assert settings.download_settings.temporary_download_root != (
+        settings.download_settings.download_root / ".vodloft-temp"
     )
     assert (
         settings.download_settings.rss_cache_root
-        == settings.download_settings.download_root / ".wireloft-rss-cache"
+        == settings.download_settings.download_root / ".vodloft-rss-cache"
     )
     assert settings.download_settings.rss_cache_retention_seconds == 7 * 24 * 60 * 60
 
@@ -24,24 +24,25 @@ def test_system_download_storage_defaults_to_direct_mode():
         by_alias=True,
         mode="json",
     )
-    assert values["downloadSettings"]["downloadMode"] == "direct"
+    assert values["downloadSettings"]["downloadMode"] == "temporary"
     assert values["downloadSettings"]["thumbnailMode"] == "embed"
     assert values["downloadSettings"]["temporaryDownloadRoot"] == str(
-        settings.download_settings.download_root / ".wireloft-temp"
+        settings.download_settings.temporary_download_root
     )
     assert values["downloadSettings"]["rssCacheRoot"] == str(
-        settings.download_settings.download_root / ".wireloft-rss-cache"
+        settings.download_settings.download_root / ".vodloft-rss-cache"
     )
     assert values["downloadSettings"]["rssCacheRetentionSeconds"] == 7 * 24 * 60 * 60
 
 
-def test_download_storage_default_factories_follow_download_root():
+def test_cache_default_follows_download_root_but_temporary_storage_does_not():
     from config.settings.submodels import DownloadSettings
 
     settings = DownloadSettings(download_root="/media")
 
-    assert settings.temporary_download_root.as_posix() == "/media/.wireloft-temp"
-    assert settings.rss_cache_root.as_posix() == "/media/.wireloft-rss-cache"
+    assert settings.temporary_download_root.name == "vodloft-downloads"
+    assert settings.temporary_download_root.as_posix() != "/media/.vodloft-temp"
+    assert settings.rss_cache_root.as_posix() == "/media/.vodloft-rss-cache"
 
 
 def test_explicit_download_storage_paths_override_default_factories():
@@ -49,12 +50,12 @@ def test_explicit_download_storage_paths_override_default_factories():
 
     settings = DownloadSettings(
         download_root="/media",
-        temporary_download_root="/tmp/wireloft-downloads",
-        rss_cache_root="/tmp/wireloft-rss-cache",
+        temporary_download_root="/tmp/vodloft-downloads",
+        rss_cache_root="/tmp/vodloft-rss-cache",
     )
 
-    assert settings.temporary_download_root.as_posix() == "/tmp/wireloft-downloads"
-    assert settings.rss_cache_root.as_posix() == "/tmp/wireloft-rss-cache"
+    assert settings.temporary_download_root.as_posix() == "/tmp/vodloft-downloads"
+    assert settings.rss_cache_root.as_posix() == "/tmp/vodloft-rss-cache"
 
 
 def test_local_media_profile_defaults_to_system_storage_and_thumbnail_modes():
