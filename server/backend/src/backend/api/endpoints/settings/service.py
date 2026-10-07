@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 import logging
 import os
@@ -11,8 +12,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import yaml
-from pydantic.alias_generators import to_snake
-from pydantic_settings import DotEnvSettingsSource, EnvSettingsSource
+from pydantic.alias_generators import to_camel, to_snake
 from yaml.nodes import MappingNode, ScalarNode
 
 from backend.api.models.settings import (
@@ -21,16 +21,21 @@ from backend.api.models.settings import (
     SettingFieldPath,
     SettingsAPIRead,
     SettingsAPIUpdate,
+    SettingsValidationIssueValue,
     SettingsValues,
     UI_SETTING_PATHS,
 )
 from config import get_settings, replace_settings
 from backend.utils.filesystem_storage import inspect_filesystem, same_filesystem
-from config.settings.base import get_config_path
+from config.settings.base import get_config_path, normalize_settings_source_keys
+from config.settings.cron_validation import (
+    WorkerCronExpressionError,
+    worker_cron_validation_errors,
+)
 from config.settings.settings import (
     AppSettings,
     TIMEZONE_ENVIRONMENT_VARIABLE,
-    environment_settings_source_data,
+    environment_settings_source_documents,
 )
 
 
@@ -51,9 +56,12 @@ class SettingsManagedByEnvironmentError(RuntimeError):
 class _SettingsRuntimeState:
     settings: AppSettings
     values: SettingsValues
+    config_source: dict[str, Any]
+    source_overrides: dict[str, Any]
     configured_fields: tuple[SettingFieldPath, ...]
     environment_overrides: dict[str, str]
     download_storage: DownloadStorageInspectionValue
+    validation_issues: tuple[SettingsValidationIssueValue, ...]
     updated_at: datetime | None
 
 
@@ -114,7 +122,7 @@ def _set_document_value(document: dict[str, Any], path: str, value: Any) -> None
             child = {}
             current[segment] = child
         current = child
-    current[segments[-1]] = value
+    current[segments[-1]] = deepcopy(value)
 
 
 def _load_config_document(path: Path) -> tuple[str, dict[str, Any]]:
@@ -123,7 +131,7 @@ def _load_config_document(path: Path) -> tuple[str, dict[str, Any]]:
     except FileNotFoundError:
         return "", {}
     except OSError as exc:
-        raise SettingsPersistenceError(f"WireLoft could not read {path}.") from exc
+        raise SettingsPersistenceError(f"VodLoft could not read {path}.") from exc
 
     try:
         loaded = yaml.safe_load(text)
@@ -151,30 +159,28 @@ def _environment_variable_name(path: str) -> str:
     return "WL_" + "__".join(to_snake(segment).upper() for segment in path.split("."))
 
 
-def _source_document(source) -> dict[str, Any]:
+def _environment_sources() -> tuple[dict[str, Any], dict[str, Any]]:
+    """Snapshot environment settings once for the lifetime of the settings registry."""
     try:
-        return environment_settings_source_data(source, AppSettings)
+        return environment_settings_source_documents(AppSettings)
     except Exception:
-        logger.exception("Failed to inspect a settings environment source")
-        return {}
+        logger.exception("Failed to inspect settings environment sources")
+        return {}, {}
 
 
-def _environment_overrides() -> dict[str, str]:
-    """Return UI paths whose effective values are controlled above config.yml.
-
-    Both process environment variables and WireLoft's configured .env file are
-    included because neither can be overridden by editing config.yml. All app
-    settings use WL_* names except timezone, which is managed by the standard
-    container-level TZ variable.
-    """
-    source_documents = [
-        _source_document(EnvSettingsSource(AppSettings)),
-        _source_document(DotEnvSettingsSource(AppSettings)),
-    ]
-
+def _environment_overrides(
+    environment_source: dict[str, Any],
+    dotenv_source: dict[str, Any],
+) -> dict[str, str]:
+    """Return UI fields managed above config.yml in the startup source snapshot."""
+    source_documents = (environment_source, dotenv_source)
     managed: dict[str, str] = {}
+
     for path in UI_SETTING_PATHS:
-        if not any(_get_document_value(document, path) is not _MISSING for document in source_documents):
+        if not any(
+            _get_document_value(document, path) is not _MISSING
+            for document in source_documents
+        ):
             continue
 
         canonical_name = _environment_variable_name(path)
@@ -193,6 +199,65 @@ def _environment_overrides() -> dict[str, str]:
         )
         managed[path] = actual_name
     return managed
+
+
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    merged = deepcopy(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = deepcopy(value)
+    return merged
+
+
+def _effective_source_shape(
+    source: dict[str, Any],
+    effective_document: dict[str, Any],
+) -> dict[str, Any]:
+    """Keep a source's shape while replacing raw values with validated values."""
+    snapshot: dict[str, Any] = {}
+    for key, raw_value in source.items():
+        effective_value = effective_document.get(key, _MISSING)
+        if effective_value is _MISSING:
+            continue
+        if isinstance(raw_value, dict) and isinstance(effective_value, dict):
+            nested = _effective_source_shape(raw_value, effective_value)
+            if nested:
+                snapshot[key] = nested
+            continue
+        snapshot[key] = deepcopy(effective_value)
+    return snapshot
+
+
+def _source_overrides_snapshot(
+    settings: AppSettings,
+    environment_source: dict[str, Any],
+    dotenv_source: dict[str, Any],
+) -> dict[str, Any]:
+    """Snapshot source precedence without retaining raw environment secrets."""
+    effective_document = settings.model_dump(mode="python", by_alias=True)
+    dotenv_snapshot = _effective_source_shape(dotenv_source, effective_document)
+    environment_snapshot = _effective_source_shape(environment_source, effective_document)
+    return _deep_merge(dotenv_snapshot, environment_snapshot)
+
+
+def _effective_settings_from_sources(
+    state: _SettingsRuntimeState,
+    config_source: dict[str, Any],
+) -> AppSettings:
+    """Build settings from already-loaded sources without touching config/.env again."""
+    merged = _deep_merge(config_source, state.source_overrides)
+
+    # These values are process-owned rather than useful file sources. Reuse the
+    # startup values so UI saves never reread pyproject.toml or re-hash a
+    # plaintext administrator password already consumed at startup.
+    merged["appVersion"] = state.settings.app_version
+    merged["adminAuth"] = state.settings.admin_auth.model_dump(
+        mode="python",
+        by_alias=True,
+    )
+    return AppSettings.model_validate(merged)
 
 
 def _atomic_write(path: Path, content: bytes) -> None:
@@ -365,15 +430,79 @@ def _download_storage(settings: AppSettings) -> DownloadStorageInspectionValue:
     )
 
 
+def _validation_issues(
+    settings: AppSettings,
+    *,
+    configured_fields: tuple[SettingFieldPath, ...],
+    environment_overrides: dict[str, str],
+) -> tuple[SettingsValidationIssueValue, ...]:
+    issues: list[SettingsValidationIssueValue] = []
+    configured = set(configured_fields)
+
+    for error in worker_cron_validation_errors(settings):
+        field = cast(
+            SettingFieldPath,
+            ".".join(to_camel(segment) for segment in error.field_path),
+        )
+        source = environment_overrides.get(field)
+        if source is None:
+            source = "config.yml" if field in configured else "built-in default"
+
+        code = (
+            "cron_expression_invalid"
+            if isinstance(error, WorkerCronExpressionError)
+            else "worker_cron_interval_too_short"
+        )
+        issues.append(SettingsValidationIssueValue(
+            field=field,
+            code=code,
+            message=str(error),
+            source=source,
+        ))
+
+    return tuple(issues)
+
+
 def _build_runtime_state(settings: AppSettings) -> _SettingsRuntimeState:
     path = get_config_path()
     _text, document = _load_config_document(path)
+    raw_config_source = normalize_settings_source_keys(document, AppSettings)
+    effective_document = settings.model_dump(mode="python", by_alias=True)
+    config_source = _effective_source_shape(raw_config_source, effective_document)
+    environment_source, dotenv_source = _environment_sources()
+    configured_fields = _configured_fields(document)
+    environment_overrides = _environment_overrides(
+        environment_source,
+        dotenv_source,
+    )
+    source_overrides = _source_overrides_snapshot(
+        settings,
+        environment_source,
+        dotenv_source,
+    )
+    validation_issues = _validation_issues(
+        settings,
+        configured_fields=configured_fields,
+        environment_overrides=environment_overrides,
+    )
+
+    for issue in validation_issues:
+        logger.error(
+            "Settings validation issue in %s for %s: %s",
+            issue.source,
+            issue.field,
+            issue.message,
+        )
+
     return _SettingsRuntimeState(
         settings=settings,
         values=SettingsValues.from_app_settings(settings),
-        configured_fields=_configured_fields(document),
-        environment_overrides=_environment_overrides(),
+        config_source=config_source,
+        source_overrides=source_overrides,
+        configured_fields=configured_fields,
+        environment_overrides=environment_overrides,
         download_storage=_download_storage(settings),
+        validation_issues=validation_issues,
         updated_at=_file_timestamp(path),
     )
 
@@ -393,6 +522,7 @@ def _response(state: _SettingsRuntimeState) -> SettingsAPIRead:
         configured_fields=list(state.configured_fields),
         environment_overrides=dict(state.environment_overrides),
         download_storage=state.download_storage,
+        validation_issues=list(state.validation_issues),
         updated_at=state.updated_at,
     )
 
@@ -433,31 +563,47 @@ def save_ui_settings(body: SettingsAPIUpdate) -> SettingsAPIRead:
         try:
             patched_text = _patch_config_scalars(text, changes)
 
-            # Revalidate from the current runtime snapshot plus only the accepted
-            # UI changes. This deliberately does not re-read config.yml, .env or
-            # process environment: external source changes take effect on restart.
-            effective_document = state.settings.model_dump(mode="python", by_alias=True)
+            config_source = deepcopy(state.config_source)
             for field, value in changes.items():
-                _set_document_value(effective_document, field, value)
-            effective_settings = AppSettings.model_validate(effective_document)
+                _set_document_value(config_source, field, value)
 
-            _atomic_write(path, patched_text.encode("utf-8"))
+            effective_settings = _effective_settings_from_sources(
+                state,
+                config_source,
+            )
+            config_source = _effective_source_shape(
+                config_source,
+                effective_settings.model_dump(mode="python", by_alias=True),
+            )
+            configured_fields = tuple(
+                dict.fromkeys((*state.configured_fields, *body.changed_fields))
+            )
+            validation_issues = _validation_issues(
+                effective_settings,
+                configured_fields=configured_fields,
+                environment_overrides=state.environment_overrides,
+            )
 
-            configured_fields = tuple(dict.fromkeys((*state.configured_fields, *body.changed_fields)))
             storage_fields = {
                 "downloadSettings.downloadRoot",
                 "downloadSettings.temporaryDownloadRoot",
             }
+            download_storage = (
+                _download_storage(effective_settings)
+                if storage_fields.intersection(body.changed_fields)
+                else state.download_storage
+            )
+
+            _atomic_write(path, patched_text.encode("utf-8"))
             next_state = _SettingsRuntimeState(
                 settings=effective_settings,
                 values=SettingsValues.from_app_settings(effective_settings),
+                config_source=config_source,
+                source_overrides=state.source_overrides,
                 configured_fields=configured_fields,
                 environment_overrides=state.environment_overrides,
-                download_storage=(
-                    _download_storage(effective_settings)
-                    if storage_fields.intersection(body.changed_fields)
-                    else state.download_storage
-                ),
+                download_storage=download_storage,
+                validation_issues=validation_issues,
                 updated_at=_file_timestamp(path),
             )
             _SETTINGS_RUNTIME.install(next_state)
