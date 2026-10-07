@@ -370,7 +370,7 @@ class DownloadSettings(SubmodelBase):
         description="Directory used to stage complete downloads before publishing them to the download root",
     )
     rss_cache_root: Path = Field(
-        default_factory=lambda data: data["download_root"] / ".wireloft-rss-cache",
+        default_factory=lambda data: data["download_root"] / ".vodloft-rss-cache",
         description="Directory used as the root for media cached while fulfilling RSS requests",
     )
     rss_cache_retention_seconds: int = Field(
