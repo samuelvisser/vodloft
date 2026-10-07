@@ -83,6 +83,77 @@ def test_disabled_cron_trigger_is_not_registered(monkeypatch):
     assert fake_scheduler.jobs == {}
 
 
+
+def test_cron_minimum_interval_policy_is_opt_in(monkeypatch):
+    import task_manager.scheduler.registry as registry_module
+    import task_manager.scheduler.scheduler as scheduler_module
+    from controller.app import setup_triggers_from_registry
+
+    monkeypatch.setattr(registry_module, "_REGISTRY", {})
+
+    @registry_module.on_cron("* * * * *", minimum_interval_ms=2 * 60 * 1000)
+    @registry_module.task(
+        key="test_paced_cron",
+        title="Paced cron",
+        allowed_resource_types=("show",),
+    )
+    async def paced(*, resource_id=None, progress=None):
+        return None
+
+    @registry_module.on_cron("* * * * *")
+    @registry_module.task(
+        key="test_unpaced_cron",
+        title="Unpaced cron",
+        allowed_resource_types=("show",),
+    )
+    async def unpaced(*, resource_id=None, progress=None):
+        return None
+
+    fake_scheduler = FakeScheduler()
+    monkeypatch.setattr(scheduler_module, "start_scheduler", lambda: fake_scheduler)
+
+    setup_triggers_from_registry()
+
+    assert any("test_unpaced_cron" in job_id for job_id in fake_scheduler.jobs)
+    assert not any("test_paced_cron" in job_id for job_id in fake_scheduler.jobs)
+
+
+def test_unscoped_event_trigger_uses_payload_resource_type(monkeypatch):
+    import task_manager.scheduler.executor as executor_module
+    import task_manager.scheduler.registry as registry_module
+    import task_manager.scheduler.scheduler as scheduler_module
+    from controller.app import setup_triggers_from_registry
+    from task_manager.events.emitters import emit_event
+    from task_manager.events.registry import wait_for_events
+
+    monkeypatch.setattr(registry_module, "_REGISTRY", {})
+
+    @registry_module.on_event("test.resource.changed")
+    @registry_module.task(
+        key="test_dynamic_resource_target",
+        title="Dynamic resource target",
+        allowed_resource_types=("show", "episode", "media_download"),
+    )
+    async def target(*, resource_id=None, progress=None):
+        return None
+
+    trigger_now = Mock()
+    monkeypatch.setattr(executor_module, "trigger_now", trigger_now)
+    monkeypatch.setattr(scheduler_module, "start_scheduler", lambda: FakeScheduler())
+
+    setup_triggers_from_registry()
+    emit_event("test.resource.changed", {
+        "resource_type": "media_download",
+        "resource_id": 73,
+    })
+    wait_for_events()
+
+    trigger_now.assert_called_once_with(
+        def_key="test_dynamic_resource_target",
+        resource_type="media_download",
+        resource_id=73,
+    )
+
 def test_domain_events_preserve_task_operation_context_across_executor_thread():
     from task_manager.events.emitters import emit_event
     from task_manager.events.registry import WireloftEventLinker, wait_for_events
