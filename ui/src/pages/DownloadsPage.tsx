@@ -143,8 +143,7 @@ function isCancellableDownload(row: MediaDownloadViewRead): boolean {
 }
 
 function isDeletableDownload(row: MediaDownloadViewRead): boolean {
-    const status = String(row.downloadStatus)
-    return status === 'not_downloaded' || status === 'missing' || status === 'cancelled'
+    return row.artifactStatus === 'absent' || row.artifactStatus === 'missing'
 }
 
 function defaultDownloadOrder(left: MediaDownloadViewRead, right: MediaDownloadViewRead): number {
@@ -421,10 +420,10 @@ export default function DownloadsPage() {
         },
         {
             header: 'Size',
-            accessor: (row) => formatBytes(row.downloadedBytes),
+            accessor: (row) => formatBytes(row.artifactSizeBytes),
             align: 'right',
             dataLabel: 'Size',
-            sortAccessor: (row) => row.downloadedBytes,
+            sortAccessor: (row) => row.artifactSizeBytes,
             width: '10%',
         },
         {
@@ -445,7 +444,7 @@ export default function DownloadsPage() {
                         Every episode and movie download shows up here, one row per Local Media Profile.
                         Running downloads report live progress; failed ones show the error and can be retried.
                         Records without a file or active queue item are marked Not downloaded and can also be retried.
-                        Download records are persistent history; Not downloaded, Missing, and Cancelled records can be deleted when no artifact is available.
+                        Download records are persistent history; any record whose artifact is Absent or Missing can be deleted, regardless of its download status.
                     </p>
                 </PageSubtitle>
             </div>
@@ -571,7 +570,7 @@ export default function DownloadsPage() {
                                 <span className="mobile-summary-title">{rowTitle(row)}</span>
                                 <span className="mobile-summary-subtitle">{rowContext(row)}</span>
                                 <span className="mobile-summary-meta">
-                                    <span>{status === 'not_downloaded' ? 'Not downloaded' : status === 'pending' ? 'Queued' : status === 'downloading' ? `${row.progress}%` : status === 'cancelled' ? 'Cancelled' : formatBytes(row.downloadedBytes)}</span>
+                                    <span>{status === 'not_downloaded' ? 'Not downloaded' : status === 'pending' ? 'Queued' : status === 'downloading' ? `${row.progress}%` : status === 'cancelled' ? 'Cancelled' : formatBytes(row.artifactSizeBytes)}</span>
                                     <span aria-hidden="true">•</span>
                                     <span>{row.formatDownloaded ?? 'Unknown format'}</span>
                                     <span className={`mobile-summary-status ${statusClass}`}>
