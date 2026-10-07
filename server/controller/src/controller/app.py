@@ -116,6 +116,11 @@ def _task_event_kwargs(task_key: str, event_data: dict[str, Any]) -> dict[str, A
 def setup_triggers_from_registry() -> None:
     """Install code-defined cron jobs and event-to-task subscriptions."""
     from apscheduler.triggers.cron import CronTrigger
+    from config.settings.cron_validation import (
+        WorkerCronExpressionError,
+        WorkerCronIntervalError,
+        validate_worker_cron_interval,
+    )
     from task_manager.events.registry import WireloftEventLinker
     from task_manager.scheduler.executor import execute_task, trigger_now as scheduler_trigger_now
     from task_manager.scheduler.registry import all_triggers
@@ -134,10 +139,31 @@ def setup_triggers_from_registry() -> None:
             if trigger.trigger_type == "cron":
                 if not trigger.enabled:
                     continue
-                cron_trigger = CronTrigger.from_crontab(
-                    trigger.cron,
-                    timezone=get_settings().timezone,
-                )
+                cron = trigger.cron
+                if cron is None:
+                    logger.error("Skipping cron trigger without an expression for %s", task_key)
+                    continue
+
+                try:
+                    if trigger.minimum_interval_ms is not None:
+                        validate_worker_cron_interval(
+                            cron,
+                            min_interval_ms=trigger.minimum_interval_ms,
+                            setting_name=task_key,
+                            field_path=("scheduler", "cron"),
+                        )
+                    cron_trigger = CronTrigger.from_crontab(
+                        cron,
+                        timezone=get_settings().timezone,
+                    )
+                except (WorkerCronExpressionError, WorkerCronIntervalError, TypeError, ValueError) as exc:
+                    logger.error(
+                        "Skipping invalid cron trigger for %s (%s): %s",
+                        task_key,
+                        cron,
+                        exc,
+                    )
+                    continue
                 job_id = f"auto-{task_key}-{trigger.resource_type}-{trigger.resource_id}-{index}"
                 scheduler.add_job(
                     execute_task,
@@ -165,14 +191,18 @@ def setup_triggers_from_registry() -> None:
                     if resource_id is None:
                         resource_id = event_data.get("id")
 
+                    resource_type = resource_type_captured
+                    if resource_type is None:
+                        resource_type = event_data.get("resource_type") or "show"
+
                     forwarded_data = {
                         key: value
                         for key, value in event_data.items()
-                        if key not in {"resource_id", "id"}
+                        if key not in {"resource_id", "id", "resource_type"}
                     }
                     scheduler_trigger_now(
                         def_key=task_key_captured,
-                        resource_type=resource_type_captured or "show",
+                        resource_type=resource_type,
                         resource_id=resource_id,
                         **_task_event_kwargs(task_key_captured, forwarded_data),
                     )
