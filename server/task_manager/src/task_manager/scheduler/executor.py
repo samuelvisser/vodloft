@@ -539,14 +539,18 @@ def _finalize_execution(
         if cancellation_reason is not None:
             _mark_run_canceled(run, cancellation_reason)
         elif worker_error is None:
+            incomplete = (
+                isinstance(worker_result, TaskResult)
+                and worker_result.outcome != "succeeded"
+            )
             if isinstance(worker_result, TaskResult):
                 run.result = worker_result.as_dict()
                 run.message = worker_result.summary
-            run.status = TaskStatus.SUCCEEDED
+            run.status = TaskStatus.FAILED if incomplete else TaskStatus.SUCCEEDED
             run.progress = 100
             if not run.message:
                 run.message = "OK"
-            run.last_error = None
+            run.last_error = worker_result.summary if incomplete else None
             run.next_retry_at = None
         else:
             run.last_error = str(worker_error)
