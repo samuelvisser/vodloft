@@ -44,6 +44,7 @@ class _MediaDownloadAPIBaseOut(ResponseBase):
     thumbnail_path: Optional[str] = None
     artifact_status: MediaDownloadArtifactStatus | str
     artifact_error: Optional[str]
+    artifact_size_bytes: Optional[int]
     automatic_retry_suppressed: bool
     downloaded_bytes: Optional[int]
     format_downloaded: Optional[str]
