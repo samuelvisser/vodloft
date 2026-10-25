@@ -107,5 +107,7 @@ export const ShowDetailsReadSchema = z.object({
     authorName: z.string(),
     authorSlug: z.string(),
     thumbnailLandscapePath: z.string().nullable().optional(),
+    /** The show's own seasons, oldest first; empty when VODLoft makes a season per upload year. */
+    seasons: z.array(z.object({slug: z.string(), name: z.string()})).optional().default([]),
 })
 export type ShowDetailsRead = z.infer<typeof ShowDetailsReadSchema>

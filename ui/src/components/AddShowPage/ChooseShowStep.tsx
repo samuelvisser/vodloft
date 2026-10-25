@@ -154,7 +154,7 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
                 return;
             }
             const details = listed.data;
-            onSeasonsSubmit([]);
+            onSeasonsSubmit(details.seasons);
             onSubmitParent(ShowCreatePayloadSchema.parse({
                 ...formOnly,
                 membershipLevel: DwMembershipLevelReg.Enum.FREE,
@@ -303,8 +303,12 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
                                         which suits most channels.</p>
                                     <p><b>Series</b> shows download and stream episodes from <i>oldest</i> to <i>newest</i>,
                                         which suits a playlist you watch in order.</p>
-                                    <p>Either way, VODLoft puts the videos of each upload year in their own season and numbers
-                                        them by upload date, like S2024E01.</p>
+                                    {listed.data?.seasons.length ? (
+                                        <p>Either way, VODLoft keeps the seasons and episode numbers of {resolved.data?.source.name}, like S02E05.</p>
+                                    ) : (
+                                        <p>Either way, VODLoft puts the videos of each upload year in their own season and numbers
+                                            them by upload date, like S2024E01.</p>
+                                    )}
                                 </ReadMore>
                             </div>
                         </div>

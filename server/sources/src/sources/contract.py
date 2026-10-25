@@ -134,6 +134,10 @@ class SeasonRef:
     number: int
     title: str | None = None
 
+    @property
+    def name(self) -> str:
+        return self.title or f"Season {self.number}"
+
 
 @dataclass(frozen=True)
 class ShowDetails:
@@ -146,6 +150,9 @@ class ShowDetails:
     image_url: str | None = None
     author_name: str | None = None
     author_url: str | None = None
+    seasons: tuple[SeasonRef, ...] = ()
+    """The show's own seasons, for a Source that has them, so they can be picked
+    before the episodes are indexed."""
 
 
 @dataclass(frozen=True)

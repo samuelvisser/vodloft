@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.models.source import (
     CookiesAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultAPIRead,
-    ShowDetailsAPIRead, SourceAPIRead, SourceDomainAPIRead, SourceDomainAPIUpdate,
+    ShowDetailsAPIRead, ShowDetailsSeasonAPIRead, SourceAPIRead, SourceDomainAPIRead, SourceDomainAPIUpdate,
 )
 from backend.app import db_session
 from backend.utils.helpers import slugify
@@ -81,6 +81,7 @@ def show_details(source_id: str, url: str = Query(min_length=1, max_length=2048)
         source_key=source.id, slug=details.slug, title=details.title, description=details.description,
         sharing_url=details.url, author_name=author, author_slug=slugify(author) or details.slug,
         thumbnail_landscape_path=details.image_url,
+        seasons=[ShowDetailsSeasonAPIRead(slug=season.slug, name=season.name) for season in details.seasons],
     )
 
 

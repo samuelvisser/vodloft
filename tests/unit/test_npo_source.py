@@ -213,3 +213,37 @@ def test_an_npo_series_is_indexed_with_its_own_seasons(npo, session):
     session.commit()
     assert index_listed_show(session, show_id=show.id, source=source) == 1
     assert session.query(Episode).filter_by(slug="een-huis-vol_4").one().episode_identifier == "ep.S02E04"
+
+
+def test_a_series_names_its_seasons_before_it_is_indexed(npo):
+    source, _ = npo
+    details = source.show_details("https://npo.nl/start/serie/een-huis-vol/afleveringen")
+    assert [(season.slug, season.number, season.name) for season in details.seasons] == [
+        ("seizoen-2", 2, "Season 2"), ("seizoen-2_2", 3, "Season 3"),
+    ]
+
+
+def test_seasons_picked_when_the_show_was_added_get_its_episodes(npo, session):
+    from backend.db.models import Episode, Season, Show
+    from task_manager.tasks.helpers.listed_shows import index_listed_show
+
+    source, _ = npo
+    show = Show(
+        uuid="uuid-huis", slug="een-huis-vol", source_key="npo", title="Een huis vol",
+        sharing_url="https://npo.nl/start/serie/een-huis-vol/afleveringen", membership_level="FREE",
+        type="series", episode_identifier="seasonal", author_name="NCRV", author_slug="ncrv",
+    )
+    # As the Add Show wizard stores them: numbered in order, not by NPO.
+    show.seasons = [
+        Season(index=1, slug="seizoen-2", name="Season 2", season_number=1),
+        Season(index=2, slug="seizoen-2_2", name="Season 3", season_number=2),
+    ]
+    session.add(show)
+    session.commit()
+
+    assert index_listed_show(session, show_id=show.id, source=source) == 5
+    session.refresh(show)
+    assert sorted((s.slug, s.season_number, s.index, len(s.episodes)) for s in show.seasons) == [
+        ("seizoen-2", 2, 1, 3), ("seizoen-2_2", 3, 2, 2),
+    ]
+    assert session.query(Episode).filter_by(slug="een-huis-vol_11").one().episode_identifier == "ep.S03E01"

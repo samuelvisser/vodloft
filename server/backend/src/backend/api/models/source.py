@@ -75,6 +75,11 @@ class ProgramStatusAPIRead(ResponseBase):
     last_update_error: Optional[str] = None
 
 
+class ShowDetailsSeasonAPIRead(ResponseBase):
+    slug: str
+    name: str
+
+
 class ShowDetailsAPIRead(ResponseBase):
     """A show at a Source with listed episodes, shaped like the fields of a new show."""
 
@@ -86,6 +91,8 @@ class ShowDetailsAPIRead(ResponseBase):
     author_name: str
     author_slug: str
     thumbnail_landscape_path: Optional[str] = None
+    # The show's own seasons, oldest first; empty for a Source that has none.
+    seasons: list[ShowDetailsSeasonAPIRead] = Field(default_factory=list)
 
 
 class CookiesAPIRead(ResponseBase):

@@ -61,10 +61,11 @@ def create_show_bundle(s: Session, request: Request, payload: ShowAPICreateBundl
         raise HTTPException(status_code=422, detail=f"{show_source.name} has no shows")
     show = create_database_fields(Show, payload.show)
     if show_source.has(Feature.EPISODE_LISTS):
-        # Indexing makes one season per upload year and numbers episodes in it.
+        # Indexing numbers the episodes in the Source's own seasons, or in a season
+        # per upload year. Seasons given here are the Source's, picked for a
+        # Download Profile; indexing matches them by slug and numbers them.
         show.episode_identifier = EpisodeIdentifier.SEASONAL.value
         show.membership_level = WlDwMembershipLevel.FREE.value
-        payload.seasons = []
     s.add(show)
 
     # The Add Show flow supplies seasons as part of the initial bundle, before the

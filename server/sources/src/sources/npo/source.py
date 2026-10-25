@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
@@ -200,7 +201,22 @@ class NpoSource(Source):
         parsed = parse_link(url)
         if parsed is None or parsed[0] is not LinkKind.SHOW:
             raise NpoError("This is not a link to a series on NPO Start")
-        return self._show(self._series(parsed[1]))
+        series = self._series(parsed[1])
+        seasons = tuple(ref for _guid, ref in self._seasons(series))
+        return replace(self._show(series), seasons=seasons)
+
+    def _seasons(self, series: dict) -> list[tuple[str, SeasonRef]]:
+        """Each season's guid and how VODLoft names it, oldest first."""
+        seasons = []
+        for position, season in enumerate(self._client.series_seasons(series["slug"], series.get("type")), start=1):
+            if not season.get("guid"):
+                continue
+            seasons.append((season["guid"], SeasonRef(
+                slug=season.get("slug") or f"seizoen-{position}",
+                number=_number(season.get("seasonKey")) or position,
+                title=season.get("label") or None,
+            )))
+        return seasons
 
     def video_details(self, url: str) -> VideoDetails:
         parsed = parse_link(url)
@@ -229,16 +245,9 @@ class NpoSource(Source):
         if parsed is None or parsed[0] is not LinkKind.SHOW:
             raise NpoError("This is not a link to a series on NPO Start")
         series = self._series(parsed[1])
-        for position, season in enumerate(self._client.series_seasons(series["slug"], series.get("type")), start=1):
-            if not season.get("guid"):
-                continue
-            ref = SeasonRef(
-                slug=season.get("slug") or f"seizoen-{position}",
-                number=_number(season.get("seasonKey")) or position,
-                title=season.get("label") or None,
-            )
+        for guid, ref in self._seasons(series):
             try:
-                programs = self._client.programs_by_season(season["guid"])
+                programs = self._client.programs_by_season(guid)
             except NpoError as exc:
                 logger.info("Skipping season %s of %s for now: %s", ref.number, series["slug"], exc)
                 continue

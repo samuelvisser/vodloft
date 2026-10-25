@@ -98,21 +98,26 @@ def index_listed_show(s: Session, *, show_id: int, source: Source) -> int:
             new.setdefault(details.slug, details)
     ordered = sorted(new.values(), key=lambda details: _order_key(details, now))
 
-    seasons = {season.season_number: season for season in show.seasons}
+    # A Source's own season is found by its slug, a season per year by its year.
+    by_slug = {season.slug: season for season in show.seasons}
+    by_year = {season.season_number: season for season in show.seasons}
     next_index = (s.scalar(select(func.max(Episode.index)).where(Episode.show_id == show.id)) or 0) + 1
     created: list[Episode] = []
     for details in ordered:
         number = _season_number(details, now)
-        season = seasons.get(number)
+        ref = details.season
+        season = by_slug.get(ref.slug) if ref is not None else by_year.get(number)
+        if season is not None and season.season_number != number:
+            # A season picked when the show was added, before VODLoft knew its number.
+            season.season_number = number
         if season is None:
-            ref = details.season
             season = create_season_record(
                 s, show_id=show.id, index=max((x.index for x in show.seasons), default=0) + 1,
                 slug=ref.slug if ref else str(number),
-                name=(ref.title or f"Season {number}") if ref else str(number),
+                name=ref.name if ref else str(number),
                 season_number=number, update_show_profiles=True,
             )
-            seasons[number] = season
+            by_slug[season.slug] = by_year[number] = season
             s.refresh(show)
         episode_number = _episode_number(s, season, details.episode_number if details.season else None)
         episode = Episode(
