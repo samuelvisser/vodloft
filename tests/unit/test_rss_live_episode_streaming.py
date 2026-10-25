@@ -134,7 +134,7 @@ def _rss_profile(
         use_downloads=True,
         use_dw_stream=use_dw_stream,
         preferred_format="format_1080p",
-        require_exact_match=False,
+        prefer_exact_match=False,
         ep_id_type_list=["ep"],
         feed_url="https://wireloft.test/feed.xml",
         video_output_mode=mode,
@@ -177,6 +177,27 @@ def _available_hls(session: Session, episode, local_profile, download_profile, p
             "media.ts\n"
             "#EXT-X-ENDLIST\n"
         )
+
+    item = EpisodeMediaDownload(
+        type=MediaType.EPISODE.value,
+        media_item_id=episode.id,
+        local_media_profile_id=local_profile.id,
+        download_profile_id=download_profile.id,
+        file_path=str(path),
+        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        downloaded_bytes=path.stat().st_size,
+        downloaded_at=datetime.now(timezone.utc),
+        downloaded_publish_status="published_final",
+    )
+    session.add(item)
+    session.flush()
+    return item
+
+
+def _available_file(session: Session, episode, local_profile, download_profile, path: Path):
+    from backend.db.models import EpisodeMediaDownload
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+    from backend.types.media_types import MediaType
 
     item = EpisodeMediaDownload(
         type=MediaType.EPISODE.value,
@@ -293,9 +314,21 @@ def test_live_handoff_keeps_same_remote_hls_url_usable_until_final_hls_exists(
         tmp_path / "episode.m3u8",
     )
 
-    assert get_feed_items(db_session, profile) == [(episode, local)]
+    # A download-only audio_hls feed lists an episode only with both enclosures local.
+    audio_profile = _local_profile(
+        db_session,
+        slug="audio",
+        preferred_format="format_audio_only",
+    )
+    audio_download_profile = _download_profile(db_session, show, audio_profile)
+    audio_path = tmp_path / "episode.m4a"
+    audio_path.write_bytes(b"audio")
+    audio = _available_file(db_session, episode, audio_profile, audio_download_profile, audio_path)
+
+    assert get_feed_items(db_session, profile) == [(episode, audio)]
     assert profile.live_episode_handoff_ids == []
     assert can_use_dailywire_for_episode(profile, episode) is False
+    assert local.artifact_status == "available"
 
 
 def test_live_handoff_is_not_dropped_just_because_episode_leaves_rss_window(

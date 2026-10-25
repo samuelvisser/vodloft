@@ -146,16 +146,20 @@ def test_episode_downloads_for_same_show_profile_run_concurrently(tmp_path, monk
                 return SimpleNamespace(show_id=300)
             raise AssertionError(f"Unexpected model lookup: {model}")
 
+        def commit(self):
+            pass
+
     @contextmanager
     def fake_db_session():
         yield FakeSession()
 
-    async def ready(*_args):
+    async def ready(*_args, **_kwargs):
         return None
 
     monkeypatch.setattr(entrypoint, "db_session", fake_db_session)
     monkeypatch.setattr(entrypoint, "wait_for_custom_index_pair", ready)
     monkeypatch.setattr(entrypoint, "pair_is_ready", lambda *_args: True)
+    monkeypatch.setattr(entrypoint, "request_show_asset_reconciliation", lambda *_args: None)
 
     async def exercise():
         both_started = asyncio.Event()
@@ -167,6 +171,7 @@ def test_episode_downloads_for_same_show_profile_run_concurrently(tmp_path, monk
             *,
             media_download_id,
             is_redownload=False,
+            prepare_existing_artifact=False,
             progress=None,
         ):
             nonlocal started

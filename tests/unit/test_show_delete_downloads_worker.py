@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
 
@@ -59,7 +59,7 @@ def _library(session: Session, tmp_path: Path):
         duration=60,
         publish_status="published_final",
         sharing_url="https://example.test/episode-1",
-        published_date=datetime(2026, 9, 1, 12, 0, 0),
+        published_date=datetime(2026, 9, 1, 12, 0, 0, tzinfo=timezone.utc),
     )
     audio_profile = LocalMediaProfile(
         slug="audio",
@@ -117,7 +117,7 @@ def _library(session: Session, tmp_path: Path):
         file_path=str(audio_path),
         downloaded_bytes=5,
         format_downloaded="audio",
-        downloaded_at=datetime(2026, 9, 2, 12, 0, 0),
+        downloaded_at=datetime(2026, 9, 2, 12, 0, 0, tzinfo=timezone.utc),
         downloaded_publish_status="published_final",
     )
     video_download = EpisodeMediaDownload(
@@ -129,7 +129,7 @@ def _library(session: Session, tmp_path: Path):
         file_path=str(video_path),
         downloaded_bytes=5,
         format_downloaded="video",
-        downloaded_at=datetime(2026, 9, 2, 12, 0, 0),
+        downloaded_at=datetime(2026, 9, 2, 12, 0, 0, tzinfo=timezone.utc),
         downloaded_publish_status="published_final",
     )
     session.add_all([audio_download, video_download])
