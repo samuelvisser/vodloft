@@ -9,6 +9,10 @@ WORKDIR /ui
 
 ARG WIRELOFT_PRO_ICONS=false
 
+# Optional label shown after the version number, e.g. "PR#15" -> "0.1.0 PR#15".
+# Used by test deployments to show which build is running.
+ARG VODLOFT_BUILD_LABEL=
+
 COPY ui/package.json ui/package-lock.json ./
 
 # Keep npm's package download cache independently of Docker's normal layer cache
@@ -30,6 +34,9 @@ RUN --mount=type=secret,id=npmrc,target=/ui/.npmrc,required=false \
 
 # Give Vite the correct application version to bake in
 COPY pyproject.toml /pyproject.toml
+RUN if [ -n "$VODLOFT_BUILD_LABEL" ]; then \
+        sed -i -E "s/^version = \"([^\"]*)\"/version = \"\1 ${VODLOFT_BUILD_LABEL}\"/" /pyproject.toml; \
+    fi
 COPY ui/ ./
 
 RUN if [ "$WIRELOFT_PRO_ICONS" = "true" ]; then \
@@ -74,6 +81,12 @@ COPY server ./server
 # Preserve uv's download/build cache independently of Docker's normal layer cache
 RUN --mount=type=cache,id=vodloft-uv,target=/root/.cache/uv,sharing=locked \
     uv sync --frozen --no-dev
+
+# Applied after uv sync: the labelled version is for display only, not a valid package version.
+ARG VODLOFT_BUILD_LABEL=
+RUN if [ -n "$VODLOFT_BUILD_LABEL" ]; then \
+        sed -i -E "s/^version = \"([^\"]*)\"/version = \"\1 ${VODLOFT_BUILD_LABEL}\"/" pyproject.toml; \
+    fi
 
 # Default config seed, copied into the /config volume on first run if missing.
 COPY config/config.yml.default ./config/config.yml.default
