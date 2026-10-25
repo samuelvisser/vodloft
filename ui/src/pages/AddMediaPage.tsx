@@ -9,6 +9,7 @@ import {useQueryClient} from '@tanstack/react-query'
 import {addVideo, resolveLink, useMovies, useShows, useSources, useVideos} from '../lib/queries'
 import {linkTarget, type MediaLinkTarget} from '../lib/sourceControls'
 import {ResolvedLinkRead, SourceFeature, sourceHas} from '../types/schemas/source'
+import {DrmNotice} from '../components/common/DrmProtected'
 
 type AddMediaPageProps = {
     onboarding?: boolean
@@ -186,6 +187,7 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
                         {link.preview.description && (
                             <p className="add-media-preview-description">{link.preview.description}</p>
                         )}
+                        {link.drmProtected && <DrmNotice/>}
                         {target ? (
                             <div className="add-media-preview-actions">
                                 <button className="btn btn-primary" type="button" onClick={proceed} disabled={addingVideo}>

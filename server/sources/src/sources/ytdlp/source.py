@@ -63,6 +63,29 @@ def _published_at(info: dict) -> datetime | None:
     return None
 
 
+def _is_drm_error(exc: Exception) -> bool:
+    return "drm" in str(exc).lower()
+
+
+def _drm_protected(info: dict) -> bool:
+    """yt-dlp marks a video, or each of its formats, that is protected by DRM."""
+    if info.get("_has_drm"):
+        return True
+    formats = [f for f in info.get("formats") or [] if isinstance(f, dict)]
+    return bool(formats) and all(f.get("has_drm") for f in formats)
+
+
+def _lookup(*args: str) -> dict:
+    """Look up a link. A video protected by DRM is looked up again for its details alone."""
+    try:
+        return runner.run_json(*args)
+    except runner.YtDlpError as exc:
+        if not _is_drm_error(exc):
+            raise
+    info = runner.run_json("--allow-unplayable-formats", *args)
+    return {**info, "_has_drm": True}
+
+
 def _thumbnail(info: dict) -> str | None:
     if info.get("thumbnail"):
         return info["thumbnail"]
@@ -89,7 +112,7 @@ class YtDlpSource(Source):
             self._cache = {key: value for key, value in self._cache.items() if now - value[0] < _CACHE_SECONDS}
             if url in self._cache:
                 return self._cache[url][1]
-        info = runner.run_json("--no-playlist", "--flat-playlist", "--playlist-items", "1", url)
+        info = _lookup("--no-playlist", "--flat-playlist", "--playlist-items", "1", url)
         with self._cache_lock:
             self._cache[url] = (now, info)
         return info
@@ -119,6 +142,7 @@ class YtDlpSource(Source):
             image_url=_thumbnail(info),
             author_name=info.get("uploader") or info.get("channel"),
             site=site,
+            drm_protected=_drm_protected(info),
         )
 
     def video_details(self, url: str) -> VideoDetails:
@@ -140,6 +164,7 @@ class YtDlpSource(Source):
             author_name=info.get("uploader") or info.get("channel"),
             author_url=info.get("uploader_url") or info.get("channel_url"),
             published_at=_published_at(info),
+            drm_protected=_drm_protected(info),
         )
 
     @staticmethod
@@ -175,7 +200,7 @@ class YtDlpSource(Source):
             if not entry_url:
                 continue
             try:
-                info = runner.run_json("--no-playlist", entry_url)
+                info = _lookup("--no-playlist", entry_url)
             except runner.YtDlpError as exc:
                 logger.info("Skipping %s for now: %s", entry_url, exc)
                 continue

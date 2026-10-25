@@ -95,6 +95,8 @@ class ResolvedLink:
     show_url: str | None = None
     site: str | None = None
     """The site the link is on, for a Source that serves many sites."""
+    drm_protected: bool = False
+    """The video is protected by DRM, so it can be added but not downloaded."""
 
 
 @dataclass(frozen=True)
@@ -113,6 +115,8 @@ class VideoDetails:
     author_name: str | None = None
     author_url: str | None = None
     published_at: datetime | None = None
+    drm_protected: bool = False
+    """The video is protected by DRM, so it can be added but not downloaded."""
 
 
 @dataclass(frozen=True)

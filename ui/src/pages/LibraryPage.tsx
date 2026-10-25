@@ -11,6 +11,7 @@ import ShowTypeFilter, {
     matchesShowTypeFilter,
 } from '../components/common/ShowTypeFilter'
 import SourceBadge from '../components/Source/SourceBadge'
+import {DrmBadge} from '../components/common/DrmProtected'
 import SourceFilter, {matchesSourceFilter} from '../components/Source/SourceFilter'
 import {useMediaDownloadsView, useMovies, useShowsView, useVideos} from '../lib/queries'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
@@ -249,6 +250,7 @@ export default function LibraryPage() {
                                         : <FontAwesomeIcon icon={faIcon('fass', 'clapperboard')}/>
                                     }
                                     <DownloadStateBadge download={download}/>
+                                    {movie.drmProtected && <DrmBadge onCover/>}
                                 </span>
                                 <span className="movie-poster-title">{movie.title}</span>
                                 {movie.authorName && <span className="movie-poster-meta">{movie.authorName}</span>}
@@ -272,6 +274,7 @@ export default function LibraryPage() {
                                         }
                                         {duration && <span className="video-card-duration">{duration}</span>}
                                         <DownloadStateBadge download={latestVideoDownload(downloads, video.id)}/>
+                                        {video.drmProtected && <DrmBadge onCover/>}
                                     </span>
                                     <span className="movie-poster-title">{video.title}</span>
                                     {video.authorName && <span className="movie-poster-meta">{video.authorName}</span>}

@@ -3,6 +3,7 @@ import React from 'react'
 import {useNavigate} from 'react-router-dom'
 import {EpisodeReadView} from '../../types/schemas/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
+import {DrmBadge} from '../common/DrmProtected'
 
 // Beyond this many downloads for one episode, collapse the rest into a "+N" pill
 // instead of letting icons overflow the thumbnail.
@@ -126,6 +127,7 @@ export default function EpisodeCard({ep, showSlug, downloads}: Props) {
         <div className="episode-card" role="listitem" aria-label={ep.title} tabIndex={0} onKeyDown={onKeyDown}>
             <div className="cover" style={style} onClick={goToEpisode}>
                 <DownloadStatusIcons downloads={downloads ?? []}/>
+                {ep.drmProtected && <DrmBadge onCover/>}
                 {isLive && (
                     <span style={LIVE_BADGE_STYLE} aria-label="Episode is live">
                         <span style={LIVE_BADGE_DOT_STYLE} aria-hidden/>

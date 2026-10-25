@@ -102,4 +102,5 @@ class ResolvedLinkAPIRead(ResponseBase):
     show_slug: Optional[str] = None
     show_url: Optional[str] = None
     site: Optional[str] = None
+    drm_protected: bool = False
     preview: ResolvedLinkPreviewAPIRead

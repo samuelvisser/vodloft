@@ -52,6 +52,7 @@ export const ResolvedLinkReadSchema = z.object({
     showSlug: z.string().nullable().optional(),
     showUrl: z.string().nullable().optional(),
     site: z.string().nullable().optional(),
+    drmProtected: z.boolean().optional().default(false),
     preview: z.object({
         title: z.string(),
         description: z.string().nullable().optional(),

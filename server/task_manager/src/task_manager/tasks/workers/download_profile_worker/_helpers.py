@@ -110,6 +110,8 @@ def get_download_profile_episodes(
         Episode.show_id == profile.show_id,
         Episode.publish_status.in_(eligible_statuses),
         episode_identifier_type_predicate(Episode.episode_identifier, allowed_types),
+        # Media protected by DRM cannot be downloaded.
+        Episode.drm_protected.is_(False),
     )
 
     if (
