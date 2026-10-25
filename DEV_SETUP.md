@@ -185,8 +185,8 @@ backend-api db init
 backend-api db seed
 
 # Use a custom database path
-backend-api db init --db <DATA_DIR>/wireloft.db
-backend-api db seed --db <DATA_DIR>/wireloft.db
+backend-api db init --db <DATA_DIR>/vodloft.db
+backend-api db seed --db <DATA_DIR>/vodloft.db
 ```
 
 #### Backend API commands

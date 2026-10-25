@@ -328,7 +328,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         if args.command == "run":
             _configure_database_for_args(args)
 
-            print("Starting Wireloft backend...")
+            print("Starting VODLoft backend...")
             _validate_db_health()
             require_database_current()
             validate_background_migration_state()
