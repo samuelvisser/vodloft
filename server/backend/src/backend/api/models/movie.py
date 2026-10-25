@@ -90,6 +90,7 @@ class _MovieAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     extended_title: Optional[str]
     description: Optional[str]
     duration: float
+    drm_protected: bool = False
     background_image_path: Optional[str]
     thumbnail_landscape_path: Optional[str]
     thumbnail_portrait_path: Optional[str]

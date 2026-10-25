@@ -108,6 +108,7 @@ export const MovieReadSchema = z.looseObject({
     matureRating: z.string().nullable(),
     hasVideo: z.boolean(),
     isDownloadable: z.boolean().nullable(),
+    drmProtected: z.boolean().optional().default(false),
     status: z.string().nullable(),
     publishedAt: ApiDateTimeSchema.nullable(),
     background: z.string().nullable(),

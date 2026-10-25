@@ -111,6 +111,7 @@ def index_listed_show(s: Session, *, show_id: int, source: Source) -> int:
             duration=details.duration or 0.0,
             thumbnail_landscape_path=details.image_url,
             background_image_path=details.image_url,
+            drm_protected=details.drm_protected,
         )
         episode.set_meta(SOURCE_SLUG_META_KEY, details.slug)
         s.add(episode)

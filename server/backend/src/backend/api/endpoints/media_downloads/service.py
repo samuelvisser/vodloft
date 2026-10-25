@@ -570,6 +570,14 @@ def _reconcile_existing_artifact(s: Session, download: MediaDownloadBase) -> Non
         resolve_media_download_file(s, download)
 
 
+DRM_PROTECTED_MESSAGE = "Protected by DRM, cannot be downloaded"
+
+
+def _ensure_not_drm_protected(media) -> None:
+    if media.drm_protected:
+        raise HTTPException(status_code=422, detail=DRM_PROTECTED_MESSAGE)
+
+
 def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownloadAPICreate) -> EpisodeMediaDownload:
     episode: Optional[Episode] = s.query(Episode).filter(Episode.slug == episode_slug).one_or_none()
     if episode is None:
@@ -578,6 +586,7 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
         raise HTTPException(status_code=422, detail="Episode has no usable media")
     if episode.publish_status == EpisodePublishStatus.DW_PROCESSING.value:
         raise HTTPException(status_code=422, detail="Episode media is still processing on Daily Wire")
+    _ensure_not_drm_protected(episode)
 
     profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.SHOW)
     redownload_when_final = (
@@ -641,6 +650,7 @@ def create_movie_download(
     body: MovieDownloadAPICreate,
 ) -> MovieMediaDownload:
     """Persist a download target for an indexed movie."""
+    _ensure_not_drm_protected(movie)
     profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.MOVIE)
     if not movie.is_downloadable:
         source_name = get_source(movie.source_key).name
@@ -746,6 +756,7 @@ def create_video_download(
     body: MovieDownloadAPICreate,
 ) -> VideoMediaDownload:
     """Persist a download target for a single video."""
+    _ensure_not_drm_protected(video)
     profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.VIDEO)
     existing: Optional[VideoMediaDownload] = (
         s.query(VideoMediaDownload)

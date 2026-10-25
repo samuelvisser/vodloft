@@ -91,6 +91,7 @@ class _EpisodeAPIBaseOut(SourcedResponse, _EpisodeIdentifierAPIOut):
     season_id: int
     index: int
     publish_status: Union[EpisodePublishStatus, str]
+    drm_protected: bool = False
     went_live_date: Optional[datetime] = None
     published_date: Optional[datetime]
     scheduled_date: Optional[datetime]
@@ -127,6 +128,7 @@ class EpisodeAPIReadView(SourcedResponse, _EpisodeIdentifierAPIOut):
     season_id: int
     index: int
     publish_status: Union[EpisodePublishStatus, str]
+    drm_protected: bool = False
     title: str
     slug: str
     thumbnail_landscape_path: Optional[str]

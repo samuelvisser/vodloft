@@ -27,6 +27,7 @@ def apply_video_details(video: Video, details: VideoDetails) -> None:
     video.author_name = details.author_name
     video.author_url = details.author_url
     video.published_at = details.published_at
+    video.drm_protected = details.drm_protected
     # Video thumbnails are landscape; they double as the page background.
     video.thumbnail_landscape_path = details.image_url
     video.background_image_path = details.image_url

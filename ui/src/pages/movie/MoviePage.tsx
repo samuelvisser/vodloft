@@ -16,6 +16,7 @@ import {useActiveOperation} from '../../components/OperationNotifier/OperationNo
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import {useDailywireMovie, useLocalMediaProfiles, useMovieDownloads, useMovies, useSourceLookup} from '../../lib/queries'
 import SourceBadge from '../../components/Source/SourceBadge'
+import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
 import {DEFAULT_SOURCE_KEY} from '../../types/schemas/source'
 import {sourceControls} from '../../lib/sourceControls'
 import {
@@ -115,6 +116,7 @@ export default function MoviePage() {
     const sources = useSourceLookup()
     const sourceName = sources.name(sourceKey)
     const showsExtras = sourceControls(localMovie).movieExtras
+    const drmProtected = Boolean(localMovie?.drmProtected)
     const refreshAttemptedSlugs = useRef(new Set<string>())
     const shouldRefreshMovie = Boolean(
         localMovie && (localMovie.status !== 'published' || !localMovie.isDownloadable),
@@ -470,6 +472,7 @@ export default function MoviePage() {
                         <span className="movie-kicker"><FontAwesomeIcon icon={faIcon('fass', 'clapperboard')}/> Movie</span>
                         {isUpcoming && <span className="movie-upcoming-badge">Upcoming</span>}
                         <SourceBadge sourceKey={sourceKey}/>
+                        {drmProtected && <DrmBadge/>}
                     </div>
                     <h1 id="movie-title">{movie.title}</h1>
                     <p>{[movie.authorName, duration, movie.matureRating].filter(Boolean).join(' • ')}</p>
@@ -571,7 +574,9 @@ export default function MoviePage() {
                                 value={profileId}
                                 onChange={setProfileId}
                             />
-                            {movie.isDownloadable ? (
+                            {drmProtected ? (
+                                <DrmNotice/>
+                            ) : movie.isDownloadable ? (
                                 <MovieDownloadControl
                                     download={movieDownload}
                                     label="Download movie"

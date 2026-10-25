@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, TYPE_CHECKING
 
-from sqlalchemy import func
+from sqlalchemy import false, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sources import DAILYWIRE
 
@@ -26,6 +26,9 @@ class MediaItemBase(Base):
     uuid: Mapped[str] = mapped_column(index=True, unique=True)
     source_key: Mapped[str] = mapped_column(index=True, default=DAILYWIRE, server_default=DAILYWIRE, comment="Id of the Source this comes from, as registered in sources")
     type: Mapped[str]
+    drm_protected: Mapped[bool] = mapped_column(
+        default=False, server_default=false(), comment="The media is protected by DRM and cannot be downloaded",
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()

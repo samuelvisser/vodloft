@@ -80,6 +80,7 @@ def _to_read(s: Session, source: Source, link: ResolvedLink) -> ResolvedLinkAPIR
         show_slug=show_slug,
         show_url=show_url,
         site=link.site,
+        drm_protected=link.drm_protected,
         preview=ResolvedLinkPreviewAPIRead(
             title=link.title,
             description=link.description,

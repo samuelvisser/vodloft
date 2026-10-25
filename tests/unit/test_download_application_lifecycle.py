@@ -127,3 +127,22 @@ def test_pipeline_failure_removes_owned_outputs(library,tmp_path,monkeypatch):
     assert not (tmp_path/'a.mp4').exists()
     with factory() as session:
         assert session.get(MediaDownloadBase,download_id).artifact_status=='absent'
+
+
+def test_drm_marks_the_media_and_stops_retrying(library, monkeypatch):
+    from backend.db.models.media_download import MediaDownloadBase
+    from downloader import EncryptedMediaError
+    from task_manager.tasks import download_adapter
+    factory, (download_id, _) = library
+
+    def prepare(session, _id, tracker):
+        raise EncryptedMediaError('This video is protected by DRM and cannot be downloaded')
+    monkeypatch.setattr(download_adapter, 'prepare_download_plan', prepare)
+    with factory() as session:
+        result = download_adapter.run_download(session, media_download_id=download_id)
+    assert result.outcome == 'failed'
+    assert 'protected by DRM' in result.summary
+    with factory() as session:
+        download = session.get(MediaDownloadBase, download_id)
+        assert download.media.drm_protected is True
+        assert download.automatic_retry_suppressed is True
