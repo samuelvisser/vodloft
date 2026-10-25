@@ -29,6 +29,7 @@ def test_deleting_one_movie_preserves_shared_source_other_placement_and_download
 ) -> None:
     import backend.db.models  # noqa: F401
     from backend.api.endpoints.media_downloads.service import create_movie_extra_download
+    from backend.services.movies import index_dailywire_movie
     from backend.api.endpoints.movies.service import delete_movie
     from backend.api.models.media_download import MovieDownloadAPICreate
     from backend.db import Base
@@ -63,8 +64,8 @@ def test_deleting_one_movie_preserves_shared_source_other_placement_and_download
         movie_b = _movie_record("movie-b", "Movie B", shared)
         body = MovieDownloadAPICreate(local_media_profile_id=profile.id)
 
-        download_a = create_movie_extra_download(session, movie_a, shared.slug, body)
-        download_b = create_movie_extra_download(session, movie_b, shared.slug, body)
+        download_a = create_movie_extra_download(session, index_dailywire_movie(session, movie_a)[0], shared.slug, body)
+        download_b = create_movie_extra_download(session, index_dailywire_movie(session, movie_b)[0], shared.slug, body)
         session.commit()
 
         source_id = session.query(MovieExtraSource.id).scalar()

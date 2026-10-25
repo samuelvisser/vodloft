@@ -220,6 +220,7 @@ def create_app() -> FastAPI:
         movie_router,
         onboarding_router,
         operation_router,
+        source_router,
         puller_router,
         episode_router,
         season_router,
@@ -255,6 +256,7 @@ def create_app() -> FastAPI:
     app.include_router(show_router, prefix="/api")
     app.include_router(movie_router, prefix="/api")
     app.include_router(onboarding_router, prefix="/api")
+    app.include_router(source_router, prefix="/api")
     app.include_router(operation_router, prefix="/api")
     app.include_router(puller_router, prefix="/api")
     app.include_router(setting_router, prefix="/api")

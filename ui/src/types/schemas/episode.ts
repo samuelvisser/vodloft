@@ -1,6 +1,7 @@
 import {z} from 'zod';
 import {EpisodePublishStatus} from "../episode";
 import {ApiDateTimeSchema} from "./datetime";
+import {SourcedFields} from "./source";
 
 
 const EpisodeBaseSchema = z.object({
@@ -26,6 +27,7 @@ export type EpisodeUpdateOut = z.output<typeof EpisodeUpdateSchema>
 
 export const EpisodeReadSchema = z.looseObject({
     id: z.int(),
+    ...SourcedFields,
     uuid: z.string(),
     showId: z.int(),
     seasonId: z.int(),
@@ -60,6 +62,7 @@ export type EpisodeRead = z.infer<typeof EpisodeReadSchema>
 
 export const EpisodeReadViewSchema = z.object({
     id: z.int(),
+    ...SourcedFields,
     showId: z.int(),
     seasonId: z.int(),
     index: z.number(),

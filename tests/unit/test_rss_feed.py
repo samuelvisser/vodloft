@@ -623,7 +623,7 @@ def test_date_based_podcast_omits_episode_numbers(db_session):
     assert "<podcast:season" not in xml
 
 
-def test_get_dailywire_stream_url_selects_requested_media(
+def test_get_source_stream_url_selects_requested_media(
         db_session,
         monkeypatch,
 ):
@@ -639,26 +639,27 @@ def test_get_dailywire_stream_url_selects_requested_media(
         use_dw_stream=True,
     )
 
-    class FakeClient:
-        def __init__(self, *, request_priority=None):
-            assert request_priority == "interactive"
+    from sources import EpisodeMedia, get_source
 
-        def get_episode_details(self, slug, *, require_member_exclusive):
-            assert slug == episode.slug
-            assert require_member_exclusive is False
-            return SimpleNamespace(
-                audio_url="https://media.example/audio.m4a",
-                video_url="https://media.example/video.m3u8",
-            )
+    source = get_source(episode.source_key)
 
-    monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
+    def episode_media(*, slug, members_only, interactive=False):
+        assert slug == episode.slug
+        assert members_only is False
+        assert interactive is True
+        return EpisodeMedia(
+            audio_url="https://media.example/audio.m4a",
+            video_url="https://media.example/video.m3u8",
+        )
 
-    assert service.get_dailywire_stream_url(
+    monkeypatch.setattr(source, "episode_media", episode_media)
+
+    assert service.get_source_stream_url(
         profile,
         episode,
         media_kind="audio",
     ) == "https://media.example/audio.m4a"
-    assert service.get_dailywire_stream_url(
+    assert service.get_source_stream_url(
         profile,
         episode,
         media_kind="video",

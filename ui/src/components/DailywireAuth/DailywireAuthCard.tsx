@@ -178,8 +178,8 @@ export default function DailywireAuthCard() {
     return (
         <div className="card dailywire-auth-card" aria-live="polite">
             <div className="card-header" style={{display: 'flex', alignItems: 'center', gap: 12}}>
-                <img src="/dw-logo-plus-compact.png" alt="DailyWire logo" style={{height: 28}}/>
-                <h2 style={{margin: 0, fontSize: 18}}>DailyWire Account</h2>
+                <img src="/dw-logo-plus-compact.png" alt="Daily Wire logo" style={{height: 28}}/>
+                <h2 style={{margin: 0, fontSize: 18}}>The Daily Wire sign-in</h2>
                 <div style={{marginLeft: 'auto'}}>
                     {status?.authenticated ? (
                         <span className="dw-status-badge" title="Connected">Connected</span>
@@ -200,7 +200,7 @@ export default function DailywireAuthCard() {
 
                         {status?.authenticated ? (
                             <>
-                                <p>You are connected to DailyWire.</p>
+                                <p>You are signed in to The Daily Wire.</p>
                                 {userInfoLoading ? (
                                     <p>Loading account info…</p>
                                 ) : userInfoError ? (
@@ -215,17 +215,17 @@ export default function DailywireAuthCard() {
                             </>
                         ) : (
                             <>
-                                <p>Connect your DailyWire account to download members-only content.</p>
+                                <p>Sign in to The Daily Wire to download content included with your membership. This is optional.</p>
                                 {!flow ? (
                                     <div style={{display: 'flex', gap: 8, flexWrap: 'wrap'}}>
-                                        <button className="btn btn-primary" onClick={startFlow}>Connect DailyWire</button>
+                                        <button className="btn btn-primary" onClick={startFlow}>Sign in to The Daily Wire</button>
                                         <button className="btn" onClick={refreshStatus}>Refresh status</button>
                                     </div>
                                 ) : (
                                     <div className="device-flow" style={{display: 'grid', gap: 10}}>
                                         <ol style={{margin: 0, paddingLeft: 18}}>
                                             <li>
-                                                Open DailyWire authorization page:
+                                                Open The Daily Wire&apos;s authorization page:
                                                 <div style={{marginTop: 6}}>
                                                     <a className="btn btn-secondary"
                                                        href={flow.verificationUriComplete || flow.verificationUri}

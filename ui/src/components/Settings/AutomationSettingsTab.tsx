@@ -179,7 +179,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                                 If this worker finds that the episode has usable media once again, it is restored and automatically
                                 picked up by download- and stream profiles. If
                                 after {' '}{formatDurationMinutes(draft.episodeStatusTiming.noUsableMediaDeleteAfterMinutes)} the
-                                episode still did not return to The Daily Wire, it is deleted.
+                                episode still did not return to its source, it is deleted.
                             </p>
                         </ReadMore>
                     }
@@ -196,8 +196,8 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     help={
                         <ReadMore summary={<span>Intervals to refresh episode metadata after it is published.</span>}>
                             <p>
-                                While a Daily Wire episode is live, VODLoft closely monitors it for status, title and thumbnail updates. After
-                                publication, these targeted metadata refreshes keep reconciling late Daily Wire changes, including corrected episode
+                                While an episode is live, VODLoft closely monitors it for status, title and thumbnail updates. After
+                                publication, these targeted metadata refreshes keep reconciling late changes at the source, including corrected episode
                                 numbers.
                             </p>
                             <p>
@@ -210,7 +210,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
 
             <SettingsDisclosure
                 title="Episode lifecycle timing"
-                description="Fallback and cleanup thresholds used while Daily Wire episode state is settling."
+                description="Fallback and cleanup thresholds used while an episode's state at its source is settling."
             >
                 <DurationField
                     id="settings-published-final"
@@ -241,7 +241,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                 />
                 <DurationField
                     id="settings-dw-processing-max"
-                    label="Daily Wire processing safeguard"
+                    label="Source processing safeguard"
                     value={draft.episodeStatusTiming.dwProcessingMaxMinutes}
                     backendUnit="minutes"
                     error={errorFor('episodeStatusTiming.dwProcessingMaxMinutes')}
@@ -278,7 +278,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                         <ReadMore summary={<span>How long an episode may remain in no usable media state before it is deleted.</span>}>
                             <p>
                                 An episode is considered in <code>no usable media</code> if it contains no media, its media is corrupted,
-                                or if it returns <code>404</code> from The Daily Wire. In all of these case, this might be a temporary issue.
+                                or if it returns <code>404</code> from its source. In all of these case, this might be a temporary issue.
                                 However, if it remains in this state after this duration, it may be deleted from VODLoft.
                             </p>
                             <p>

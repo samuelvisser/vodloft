@@ -5,9 +5,11 @@ from typing import Optional
 
 from pydantic import AwareDatetime, Field, computed_field
 
-from backend.api.models.base import RequestBase, ResponseBase
+from backend.api.models.base import RequestBase
+from backend.api.models.source import SourcedResponse
 from backend.types.media_types import MovieExtraType
 from backend.utils.helpers import generate_uuid
+from sources import Feature
 
 
 class _MovieExtraAPIBaseIn(RequestBase):
@@ -38,7 +40,9 @@ class MovieExtraAPIUpdate(_MovieExtraAPIBaseIn):
     pass
 
 
-class MovieExtraAPIRead(ResponseBase):
+class MovieExtraAPIRead(SourcedResponse):
+    source_feature_fields = {"available_for": Feature.MEMBERSHIP_LEVELS}
+
     id: int
     movie_id: int
     uuid: str
@@ -53,6 +57,6 @@ class MovieExtraAPIRead(ResponseBase):
     slug: str
     sharing_url: Optional[str]
     published_date: Optional[datetime]
-    available_for: list[str]
+    available_for: list[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime

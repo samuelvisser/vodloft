@@ -208,7 +208,7 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
     }),
 })
 
-const WORKER_CRON_MINIMUM_MESSAGE = 'This worker runs more often than the configured DailyWire slow-request delay. Increase this cron interval, or change DailyWire → Request pacing → Minimum slow-request delay.'
+const WORKER_CRON_MINIMUM_MESSAGE = 'This worker runs more often than the configured slow-request delay. Increase this cron interval, or lower the minimum slow-request delay under Sources → Request pacing.'
 const INVALID_CRON_MESSAGE = 'Enter a valid five-part cron expression.'
 
 const CRON_SERVER_ERRORS = {

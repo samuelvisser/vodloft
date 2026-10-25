@@ -432,6 +432,13 @@ class MiddlewareClient:
 
         return record
 
+    def get_episode_payload(self, episode_slug: str) -> Dict[str, Any]:
+        """The raw getEpisode payload, for callers that only need a few loose fields."""
+        payload = self._get('v4/getEpisode', {'slug': episode_slug})
+        if not isinstance(payload, dict) or not payload.get('slug'):
+            raise MiddlewareAPIError(f"Daily Wire episode '{episode_slug}' was not found")
+        return payload
+
     def get_show_id_by_slug(self, show_slug: str) -> str:
         dw_show = self.get_show_page(show_slug)
         return dw_show.dw_id

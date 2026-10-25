@@ -86,7 +86,7 @@ export default function EditShowPage() {
       title: form.name,
       description: show.description,
       sharingUrl: form.url,
-      membershipLevel: show.membershipLevel,
+      ...(show.membershipLevel !== undefined ? {membershipLevel: show.membershipLevel} : {}),
       authorName: form.author,
       authorHeadshotPath: show.authorHeadshotPath ?? null,
       backgroundImagePath: show.backgroundImagePath ?? null,
@@ -148,7 +148,7 @@ export default function EditShowPage() {
             className="input"
             type="url"
             inputMode="url"
-            placeholder="https://www.dailywire.com/show/the-ben-shapiro-show"
+            placeholder="https://…"
             value={form.url}
             onChange={(e) => setForm({ ...form, url: e.target.value })}
             disabled

@@ -18,7 +18,7 @@ export default function DailywireShowCard({showSlug, membershipPlan}: Props) {
             <div className="dw-card" aria-busy="true" aria-live="polite">
                 <div className="dw-card-body">
                     <div className="dw-card-title">Checking show…</div>
-                    <div className="dw-card-desc">Fetching DailyWire show details</div>
+                    <div className="dw-card-desc">Fetching show details</div>
                 </div>
             </div>
         )

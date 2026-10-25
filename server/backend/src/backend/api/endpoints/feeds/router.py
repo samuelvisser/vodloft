@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from .cached_video import get_cached_mp4_path, prepare_cached_mp4
 from .service import (
     can_use_dailywire_for_episode,
-    get_dailywire_stream_url,
+    get_source_stream_url,
     get_episode_for_feed,
     get_local_download_for_episode,
     get_rss_stream_profile_by_token,
@@ -148,7 +148,7 @@ def rss_feed_episode_audio(token: str, episode_slug: str, request: Request):
             )
 
         return _temporary_stream_redirect(
-            get_dailywire_stream_url(
+            get_source_stream_url(
                 profile,
                 episode,
                 media_kind="audio",
@@ -206,7 +206,7 @@ def rss_feed_episode_video_mp4(token: str, episode_slug: str, request: Request):
             return _cached_mp4_head_response(cached_file, filename=filename)
 
         if cached_file is None:
-            source_url = get_dailywire_stream_url(
+            source_url = get_source_stream_url(
                 profile,
                 episode,
                 media_kind="video",
@@ -269,7 +269,7 @@ def rss_feed_episode_video_hls(token: str, episode_slug: str, request: Request):
                 detail="No local HLS video is available and Daily Wire streaming is disabled",
             )
 
-        source_url = get_dailywire_stream_url(
+        source_url = get_source_stream_url(
             profile,
             episode,
             media_kind="video",

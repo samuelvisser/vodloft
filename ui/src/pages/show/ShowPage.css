@@ -274,3 +274,6 @@
         gap: 7px;
     }
 }
+
+/* Links share the button row; match the size buttons get from the browser. */
+.show-page-actions > a.btn { font-size: 0.8333rem; }

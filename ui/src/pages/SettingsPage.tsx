@@ -7,9 +7,9 @@ import toast from 'react-hot-toast'
 
 import AdvancedSettingsTab from '../components/Settings/AdvancedSettingsTab'
 import AutomationSettingsTab from '../components/Settings/AutomationSettingsTab'
-import DailyWireSettingsTab from '../components/Settings/DailyWireSettingsTab'
 import DownloadsSettingsTab from '../components/Settings/DownloadsSettingsTab'
 import GeneralSettingsTab from '../components/Settings/GeneralSettingsTab'
+import SourcesSettingsTab from '../components/Settings/SourcesSettingsTab'
 import {SettingsLoading} from '../components/Settings/SettingsControls'
 import {saveSettingsRequest, useSettings} from '../lib/settings'
 import {
@@ -26,7 +26,7 @@ import './SettingsPage.css'
 import './SettingsEnvironmentOverrides.css'
 
 
-type SettingsTab = 'general' | 'downloads' | 'automation' | 'dailywire' | 'advanced'
+type SettingsTab = 'general' | 'downloads' | 'automation' | 'sources' | 'advanced'
 
 type SettingsTabDefinition = {
     id: SettingsTab
@@ -38,7 +38,7 @@ const SETTINGS_TABS: SettingsTabDefinition[] = [
     {id: 'general', label: 'General', description: 'Application behaviour and sessions'},
     {id: 'downloads', label: 'Downloads', description: 'Storage, naming, processing and verification'},
     {id: 'automation', label: 'Automation', description: 'Scheduler and episode monitoring'},
-    {id: 'dailywire', label: 'DailyWire', description: 'Account and integration details'},
+    {id: 'sources', label: 'Sources', description: 'Services, sign-ins and their settings'},
     {id: 'advanced', label: 'Advanced', description: 'Encryption files and configuration details'},
 ]
 
@@ -76,7 +76,9 @@ export default function SettingsPage() {
     const queryClient = useQueryClient()
     const [params, setParams] = useSearchParams()
     const [baseline, setBaseline] = useState<SettingsValues | null>(null)
-    const activeTab = SETTINGS_TABS.find((tab) => tab.id === params.get('tab'))?.id ?? 'general'
+    // Old links to the Daily Wire tab open the Sources tab that replaced it.
+    const requestedTab = params.get('tab') === 'dailywire' ? 'sources' : params.get('tab')
+    const activeTab = SETTINGS_TABS.find((tab) => tab.id === requestedTab)?.id ?? 'general'
 
     const chooseTab = (tab: SettingsTab) => {
         setParams({tab}, {replace: true})
@@ -279,7 +281,7 @@ export default function SettingsPage() {
                     {activeTab === 'general' ? <GeneralSettingsTab {...tabProps} /> : null}
                     {activeTab === 'downloads' ? <DownloadsSettingsTab {...tabProps} /> : null}
                     {activeTab === 'automation' ? <AutomationSettingsTab {...tabProps} /> : null}
-                    {activeTab === 'dailywire' ? <DailyWireSettingsTab {...tabProps} /> : null}
+                    {activeTab === 'sources' ? <SourcesSettingsTab {...tabProps} /> : null}
                     {activeTab === 'advanced' ? <AdvancedSettingsTab {...tabProps} /> : null}
                 </div>
 

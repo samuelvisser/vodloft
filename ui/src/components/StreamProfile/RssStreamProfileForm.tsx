@@ -16,6 +16,8 @@ type Props = {
     onRegenerateToken?: () => void | Promise<void>
     regeneratingToken?: boolean
     advisory?: ReactNode
+    /** Whether the show's Source has live episodes to offer. */
+    liveEpisodes?: boolean
 }
 
 export default function RssStreamProfileForm({
@@ -24,6 +26,7 @@ export default function RssStreamProfileForm({
     onRegenerateToken,
     regeneratingToken,
     advisory,
+    liveEpisodes = true,
 }: Props) {
     const {control, formState: {errors}, register, setValue, watch} = form
     const [copied, setCopied] = useState(false)
@@ -35,6 +38,7 @@ export default function RssStreamProfileForm({
     const streamLiveEpisodes: boolean = watch('streamLiveEpisodes')
     const usesVideo = VIDEO_FORMATS.has(preferredFormat ?? '')
     const usesHlsVideo = usesVideo && RssHlsOutputModes.has(videoOutputMode ?? '')
+    const offersLiveEpisodes = liveEpisodes && usesHlsVideo
 
     useEffect(() => {
         if (preferredFormat === 'format_audio_only') {
@@ -56,13 +60,13 @@ export default function RssStreamProfileForm({
     }, [preferredFormat, setValue, usesVideo, videoOutputMode])
 
     useEffect(() => {
-        if (!usesHlsVideo && streamLiveEpisodes) {
+        if (!offersLiveEpisodes && streamLiveEpisodes) {
             setValue('streamLiveEpisodes', false, {
                 shouldDirty: true,
                 shouldValidate: true,
             })
         }
-    }, [setValue, streamLiveEpisodes, usesHlsVideo])
+    }, [offersLiveEpisodes, setValue, streamLiveEpisodes])
 
     const onCopy = async () => {
         if (!feedUrl) return
@@ -154,7 +158,7 @@ export default function RssStreamProfileForm({
                 </div>
             )}
 
-            {usesHlsVideo && (
+            {offersLiveEpisodes && (
                 <div className="form-row">
                     <label htmlFor="rss-stream-live-episodes">Stream live episodes</label>
                     <Controller

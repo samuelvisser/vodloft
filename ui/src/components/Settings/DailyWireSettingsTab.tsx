@@ -1,15 +1,13 @@
-import DailywireAuthCard from '../DailywireAuth/DailywireAuthCard'
 import type {SettingsTabProps} from './SettingsTabTypes'
 import {DurationField, NumberField, SettingsDisclosure, TextField} from './SettingsControls'
 
+/** Daily Wire's own settings, shown on its card in Settings › Sources. */
 export default function DailyWireSettingsTab({draft, updateDraft, environmentVariableFor, errorFor}: SettingsTabProps) {
     return (
         <>
-            <DailywireAuthCard />
-
             <SettingsDisclosure
-                title="DailyWire API endpoints"
-                description="Normally only change these for development, proxies or a DailyWire API migration."
+                title="Daily Wire API endpoints"
+                description="Normally only change these for development, proxies or a Daily Wire API migration."
             >
                 <TextField
                     id="settings-dw-middleware-api"
@@ -87,7 +85,7 @@ export default function DailyWireSettingsTab({draft, updateDraft, environmentVar
 
             <SettingsDisclosure
                 title="Request pacing"
-                description="Rate-control thresholds used when VODLoft talks to DailyWire."
+                description="Rate-control thresholds used when VODLoft talks to Daily Wire."
             >
                 <DurationField
                     id="settings-fast-request-delay"

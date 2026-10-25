@@ -12,7 +12,7 @@ const KEY_SHOWS = STORAGE_PREFIX + 'shows'
 const KEY_PROFILES = STORAGE_PREFIX + 'localMediaProfiles'
 
 const SHOW_CACHE_PREFIX = 'wl_show_cache_v3:'
-const SHOW_CACHE_VERSION = 4
+const SHOW_CACHE_VERSION = 5
 const KEY_EPISODES_PREFIX = SHOW_CACHE_PREFIX + 'episodes:'
 const KEY_EPISODES_META_PREFIX = SHOW_CACHE_PREFIX + 'episodes-meta:'
 const KEY_SEASONS_PREFIX = SHOW_CACHE_PREFIX + 'seasons:'
@@ -118,6 +118,8 @@ function cacheMetadata(fetchedAt: number, total?: number): CacheMetadata {
 function compactEpisodes(data: EpisodeReadView[]): EpisodeReadView[] {
   return data.map((episode) => ({
     id: episode.id,
+    sourceKey: episode.sourceKey,
+    sourceFeatures: episode.sourceFeatures,
     showId: episode.showId,
     seasonId: episode.seasonId,
     index: episode.index,

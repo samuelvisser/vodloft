@@ -3,8 +3,8 @@ import {faIcon} from '../icons/faIcon'
 import {formatDateTimeForDeadline} from '../utils/formatting'
 
 const WAITS: Record<string, [string, string]> = {
-    daily_wire_request_cooldown: ['Cooldown', 'Waiting for The Daily Wire request cooldown. The operation will resume automatically.'],
-    daily_wire_request_queue: ['API queue', 'Waiting for a turn to request The Daily Wire.'],
+    daily_wire_request_cooldown: ['Cooldown', 'Waiting for the source\'s request cooldown. The operation will resume automatically.'],
+    daily_wire_request_queue: ['API queue', 'Waiting for a turn to make a request to the source.'],
     request_spacing: ['Waiting', 'Waiting for the next permitted API request.'],
     upstream_retry: ['Retry wait', 'The server requested a delay before retrying.'],
     retry_backoff: ['Retry wait', 'Waiting before retrying the network request.'],

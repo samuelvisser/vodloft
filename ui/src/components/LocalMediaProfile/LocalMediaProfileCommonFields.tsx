@@ -150,7 +150,7 @@ export default function LocalMediaProfileCommonFields({form}: { form: UseFormRet
                     </div>
                 )}
                 <div className="help" id="local-media-thumbnail-mode-help">
-                    <ReadMore summary="Choose how this profile stores the Daily Wire thumbnail for downloaded media.">
+                    <ReadMore summary="Choose how this profile stores the source's thumbnail for downloaded media.">
                         <p><strong>System</strong> follows the current system-wide default.</p>
                         <p><strong>No thumbnail</strong> keeps downloads media-only.</p>
                         <p><strong>Embed in media</strong> stores the thumbnail as cover artwork inside the downloaded media file.</p>

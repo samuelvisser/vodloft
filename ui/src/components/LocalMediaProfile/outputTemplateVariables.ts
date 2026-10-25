@@ -47,14 +47,14 @@ const SHOW_VARIABLES: readonly OutputTemplateVariable[] = [
         readMore: {
             paragraphs: [
                 'Normal seasons use their stable media-facing season number, while every extras season uses 0.',
-                'Unlike the internal season_index, this value is designed for media-server paths and is not affected by where extras seasons appear in The Daily Wire season list.',
+                'Unlike the internal season_index, this value is designed for media-server paths and is not affected by where extras seasons appear in the source\'s season list.',
             ],
         },
     },
     {name: 'episode', description: 'Episode URL slug'},
     {name: 'episode_title', description: 'Episode title'},
     {name: 'title', description: 'Episode title'},
-    {name: 'dw_episode_number', description: 'Raw episode number exactly as returned by The Daily Wire'},
+    {name: 'dw_episode_number', description: 'Raw episode number exactly as returned by the source'},
     {name: 'episode_type', description: 'Episode type: ep, ep-extra, aux, or trailer'},
     {name: 'episode_extra_type', description: 'Episode-extra subtype: other or trailer; empty otherwise'},
     {
@@ -74,7 +74,7 @@ const SHOW_VARIABLES: readonly OutputTemplateVariable[] = [
         },
     },
     {name: 'episode_number', description: 'Main episode number, or VODLoft counter for aux/trailer'},
-    {name: 'episode_sub_number', description: 'The Daily Wire sub-episode number for episode extras; empty otherwise'},
+    {name: 'episode_sub_number', description: 'The source\'s sub-episode number for episode extras; empty otherwise'},
     {name: 'episode_label', description: 'Canonical label without the type prefix (e.g. 2497, 2497.1, S01E07, S01E07.1)'},
     {
         name: 'episode_identifier',

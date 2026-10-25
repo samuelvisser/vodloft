@@ -62,13 +62,14 @@ def test_upcoming_movie_allows_extras_but_not_full_movie(tmp_path, monkeypatch):
 
     assert movie_data.is_upcoming is True
 
+    movie, _ = movie_service.index_dailywire_movie(session, movie_data)
     with pytest.raises(HTTPException) as exc_info:
-        create_movie_download(session, movie_data, body)
+        create_movie_download(session, movie, body)
     assert exc_info.value.status_code == 422
 
     extra_download = create_movie_extra_download(
         session,
-        movie_data,
+        movie,
         trailer.slug,
         body,
     )

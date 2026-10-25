@@ -4,6 +4,8 @@ import ReadMore from '../../utils/ReadMore'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import DateInput from '../common/DateInput'
 import SimpleSelect from '../common/SimpleSelect'
+import {useShows} from '../../lib/queries'
+import {sourceControls} from '../../lib/sourceControls'
 
 type Props = {
     form: UseFormReturn<any>
@@ -22,6 +24,12 @@ export default function PodcastDownloadProfileForm({form}: Props) {
 
     // If countdown is disabled, redownload final becomes irrelevant and is hidden
     const withCountdown = watch('downloadWithCountdown')
+
+    // Countdowns only appear on the live episodes some Sources publish.
+    const {data: shows} = useShows()
+    const showId = watch('showId')
+    const show = shows?.find((item) => item.id === Number(showId))
+    const offersCountdown = sourceControls(show).countdownDownloads || !!withCountdown
 
     const watchedDaysRaw = watch('downloadDaysInPast') ?? 0
     const watchedEpisodeCountRaw = watch('downloadEpisodeCount') ?? 0
@@ -70,6 +78,7 @@ export default function PodcastDownloadProfileForm({form}: Props) {
 
     return (
         <>
+            {offersCountdown && (
             <div className="form-row">
                 <label htmlFor="with-countdown">Download with countdown</label>
                 <Controller
@@ -96,15 +105,16 @@ export default function PodcastDownloadProfileForm({form}: Props) {
                 )}
                 <div className="help" id="with-countdown-help">
                     <ReadMore summary={<span>Download with the countdown meant for live shows</span>}>
-                        Some DailyWire podcast episodes appear with a countdown timer before the final media is available. Enabling
+                        Some live podcast episodes appear with a countdown timer before the final media is available. Enabling
                         this option will download the episode while the countdown is still present. If enabled, you may also choose
                         to re-download the final version after the countdown disappears (usually in about 1,5 to 2 hours after
                         the episode was published).
                     </ReadMore>
                 </div>
             </div>
+            )}
 
-            {withCountdown && (
+            {offersCountdown && withCountdown && (
                 <div className="form-row">
                     <label htmlFor="redownload-final">Redownload final version</label>
                     <Controller

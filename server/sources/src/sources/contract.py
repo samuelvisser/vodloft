@@ -49,6 +49,34 @@ class MoviePlayback:
     drm_protected: bool = False
 
 
+class LinkKind(StrEnum):
+    SHOW = "show"
+    MOVIE = "movie"
+    EPISODE = "episode"
+
+
+@dataclass(frozen=True)
+class ResolvedLink:
+    """What a link points to, with enough to show a preview before anything is added.
+
+    An episode link names the show it belongs to in ``show_slug`` and
+    ``show_url`` when the Source can tell, because VODLoft adds whole shows.
+    """
+
+    kind: LinkKind
+    slug: str
+    url: str
+    title: str
+    description: str | None = None
+    image_url: str | None = None
+    author_name: str | None = None
+    show_slug: str | None = None
+    show_url: str | None = None
+
+
+ANY_DOMAIN = "*"
+
+
 class Source(ABC):
     id: ClassVar[str]
     name: ClassVar[str]
@@ -60,8 +88,14 @@ class Source(ABC):
 
     def handles(self, url: str) -> bool:
         """True when the link's host is one of this Source's domains or a subdomain of one."""
+        if ANY_DOMAIN in self.domains:
+            return True
         host = (urlsplit(url).hostname or "").lower().rstrip(".")
         return any(host == domain or host.endswith(f".{domain}") for domain in self.domains)
+
+    @abstractmethod
+    def resolve(self, url: str) -> ResolvedLink | None:
+        """Say what a link points to, or None when this Source does not recognise it."""
 
     @abstractmethod
     def episode_media(

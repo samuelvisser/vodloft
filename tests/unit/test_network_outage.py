@@ -152,8 +152,10 @@ def test_rss_stream_outage_is_not_downgraded_to_episode_502() -> None:
     outage = MiddlewareAPIError("Network error: temporary DNS failure")
     outage.__cause__ = _dns_error()
 
-    class FakeClient:
-        def get_episode_details(self, slug, *, require_member_exclusive):
+    class FakeSource:
+        name = "Fake"
+
+        def episode_media(self, *, slug, members_only, interactive=False):
             raise outage
 
     profile = SimpleNamespace(
@@ -163,6 +165,6 @@ def test_rss_stream_outage_is_not_downgraded_to_episode_502() -> None:
     episode = SimpleNamespace(slug="example-episode")
 
     with pytest.raises(MiddlewareAPIError) as exc_info:
-        service.get_dailywire_stream_url(profile, episode, client=FakeClient())
+        service.get_source_stream_url(profile, episode, source=FakeSource())
 
     assert is_no_internet_error(exc_info.value)

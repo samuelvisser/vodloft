@@ -91,7 +91,7 @@ export default function AdvancedSettingsTab({draft, updateDraft, environmentVari
 
             <SettingsDisclosure
                 title="Encryption key files"
-                description="Paths used to retain encrypted DailyWire tokens and other protected values."
+                description="Paths used to retain encrypted sign-in tokens and other protected values."
             >
                 <TextField
                     id="settings-secret-key-file"

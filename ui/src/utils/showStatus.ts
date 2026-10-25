@@ -62,7 +62,7 @@ export function statusLabel(status: string) {
         case 'no_usable_media':
             return 'No usable media'
         case 'dw_processing':
-            return 'Dailywire is processing the episode'
+            return 'The source is still processing the episode'
         case 'local_processing':
             return 'Locally processing the episode'
         case 'error':

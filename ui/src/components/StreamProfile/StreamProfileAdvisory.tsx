@@ -25,6 +25,8 @@ type Props = {
     downloadProfileDefaults?: StreamDownloadProfileDefault[]
     showSlug?: string
     canOpenDownloadProfiles?: boolean
+    /** The show's Source, named in the streaming advice. */
+    sourceName?: string
     onEnableDownloads: () => void
     onDisableDwStream: () => void
 }
@@ -301,9 +303,11 @@ export default function StreamProfileAdvisory({
     downloadProfileDefaults,
     showSlug,
     canOpenDownloadProfiles = true,
+    sourceName = 'The Daily Wire',
     onEnableDownloads,
     onDisableDwStream,
 }: Props) {
+    const streaming = `${sourceName} streaming`
     const isRssProfile = mode === 'rss'
     const downloadProfilesLoaded = downloadProfileDefaults !== undefined
     const downloadProfiles = downloadProfileDefaults ?? []
@@ -361,25 +365,25 @@ export default function StreamProfileAdvisory({
     if (showDirectMp4StreamingWarning) {
         return (
             <AdvisoryCard
-                title="Disable Daily Wire streaming for immediate MP4 playback"
+                title={`Disable ${streaming} for immediate MP4 playback`}
                 helpSummary="Why MP4 behaves differently from HLS"
                 help={(
                     <>
                         <p>
-                            MP4 clients expect one complete seekable file. VODLoft cannot return the beginning of that MP4 while it is still building the rest of the file from The Daily Wire&apos;s HLS stream.
+                            MP4 clients expect one complete seekable file. VODLoft cannot return the beginning of that MP4 while it is still building the rest of the file from {sourceName}&apos;s HLS stream.
                         </p>
                         <p>
-                            Keep matching video episodes downloaded and use those local files for immediate MP4 playback. After disabling Daily Wire streaming, VODLoft will show whether matching Download Profile coverage is missing.
+                            Keep matching video episodes downloaded and use those local files for immediate MP4 playback. After disabling {streaming}, VODLoft will show whether matching Download Profile coverage is missing.
                         </p>
                     </>
                 )}
                 actions={(
                     <button type="button" className="btn" onClick={onDisableDwStream}>
-                        Disable Daily Wire streaming
+                        Disable {streaming}
                     </button>
                 )}
             >
-                The Daily Wire provides video as HLS, not as a ready-to-stream MP4. If a podcast app requests the stable MP4 URL before a local video download exists, VODLoft must first download and prepare the complete episode, which can make playback take several minutes to start.
+                {sourceName} provides video as HLS, not as a ready-to-stream MP4. If a podcast app requests the stable MP4 URL before a local video download exists, VODLoft must first download and prepare the complete episode, which can make playback take several minutes to start.
             </AdvisoryCard>
         )
     }
@@ -397,7 +401,7 @@ export default function StreamProfileAdvisory({
                             Every media type used by this RSS output needs enabled Download Profile coverage for every selected episode type. Multiple Download Profiles can combine to provide that coverage.
                         </p>
                         <p>
-                            Without complete local coverage, episodes missing any required media are left out of the RSS feed because Daily Wire streaming is disabled.
+                            Without complete local coverage, episodes missing any required media are left out of the RSS feed because {streaming} is disabled.
                         </p>
                         {!useDownloads ? (
                             <p>
@@ -409,12 +413,12 @@ export default function StreamProfileAdvisory({
             >
                 <p>
                     {hasPartialCoverage
-                        ? 'Daily Wire streaming is disabled, but the existing Download Profiles do not fully cover this Stream Profile.'
-                        : 'Daily Wire streaming is disabled and no enabled Download Profile matches the media coverage this Stream Profile is setup to include.'}
+                        ? `${streaming} is disabled, but the existing Download Profiles do not fully cover this Stream Profile.`
+                        : `${streaming} is disabled and no enabled Download Profile matches the media coverage this Stream Profile is setup to include.`}
                 </p>
                 {streamsLiveEpisodes ? (
                     <p>
-                        <strong>Live episodes will not show in this feed.</strong> Without Daily Wire streaming, a live episode is only listed when all of its media is set to download once it is published.
+                        <strong>Live episodes will not show in this feed.</strong> Without {streaming}, a live episode is only listed when all of its media is set to download once it is published.
                     </p>
                 ) : null}
                 <div className="stream-profile-advisory-requirements">
@@ -444,7 +448,7 @@ export default function StreamProfileAdvisory({
                     </button>
                 )}
             >
-                Matching Download Profiles exist, but both Daily Wire streaming and Use Downloads are disabled. Enable downloads so this Stream Profile can serve its local media.
+                Matching Download Profiles exist, but both {streaming} and Use Downloads are disabled. Enable downloads so this Stream Profile can serve its local media.
             </AdvisoryCard>
         )
     }
@@ -457,10 +461,10 @@ export default function StreamProfileAdvisory({
                 help={(
                     <>
                         <p>
-                            The HLS stream can start immediately from The Daily Wire, but the MP4 fallback still has to be prepared completely before playback if no normal video download exists.
+                            The HLS stream can start immediately from {sourceName}, but the MP4 fallback still has to be prepared completely before playback if no normal video download exists.
                         </p>
                         <p>
-                            Keeping the latest 5 episodes downloaded gives recent episodes immediate MP4 fallback delivery while older episodes can still use The Daily Wire.
+                            Keeping the latest 5 episodes downloaded gives recent episodes immediate MP4 fallback delivery while older episodes can still use {sourceName}.
                         </p>
                         {!useDownloads ? (
                             <p>

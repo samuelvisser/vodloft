@@ -5,7 +5,8 @@ import {faIcon} from '../icons/faIcon'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import MediaTypeTabs, {MediaType} from '../components/MediaTypeTabs/MediaTypeTabs'
-import {useDailywireMovieCatalog, useDailywireShowCatalog, useMovies, useShows} from '../lib/queries'
+import {useDailywireMovieCatalog, useDailywireShowCatalog, useMovies, useShows, useSourceLookup} from '../lib/queries'
+import {SourceFeature, sourceHas} from '../types/schemas/source'
 import {
     DailywireCatalogMovieRead,
     DailywireCatalogShowRead,
@@ -13,10 +14,13 @@ import {
 
 type ShowGrouping = 'alphabetical' | 'host'
 
+/** The catalogue on this page is The Daily Wire's, the only Source that can browse so far. */
+const CATALOG_SOURCE = 'dailywire'
+
 type BrowsePageProps = {
     onboarding?: boolean
-    onShowSelect?: (show: DailywireCatalogShowRead) => void
-    onMovieSelect?: (movie: DailywireCatalogMovieRead) => void
+    onShowSelect?: (show: DailywireCatalogShowRead, url: string) => void
+    onMovieSelect?: (movie: DailywireCatalogMovieRead, url: string) => void
     onSkip?: () => void
 }
 
@@ -34,6 +38,10 @@ function groupShows(shows: DailywireCatalogShowRead[], grouping: ShowGrouping) {
 export default function BrowsePage({onboarding = false, onShowSelect, onMovieSelect, onSkip}: BrowsePageProps = {}) {
     const navigate = useNavigate()
     const [params, setParams] = useSearchParams()
+    const sources = useSourceLookup()
+    const catalogSource = sources.get(CATALOG_SOURCE)
+    const sourceName = catalogSource?.name ?? 'the catalogue'
+    const canBrowse = !catalogSource || sourceHas(catalogSource, SourceFeature.BROWSE)
     const initialType = params.get('type') === 'movies' ? 'movies' : 'shows'
     const [activeType, setActiveType] = useState<MediaType>(initialType)
     const [grouping, setGrouping] = useState<ShowGrouping>('host')
@@ -44,8 +52,8 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
         return () => window.clearTimeout(timer)
     }, [search])
 
-    const showCatalog = useDailywireShowCatalog(debouncedSearch, grouping, activeType === 'shows')
-    const movieCatalog = useDailywireMovieCatalog(debouncedSearch, activeType === 'movies')
+    const showCatalog = useDailywireShowCatalog(debouncedSearch, grouping, canBrowse && activeType === 'shows')
+    const movieCatalog = useDailywireMovieCatalog(debouncedSearch, canBrowse && activeType === 'movies')
     const {data: localShows} = useShows()
     const {data: localMovies} = useMovies()
     const localShowsBySlug = useMemo(
@@ -86,8 +94,9 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
     }
 
     const chooseShow = (show: DailywireCatalogShowRead) => {
+        const url = `https://www.dailywire.com/show/${show.slug}`
         if (onShowSelect) {
-            onShowSelect(show)
+            onShowSelect(show, url)
             return
         }
         const localShow = localShowsBySlug.get(show.slug)
@@ -95,23 +104,32 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
             navigate(`/show/${localShow.slug}`)
             return
         }
-        const url = `https://www.dailywire.com/show/${show.slug}`
         navigate(`/add-show?url=${encodeURIComponent(url)}`)
     }
 
     const chooseMovie = (movie: DailywireCatalogMovieRead) => {
         if (onMovieSelect) {
-            onMovieSelect(movie)
+            onMovieSelect(movie, `https://www.dailywire.com/videos/${movie.slug}`)
             return
         }
         navigate(`/movie/${movie.slug}`)
+    }
+
+    if (!canBrowse) {
+        return (
+            <section className="view browse-view" aria-labelledby="browse-title">
+                <h1 id="browse-title">Browse</h1>
+                <p>{sourceName} cannot be browsed. Paste a link on the Add media page instead.</p>
+                <button className="btn btn-primary" type="button" onClick={() => navigate('/add')}>Add media</button>
+            </section>
+        )
     }
 
     return (
         <section className={`view browse-view${onboarding ? ' browse-view--onboarding' : ''}`} aria-labelledby="browse-title">
             <div className="view-header">
                 <div>
-                    <h1 id="browse-title">{onboarding ? 'Add your first media' : 'Browse Daily Wire'}</h1>
+                    <h1 id="browse-title">{onboarding ? 'Add your first media' : `Browse ${sourceName}`}</h1>
                     <p className="view-description">
                         {onboarding
                             ? 'Choose a show or movie. VODLoft will let you confirm its download location before anything is saved.'
@@ -139,8 +157,8 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
                 )}
             </div>
 
-            {activeQuery.isPending && !hasItems ? <p>Loading the Daily Wire catalog…</p> : activeQuery.error && !hasItems ? (
-                <div className="form-error-card" role="alert">Could not load the Daily Wire catalog: {activeQuery.error.message}</div>
+            {activeQuery.isPending && !hasItems ? <p>Loading the {sourceName} catalogue…</p> : activeQuery.error && !hasItems ? (
+                <div className="form-error-card" role="alert">Could not load the {sourceName} catalogue: {activeQuery.error.message}</div>
             ) : !hasItems ? (
                 <div className="catalog-empty">
                     <FontAwesomeIcon icon={faIcon('fass', 'magnifying-glass')}/>
@@ -162,7 +180,7 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
                                             </span>
                                             <span className="show-summary-copy">
                                                 <strong className="show-summary-title">{show.title}</strong>
-                                                <span className="show-summary-author">{show.authorName || 'Daily Wire'}</span>
+                                                <span className="show-summary-author">{show.authorName || sourceName}</span>
                                                 {show.description && <span className="show-summary-description">{show.description}</span>}
                                             </span>
                                             {added && <span className="catalog-added"><FontAwesomeIcon icon={faIcon('fass', 'check')}/> In library</span>}
@@ -174,7 +192,7 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
                     ))}
                 </div>
             ) : (
-                <div className="movie-poster-grid catalog-movie-grid" role="list" aria-label="Daily Wire movies">
+                <div className="movie-poster-grid catalog-movie-grid" role="list" aria-label={`${sourceName} movies`}>
                     {movies.map((movie) => {
                         const image = toImageUrl(movie.thumbnailPortraitPath || movie.thumbnailLandscapePath || movie.backgroundImagePath)
                         const added = localMovieSlugs.has(movie.slug)
@@ -188,7 +206,7 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
                                     {added && <span className="badge" style={{top: 8, bottom: 'auto'}}>In library</span>}
                                 </span>
                                 <span className="movie-poster-title">{movie.title}</span>
-                                <span className="movie-poster-meta">{movie.authorName || 'Daily Wire'}</span>
+                                <span className="movie-poster-meta">{movie.authorName || sourceName}</span>
                             </button>
                         )
                     })}

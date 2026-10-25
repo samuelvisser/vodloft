@@ -145,7 +145,7 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
             const first = dailywireParsed.error.issues[0];
             setError("url", {
                 type: "validate",
-                message: "Dailywire api returned invalid data: " + (first?.message ?? "Invalid data from dailywire")
+                message: "The source returned invalid show data: " + (first?.message ?? "invalid data")
             });
             throw dailywireParsed.error;
         }
@@ -154,7 +154,7 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
             const first = seasonsParsed.error.issues[0];
             setError("url", {
                 type: "validate",
-                message: "Dailywire seasons invalid: " + (first?.message ?? "Invalid seasons from DailyWire"),
+                message: "The source returned invalid seasons: " + (first?.message ?? "invalid seasons"),
             });
             throw seasonsParsed.error;
         }
@@ -175,13 +175,13 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
                 </div>
             )}
             <div className="form-row">
-                <label htmlFor="show-url">Daily Wire show URL</label>
+                <label htmlFor="show-url">Show link</label>
                 <input
                     id="show-url"
                     className="input"
                     type="url"
                     inputMode="url"
-                    placeholder="https://www.dailywire.com/show/the-ben-shapiro-show"
+                    placeholder="https://…"
                     {...register("url")}
                     aria-invalid={!!errors.url}
                     aria-describedby={errors.url ? "show-url-validate" : undefined}
@@ -192,7 +192,7 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
                     </div>
                 )}
                 <div id="url-help" className="help">
-                    Must be on dailywire.com, include /show/, and a show name.
+                    The link to the show's own page. To add something else, use Add media.
                 </div>
             </div>
 
@@ -231,14 +231,14 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
                                 )}
                                 <div className="help" id="membership-level-help">
                                     <ReadMore summary={
-                                        <span>Current Daily Wire membership level: {DwMembershipLevelReg.getLabelLoose(dwAccessLevel ?? 'Unknown')}</span>}>
+                                        <span>Current membership level at The Daily Wire: {DwMembershipLevelReg.getLabelLoose(dwAccessLevel ?? 'Unknown')}</span>}>
                                         <p>This sets the membership level used when indexing episodes for this show.</p>
                                         <p>VODLoft will make sure to only index episodes with at least this membership level.
                                             If your subscription expires, gives access to a lower level membership than configured here, or
-                                            VODLoft looses access to your DailyWire account alltogether, indexing will be paused.</p>
+                                            VODLoft loses access to your account at The Daily Wire altogether, indexing will be paused.</p>
                                         <p>If you choose <strong>Highest allowed</strong>, VODLoft will index episodes using the membership level
-                                            currently available on your connected DailyWire account. However, if this ever changes or
-                                            VODLoft looses access to your account, episodes of a different membership level will
+                                            currently available on your connected account at The Daily Wire. However, if this ever changes or
+                                            VODLoft loses access to your account, episodes of a different membership level will
                                             be indexed. This might result in a confusing mix of episodes from different membership
                                             levels combined.</p>
                                     </ReadMore>

@@ -8,10 +8,12 @@ from pydantic import AwareDatetime, computed_field, model_validator
 
 from backend.api.models.base import ResponseBase, RequestBase, response_model_config
 from backend.api.models.pagination import CursorPageRead
+from backend.api.models.source import SourcedResponse
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode import EpisodeIdentifierInfo
 
 from backend.utils.helpers import generate_uuid
+from sources import Feature
 
 
 # ---------- Strict input (create/update) ----------
@@ -79,15 +81,17 @@ class _EpisodeIdentifierAPIOut(ResponseBase):
         return values
 
 
-class _EpisodeAPIBaseOut(_EpisodeIdentifierAPIOut):
+class _EpisodeAPIBaseOut(SourcedResponse, _EpisodeIdentifierAPIOut):
     """Complete episode response fields shared by full read models."""
+
+    source_feature_fields = {"went_live_date": Feature.LIVE_EPISODES}
 
     id: int
     show_id: int
     season_id: int
     index: int
     publish_status: Union[EpisodePublishStatus, str]
-    went_live_date: Optional[datetime]
+    went_live_date: Optional[datetime] = None
     published_date: Optional[datetime]
     scheduled_date: Optional[datetime]
     sharing_url: str
@@ -115,7 +119,7 @@ class EpisodeAPIRead(_EpisodeAPIBaseOut):
     updated_at: datetime
 
 
-class EpisodeAPIReadView(_EpisodeIdentifierAPIOut):
+class EpisodeAPIReadView(SourcedResponse, _EpisodeIdentifierAPIOut):
     """Small episode representation used by show grids and browser-side warm caches."""
 
     id: int

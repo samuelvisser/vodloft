@@ -5,9 +5,9 @@ export enum EpisodePublishStatus {
     delayed = 'Delayed',
     live = 'Live',
     noUsableMedia = 'No usable media',
-    dwProcessing = 'Processing on Dailywire',
-    publishedWithCountdown = 'Published on Dailywire (with countdown)',
-    publishedFinal = 'Published on Dailywire',
+    dwProcessing = 'Processing at the source',
+    publishedWithCountdown = 'Published (with countdown)',
+    publishedFinal = 'Published',
 }
 
 export const EpisodeTypeReg = createSelectRegistry("EpisodeType", {
@@ -23,7 +23,7 @@ export const PUBLISH_STATUS_LABELS: Record<string, string> = {
     delayed: 'Officially delayed',
     live: 'Live',
     no_usable_media: 'No usable media',
-    dw_processing: 'Processing on DailyWire',
+    dw_processing: 'Processing at the source',
     published_with_countdown: 'Published (still contains countdown)',
     published_final: 'Published',
 }

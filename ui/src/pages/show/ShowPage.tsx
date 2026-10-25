@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { useDownloadProfilesView, useEpisodePages, useShow, useShowDownloads, useShowSeasons, useStreamProfilesView } from '../../lib/queries'
+import { useDownloadProfilesView, useEpisodePages, useShow, useShowDownloads, useShowSeasons, useSourceLookup, useStreamProfilesView } from '../../lib/queries'
+import SourceBadge from '../../components/Source/SourceBadge'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'react-hot-toast'
 import EpisodeCard, {groupDownloadsByEpisodeSlug} from '../../components/Episode/EpisodeCard'
@@ -40,6 +41,7 @@ export default function ShowPage() {
   const PAGE_SIZE = 36
 
   const { data: show, isLoading, error } = useShow(id)
+  const sources = useSourceLookup()
   const isSeasonal = show?.episodeIdentifier === 'seasonal'
 
   const [confirm, setConfirm] = useState(false)
@@ -398,11 +400,18 @@ export default function ShowPage() {
       <article className="show-details" aria-label="Show details">
         <header className="show-page-header">
           <div className="show-page-heading">
+            <SourceBadge sourceKey={show.sourceKey}/>
             <div className="show-author">{show.authorName}</div>
             <div className="show-meta">{total} episodes{show.years ? ` • ${show.years}` : ''}</div>
           </div>
 
           <div className="show-page-actions">
+            {show.sharingUrl && (
+              <a className="btn" href={show.sharingUrl} target="_blank" rel="noreferrer">
+                <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')} aria-hidden="true"/>
+                <span>Open on {sources.name(show.sourceKey)}</span>
+              </a>
+            )}
             <button type="button" className="btn" title="Edit show" onClick={onEdit}>
               <FontAwesomeIcon icon={faIcon('fass', 'pen-to-square')} aria-hidden="true"/>
               <span>Edit</span>

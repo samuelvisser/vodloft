@@ -25,8 +25,6 @@ DAILYWIRE_FEATURE_MODULES = {
     "backend/src/backend/api/endpoints/dailywire/shows/service.py",
     "backend/src/backend/api/endpoints/dailywire/user_info/router.py",
     "backend/src/backend/api/endpoints/dailywire/user_info/service.py",
-    "backend/src/backend/api/endpoints/feeds/service.py",
-    "backend/src/backend/api/endpoints/media_downloads/service.py",
     "backend/src/backend/api/endpoints/movies/service.py",
     "backend/src/backend/db/background_migrations/versions/3c8f6a1d2b47_square_show_thumbnails.py",
     "backend/src/backend/db/background_migrations/versions/f6a1c3d8b427_episode_indexing_semantics.py",
