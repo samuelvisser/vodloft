@@ -17,7 +17,7 @@ def test_pending_movie_gets_one_lookup_after_tmdb_is_configured(tmp_path, monkey
     from backend.db.models import Movie, MovieLocalMediaProfile
     from backend.integrations.tmdb import MovieReleaseLookupResult
     from config import get_settings
-    from dailywire_api.records import DwMovieExtraRecord, DwMovieRecord
+    from sources.dailywire.api.records import DwMovieExtraRecord, DwMovieRecord
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)

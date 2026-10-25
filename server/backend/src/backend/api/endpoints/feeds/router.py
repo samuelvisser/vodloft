@@ -24,7 +24,7 @@ from backend.types.stream_profile_types import (
     RSS_HLS_OUTPUT_MODES,
     RSS_MP4_OUTPUT_MODES,
 )
-from dailywire_downloader import hls_asset_root
+from downloader import hls_asset_root
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 

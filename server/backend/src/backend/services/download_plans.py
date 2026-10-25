@@ -18,16 +18,12 @@ from backend.utils.output_template import resolve_episode_output_path, resolve_m
 from config import get_settings
 from config.network import is_no_internet_error
 from config.settings.submodels import MetadataMode, ThumbnailMode
-from dailywire_api.dw_api.client import MiddlewareClient
-from dailywire_api.dw_api.movie import MovieMiddlewareClient
-from dailywire_api.records import DwMovieExtraRecord
-from dailywire_authorisation import DeviceAuthClient
-from dailywire_downloader import DownloadCancelled, DownloadError, MediaUnavailableError
-from dailywire_downloader.lifecycle import DownloadTracker
-from dailywire_downloader.metadata import render_nfo
-from dailywire_downloader.plan import DownloadPlan, SidecarSpec, build_download_plan
-from dailywire_downloader.playback import resolve_movie_playback
-from dailywire_downloader.source import resolve_download_source
+from downloader import DownloadCancelled, DownloadError, MediaUnavailableError
+from downloader.lifecycle import DownloadTracker
+from downloader.metadata import render_nfo
+from downloader.plan import DownloadPlan, SidecarSpec, build_download_plan
+from downloader.source import resolve_download_source
+from sources import get_source
 
 
 def prepare_download_plan(session: Session, media_download_id: int, tracker: DownloadTracker) -> DownloadPlan:
@@ -59,6 +55,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     output_template = profile.output_template
     title, slug, media_id = media.title, media.slug, media.id
     thumbnail_url = select_thumbnail_url(media)
+    media_source = get_source(media.source_key)
     if episode is not None:
         video_url, audio_url = episode.video_url, episode.audio_url
         member_only = episode.show.membership_level != WlDwMembershipLevel.FREE.value
@@ -76,10 +73,10 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
                         else "video"
                     )
                     raise MediaUnavailableError(
-                        f"The Daily Wire provides no playable {media_kind} for '{title}'"
+                        f"{media_source.name} provides no playable {media_kind} for '{title}'"
                     )
                 tracker.preparing("resolve_playback")
-                detail = MiddlewareClient().get_episode_details(slug, require_member_exclusive=member_only)
+                detail = media_source.episode_media(slug=slug, members_only=member_only)
                 tracker.ensure_active()
                 current = session.get(Episode, media_id)
                 if current is None:
@@ -110,7 +107,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
                         else "video"
                     )
                     raise MediaUnavailableError(
-                        f"The Daily Wire provides no playable {media_kind} for '{title}'"
+                        f"{media_source.name} provides no playable {media_kind} for '{title}'"
                     ) from exc
                 # A stored URL can go stale. Refresh both candidates once, which
                 # also gives an audio request a chance to switch between the
@@ -121,18 +118,14 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         movie_slug, duration = movie.slug, movie.duration
         is_official_trailer = is_extra and movie.official_trailer_id == media_id
         session.rollback()
-        tracker.preparing("authorize")
-        tokens = DeviceAuthClient().get_token()
-        tracker.ensure_active()
-        client = MovieMiddlewareClient(access_token=tokens.access_token if tokens else None)
         tracker.preparing("resolve_playback")
-        playback = resolve_movie_playback(
-            client, movie_slug=movie_slug, title=title, duration=duration,
+        playback = media_source.movie_playback(
+            movie_slug=movie_slug, title=title, duration=duration,
             is_extra=is_extra, extra_slug=slug if is_extra else None,
             is_official_trailer=is_official_trailer,
         )
         tracker.ensure_active()
-        if isinstance(playback.metadata, DwMovieExtraRecord) and is_extra:
+        if playback.metadata is not None and is_extra:
             current = session.get(MovieExtra, media_id)
             if current is None:
                 raise DownloadCancelled("Movie extra was deleted during preparation")

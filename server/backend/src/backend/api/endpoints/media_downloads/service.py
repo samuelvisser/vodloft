@@ -51,7 +51,7 @@ from backend.types.media_download_history_types import MediaDownloadHistoryActio
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.types.media_types import MediaType
-from dailywire_downloader.storage.artifacts import remove_download_artifacts
+from downloader.storage.artifacts import remove_download_artifacts
 from backend.services.episode_download_delay import episode_download_delay_passed
 from backend.services.media_download_collection import (
     MediaDownloadCollectionQuery,
@@ -61,7 +61,7 @@ from backend.services.media_download_collection import (
 )
 from backend.services.media_download_history import record_media_download_history
 from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path
-from dailywire_api.records import DwMovieRecord
+from sources.dailywire.api.records import DwMovieRecord
 from task_manager.scheduler.db import TaskRun
 from task_manager.tasks.media_download_operations import (
     get_active_media_download_operation,

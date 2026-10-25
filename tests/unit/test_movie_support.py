@@ -2,8 +2,8 @@ from __future__ import annotations
 
 
 def test_movie_metadata_is_owned_by_movie_client_and_uses_get_movie_page(monkeypatch):
-    from dailywire_api.dw_api.client import MiddlewareClient
-    from dailywire_api.dw_api.movie import MovieMiddlewareClient
+    from sources.dailywire.api.dw_api.client import MiddlewareClient
+    from sources.dailywire.api.dw_api.movie import MovieMiddlewareClient
 
     assert not hasattr(MiddlewareClient, "get_movie_page")
 
@@ -56,7 +56,7 @@ def test_movie_metadata_is_owned_by_movie_client_and_uses_get_movie_page(monkeyp
 
 
 def test_movie_playback_intentionally_uses_v2_get_video(monkeypatch):
-    from dailywire_api.dw_api.movie import MovieMiddlewareClient
+    from sources.dailywire.api.dw_api.movie import MovieMiddlewareClient
 
     client = MovieMiddlewareClient(base_url="https://middleware.example/middleware")
     calls: list[tuple[str, dict]] = []
@@ -82,7 +82,7 @@ def test_movie_playback_intentionally_uses_v2_get_video(monkeypatch):
 
 
 def test_movie_extra_playback_uses_clip_endpoint_and_retains_metadata(monkeypatch):
-    from dailywire_api.dw_api.movie import MovieMiddlewareClient
+    from sources.dailywire.api.dw_api.movie import MovieMiddlewareClient
 
     client = MovieMiddlewareClient(base_url="https://middleware.example/middleware")
     calls: list[tuple[str, dict]] = []

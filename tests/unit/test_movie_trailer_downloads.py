@@ -267,7 +267,7 @@ def test_movie_extra_download_repairs_legacy_official_trailer_classification(
     from backend.db.models.media_download import MovieExtraMediaDownload
     from backend.types.media_types import MediaType, MovieExtraType
     from config import get_settings
-    from dailywire_api.records import DwMovieExtraRecord, DwMovieRecord
+    from sources.dailywire.api.records import DwMovieExtraRecord, DwMovieRecord
 
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
 

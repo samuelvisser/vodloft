@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 def test_dailywire_catalog_normalizes_show_and_movie_titles(monkeypatch):
-    from dailywire_api.dw_api.client import MiddlewareClient
+    from sources.dailywire.api.dw_api.client import MiddlewareClient
 
     show_description = (
         "Matt Walsh confronts the lies used to rewrite America's past. "

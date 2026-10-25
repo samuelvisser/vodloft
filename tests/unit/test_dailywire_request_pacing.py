@@ -16,7 +16,7 @@ def _fake_response():
 
 
 def test_middleware_client_uses_global_pacing_by_default(monkeypatch):
-    from dailywire_api.dw_api import client
+    from sources.dailywire.api.dw_api import client
 
     priorities = []
     monkeypatch.setattr(
@@ -32,7 +32,7 @@ def test_middleware_client_uses_global_pacing_by_default(monkeypatch):
 
 
 def test_interactive_middleware_client_preserves_pacing_override(monkeypatch):
-    from dailywire_api.dw_api import client
+    from sources.dailywire.api.dw_api import client
 
     priorities = []
     monkeypatch.setattr(
@@ -51,7 +51,7 @@ def test_interactive_middleware_client_preserves_pacing_override(monkeypatch):
 
 
 def test_explicit_pace_requests_false_preserves_bypass(monkeypatch):
-    from dailywire_api.dw_api import client
+    from sources.dailywire.api.dw_api import client
 
     priorities = []
     monkeypatch.setattr(

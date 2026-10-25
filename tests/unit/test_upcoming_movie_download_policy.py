@@ -19,7 +19,7 @@ def test_upcoming_movie_allows_extras_but_not_full_movie(tmp_path, monkeypatch):
     from backend.db.models import MovieLocalMediaProfile
     from backend.db.models.media_download import MovieExtraMediaDownload
     from config import get_settings
-    from dailywire_api.records import DwMovieExtraRecord, DwMovieRecord
+    from sources.dailywire.api.records import DwMovieExtraRecord, DwMovieRecord
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)

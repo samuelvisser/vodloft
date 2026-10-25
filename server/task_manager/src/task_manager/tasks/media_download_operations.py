@@ -20,7 +20,7 @@ from backend.services.media_download_history import (
     record_media_download_history,
     record_media_download_operation_history_once,
 )
-from dailywire_downloader.storage.artifacts import remove_download_artifacts
+from downloader.storage.artifacts import remove_download_artifacts
 from config import get_settings
 from task_manager.scheduler.db import (
     TaskDefinition,

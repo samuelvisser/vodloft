@@ -9,11 +9,10 @@ dependencies = [
   "pyventus>=0.7.2",
   "SQLAlchemy>=2.0.43,<3.0",
   "backend",
-  "dailywire-api",
-  "dailywire-downloader",
+  "downloader",
+  "sources",
   "config",
   "controller",
-  "dailywire-authorisation",
 ]
 
 [build-system]

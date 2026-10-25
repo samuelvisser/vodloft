@@ -12,8 +12,8 @@ from sqlalchemy import func, select
 
 from backend.db.core import get_session
 from backend.db.models import Show
-from dailywire_api.dw_api.client import MiddlewareClient
-from dailywire_authorisation import DeviceAuthClient
+from sources.dailywire.api.dw_api.client import MiddlewareClient
+from sources.dailywire.auth import DeviceAuthClient
 
 
 revision = "3c8f6a1d2b47"

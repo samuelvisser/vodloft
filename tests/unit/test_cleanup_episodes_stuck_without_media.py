@@ -170,7 +170,7 @@ def test_mark_no_usable_media_refreshes_existing_metadata_rows(db_session):
 
 def test_monitor_deletes_only_expired_episode_that_still_404s(db_session, monkeypatch):
     from backend.db.models import Episode
-    from dailywire_api.dw_api.client import MiddlewareAPIError
+    from sources.dailywire.api.dw_api.client import MiddlewareAPIError
     from task_manager.tasks.workers.monitor_no_usable_media_episode import service
     show = _make_show(db_session)
     episode = _make_episode(db_session, show)
@@ -352,7 +352,7 @@ def test_force_delete_reports_recovery_and_new_status(db_session, monkeypatch):
 def test_force_delete_reports_replacement_as_recovered_state(db_session, monkeypatch):
     from backend.db.models import Episode
     from backend.types.episode_types import EpisodePublishStatus
-    from dailywire_api.dw_api.client import MiddlewareAPIError
+    from sources.dailywire.api.dw_api.client import MiddlewareAPIError
     from task_manager.tasks.workers.monitor_no_usable_media_episode import service
 
     show = _make_show(db_session)
@@ -386,7 +386,7 @@ def test_force_delete_reports_replacement_as_recovered_state(db_session, monkeyp
 
 def test_force_delete_removes_target_immediately_when_it_still_404s(db_session, monkeypatch):
     from backend.db.models import Episode
-    from dailywire_api.dw_api.client import MiddlewareAPIError
+    from sources.dailywire.api.dw_api.client import MiddlewareAPIError
     from task_manager.tasks.workers.monitor_no_usable_media_episode import service
     show = _make_show(db_session)
     episode = _make_episode(db_session, show)

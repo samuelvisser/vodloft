@@ -93,7 +93,7 @@ def _movie_page_payload(*, status: str = "scheduled", has_video: bool = False) -
 
 
 def test_movie_page_uses_structured_status_and_release_instant(monkeypatch):
-    from dailywire_api.dw_api.movie import MovieMiddlewareClient
+    from sources.dailywire.api.dw_api.movie import MovieMiddlewareClient
 
     calls = []
     client = MovieMiddlewareClient(base_url="https://example.invalid")
@@ -128,7 +128,7 @@ def test_movie_page_uses_structured_status_and_release_instant(monkeypatch):
 
 
 def test_published_status_is_not_upcoming(monkeypatch):
-    from dailywire_api.dw_api.movie import MovieMiddlewareClient
+    from sources.dailywire.api.dw_api.movie import MovieMiddlewareClient
 
     client = MovieMiddlewareClient(base_url="https://example.invalid")
     monkeypatch.setattr(
@@ -149,7 +149,7 @@ def test_published_status_is_not_upcoming(monkeypatch):
 
 def test_catalog_movie_fallback_never_advertises_full_movie_download(monkeypatch):
     from backend.api.endpoints.dailywire.movies import service
-    from dailywire_api.records import DwCatalogMovieRecord, DwCatalogRecord
+    from sources.dailywire.api.records import DwCatalogMovieRecord, DwCatalogRecord
 
     monkeypatch.setattr(
         service,
@@ -175,7 +175,7 @@ def test_catalog_movie_fallback_never_advertises_full_movie_download(monkeypatch
 def test_sync_dailywire_movie_metadata_persists_rich_movie_page(monkeypatch):
     from backend.api.endpoints.movies.service import index_dailywire_movie
     from backend.db.core import Base
-    from dailywire_api.dw_api.movie import MovieMiddlewareClient
+    from sources.dailywire.api.dw_api.movie import MovieMiddlewareClient
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)

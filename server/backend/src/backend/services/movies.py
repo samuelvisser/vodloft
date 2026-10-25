@@ -10,7 +10,7 @@ from backend.db.models import Movie, MovieExtra, MovieExtraSource
 from backend.integrations.tmdb import MovieReleaseLookupResult, lookup_movie_release_metadata
 from backend.types.media_types import MediaType, MovieExtraType
 from backend.utils.helpers import generate_uuid
-from dailywire_api.records import DwMovieExtraRecord, DwMovieRecord
+from sources.dailywire.api.records import DwMovieExtraRecord, DwMovieRecord
 
 
 DAILYWIRE_RELEASE_SOURCE = "dailywire"

@@ -14,8 +14,8 @@ from backend.utils.episode_publication_timing import (
     best_effort_published_date,
     invalidate_safe_publication_timing,
 )
-from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
-from dailywire_api.records import DwEpisodeDetailRecord
+from sources.dailywire.api.dw_api.client import MiddlewareAPIError, MiddlewareClient
+from sources.dailywire.api.records import DwEpisodeDetailRecord
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.db import TaskOperation, TaskOperationTarget
 from task_manager.scheduler.executor import trigger_now

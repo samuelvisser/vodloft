@@ -43,7 +43,7 @@ def _recover_download_filesystem(download_settings, scheduled_work_pause) -> Non
     released.
     """
     from backend.api.endpoints.feeds.cached_video import cleanup_expired_rss_cache
-    from dailywire_downloader.storage import (
+    from downloader.storage import (
         cleanup_abandoned_download_path_reservations,
         )
 

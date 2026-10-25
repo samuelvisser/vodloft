@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dailywire_api.dw_api.client import MiddlewareClient
-from dailywire_api.records import DwUserInfo
+from sources.dailywire.api.dw_api.client import MiddlewareClient
+from sources.dailywire.api.records import DwUserInfo
 
 
 def get_user_info() -> DwUserInfo:

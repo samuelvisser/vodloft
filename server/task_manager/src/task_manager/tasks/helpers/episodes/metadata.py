@@ -7,7 +7,7 @@ from backend.db.models import Episode
 from backend.types.episode_types import EpisodePublishStatus
 from config import get_settings
 from config.settings.submodels import parse_metadata_refresh_intervals
-from dailywire_api.records import DwEpisodeDetailRecord
+from sources.dailywire.api.records import DwEpisodeDetailRecord
 
 
 METADATA_REFRESH_REQUESTED_EVENT = "episode.metadata_refresh_requested"

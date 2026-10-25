@@ -3,7 +3,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.datetime import api_timezone_payload
-from dailywire_api.records import (
+from sources.dailywire.api.records import (
     DwCatalogMoviePageRecord,
     DwCatalogRecord,
     DwCatalogShowPageRecord,

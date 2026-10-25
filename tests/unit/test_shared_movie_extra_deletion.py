@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 
 def _movie_record(slug: str, title: str, extra):
-    from dailywire_api.records import DwMovieRecord
+    from sources.dailywire.api.records import DwMovieRecord
 
     return DwMovieRecord(
         dw_id=f"rotating-{slug}-id",
@@ -35,7 +35,7 @@ def test_deleting_one_movie_preserves_shared_source_other_placement_and_download
     from backend.db.models import Movie, MovieExtra, MovieExtraSource, MovieLocalMediaProfile
     from backend.db.models.media_download import MovieExtraMediaDownload
     from config import get_settings
-    from dailywire_api.records import DwMovieExtraRecord
+    from sources.dailywire.api.records import DwMovieExtraRecord
 
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
 

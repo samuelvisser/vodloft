@@ -23,7 +23,7 @@ from backend.utils.show_media_directory import ShowMediaDirectory, infer_show_me
 from config import get_settings
 
 if TYPE_CHECKING:
-    from dailywire_api.records import DwShowRecord
+    from sources.dailywire.api.records import DwShowRecord
 
 SHOW_ASSETS_REQUESTED = "show_assets.reconcile_requested"
 

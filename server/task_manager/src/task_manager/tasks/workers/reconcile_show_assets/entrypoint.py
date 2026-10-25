@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from threading import Event
 
-from dailywire_downloader import DownloadCancelled
+from downloader import DownloadCancelled
 
 from backend.services.show_assets import SHOW_ASSETS_REQUESTED
 from task_manager.scheduler.registry import on_event, task

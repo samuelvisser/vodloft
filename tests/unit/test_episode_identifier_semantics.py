@@ -11,7 +11,7 @@ def _record(
     title: str = "Episode",
     is_trailer: bool | None = None,
 ):
-    from dailywire_api.records import DwEpisodeRecord
+    from sources.dailywire.api.records import DwEpisodeRecord
 
     return DwEpisodeRecord(
         dw_id=f"remote-{slug or episode_number}",
@@ -230,7 +230,7 @@ def test_same_episode_number_is_distinct_across_seasons():
 
 
 def test_mapper_uses_false_detail_flag_for_ambiguous_trailer_title():
-    from dailywire_api.dw_api.client import EpisodesPaginatedResult
+    from sources.dailywire.api.dw_api.client import EpisodesPaginatedResult
     from task_manager.tasks.helpers.episodes.mapper import get_dw_episodes_by_seasons
     from task_manager.tasks.types.general import RecordOrder
 
@@ -268,7 +268,7 @@ def test_mapper_uses_false_detail_flag_for_ambiguous_trailer_title():
 
 
 def test_mapper_accepts_true_paginated_trailer_flag_without_detail_lookup():
-    from dailywire_api.dw_api.client import EpisodesPaginatedResult
+    from sources.dailywire.api.dw_api.client import EpisodesPaginatedResult
     from task_manager.tasks.helpers.episodes.mapper import get_dw_episodes_by_seasons
     from task_manager.tasks.types.general import RecordOrder
 
@@ -303,7 +303,7 @@ def test_mapper_accepts_true_paginated_trailer_flag_without_detail_lookup():
 
 
 def test_mapper_checks_detail_when_paginated_trailer_flag_is_none():
-    from dailywire_api.dw_api.client import EpisodesPaginatedResult
+    from sources.dailywire.api.dw_api.client import EpisodesPaginatedResult
     from task_manager.tasks.helpers.episodes.mapper import get_dw_episodes_by_seasons
     from task_manager.tasks.types.general import RecordOrder
 
@@ -342,7 +342,7 @@ def test_mapper_checks_detail_when_paginated_trailer_flag_is_none():
 
 
 def test_mapper_promotes_attached_trailer_from_affirmative_detail_flag():
-    from dailywire_api.dw_api.client import EpisodesPaginatedResult
+    from sources.dailywire.api.dw_api.client import EpisodesPaginatedResult
     from task_manager.tasks.helpers.episodes.mapper import get_dw_episodes_by_seasons
     from task_manager.tasks.types.general import RecordOrder
 
@@ -399,7 +399,7 @@ def test_official_trailer_title_overrides_false_dailywire_flag():
 
 
 def test_mapper_skips_detail_lookup_for_explicit_official_trailer_title():
-    from dailywire_api.dw_api.client import EpisodesPaginatedResult
+    from sources.dailywire.api.dw_api.client import EpisodesPaginatedResult
     from task_manager.tasks.helpers.episodes.mapper import get_dw_episodes_by_seasons
     from task_manager.tasks.types.general import RecordOrder
 
@@ -715,7 +715,7 @@ def test_background_reindex_downgrade_restores_previous_identifier_grammar():
 
 
 def test_mapper_does_not_mutate_callers_occupied_identifier_snapshot():
-    from dailywire_api.dw_api.client import EpisodesPaginatedResult
+    from sources.dailywire.api.dw_api.client import EpisodesPaginatedResult
     from task_manager.tasks.helpers.episodes.mapper import get_dw_episodes_by_seasons
     from task_manager.tasks.types.general import RecordOrder
 

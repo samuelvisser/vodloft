@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 def test_download_reporter_preserves_structured_activity_and_selected_format():
     from task_manager.tasks.download_adapter import DownloadProgressReporter
-    from dailywire_downloader.lifecycle import DownloadTracker
+    from downloader.lifecycle import DownloadTracker
 
     calls = []
     class Progress:

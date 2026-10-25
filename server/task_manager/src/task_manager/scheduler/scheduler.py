@@ -18,7 +18,7 @@ from apscheduler.triggers.date import DateTrigger
 from backend.db.datetime_types import utc_datetime
 from config import get_settings
 from config.network import is_no_internet_error
-from dailywire_downloader import MediaUnavailableError
+from downloader import MediaUnavailableError
 
 _scheduler: Optional[AsyncIOScheduler] = None
 _critical_scheduler: Optional[AsyncIOScheduler] = None

@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from backend.types.episode_types import EpisodePublishStatus
 from config import get_settings
 from controller.m3u8 import get_vod_info
-from dailywire_api.records import DwEpisodeDetailRecord, DwEpisodeRecord
+from sources.dailywire.api.records import DwEpisodeDetailRecord, DwEpisodeRecord
 from .metadata import ensure_utc
 from .no_show import is_no_show_today_slug
 

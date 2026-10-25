@@ -5,13 +5,13 @@ from typing import Any, List, Optional, OrderedDict, Sequence, Tuple
 
 from backend.db.models import Episode, Season, Show
 from backend.types.show_types import EpisodeIdentifier
-from dailywire_api.dw_api.client import (
+from sources.dailywire.api.dw_api.client import (
     ByNextPage,
     ByShowSeason,
     MiddlewareAPIError,
     MiddlewareClient,
 )
-from dailywire_api.records import DwEpisodeRecord
+from sources.dailywire.api.records import DwEpisodeRecord
 from task_manager.tasks.helpers.episodes.identifier import (
     EpisodeWithIdentifier,
     IdentifierMaxValues,

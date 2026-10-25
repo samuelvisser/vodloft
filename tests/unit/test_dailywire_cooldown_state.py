@@ -19,7 +19,7 @@ def _session() -> Session:
 
 
 def test_dailywire_slow_cooldown_notifies_current_execution(monkeypatch):
-    from dailywire_api import pacing
+    from sources import pacing
     from time import monotonic, time
     monkeypatch.setattr(pacing, "get_settings", lambda: SimpleNamespace(dw_timeout=SimpleNamespace(
         min_fast_request_ms=0, max_fast_requests=0, min_slow_request_ms=20,

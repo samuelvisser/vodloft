@@ -18,14 +18,14 @@ from backend.db.core import get_session
 from backend.db.datetime_types import utc_datetime
 from backend.db.models import Metadata, Show
 from backend.db.models.media_item import Episode
-from dailywire_api.dw_api.client import (
+from sources.dailywire.api.dw_api.client import (
     ByNextPage,
     ByShowSeason,
     MiddlewareAPIError,
     MiddlewareClient,
 )
-from dailywire_api.records import DwEpisodeRecord
-from dailywire_authorisation import DeviceAuthClient
+from sources.dailywire.api.records import DwEpisodeRecord
+from sources.dailywire.auth import DeviceAuthClient
 
 
 revision = "f6a1c3d8b427"

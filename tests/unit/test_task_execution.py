@@ -176,7 +176,7 @@ def test_zero_retry_override_is_terminal(task_database, monkeypatch):
 
 def test_cancelled_task_is_terminal_without_scheduling_retry(task_database, monkeypatch):
     import task_manager.scheduler.scheduler as scheduler_module
-    from dailywire_downloader import DownloadCancelled
+    from downloader import DownloadCancelled
     from task_manager.scheduler.db import TaskRun
     from task_manager.scheduler.executor import execute_task
 

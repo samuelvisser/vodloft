@@ -19,7 +19,7 @@ def _episode_record(
         downloadable: bool = True,
         duration: float = 3600,
 ):
-    from dailywire_api.records import DwEpisodeRecord
+    from sources.dailywire.api.records import DwEpisodeRecord
     return DwEpisodeRecord(
         dw_id=f"remote-{slug}", slug=slug, title=title, description=None,
         duration=duration, episode_number=episode_number, display_episode_number=episode_number,
@@ -31,7 +31,7 @@ def _episode_record(
 
 
 def _episode_detail(**kwargs):
-    from dailywire_api.records import DwEpisodeDetailRecord
+    from sources.dailywire.api.records import DwEpisodeDetailRecord
     record = _episode_record(**kwargs)
     return DwEpisodeDetailRecord(
         **record.model_dump(mode="python", by_alias=False),
@@ -174,7 +174,7 @@ def test_transition_policy_reuses_the_single_hls_observation(monkeypatch):
 
 def test_incremental_detail_404_overrides_age_fallback(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
-    from dailywire_api.dw_api.client import MiddlewareAPIError
+    from sources.dailywire.api.dw_api.client import MiddlewareAPIError
     from task_manager.tasks.helpers.episodes import save, status
     from task_manager.tasks.helpers.episodes.unusable_media import NoUsableMediaReason
     monkeypatch.setattr(status, "get_settings", _timing_settings)
@@ -208,7 +208,7 @@ def test_initial_back_catalog_can_shortcut_old_final_without_detail(monkeypatch)
 
 
 def test_incremental_mapper_reclaims_vacated_identifier_before_final_cursor():
-    from dailywire_api.dw_api.client import EpisodesPaginatedResult
+    from sources.dailywire.api.dw_api.client import EpisodesPaginatedResult
     from task_manager.tasks.helpers.episodes.mapper import get_dw_episodes_since_ep
     from task_manager.tasks.types.general import RecordOrder
 

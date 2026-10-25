@@ -9,7 +9,7 @@ from backend.db.models import Episode, Show
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode_publication_timing import best_effort_published_date
-from dailywire_api.dw_api.client import ByShowSeason, MiddlewareAPIError, MiddlewareClient
+from sources.dailywire.api.dw_api.client import ByShowSeason, MiddlewareAPIError, MiddlewareClient
 from task_manager.events.transactional import queue_event
 
 from ._helpers import save_status_metadata

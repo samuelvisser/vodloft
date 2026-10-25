@@ -14,7 +14,7 @@ def test_shared_source_owns_all_intrinsic_movie_extra_metadata() -> None:
     from backend.db import Base
     from backend.db.models import Movie, MovieExtra, MovieExtraSource
     from backend.types.media_types import MediaType
-    from dailywire_api.records import DwMovieExtraRecord
+    from sources.dailywire.api.records import DwMovieExtraRecord
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
@@ -144,7 +144,7 @@ def test_refreshing_one_parent_updates_global_metadata_for_every_placement() -> 
     from backend.db import Base
     from backend.db.models import Movie, MovieExtra, MovieExtraSource
     from backend.types.media_types import MediaType
-    from dailywire_api.records import DwMovieExtraRecord
+    from sources.dailywire.api.records import DwMovieExtraRecord
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)

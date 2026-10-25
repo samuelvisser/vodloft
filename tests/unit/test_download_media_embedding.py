@@ -8,7 +8,7 @@ import subprocess
 
 import pytest
 
-from dailywire_downloader.ffmpeg import embed_media
+from downloader.ffmpeg import embed_media
 
 pytestmark = pytest.mark.skipif(
     not shutil.which("ffmpeg") or not shutil.which("ffprobe"),

@@ -71,7 +71,7 @@ def test_no_internet_classifier_does_not_hide_remote_service_errors() -> None:
 def test_scheduler_suppresses_expected_external_failures(monkeypatch, caplog) -> None:
     import task_manager.scheduler.executor as executor_module
     from config.network import NoInternetConnectionError
-    from dailywire_downloader import MediaUnavailableError
+    from downloader import MediaUnavailableError
     from task_manager.scheduler.scheduler import _execute_task_job
 
     def offline(**_kwargs) -> None:
@@ -147,7 +147,7 @@ def test_rss_stream_outage_is_not_downgraded_to_episode_502() -> None:
     from backend.api.endpoints.feeds import service
     from backend.types.dailywire_user_info import WlDwMembershipLevel
     from config.network import is_no_internet_error
-    from dailywire_api.dw_api.client import MiddlewareAPIError
+    from sources.dailywire.api.dw_api.client import MiddlewareAPIError
 
     outage = MiddlewareAPIError("Network error: temporary DNS failure")
     outage.__cause__ = _dns_error()

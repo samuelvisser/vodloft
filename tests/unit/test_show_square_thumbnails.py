@@ -44,7 +44,7 @@ def db_session():
 
 
 def test_dailywire_square_show_thumbnail_lookup_uses_square_carousel(monkeypatch):
-    from dailywire_api.dw_api.client import MiddlewareClient
+    from sources.dailywire.api.dw_api.client import MiddlewareClient
 
     payload = {
         "components": [
@@ -126,7 +126,7 @@ def test_dailywire_square_show_thumbnail_lookup_uses_square_carousel(monkeypatch
 
 
 def test_dailywire_square_show_thumbnail_lookup_allows_missing_carousel(monkeypatch):
-    from dailywire_api.dw_api.client import MiddlewareClient
+    from sources.dailywire.api.dw_api.client import MiddlewareClient
 
     client = MiddlewareClient(base_url="https://example.invalid", pace_requests=False)
     monkeypatch.setattr(

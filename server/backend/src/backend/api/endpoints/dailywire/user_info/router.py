@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from backend.api.datetime import api_timezone_payload
-from dailywire_api.records import DwUserInfo
+from sources.dailywire.api.records import DwUserInfo
 from .service import get_user_info
 
 

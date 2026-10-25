@@ -116,7 +116,7 @@ def db_session():
 
 
 def _dw_episode_record(slug: str, title: str):
-    from dailywire_api.records import DwEpisodeRecord
+    from sources.dailywire.api.records import DwEpisodeRecord
 
     return DwEpisodeRecord(
         dw_id=f"remote-{slug}",
@@ -140,7 +140,7 @@ def _dw_episode_record(slug: str, title: str):
 
 
 def _dw_episode_detail(slug: str, title: str):
-    from dailywire_api.records import DwEpisodeDetailRecord
+    from sources.dailywire.api.records import DwEpisodeDetailRecord
 
     return DwEpisodeDetailRecord(
         **_dw_episode_record(slug, title).model_dump(mode="python", by_alias=False),
@@ -465,7 +465,7 @@ def test_monitor_recovers_no_show_placeholder_that_became_real_episode(db_sessio
 
 def test_monitor_deletes_continuous_404_after_four_hours(db_session, monkeypatch):
     from backend.db.models import Episode
-    from dailywire_api.dw_api.client import MiddlewareAPIError
+    from sources.dailywire.api.dw_api.client import MiddlewareAPIError
     from task_manager.tasks.helpers.episodes.unusable_media import NoUsableMediaReason
     from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
 
@@ -507,7 +507,7 @@ def test_monitor_deletes_continuous_404_after_four_hours(db_session, monkeypatch
 
 def test_monitor_verifies_recent_404_but_does_not_delete_it(db_session, monkeypatch):
     from backend.db.models import Episode
-    from dailywire_api.dw_api.client import MiddlewareAPIError
+    from sources.dailywire.api.dw_api.client import MiddlewareAPIError
     from task_manager.tasks.helpers.episodes.unusable_media import NoUsableMediaReason
     from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
 

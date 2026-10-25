@@ -21,16 +21,16 @@ from backend.services.media_download_history import (
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from config import get_settings
-from dailywire_api.pacing import RequestCancelled, request_context
-from dailywire_downloader import DownloadCancelled
-from dailywire_downloader.capacity import resources
-from dailywire_downloader.coordinator import execute_download_plan
-from dailywire_downloader.lifecycle import (
+from sources.pacing import RequestCancelled, request_context
+from downloader import DownloadCancelled
+from downloader.capacity import resources
+from downloader.coordinator import execute_download_plan
+from downloader.lifecycle import (
     DownloadSnapshot,
     DownloadTracker,
     download_completion_fraction,
 )
-from dailywire_downloader.transfer_context import transfer_context
+from downloader.transfer_context import transfer_context
 from task_manager.scheduler.operation_context import current_operation_ids
 from task_manager.scheduler.results import TaskResult
 from task_manager.tasks.media_download_operations import (

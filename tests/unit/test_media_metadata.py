@@ -58,7 +58,7 @@ def test_date_based_episode_metadata_does_not_invent_numbers():
 
 def test_movie_nfo_contains_media_server_metadata(tmp_path):
     from backend.services.download_metadata import build_movie_metadata
-    from dailywire_downloader.metadata import write_nfo
+    from downloader.metadata import write_nfo
 
     movie = SimpleNamespace(
         title="Example Movie",
@@ -101,7 +101,7 @@ def test_movie_nfo_contains_media_server_metadata(tmp_path):
 
 
 def test_nfo_writer_refuses_to_overwrite_external_file(tmp_path):
-    from dailywire_downloader.metadata import (
+    from downloader.metadata import (
         MediaServerMetadata,
         write_nfo,
     )
@@ -121,7 +121,7 @@ def test_nfo_writer_refuses_to_overwrite_external_file(tmp_path):
 
 
 def test_ffmpeg_metadata_embedding_stream_copies_media(tmp_path, monkeypatch):
-    from dailywire_downloader import ffmpeg as ffmpeg_module
+    from downloader import ffmpeg as ffmpeg_module
 
     media = tmp_path / "episode.mp4"
     media.write_bytes(b"media")
@@ -161,7 +161,7 @@ def test_ffmpeg_metadata_embedding_stream_copies_media(tmp_path, monkeypatch):
     ((("title", "Example"),), "artwork", "embed_artwork_metadata"),
 ])
 def test_plan_resolves_exactly_one_optional_embedding_pass(tmp_path, metadata, artwork, code):
-    from dailywire_downloader.plan import ResolvedDownloadSource, SidecarSpec, build_download_plan
+    from downloader.plan import ResolvedDownloadSource, SidecarSpec, build_download_plan
     value = build_download_plan(
         source=ResolvedDownloadSource("https://example.test/a.mp4", "1080p", False, False, "mp4", False),
         requested_destination=tmp_path/"a.mp4", temporary_root=tmp_path/"temp", download_mode="direct",
@@ -173,7 +173,7 @@ def test_plan_resolves_exactly_one_optional_embedding_pass(tmp_path, metadata, a
 
 
 def test_remove_download_artifacts_removes_tracked_nfo(tmp_path):
-    from dailywire_downloader.storage.artifacts import remove_download_artifacts
+    from downloader.storage.artifacts import remove_download_artifacts
 
     media = tmp_path / "episode.mp4"
     nfo = tmp_path / "episode.nfo"

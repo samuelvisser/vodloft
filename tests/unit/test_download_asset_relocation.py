@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from dailywire_downloader.storage.relocation import PathMove, RelocationTransaction
+from downloader.storage.relocation import PathMove, RelocationTransaction
 
 
 def test_arbitrary_subtitle_suffix_relocates_and_rolls_back_with_media(tmp_path):

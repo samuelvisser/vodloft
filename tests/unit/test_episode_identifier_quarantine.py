@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 
 def _record(number: int):
-    from dailywire_api.records import DwEpisodeRecord
+    from sources.dailywire.api.records import DwEpisodeRecord
 
     return DwEpisodeRecord(
         dw_id=f"remote-{number}",

@@ -14,9 +14,9 @@ from backend.db.models.media_download import MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.services.media_download_history import record_media_download_history
-from dailywire_downloader.storage.identity import ArtifactIdentity, inspect_artifact
+from downloader.storage.identity import ArtifactIdentity, inspect_artifact
 from config import get_settings
-from dailywire_downloader import hls_asset_marker, hls_asset_root, missing_hls_bundle_files
+from downloader import hls_asset_marker, hls_asset_root, missing_hls_bundle_files
 
 from ._helpers import get_tracked_downloads
 

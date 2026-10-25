@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 
 def test_temporary_download_is_not_visible_at_destination_until_publish(tmp_path):
-    from dailywire_downloader.storage import (
+    from downloader.storage import (
         create_temporary_download_workspace,
         publish_temporary_download,
     )
@@ -37,7 +37,7 @@ def test_temporary_download_is_not_visible_at_destination_until_publish(tmp_path
 
 
 def test_temporary_publish_numbers_existing_exact_filename(tmp_path):
-    from dailywire_downloader.storage import (
+    from downloader.storage import (
         create_temporary_download_workspace,
         publish_temporary_download,
     )
@@ -60,7 +60,7 @@ def test_temporary_publish_numbers_existing_exact_filename(tmp_path):
 
 
 def test_temporary_publish_treats_extensions_as_distinct(tmp_path):
-    from dailywire_downloader.storage import (
+    from downloader.storage import (
         create_temporary_download_workspace,
         publish_temporary_download,
     )
@@ -79,7 +79,7 @@ def test_temporary_publish_treats_extensions_as_distinct(tmp_path):
 
 
 def test_temporary_publish_is_collision_safe_between_concurrent_workers(tmp_path):
-    from dailywire_downloader.storage import (
+    from downloader.storage import (
         create_temporary_download_workspace,
         publish_temporary_download,
     )
@@ -121,7 +121,7 @@ def test_temporary_publish_is_collision_safe_between_concurrent_workers(tmp_path
 
 
 def test_temporary_publish_copies_complete_file_when_staging_is_cross_filesystem(tmp_path, monkeypatch):
-    import dailywire_downloader.storage.temporary as download_paths
+    import downloader.storage.temporary as download_paths
 
     destination = tmp_path / "downloads" / "Episode.m4a"
     workspace = download_paths.create_temporary_download_workspace(
@@ -177,10 +177,10 @@ def test_local_media_profile_mode_resolves_against_system_default(monkeypatch):
 
 
 def test_plan_execution_keeps_destination_absent_until_temporary_download_finishes(tmp_path, monkeypatch):
-    from dailywire_downloader import coordinator
-    from dailywire_downloader.lifecycle import DownloadTracker
-    from dailywire_downloader.plan import build_download_plan, ResolvedDownloadSource
-    from dailywire_downloader.models import DownloadResult
+    from downloader import coordinator
+    from downloader.lifecycle import DownloadTracker
+    from downloader.plan import build_download_plan, ResolvedDownloadSource
+    from downloader.models import DownloadResult
     destination = tmp_path / "library" / "Episode.m4a"
     source = ResolvedDownloadSource("https://example.test/audio.m4a", "audio", False, False, "m4a", True)
     def transfer(_url, path, **_kwargs):
