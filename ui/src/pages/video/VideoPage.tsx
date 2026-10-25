@@ -23,6 +23,15 @@ function formatDuration(seconds: number) {
     return hours ? `${hours}h ${minutes}m` : `${Math.max(minutes, 1)}m`
 }
 
+/** The site a video is on, since one Source can serve many sites. */
+function siteName(url: string): string | null {
+    try {
+        return new URL(url).hostname.replace(/^www\./, '')
+    } catch {
+        return null
+    }
+}
+
 export default function VideoPage() {
     const {id} = useParams()
     const videoId = id && /^\d+$/.test(id) ? Number(id) : undefined
@@ -179,7 +188,7 @@ export default function VideoPage() {
                         <span className="episode-summary-separator" aria-hidden="true"/>
                         <a className="episode-summary-item" href={video.sharingUrl} target="_blank" rel="noreferrer">
                             <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')} aria-hidden="true"/>
-                            <span>Open on {sourceName}</span>
+                            <span>Open on {siteName(video.sharingUrl) ?? sourceName}</span>
                         </a>
                     </div>
                 </header>

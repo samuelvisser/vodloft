@@ -2067,4 +2067,12 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .source-card-header { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; }
 .source-card-header h3 { margin: 0; }
 .source-card-domains { color: var(--muted); font-size: 13px; }
+.source-setting { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding-top: 12px; border-top: 1px solid rgba(100,116,139,.25); }
+.source-setting-copy { min-width: 0; }
+.source-setting-copy h4 { margin: 0 0 4px; }
+.source-setting-copy p { margin: 0; color: var(--muted); }
+.source-setting-copy .source-setting-error { margin-top: 6px; color: var(--error); }
+.source-setting-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.source-setting .btn { white-space: nowrap; }
+@media (max-width: 640px) { .source-setting { flex-direction: column; } .source-setting-actions { justify-content: flex-start; } }
 .source-feature-list { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 0; padding: 0; list-style: none; }

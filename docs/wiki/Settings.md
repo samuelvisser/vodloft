@@ -169,6 +169,12 @@ These are safeguards for unusual Daily Wire publication states. Most users shoul
 
 The Sources tab lists every Source VODLoft can add media from, with what it supports. The Daily Wire's card contains its sign-in plus advanced integration settings. Ordinary installations should leave the endpoint, OAuth, and pacing values unchanged.
 
+### yt-dlp
+
+The yt-dlp card shows the installed yt-dlp version and when it was last updated. Sites change often, so VODLoft fetches the latest yt-dlp release once a week; **Update now** does it straight away, which is the first thing to try when a site stops working. The update is stored in the config directory and survives container upgrades.
+
+**Cookies file** is optional. Some videos only play for a signed-in viewer, such as age-restricted or members-only videos. Export a `cookies.txt` file (Netscape format) from a browser where you are signed in, with a browser extension made for that, and choose it here. yt-dlp then uses it for every lookup and download. Treat the file like a password: it signs VODLoft in as you.
+
 ### API endpoints
 
 | Setting | Environment variable | Default |

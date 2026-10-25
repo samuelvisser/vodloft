@@ -29,6 +29,7 @@ _WORKER_EXPORTS = {
     "manage_custom_indexes": ".workers.manage_custom_indexes",
     "file_watcher": ".workers.file_watcher",
     "trigger_task_worker": ".workers.trigger_task_worker",
+    "update_source_programs": ".workers.update_source_programs",
 }
 
 
