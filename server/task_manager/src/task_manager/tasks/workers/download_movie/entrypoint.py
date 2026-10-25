@@ -13,7 +13,7 @@ from .service import run_download_movie
 @task(
     key="download_movie",
     title="Download movie media",
-    description="Downloads one Daily Wire movie or movie extra according to a Movie Local Media Profile.",
+    description="Downloads one movie, movie extra or single video according to its Local Media Profile.",
     allowed_resource_types=("media_download",),
     default_max_retries=2,
     tracks_progress=True,

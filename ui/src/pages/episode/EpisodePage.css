@@ -479,3 +479,13 @@
         padding-top: 16px;
     }
 }
+
+.video-view .episode-cover .video-cover-placeholder {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  color: var(--muted);
+  font-size: 40px;
+  background: linear-gradient(145deg, rgba(100,116,139,.4), rgba(15,23,42,.85));
+}
+.video-view .episode-summary a { color: inherit; }

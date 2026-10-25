@@ -15,6 +15,10 @@ import {
     ShowLocalMediaProfileCreateIn,
     ShowLocalMediaProfileCreateSchema,
 } from '../../types/schemas/show_local_media_profile'
+import {
+    VideoLocalMediaProfileCreateIn,
+    VideoLocalMediaProfileCreateSchema,
+} from '../../types/schemas/video_local_media_profile'
 import {useForm, UseFormReturn} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {WithRoot} from '../../types/form'
@@ -27,6 +31,7 @@ import {
     saveLocalMediaProfileDraft,
 } from '../../components/LocalMediaProfile/localMediaProfileDraft'
 import {getZodDefaults} from '../../utils/defaultZod'
+import {localMediaProfileEndpoint} from '../../types/local_media_profile'
 
 
 export default function AddLocalMediaProfilePage() {
@@ -39,7 +44,9 @@ export default function AddLocalMediaProfilePage() {
         [draftKey],
     )
     const requestedMode = searchParams.get('type')
-    const explicitMode = requestedMode === 'movie' || requestedMode === 'show' ? requestedMode : undefined
+    const explicitMode = requestedMode === 'movie' || requestedMode === 'show' || requestedMode === 'video'
+        ? requestedMode
+        : undefined
     const initialMode: LocalMediaProfileMode = explicitMode ?? restoredDraft?.mode ?? 'show'
     const [mode, setMode] = useState<LocalMediaProfileMode>(initialMode)
 
@@ -67,7 +74,19 @@ export default function AddLocalMediaProfilePage() {
         },
     })
 
-    const form = (mode === 'movie' ? formMovie : formShow) as UseFormReturn<any>
+    const formVideo = useForm<WithRoot<VideoLocalMediaProfileCreateIn>>({
+        resolver: zodResolver(VideoLocalMediaProfileCreateSchema),
+        mode: 'onBlur',
+        shouldFocusError: true,
+        defaultValues: {
+            ...getZodDefaults(VideoLocalMediaProfileCreateSchema),
+            ...(restoredDraft?.mode === 'video'
+                ? restoredDraft.values as Partial<VideoLocalMediaProfileCreateIn>
+                : {}),
+        },
+    })
+
+    const form = ({show: formShow, movie: formMovie, video: formVideo}[mode]) as UseFormReturn<any>
 
     useEffect(() => {
         const saveDraft = (values: Partial<LocalMediaProfileCreateIn>) => {
@@ -85,9 +104,7 @@ export default function AddLocalMediaProfilePage() {
     }, [draftKey, form, mode])
 
     const submitFn = async (data: LocalMediaProfileCreateOut) => {
-        const endpoint = mode === 'movie'
-            ? 'movie-local-media-profiles'
-            : 'show-local-media-profiles'
+        const endpoint = localMediaProfileEndpoint(mode)
         return fetch(`${(window as any).appConfig.API_URL}/${endpoint}`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -138,6 +155,11 @@ export default function AddLocalMediaProfilePage() {
                                 value: 'movie',
                                 label: 'Movie',
                                 description: 'Store manually downloaded movies and their extras',
+                            },
+                            {
+                                value: 'video',
+                                label: 'Video',
+                                description: 'Store single videos added on their own',
                             },
                         ]}
                     />

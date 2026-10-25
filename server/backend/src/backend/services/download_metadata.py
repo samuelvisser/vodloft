@@ -74,6 +74,22 @@ def build_movie_metadata(movie, media) -> MediaServerMetadata:
     )
 
 
+def build_video_metadata(video, *, source_name: str) -> MediaServerMetadata:
+    return MediaServerMetadata(
+        kind="video",
+        title=video.title,
+        description=video.description,
+        unique_id=video.slug,
+        unique_id_type=video.source_key,
+        source_url=video.sharing_url,
+        release_date=_as_date(video.published_at),
+        duration_seconds=video.duration,
+        authors=_strings((video.author_name,)),
+        studios=_strings((video.author_name, source_name)),
+        media_type="video",
+    )
+
+
 def _as_date(value) -> date | None:
     if isinstance(value, datetime):
         return value.date()

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Any, ClassVar
 from urllib.parse import urlsplit
@@ -25,6 +26,7 @@ class Feature(StrEnum):
     LIVE_EPISODES = "live_episodes"
     MEMBERSHIP_LEVELS = "membership_levels"
     RSS_STREAMING = "rss_streaming"
+    VIDEOS = "videos"
 
 
 @dataclass(frozen=True)
@@ -53,6 +55,7 @@ class LinkKind(StrEnum):
     SHOW = "show"
     MOVIE = "movie"
     EPISODE = "episode"
+    VIDEO = "video"
 
 
 @dataclass(frozen=True)
@@ -72,6 +75,24 @@ class ResolvedLink:
     author_name: str | None = None
     show_slug: str | None = None
     show_url: str | None = None
+
+
+@dataclass(frozen=True)
+class VideoDetails:
+    """Everything VODLoft stores about a single video.
+
+    ``slug`` is the Source's own id for the video and ``url`` its canonical link.
+    """
+
+    slug: str
+    url: str
+    title: str
+    description: str | None = None
+    duration: float | None = None
+    image_url: str | None = None
+    author_name: str | None = None
+    author_url: str | None = None
+    published_at: datetime | None = None
 
 
 ANY_DOMAIN = "*"
@@ -109,3 +130,11 @@ class Source(ABC):
         extra_slug: str | None = None, is_extra: bool = False, is_official_trailer: bool = False,
     ) -> MoviePlayback:
         """Resolve the playable URL of a movie or one of its extras."""
+
+    def video_details(self, url: str) -> VideoDetails:
+        """Look up a single video. Only Sources with ``Feature.VIDEOS`` implement it."""
+        raise NotImplementedError(f"{self.name} has no single videos")
+
+    def video_playback(self, *, slug: str, url: str) -> MoviePlayback:
+        """Resolve the playable URL of a single video. Only Sources with ``Feature.VIDEOS`` implement it."""
+        raise NotImplementedError(f"{self.name} has no single videos")

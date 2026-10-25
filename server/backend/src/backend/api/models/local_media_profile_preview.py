@@ -12,7 +12,7 @@ from backend.api.models.local_media_profile import (
 class LocalMediaProfilePreviewRequest(LocalMediaProfileTemplatePreview):
     """One unsaved profile and editable example shared by every form preview."""
 
-    type: Literal["show", "movie"]
+    type: Literal["show", "movie", "video"]
     source_id: str | None = Field(default=None, max_length=100)
     local_media_profile_id: int | None = Field(default=None, gt=0)
 

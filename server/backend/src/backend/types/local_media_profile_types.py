@@ -4,6 +4,7 @@ from enum import StrEnum
 class LocalMediaProfileType(StrEnum):
     SHOW = "show"
     MOVIE = "movie"
+    VIDEO = "video"
 
     # Only used by the polymorphic parent mapper.
     BASE = "base"

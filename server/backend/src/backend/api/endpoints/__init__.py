@@ -9,6 +9,8 @@ from .local_media_profiles import local_media_profile_router
 from .show_local_media_profiles import show_local_media_profile_router
 from .movie_local_media_profiles import movie_local_media_profile_router
 from .movies import movie_router
+from .videos import video_router
+from .video_local_media_profiles import video_local_media_profile_router
 from .onboarding import onboarding_router
 from .operations import operation_router
 from .sources import source_router

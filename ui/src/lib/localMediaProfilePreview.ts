@@ -7,7 +7,7 @@ import {
 } from '../types/schemas/local_media_profile_preview'
 
 type PreviewRequest = {
-    type: 'show' | 'movie'
+    type: 'show' | 'movie' | 'video'
     outputTemplate: string
     preferredFormat: string
     sourceId: string

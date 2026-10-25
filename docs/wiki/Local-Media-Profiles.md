@@ -2,9 +2,9 @@
 
 A Local Media Profile describes **the local file VODLoft should create**. It controls the preferred format, where the file is stored, and whether incomplete download work is written directly in the library or staged elsewhere first.
 
-Download Profiles use Local Media Profiles for automatic show downloads. Movies also use Local Media Profiles, but movie downloads are started manually.
+Download Profiles use Local Media Profiles for automatic show downloads. Movies and single videos also use Local Media Profiles, but their downloads are started manually.
 
-## Show and Movie profiles
+## Show, Movie and Video profiles
 
 ### Show profiles
 
@@ -20,6 +20,10 @@ A Show profile also has an **Available for** setting. This controls where VODLof
 ### Movie profiles
 
 Movie profiles can use 4K, 1080p, or 720p video. The same profile can be used for the main movie and its extras, so its output template must keep those items distinct.
+
+### Video profiles
+
+Video profiles store single videos that you added on their own, outside any show. They can use 4K, 1080p or 720p video, or audio only. When a site does not offer the chosen quality, VODLoft downloads the best quality below it. New installations start with a **VODLoft Videos** profile; on an existing installation, create one from **Profiles → Local Media Profiles**.
 
 ## Download behavior
 
@@ -186,6 +190,26 @@ These describe the main movie or the specific extra currently being downloaded:
 | `year`, `month`, `day`, `hour`, `minute`, `second` | Item date/time components |
 
 The Daily Wire does not always provide every field for movie extras. Use conditionals around values that may be empty.
+
+## Videos
+
+Video templates describe one single video:
+
+| Variable | Meaning |
+| --- | --- |
+| `title` | Video title |
+| `slug` | The site's own id for the video |
+| `author` | Channel or uploader, when the site names one |
+| `source` | Name of the site the video comes from |
+| `duration_seconds` | Video duration in seconds |
+| `date`, `time`, `datetime` | Upload date/time values |
+| `year`, `month`, `day`, `hour`, `minute`, `second` | Upload date/time components |
+
+Titles are not unique, so include `{{ slug }}` in the filename. Sites do not always give an uploader or an upload date, so fall back or use a conditional:
+
+```jinja
+{% set output_date = date ~ ' - ' if date %}/downloads/videos/{{ author or source }}/{{ output_date }}{{ title }} [{{ slug }}].ext
+```
 
 ## Filename restrictions
 

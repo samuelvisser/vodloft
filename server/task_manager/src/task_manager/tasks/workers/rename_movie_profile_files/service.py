@@ -4,11 +4,12 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from backend.db.models import Movie, MovieExtra, MovieLocalMediaProfile
+from backend.db.models import LocalMediaProfileBase, Movie, MovieExtra, Video
 from backend.db.models.media_download import MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_types import MediaType
-from backend.utils.output_template import resolve_movie_output_path
+from backend.types.local_media_profile_types import LocalMediaProfileType
+from backend.utils.output_template import resolve_movie_output_path, resolve_video_output_path
 from backend.services.download_relocation import DownloadRelocation, plan_download_relocation, relocate_downloads
 from task_manager.scheduler.results import TaskResult
 from task_manager.tasks.helpers.progress import update_progress
@@ -20,6 +21,12 @@ _PHYSICAL_STATUSES = (
     MediaDownloadArtifactStatus.CORRUPTED.value,
 )
 
+# The media types each Local Media Profile type downloads.
+_PROFILE_MEDIA_TYPES = {
+    LocalMediaProfileType.MOVIE.value: (MediaType.MOVIE.value, MediaType.MOVIE_EXTRA.value),
+    LocalMediaProfileType.VIDEO.value: (MediaType.VIDEO.value,),
+}
+
 
 def run_rename_movie_profile_files(
     session: Session,
@@ -27,9 +34,12 @@ def run_rename_movie_profile_files(
     local_media_profile_id: int,
     progress=None,
 ) -> TaskResult:
-    profile = session.get(MovieLocalMediaProfile, local_media_profile_id)
+    profile = session.get(LocalMediaProfileBase, local_media_profile_id)
     if profile is None:
         return TaskResult(summary="Local Media Profile no longer exists")
+    media_types = _PROFILE_MEDIA_TYPES.get(profile.type)
+    if media_types is None:
+        raise ValueError(f"Local Media Profile {profile.name} is not a Movie or Video profile")
 
     downloads = list(session.scalars(
         select(MediaDownloadBase)
@@ -39,9 +49,7 @@ def run_rename_movie_profile_files(
         )
         .where(
             MediaDownloadBase.local_media_profile_id == local_media_profile_id,
-            MediaDownloadBase.type.in_(
-                (MediaType.MOVIE.value, MediaType.MOVIE_EXTRA.value)
-            ),
+            MediaDownloadBase.type.in_(media_types),
             MediaDownloadBase.artifact_status.in_(_PHYSICAL_STATUSES),
         )
         .order_by(MediaDownloadBase.id.asc())
@@ -69,26 +77,28 @@ def run_rename_movie_profile_files(
             )
 
         media = download.media
-        if isinstance(media, Movie):
-            movie = media
-        elif isinstance(media, MovieExtra):
-            movie = media.movie
-        else:
-            raise ValueError(
-                f"Media download {download.id} is not a movie or movie extra"
-            )
-
         extension = source.suffix.removeprefix(".")
         if not extension:
             raise ValueError(
                 f"Cannot determine extension for media download {download.id}"
             )
-        destination = resolve_movie_output_path(
-            profile.output_template,
-            movie=movie,
-            media_item=media,
-            extension=extension,
-        )
+        if isinstance(media, Video):
+            destination = resolve_video_output_path(
+                profile.output_template,
+                video=media,
+                extension=extension,
+            )
+        elif isinstance(media, (Movie, MovieExtra)):
+            destination = resolve_movie_output_path(
+                profile.output_template,
+                movie=media if isinstance(media, Movie) else media.movie,
+                media_item=media,
+                extension=extension,
+            )
+        else:
+            raise ValueError(
+                f"Media download {download.id} is not a movie, movie extra or video"
+            )
         if source == destination:
             unchanged += 1
             continue

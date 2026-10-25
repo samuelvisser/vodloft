@@ -1725,7 +1725,8 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 
 .media-type-tabs {
   display: inline-grid;
-  grid-template-columns: repeat(2, minmax(130px, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(130px, 1fr);
   gap: 4px;
   padding: 4px;
   margin-bottom: 22px;
@@ -1856,6 +1857,14 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .movie-state.is-active { background: #3b82f6; }
 .movie-state.is-error { background: #dc4f57; }
 
+.video-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 22px 16px; }
+.video-card { display: flex; flex-direction: column; min-width: 0; color: inherit; text-decoration: none; }
+.video-card .movie-poster-art { aspect-ratio: 16 / 9; }
+.video-card:hover .movie-poster-art { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(15, 23, 42, .22); }
+.video-card-duration { position: absolute; right: 8px; bottom: 8px; padding: 2px 6px; border-radius: 6px; background: rgba(0, 0, 0, .72); color: white; font-size: 11px; font-weight: 600; }
+.video-card .movie-poster-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.video-card .source-badge { align-self: flex-start; margin-top: 6px; }
+
 .browse-type-tabs { display: grid; width: min(100%, 360px); }
 .browse-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 24px; }
 .browse-search { flex: 1; max-width: 480px; min-height: 44px; display: flex; align-items: center; gap: 9px; padding: 0 12px; border: 1px solid rgba(100,116,139,.4); border-radius: 10px; background: rgba(148,163,184,.07); color: var(--muted); }
@@ -1980,7 +1989,7 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 }
 
 @media (max-width: 480px) {
-  .media-type-tabs { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .media-type-tabs { display: grid; width: 100%; grid-auto-columns: minmax(0,1fr); }
   .library-show-list, .catalog-show-grid { grid-template-columns: 1fr; }
   .show-summary-card { grid-template-columns: 74px minmax(0,1fr) auto; gap: 11px; padding: 10px; }
   .catalog-show-card { grid-template-columns: 74px minmax(0,1fr); }

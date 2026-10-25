@@ -11,10 +11,16 @@ import {
     ShowLocalMediaProfileReadSchema,
     ShowLocalMediaProfileUpdateSchema,
 } from './show_local_media_profile'
+import {
+    VideoLocalMediaProfileCreateSchema,
+    VideoLocalMediaProfileReadSchema,
+    VideoLocalMediaProfileUpdateSchema,
+} from './video_local_media_profile'
 
 export * from './local_media_profile_base'
 export * from './movie_local_media_profile'
 export * from './show_local_media_profile'
+export * from './video_local_media_profile'
 
 
 export const LocalMediaProfileServerErrors = createServerErrorMapper({
@@ -48,11 +54,17 @@ export const MOVIE_OUTPUT_TEMPLATE_FIELDS = [
     ...DATE_OUTPUT_TEMPLATE_FIELDS,
 ] as const
 
+export const VIDEO_OUTPUT_TEMPLATE_FIELDS = [
+    'slug', 'title', 'author', 'duration_seconds', 'source',
+    ...DATE_OUTPUT_TEMPLATE_FIELDS,
+] as const
+
 
 // ---------- Strict request (create/update) ----------
 export const LocalMediaProfileCreateSchema = z.discriminatedUnion('type', [
     ShowLocalMediaProfileCreateSchema,
     MovieLocalMediaProfileCreateSchema,
+    VideoLocalMediaProfileCreateSchema,
 ])
 export type LocalMediaProfileCreateIn = z.input<typeof LocalMediaProfileCreateSchema>
 export type LocalMediaProfileCreateOut = z.output<typeof LocalMediaProfileCreateSchema>
@@ -60,6 +72,7 @@ export type LocalMediaProfileCreateOut = z.output<typeof LocalMediaProfileCreate
 export const LocalMediaProfileUpdateSchema = z.discriminatedUnion('type', [
     ShowLocalMediaProfileUpdateSchema,
     MovieLocalMediaProfileUpdateSchema,
+    VideoLocalMediaProfileUpdateSchema,
 ])
 export type LocalMediaProfileUpdateIn = z.input<typeof LocalMediaProfileUpdateSchema>
 export type LocalMediaProfileUpdateOut = z.output<typeof LocalMediaProfileUpdateSchema>
@@ -69,6 +82,7 @@ export type LocalMediaProfileUpdateOut = z.output<typeof LocalMediaProfileUpdate
 export const LocalMediaProfileReadSchema = z.discriminatedUnion('type', [
     ShowLocalMediaProfileReadSchema,
     MovieLocalMediaProfileReadSchema,
+    VideoLocalMediaProfileReadSchema,
 ])
 export type LocalMediaProfileRead = z.infer<typeof LocalMediaProfileReadSchema>
 

@@ -162,7 +162,7 @@ def prepare_media_download_artifact(
 
 
 def _task_key(download: MediaDownloadBase) -> str:
-    if download.type in {MediaType.MOVIE.value, MediaType.MOVIE_EXTRA.value}:
+    if download.type in {MediaType.MOVIE.value, MediaType.MOVIE_EXTRA.value, MediaType.VIDEO.value}:
         return "download_movie"
     return "download_episode"
 

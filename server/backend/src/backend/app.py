@@ -218,6 +218,7 @@ def create_app() -> FastAPI:
         media_download_router,
         show_router,
         movie_router,
+        video_router,
         onboarding_router,
         operation_router,
         source_router,
@@ -228,6 +229,7 @@ def create_app() -> FastAPI:
         local_media_profile_router,
         show_local_media_profile_router,
         movie_local_media_profile_router,
+        video_local_media_profile_router,
         meta_router,
         config_router,
         rss_stream_profile_router,
@@ -255,6 +257,7 @@ def create_app() -> FastAPI:
     app.include_router(media_download_router, prefix="/api")
     app.include_router(show_router, prefix="/api")
     app.include_router(movie_router, prefix="/api")
+    app.include_router(video_router, prefix="/api")
     app.include_router(onboarding_router, prefix="/api")
     app.include_router(source_router, prefix="/api")
     app.include_router(operation_router, prefix="/api")
@@ -263,6 +266,7 @@ def create_app() -> FastAPI:
     app.include_router(local_media_profile_router, prefix="/api")
     app.include_router(show_local_media_profile_router, prefix="/api")
     app.include_router(movie_local_media_profile_router, prefix="/api")
+    app.include_router(video_local_media_profile_router, prefix="/api")
     app.include_router(custom_metadata_router, prefix="/api")
     app.include_router(meta_router, prefix="/api")
     app.include_router(config_router, prefix="/api")

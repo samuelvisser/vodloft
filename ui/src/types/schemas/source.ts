@@ -10,6 +10,7 @@ export const SourceFeature = {
     LIVE_EPISODES: 'live_episodes',
     MEMBERSHIP_LEVELS: 'membership_levels',
     RSS_STREAMING: 'rss_streaming',
+    VIDEOS: 'videos',
 } as const
 export type SourceFeatureValue = typeof SourceFeature[keyof typeof SourceFeature]
 
@@ -42,7 +43,7 @@ export function sourceHas(source: SourceRead | null | undefined, feature: Source
 
 export const ResolvedLinkReadSchema = z.object({
     source: SourceReadSchema,
-    kind: z.enum(['show', 'movie', 'episode']),
+    kind: z.enum(['show', 'movie', 'episode', 'video']),
     slug: z.string(),
     url: z.string(),
     showSlug: z.string().nullable().optional(),

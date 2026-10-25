@@ -127,11 +127,34 @@ const MOVIE_VARIABLES: readonly OutputTemplateVariable[] = [
     {name: 'second', description: 'Downloaded item second'},
 ]
 
+const VIDEO_VARIABLES: readonly OutputTemplateVariable[] = [
+    {name: 'title', description: 'Video title'},
+    {name: 'slug', description: 'The site\'s own id for the video'},
+    {name: 'author', description: 'Channel or uploader, when the site names one'},
+    {name: 'source', description: 'Name of the site the video comes from'},
+    {name: 'duration_seconds', description: 'Video duration in seconds'},
+    {name: 'date', description: 'Upload date as YYYY-MM-DD'},
+    {name: 'time', description: 'Upload time as HH:MM:SS'},
+    {name: 'datetime', description: 'Upload date and time'},
+    {name: 'year', description: 'Upload year'},
+    {name: 'month', description: 'Upload month'},
+    {name: 'day', description: 'Upload day'},
+    {name: 'hour', description: 'Upload hour'},
+    {name: 'minute', description: 'Upload minute'},
+    {name: 'second', description: 'Upload second'},
+]
+
+const VARIABLES_BY_MODE: Record<LocalMediaProfileMode, readonly OutputTemplateVariable[]> = {
+    show: SHOW_VARIABLES,
+    movie: MOVIE_VARIABLES,
+    video: VIDEO_VARIABLES,
+}
+
 export function getOutputTemplateVariables(
     mode: LocalMediaProfileMode,
     customVariables: readonly OutputTemplateVariable[] = [],
 ): readonly OutputTemplateVariable[] {
-    const baseVariables = mode === 'movie' ? MOVIE_VARIABLES : SHOW_VARIABLES
+    const baseVariables = VARIABLES_BY_MODE[mode]
     const merged = new Map(baseVariables.map((variable) => [variable.name, variable]))
     for (const variable of customVariables) merged.set(variable.name, variable)
     return [...merged.values()]

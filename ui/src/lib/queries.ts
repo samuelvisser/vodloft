@@ -58,6 +58,7 @@ import {
 } from "../types/schemas/media_download";
 import {TaskOperationRead} from "../types/schemas/operation";
 import {MovieRead, MovieReadSchema} from "../types/schemas/movie";
+import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {DEFAULT_SOURCE_KEY, ResolvedLinkRead, ResolvedLinkReadSchema, SourceRead, SourceReadSchema} from "../types/schemas/source";
 import {
     DailywireCatalogRead,
@@ -215,6 +216,54 @@ export function useMovies() {
     })
 }
 
+export function useVideos() {
+    return useQuery<VideoRead[], Error, VideoRead[], readonly ['videos']>({
+        queryKey: ['videos'] as const,
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/videos`,
+            VideoReadSchema.array(),
+            signal,
+        ),
+        refetchOnMount: 'always',
+    })
+}
+
+export function useVideo(id?: number) {
+    return useQuery<VideoRead, Error, VideoRead, readonly ['video', number | undefined]>({
+        queryKey: ['video', id] as const,
+        enabled: id !== undefined && Number.isFinite(id),
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/videos/${id}`,
+            VideoReadSchema,
+            signal,
+        ),
+        refetchOnMount: 'always',
+    })
+}
+
+async function responseError(response: Response): Promise<Error> {
+    let detail = `HTTP ${response.status}`
+    try {
+        const body = await response.json()
+        if (typeof body?.detail === 'string') detail = body.detail
+    } catch {
+        // Keep the status text when the body is not JSON.
+    }
+    return new Error(detail)
+}
+
+/** Add a single video by its link, at the Source that recognised the link. */
+export async function addVideo(url: string, sourceKey: string): Promise<VideoRead> {
+    const response = await fetch(`${(window as any).appConfig.API_URL}/videos`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({url, sourceKey}),
+    })
+    if (!response.ok) throw await responseError(response)
+    return VideoReadSchema.parse(await response.json())
+}
+
 export function useSources() {
     return useQuery<SourceRead[], Error, SourceRead[], readonly ['sources']>({
         queryKey: ['sources'] as const,
@@ -249,16 +298,7 @@ export async function resolveLink(url: string, signal?: AbortSignal): Promise<Re
         body: JSON.stringify({url}),
         signal,
     })
-    if (!response.ok) {
-        let detail = `HTTP ${response.status}`
-        try {
-            const body = await response.json()
-            if (typeof body?.detail === 'string') detail = body.detail
-        } catch {
-            // Keep the status text when the body is not JSON.
-        }
-        throw new Error(detail)
-    }
+    if (!response.ok) throw await responseError(response)
     return ResolvedLinkReadSchema.parse(await response.json())
 }
 
@@ -634,6 +674,7 @@ type MediaDownloadScope =
     | {kind: 'episode'; slug?: string}
     | {kind: 'movie'; slug?: string}
     | {kind: 'show'; slug?: string}
+    | {kind: 'video'; id?: number}
 
 function mediaDownloadScopeKey(scope: MediaDownloadScope) {
     switch (scope.kind) {
@@ -643,6 +684,8 @@ function mediaDownloadScopeKey(scope: MediaDownloadScope) {
             return ['movieDownloads', scope.slug] as const
         case 'show':
             return ['showDownloads', scope.slug] as const
+        case 'video':
+            return ['videoDownloads', scope.id] as const
         default:
             return ['mediaDownloadsView'] as const
     }
@@ -656,6 +699,7 @@ function mediaDownloadScopeUrl(scope: MediaDownloadScope) {
     if (scope.kind === 'episode' && scope.slug) params.set('episode_slug', scope.slug)
     if (scope.kind === 'movie' && scope.slug) params.set('movie_slug', scope.slug)
     if (scope.kind === 'show' && scope.slug) params.set('show_slug', scope.slug)
+    if (scope.kind === 'video' && scope.id !== undefined) params.set('video_id', String(scope.id))
     return `${base}?${params}`
 }
 
@@ -664,6 +708,11 @@ function operationMatchesMediaDownloadScope(
     scope: MediaDownloadScope,
 ) {
     if (scope.kind === 'all') return true
+    if (scope.kind === 'video') {
+        return scope.id !== undefined
+            && contextString(operation, 'media_type') === 'video'
+            && contextNumber(operation, 'media_item_id') === scope.id
+    }
     if (!scope.slug) return false
     if (scope.kind === 'episode') return contextString(operation, 'episode_slug') === scope.slug
     if (scope.kind === 'movie') return contextString(operation, 'movie_slug') === scope.slug
@@ -671,7 +720,7 @@ function operationMatchesMediaDownloadScope(
 }
 
 function useMediaDownloadPresentation(scope: MediaDownloadScope) {
-    const enabled = scope.kind === 'all' || Boolean(scope.slug)
+    const enabled = scope.kind === 'all' || (scope.kind === 'video' ? scope.id !== undefined : Boolean(scope.slug))
     const domainQuery = useQuery({
         queryKey: mediaDownloadScopeKey(scope),
         enabled,
@@ -723,6 +772,10 @@ export function useEpisodeDownloads(episodeSlug?: string) {
 
 export function useMovieDownloads(movieSlug?: string) {
     return useMediaDownloadPresentation({kind: 'movie', slug: movieSlug})
+}
+
+export function useVideoDownloads(videoId?: number) {
+    return useMediaDownloadPresentation({kind: 'video', id: videoId})
 }
 
 export function useShowDownloads(showSlug?: string) {

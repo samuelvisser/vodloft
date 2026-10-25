@@ -219,6 +219,7 @@ export default function DownloadsPage() {
         await qc.invalidateQueries({queryKey: ['mediaDownloadsView']})
         if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
         if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
+        if (row.type === 'video') await qc.invalidateQueries({queryKey: ['videoDownloads', row.mediaItemId]})
         if (row.showSlug) await qc.invalidateQueries({queryKey: ['showDownloads', row.showSlug]})
     }
 
@@ -246,6 +247,7 @@ export default function DownloadsPage() {
         await qc.invalidateQueries({queryKey: ['mediaDownloadsView']})
         if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
         if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
+        if (row.type === 'video') await qc.invalidateQueries({queryKey: ['videoDownloads', row.mediaItemId]})
         if (row.showSlug) await qc.invalidateQueries({queryKey: ['showDownloads', row.showSlug]})
     }
 
@@ -264,6 +266,7 @@ export default function DownloadsPage() {
         await qc.invalidateQueries({queryKey: ['mediaDownloadsView']})
         if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
         if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
+        if (row.type === 'video') await qc.invalidateQueries({queryKey: ['videoDownloads', row.mediaItemId]})
         if (row.showSlug) await qc.invalidateQueries({queryKey: ['showDownloads', row.showSlug]})
     }
 
@@ -288,6 +291,7 @@ export default function DownloadsPage() {
             await qc.invalidateQueries({queryKey: ['mediaDownloadsView']})
             if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
             if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
+            if (row.type === 'video') await qc.invalidateQueries({queryKey: ['videoDownloads', row.mediaItemId]})
         } catch {
             toast.error('Could not delete the download item')
         } finally {
@@ -535,6 +539,7 @@ export default function DownloadsPage() {
                     mobileRowActionLabel="Open media"
                     onRowClick={(row) => {
                         if (row.movieSlug) navigate(`/movie/${row.movieSlug}`)
+                        else if (row.type === 'video') navigate(`/video/${row.mediaItemId}`)
                         else if (row.showSlug && row.episodeSlug) navigate(`/show/${row.showSlug}/episode/${row.episodeSlug}`)
                     }}
                     actions={(row) => {

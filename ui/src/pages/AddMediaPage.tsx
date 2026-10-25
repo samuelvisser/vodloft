@@ -5,7 +5,8 @@ import {faIcon} from '../icons/faIcon'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import SourceBadge from '../components/Source/SourceBadge'
-import {resolveLink, useMovies, useShows, useSources} from '../lib/queries'
+import {useQueryClient} from '@tanstack/react-query'
+import {addVideo, resolveLink, useMovies, useShows, useSources, useVideos} from '../lib/queries'
 import {linkTarget, type MediaLinkTarget} from '../lib/sourceControls'
 import {ResolvedLinkRead, SourceFeature, sourceHas} from '../types/schemas/source'
 
@@ -21,6 +22,7 @@ const KIND_LABEL: Record<ResolvedLinkRead['kind'], string> = {
     show: 'Show',
     movie: 'Movie',
     episode: 'Episode',
+    video: 'Video',
 }
 
 export default function AddMediaPage({onboarding = false, onShow, onMovie, onBrowse, onSkip}: AddMediaPageProps = {}) {
@@ -29,6 +31,9 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
     const {data: sources} = useSources()
     const {data: localShows} = useShows()
     const {data: localMovies} = useMovies()
+    const {data: localVideos} = useVideos()
+    const queryClient = useQueryClient()
+    const [addingVideo, setAddingVideo] = useState(false)
     const [url, setUrl] = useState(params.get('url') ?? '')
     const [link, setLink] = useState<ResolvedLinkRead | null>(null)
     const [error, setError] = useState<string | null>(null)
@@ -75,8 +80,34 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
         ? localMovies?.find((movie) => movie.slug === target.slug && movie.sourceKey === target.sourceKey)
         : undefined
 
+    const localVideo = target?.kind === 'video'
+        ? localVideos?.find((video) => video.slug === target.slug && video.sourceKey === target.sourceKey)
+        : undefined
+
+    const openVideo = async (videoTarget: MediaLinkTarget) => {
+        if (localVideo) {
+            navigate(`/video/${localVideo.id}`)
+            return
+        }
+        setAddingVideo(true)
+        setError(null)
+        try {
+            const video = await addVideo(videoTarget.url, videoTarget.sourceKey)
+            await queryClient.invalidateQueries({queryKey: ['videos']})
+            navigate(`/video/${video.id}`)
+        } catch (exc) {
+            setError(exc instanceof Error ? exc.message : String(exc))
+        } finally {
+            setAddingVideo(false)
+        }
+    }
+
     const proceed = () => {
         if (!target) return
+        if (target.kind === 'video') {
+            void openVideo(target)
+            return
+        }
         if (target.kind === 'movie') {
             if (onMovie) onMovie(target)
             else navigate(`/movie/${target.slug}`)
@@ -97,15 +128,13 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
     }
 
     const image = toImageUrl(link?.preview.imageUrl)
-    const actionLabel = !target
-        ? null
-        : target.kind === 'movie'
-            ? (localMovie ? 'Open movie' : 'Continue with this movie')
-            : localShow
-                ? 'Open show'
-                : link?.kind === 'episode'
-                    ? 'Add its show'
-                    : 'Continue with this show'
+    const actionLabel = (() => {
+        if (!target) return null
+        if (target.kind === 'video') return localVideo ? 'Open video' : addingVideo ? 'Adding video…' : 'Add this video'
+        if (target.kind === 'movie') return localMovie ? 'Open movie' : 'Continue with this movie'
+        if (localShow) return 'Open show'
+        return link?.kind === 'episode' ? 'Add its show' : 'Continue with this show'
+    })()
 
     return (
         <section className={`view add-media-view${onboarding ? ' add-media-view--onboarding' : ''}`} aria-labelledby="add-media-title">
@@ -113,7 +142,7 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
                 <div>
                     <h1 id="add-media-title">{onboarding ? 'Add your first media' : 'Add media'}</h1>
                     <p className="view-description">
-                        Paste a link to a show, an episode or a movie. VODLoft finds the service it comes from and
+                        Paste a link to a show, an episode, a movie or a video. VODLoft finds the service it comes from and
                         lets you confirm everything before anything is saved.
                     </p>
                 </div>
@@ -157,7 +186,7 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
                         )}
                         {target ? (
                             <div className="add-media-preview-actions">
-                                <button className="btn btn-primary" type="button" onClick={proceed}>
+                                <button className="btn btn-primary" type="button" onClick={proceed} disabled={addingVideo}>
                                     {actionLabel}
                                     <FontAwesomeIcon icon={faIcon('fass', 'arrow-right')}/>
                                 </button>

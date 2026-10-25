@@ -3,5 +3,6 @@ from .MediaDownloadHistory import MediaDownloadHistory
 from .EpisodeMediaDownload import EpisodeMediaDownload
 from .MovieMediaDownload import MovieMediaDownload
 from .MovieExtraMediaDownload import MovieExtraMediaDownload
+from .VideoMediaDownload import VideoMediaDownload
 
 from .MediaDownloadAsset import MediaDownloadAsset
