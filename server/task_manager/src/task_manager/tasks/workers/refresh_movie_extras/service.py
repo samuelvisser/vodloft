@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 
 from backend.services.movies import sync_dailywire_movie_metadata, sync_movie_extras
 from backend.db.models import Movie
-from dailywire_api.dw_api.movie import MovieMiddlewareClient
-from dailywire_authorisation import DeviceAuthClient
+from sources.dailywire.api.dw_api.movie import MovieMiddlewareClient
+from sources.dailywire.auth import DeviceAuthClient
 
 
 async def run_refresh_movie_extras(

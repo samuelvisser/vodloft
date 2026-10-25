@@ -1,6 +1,6 @@
 from backend.db.models import Show
-from dailywire_api.dw_api.client import MiddlewareClient
-from dailywire_api.records import DwSeasonRecord
+from sources.dailywire.api.dw_api.client import MiddlewareClient
+from sources.dailywire.api.records import DwSeasonRecord
 
 
 def get_latest_dw_season(client: MiddlewareClient, show: Show) -> DwSeasonRecord:

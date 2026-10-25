@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode
 from backend.types.episode_types import EpisodePublishStatus
-from dailywire_api.records import DwEpisodeDetailRecord
+from sources.dailywire.api.records import DwEpisodeDetailRecord
 
 
 def save_status_metadata(

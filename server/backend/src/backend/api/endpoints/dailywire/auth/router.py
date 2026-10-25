@@ -12,7 +12,7 @@ import threading
 from starlette.concurrency import run_in_threadpool
 
 from backend.api.models.dailywire_auth import *
-from dailywire_authorisation import DeviceAuthClient
+from sources.dailywire.auth import DeviceAuthClient
 
 router = APIRouter(prefix="/auth", tags=["DailyWire Auth"])
 
@@ -30,7 +30,7 @@ def get_client() -> DeviceAuthClient:
     """Get or create the shared DeviceAuthClient instance."""
     global _client
     if _client is None:
-        from dailywire_authorisation.config import get_default_config
+        from sources.dailywire.auth.config import get_default_config
 
         # Get default config (DeviceAuthConfig instance)
         config = get_default_config()

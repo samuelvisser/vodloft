@@ -11,7 +11,7 @@ from pydantic.alias_generators import to_camel
 from pydantic_core import PydanticCustomError
 
 from backend.api.models.base import RequestBase, ResponseBase
-from dailywire_downloader.storage import FilesystemStorageKind
+from downloader.storage import FilesystemStorageKind
 from config.settings.cron_validation import (
     CronExpressionError,
     WorkerCronExpressionError,

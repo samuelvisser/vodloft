@@ -12,9 +12,9 @@ from backend.services.show_assets import update_show_artwork_metadata
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.show_types import EpisodeIdentifier
-from dailywire_api.dw_api.client import ByShowSeason, MiddlewareClient
-from dailywire_api.records import DwEpisodeRecord, DwSeasonRecord
-from dailywire_authorisation import DeviceAuthClient
+from sources.dailywire.api.dw_api.client import ByShowSeason, MiddlewareClient
+from sources.dailywire.api.records import DwEpisodeRecord, DwSeasonRecord
+from sources.dailywire.auth import DeviceAuthClient
 from task_manager.events.transactional import queue_event
 from ._helpers import get_latest_ep_index, get_season_from_list_by_id, get_shows
 from ...helpers.episodes.events import queue_episode_status_events

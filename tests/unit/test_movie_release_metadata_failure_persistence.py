@@ -15,7 +15,7 @@ def test_failed_lookup_uses_conditional_path_and_creates_download(tmp_path, monk
     from backend.db.models.media_download import MediaDownloadBase
     from backend.integrations.tmdb import MovieReleaseLookupResult
     from config import get_settings
-    from dailywire_api.records import DwMovieRecord
+    from sources.dailywire.api.records import DwMovieRecord
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)

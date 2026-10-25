@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 
 def test_movie_page_images_map_to_wireloft_poster_fields() -> None:
-    from dailywire_api.records import DwMovieRecord
+    from sources.dailywire.api.records import DwMovieRecord
 
     movie = DwMovieRecord.model_validate({
         "pid": "movie-1",
@@ -27,7 +27,7 @@ def test_movie_page_images_map_to_wireloft_poster_fields() -> None:
 
 def test_catalog_promotional_movie_uses_canonical_movie_page_art(monkeypatch) -> None:
     from backend.api.endpoints.dailywire.catalog import service
-    from dailywire_api.records import DwCatalogMovieRecord, DwCatalogRecord, DwMovieRecord
+    from sources.dailywire.api.records import DwCatalogMovieRecord, DwCatalogRecord, DwMovieRecord
 
     browse_movie = DwCatalogMovieRecord(
         dw_id="promotional-video-1",
@@ -87,7 +87,7 @@ def test_catalog_promotional_movie_uses_canonical_movie_page_art(monkeypatch) ->
 
 def test_catalog_missing_portrait_also_uses_canonical_movie_page_art(monkeypatch) -> None:
     from backend.api.endpoints.dailywire.catalog import service
-    from dailywire_api.records import DwCatalogMovieRecord, DwCatalogRecord, DwMovieRecord
+    from sources.dailywire.api.records import DwCatalogMovieRecord, DwCatalogRecord, DwMovieRecord
 
     browse_movie = DwCatalogMovieRecord(
         dw_id="movie-1",

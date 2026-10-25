@@ -54,7 +54,7 @@ def test_select_thumbnail_url_ignores_non_http_paths():
 
 
 def test_embed_thumbnail_uses_attached_picture_stream_for_audio(tmp_path, monkeypatch):
-    from dailywire_downloader import ffmpeg as ffmpeg_module
+    from downloader import ffmpeg as ffmpeg_module
 
     media = tmp_path / "episode.m4a"
     thumbnail = tmp_path / "thumbnail.jpg"
@@ -95,7 +95,7 @@ def test_embed_thumbnail_uses_attached_picture_stream_for_audio(tmp_path, monkey
 def test_sidecar_uses_media_basename_and_does_not_overwrite(tmp_path):
     import pytest
 
-    from dailywire_downloader.storage.publication import PublicationJournal
+    from downloader.storage.publication import PublicationJournal
 
     thumbnail = tmp_path / "source.jpg"
     thumbnail.write_bytes(b"image")
@@ -115,7 +115,7 @@ def test_sidecar_uses_media_basename_and_does_not_overwrite(tmp_path):
 def test_sidecar_refuses_external_empty_file_without_deleting_it(tmp_path):
     import pytest
 
-    from dailywire_downloader.storage.publication import PublicationJournal
+    from downloader.storage.publication import PublicationJournal
 
     thumbnail = tmp_path / "source.jpg"
     thumbnail.write_bytes(b"image")
@@ -132,7 +132,7 @@ def test_sidecar_refuses_external_empty_file_without_deleting_it(tmp_path):
 
 
 def test_remove_download_artifacts_removes_tracked_sidecar(tmp_path):
-    from dailywire_downloader.storage.artifacts import remove_download_artifacts
+    from downloader.storage.artifacts import remove_download_artifacts
 
     media = tmp_path / "episode.mp4"
     sidecar = tmp_path / "episode.jpg"

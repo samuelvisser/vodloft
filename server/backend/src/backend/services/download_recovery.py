@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from backend.db import get_session
-from dailywire_downloader.storage.identity import ArtifactIdentity
-from dailywire_downloader.storage import temporary
+from downloader.storage.identity import ArtifactIdentity
+from downloader.storage import temporary
 
 
 def _is_committed_download_artifact(path: Path, identity: ArtifactIdentity) -> bool:

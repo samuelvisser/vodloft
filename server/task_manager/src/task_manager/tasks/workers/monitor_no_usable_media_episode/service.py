@@ -12,8 +12,8 @@ from backend.services.custom_indexes import request_show_custom_index_reconcilia
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from config.network import NoInternetConnectionError, is_no_internet_error
-from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
-from dailywire_authorisation import DeviceAuthClient
+from sources.dailywire.api.dw_api.client import MiddlewareAPIError, MiddlewareClient
+from sources.dailywire.auth import DeviceAuthClient
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.results import TaskResult
 from ...helpers.episodes.events import episode_event_payload, queue_episode_status_events

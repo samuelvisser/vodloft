@@ -41,7 +41,7 @@ from config.settings.settings import (
     TIMEZONE_ENVIRONMENT_VARIABLE,
     environment_settings_source_documents,
 )
-from dailywire_downloader.storage import inspect_filesystem
+from downloader.storage import inspect_filesystem
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import complete_operation, queue_operation_target_dispatch
 from task_manager.tasks.helpers.episodes.same_episode import PENDING_EPISODE_PUBLISH_STATUSES

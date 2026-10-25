@@ -6,9 +6,8 @@ dependencies = [
     "backend",
     "config",
     "controller",
-    "dailywire-api",
-    "dailywire-authorisation",
-    "dailywire-downloader",
+    "downloader",
+    "sources",
     "task-manager"
 ]
 
@@ -19,9 +18,8 @@ members = ["server/*"]
 backend = { workspace = true }
 config = { workspace = true }
 controller = { workspace = true }
-dailywire-api = { workspace = true }
-dailywire-authorisation = { workspace = true }
-dailywire-downloader = { workspace = true }
+downloader = { workspace = true }
+sources = { workspace = true }
 task-manager = { workspace = true }
 
 [dependency-groups]

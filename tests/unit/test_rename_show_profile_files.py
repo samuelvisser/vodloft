@@ -3,7 +3,7 @@ from pathlib import Path
 import logging
 
 from backend.services import download_relocation as service
-from dailywire_downloader.storage.relocation import PathMove
+from downloader.storage.relocation import PathMove
 
 
 def _move(download_id: int, source: Path, destination: Path):

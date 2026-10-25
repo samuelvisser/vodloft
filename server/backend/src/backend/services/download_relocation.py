@@ -10,9 +10,9 @@ from sqlalchemy.orm import Session
 from backend.db.models.media_download import MediaDownloadBase
 from backend.services.media_download_history import record_media_download_history
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
-from dailywire_downloader import hls_asset_marker, hls_asset_root
-from dailywire_downloader.storage.identity import inspect_artifact
-from dailywire_downloader.storage.relocation import PathMove, RelocationTransaction
+from downloader import hls_asset_marker, hls_asset_root
+from downloader.storage.identity import inspect_artifact
+from downloader.storage.relocation import PathMove, RelocationTransaction
 
 logger = logging.getLogger(__name__)
 

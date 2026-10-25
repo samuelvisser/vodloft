@@ -13,7 +13,7 @@ from backend.types.episode_types import (
 )
 from backend.types.show_types import EpisodeIdentifier
 from backend.utils.episode import EpisodeIdentifierInfo
-from dailywire_api.records import DwEpisodeRecord
+from sources.dailywire.api.records import DwEpisodeRecord
 from .metadata import ensure_utc
 
 

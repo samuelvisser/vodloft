@@ -9,9 +9,9 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy import select
 
-from dailywire_downloader.lifecycle import DownloadTracker
-from dailywire_downloader.models import DownloadProgress, DownloadResult
-from dailywire_downloader.plan import ResolvedDownloadSource, SidecarSpec, build_download_plan
+from downloader.lifecycle import DownloadTracker
+from downloader.models import DownloadProgress, DownloadResult
+from downloader.plan import ResolvedDownloadSource, SidecarSpec, build_download_plan
 
 
 @pytest.fixture
@@ -55,7 +55,7 @@ def start_run(factory, download_id):
 def test_artifacts_history_and_execution_commit_atomically(library, tmp_path, monkeypatch):
     from backend.db.models.media_download import MediaDownloadBase, MediaDownloadHistory
     from backend.api.models.media_download import MediaDownloadAPIRead
-    from dailywire_downloader import coordinator
+    from downloader import coordinator
     from task_manager.scheduler.db import TaskRun
     from task_manager.scheduler.executor import ProgressUpdater, _PreparedExecution, _finalize_execution
     from task_manager.scheduler.operations import get_operation
@@ -101,7 +101,7 @@ def test_cancellation_wins_before_transactional_completion(library):
     from task_manager.scheduler.executor import ProgressUpdater
     from task_manager.scheduler.operation_control import cancel_task_run
     from task_manager.scheduler.results import TaskResult
-    from dailywire_downloader import DownloadCancelled
+    from downloader import DownloadCancelled
     factory,(download_id,_) = library
     run_id,_ = start_run(factory,download_id)
     cancel_task_run(run_id,reason='Cancel first')
@@ -167,8 +167,8 @@ def test_bulk_uses_stage_work_not_individual_transfer_percentage(tmp_path):
 
 
 def test_pipeline_failure_removes_owned_outputs(library,tmp_path,monkeypatch):
-    from dailywire_downloader import coordinator
-    from dailywire_downloader.storage.publication import PublicationJournal
+    from downloader import coordinator
+    from downloader.storage.publication import PublicationJournal
     from task_manager.tasks import download_adapter
     from backend.db.models.media_download import MediaDownloadBase
     factory,(download_id,_)=library

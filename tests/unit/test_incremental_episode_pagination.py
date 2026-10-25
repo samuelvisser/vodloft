@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 
 def _record(slug: str):
-    from dailywire_api.records import DwEpisodeRecord
+    from sources.dailywire.api.records import DwEpisodeRecord
 
     return DwEpisodeRecord(
         dw_id=f"remote-{slug}",
@@ -29,7 +29,7 @@ def _record(slug: str):
 
 
 def test_incremental_fetch_stops_when_known_cursor_is_seen():
-    from dailywire_api.dw_api.client import (
+    from sources.dailywire.api.dw_api.client import (
         ByNextPage,
         ByShowSeason,
         EpisodesPaginatedResult,
@@ -86,7 +86,7 @@ def test_incremental_fetch_stops_when_known_cursor_is_seen():
 
 
 def test_incremental_fetch_falls_back_to_end_when_cursor_disappeared():
-    from dailywire_api.dw_api.client import (
+    from sources.dailywire.api.dw_api.client import (
         ByNextPage,
         ByShowSeason,
         EpisodesPaginatedResult,

@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Session
 
-from dailywire_api.records import DwEpisodeRecord
+from sources.dailywire.api.records import DwEpisodeRecord
 from .events import queue_episode_identifier_changed_event
 from .identifier import reconcile_episode_identifier_from_dailywire
 

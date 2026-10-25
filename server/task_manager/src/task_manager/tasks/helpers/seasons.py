@@ -1,6 +1,6 @@
 from backend.db.models import Season, Show
 from backend.services.seasons import create_season_record
-from dailywire_api.records import DwSeasonRecord
+from sources.dailywire.api.records import DwSeasonRecord
 from sqlalchemy.orm import Session
 
 

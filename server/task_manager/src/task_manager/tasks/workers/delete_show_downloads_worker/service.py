@@ -5,7 +5,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from backend.utils.episode_download_scope import EpisodeDownloadScope
-from dailywire_downloader import DownloadCancelled
+from downloader import DownloadCancelled
 from task_manager.tasks.helpers.download_profiles import (
     disable_download_profiles_for_episode_scope,
 )

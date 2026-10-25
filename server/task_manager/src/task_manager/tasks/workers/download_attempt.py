@@ -20,7 +20,7 @@ def serialize_download_attempt(media_download_id: int, *, progress=None) -> Iter
     """
     with _ATTEMPT_LOCKS_GUARD:
         lock = _ATTEMPT_LOCKS.setdefault(media_download_id, threading.Lock())
-    from dailywire_downloader import DownloadCancelled
+    from downloader import DownloadCancelled
     waiting = False
     acquired = False
     try:

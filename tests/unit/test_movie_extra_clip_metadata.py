@@ -10,7 +10,7 @@ def test_movie_extra_source_metadata_update_rejects_different_slug() -> None:
         update_movie_extra_source_metadata,
     )
     from backend.db.models import MovieExtraSource
-    from dailywire_api.records import DwMovieExtraRecord
+    from sources.dailywire.api.records import DwMovieExtraRecord
 
     source = MovieExtraSource(slug="expected", title="Original")
     metadata = DwMovieExtraRecord(slug="different", title="Updated")
@@ -27,7 +27,7 @@ def test_download_clip_metadata_refresh_updates_canonical_source() -> None:
     from backend.db import Base
     from backend.db.models import Movie, MovieExtra, MovieExtraSource
     from backend.types.media_types import MediaType
-    from dailywire_api.records import DwMovieExtraDetailRecord
+    from sources.dailywire.api.records import DwMovieExtraDetailRecord
     from task_manager.tasks.workers.download_movie.service import _persist_movie_extra_metadata
 
     engine = create_engine("sqlite:///:memory:")

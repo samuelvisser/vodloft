@@ -18,7 +18,7 @@ from backend.db.models import (
     MediaDownloadBase,
 )
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
-from dailywire_downloader import hls_asset_marker
+from downloader import hls_asset_marker
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 

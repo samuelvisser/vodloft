@@ -8,7 +8,7 @@ import os
 import tempfile
 from typing import Callable
 
-from dailywire_downloader import DownloadCancelled
+from downloader import DownloadCancelled
 from sqlalchemy import String, and_, cast, func, or_, select
 
 from backend.db.models import DownloadProfileBase, Episode, EpisodeMediaDownload, Show, ShowLocalMediaProfile

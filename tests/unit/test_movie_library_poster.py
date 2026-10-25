@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 
 def _movie_page_record(*, poster: str):
-    from dailywire_api.records import DwMovieRecord
+    from sources.dailywire.api.records import DwMovieRecord
 
     return DwMovieRecord(
         dw_id="movie-1",
@@ -23,7 +23,7 @@ def _movie_page_record(*, poster: str):
 
 
 def _catalog_record(*, poster: str, extended_title: str = "Run Hide Fight: Infidels"):
-    from dailywire_api.records import DwCatalogMovieRecord
+    from sources.dailywire.api.records import DwCatalogMovieRecord
 
     return DwCatalogMovieRecord(
         dw_id="catalog-movie-1",
@@ -38,7 +38,7 @@ def test_reliable_catalog_poster_is_persisted_when_movie_is_indexed(monkeypatch)
     from backend.api.endpoints.dailywire.movies import service as dailywire_movie_service
     from backend.api.endpoints.movies.service import index_dailywire_movie
     from backend.db.core import Base
-    from dailywire_api.records import DwCatalogRecord
+    from sources.dailywire.api.records import DwCatalogRecord
 
     live_movie = _movie_page_record(poster="wrong-movie-page-poster.png")
     catalog_movie = _catalog_record(poster="correct-catalog-poster.png")
@@ -83,7 +83,7 @@ def test_reliable_catalog_poster_is_persisted_when_movie_is_indexed(monkeypatch)
 
 def test_promotional_catalog_art_does_not_replace_canonical_movie_poster(monkeypatch) -> None:
     from backend.api.endpoints.dailywire.movies import service as dailywire_movie_service
-    from dailywire_api.records import DwCatalogRecord
+    from sources.dailywire.api.records import DwCatalogRecord
 
     live_movie = _movie_page_record(poster="canonical-movie-poster.png")
     catalog_movie = _catalog_record(

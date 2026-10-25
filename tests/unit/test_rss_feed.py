@@ -289,8 +289,8 @@ def test_rss_media_urls_do_not_change_when_download_appears(
         stable_suffixes,
 ):
     from backend.api.endpoints.feeds.service import render_rss_feed
-    from dailywire_downloader.storage.identity import inspect_artifact
-    from dailywire_downloader import hls_asset_marker, hls_asset_root
+    from downloader.storage.identity import inspect_artifact
+    from downloader import hls_asset_marker, hls_asset_root
 
     show = _make_show(db_session)
     season = _make_season(db_session, show)
@@ -811,7 +811,7 @@ def test_live_streaming_requires_hls_video_output_mode():
 
 
 def _make_hls_bundle(path: Path) -> None:
-    from dailywire_downloader import hls_asset_marker, hls_asset_root
+    from downloader import hls_asset_marker, hls_asset_root
 
     path.write_text(
         "#EXTM3U\n"

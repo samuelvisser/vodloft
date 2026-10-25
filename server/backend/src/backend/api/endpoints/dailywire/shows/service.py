@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Optional
 
-from dailywire_api.dw_api.client import MiddlewareClient
-from dailywire_api.records import DwShowRecord
-from dailywire_authorisation import DeviceAuthClient
+from sources.dailywire.api.dw_api.client import MiddlewareClient
+from sources.dailywire.api.records import DwShowRecord
+from sources.dailywire.auth import DeviceAuthClient
 
 
 def get_show(

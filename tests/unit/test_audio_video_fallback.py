@@ -4,8 +4,8 @@ import pytest
 
 
 def test_video_fallback_for_audio_selects_smallest_rendition_and_m4a(monkeypatch):
-    from dailywire_downloader.models import MediaInfo, MediaKind, VideoRendition
-    from dailywire_downloader import source as source_module
+    from downloader.models import MediaInfo, MediaKind, VideoRendition
+    from downloader import source as source_module
 
     info = MediaInfo(
         url="https://media.test/master.m3u8",
@@ -36,7 +36,7 @@ def test_video_fallback_for_audio_selects_smallest_rendition_and_m4a(monkeypatch
 
 
 def test_audio_fallback_conversion_is_planned_between_transfer_and_embedding(tmp_path):
-    from dailywire_downloader.plan import ResolvedDownloadSource, build_download_plan
+    from downloader.plan import ResolvedDownloadSource, build_download_plan
 
     plan = build_download_plan(
         source=ResolvedDownloadSource(
@@ -62,7 +62,7 @@ def test_audio_fallback_conversion_is_planned_between_transfer_and_embedding(tmp
 
 
 def test_convert_video_to_m4a_stream_copies_audio(tmp_path, monkeypatch):
-    from dailywire_downloader import ffmpeg as ffmpeg_module
+    from downloader import ffmpeg as ffmpeg_module
 
     calls = []
     monkeypatch.setattr(ffmpeg_module.shutil, "which", lambda _path: "/usr/bin/ffmpeg")

@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 from pydantic_settings import SettingsConfigDict, BaseSettings
 
-from dailywire_api.config import PROJECT_ROOT
+from config.config import PROJECT_ROOT
 
 
 def get_config_path() -> Path:

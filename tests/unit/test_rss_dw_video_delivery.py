@@ -52,7 +52,7 @@ def test_hls_download_stores_480_720_and_1080_without_transcoding(
         tmp_path,
         monkeypatch,
 ):
-    import dailywire_downloader.hls_bundle as hls_bundle
+    import downloader.hls_bundle as hls_bundle
 
     playlists = {
         MASTER_URL: _master(),
@@ -100,8 +100,8 @@ def test_hls_download_stores_480_720_and_1080_without_transcoding(
 
 
 def test_hls_download_requires_all_three_adaptive_renditions(tmp_path, monkeypatch):
-    import dailywire_downloader.hls_bundle as hls_bundle
-    from dailywire_downloader import MediaUnavailableError
+    import downloader.hls_bundle as hls_bundle
+    from downloader import MediaUnavailableError
 
     master_without_480 = """#EXTM3U
 #EXT-X-STREAM-INF:BANDWIDTH=1800000,RESOLUTION=1280x720
@@ -119,8 +119,8 @@ def test_hls_download_requires_all_three_adaptive_renditions(tmp_path, monkeypat
 
 
 def test_hls_download_rejects_live_playlist(tmp_path, monkeypatch):
-    import dailywire_downloader.hls_bundle as hls_bundle
-    from dailywire_downloader import DownloadError
+    import downloader.hls_bundle as hls_bundle
+    from downloader import DownloadError
 
     playlists = {
         MASTER_URL: _master(),
@@ -138,8 +138,8 @@ def test_hls_download_rejects_live_playlist(tmp_path, monkeypatch):
 
 
 def test_hls_cleanup_removes_owned_companion_assets(tmp_path):
-    from dailywire_downloader import hls_asset_marker, hls_asset_root
-    from dailywire_downloader.storage.artifacts import (
+    from downloader import hls_asset_marker, hls_asset_root
+    from downloader.storage.artifacts import (
         remove_download_artifacts,
     )
 
@@ -157,8 +157,8 @@ def test_hls_cleanup_removes_owned_companion_assets(tmp_path):
 
 
 def test_hls_cleanup_preserves_unowned_similarly_named_directory(tmp_path):
-    from dailywire_downloader import hls_asset_root
-    from dailywire_downloader.storage.artifacts import (
+    from downloader import hls_asset_root
+    from downloader.storage.artifacts import (
         remove_download_artifacts,
     )
 
@@ -247,7 +247,7 @@ def test_hls_endpoint_falls_back_directly_to_dailywire_without_mp4_preparation(
 
 def test_file_watcher_rejects_incomplete_hls_bundle(tmp_path):
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
-    from dailywire_downloader import hls_asset_marker, hls_asset_root
+    from downloader import hls_asset_marker, hls_asset_root
     from task_manager.tasks.workers.file_watcher.service import _size_problem
 
     master = tmp_path / "episode.m3u8"
@@ -278,7 +278,7 @@ def test_compact_hls_bundle_validator_detects_missing_media_file(
         tmp_path,
         monkeypatch,
 ):
-    import dailywire_downloader.hls_bundle as hls_bundle
+    import downloader.hls_bundle as hls_bundle
 
     playlists = {
         MASTER_URL: _master(),

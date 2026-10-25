@@ -153,7 +153,7 @@ def test_movie_and_extra_downloads_share_one_persisted_release_lookup(tmp_path, 
     from backend.db.models import Movie, MovieLocalMediaProfile
     from backend.integrations.tmdb import MovieReleaseLookupResult
     from config import get_settings
-    from dailywire_api.records import DwMovieExtraRecord, DwMovieRecord
+    from sources.dailywire.api.records import DwMovieExtraRecord, DwMovieRecord
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)

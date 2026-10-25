@@ -64,7 +64,7 @@ def test_recurring_pending_monitor_can_be_disabled(monkeypatch):
 
 
 def _episode_record(slug: str):
-    from dailywire_api.records import DwEpisodeRecord
+    from sources.dailywire.api.records import DwEpisodeRecord
     return DwEpisodeRecord(
         dw_id=f"remote-{slug}", slug=slug, title="Live episode", description=None,
         duration=3600, episode_number="101.00", display_episode_number="101.00",
@@ -131,7 +131,7 @@ def test_upsert_existing_episode_stores_raw_source_number_separately():
 
 def test_pending_monitor_marks_unreconciled_404_as_no_usable_media(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
-    from dailywire_api.dw_api.client import MiddlewareAPIError
+    from sources.dailywire.api.dw_api.client import MiddlewareAPIError
     from task_manager.tasks.helpers.episodes.unusable_media import NoUsableMediaReason, episode_no_usable_media_reason, episode_no_usable_media_since
     from task_manager.tasks.workers.monitor_pending_episode import service
     engine, session, show, episode = _monitor_fixture()
@@ -159,7 +159,7 @@ def test_pending_monitor_marks_unreconciled_404_as_no_usable_media(monkeypatch):
 
 
 def test_pending_monitor_still_raises_non_404_dailywire_errors(monkeypatch):
-    from dailywire_api.dw_api.client import MiddlewareAPIError
+    from sources.dailywire.api.dw_api.client import MiddlewareAPIError
     from task_manager.tasks.workers.monitor_pending_episode import service
     engine, session, show, episode = _monitor_fixture()
 

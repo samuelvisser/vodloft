@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "a4e7c19b2d53"
+HEAD_REVISION = "a3e7c1d9f052"
 COUNTDOWN_REDOWNLOAD_REVISION = "6d3a9f1c2b7e"
 WIRELOFT_1_2_1_REVISION = "f2a6c93d8b14"
 WIRELOFT_1_2_REVISION = "6d4a8c1f2b90"
@@ -877,3 +877,25 @@ def test_wireloft_1_1_downgrades_to_1_0_schema(migration_database):
         assert connection.execute(text(
             "SELECT alembic_version_num FROM settings"
         )).scalar_one() == WIRELOFT_1_0_REVISION
+
+
+def test_sources_migration_marks_existing_rows_as_daily_wire(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config(allow_version_storage_migration=True)
+    command.upgrade(config, "a4e7c19b2d53")
+    with engine.begin() as connection:
+        connection.execute(text("INSERT INTO media_items (uuid, type) VALUES ('existing', 'movie')"))
+
+    command.upgrade(config, HEAD_REVISION)
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT source_key FROM media_items")).scalar_one() == "dailywire"
+    inspector = inspect(engine)
+    for table in ("shows", "media_items"):
+        assert "source_key" in {column["name"] for column in inspector.get_columns(table)}
+
+    command.downgrade(config, "a4e7c19b2d53")
+    inspector = inspect(engine)
+    for table in ("shows", "media_items"):
+        assert "source_key" not in {column["name"] for column in inspector.get_columns(table)}

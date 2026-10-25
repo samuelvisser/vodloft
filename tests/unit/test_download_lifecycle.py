@@ -6,11 +6,11 @@ from threading import Event
 
 import pytest
 
-from dailywire_downloader.errors import DownloadCancelled
-from dailywire_downloader.lifecycle import DownloadTracker, download_completion_fraction
-from dailywire_downloader.models import DownloadProgress, DownloadResult
-from dailywire_downloader.plan import ResolvedDownloadSource, SidecarSpec, build_download_plan
-from dailywire_downloader.capacity import DownloadResources
+from downloader.errors import DownloadCancelled
+from downloader.lifecycle import DownloadTracker, download_completion_fraction
+from downloader.models import DownloadProgress, DownloadResult
+from downloader.plan import ResolvedDownloadSource, SidecarSpec, build_download_plan
+from downloader.capacity import DownloadResources
 
 
 def plan(tmp_path, tracker, **options):
@@ -85,7 +85,7 @@ def test_sidecar_wait_does_not_replace_main_media_activity(tmp_path):
 
 
 def test_coordinator_overlaps_artwork_then_embeds_once_and_publishes_nfo(tmp_path, monkeypatch):
-    from dailywire_downloader import coordinator, sidecars
+    from downloader import coordinator, sidecars
     artwork_started, media_started = Event(), Event()
     class Response:
         headers = {"Content-Type": "image/jpeg", "Content-Length": "5"}
@@ -123,7 +123,7 @@ def test_coordinator_overlaps_artwork_then_embeds_once_and_publishes_nfo(tmp_pat
 
 
 def test_publication_collision_never_removes_identical_external_file(tmp_path):
-    from dailywire_downloader.storage.publication import PublicationJournal, reconcile_publication_journal
+    from downloader.storage.publication import PublicationJournal, reconcile_publication_journal
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     media = tmp_path / "media.mp4"
@@ -143,8 +143,8 @@ def test_publication_collision_never_removes_identical_external_file(tmp_path):
 
 def test_library_does_not_import_application_packages():
     import ast
-    import dailywire_downloader
-    root = Path(dailywire_downloader.__file__).parent
+    import downloader
+    root = Path(downloader.__file__).parent
     for file in root.rglob("*.py"):
         tree = ast.parse(file.read_text())
         for node in ast.walk(tree):
@@ -154,8 +154,8 @@ def test_library_does_not_import_application_packages():
 
 def test_required_sidecar_failure_aborts_media_and_joins_writers(tmp_path, monkeypatch):
     import time
-    from dailywire_downloader import coordinator, sidecars
-    from dailywire_downloader.errors import DownloadError
+    from downloader import coordinator, sidecars
+    from downloader.errors import DownloadError
     media_started = Event()
     def unavailable(*_args, **_kwargs):
         assert media_started.wait(2)
@@ -178,7 +178,7 @@ def test_required_sidecar_failure_aborts_media_and_joins_writers(tmp_path, monke
 
 
 def test_optional_asset_failure_preserves_successful_media(tmp_path, monkeypatch):
-    from dailywire_downloader import coordinator, sidecars
+    from downloader import coordinator, sidecars
     monkeypatch.setattr(sidecars, 'http_get', lambda *a, **k: (_ for _ in ()).throw(sidecars.InvalidSidecar('Invalid optional image')))
     def download(_url, destination, **_kwargs):
         Path(destination).write_bytes(b'media')
@@ -194,7 +194,7 @@ def test_optional_asset_failure_preserves_successful_media(tmp_path, monkeypatch
 
 
 def test_sidecar_retry_does_not_repeat_primary_transfer(tmp_path, monkeypatch):
-    from dailywire_downloader import coordinator, sidecars
+    from downloader import coordinator, sidecars
     attempts = []
     class Response:
         headers = {'Content-Type': 'image/jpeg', 'Content-Length': '5'}

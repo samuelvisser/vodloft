@@ -15,7 +15,7 @@ def test_monitor_reconciles_identifier_and_rekeys_recurring_job(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
     from backend.types.show_types import EpisodeIdentifier, ShowType
     from backend.utils.helpers import generate_uuid
-    from dailywire_api.records import DwEpisodeDetailRecord
+    from sources.dailywire.api.records import DwEpisodeDetailRecord
     from task_manager.tasks.helpers.episodes import events as episode_events
     from task_manager.tasks.workers.monitor_episode_worker import service
     from task_manager.tasks.workers.monitor_episode_worker.scheduling import (

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from dailywire_api import pacing
+from sources import pacing
 
 
 def policy(monkeypatch, *, slow=200, fast=0, maximum=0):

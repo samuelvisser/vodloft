@@ -151,7 +151,7 @@ def _available_hls(session: Session, episode, local_profile, download_profile, p
     from backend.db.models import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
-    from dailywire_downloader import hls_asset_marker, hls_asset_root
+    from downloader import hls_asset_marker, hls_asset_root
 
     path.write_text(
         "#EXTM3U\n"

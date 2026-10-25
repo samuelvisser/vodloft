@@ -6,15 +6,15 @@ from time import monotonic
 
 from pydantic import ValidationError
 
-from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
-from dailywire_api.dw_api.movie import MovieMiddlewareClient
-from dailywire_api.records import (
+from sources.dailywire.api.dw_api.client import MiddlewareAPIError, MiddlewareClient
+from sources.dailywire.api.dw_api.movie import MovieMiddlewareClient
+from sources.dailywire.api.records import (
     DwCatalogMoviePageRecord,
     DwCatalogMovieRecord,
     DwCatalogRecord,
     DwCatalogShowPageRecord,
 )
-from dailywire_authorisation import DeviceAuthClient
+from sources.dailywire.auth import DeviceAuthClient
 
 
 logger = logging.getLogger(__name__)

@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from backend.api.datetime import api_timezone_payload
 from backend.api.endpoints.dailywire.episodes.service import *
-from dailywire_api.records import DwEpisodeRecord, DwEpisodeDetailRecord
+from sources.dailywire.api.records import DwEpisodeRecord, DwEpisodeDetailRecord
 
 
 router = APIRouter(prefix="/episodes", tags=["DailyWire Episodes"])

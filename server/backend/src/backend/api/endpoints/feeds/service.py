@@ -34,7 +34,7 @@ from backend.types.stream_profile_types import (
     RssVideoOutputMode,
 )
 from config.network import is_no_internet_error
-from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
+from sources.dailywire.api.dw_api.client import MiddlewareAPIError, MiddlewareClient
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 

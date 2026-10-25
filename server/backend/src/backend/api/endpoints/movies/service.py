@@ -20,7 +20,7 @@ from backend.services.movies import (
     index_dailywire_movie,
     sync_indexed_dailywire_movie,
 )
-from dailywire_api.records import DwMovieRecord
+from sources.dailywire.api.records import DwMovieRecord
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import complete_operation, queue_operation_target_dispatch
 from task_manager.tasks.media_download_operations import attach_redownload_dependencies

@@ -8,7 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 
-# ---------- dailywire_downloader: HLS parsing ----------
+# ---------- downloader: HLS parsing ----------
 
 MASTER = """#EXTM3U
 #EXT-X-VERSION:5
@@ -36,7 +36,7 @@ https://cdn.example/chunk/2.ts
 
 
 def test_parse_master_playlist_extracts_renditions():
-    from dailywire_downloader.hls import parse_master_playlist
+    from downloader.hls import parse_master_playlist
 
     renditions = parse_master_playlist(MASTER, base_url="https://cdn.example/master.m3u8")
     assert [(r.width, r.height, r.bandwidth) for r in renditions] == [
@@ -50,7 +50,7 @@ def test_parse_master_playlist_extracts_renditions():
 
 
 def test_parse_media_playlist_extracts_segments():
-    from dailywire_downloader.hls import parse_media_playlist
+    from downloader.hls import parse_media_playlist
 
     playlist = parse_media_playlist(MEDIA, base_url="https://cdn.example/480/rendition.m3u8")
     assert playlist.is_endlist
@@ -63,8 +63,8 @@ def test_parse_media_playlist_extracts_segments():
 
 
 def test_parse_media_playlist_rejects_encryption():
-    from dailywire_downloader.errors import EncryptedMediaError
-    from dailywire_downloader.hls import parse_media_playlist
+    from downloader.errors import EncryptedMediaError
+    from downloader.hls import parse_media_playlist
 
     encrypted = MEDIA.replace(
         "#EXT-X-TARGETDURATION:6",
@@ -75,7 +75,7 @@ def test_parse_media_playlist_rejects_encryption():
 
 
 def test_probe_kinds_via_suggested_extension():
-    from dailywire_downloader.models import MediaInfo, MediaKind
+    from downloader.models import MediaInfo, MediaKind
 
     hls = MediaInfo(url="https://x/master.m3u8", kind=MediaKind.HLS_MASTER)
     assert hls.suggested_extension == "ts"
@@ -90,7 +90,7 @@ def test_probe_kinds_via_suggested_extension():
 # ---------- resolution selection (application logic) ----------
 
 def _rendition(height: int, bandwidth: int = 1000):
-    from dailywire_downloader import VideoRendition
+    from downloader import VideoRendition
 
     return VideoRendition(url=f"https://x/{height}.m3u8", width=height * 16 // 9,
                           height=height, bandwidth=bandwidth, codecs=None)
@@ -114,7 +114,7 @@ def test_select_rendition_falls_back_to_highest_available():
 
 
 def test_select_rendition_requires_resolutions():
-    from dailywire_downloader import MediaUnavailableError, VideoRendition
+    from downloader import MediaUnavailableError, VideoRendition
     from task_manager.tasks.workers.download_episode._helpers import select_rendition
 
     nameless = VideoRendition(url="https://x/a.m3u8", width=None, height=None, bandwidth=None, codecs=None)
@@ -265,7 +265,7 @@ def test_create_episode_download_enforces_one_per_profile(monkeypatch, tmp_path)
 # ---------- ffmpeg remux ----------
 
 def test_remux_to_mp4_runs_ffmpeg_and_renames_part_file(tmp_path, monkeypatch):
-    from dailywire_downloader import ffmpeg as ffmpeg_module
+    from downloader import ffmpeg as ffmpeg_module
 
     calls = []
 
@@ -309,8 +309,8 @@ def test_remux_to_mp4_runs_ffmpeg_and_renames_part_file(tmp_path, monkeypatch):
 
 
 def test_remux_to_mp4_raises_when_ffmpeg_missing(monkeypatch, tmp_path):
-    from dailywire_downloader import ffmpeg as ffmpeg_module
-    from dailywire_downloader.errors import FfmpegNotFoundError
+    from downloader import ffmpeg as ffmpeg_module
+    from downloader.errors import FfmpegNotFoundError
 
     monkeypatch.setattr(ffmpeg_module.shutil, "which", lambda path: None)
 
@@ -319,8 +319,8 @@ def test_remux_to_mp4_raises_when_ffmpeg_missing(monkeypatch, tmp_path):
 
 
 def test_remux_to_mp4_cleans_up_part_file_on_failure(monkeypatch, tmp_path):
-    from dailywire_downloader import ffmpeg as ffmpeg_module
-    from dailywire_downloader.errors import DownloadError
+    from downloader import ffmpeg as ffmpeg_module
+    from downloader.errors import DownloadError
 
     monkeypatch.setattr(ffmpeg_module.shutil, "which", lambda path: "/usr/bin/ffmpeg")
 
@@ -348,8 +348,8 @@ def test_remux_to_mp4_error_uses_tail_lines_not_a_raw_character_slice(monkeypatc
     """A raw character slice of long ffmpeg output can land mid-line (this is
     literally what was reported: a chunk of the multi-line "configuration:"
     banner with no visible error). Lines are the unit that must be kept."""
-    from dailywire_downloader import ffmpeg as ffmpeg_module
-    from dailywire_downloader.errors import DownloadError
+    from downloader import ffmpeg as ffmpeg_module
+    from downloader.errors import DownloadError
 
     monkeypatch.setattr(ffmpeg_module.shutil, "which", lambda path: "/usr/bin/ffmpeg")
 
@@ -375,8 +375,8 @@ def test_remux_to_mp4_strips_ffmpeg_banner_even_when_output_is_short(monkeypatch
     that a plain last-N-lines tail still included it wholesale, burying the one
     real diagnostic line under noise. The banner must be dropped outright, not
     just hoped to fall outside the tail window."""
-    from dailywire_downloader import ffmpeg as ffmpeg_module
-    from dailywire_downloader.errors import DownloadError
+    from downloader import ffmpeg as ffmpeg_module
+    from downloader.errors import DownloadError
 
     monkeypatch.setattr(ffmpeg_module.shutil, "which", lambda path: "/usr/bin/ffmpeg")
 
@@ -521,7 +521,7 @@ def test_replaced_episode_worker_cancels_without_overwriting_fresh_state(tmp_pat
     from sqlalchemy.orm import sessionmaker
 
     from config import get_settings
-    from dailywire_downloader import DownloadCancelled, MediaInfo, MediaKind
+    from downloader import DownloadCancelled, MediaInfo, MediaKind
     from task_manager.tasks.workers import download_attempt
     from task_manager.tasks.workers.download_episode import service
     from task_manager.tasks.workers.download_profile_worker import _helpers as profile_helpers
@@ -583,7 +583,7 @@ def test_replaced_episode_worker_cancels_without_overwriting_fresh_state(tmp_pat
 
 def test_run_download_episode_remuxes_hls_video_to_mp4(tmp_path, monkeypatch):
     from config import get_settings
-    from dailywire_downloader import DownloadResult, MediaInfo, MediaKind, VideoRendition
+    from downloader import DownloadResult, MediaInfo, MediaKind, VideoRendition
     from task_manager.tasks.workers.download_episode import service
 
     session, engine, episode, download = _db_with_episode_and_download()
@@ -639,7 +639,7 @@ def test_run_download_episode_remuxes_hls_video_to_mp4(tmp_path, monkeypatch):
 
 def test_run_download_episode_keeps_ts_when_remux_disabled(tmp_path, monkeypatch):
     from config import get_settings
-    from dailywire_downloader import DownloadResult, MediaInfo, MediaKind, VideoRendition
+    from downloader import DownloadResult, MediaInfo, MediaKind, VideoRendition
     from task_manager.tasks.workers.download_episode import service
 
     session, engine, episode, download = _db_with_episode_and_download()
@@ -677,7 +677,7 @@ def test_run_download_episode_keeps_ts_when_remux_disabled(tmp_path, monkeypatch
 
 def test_run_download_episode_audio_unaffected_by_remux_setting(tmp_path, monkeypatch):
     from config import get_settings
-    from dailywire_downloader import DownloadResult, MediaInfo, MediaKind
+    from downloader import DownloadResult, MediaInfo, MediaKind
     from task_manager.tasks.workers.download_episode import service
 
     session, engine, episode, download = _db_with_episode_and_download(video_local_media_profile=False)
@@ -694,7 +694,7 @@ def test_run_download_episode_audio_unaffected_by_remux_setting(tmp_path, monkey
         __import__("os").makedirs(__import__("os").path.dirname(dest_path), exist_ok=True)
         with open(dest_path, "wb") as f:
             f.write(b"audio-bytes")
-        from dailywire_downloader import DownloadResult
+        from downloader import DownloadResult
         return DownloadResult(path=dest_path, bytes_downloaded=11)
 
     monkeypatch.setattr(service, "download_file", fake_download_file)
@@ -713,7 +713,7 @@ def test_run_download_episode_audio_unaffected_by_remux_setting(tmp_path, monkey
 
 def test_run_download_episode_drains_next_pending_download_on_success(tmp_path, monkeypatch):
     from config import get_settings
-    from dailywire_downloader import DownloadResult, MediaInfo, MediaKind
+    from downloader import DownloadResult, MediaInfo, MediaKind
     from task_manager.tasks.workers.download_episode import service
     from task_manager.tasks.workers.download_profile_worker import _helpers as profile_helpers
 
@@ -777,7 +777,7 @@ def test_run_download_episode_drains_next_pending_download_on_failure(tmp_path, 
 
 def test_run_download_episode_records_redownload_attempt_on_success(tmp_path, monkeypatch):
     from config import get_settings
-    from dailywire_downloader import DownloadResult, MediaInfo, MediaKind
+    from downloader import DownloadResult, MediaInfo, MediaKind
     from task_manager.tasks.workers.download_episode import service
 
     session, engine, episode, download = _db_with_episode_and_download(video_local_media_profile=False)
@@ -827,7 +827,7 @@ def test_run_download_episode_records_redownload_attempt_on_failure(tmp_path, mo
 
 def test_run_download_episode_records_initial_attempt(tmp_path, monkeypatch):
     from config import get_settings
-    from dailywire_downloader import DownloadResult, MediaInfo, MediaKind
+    from downloader import DownloadResult, MediaInfo, MediaKind
     from task_manager.tasks.workers.download_episode import service
 
     session, engine, episode, download = _db_with_episode_and_download(video_local_media_profile=False)
@@ -857,7 +857,7 @@ def test_run_download_episode_records_initial_attempt(tmp_path, monkeypatch):
 
 def test_run_download_episode_appends_ledger_entry_on_success(tmp_path, monkeypatch):
     from config import get_settings
-    from dailywire_downloader import DownloadResult, MediaInfo, MediaKind
+    from downloader import DownloadResult, MediaInfo, MediaKind
     from task_manager.tasks.workers.download_episode import service
     from backend.db.models.media_download import MediaDownloadAttempt
 
@@ -893,7 +893,7 @@ def test_run_download_episode_appends_ledger_entry_on_failure_and_survives_a_ret
     live row shows "no errors" again while it re-downloads, but the previous
     error must still be readable from the ledger."""
     from config import get_settings
-    from dailywire_downloader import DownloadResult, MediaInfo, MediaKind
+    from downloader import DownloadResult, MediaInfo, MediaKind
     from task_manager.tasks.workers.download_episode import service
     from backend.db.models.media_download import MediaDownloadAttempt
 
@@ -925,7 +925,7 @@ def test_run_download_episode_appends_ledger_entry_on_failure_and_survives_a_ret
 
 def test_run_download_episode_ledger_keeps_every_attempt_across_retries(tmp_path, monkeypatch):
     from config import get_settings
-    from dailywire_downloader import DownloadResult, MediaInfo, MediaKind
+    from downloader import DownloadResult, MediaInfo, MediaKind
     from task_manager.tasks.workers.download_episode import service
     from backend.db.models.media_download import MediaDownloadAttempt
 

@@ -304,7 +304,7 @@ def test_manual_downloads_reject_the_wrong_local_media_profile_type() -> None:
     )
     from backend.types.show_types import EpisodeIdentifier, ShowType
     from backend.utils.helpers import generate_uuid
-    from dailywire_api.records import DwMovieRecord
+    from sources.dailywire.api.records import DwMovieRecord
 
     session, engine = _new_session()
     show_profile = ShowLocalMediaProfile(

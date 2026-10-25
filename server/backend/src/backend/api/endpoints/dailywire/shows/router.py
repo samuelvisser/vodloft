@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Query, HTTPException
 
 from backend.api.datetime import api_timezone_payload
-from dailywire_api.records import DwShowRecord
+from sources.dailywire.api.records import DwShowRecord
 from .service import get_show
 
 router = APIRouter(prefix="/shows", tags=["DailyWire Shows"])

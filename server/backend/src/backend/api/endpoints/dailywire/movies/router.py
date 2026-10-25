@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 
 from backend.api.datetime import api_timezone_payload
-from dailywire_api.records import DwMovieRecord
+from sources.dailywire.api.records import DwMovieRecord
 
 from .service import get_movie
 

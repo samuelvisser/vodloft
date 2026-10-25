@@ -4,8 +4,8 @@ from dataclasses import replace
 
 import pytest
 
-from dailywire_downloader.lifecycle import DownloadTracker
-from dailywire_downloader.plan import ResolvedDownloadSource, SidecarSpec, build_download_plan
+from downloader.lifecycle import DownloadTracker
+from downloader.plan import ResolvedDownloadSource, SidecarSpec, build_download_plan
 
 
 def make_plan(tmp_path, *, tracker=None, remux=False, **options):
@@ -84,7 +84,7 @@ def test_skipped_optional_asset_satisfies_dependency_without_claiming_a_file(tmp
 
 
 def test_tracker_uses_deadline_in_plan_instead_of_coordinator_constant(tmp_path, monkeypatch):
-    import dailywire_downloader.lifecycle as lifecycle
+    import downloader.lifecycle as lifecycle
     tracker = DownloadTracker()
     value = make_plan(tmp_path, tracker=tracker)
     value = replace(value, stages=tuple(
@@ -138,8 +138,8 @@ def test_plan_rejects_invalid_deadlines(tmp_path, deadline):
 def test_plan_uses_network_processing_weights(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
-    import dailywire_downloader.plan as plan_module
-    from dailywire_downloader.storage.filesystem import FilesystemStorageKind
+    import downloader.plan as plan_module
+    from downloader.storage.filesystem import FilesystemStorageKind
 
     monkeypatch.setattr(
         plan_module,
@@ -160,8 +160,8 @@ def test_plan_uses_network_processing_weights(tmp_path, monkeypatch):
 def test_cross_filesystem_publish_to_network_storage_uses_copy_weight(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
-    import dailywire_downloader.plan as plan_module
-    from dailywire_downloader.storage.filesystem import FilesystemStorageKind
+    import downloader.plan as plan_module
+    from downloader.storage.filesystem import FilesystemStorageKind
 
     monkeypatch.setattr(plan_module, "publication_requires_copy", lambda *_args: True)
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 def test_http_get_encodes_raw_spaces_without_touching_existing_percent_encoding(monkeypatch) -> None:
-    import dailywire_downloader.http as http_module
+    import downloader.http as http_module
 
     requested_urls: list[str] = []
 
@@ -45,7 +45,7 @@ def test_movie_extra_sync_preserves_encoded_thumbnail_url() -> None:
     from backend.db import Base
     from backend.db.models import Movie, MovieExtraSource
     from backend.types.media_types import MediaType
-    from dailywire_api.records import DwMovieExtraRecord
+    from sources.dailywire.api.records import DwMovieExtraRecord
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
 

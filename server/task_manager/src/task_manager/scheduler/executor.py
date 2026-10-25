@@ -39,8 +39,8 @@ from config.network import (
     NoInternetConnectionError,
     is_no_internet_error,
 )
-from dailywire_api.pacing import RequestCancelled, RequestWait, request_context
-from dailywire_downloader import DownloadCancelled
+from sources.pacing import RequestCancelled, RequestWait, request_context
+from downloader import DownloadCancelled
 from task_manager.scheduler import scheduler
 
 

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 
 def _movie_record(*, dw_id: str, slug: str, title: str, extras):
-    from dailywire_api.records import DwMovieRecord
+    from sources.dailywire.api.records import DwMovieRecord
 
     return DwMovieRecord(
         dw_id=dw_id,
@@ -31,7 +31,7 @@ def test_same_dailywire_clip_uses_one_source_across_multiple_movies() -> None:
     from backend.db import Base
     from backend.db.models import Movie, MovieExtra, MovieExtraSource
     from backend.types.media_types import MediaType
-    from dailywire_api.records import DwMovieExtraRecord
+    from sources.dailywire.api.records import DwMovieExtraRecord
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
@@ -119,7 +119,7 @@ def test_rotating_dailywire_ids_do_not_change_persisted_movie_identity() -> None
     from backend.api.endpoints.movies.service import index_dailywire_movie
     from backend.db import Base
     from backend.db.models import Movie, MovieExtra, MovieExtraSource
-    from dailywire_api.records import DwMovieExtraRecord
+    from sources.dailywire.api.records import DwMovieExtraRecord
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
@@ -198,7 +198,7 @@ def test_downloading_one_extra_survives_another_movies_shared_clip(
     from backend.db.models import MovieExtra, MovieExtraSource, MovieLocalMediaProfile
     from backend.types.media_types import MediaType
     from config import get_settings
-    from dailywire_api.records import DwMovieExtraRecord
+    from sources.dailywire.api.records import DwMovieExtraRecord
 
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
 
@@ -285,7 +285,7 @@ def test_shared_clip_downloads_remain_scoped_to_parent_movie_and_profile(
     from backend.db.models import MovieExtra, MovieExtraSource, MovieLocalMediaProfile
     from backend.db.models.media_download import MovieExtraMediaDownload
     from config import get_settings
-    from dailywire_api.records import DwMovieExtraRecord
+    from sources.dailywire.api.records import DwMovieExtraRecord
 
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
 

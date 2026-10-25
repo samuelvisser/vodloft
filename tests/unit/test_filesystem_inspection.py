@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from dailywire_downloader.storage.filesystem import (
+from downloader.storage.filesystem import (
     FilesystemStorageKind,
     _Mount,
     _decode_mount_path,

@@ -57,7 +57,7 @@ def _episode_payload(*, land, port, square):
 
 
 def test_show_record_keeps_portrait_and_discards_duplicate_landscape_and_square():
-    from dailywire_api.records import DwShowRecord
+    from sources.dailywire.api.records import DwShowRecord
 
     record = DwShowRecord.model_validate(
         _show_payload(
@@ -73,7 +73,7 @@ def test_show_record_keeps_portrait_and_discards_duplicate_landscape_and_square(
 
 
 def test_show_record_preserves_distinct_landscape_and_square_urls():
-    from dailywire_api.records import DwShowRecord
+    from sources.dailywire.api.records import DwShowRecord
 
     record = DwShowRecord.model_validate(
         _show_payload(
@@ -89,7 +89,7 @@ def test_show_record_preserves_distinct_landscape_and_square_urls():
 
 
 def test_catalog_show_record_uses_same_thumbnail_normalization():
-    from dailywire_api.records import DwCatalogShowRecord
+    from sources.dailywire.api.records import DwCatalogShowRecord
 
     record = DwCatalogShowRecord(
         dw_id="show-1",
@@ -106,7 +106,7 @@ def test_catalog_show_record_uses_same_thumbnail_normalization():
 
 
 def test_episode_record_keeps_landscape_and_discards_duplicate_portrait_and_square():
-    from dailywire_api.records import DwEpisodeRecord
+    from sources.dailywire.api.records import DwEpisodeRecord
 
     record = DwEpisodeRecord.model_validate(
         _episode_payload(
@@ -122,7 +122,7 @@ def test_episode_record_keeps_landscape_and_discards_duplicate_portrait_and_squa
 
 
 def test_episode_record_preserves_distinct_portrait_and_square_urls():
-    from dailywire_api.records import DwEpisodeRecord
+    from sources.dailywire.api.records import DwEpisodeRecord
 
     record = DwEpisodeRecord.model_validate(
         _episode_payload(
@@ -138,7 +138,7 @@ def test_episode_record_preserves_distinct_portrait_and_square_urls():
 
 
 def test_catalog_movie_uses_portrait_as_default_thumbnail():
-    from dailywire_api.records import DwCatalogMovieRecord
+    from sources.dailywire.api.records import DwCatalogMovieRecord
 
     record = DwCatalogMovieRecord(
         dw_id="movie-1",
@@ -154,7 +154,7 @@ def test_catalog_movie_uses_portrait_as_default_thumbnail():
     assert record.thumbnail_square_path is None
 
 def test_movie_record_keeps_portrait_and_discards_duplicate_alternates():
-    from dailywire_api.records import DwMovieRecord
+    from sources.dailywire.api.records import DwMovieRecord
 
     record = DwMovieRecord(
         dw_id="movie-1",
@@ -172,7 +172,7 @@ def test_movie_record_keeps_portrait_and_discards_duplicate_alternates():
 
 
 def test_movie_record_preserves_distinct_alternate_thumbnails():
-    from dailywire_api.records import DwMovieRecord
+    from sources.dailywire.api.records import DwMovieRecord
 
     record = DwMovieRecord(
         dw_id="movie-1",
@@ -190,7 +190,7 @@ def test_movie_record_preserves_distinct_alternate_thumbnails():
 
 
 def test_movie_extra_keeps_landscape_and_discards_duplicate_alternates():
-    from dailywire_api.records import DwMovieExtraRecord
+    from sources.dailywire.api.records import DwMovieExtraRecord
 
     record = DwMovieExtraRecord(
         slug="example-extra",
@@ -206,7 +206,7 @@ def test_movie_extra_keeps_landscape_and_discards_duplicate_alternates():
 
 
 def test_movie_extra_preserves_distinct_alternate_thumbnails():
-    from dailywire_api.records import DwMovieExtraRecord
+    from sources.dailywire.api.records import DwMovieExtraRecord
 
     record = DwMovieExtraRecord(
         slug="example-extra",

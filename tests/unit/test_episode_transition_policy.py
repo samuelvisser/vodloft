@@ -10,7 +10,7 @@ def _detail(
     slug="episode",
     video_url="https://example.test/video.m3u8",
 ):
-    from dailywire_api.records import DwEpisodeDetailRecord, DwEpisodeRecord
+    from sources.dailywire.api.records import DwEpisodeDetailRecord, DwEpisodeRecord
 
     record = DwEpisodeRecord(
         dw_id="remote-episode",

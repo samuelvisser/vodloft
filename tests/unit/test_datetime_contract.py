@@ -12,7 +12,7 @@ from sqlalchemy.exc import StatementError
 from backend.api.datetime import api_datetime, api_timezone_payload
 from backend.api.models.base import ResponseBase
 from backend.db.datetime_types import UTCDateTime
-from dailywire_api.records import DwShowRecord
+from sources.dailywire.api.records import DwShowRecord
 from task_manager.scheduler.db import TaskSchedule
 from task_manager.scheduler import scheduler as scheduler_module
 from task_manager.tasks.helpers.episodes.metadata import ensure_utc

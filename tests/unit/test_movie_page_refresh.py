@@ -5,7 +5,7 @@ from sqlalchemy.orm import sessionmaker
 
 
 def _movie_record(*, status: str, downloadable: bool, title: str):
-    from dailywire_api.records import DwMovieRecord
+    from sources.dailywire.api.records import DwMovieRecord
 
     return DwMovieRecord(
         dw_id="movie-1",

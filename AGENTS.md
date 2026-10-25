@@ -122,6 +122,18 @@ It should also be easy to understand for a moderately tech-literate audience.
 The wiki should document the big picture for VODLoft: code comments are for explaining 
 programming implementation details.
 
+## Sources
+A Source is everything VODLoft knows about one service (The Daily Wire, later yt-dlp and NPO). Sources
+live in the `sources` package (`server/sources`), one subpackage each, and register themselves in
+`sources/__init__.py`.
+- Application code reaches a service through the contract in `sources.contract` and the registry
+  (`get_source(...)`), and checks a `Feature` rather than a Source id.
+- Only the Daily Wire-only features listed in `tests/unit/test_source_boundaries.py` may import
+  `sources.dailywire` directly. Do not add to that list; move code behind the contract instead.
+- Add to the contract only what has a caller. A Source never imports the application, and the
+  `downloader` package knows nothing about Sources.
+- Shows and media items store their Source's id in `source_key`.
+
 ## The Daily Wire
 When referring to The Daily Wire, in most cases, use the full name, "The Daily Wire". 
 However, in some contexts, it may read better to use "Daily Wire" instead. This is not the 'correct'

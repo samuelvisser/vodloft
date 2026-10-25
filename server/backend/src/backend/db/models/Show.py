@@ -3,6 +3,7 @@ from typing import Optional, TYPE_CHECKING, TypeAlias
 
 from sqlalchemy import func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sources import DAILYWIRE
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
 from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
@@ -22,6 +23,7 @@ class Show(Base, HasMetadataMixin, HasTaskResourcesMixin):
     # Columns
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     uuid: Mapped[str] = mapped_column(index=True, unique=True)
+    source_key: Mapped[str] = mapped_column(index=True, default=DAILYWIRE, server_default=DAILYWIRE, comment="Id of the Source this comes from, as registered in sources")
     slug: Mapped[str] = mapped_column(index=True, unique=True)
     title: Mapped[str]
     description: Mapped[Optional[str]]
