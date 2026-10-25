@@ -1,3 +1,4 @@
+import {sourceControls} from '../../lib/sourceControls'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
@@ -21,6 +22,7 @@ import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import './ShowPage.css'
 import {faIcon} from '../../icons/faIcon'
+import {siteName} from '../../lib/siteName'
 
 
 function preferredFormatLabel(value?: string | null) {
@@ -409,7 +411,7 @@ export default function ShowPage() {
             {show.sharingUrl && (
               <a className="btn" href={show.sharingUrl} target="_blank" rel="noreferrer">
                 <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')} aria-hidden="true"/>
-                <span>Open on {sources.name(show.sourceKey)}</span>
+                <span>Open on {sources.get(show.sourceKey)?.domains.includes('*') ? siteName(show.sharingUrl) ?? sources.name(show.sourceKey) : sources.name(show.sourceKey)}</span>
               </a>
             )}
             <button type="button" className="btn" title="Edit show" onClick={onEdit}>
@@ -436,15 +438,15 @@ export default function ShowPage() {
                   icon: faIcon('fass', 'clock-rotate-left'),
                   onSelect: () => setSyncLogOpen(true),
                 },
-                {
+                ...(sourceControls(show).metadataRefresh ? [{
                   label: 'Refresh all metadata',
-                  icon: faIcon('fass', 'clipboard-list'),
+                  icon: faIcon('fass', 'clipboard-list') as [string, string],
                   disabled: metadataRefreshBusy,
                   disabledReason: metadataRefreshDisabledReason,
                   operation: metadataRefreshOperation,
                   controls: operationControls(metadataRefreshOperation?.id, 'metadata refresh'),
                   onSelect: () => setMetadataRefreshConfirm(true),
-                },
+                }] : []),
                 {
                   label: 'Rename all episode files',
                   icon: faIcon('fass', 'file-pen'),

@@ -1,4 +1,5 @@
-import DailywireShowCard from './DailywireShowCard'
+import {ChosenShowCard} from './ShowPreviewCard'
+import type {ShowCreatePayloadOut} from '../../types/schemas/show'
 import {ShowTypeReg, ShowTypeValue} from '../../types/show'
 import SeriesDownloadProfileStep from './DownloadProfileVersions/SeriesDownloadProfileStep'
 import PodcastDownloadProfileStep from "./DownloadProfileVersions/PodcastDownloadProfileStep";
@@ -25,12 +26,14 @@ type Props = {
     onContinue: () => void
     onCancel: () => void
     showSlug?: string
+    /** The show chosen in the first step. */
+    show?: ShowCreatePayloadOut
     showType?: ShowTypeValue | ''
     seasons: SeasonDetachedOut[]
     continueLabel?: string
 }
 
-export default function DownloadProfileStep({value, onChange, onSubmit, onBack, onContinue, onCancel, showSlug, showType, seasons, continueLabel}: Props) {
+export default function DownloadProfileStep({value, onChange, onSubmit, onBack, onContinue, onCancel, show, showType, seasons, continueLabel}: Props) {
     // Return the appropriate step component based on the show type
     return (
         <div className="wizard-with-aside">
@@ -44,6 +47,7 @@ export default function DownloadProfileStep({value, onChange, onSubmit, onBack, 
                         onContinue={onContinue}
                         onCancel={onCancel}
                         continueLabel={continueLabel}
+                        sourceKey={show?.sourceKey}
                     />
                 ) : (
                     <SeriesDownloadProfileStep
@@ -59,9 +63,9 @@ export default function DownloadProfileStep({value, onChange, onSubmit, onBack, 
                 )}
             </div>
 
-            {showSlug ? (
+            {show ? (
                 <aside className="wizard-aside" aria-label="Selected show details">
-                    <DailywireShowCard showSlug={showSlug}/>
+                    <ChosenShowCard show={show}/>
                 </aside>
             ) : null}
         </div>

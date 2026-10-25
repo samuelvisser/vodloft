@@ -1,7 +1,8 @@
 import {useEffect, useRef} from 'react'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
-import DailywireShowCard from './DailywireShowCard'
+import {ChosenShowCard} from './ShowPreviewCard'
+import type {ShowCreatePayloadOut} from '../../types/schemas/show'
 import LocalMediaProfileCommonFields from '../LocalMediaProfile/LocalMediaProfileCommonFields'
 import ShowLocalMediaProfileFields from '../LocalMediaProfile/ShowLocalMediaProfileFields'
 import IndexingValuesEditorButton from '../LocalMediaProfile/IndexingValuesEditorButton'
@@ -30,10 +31,12 @@ type Props = {
     onContinue: () => void
     onCancel: () => void
     showSlug?: string
+    /** The show chosen in the first step. */
+    show?: ShowCreatePayloadOut
     showType: ShowLocalMediaProfileContext
 }
 
-export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubmitParent, onBack, onContinue, onCancel, showSlug, showType}: Props) {
+export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubmitParent, onBack, onContinue, onCancel, show, showType}: Props) {
     const profilesQuery = useLocalMediaProfiles()
     const profiles: ShowLocalMediaProfileRead[] | undefined = profilesQuery.data?.filter(
         (profile): profile is ShowLocalMediaProfileRead =>
@@ -151,9 +154,9 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
                     </div>
                 </div>
 
-                {showSlug ? (
+                {show ? (
                     <aside className="wizard-aside" aria-label="Selected show details">
-                        <DailywireShowCard showSlug={showSlug}/>
+                        <ChosenShowCard show={show}/>
                     </aside>
                 ) : null}
             </div>

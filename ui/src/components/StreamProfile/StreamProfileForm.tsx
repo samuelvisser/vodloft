@@ -44,6 +44,8 @@ type Props = {
     onEpisodeTypesManuallyChanged?: () => void
     showSlug?: string
     showTitle?: string
+    /** The Source of a show that is not saved yet. */
+    sourceKey?: string
     canOpenDownloadProfiles?: boolean
 }
 
@@ -59,19 +61,21 @@ export default function StreamProfileForm({
     onEpisodeTypesManuallyChanged,
     showSlug,
     showTitle,
+    sourceKey,
     canOpenDownloadProfiles = true,
 }: Props) {
     const {control, formState: {errors}, getValues, register, setValue, watch} = form
     showRoot ??= true
 
-    // A show that is not saved yet is being added from The Daily Wire, so it keeps every option.
+    // A show that is not saved yet takes the options of the Source it is added from.
     const {data: shows} = useShows()
     const sources = useSourceLookup()
     const show = showSlug ? shows?.find((item) => item.slug === showSlug) : undefined
-    const controls = sourceControls(show)
+    const newShowSource = !show && sourceKey ? sources.get(sourceKey) : undefined
+    const controls = sourceControls(show ?? (newShowSource ? {sourceFeatures: newShowSource.features} : undefined))
     const canStreamFromSource = controls.rssStreaming
     const canStreamLiveEpisodes = controls.liveEpisodes
-    const streamSourceName = show ? sources.name(show.sourceKey) : 'The Daily Wire'
+    const streamSourceName = show ? sources.name(show.sourceKey) : newShowSource?.name ?? 'The Daily Wire'
 
     const useDownloads = watch('useDownloads')
     const useDwStream = watch('useDwStream')

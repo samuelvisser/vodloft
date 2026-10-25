@@ -2,7 +2,7 @@ import {z} from "zod";
 import {EpisodeIdentifierReg, ShowTypeReg} from "../show";
 import {DwMembershipLevelReg} from "../dailywire_user_info";
 import {ApiDateTimeSchema} from "./datetime";
-import {SourcedFields} from "./source";
+import {DEFAULT_SOURCE_KEY, SourcedFields} from "./source";
 
 
 /** Ensure https:// if a scheme is missing */
@@ -13,8 +13,13 @@ function ensureProtocol(input: string): string {
     return v;
 }
 
-/** DailyWire URL constraints */
-const dailyWireUrl = z
+function isDailyWire(url: URL): boolean {
+    const host = url.hostname.toLowerCase();
+    return host === "dailywire.com" || host === "www.dailywire.com";
+}
+
+/** A show's link. Daily Wire links must point at a show page; other sites keep their full link. */
+const showUrl = z
     .string()
     .nonempty({message: "URL is required"})
     .default('')
@@ -22,7 +27,7 @@ const dailyWireUrl = z
     .transform((s) => {
         try {
             const u = new URL(s);
-            return `${u.origin}${u.pathname}`;
+            return isDailyWire(u) ? `${u.origin}${u.pathname}` : s;
         } catch {
             // let the later refinements surface the error
             return s;
@@ -30,36 +35,25 @@ const dailyWireUrl = z
     })
     .refine((s) => {
         try {
-            const u = new URL(s);
-            const host = u.hostname.toLowerCase();
-            return host === "dailywire.com" || host === "www.dailywire.com";
+            return ["http:", "https:"].includes(new URL(s).protocol);
         } catch {
             return false;
         }
-    }, {message: "URL must be on dailywire.com"})
+    }, {message: "Enter a valid link"})
     .refine((s) => {
-        try {
-            const u = new URL(s);
-            return u.pathname.startsWith("/show/");
-        } catch {
-            return false;
-        }
+        const u = new URL(s);
+        return !isDailyWire(u) || u.pathname.startsWith("/show/");
     }, {message: "URL must include /show/ in the path"})
     .refine((s) => {
-        try {
-            const u = new URL(s);
-            const slug = u.pathname.slice("/show/".length).split("/")[0];
-            return !!slug;
-        } catch {
-            return false;
-        }
+        const u = new URL(s);
+        return !isDailyWire(u) || !!u.pathname.slice("/show/".length).split("/")[0];
     }, {message: "URL must include a show name after /show/ (e.g., the-ben-shapiro-show)"});
 
 /* ------------------------------------------------------------------ */
 /* FORM schemas (only user-editable fields)                          */
 /* ------------------------------------------------------------------ */
 const ShowBaseFormSchema = z.object({
-    url: dailyWireUrl,
+    url: showUrl,
     membershipLevel: z.enum(DwMembershipLevelReg.Enum).default(DwMembershipLevelReg.Enum.WL_ANY),
     type: z.union([z.enum(ShowTypeReg.values), z.literal('')]).default('').pipe(z.enum(ShowTypeReg.values)),
     episodeIdentifier: z.union([z.enum(EpisodeIdentifierReg.values), z.literal('')]).default('').pipe(z.enum(EpisodeIdentifierReg.values)),
@@ -79,6 +73,7 @@ export type ShowUpdateFormOut = z.output<typeof ShowUpdateFormSchema>;
 /* PAYLOAD schema (what we POST to the backend)                    */
 /* ------------------------------------------------------------------ */
 const ShowBasePayloadSchema = ShowBaseFormSchema.extend({
+    sourceKey: z.string().default(DEFAULT_SOURCE_KEY),
     dwId: z.string().min(1, "dwId missing").default(''),
     slug: z.string().min(1, "slug missing").default(''),
     title: z.string().min(1, "title missing").default(''),

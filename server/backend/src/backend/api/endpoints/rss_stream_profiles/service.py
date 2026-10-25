@@ -17,11 +17,24 @@ from backend.types.local_media_profile_types import PreferredFormat
 from backend.types.stream_profile_types import RSS_HLS_OUTPUT_MODES
 from backend.utils.feed_urls import build_rss_feed_url
 from backend.utils.helpers import generate_stream_profile_token
+from sources import Feature, get_source
 
 
 def _title_override(title: str, show_title: str) -> Optional[str]:
     normalized = title.strip()
     return None if normalized == show_title else normalized
+
+
+def ensure_source_can_stream(show: Show, use_dw_stream: bool) -> None:
+    """Only a Source with RSS streaming can stream episodes that are not downloaded."""
+    if not use_dw_stream:
+        return
+    source = get_source(show.source_key)
+    if not source.has(Feature.RSS_STREAMING):
+        raise HTTPException(
+            status_code=422,
+            detail=f"{source.name} cannot stream episodes; a feed for this show serves downloaded files only",
+        )
 
 
 def _keeps_live_episode_handoff(profile: RssStreamProfile) -> bool:
@@ -65,6 +78,7 @@ def create_stream_profile_rss(
     show: Optional[Show] = s.get(Show, body.show_id)
     if show is None:
         raise HTTPException(status_code=404, detail="Show not found")
+    ensure_source_can_stream(show, body.use_dw_stream)
 
     token = generate_stream_profile_token()
     feed_url = (body.feed_url or "").strip() or build_rss_feed_url(
@@ -99,6 +113,7 @@ def update_stream_profile_rss(
     )
     if item is None:
         raise HTTPException(status_code=404, detail="Stream profile not found")
+    ensure_source_can_stream(item.show, body.use_dw_stream)
 
     feed_url = body.feed_url.strip()
     update_database_fields(item, body, exclude_fields={"feed_url", "title"})

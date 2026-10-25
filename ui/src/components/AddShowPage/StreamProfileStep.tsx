@@ -1,7 +1,8 @@
 import {useEffect} from 'react'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
-import DailywireShowCard from './DailywireShowCard'
+import {ChosenShowCard} from './ShowPreviewCard'
+import type {ShowCreatePayloadOut} from '../../types/schemas/show'
 import StreamProfileForm, {StreamDownloadProfileDefault} from '../StreamProfile/StreamProfileForm'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {
@@ -18,6 +19,8 @@ type Props = {
     onFinish: () => void
     onCancel: () => void
     showSlug?: string
+    /** The show chosen in the first step. */
+    show?: ShowCreatePayloadOut
     showTitle?: string
     downloadProfileDefaults?: StreamDownloadProfileDefault[]
     episodeTypesManuallyChanged?: boolean
@@ -32,6 +35,7 @@ export default function StreamProfileStep({
     onFinish,
     onCancel,
     showSlug,
+    show,
     showTitle,
     downloadProfileDefaults,
     episodeTypesManuallyChanged,
@@ -72,6 +76,7 @@ export default function StreamProfileStep({
                         onEpisodeTypesManuallyChanged={onEpisodeTypesManuallyChanged}
                         showSlug={showSlug}
                         showTitle={showTitle}
+                        sourceKey={show?.sourceKey}
                         canOpenDownloadProfiles={false}
                     />
                     <div className="actions">
@@ -82,9 +87,9 @@ export default function StreamProfileStep({
                 </form>
             </div>
 
-            {showSlug ? (
+            {show ? (
                 <aside className="wizard-aside" aria-label="Selected show details">
-                    <DailywireShowCard showSlug={showSlug}/>
+                    <ChosenShowCard show={show}/>
                 </aside>
             ) : null}
         </div>

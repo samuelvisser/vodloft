@@ -1,16 +1,37 @@
 from __future__ import annotations
 
+import logging
+import re
 import threading
 import time
+from collections.abc import Iterator
 from datetime import datetime, timezone
+from urllib.parse import urlsplit, urlunsplit
 
 from ..contract import (
-    ANY_DOMAIN, Feature, LinkKind, MoviePlayback, PlaybackKind, ProgramStatus, ResolvedLink, Source, VideoDetails,
+    ANY_DOMAIN, Feature, LinkKind, MoviePlayback, PlaybackKind, ProgramStatus, ResolvedLink, ShowDetails, Source,
+    VideoDetails,
 )
 from . import runner
 
+logger = logging.getLogger(__name__)
+
 GENERIC_SITE = "Other sites · best effort"
 _CACHE_SECONDS = 300
+# Pause between per-video lookups while listing a show, so a large channel
+# does not look like a scraper to the site.
+_LISTING_PAUSE_SECONDS = 1.0
+_YOUTUBE_CHANNEL = re.compile(r"^/(@[^/]+|channel/[^/]+|c/[^/]+|user/[^/]+)/?$")
+_UNAVAILABLE_TITLES = {"[Private video]", "[Deleted video]"}
+
+
+def show_url(url: str) -> str:
+    """A YouTube channel's link lists its tabs; the show is its Videos tab."""
+    parts = urlsplit(url)
+    host = (parts.hostname or "").lower()
+    if (host == "youtube.com" or host.endswith(".youtube.com")) and _YOUTUBE_CHANNEL.match(parts.path):
+        return urlunsplit(parts._replace(path=parts.path.rstrip("/") + "/videos"))
+    return url
 
 
 def _site(info: dict) -> str:
@@ -55,7 +76,7 @@ class YtDlpSource(Source):
     id = "ytdlp"
     name = "yt-dlp"
     domains = (ANY_DOMAIN,)
-    features = frozenset({Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES})
+    features = frozenset({Feature.SHOWS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES})
 
     def __init__(self):
         self._cache: dict[str, tuple[float, dict]] = {}
@@ -74,6 +95,7 @@ class YtDlpSource(Source):
         return info
 
     def resolve(self, url: str) -> ResolvedLink | None:
+        url = show_url(url)
         try:
             info = self._info(url)
         except runner.YtDlpError as exc:
@@ -82,14 +104,10 @@ class YtDlpSource(Source):
             raise
         site = _site(info)
         if info.get("_type") == "playlist":
+            show = self._show(info, url)
             return ResolvedLink(
-                kind=LinkKind.SHOW,
-                slug=str(info.get("id") or url),
-                url=info.get("webpage_url") or url,
-                title=info.get("title") or info.get("channel") or url,
-                description=info.get("description"),
-                image_url=_thumbnail(info),
-                author_name=info.get("uploader") or info.get("channel"),
+                kind=LinkKind.SHOW, slug=show.slug, url=show.url, title=show.title,
+                description=show.description, image_url=show.image_url, author_name=show.author_name,
                 site=site,
             )
         return ResolvedLink(
@@ -107,6 +125,10 @@ class YtDlpSource(Source):
         info = self._info(url)
         if info.get("_type") == "playlist":
             raise runner.YtDlpError("This link is a playlist or channel, not a single video")
+        return self._video(info, url)
+
+    @staticmethod
+    def _video(info: dict, url: str) -> VideoDetails:
         duration = info.get("duration")
         return VideoDetails(
             slug=video_slug(info),
@@ -120,11 +142,52 @@ class YtDlpSource(Source):
             published_at=_published_at(info),
         )
 
+    @staticmethod
+    def _show(info: dict, url: str) -> ShowDetails:
+        channel = info.get("channel") or info.get("uploader")
+        # A channel's Videos tab is titled "<channel> - Videos"; the show is the channel.
+        is_channel = bool(info.get("channel_id")) and info.get("channel_id") == info.get("id")
+        return ShowDetails(
+            slug=str(info.get("id") or url),
+            url=info.get("webpage_url") or url,
+            title=(channel if is_channel else info.get("title")) or channel or url,
+            description=info.get("description") or None,
+            image_url=_thumbnail(info),
+            author_name=channel,
+            author_url=info.get("channel_url") or info.get("uploader_url"),
+        )
+
+    def show_details(self, url: str) -> ShowDetails:
+        url = show_url(url)
+        info = self._info(url)
+        if info.get("_type") != "playlist":
+            raise runner.YtDlpError("This link is a single video, not a channel or playlist")
+        return self._show(info, url)
+
+    def list_episodes(self, url: str, *, known: frozenset[str]) -> Iterator[VideoDetails]:
+        listing = runner.run_json("--flat-playlist", show_url(url))
+        for entry in listing.get("entries") or []:
+            if not isinstance(entry, dict) or not entry.get("id") or entry.get("title") in _UNAVAILABLE_TITLES:
+                continue
+            if video_slug(entry) in known:
+                continue
+            entry_url = entry.get("url") or entry.get("webpage_url")
+            if not entry_url:
+                continue
+            try:
+                info = runner.run_json("--no-playlist", entry_url)
+            except runner.YtDlpError as exc:
+                logger.info("Skipping %s for now: %s", entry_url, exc)
+                continue
+            finally:
+                time.sleep(_LISTING_PAUSE_SECONDS)
+            yield self._video(info, entry_url)
+
     def video_playback(self, *, slug: str, url: str) -> MoviePlayback:
         return MoviePlayback(url=url, kind=PlaybackKind.YTDLP, command=runner.command())
 
     def episode_media(self, *, slug: str, members_only: bool, interactive: bool = False):
-        raise NotImplementedError("yt-dlp has no shows yet")
+        raise NotImplementedError("yt-dlp episodes are downloaded with video_playback")
 
     def movie_playback(self, **_kwargs) -> MoviePlayback:
         raise NotImplementedError("yt-dlp has no movies")

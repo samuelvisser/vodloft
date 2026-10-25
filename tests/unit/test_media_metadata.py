@@ -15,6 +15,7 @@ def _episode(*, identifier: str = "numbered"):
     )
     season = SimpleNamespace(season_number=3)
     episode = SimpleNamespace(
+        source_key="dailywire",
         title="An Episode",
         description="Episode description",
         slug="an-episode",

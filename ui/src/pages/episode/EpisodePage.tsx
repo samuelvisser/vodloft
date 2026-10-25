@@ -1,3 +1,4 @@
+import {sourceControls} from '../../lib/sourceControls'
 import {useState} from 'react'
 import {Link, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
@@ -229,7 +230,7 @@ export default function EpisodePage() {
                         <h1 id="episode-title" className="episode-title-text">{episode.title}</h1>
                         <ActionMenu
                             items={[
-                                {
+                                ...(sourceControls(show).metadataRefresh ? [{
                                     label: 'Refresh metadata',
                                     icon: faIcon('fass', 'arrows-rotate'),
                                     disabled: metadataRefreshBusy,
@@ -240,7 +241,7 @@ export default function EpisodePage() {
                                             : undefined,
                                     operation: metadataRefreshOperation,
                                     onSelect: () => void refreshMetadata(),
-                                },
+                                }] : []),
                                 ...(earlyDeleteAvailable ? [{
                                     label: 'Early Delete',
                                     icon: faIcon('fass', 'trash') as [string, string],
