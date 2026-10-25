@@ -8,6 +8,17 @@ from sqlalchemy.orm import sessionmaker
 
 
 @pytest.fixture(autouse=True)
+def no_real_ytdlp(monkeypatch):
+    """Sockets are disabled in tests, but a yt-dlp subprocess would still reach the internet."""
+    from sources.ytdlp import runner
+
+    def refuse(*_args, **_kwargs):
+        raise runner.YtDlpError("yt-dlp does not run in tests")
+
+    monkeypatch.setattr(runner, "run_json", refuse)
+
+
+@pytest.fixture(autouse=True)
 def clean_event_bus():
     from task_manager.events.registry import (
         WireloftEventLinker,

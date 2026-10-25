@@ -4,12 +4,14 @@ import ReadMore from '../../utils/ReadMore'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import DateInput from '../common/DateInput'
 import SimpleSelect from '../common/SimpleSelect'
-import {useShows} from '../../lib/queries'
+import {useShows, useSourceLookup} from '../../lib/queries'
 import {sourceControls} from '../../lib/sourceControls'
 
 type Props = {
     form: UseFormReturn<any>
     mode?: 'create' | 'update'
+    /** The Source of a show that is not saved yet. */
+    sourceKey?: string
 }
 
 const LimitModeReg = createSelectRegistry('DownloadLimitMode', {
@@ -19,7 +21,7 @@ const LimitModeReg = createSelectRegistry('DownloadLimitMode', {
 })
 type LimitMode = (typeof LimitModeReg)['values'][number]
 
-export default function PodcastDownloadProfileForm({form}: Props) {
+export default function PodcastDownloadProfileForm({form, sourceKey}: Props) {
     const {control, register, watch, setValue, clearErrors, formState: {errors}} = form
 
     // If countdown is disabled, redownload final becomes irrelevant and is hidden
@@ -29,7 +31,9 @@ export default function PodcastDownloadProfileForm({form}: Props) {
     const {data: shows} = useShows()
     const showId = watch('showId')
     const show = shows?.find((item) => item.id === Number(showId))
-    const offersCountdown = sourceControls(show).countdownDownloads || !!withCountdown
+    const newShowSource = useSourceLookup().get(sourceKey)
+    const controls = sourceControls(show ?? (newShowSource ? {sourceFeatures: newShowSource.features} : undefined))
+    const offersCountdown = controls.countdownDownloads || !!withCountdown
 
     const watchedDaysRaw = watch('downloadDaysInPast') ?? 0
     const watchedEpisodeCountRaw = watch('downloadEpisodeCount') ?? 0

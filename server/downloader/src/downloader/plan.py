@@ -30,6 +30,8 @@ class ResolvedDownloadSource:
     hls_bundle: bool = False
     expected_bytes: int | None = None
     convert_video_to_m4a: bool = False
+    ytdlp_command: tuple[str, ...] = ()
+    """When set, yt-dlp downloads ``url`` (a web page) with this command line."""
 
 
 @dataclass(frozen=True)
@@ -192,6 +194,8 @@ def build_download_plan(
         raise ValueError("Embedded artwork must reference a planned asset")
     if source.hls_bundle and (metadata_tags or artwork_asset_id):
         raise DownloadError("HLS bundles support sidecars, not container embedding")
+    if source.ytdlp_command and (source.use_hls or source.hls_bundle or source.remux_to_mp4 or source.convert_video_to_m4a):
+        raise DownloadError("yt-dlp downloads produce their final format themselves")
     if source.remux_to_mp4 and source.convert_video_to_m4a:
         raise DownloadError("A source cannot be remuxed to MP4 and converted to M4A")
     if source.convert_video_to_m4a and (not source.audio_only or source.extension != "m4a"):

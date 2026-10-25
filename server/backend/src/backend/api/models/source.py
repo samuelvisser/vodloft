@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import ClassVar, Literal, Optional
 
 from pydantic import Field, computed_field, model_serializer
@@ -65,6 +66,34 @@ class ResolvedLinkPreviewAPIRead(ResponseBase):
     author_name: Optional[str] = None
 
 
+class ProgramStatusAPIRead(ResponseBase):
+    name: str
+    version: Optional[str] = None
+    last_update_at: Optional[datetime] = None
+    last_update_error: Optional[str] = None
+
+
+class ShowDetailsAPIRead(ResponseBase):
+    """A show at a Source with listed episodes, shaped like the fields of a new show."""
+
+    source_key: str
+    slug: str
+    title: str
+    description: Optional[str] = None
+    sharing_url: str
+    author_name: str
+    author_slug: str
+    thumbnail_landscape_path: Optional[str] = None
+
+
+class CookiesAPIRead(ResponseBase):
+    has_cookies: bool
+
+
+class CookiesAPIUpdate(RequestBase):
+    content: str = Field(min_length=1, max_length=4 * 1024 * 1024)
+
+
 class ResolvedLinkAPIRead(ResponseBase):
     source: SourceAPIRead
     kind: Literal["show", "movie", "episode", "video"]
@@ -72,4 +101,6 @@ class ResolvedLinkAPIRead(ResponseBase):
     url: str
     show_slug: Optional[str] = None
     show_url: Optional[str] = None
+    site: Optional[str] = None
+    drm_protected: bool = False
     preview: ResolvedLinkPreviewAPIRead

@@ -9,6 +9,7 @@ import {useQueryClient} from '@tanstack/react-query'
 import {addVideo, resolveLink, useMovies, useShows, useSources, useVideos} from '../lib/queries'
 import {linkTarget, type MediaLinkTarget} from '../lib/sourceControls'
 import {ResolvedLinkRead, SourceFeature, sourceHas} from '../types/schemas/source'
+import {DrmNotice} from '../components/common/DrmProtected'
 
 type AddMediaPageProps = {
     onboarding?: boolean
@@ -72,7 +73,9 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
         void lookUp(url)
     }
 
-    const target = link ? linkTarget(link) : null
+    // A show link from a Source that cannot add shows yet, such as a playlist at a video site.
+    const showsUnsupported = !!link && (link.kind === 'show' || link.kind === 'episode') && !sourceHas(link.source, SourceFeature.SHOWS)
+    const target = link && !showsUnsupported ? linkTarget(link) : null
     const localShow = target?.kind === 'show'
         ? localShows?.find((show) => show.slug === target.slug && show.sourceKey === target.sourceKey)
         : undefined
@@ -179,11 +182,12 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
                     )}
                     <div className="add-media-preview-copy">
                         <SourceBadge sourceKey={link.source.id}/>
-                        <p>{KIND_LABEL[link.kind]}{link.preview.authorName ? ` · ${link.preview.authorName}` : ''}</p>
+                        <p>{[KIND_LABEL[link.kind], link.site, link.preview.authorName].filter(Boolean).join(' · ')}</p>
                         <h2>{link.preview.title}</h2>
                         {link.preview.description && (
                             <p className="add-media-preview-description">{link.preview.description}</p>
                         )}
+                        {link.drmProtected && <DrmNotice/>}
                         {target ? (
                             <div className="add-media-preview-actions">
                                 <button className="btn btn-primary" type="button" onClick={proceed} disabled={addingVideo}>
@@ -191,6 +195,10 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
                                     <FontAwesomeIcon icon={faIcon('fass', 'arrow-right')}/>
                                 </button>
                             </div>
+                        ) : showsUnsupported ? (
+                            <p role="alert">
+                                VODLoft cannot add channels or playlists from {link.source.name} yet. Paste the link to one video instead.
+                            </p>
                         ) : (
                             <p role="alert">
                                 {link.source.name} did not say which show this episode belongs to. Paste the show's link instead.

@@ -271,3 +271,28 @@ def test_the_download_plan_asks_the_source_for_the_video(video_sources, session,
     assert probed["url"] == "https://cdn.clips.example/abc.mp4"
     assert probed["audio_only"] is True
     assert str(plan.requested_destination).endswith("/videos/A Channel/2026-03-04 - Clip abc [abc].m4a")
+
+
+def test_a_ytdlp_playback_plans_a_ytdlp_download(video_sources, session, monkeypatch):
+    from backend.api.endpoints.media_downloads.service import create_video_download
+    from backend.api.models.media_download import MovieDownloadAPICreate
+    from backend.services import download_plans
+    from backend.services.videos import index_video
+    from downloader.lifecycle import DownloadTracker
+    from sources import PlaybackKind
+
+    def ytdlp_playback(*, slug, url):
+        return MoviePlayback(url=url, kind=PlaybackKind.YTDLP, command=("yt-dlp", "--cookies", "c.txt"))
+
+    monkeypatch.setattr(video_sources, "video_playback", ytdlp_playback)
+    monkeypatch.setattr(download_plans, "resolve_download_source", lambda *_a, **_k: pytest.fail("yt-dlp pages are not probed"))
+    profile = _video_profile(session, preferred_format="format_720p")
+    video, _ = index_video(session, "clips", video_sources.video_details("https://clips.example/v/abc"))
+    download = create_video_download(session, video, MovieDownloadAPICreate(local_media_profile_id=profile.id))
+    session.commit()
+
+    plan = download_plans.prepare_download_plan(session, download.id, DownloadTracker())
+    assert plan.source.url == "https://clips.example/v/abc"
+    assert plan.source.ytdlp_command[:3] == ("yt-dlp", "--cookies", "c.txt")
+    assert "res:720,vcodec:h264,acodec:m4a" in plan.source.ytdlp_command
+    assert str(plan.requested_destination).endswith("/videos/A Channel/2026-03-04 - Clip abc [abc].mp4")

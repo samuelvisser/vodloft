@@ -9,7 +9,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "b5d2e8a4c716"
+HEAD_REVISION = "e3c9a7b5d214"
+VODLOFT_VIDEOS_REVISION = "b5d2e8a4c716"
 VODLOFT_SOURCES_REVISION = "a3e7c1d9f052"
 WIRELOFT_1_2_3_REVISION = "a4e7c19b2d53"
 WIRELOFT_1_2_1_REVISION = "f2a6c93d8b14"
@@ -241,7 +242,8 @@ def test_migration_history_has_one_head(migration_database):
     )
 
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == VODLOFT_SOURCES_REVISION
+    assert script.get_revision(HEAD_REVISION).down_revision == VODLOFT_VIDEOS_REVISION
+    assert script.get_revision(VODLOFT_VIDEOS_REVISION).down_revision == VODLOFT_SOURCES_REVISION
     assert script.get_revision(VODLOFT_SOURCES_REVISION).down_revision == WIRELOFT_1_2_3_REVISION
     assert script.get_revision(WIRELOFT_1_2_3_REVISION).down_revision == WIRELOFT_1_2_1_REVISION
     assert script.get_revision(WIRELOFT_1_2_1_REVISION).down_revision == WIRELOFT_1_2_REVISION

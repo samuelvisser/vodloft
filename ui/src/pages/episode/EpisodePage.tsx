@@ -1,3 +1,4 @@
+import {sourceControls} from '../../lib/sourceControls'
 import {useState} from 'react'
 import {Link, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
@@ -16,6 +17,7 @@ import {useActiveOperation} from '../../components/OperationNotifier/OperationNo
 import {formatDate, formatDurationMinutes} from "../../utils/formatting";
 import './EpisodePage.css'
 import {faIcon} from '../../icons/faIcon'
+import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
 
 
 const OPERATION_STARTING_MESSAGE = 'This task is starting...'
@@ -229,7 +231,7 @@ export default function EpisodePage() {
                         <h1 id="episode-title" className="episode-title-text">{episode.title}</h1>
                         <ActionMenu
                             items={[
-                                {
+                                ...(sourceControls(show).metadataRefresh ? [{
                                     label: 'Refresh metadata',
                                     icon: faIcon('fass', 'arrows-rotate'),
                                     disabled: metadataRefreshBusy,
@@ -240,7 +242,7 @@ export default function EpisodePage() {
                                             : undefined,
                                     operation: metadataRefreshOperation,
                                     onSelect: () => void refreshMetadata(),
-                                },
+                                }] : []),
                                 ...(earlyDeleteAvailable ? [{
                                     label: 'Early Delete',
                                     icon: faIcon('fass', 'trash') as [string, string],
@@ -259,6 +261,7 @@ export default function EpisodePage() {
                             {isLive && <span className="episode-status-dot" aria-hidden="true"/>}
                             {statusLabel}
                         </span>
+                        {episode.drmProtected && <DrmBadge/>}
                         <span className="episode-summary-separator" aria-hidden="true"/>
                         <span className="episode-summary-item">
                             <FontAwesomeIcon icon={faIcon('fass', 'calendar')} aria-hidden="true"/>
@@ -286,23 +289,24 @@ export default function EpisodePage() {
                 {isDownloadable && (
                     <div className="episode-downloads" aria-labelledby="episode-downloads-title">
                         <h2 id="episode-downloads-title">Downloads</h2>
-                        {downloadStateError && (
+                        {episode.drmProtected && <DrmNotice/>}
+                        {!episode.drmProtected && downloadStateError && (
                             <div className="form-error-card" role="alert">
                                 Could not load download status: {downloadStateError.message}
                             </div>
                         )}
-                        {!downloadStateError && profiles === undefined && (
+                        {!episode.drmProtected && !downloadStateError && profiles === undefined && (
                             <div role="status" aria-busy="true" className="episode-downloads-loading">
                                 Loading download options…
                             </div>
                         )}
-                        {!downloadStateError && profiles !== undefined && !showProfiles?.length && (
+                        {!episode.drmProtected && !downloadStateError && profiles !== undefined && !showProfiles?.length && (
                             <p>
                                 No Local Media Profiles configured yet.{' '}
                                 <Link to="/add-local-media-profile">Add one</Link> to download this episode.
                             </p>
                         )}
-                        {!downloadStateError && !!showProfiles?.length && (
+                        {!episode.drmProtected && !downloadStateError && !!showProfiles?.length && (
                             <div role="list" aria-label="Available downloads per Local Media Profile">
                                 {showProfiles.map((profile) => {
                                     const download = downloadByProfileId.get(profile.id)

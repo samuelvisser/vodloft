@@ -47,7 +47,8 @@ class CatchAllSource(StubSource):
 
 @pytest.fixture
 def stub_sources(monkeypatch):
-    sources = dict(registry._sources)
+    # Only the stubs claim every domain, so no real catch-all Source answers first.
+    sources = {key: source for key, source in registry._sources.items() if ANY_DOMAIN not in source.domains}
     monkeypatch.setattr(registry, "_sources", sources)
     catch_all = registry.register(CatchAllSource())
     stub = registry.register(StubSource())

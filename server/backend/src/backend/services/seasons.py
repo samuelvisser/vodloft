@@ -17,12 +17,16 @@ def create_season_record(
     slug: str,
     name: str,
     update_show_profiles: bool = False,
+    season_number: int | None = None,
 ) -> Season:
-    """Create one persistent season without depending on an API request model."""
+    """Create one persistent season without depending on an API request model.
+
+    Without ``season_number`` a normal season is numbered after the show's last one.
+    """
     season_type = season_type_from_name(name)
     if season_type is SeasonType.EXTRA:
         season_number = 0
-    else:
+    elif season_number is None:
         season_number = max(
             (
                 existing.season_number

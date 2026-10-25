@@ -75,6 +75,20 @@ Movie output templates should distinguish the main movie from extras so differen
 
 A single video is one video added on its own, outside any show. It appears under **Videos** in the Library. Its page shows the uploader, upload date and description, and one download row for each Video Local Media Profile. Single videos are downloaded manually. **Refresh details** asks the site for the current title, description and thumbnail.
 
+Single videos come from yt-dlp, which supports YouTube and well over a thousand other sites. A link to a page yt-dlp has no dedicated support for is shown as "Other sites · best effort": VODLoft tries to find a video on the page, which often works for plain video pages but not always.
+
+## YouTube channels and playlists
+
+A YouTube channel or playlist, or a playlist on another site yt-dlp supports, can be added as a show: paste its link in **Add media** or in the Add Show wizard and pick Podcast or Series. A channel link adds the channel's Videos tab.
+
+These shows have no seasons of their own, so VODLoft makes one season per upload year and numbers the videos in each year by upload date, such as S2024E01 and S2024E02. A video found later is numbered after the ones VODLoft already has, so existing file names never change. Download Profiles work as for any other show. Their streams serve downloaded files only, and their metadata is not refreshed after a video is added.
+
+VODLoft checks the channel or playlist for new videos on the usual schedule. It looks up each new video once and pauses between lookups, so the first scan of a large channel takes a while. Private and deleted videos are skipped.
+
+## Media protected by DRM
+
+VODLoft cannot download media that is protected by DRM. Such an episode, movie or video shows a DRM badge, and its page says "Protected by DRM, cannot be downloaded" where the download controls would be. VODLoft marks an item this way when its Source reports DRM, or when a download fails because of it. Download Profiles skip protected episodes, and a download that fails because of DRM is not retried.
+
 ## Profiles and files are separate
 
 A Local Media Profile describes the local file VODLoft should create. A Download Profile describes which show episodes should be downloaded automatically. An RSS Stream Profile describes a private feed. A download record represents actual file activity.

@@ -1,0 +1,47 @@
+.drm-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: #7c2d12;
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    line-height: 1;
+}
+
+.drm-badge-cover {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 2;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 30%);
+}
+
+.drm-notice {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    padding: 10px 12px;
+    border: 1px solid rgba(124, 45, 18, 0.3);
+    border-radius: 10px;
+    background: rgba(234, 88, 12, 0.08);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+@media (prefers-color-scheme: dark) {
+    .drm-badge {
+        background: #fdba74;
+        color: #431407;
+    }
+
+    .drm-notice {
+        border-color: rgba(253, 186, 116, 0.3);
+        background: rgba(253, 186, 116, 0.08);
+    }
+}

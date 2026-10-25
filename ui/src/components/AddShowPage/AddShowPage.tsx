@@ -21,6 +21,8 @@ import {
 import {ShowTypeReg} from "../../types/show";
 import {useQueryClient} from "@tanstack/react-query";
 import {SeasonDetachedOut} from "../../types/schemas/season";
+import {useSourceLookup} from "../../lib/queries";
+import {SourceFeature, sourceHas} from "../../types/schemas/source";
 
 export type Props = {
     onCancel: () => void
@@ -119,6 +121,7 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
     const setWizardMessage = (message: string, type: WizardType) => setGlobalMessage({text: message, type})
     const clearWizardMessage = () => setGlobalMessage(null)
     const qc = useQueryClient()
+    const sources = useSourceLookup()
 
     const [step, setStep] = useState<WizardStep>(() => persisted?.step ?? 1)
     const wizardRootRef = useRef<HTMLDivElement>(null)
@@ -353,6 +356,7 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
             {step === 2 && (
                 <ShowActionStep
                     value={showAction}
+                    canStreamFromSource={!showSubmit || sourceHas(sources.get(showSubmit.sourceKey), SourceFeature.RSS_STREAMING)}
                     onChange={setShowAction}
                     onBack={() => setStep(1)}
                     onContinue={handleActionContinue}
@@ -373,6 +377,7 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
                     onFinish={() => handleFinish('stream')}
                     onCancel={handleCancel}
                     showSlug={showSubmit?.slug}
+                    show={showSubmit}
                     showTitle={showSubmit?.title}
                     downloadProfileDefaults={[]}
                     episodeTypesManuallyChanged={streamEpisodeTypesManuallyChanged}
@@ -397,6 +402,7 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
                     onContinue={() => setStep(4)}
                     onCancel={handleCancel}
                     showSlug={showSubmit.slug}
+                    show={showSubmit}
                     showType={showSubmit.type}
                 />
             )}
@@ -425,6 +431,7 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
                     }}
                     onCancel={handleCancel}
                     showSlug={showSubmit?.slug}
+                    show={showSubmit}
                     showType={showSubmit?.type}
                     seasons={seasonsSubmit as any}
                     continueLabel={showAction === 'download' ? 'Save show' : 'Continue'}
@@ -443,6 +450,7 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
                     onFinish={() => handleFinish('download-stream')}
                     onCancel={handleCancel}
                     showSlug={showSubmit?.slug}
+                    show={showSubmit}
                     downloadProfileDefaults={wizardDownloadProfileDefaults}
                     episodeTypesManuallyChanged={streamEpisodeTypesManuallyChanged}
                     onEpisodeTypesManuallyChanged={() => setStreamEpisodeTypesManuallyChanged(true)}

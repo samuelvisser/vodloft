@@ -23,7 +23,8 @@ from downloader.lifecycle import DownloadTracker
 from downloader.metadata import render_nfo
 from downloader.plan import DownloadPlan, SidecarSpec, build_download_plan
 from downloader.source import resolve_download_source
-from sources import get_source
+from downloader.ytdlp import resolve_ytdlp_source
+from sources import Feature, PlaybackKind, get_source
 
 
 def prepare_download_plan(session: Session, media_download_id: int, tracker: DownloadTracker) -> DownloadPlan:
@@ -63,7 +64,19 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     title, slug, media_id = media.title, media.slug, media.id
     thumbnail_url = select_thumbnail_url(media)
     media_source = get_source(media.source_key)
-    if episode is not None:
+    if (episode is not None and media_source.has(Feature.EPISODE_LISTS)) or video is not None:
+        # A listed episode is a video on a page, just like a single video.
+        page_url = media.sharing_url
+        session.rollback()
+        tracker.preparing("resolve_playback")
+        playback = media_source.video_playback(slug=slug, url=page_url)
+        tracker.ensure_active()
+        if playback.kind is PlaybackKind.YTDLP:
+            source = resolve_ytdlp_source(playback.url, command=playback.command, preferred_format=preferred, audio_only=audio_only, ffmpeg_path=ffmpeg_path)
+        else:
+            tracker.preparing("inspect_stream")
+            source = resolve_download_source(playback.url, preferred_format=preferred, audio_only=audio_only, remux_video_to_mp4=remux, cancellation=tracker.is_canceled)
+    elif episode is not None:
         video_url, audio_url = episode.video_url, episode.audio_url
         member_only = episode.show.membership_level != WlDwMembershipLevel.FREE.value
         session.rollback()
@@ -120,14 +133,6 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
                 # also gives an audio request a chance to switch between the
                 # direct audio source and the video fallback.
                 video_url = audio_url = None
-    elif video is not None:
-        video_url = video.sharing_url
-        session.rollback()
-        tracker.preparing("resolve_playback")
-        playback = media_source.video_playback(slug=slug, url=video_url)
-        tracker.ensure_active()
-        tracker.preparing("inspect_stream")
-        source = resolve_download_source(playback.url, preferred_format=preferred, audio_only=audio_only, remux_video_to_mp4=remux, cancellation=tracker.is_canceled)
     else:
         assert movie is not None
         movie_slug, duration = movie.slug, movie.duration

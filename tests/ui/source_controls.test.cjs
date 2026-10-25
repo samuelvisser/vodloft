@@ -37,7 +37,12 @@ test('a Source without Features gets none of the Daily Wire controls', () => {
         countdownDownloads: false,
         rssStreaming: false,
         movieExtras: false,
+        metadataRefresh: true,
     })
+})
+
+test('a Source that lists its episodes has no metadata refresh', () => {
+    assert.equal(sourceControls({sourceKey: 'ytdlp', sourceFeatures: ['shows', 'episode_lists']}).metadataRefresh, false)
 })
 
 test('Daily Wire items keep every control', () => {

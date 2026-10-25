@@ -15,6 +15,7 @@ from backend.types.show_types import EpisodeIdentifier
 from sources.dailywire.api.dw_api.client import ByShowSeason, MiddlewareClient
 from sources.dailywire.api.records import DwEpisodeRecord, DwSeasonRecord
 from sources.dailywire.auth import DeviceAuthClient
+from sources import Feature, get_source
 from task_manager.events.transactional import queue_event
 from ._helpers import get_latest_ep_index, get_season_from_list_by_id, get_shows
 from ...helpers.episodes.events import queue_episode_status_events
@@ -36,6 +37,7 @@ from ...helpers.episodes.save import (
     resolve_dw_episodes,
     save_resolved_episodes_per_season_asc,
 )
+from ...helpers.listed_shows import index_listed_show
 from ...helpers.progress import ProgressBounds, update_progress
 from ...helpers.seasons import create_season_by_dw_season
 from ...types.general import RecordOrder
@@ -154,6 +156,10 @@ async def run_fetch_new_episodes(
     for current_show_id in show_ids:
         show = s.get(Show, current_show_id)
         if show is None:
+            continue
+        show_source = get_source(show.source_key)
+        if show_source.has(Feature.EPISODE_LISTS):
+            completed.append(_index_listed_show(s, show=show, source=show_source, dry_run=dry_run))
             continue
         try:
             found = await _fetch_show(
@@ -458,6 +464,25 @@ async def _fetch_show(
     s.commit()
     update_progress(progress, 100, _completion_message(total, len(monitor_requests)))
     return total
+
+
+def _index_listed_show(s: Session, *, show: Show, source, dry_run: bool) -> ShowEpisodeScanResult:
+    result = ShowEpisodeScanResult(show_id=show.id, show_slug=show.slug, show_title=show.title, episodes_found=0)
+    if dry_run:
+        return result
+    from backend.services.custom_indexes import request_show_custom_index_reconciliation
+    show_id = show.id
+    try:
+        found = index_listed_show(s, show_id=show_id, source=source)
+        show = s.get(Show, show_id)
+        if show is not None:
+            request_show_custom_index_reconciliation(s, show_id)
+            _queue_show_indexed(s, show=show, indexed_count=found)
+        s.commit()
+    except Exception:
+        s.rollback()
+        raise
+    return replace(result, episodes_found=found)
 
 
 def _announce_new_episodes(

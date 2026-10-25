@@ -6,6 +6,16 @@ from typing import Iterable
 from backend.db.models.media_item import Episode
 from backend.types.show_types import EpisodeIdentifier
 from downloader.metadata import MediaServerMetadata
+from sources import Feature, UnknownSourceError, get_source
+
+
+def _studios(source_key: str) -> tuple[str, ...]:
+    try:
+        source = get_source(source_key)
+    except UnknownSourceError:
+        return ()
+    # A Source that lists other people's videos, such as yt-dlp, is not their studio.
+    return () if source.has(Feature.EPISODE_LISTS) else (source.name,)
 
 
 def build_episode_metadata(episode: Episode, show) -> MediaServerMetadata:
@@ -26,6 +36,7 @@ def build_episode_metadata(episode: Episode, show) -> MediaServerMetadata:
         title=episode.title,
         description=episode.description,
         unique_id=episode.slug or episode.uuid,
+        unique_id_type=episode.source_key,
         source_url=episode.sharing_url,
         show_title=show.title,
         season_number=season_number,
@@ -34,7 +45,7 @@ def build_episode_metadata(episode: Episode, show) -> MediaServerMetadata:
         aired=_as_date(published),
         duration_seconds=episode.duration,
         authors=_strings((show.author_name,)),
-        studios=("The Daily Wire",),
+        studios=_studios(episode.source_key),
         media_type="episode",
     )
 

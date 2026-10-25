@@ -11,7 +11,7 @@ from backend.api.models.source import SourcedResponse
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.show_types import ShowType, EpisodeIdentifier
 from backend.utils.helpers import generate_uuid
-from sources import Feature
+from sources import DAILYWIRE, Feature
 
 
 # ---------- Strict input (create/update) ----------
@@ -35,6 +35,7 @@ class ShowAPICreate(_ShowAPIBaseIn):
     """Request body for creating a show."""
 
     slug: str
+    source_key: str = DAILYWIRE
     membership_level: WlDwMembershipLevel
     type: ShowType
     episode_identifier: EpisodeIdentifier

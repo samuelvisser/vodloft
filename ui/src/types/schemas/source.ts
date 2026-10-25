@@ -11,6 +11,9 @@ export const SourceFeature = {
     MEMBERSHIP_LEVELS: 'membership_levels',
     RSS_STREAMING: 'rss_streaming',
     VIDEOS: 'videos',
+    EPISODE_LISTS: 'episode_lists',
+    PROGRAM_UPDATES: 'program_updates',
+    COOKIES: 'cookies',
 } as const
 export type SourceFeatureValue = typeof SourceFeature[keyof typeof SourceFeature]
 
@@ -48,6 +51,8 @@ export const ResolvedLinkReadSchema = z.object({
     url: z.string(),
     showSlug: z.string().nullable().optional(),
     showUrl: z.string().nullable().optional(),
+    site: z.string().nullable().optional(),
+    drmProtected: z.boolean().optional().default(false),
     preview: z.object({
         title: z.string(),
         description: z.string().nullable().optional(),
@@ -56,3 +61,27 @@ export const ResolvedLinkReadSchema = z.object({
     }),
 })
 export type ResolvedLinkRead = z.infer<typeof ResolvedLinkReadSchema>
+
+export const ProgramStatusReadSchema = z.object({
+    name: z.string(),
+    version: z.string().nullable().optional(),
+    lastUpdateAt: z.string().nullable().optional(),
+    lastUpdateError: z.string().nullable().optional(),
+})
+export type ProgramStatusRead = z.infer<typeof ProgramStatusReadSchema>
+
+export const CookiesReadSchema = z.object({hasCookies: z.boolean()})
+export type CookiesRead = z.infer<typeof CookiesReadSchema>
+
+/** A show at a Source with listed episodes, shaped like the fields of a new show. */
+export const ShowDetailsReadSchema = z.object({
+    sourceKey: z.string(),
+    slug: z.string(),
+    title: z.string(),
+    description: z.string().nullable().optional(),
+    sharingUrl: z.string(),
+    authorName: z.string(),
+    authorSlug: z.string(),
+    thumbnailLandscapePath: z.string().nullable().optional(),
+})
+export type ShowDetailsRead = z.infer<typeof ShowDetailsReadSchema>

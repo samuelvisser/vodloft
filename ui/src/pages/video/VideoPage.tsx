@@ -15,6 +15,8 @@ import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {VideoReadSchema} from '../../types/schemas/video'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
 import '../episode/EpisodePage.css'
+import {siteName} from '../../lib/siteName'
+import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
 
 function formatDuration(seconds: number) {
     if (!seconds) return null
@@ -23,6 +25,7 @@ function formatDuration(seconds: number) {
     return hours ? `${hours}h ${minutes}m` : `${Math.max(minutes, 1)}m`
 }
 
+/** The site a video is on, since one Source can serve many sites. */
 export default function VideoPage() {
     const {id} = useParams()
     const videoId = id && /^\d+$/.test(id) ? Number(id) : undefined
@@ -147,6 +150,7 @@ export default function VideoPage() {
                     </div>
                     <div className="episode-summary" aria-label="Video metadata">
                         <SourceBadge sourceKey={video.sourceKey}/>
+                        {video.drmProtected && <DrmBadge/>}
                         {video.authorName && (
                             <>
                                 <span className="episode-summary-separator" aria-hidden="true"/>
@@ -179,7 +183,7 @@ export default function VideoPage() {
                         <span className="episode-summary-separator" aria-hidden="true"/>
                         <a className="episode-summary-item" href={video.sharingUrl} target="_blank" rel="noreferrer">
                             <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')} aria-hidden="true"/>
-                            <span>Open on {sourceName}</span>
+                            <span>Open on {siteName(video.sharingUrl) ?? sourceName}</span>
                         </a>
                     </div>
                 </header>
@@ -193,23 +197,24 @@ export default function VideoPage() {
 
                 <div className="episode-downloads" aria-labelledby="video-downloads-title">
                     <h2 id="video-downloads-title">Downloads</h2>
-                    {downloadStateError && (
+                    {video.drmProtected && <DrmNotice/>}
+                    {!video.drmProtected && downloadStateError && (
                         <div className="form-error-card" role="alert">
                             Could not load download status: {downloadStateError.message}
                         </div>
                     )}
-                    {!downloadStateError && profiles === undefined && (
+                    {!video.drmProtected && !downloadStateError && profiles === undefined && (
                         <div role="status" aria-busy="true" className="episode-downloads-loading">
                             Loading download options…
                         </div>
                     )}
-                    {!downloadStateError && profiles !== undefined && !videoProfiles?.length && (
+                    {!video.drmProtected && !downloadStateError && profiles !== undefined && !videoProfiles?.length && (
                         <p>
                             No Video Local Media Profiles yet.{' '}
                             <Link to="/add-local-media-profile?type=video">Add one</Link> to download this video.
                         </p>
                     )}
-                    {!downloadStateError && !!videoProfiles?.length && (
+                    {!video.drmProtected && !downloadStateError && !!videoProfiles?.length && (
                         <div role="list" aria-label="Available downloads per Local Media Profile">
                             {videoProfiles.map((profile) => {
                                 const download = downloadByProfileId.get(profile.id)

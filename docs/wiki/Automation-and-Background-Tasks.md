@@ -15,8 +15,9 @@ For most installations, the defaults are a good balance between keeping content 
 | Download verification | Every 2 hours |
 | Tracked files on disk | Every 10 minutes |
 | Stalled task timeout | 20 minutes without progress |
+| yt-dlp update | Once a week, checked daily and at startup |
 
-All of these can be adjusted from **Settings**, but there is usually no need to make them more aggressive.
+The yt-dlp update runs on its own schedule. You can also start it from the Sources tab with **Update now**. Everything else can be adjusted from **Settings**, but there is usually no need to make them more aggressive.
 
 ## Finding new episodes
 

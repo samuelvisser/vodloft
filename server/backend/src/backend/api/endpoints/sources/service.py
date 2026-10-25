@@ -4,10 +4,10 @@ import logging
 
 from sqlalchemy.orm import Session
 
-from backend.api.models.source import ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SourceAPIRead
+from backend.api.models.source import ProgramStatusAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SourceAPIRead
 from backend.db.models import Episode, Show
 from config.network import is_no_internet_error
-from sources import LinkKind, ResolvedLink, Source, all_sources, sources_for
+from sources import Feature, LinkKind, ProgramStatus, ResolvedLink, Source, UnknownSourceError, all_sources, get_source, sources_for
 
 
 logger = logging.getLogger(__name__)
@@ -36,6 +36,27 @@ def list_sources() -> list[SourceAPIRead]:
     return [to_source_read(source) for source in all_sources()]
 
 
+class SourceFeatureMissingError(LookupError):
+    pass
+
+
+def source_with(source_id: str, feature: Feature) -> Source:
+    try:
+        source = get_source(source_id)
+    except UnknownSourceError as exc:
+        raise SourceFeatureMissingError(str(exc)) from exc
+    if not source.has(feature):
+        raise SourceFeatureMissingError(f"{source.name} does not support this")
+    return source
+
+
+def to_program_read(status: ProgramStatus) -> ProgramStatusAPIRead:
+    return ProgramStatusAPIRead(
+        name=status.name, version=status.version,
+        last_update_at=status.last_update_at, last_update_error=status.last_update_error,
+    )
+
+
 def _show_of_local_episode(s: Session, source: Source, episode_slug: str) -> Show | None:
     episode = (
         s.query(Episode)
@@ -58,6 +79,8 @@ def _to_read(s: Session, source: Source, link: ResolvedLink) -> ResolvedLinkAPIR
         url=link.url,
         show_slug=show_slug,
         show_url=show_url,
+        site=link.site,
+        drm_protected=link.drm_protected,
         preview=ResolvedLinkPreviewAPIRead(
             title=link.title,
             description=link.description,

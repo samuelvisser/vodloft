@@ -15,6 +15,8 @@ export function sourceControls(item: SourcedItem) {
         countdownDownloads: has(SourceFeature.LIVE_EPISODES),
         rssStreaming: has(SourceFeature.RSS_STREAMING),
         movieExtras: has(SourceFeature.MOVIE_EXTRAS),
+        // Listed episodes are not refreshed from their Source after they are indexed.
+        metadataRefresh: item === undefined || !hasSourceFeature(item, SourceFeature.EPISODE_LISTS),
     }
 }
 

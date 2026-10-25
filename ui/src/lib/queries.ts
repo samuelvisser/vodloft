@@ -59,7 +59,10 @@ import {
 import {TaskOperationRead} from "../types/schemas/operation";
 import {MovieRead, MovieReadSchema} from "../types/schemas/movie";
 import {VideoRead, VideoReadSchema} from "../types/schemas/video";
-import {DEFAULT_SOURCE_KEY, ResolvedLinkRead, ResolvedLinkReadSchema, SourceRead, SourceReadSchema} from "../types/schemas/source";
+import {
+    CookiesRead, CookiesReadSchema, DEFAULT_SOURCE_KEY, ProgramStatusRead, ProgramStatusReadSchema, ResolvedLinkRead,
+    ResolvedLinkReadSchema, ShowDetailsRead, ShowDetailsReadSchema, SourceRead, SourceReadSchema,
+} from "../types/schemas/source";
 import {
     DailywireCatalogRead,
     DailywireCatalogReadSchema,
@@ -287,6 +290,82 @@ export function useSourceLookup() {
             name: (id?: string | null) => (id ? byId.get(id)?.name ?? id : ''),
         }
     }, [sources])
+}
+
+export function useSourceProgram(sourceId: string, enabled = true) {
+    return useQuery<ProgramStatusRead, Error, ProgramStatusRead, readonly ['sourceProgram', string]>({
+        queryKey: ['sourceProgram', sourceId] as const,
+        enabled,
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceId)}/program`,
+            ProgramStatusReadSchema,
+            signal,
+        ),
+    })
+}
+
+/** Fetch the latest version of the program a Source runs. */
+export async function updateSourceProgram(sourceId: string): Promise<ProgramStatusRead> {
+    const response = await fetch(`${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceId)}/program/update`, {
+        method: 'POST',
+        credentials: 'include',
+    })
+    if (!response.ok) throw await responseError(response)
+    return ProgramStatusReadSchema.parse(await response.json())
+}
+
+export function useSourceCookies(sourceId: string, enabled = true) {
+    return useQuery<CookiesRead, Error, CookiesRead, readonly ['sourceCookies', string]>({
+        queryKey: ['sourceCookies', sourceId] as const,
+        enabled,
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceId)}/cookies`,
+            CookiesReadSchema,
+            signal,
+        ),
+    })
+}
+
+/** Store a cookies.txt file for a Source, or remove it with null. */
+export async function saveSourceCookies(sourceId: string, content: string | null): Promise<CookiesRead> {
+    const response = await fetch(`${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceId)}/cookies`, {
+        method: content === null ? 'DELETE' : 'PUT',
+        credentials: 'include',
+        headers: content === null ? undefined : {'Content-Type': 'application/json'},
+        body: content === null ? undefined : JSON.stringify({content}),
+    })
+    if (!response.ok) throw await responseError(response)
+    return CookiesReadSchema.parse(await response.json())
+}
+
+/** Which Source recognises a link, for pages that need to know before anything is added. */
+export function useResolvedLink(url: string | undefined) {
+    return useQuery<ResolvedLinkRead, Error, ResolvedLinkRead, readonly ['resolvedLink', string | undefined]>({
+        queryKey: ['resolvedLink', url] as const,
+        enabled: !!url,
+        queryFn: ({signal}) => resolveLink(url!, signal),
+        staleTime: 5 * 60 * 1000,
+        retry: false,
+    })
+}
+
+/** A show to add, at a Source that lists its episodes. */
+export function useListedShowDetails(sourceId: string | undefined, url: string | undefined) {
+    return useQuery<ShowDetailsRead, Error, ShowDetailsRead, readonly ['listedShow', string | undefined, string | undefined]>({
+        queryKey: ['listedShow', sourceId, url] as const,
+        enabled: !!sourceId && !!url,
+        queryFn: async ({signal}) => {
+            const params = new URLSearchParams({url: url!})
+            const response = await fetch(
+                `${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceId!)}/show?${params}`,
+                {signal, credentials: 'include'},
+            )
+            if (!response.ok) throw await responseError(response)
+            return ShowDetailsReadSchema.parse(await response.json())
+        },
+        staleTime: 5 * 60 * 1000,
+        retry: false,
+    })
 }
 
 /** Ask the backend which Source recognises a link, and what it points to. */

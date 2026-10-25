@@ -82,6 +82,8 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
         control.onSelect()
     }
 
+    if (items.length === 0) return null
+
     return (
         <div ref={rootRef} className={`action-menu${open ? ' is-open' : ''}${className ? ` ${className}` : ''}`}>
             <div className="action-menu-inline-items" role="group" aria-label={label}>

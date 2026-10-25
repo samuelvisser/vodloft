@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
+from collections.abc import Iterator
 from typing import Any, ClassVar
 from urllib.parse import urlsplit
 
@@ -27,6 +28,11 @@ class Feature(StrEnum):
     MEMBERSHIP_LEVELS = "membership_levels"
     RSS_STREAMING = "rss_streaming"
     VIDEOS = "videos"
+    EPISODE_LISTS = "episode_lists"
+    """Shows whose episodes the Source lists with ``list_episodes``; VODLoft
+    groups them into one season per upload year."""
+    PROGRAM_UPDATES = "program_updates"
+    COOKIES = "cookies"
 
 
 @dataclass(frozen=True)
@@ -38,17 +44,29 @@ class EpisodeMedia:
     drm_protected: bool = False
 
 
+class PlaybackKind(StrEnum):
+    """How the downloader fetches a playback URL."""
+
+    URL = "url"
+    """The URL is the media itself: a file or an HLS playlist."""
+    YTDLP = "ytdlp"
+    """The URL is a web page that yt-dlp downloads with ``MoviePlayback.command``."""
+
+
 @dataclass(frozen=True)
 class MoviePlayback:
-    """The playable URL of a movie or movie extra.
+    """The playable URL of a movie, movie extra or single video.
 
     ``metadata`` is the Source's own record when the playback lookup also
     returned fresher metadata; the Source that produced it knows how to apply it.
+    ``command`` is the yt-dlp program and options for ``PlaybackKind.YTDLP``.
     """
 
     url: str
     metadata: Any = None
     drm_protected: bool = False
+    kind: PlaybackKind = PlaybackKind.URL
+    command: tuple[str, ...] = ()
 
 
 class LinkKind(StrEnum):
@@ -75,6 +93,10 @@ class ResolvedLink:
     author_name: str | None = None
     show_slug: str | None = None
     show_url: str | None = None
+    site: str | None = None
+    """The site the link is on, for a Source that serves many sites."""
+    drm_protected: bool = False
+    """The video is protected by DRM, so it can be added but not downloaded."""
 
 
 @dataclass(frozen=True)
@@ -93,6 +115,31 @@ class VideoDetails:
     author_name: str | None = None
     author_url: str | None = None
     published_at: datetime | None = None
+    drm_protected: bool = False
+    """The video is protected by DRM, so it can be added but not downloaded."""
+
+
+@dataclass(frozen=True)
+class ShowDetails:
+    """What VODLoft stores about a show from a Source with ``Feature.EPISODE_LISTS``."""
+
+    slug: str
+    url: str
+    title: str
+    description: str | None = None
+    image_url: str | None = None
+    author_name: str | None = None
+    author_url: str | None = None
+
+
+@dataclass(frozen=True)
+class ProgramStatus:
+    """The program a Source runs, for a Source with ``Feature.PROGRAM_UPDATES``."""
+
+    name: str
+    version: str | None
+    last_update_at: datetime | None = None
+    last_update_error: str | None = None
 
 
 ANY_DOMAIN = "*"
@@ -136,5 +183,42 @@ class Source(ABC):
         raise NotImplementedError(f"{self.name} has no single videos")
 
     def video_playback(self, *, slug: str, url: str) -> MoviePlayback:
-        """Resolve the playable URL of a single video. Only Sources with ``Feature.VIDEOS`` implement it."""
+        """Resolve the playable URL of a single video, or of an episode of a show
+        from ``list_episodes``. Only Sources with ``Feature.VIDEOS`` or
+        ``Feature.EPISODE_LISTS`` implement it."""
         raise NotImplementedError(f"{self.name} has no single videos")
+
+    def show_details(self, url: str) -> ShowDetails:
+        """Look up a show. Only Sources with ``Feature.EPISODE_LISTS`` implement it."""
+        raise NotImplementedError(f"{self.name} does not list episodes")
+
+    def list_episodes(self, url: str, *, known: frozenset[str]) -> Iterator[VideoDetails]:
+        """The show's episodes whose slugs are not in ``known``.
+
+        An episode that cannot be looked up right now is left out, so a later
+        scan tries it again.
+        """
+        raise NotImplementedError(f"{self.name} does not list episodes")
+
+    def program_status(self) -> ProgramStatus:
+        """The program this Source runs. Only Sources with ``Feature.PROGRAM_UPDATES`` implement it."""
+        raise NotImplementedError(f"{self.name} has no program to update")
+
+    def program_update_due(self) -> bool:
+        """True when the weekly update should fetch a new version of the program."""
+        raise NotImplementedError(f"{self.name} has no program to update")
+
+    def update_program(self) -> ProgramStatus:
+        """Fetch the latest version of the program and use it from now on."""
+        raise NotImplementedError(f"{self.name} has no program to update")
+
+    def has_cookies(self) -> bool:
+        """True when a cookies file is stored. Only Sources with ``Feature.COOKIES`` implement it."""
+        raise NotImplementedError(f"{self.name} takes no cookies file")
+
+    def save_cookies(self, content: bytes) -> None:
+        """Store a cookies file that every lookup and download uses. Raises ValueError for a file it cannot use."""
+        raise NotImplementedError(f"{self.name} takes no cookies file")
+
+    def remove_cookies(self) -> None:
+        raise NotImplementedError(f"{self.name} takes no cookies file")
