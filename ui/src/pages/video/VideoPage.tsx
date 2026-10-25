@@ -15,6 +15,7 @@ import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {VideoReadSchema} from '../../types/schemas/video'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
 import '../episode/EpisodePage.css'
+import {siteName} from '../../lib/siteName'
 
 function formatDuration(seconds: number) {
     if (!seconds) return null
@@ -24,14 +25,6 @@ function formatDuration(seconds: number) {
 }
 
 /** The site a video is on, since one Source can serve many sites. */
-function siteName(url: string): string | null {
-    try {
-        return new URL(url).hostname.replace(/^www\./, '')
-    } catch {
-        return null
-    }
-}
-
 export default function VideoPage() {
     const {id} = useParams()
     const videoId = id && /^\d+$/.test(id) ? Number(id) : undefined

@@ -1,6 +1,8 @@
 import {useEffect, useMemo, useRef} from "react";
 import DailywireShowCard from "./DailywireShowCard";
-import {useDailywireShow, useDailywireUserInfo} from "../../lib/queries";
+import ShowPreviewCard from "./ShowPreviewCard";
+import {useDailywireShow, useDailywireUserInfo, useListedShowDetails, useResolvedLink} from "../../lib/queries";
+import {SourceFeature, sourceHas} from "../../types/schemas/source";
 import ReadMore from "../../utils/ReadMore";
 import {Controller, SubmitHandler, useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
@@ -69,6 +71,20 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
         }
     }, [urlParsed]);
 
+    // --- A link that is not a Daily Wire show page goes to the Source that recognises it.
+    // Sources that list their episodes describe the show themselves.
+    const resolved = useResolvedLink(urlParsed.success && !slugFromUrl ? urlParsed.data : undefined);
+    const listedSource = resolved.data?.kind === 'show' && sourceHas(resolved.data.source, SourceFeature.EPISODE_LISTS)
+        ? resolved.data.source
+        : undefined;
+    const listed = useListedShowDetails(listedSource?.id, listedSource ? resolved.data?.url : undefined);
+    useEffect(() => {
+        if (!listed.data) return;
+        // Episodes of a listed show are numbered per upload year.
+        setValue("episodeIdentifier", EpisodeIdentifierReg.Enum.seasonal, {shouldValidate: true});
+        setValue("membershipLevel", DwMembershipLevelReg.Enum.FREE, {shouldValidate: true});
+    }, [listed.data, setValue]);
+
     // --- Watch the type and set the episodeIdentifier to seasonal when the type is series
     const watchedType = watch("type");
     useEffect(() => {
@@ -101,6 +117,7 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
 
     // --- Apply the current membership level to the form
     useEffect(() => {
+        if (!slugFromUrl) return;
         setValue('membershipLevel', dwAccessLevel ?? '' as any, {shouldDirty: true});
 
         if (dwUserInfo.isError) {
@@ -109,7 +126,7 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
                 setError('membershipLevel', {type: 'server', message: `Failed to fetch current membership level: ${dwUserInfo.error?.detail ?? ''}`});
             }
         }
-    }, [dwUserInfo.isError, setValue, setError, dwAccessLevel]);
+    }, [dwUserInfo.isError, setValue, setError, dwAccessLevel, slugFromUrl]);
 
     // --- Prefill defaults for type & episodeIdentifier from the external API when available
     useEffect(() => {
@@ -131,6 +148,35 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
 
     // --- Submit handler
     const onSubmit: SubmitHandler<ShowCreateFormIn> = (formOnly: ShowCreateFormIn) => {
+        if (!slugFromUrl) {
+            if (!listed.data) {
+                setError("url", {type: "validate", message: "Paste the link to a show or channel"});
+                return;
+            }
+            const details = listed.data;
+            onSeasonsSubmit([]);
+            onSubmitParent(ShowCreatePayloadSchema.parse({
+                ...formOnly,
+                membershipLevel: DwMembershipLevelReg.Enum.FREE,
+                episodeIdentifier: EpisodeIdentifierReg.Enum.seasonal,
+                sourceKey: details.sourceKey,
+                dwId: details.slug,
+                slug: details.slug,
+                title: details.title,
+                description: details.description ?? null,
+                backgroundImagePath: null,
+                logoImagePath: null,
+                sharingUrl: details.sharingUrl,
+                authorName: details.authorName,
+                authorSlug: details.authorSlug,
+                authorHeadshotPath: null,
+                thumbnailLandscapePath: details.thumbnailLandscapePath ?? null,
+                thumbnailPortraitPath: null,
+                thumbnailSquarePath: null,
+            }));
+            onContinue();
+            return;
+        }
         // Gather/normalize derived fields from the API response
         const dwShowData = dw.data as DailywireShowRead;
 
@@ -192,12 +238,82 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
                     </div>
                 )}
                 <div id="url-help" className="help">
-                    The link to the show's own page. To add something else, use Add media.
+                    The link to the show's own page, such as a Daily Wire show, a YouTube channel or a playlist.
+                    To add something else, use Add media.
                 </div>
             </div>
 
+            {/* A show from a Source that lists its episodes */}
+            {urlParsed.success && !slugFromUrl && (
+                <>
+                    <div className="form-row" aria-live="polite">
+                        {resolved.isPending || listed.isFetching ? (
+                            <div className="dw-card" aria-busy="true">
+                                <div className="dw-card-body">
+                                    <div className="dw-card-title">Checking show…</div>
+                                    <div className="dw-card-desc">Looking up this link</div>
+                                </div>
+                            </div>
+                        ) : resolved.isError || listed.isError ? (
+                            <div className="form-error-card" role="alert">
+                                {(resolved.error ?? listed.error)?.message}
+                            </div>
+                        ) : listed.data ? (
+                            <ShowPreviewCard
+                                title={listed.data.title}
+                                authorName={listed.data.authorName}
+                                description={listed.data.description}
+                                imageUrl={listed.data.thumbnailLandscapePath}
+                            />
+                        ) : (
+                            <div className="form-error-card" role="alert">
+                                {resolved.data?.kind === 'show'
+                                    ? `VODLoft cannot add shows from ${resolved.data.source.name} yet.`
+                                    : 'This link is not a show. Paste the link to a show, channel or playlist, or add it from Add media.'}
+                            </div>
+                        )}
+                    </div>
+                    {listed.data && (
+                        <div className="form-row">
+                            <label htmlFor="show-type">Show type</label>
+                            <Controller
+                                control={control}
+                                name="type"
+                                render={({field}) => (
+                                    <Select
+                                        inputId="show-type"
+                                        options={ShowTypeReg.options}
+                                        value={ShowTypeReg.options.find(o => o.value === field.value) ?? null}
+                                        onChange={(opt) => field.onChange(opt?.value ?? "")}
+                                        onBlur={field.onBlur}
+                                        aria-invalid={!!errors.type}
+                                        aria-describedby={errors.type ? 'show-type-errors' : 'show-type-help'}
+                                        isClearable
+                                    />
+                                )}
+                            />
+                            {errors.type && (
+                                <div id="show-type-errors" className="error" role="alert" aria-live="polite">
+                                    {errors.type.message as string}
+                                </div>
+                            )}
+                            <div className="help" id="show-type-help">
+                                <ReadMore summary={<span>Why do I need to choose this?</span>}>
+                                    <p><b>Podcast</b> shows download and stream episodes from <i>newest</i> to <i>oldest</i>,
+                                        which suits most channels.</p>
+                                    <p><b>Series</b> shows download and stream episodes from <i>oldest</i> to <i>newest</i>,
+                                        which suits a playlist you watch in order.</p>
+                                    <p>Either way, VODLoft puts the videos of each upload year in their own season and numbers
+                                        them by upload date, like S2024E01.</p>
+                                </ReadMore>
+                            </div>
+                        </div>
+                    )}
+                </>
+            )}
+
             {/* Preview fetched DailyWire show info */}
-            {urlParsed.success && (
+            {urlParsed.success && slugFromUrl && (
                 <>
                     <div className="form-row" aria-live="polite">
                         <DailywireShowCard showSlug={slugFromUrl}/>

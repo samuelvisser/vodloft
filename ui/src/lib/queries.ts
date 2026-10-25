@@ -61,7 +61,7 @@ import {MovieRead, MovieReadSchema} from "../types/schemas/movie";
 import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
     CookiesRead, CookiesReadSchema, DEFAULT_SOURCE_KEY, ProgramStatusRead, ProgramStatusReadSchema, ResolvedLinkRead,
-    ResolvedLinkReadSchema, SourceRead, SourceReadSchema,
+    ResolvedLinkReadSchema, ShowDetailsRead, ShowDetailsReadSchema, SourceRead, SourceReadSchema,
 } from "../types/schemas/source";
 import {
     DailywireCatalogRead,
@@ -336,6 +336,36 @@ export async function saveSourceCookies(sourceId: string, content: string | null
     })
     if (!response.ok) throw await responseError(response)
     return CookiesReadSchema.parse(await response.json())
+}
+
+/** Which Source recognises a link, for pages that need to know before anything is added. */
+export function useResolvedLink(url: string | undefined) {
+    return useQuery<ResolvedLinkRead, Error, ResolvedLinkRead, readonly ['resolvedLink', string | undefined]>({
+        queryKey: ['resolvedLink', url] as const,
+        enabled: !!url,
+        queryFn: ({signal}) => resolveLink(url!, signal),
+        staleTime: 5 * 60 * 1000,
+        retry: false,
+    })
+}
+
+/** A show to add, at a Source that lists its episodes. */
+export function useListedShowDetails(sourceId: string | undefined, url: string | undefined) {
+    return useQuery<ShowDetailsRead, Error, ShowDetailsRead, readonly ['listedShow', string | undefined, string | undefined]>({
+        queryKey: ['listedShow', sourceId, url] as const,
+        enabled: !!sourceId && !!url,
+        queryFn: async ({signal}) => {
+            const params = new URLSearchParams({url: url!})
+            const response = await fetch(
+                `${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceId!)}/show?${params}`,
+                {signal, credentials: 'include'},
+            )
+            if (!response.ok) throw await responseError(response)
+            return ShowDetailsReadSchema.parse(await response.json())
+        },
+        staleTime: 5 * 60 * 1000,
+        retry: false,
+    })
 }
 
 /** Ask the backend which Source recognises a link, and what it points to. */

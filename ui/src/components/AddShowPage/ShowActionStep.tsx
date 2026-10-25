@@ -9,6 +9,8 @@ type Props = {
     onContinue: () => void
     onCancel: () => void
     isSubmitting?: boolean
+    /** False for a Source that cannot stream episodes it has not downloaded. */
+    canStreamFromSource?: boolean
 }
 
 const OPTIONS: Array<{
@@ -43,7 +45,8 @@ const OPTIONS: Array<{
     },
 ]
 
-export default function ShowActionStep({value, onChange, onBack, onContinue, onCancel, isSubmitting}: Props) {
+export default function ShowActionStep({value, onChange, onBack, onContinue, onCancel, isSubmitting, canStreamFromSource = true}: Props) {
+    const options = canStreamFromSource ? OPTIONS : OPTIONS.filter((option) => option.value !== 'stream')
     return (
         <div className="show-action-step">
             <div className="show-action-heading">
@@ -52,7 +55,7 @@ export default function ShowActionStep({value, onChange, onBack, onContinue, onC
             </div>
 
             <div className="show-action-options" role="radiogroup" aria-label="Show setup mode">
-                {OPTIONS.map((option, index) => {
+                {options.map((option, index) => {
                     const selected = value === option.value
                     return (
                         <button

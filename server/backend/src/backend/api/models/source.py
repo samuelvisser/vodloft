@@ -73,6 +73,19 @@ class ProgramStatusAPIRead(ResponseBase):
     last_update_error: Optional[str] = None
 
 
+class ShowDetailsAPIRead(ResponseBase):
+    """A show at a Source with listed episodes, shaped like the fields of a new show."""
+
+    source_key: str
+    slug: str
+    title: str
+    description: Optional[str] = None
+    sharing_url: str
+    author_name: str
+    author_slug: str
+    thumbnail_landscape_path: Optional[str] = None
+
+
 class CookiesAPIRead(ResponseBase):
     has_cookies: bool
 

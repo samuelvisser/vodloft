@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
+from collections.abc import Iterator
 from typing import Any, ClassVar
 from urllib.parse import urlsplit
 
@@ -27,6 +28,9 @@ class Feature(StrEnum):
     MEMBERSHIP_LEVELS = "membership_levels"
     RSS_STREAMING = "rss_streaming"
     VIDEOS = "videos"
+    EPISODE_LISTS = "episode_lists"
+    """Shows whose episodes the Source lists with ``list_episodes``; VODLoft
+    groups them into one season per upload year."""
     PROGRAM_UPDATES = "program_updates"
     COOKIES = "cookies"
 
@@ -112,6 +116,19 @@ class VideoDetails:
 
 
 @dataclass(frozen=True)
+class ShowDetails:
+    """What VODLoft stores about a show from a Source with ``Feature.EPISODE_LISTS``."""
+
+    slug: str
+    url: str
+    title: str
+    description: str | None = None
+    image_url: str | None = None
+    author_name: str | None = None
+    author_url: str | None = None
+
+
+@dataclass(frozen=True)
 class ProgramStatus:
     """The program a Source runs, for a Source with ``Feature.PROGRAM_UPDATES``."""
 
@@ -162,8 +179,22 @@ class Source(ABC):
         raise NotImplementedError(f"{self.name} has no single videos")
 
     def video_playback(self, *, slug: str, url: str) -> MoviePlayback:
-        """Resolve the playable URL of a single video. Only Sources with ``Feature.VIDEOS`` implement it."""
+        """Resolve the playable URL of a single video, or of an episode of a show
+        from ``list_episodes``. Only Sources with ``Feature.VIDEOS`` or
+        ``Feature.EPISODE_LISTS`` implement it."""
         raise NotImplementedError(f"{self.name} has no single videos")
+
+    def show_details(self, url: str) -> ShowDetails:
+        """Look up a show. Only Sources with ``Feature.EPISODE_LISTS`` implement it."""
+        raise NotImplementedError(f"{self.name} does not list episodes")
+
+    def list_episodes(self, url: str, *, known: frozenset[str]) -> Iterator[VideoDetails]:
+        """The show's episodes whose slugs are not in ``known``.
+
+        An episode that cannot be looked up right now is left out, so a later
+        scan tries it again.
+        """
+        raise NotImplementedError(f"{self.name} does not list episodes")
 
     def program_status(self) -> ProgramStatus:
         """The program this Source runs. Only Sources with ``Feature.PROGRAM_UPDATES`` implement it."""

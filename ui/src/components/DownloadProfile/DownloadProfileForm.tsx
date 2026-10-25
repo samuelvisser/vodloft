@@ -16,6 +16,8 @@ type Props = {
     profileMode?: 'create' | 'update'
     showRoot?: boolean
     disabledEpisodeTypes?: ReadonlySet<string>
+    /** The Source of a show that is not saved yet. */
+    sourceKey?: string
 }
 
 // Simple option model for react-select
@@ -23,7 +25,7 @@ type UIOption = { value: string; label: string }
 
 const NO_DISABLED_EPISODE_TYPES = new Set<string>()
 
-export default function DownloadProfileForm({form, mode, seasons, showRoot, disabledEpisodeTypes}: Props) {
+export default function DownloadProfileForm({form, mode, seasons, showRoot, disabledEpisodeTypes, sourceKey}: Props) {
     const {control, watch, setValue, formState: {errors}} = form
     showRoot ??= true
 
@@ -145,7 +147,7 @@ export default function DownloadProfileForm({form, mode, seasons, showRoot, disa
 
             {/* Variant-specific fields */}
             {mode === 'podcast' ? (
-                <PodcastDownloadProfileForm form={form}/>
+                <PodcastDownloadProfileForm form={form} sourceKey={sourceKey}/>
             ) : mode === 'series' ? (
                 <SeriesDownloadProfileForm form={form} seasons={seasons ?? []}/>
             ) : undefined }

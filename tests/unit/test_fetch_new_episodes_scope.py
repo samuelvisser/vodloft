@@ -17,8 +17,8 @@ def scope_helpers():
 @pytest.fixture
 def shows():
     return [
-        SimpleNamespace(id=1, slug="first-show", title="First Show"),
-        SimpleNamespace(id=17, slug="second-show", title="Second Show"),
+        SimpleNamespace(id=1, slug="first-show", title="First Show", source_key="dailywire"),
+        SimpleNamespace(id=17, slug="second-show", title="Second Show", source_key="dailywire"),
     ]
 
 
