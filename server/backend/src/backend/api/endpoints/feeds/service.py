@@ -34,7 +34,7 @@ from backend.types.stream_profile_types import (
     RssVideoOutputMode,
 )
 from config.network import is_no_internet_error
-from sources.dailywire.api.dw_api.client import MiddlewareAPIError, MiddlewareClient
+from sources import Source, get_source
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 
@@ -750,28 +750,27 @@ def get_download_for_episode(
     return download
 
 
-def get_dailywire_stream_url(
+def get_source_stream_url(
         profile: RssStreamProfile,
         episode: Episode,
         *,
         media_kind: Literal["audio", "video"] | None = None,
-        client: MiddlewareClient | None = None,
+        source: Source | None = None,
 ) -> str:
-    require_member_exclusive = profile.show.membership_level not in {
+    """Ask the episode's Source for its current stream URL."""
+    source = source or get_source(episode.source_key)
+    members_only = profile.show.membership_level not in {
         WlDwMembershipLevel.FREE.value,
         WlDwMembershipLevel.WL_ANY.value,
     }
     try:
-        detail = (client or MiddlewareClient(request_priority="interactive")).get_episode_details(
-            episode.slug,
-            require_member_exclusive=require_member_exclusive,
-        )
-    except MiddlewareAPIError as exc:
+        media = source.episode_media(slug=episode.slug, members_only=members_only, interactive=True)
+    except Exception as exc:
         if is_no_internet_error(exc):
             raise
         raise HTTPException(
             status_code=502,
-            detail="Daily Wire stream is currently unavailable",
+            detail=f"{source.name} stream is currently unavailable",
         ) from exc
 
     if media_kind is None:
@@ -781,11 +780,11 @@ def get_dailywire_stream_url(
             else "video"
         )
 
-    media_url = detail.audio_url if media_kind == "audio" else detail.video_url
+    media_url = media.audio_url if media_kind == "audio" else media.video_url
     if not media_url:
         raise HTTPException(
             status_code=404,
-            detail=f"No Daily Wire {media_kind} stream available for this episode",
+            detail=f"No {source.name} {media_kind} stream available for this episode",
         )
     return media_url
 

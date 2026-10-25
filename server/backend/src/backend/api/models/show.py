@@ -7,9 +7,11 @@ from pydantic import AliasChoices, AliasPath, computed_field, Field
 
 from backend.api.models.base import RequestBase, response_model_config
 from backend.api.models.custom_metadata import CustomMetadataResponseBase
+from backend.api.models.source import SourcedResponse
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.show_types import ShowType, EpisodeIdentifier
 from backend.utils.helpers import generate_uuid
+from sources import Feature
 
 
 # ---------- Strict input (create/update) ----------
@@ -45,8 +47,12 @@ class ShowAPICreate(_ShowAPIBaseIn):
 
 
 class ShowAPIUpdate(_ShowAPIBaseIn):
-    """Request body for updating a show."""
-    pass
+    """Request body for updating a show.
+
+    Shows from a Source without membership levels leave ``membership_level`` out.
+    """
+
+    membership_level: Optional[str] = None
 
 
 class ShowFileRenameAPIRequest(RequestBase):
@@ -70,10 +76,11 @@ class ShowRedownloadEpisodesAPIRequest(_ShowDownloadMaintenanceAPIRequest):
 
 
 # ---------- Lenient output (read) ----------
-class _ShowAPIBaseOut(CustomMetadataResponseBase):
+class _ShowAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     """Fields for responses: no validators, no constraints."""
 
     model_config = response_model_config(nested_source="show")
+    source_feature_fields = {"membership_level": Feature.MEMBERSHIP_LEVELS}
 
     custom_metadata: dict[str, str] = Field(
         default_factory=dict,
@@ -86,7 +93,7 @@ class _ShowAPIBaseOut(CustomMetadataResponseBase):
     id: int
     uuid: str
     slug: str
-    membership_level: Union[WlDwMembershipLevel, str]
+    membership_level: Optional[Union[WlDwMembershipLevel, str]] = None
     type: Union[ShowType, str]
     episode_identifier: Union[EpisodeIdentifier, str]
     author_slug: str

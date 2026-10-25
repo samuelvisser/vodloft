@@ -11,6 +11,7 @@ def test_pending_movie_gets_one_lookup_after_tmdb_is_configured(tmp_path, monkey
         create_movie_download,
         create_movie_extra_download,
     )
+    from backend.services.movies import index_dailywire_movie
     from backend.services import movies as movie_service
     from backend.api.models.media_download import MovieDownloadAPICreate
     from backend.db.core import Base
@@ -75,7 +76,7 @@ def test_pending_movie_gets_one_lookup_after_tmdb_is_configured(tmp_path, monkey
 
     create_movie_download(
         session,
-        movie_data,
+        index_dailywire_movie(session, movie_data)[0],
         MovieDownloadAPICreate(local_media_profile_id=profiles[0].id),
     )
     session.commit()
@@ -86,7 +87,7 @@ def test_pending_movie_gets_one_lookup_after_tmdb_is_configured(tmp_path, monkey
     configured = True
     create_movie_extra_download(
         session,
-        movie_data,
+        index_dailywire_movie(session, movie_data)[0],
         "run-hide-fight-trailer",
         MovieDownloadAPICreate(local_media_profile_id=profiles[1].id),
     )
@@ -96,7 +97,7 @@ def test_pending_movie_gets_one_lookup_after_tmdb_is_configured(tmp_path, monkey
 
     create_movie_download(
         session,
-        movie_data,
+        index_dailywire_movie(session, movie_data)[0],
         MovieDownloadAPICreate(local_media_profile_id=profiles[2].id),
     )
     session.commit()

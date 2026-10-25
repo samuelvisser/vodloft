@@ -39,7 +39,7 @@ const OPTIONS: Array<{
         value: 'download-stream',
         eyebrow: 'Index + Download + Stream',
         title: 'Index, download and stream downloaded files',
-        description: 'Archive The Daily Wire content and serve it from your own server. VODLoft downloads episodes automatically and exposes them through a stream.',
+        description: 'Archive the show and serve it from your own server. VODLoft downloads episodes automatically and exposes them through a stream.',
     },
 ]
 

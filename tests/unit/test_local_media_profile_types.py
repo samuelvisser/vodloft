@@ -304,7 +304,7 @@ def test_manual_downloads_reject_the_wrong_local_media_profile_type() -> None:
     )
     from backend.types.show_types import EpisodeIdentifier, ShowType
     from backend.utils.helpers import generate_uuid
-    from sources.dailywire.api.records import DwMovieRecord
+    from backend.db.models import Movie
 
     session, engine = _new_session()
     show_profile = ShowLocalMediaProfile(
@@ -356,16 +356,13 @@ def test_manual_downloads_reject_the_wrong_local_media_profile_type() -> None:
         )
     assert episode_error.value.status_code == 422
 
-    movie_data = DwMovieRecord(
-        dw_id="movie-1",
-        slug="a-movie",
-        title="A Movie",
-        sharing_url="https://example.test/a-movie",
-    )
+    movie = Movie(uuid=generate_uuid(), slug="a-movie", title="A Movie", sharing_url="https://example.test/a-movie")
+    session.add(movie)
+    session.flush()
     with pytest.raises(HTTPException, match="Movie Local Media Profile") as movie_error:
         create_movie_download(
             session,
-            movie_data,
+            movie,
             MovieDownloadAPICreate(local_media_profile_id=show_profile.id),
         )
     assert movie_error.value.status_code == 422

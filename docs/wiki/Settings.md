@@ -1,6 +1,6 @@
 # Settings
 
-Most VODLoft configuration can be changed from the **Settings** page. The interface groups normal options into General, Downloads, Automation, DailyWire, and Advanced tabs and explains environment-variable overrides when they are active.
+Most VODLoft configuration can be changed from the **Settings** page. The interface groups normal options into General, Downloads, Automation, Sources, and Advanced tabs and explains environment-variable overrides when they are active.
 
 This page is the complete 1.1 reference for settings users may need to configure.
 
@@ -167,7 +167,7 @@ These are safeguards for unusual Daily Wire publication states. Most users shoul
 
 ## Daily Wire integration
 
-The DailyWire tab contains the account connection plus advanced integration settings. Ordinary installations should leave the endpoint, OAuth, and pacing values unchanged.
+The Sources tab lists every Source VODLoft can add media from, with what it supports. The Daily Wire's card contains its sign-in plus advanced integration settings. Ordinary installations should leave the endpoint, OAuth, and pacing values unchanged.
 
 ### API endpoints
 

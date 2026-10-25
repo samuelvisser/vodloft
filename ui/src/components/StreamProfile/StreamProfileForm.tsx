@@ -10,6 +10,8 @@ import StreamProfileAdvisory, {type StreamDownloadProfileDefault} from './Stream
 import SegmentedOptions from '../SegmentedOptions/SegmentedOptions'
 import {MediaTypeReg} from "../../types/stream_profile";
 import {createSelectRegistry} from '../../utils/selectRegistry'
+import {useShows, useSourceLookup} from '../../lib/queries'
+import {sourceControls} from '../../lib/sourceControls'
 
 export type StreamProfileMode = 'rss' | 'base'
 
@@ -61,6 +63,15 @@ export default function StreamProfileForm({
 }: Props) {
     const {control, formState: {errors}, getValues, register, setValue, watch} = form
     showRoot ??= true
+
+    // A show that is not saved yet is being added from The Daily Wire, so it keeps every option.
+    const {data: shows} = useShows()
+    const sources = useSourceLookup()
+    const show = showSlug ? shows?.find((item) => item.slug === showSlug) : undefined
+    const controls = sourceControls(show)
+    const canStreamFromSource = controls.rssStreaming
+    const canStreamLiveEpisodes = controls.liveEpisodes
+    const streamSourceName = show ? sources.name(show.sourceKey) : 'The Daily Wire'
 
     const useDownloads = watch('useDownloads')
     const useDwStream = watch('useDwStream')
@@ -187,6 +198,7 @@ export default function StreamProfileForm({
             downloadProfileDefaults={downloadProfileDefaults}
             showSlug={showSlug}
             canOpenDownloadProfiles={canOpenDownloadProfiles}
+            sourceName={streamSourceName}
             onEnableDownloads={() => setValue('useDownloads', true, {
                 shouldDirty: true,
                 shouldValidate: true,
@@ -241,12 +253,12 @@ export default function StreamProfileForm({
                                 </ReadMore>
                             ),
                         },
-                        {
+                        ...(canStreamFromSource || useDwStream ? [{
                             value: 'dw',
-                            label: 'Use DailyWire stream',
+                            label: `Use ${streamSourceName} stream`,
                             description: (
-                                <ReadMore summary={<span>Stream directly from The Daily Wire.</span>}>
-                                    <p>If enabled, streamed media can come directly from The Daily Wire's own servers.</p>
+                                <ReadMore summary={<span>Stream directly from {streamSourceName}.</span>}>
+                                    <p>If enabled, streamed media can come directly from {streamSourceName}&apos;s own servers.</p>
                                     <p>If Use Downloads is enabled too, VODLoft will prefer downloaded media,
                                         but stream directly when no downloaded media exists.
                                     </p>
@@ -254,7 +266,7 @@ export default function StreamProfileForm({
                                     but still want to retain the ability to stream many more.</p>
                                 </ReadMore>
                             ),
-                        },
+                        }] : []),
                     ]}
                     value={selectedSources}
                     onChange={(vals) => {
@@ -458,6 +470,7 @@ export default function StreamProfileForm({
                     onRegenerateToken={onRegenerateToken}
                     regeneratingToken={regeneratingToken}
                     advisory={streamProfileAdvisory}
+                    liveEpisodes={canStreamLiveEpisodes}
                 />
             ) : undefined}
         </>

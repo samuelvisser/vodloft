@@ -34,7 +34,7 @@ export default function MovieLocalMediaProfileForm({form}: { form: UseFormReturn
                             movie's release date. Dates VODLoft does not know are empty, so a conditional can omit them.
                         </p>
                         <p>
-                            Daily Wire does not currently provide separate author or rating metadata for movie extras, so
+                            Sources do not currently provide separate author or rating metadata for movie extras, so
                             unprefixed <b>{'{{ author }}'}</b>, <b>{'{{ mature_rating }}'}</b>, and
                             <b> {'{{ rating }}'}</b> are empty for those items. Their <b>movie_</b> equivalents remain
                             available from the parent movie.

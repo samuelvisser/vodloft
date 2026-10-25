@@ -58,6 +58,7 @@ import {
 } from "../types/schemas/media_download";
 import {TaskOperationRead} from "../types/schemas/operation";
 import {MovieRead, MovieReadSchema} from "../types/schemas/movie";
+import {DEFAULT_SOURCE_KEY, ResolvedLinkRead, ResolvedLinkReadSchema, SourceRead, SourceReadSchema} from "../types/schemas/source";
 import {
     DailywireCatalogRead,
     DailywireCatalogReadSchema,
@@ -212,6 +213,53 @@ export function useMovies() {
         ),
         refetchOnMount: 'always',
     })
+}
+
+export function useSources() {
+    return useQuery<SourceRead[], Error, SourceRead[], readonly ['sources']>({
+        queryKey: ['sources'] as const,
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/sources`,
+            SourceReadSchema.array(),
+            signal,
+        ),
+        staleTime: Infinity,
+    })
+}
+
+/** The Sources by id, with a name fallback for items whose Source is no longer registered. */
+export function useSourceLookup() {
+    const {data: sources} = useSources()
+    return useMemo(() => {
+        const byId = new Map((sources ?? []).map((source) => [source.id, source]))
+        return {
+            sources: sources ?? [],
+            get: (id?: string | null) => (id ? byId.get(id) : undefined),
+            name: (id?: string | null) => (id ? byId.get(id)?.name ?? id : ''),
+        }
+    }, [sources])
+}
+
+/** Ask the backend which Source recognises a link, and what it points to. */
+export async function resolveLink(url: string, signal?: AbortSignal): Promise<ResolvedLinkRead> {
+    const response = await fetch(`${(window as any).appConfig.API_URL}/resolve`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({url}),
+        signal,
+    })
+    if (!response.ok) {
+        let detail = `HTTP ${response.status}`
+        try {
+            const body = await response.json()
+            if (typeof body?.detail === 'string') detail = body.detail
+        } catch {
+            // Keep the status text when the body is not JSON.
+        }
+        throw new Error(detail)
+    }
+    return ResolvedLinkReadSchema.parse(await response.json())
 }
 
 export function useDailywireCatalog() {
@@ -542,6 +590,8 @@ function syntheticDownload(operation: TaskOperationRead): MediaDownloadDomainVie
     const createdAt = operationDate(operation.createdAt) || new Date()
     return {
         id: operation.resourceId,
+        sourceKey: contextString(operation, 'source_key') || DEFAULT_SOURCE_KEY,
+        sourceFeatures: [],
         type: contextString(operation, 'media_type') || 'episode',
         mediaItemId,
         localMediaProfileId,

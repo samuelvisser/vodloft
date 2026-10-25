@@ -14,7 +14,10 @@ import DownloadLogDialog from '../../components/MediaDownload/DownloadLogDialog'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
-import {useDailywireMovie, useLocalMediaProfiles, useMovieDownloads, useMovies} from '../../lib/queries'
+import {useDailywireMovie, useLocalMediaProfiles, useMovieDownloads, useMovies, useSourceLookup} from '../../lib/queries'
+import SourceBadge from '../../components/Source/SourceBadge'
+import {DEFAULT_SOURCE_KEY} from '../../types/schemas/source'
+import {sourceControls} from '../../lib/sourceControls'
 import {
     OperationControlError,
     type OperationControlAction,
@@ -107,6 +110,11 @@ export default function MoviePage() {
         error: dailywireMovieError,
     } = useDailywireMovie(localMovies && !localMovie ? slug : undefined)
     const movie = localMovie ?? dailywireMovie
+    // A movie that is not in the library yet is previewed from The Daily Wire, the only Source with movies so far.
+    const sourceKey = localMovie?.sourceKey ?? DEFAULT_SOURCE_KEY
+    const sources = useSourceLookup()
+    const sourceName = sources.name(sourceKey)
+    const showsExtras = sourceControls(localMovie).movieExtras
     const refreshAttemptedSlugs = useRef(new Set<string>())
     const shouldRefreshMovie = Boolean(
         localMovie && (localMovie.status !== 'published' || !localMovie.isDownloadable),
@@ -461,6 +469,7 @@ export default function MoviePage() {
                     <div className="movie-kicker-row">
                         <span className="movie-kicker"><FontAwesomeIcon icon={faIcon('fass', 'clapperboard')}/> Movie</span>
                         {isUpcoming && <span className="movie-upcoming-badge">Upcoming</span>}
+                        <SourceBadge sourceKey={sourceKey}/>
                     </div>
                     <h1 id="movie-title">{movie.title}</h1>
                     <p>{[movie.authorName, duration, movie.matureRating].filter(Boolean).join(' • ')}</p>
@@ -478,7 +487,7 @@ export default function MoviePage() {
                 )}
                 {movie.sharingUrl && (
                     <a className="btn" href={movie.sharingUrl} target="_blank" rel="noreferrer">
-                        <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')}/> Open on Daily Wire
+                        <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')}/> Open on {sourceName}
                     </a>
                 )}
                 {localMovies && !localMovie && (
@@ -507,7 +516,7 @@ export default function MoviePage() {
                 {localMovie && (
                     <ActionMenu
                         items={[
-                            {
+                            ...(showsExtras ? [{
                                 label: 'Refresh extras',
                                 icon: faIcon('fass', 'rotate'),
                                 disabled: refreshingExtras,
@@ -519,7 +528,7 @@ export default function MoviePage() {
                                 operation: refreshExtrasOperation,
                                 controls: operationControls(refreshExtrasOperation?.id, 'movie-extra refresh'),
                                 onSelect: () => void refreshMovieExtras(),
-                            },
+                            }] : []),
                             {
                                 label: 'Delete and re-download all media',
                                 icon: faIcon('fass', 'arrows-rotate'),
@@ -543,7 +552,7 @@ export default function MoviePage() {
             <div className="movie-detail-layout">
                 <div className="movie-description">
                     <h2>About this movie</h2>
-                    <p>{movie.description || 'Daily Wire did not provide a description for this movie.'}</p>
+                    <p>{movie.description || `${sourceName} did not provide a description for this movie.`}</p>
                 </div>
 
                 <aside className="movie-download-panel" aria-labelledby="download-movie-title">
@@ -583,7 +592,7 @@ export default function MoviePage() {
                                         ? expectedReleaseDate
                                             ? `Full movie expected ${expectedReleaseDate}.`
                                             : 'Full movie has not been released yet.'
-                                        : 'Daily Wire does not currently offer the full movie for download.'}
+                                        : `${sourceName} does not currently offer the full movie for download.`}
                                 </div>
                             )}
                             {featuredTrailer && (
@@ -613,7 +622,7 @@ export default function MoviePage() {
                 </aside>
             </div>
 
-            {movieExtras.length > 0 && (
+            {showsExtras && movieExtras.length > 0 && (
                 <section className="movie-extras" aria-labelledby="movie-extras-title">
                     <div className="movie-section-heading">
                         <div>
@@ -645,7 +654,7 @@ export default function MoviePage() {
                                         </div>
                                         <div className="movie-extra-actions">
                                             {extra.sharingUrl && (
-                                                <a className="btn btn-icon" href={extra.sharingUrl} target="_blank" rel="noreferrer" aria-label={`Watch ${extra.title}`} title="Watch on Daily Wire">
+                                                <a className="btn btn-icon" href={extra.sharingUrl} target="_blank" rel="noreferrer" aria-label={`Watch ${extra.title}`} title={`Watch on ${sourceName}`}>
                                                     <FontAwesomeIcon icon={faIcon('fass', 'play')}/>
                                                 </a>
                                             )}

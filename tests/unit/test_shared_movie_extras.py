@@ -190,6 +190,7 @@ def test_downloading_one_extra_survives_another_movies_shared_clip(
     """Indexing all extras must not block a download because one clip is shared."""
     import backend.db.models  # noqa: F401
     from backend.api.endpoints.media_downloads.service import create_movie_extra_download
+    from backend.services.movies import index_dailywire_movie
     from backend.api.endpoints.movies.service import index_dailywire_movie
     from backend.api.models.media_download import MovieDownloadAPICreate
     from backend.db import Base
@@ -246,7 +247,7 @@ def test_downloading_one_extra_survives_another_movies_shared_clip(
         )
         download = create_movie_extra_download(
             session,
-            infidels,
+            index_dailywire_movie(session, infidels)[0],
             final_trailer.slug,
             MovieDownloadAPICreate(local_media_profile_id=profile.id),
         )
@@ -278,6 +279,7 @@ def test_shared_clip_downloads_remain_scoped_to_parent_movie_and_profile(
     """The generic one-download-per-MediaItem/profile invariant stays intact."""
     import backend.db.models  # noqa: F401
     from backend.api.endpoints.media_downloads.service import create_movie_extra_download
+    from backend.services.movies import index_dailywire_movie
     from backend.api.models.media_download import MovieDownloadAPICreate
     from backend.db import Base
     from backend.db.models import MovieExtra, MovieExtraSource, MovieLocalMediaProfile
@@ -322,8 +324,8 @@ def test_shared_clip_downloads_remain_scoped_to_parent_movie_and_profile(
         )
         body = MovieDownloadAPICreate(local_media_profile_id=profile.id)
 
-        download_a = create_movie_extra_download(session, movie_a, shared.slug, body)
-        download_b = create_movie_extra_download(session, movie_b, shared.slug, body)
+        download_a = create_movie_extra_download(session, index_dailywire_movie(session, movie_a)[0], shared.slug, body)
+        download_b = create_movie_extra_download(session, index_dailywire_movie(session, movie_b)[0], shared.slug, body)
         session.commit()
 
         assert download_a.id != download_b.id
@@ -340,7 +342,7 @@ def test_shared_clip_downloads_remain_scoped_to_parent_movie_and_profile(
 
         # Re-requesting the same association/profile reuses its MediaDownload;
         # it does not weaken the existing base-table uniqueness contract.
-        same_download_a = create_movie_extra_download(session, movie_a, shared.slug, body)
+        same_download_a = create_movie_extra_download(session, index_dailywire_movie(session, movie_a)[0], shared.slug, body)
         assert same_download_a.id == download_a.id
         assert session.query(MovieExtraMediaDownload).count() == 2
     finally:

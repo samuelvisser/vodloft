@@ -7,8 +7,10 @@ from pydantic import AwareDatetime, Field, computed_field
 
 from backend.api.models.base import RequestBase
 from backend.api.models.custom_metadata import CustomMetadataResponseBase
+from backend.api.models.source import SourcedResponse
 from backend.api.models.movie_extra import MovieExtraAPICreate, MovieExtraAPIRead
 from backend.utils.helpers import generate_uuid
+from sources import Feature
 
 
 # ---------- Strict input (create/update) ----------
@@ -71,8 +73,15 @@ class MovieAPIUpdate(_MovieAPIBaseIn):
 
 
 # ---------- Lenient output (read) ----------
-class _MovieAPIBaseOut(CustomMetadataResponseBase):
+class _MovieAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     """Fields for responses: no validators, no constraints."""
+
+    source_feature_fields = {
+        "available_for": Feature.MEMBERSHIP_LEVELS,
+        "official_trailer_id": Feature.MOVIE_EXTRAS,
+        "official_trailer": Feature.MOVIE_EXTRAS,
+        "movie_extras": Feature.MOVIE_EXTRAS,
+    }
 
     id: int
     uuid: str
@@ -99,7 +108,7 @@ class _MovieAPIBaseOut(CustomMetadataResponseBase):
     language: Optional[str]
     origin_country: Optional[str]
     images: dict[str, Any]
-    available_for: list[str]
+    available_for: list[str] = Field(default_factory=list)
     cast_and_crew: list[dict[str, Any]]
     directed_by: list[str]
     genres: list[Any]
@@ -113,9 +122,9 @@ class _MovieAPIBaseOut(CustomMetadataResponseBase):
     release_date_lookup_status: str
     release_date_lookup_attempted_at: Optional[datetime]
     release_date_lookup_error: Optional[str]
-    official_trailer_id: Optional[int]
-    official_trailer: Optional[MovieExtraAPIRead]
-    movie_extras: list[MovieExtraAPIRead]
+    official_trailer_id: Optional[int] = None
+    official_trailer: Optional[MovieExtraAPIRead] = None
+    movie_extras: list[MovieExtraAPIRead] = Field(default_factory=list)
 
 
 class MovieAPIRead(_MovieAPIBaseOut):

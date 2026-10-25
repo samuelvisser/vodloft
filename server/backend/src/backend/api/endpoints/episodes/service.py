@@ -79,6 +79,7 @@ def _episode_view_stmt(show_slug: str, season_id: int | None = None):
     stmt = (
         select(
             Episode.id.label("id"),
+            Episode.source_key.label("source_key"),
             Episode.show_id.label("show_id"),
             Episode.season_id.label("season_id"),
             Episode.index.label("index"),

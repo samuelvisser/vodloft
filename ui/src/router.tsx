@@ -28,6 +28,7 @@ import EditStreamProfilePage from './pages/stream-profile/EditStreamProfilePage'
 import DownloadsPage from './pages/DownloadsPage'
 import LibraryPage from './pages/LibraryPage'
 import BrowsePage from './pages/BrowsePage'
+import AddMediaPage from './pages/AddMediaPage'
 import MoviePage from './pages/movie/MoviePage'
 import EditMoviePage from './pages/movie/EditMoviePage'
 
@@ -52,6 +53,7 @@ export const router = createBrowserRouter(
       <Route path="library" element={<LibraryPage />} />
       <Route path="shows" element={<Navigate to="/library?type=shows" replace />} />
       <Route path="browse" element={<BrowsePage />} />
+      <Route path="add" element={<AddMediaPage />} />
       <Route path="downloads" element={<DownloadsPage />} />
       <Route path="local-media-profiles" element={<LocalMediaProfilesPage />} />
       <Route path="settings" element={<SettingsPage />} />

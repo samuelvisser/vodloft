@@ -1,6 +1,7 @@
 import {z} from "zod";
 import {MovieExtraTypeSchema} from './dailywire_catalog'
 import {ApiDateTimeSchema} from './datetime'
+import {SourcedFields} from './source'
 
 
 export const MovieExtraCreateSchema = z.object({
@@ -36,7 +37,8 @@ export const MovieExtraReadSchema = z.looseObject({
     thumbnailSquarePath: z.string().nullable(),
     sharingUrl: z.string().nullable(),
     publishedDate: ApiDateTimeSchema.nullable(),
-    availableFor: z.array(z.string()),
+    availableFor: z.array(z.string()).default([]),
+    ...SourcedFields,
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
 })
@@ -113,7 +115,7 @@ export const MovieReadSchema = z.looseObject({
     language: z.string().nullable(),
     originCountry: z.string().nullable(),
     images: z.record(z.string(), z.unknown()),
-    availableFor: z.array(z.string()),
+    availableFor: z.array(z.string()).default([]),
     castAndCrew: z.array(z.record(z.string(), z.unknown())),
     directedBy: z.array(z.string()),
     genres: z.array(z.unknown()),
@@ -128,9 +130,10 @@ export const MovieReadSchema = z.looseObject({
     releaseDateLookupStatus: z.string(),
     releaseDateLookupAttemptedAt: ApiDateTimeSchema.nullable(),
     releaseDateLookupError: z.string().nullable(),
-    officialTrailerId: z.int().nullable(),
-    officialTrailer: MovieExtraReadSchema.nullable(),
-    movieExtras: z.array(MovieExtraReadSchema),
+    officialTrailerId: z.int().nullable().default(null),
+    officialTrailer: MovieExtraReadSchema.nullable().default(null),
+    movieExtras: z.array(MovieExtraReadSchema).default([]),
+    ...SourcedFields,
     customMetadata: z.record(z.string(), z.string()).default({}),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,

@@ -1,16 +1,18 @@
 # First-Run Setup
 
-On first launch, VODLoft guides you through connecting The Daily Wire, reviewing security, and adding your first media. You can skip optional steps and finish them later from the normal interface.
+On first launch, VODLoft shows the services it can add media from, helps you review security, and adds your first media. You can skip optional steps and finish them later from the normal interface.
 
-## 1. Connect to The Daily Wire
+## 1. Sources
+
+VODLoft calls the services it adds media from **Sources**. The first-run setup lists each Source, and offers its sign-in as an optional step. Today that is The Daily Wire.
 
 VODLoft uses The Daily Wire's device authorization flow. Follow the instructions shown by VODLoft and authorize the connection on The Daily Wire's own site.
 
 VODLoft does **not** ask for your The Daily Wire password.
 
-Connecting an account is required for member-exclusive content. You can skip this step if you only want to use content that The Daily Wire makes publicly available without signing in.
+Signing in is only needed for member-exclusive content. You can continue without signing in and use what The Daily Wire makes publicly available.
 
-You can reconnect or change the Daily Wire session later from **Settings → DailyWire**.
+You can sign in, reconnect or change the session later from **Settings → Sources**.
 
 ## 2. Decide how VODLoft should be protected
 
@@ -29,7 +31,7 @@ Private RSS feeds do not use this administrator login. Each feed has its own sec
 
 ## 3. Add your first show or movie
 
-Open **Browse** to see Daily Wire content that can be added to your Library.
+Paste a link to a show, an episode or a movie. VODLoft finds the Source that recognises the link, shows a preview, and continues to the normal Add Show wizard or movie page. A link to an episode opens its show. You can also browse The Daily Wire's catalogue instead.
 
 ### Shows
 
@@ -54,9 +56,9 @@ For most installations:
 
 1. Make sure `/config` and `/downloads` are persistent.
 2. Set `TZ` to your local timezone.
-3. Connect your Daily Wire account if you use member content.
+3. Sign in to The Daily Wire under Settings → Sources if you use member content.
 4. Protect the VODLoft UI if it is not confined to a trusted network.
-5. Add one show from Browse.
+5. Add one show with **Add media** in the Library.
 6. Create a Local Media Profile with the format and folder structure you want.
 7. Add a Download Profile if you want automatic downloads.
 8. Add an RSS Stream Profile only if you want to use VODLoft as a private podcast/video feed.

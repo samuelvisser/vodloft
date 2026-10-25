@@ -16,7 +16,7 @@ export const RssVideoOutputModeReg = createSelectRegistry("RssVideoOutputMode", 
   },
   'mp4': {
     label: "Serve mp4 video only",
-    help: "Normal mp4 enclosure without audio fallback. Not recommended if 'Use DailyWire stream' is enabled.",
+    help: "Normal mp4 enclosure without audio fallback. Not recommended if 'Use The Daily Wire stream' is enabled.",
   },
   'mp4_hls': {
     label: "HLS video stream with mp4 fallback",

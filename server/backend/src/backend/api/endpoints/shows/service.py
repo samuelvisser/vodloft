@@ -201,7 +201,7 @@ def update_show(s: Session, show_slug: str, body: ShowAPIUpdate) -> ShowAPIRead:
     if show is None:
         raise HTTPException(status_code=404, detail="Show not found")
 
-    update_database_fields(show, body)
+    update_database_fields(show, body, exclude_fields={"membership_level"} if body.membership_level is None else None)
     s.flush()
     request_show_custom_index_reconciliation(s, show.id)
 

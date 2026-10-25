@@ -1,4 +1,5 @@
 import type {TaskOperationRead} from '../types/schemas/operation'
+import SourceBadge from '../components/Source/SourceBadge'
 import {useEffect, useMemo, useRef, useState} from 'react'
 import {useNavigate, useSearchParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
@@ -358,6 +359,7 @@ export default function DownloadsPage() {
                 <div>
                     <div>{rowTitle(row)}</div>
                     <div style={{color: 'var(--muted, #777)', fontSize: '0.85rem'}}>{rowContext(row)}</div>
+                    <SourceBadge sourceKey={row.sourceKey}/>
                 </div>
             ),
             dataLabel: 'Media',

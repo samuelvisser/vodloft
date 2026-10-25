@@ -55,7 +55,8 @@ def movie_download_create(movie_slug: str, body: MovieDownloadAPICreate):
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     with db_session() as s:
         try:
-            download = create_movie_download(s, movie_data, body)
+            movie, _ = index_dailywire_movie(s, movie_data)
+            download = create_movie_download(s, movie, body)
             operation = create_media_download_operation(
                 s,
                 download,
@@ -87,7 +88,8 @@ def movie_extra_download_create(movie_slug: str, movie_extra_slug: str, body: Mo
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     with db_session() as s:
         try:
-            download = create_movie_extra_download(s, movie_data, movie_extra_slug, body)
+            movie, _ = index_dailywire_movie(s, movie_data)
+            download = create_movie_extra_download(s, movie, movie_extra_slug, body)
             operation = create_media_download_operation(
                 s,
                 download,

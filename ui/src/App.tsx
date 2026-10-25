@@ -90,7 +90,7 @@ export default function App() {
           setOnboardingStatus((current) => current ? { ...current, completed: true } : current)
           navigate('/', { replace: true })
           toast.success(
-            'VODLoft is setup. Look around a little and explore your very own media manager for all things Daily Wire. Enjoy!',
+            'VODLoft is setup. Look around a little and explore your very own media manager. Enjoy!',
             { duration: 8000 },
           )
         }}

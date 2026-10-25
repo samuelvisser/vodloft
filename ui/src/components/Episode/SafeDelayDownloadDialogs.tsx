@@ -115,7 +115,7 @@ export function SafeDelayConfirmDialog({
             }}
         >
             <p>
-                VODLoft&apos;s configured post-publication safety delay has not passed yet. The Daily Wire may still be
+                VODLoft&apos;s configured post-publication safety delay has not passed yet. The source may still be
                 processing this episode, so the current file may be incomplete.
             </p>
             {safeDelayReadyLabel && (

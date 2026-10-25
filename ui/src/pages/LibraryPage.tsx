@@ -10,6 +10,8 @@ import ShowTypeFilter, {
     createDefaultShowTypeFilter,
     matchesShowTypeFilter,
 } from '../components/common/ShowTypeFilter'
+import SourceBadge from '../components/Source/SourceBadge'
+import SourceFilter, {matchesSourceFilter} from '../components/Source/SourceFilter'
 import {useMediaDownloadsView, useMovies, useShowsView} from '../lib/queries'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {ShowTypeReg, ShowTypeValue} from '../types/show'
@@ -51,12 +53,23 @@ export default function LibraryPage() {
     const navigate = useNavigate()
     const [params, setParams] = useSearchParams()
     const [showTypeFilter, setShowTypeFilter] = useState(loadLibraryShowTypeFilter)
+    const [sourceFilter, setSourceFilter] = useState<Set<string>>(() => new Set())
     const {data: shows, isLoading: showsLoading, error: showsError} = useShowsView()
     const {data: movies, isLoading: moviesLoading, error: moviesError} = useMovies()
     const {data: downloads} = useMediaDownloadsView()
+    const sourceKeys = useMemo(
+        () => [...new Set([...(shows ?? []), ...(movies ?? [])].map((item) => item.sourceKey))].sort(),
+        [shows, movies],
+    )
     const filteredShows = useMemo(
-        () => shows?.filter((show) => matchesShowTypeFilter(show.type, showTypeFilter)) ?? [],
-        [shows, showTypeFilter],
+        () => shows?.filter((show) => (
+            matchesShowTypeFilter(show.type, showTypeFilter) && matchesSourceFilter(show.sourceKey, sourceFilter)
+        )) ?? [],
+        [shows, showTypeFilter, sourceFilter],
+    )
+    const filteredMovies = useMemo(
+        () => movies?.filter((movie) => matchesSourceFilter(movie.sourceKey, sourceFilter)) ?? [],
+        [movies, sourceFilter],
     )
     const hasShows = !!shows?.length
     const hasMovies = !!movies?.length
@@ -82,7 +95,6 @@ export default function LibraryPage() {
         setParams({type}, {replace: true})
     }
 
-    const browseUrl = `/browse?type=${activeType}`
     const loading = showsLoading || moviesLoading
     const error = showsError || moviesError
     const showTabs = hasShows && hasMovies
@@ -94,9 +106,9 @@ export default function LibraryPage() {
                     <h1 id="library-title">Library</h1>
                     <p className="view-description">Shows and movies indexed by VODLoft.</p>
                 </div>
-                <button className="btn btn-primary" onClick={() => navigate(browseUrl)}>
-                    <FontAwesomeIcon icon={faIcon('fass', 'compass')}/>
-                    Browse Daily Wire
+                <button className="btn btn-primary" onClick={() => navigate('/add')}>
+                    <FontAwesomeIcon icon={faIcon('fass', 'plus')}/>
+                    Add media
                 </button>
             </div>
 
@@ -107,6 +119,15 @@ export default function LibraryPage() {
                     ariaLabel="Library media type"
                     showCount={shows?.length ?? 0}
                     movieCount={movies?.length ?? 0}
+                />
+            )}
+
+            {(hasShows || hasMovies) && (
+                <SourceFilter
+                    sourceKeys={sourceKeys}
+                    selected={sourceFilter}
+                    onChange={setSourceFilter}
+                    ariaLabel="Filter library by source"
                 />
             )}
 
@@ -126,8 +147,8 @@ export default function LibraryPage() {
                 <div className="library-empty">
                     <FontAwesomeIcon icon={faIcon('fass', 'book-open')}/>
                     <h2>Your library is empty</h2>
-                    <p>Browse Daily Wire to add a show or movie.</p>
-                    <button className="btn btn-primary" onClick={() => navigate(browseUrl)}>Browse Daily Wire</button>
+                    <p>Paste a link to a show or movie to add it.</p>
+                    <button className="btn btn-primary" onClick={() => navigate('/add')}>Add media</button>
                 </div>
             ) : activeType === 'shows' && hasShows ? (
                 filteredShows.length > 0 ? (
@@ -143,7 +164,8 @@ export default function LibraryPage() {
                                     </span>
                                     <div className="show-summary-copy">
                                         <span className="show-summary-title">{show.title}</span>
-                                        <span className="show-summary-author">{show.authorName || 'Daily Wire'}</span>
+                                        <span className="show-summary-author">{show.authorName}</span>
+                                        <SourceBadge sourceKey={show.sourceKey}/>
                                         <span className="show-summary-meta">{show.episodeCount} episodes{show.years ? ` • ${show.years}` : ''}</span>
                                         {show.description && <span className="show-summary-description">{show.description}</span>}
                                         <ShowIndexingProgress
@@ -166,7 +188,7 @@ export default function LibraryPage() {
                 )
             ) : activeType === 'movies' && hasMovies ? (
                 <div className="movie-poster-grid" role="list" aria-label="Movies">
-                    {movies!.map((movie) => {
+                    {filteredMovies.map((movie) => {
                         const image = toImageUrl(
                             movie.thumbnailPortraitPath
                             || movie.thumbnailLandscapePath
@@ -191,7 +213,8 @@ export default function LibraryPage() {
                                     ) : null}
                                 </span>
                                 <span className="movie-poster-title">{movie.title}</span>
-                                <span className="movie-poster-meta">{movie.authorName || 'Daily Wire'}</span>
+                                {movie.authorName && <span className="movie-poster-meta">{movie.authorName}</span>}
+                                <SourceBadge sourceKey={movie.sourceKey}/>
                             </Link>
                         )
                     })}

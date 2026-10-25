@@ -173,7 +173,7 @@ Check:
 
 Check:
 
-- at least one of **Use Downloads** or **Use DailyWire stream** is enabled;
+- at least one of **Use Downloads** or **Use The Daily Wire stream** is enabled;
 - selected episode types;
 - preferred format;
 - **Prefer exact match**;
@@ -210,7 +210,7 @@ For faster access to recent episodes, keep a small recent video window downloade
 
 ## Premium Daily Wire media fails
 
-Open **Settings → DailyWire** and confirm VODLoft is still connected. Also confirm that the same account still has access to the content on Daily Wire itself.
+Open **Settings → Sources** and confirm VODLoft is still signed in to The Daily Wire. Also confirm that the same account still has access to the content on Daily Wire itself.
 
 If you changed advanced endpoints, OAuth settings, or request pacing, restore their defaults before continuing diagnosis.
 

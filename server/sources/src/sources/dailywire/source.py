@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from ..contract import EpisodeMedia, Feature, MoviePlayback, Source
+from ..contract import EpisodeMedia, Feature, MoviePlayback, ResolvedLink, Source
 from .api.dw_api.client import MiddlewareClient
 from .api.dw_api.movie import MovieMiddlewareClient
 from .auth import DeviceAuthClient
+from .links import resolve_link
 from .playback import resolve_movie_playback
 
 
@@ -21,6 +22,9 @@ class DailyWireSource(Source):
         Feature.MEMBERSHIP_LEVELS,
         Feature.RSS_STREAMING,
     })
+
+    def resolve(self, url: str) -> ResolvedLink | None:
+        return resolve_link(url)
 
     def episode_media(self, *, slug: str, members_only: bool, interactive: bool = False) -> EpisodeMedia:
         client = MiddlewareClient(request_priority="interactive") if interactive else MiddlewareClient()

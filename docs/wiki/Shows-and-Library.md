@@ -8,15 +8,19 @@ The Home page is the quickest way to see the state of VODLoft. It summarizes act
 
 Use Home when you want to know whether VODLoft is operating normally or something needs your attention.
 
+## Add media
+
+**Add media** in the Library takes a link to a show, an episode or a movie. VODLoft asks each Source that claims the link's website whether it recognises it, and shows a preview from the first one that does. Continuing opens the normal Add Show wizard, or the movie page, already filled in. A link to an episode opens the show it belongs to. If no Source recognises the link, VODLoft says so instead of guessing.
+
 ## Browse
 
-Browse shows Daily Wire content that can be added to VODLoft. Shows and movies are kept separate so it is easier to find the kind of media you want.
+Browse shows The Daily Wire's content that can be added to VODLoft. Shows and movies are kept separate so it is easier to find the kind of media you want.
 
 Adding an item from Browse creates a managed entry in your Library. For shows, VODLoft indexes seasons and episodes. For movies, VODLoft stores the information needed for the local movie page and downloads.
 
 ## Library
 
-Library contains the shows and movies you have chosen to manage.
+Library contains the shows and movies you have chosen to manage. Each card names the Source it comes from, and when your Library holds items from more than one Source, you can filter it by Source.
 
 It has separate Shows and Movies views. Show filters are remembered in that browser, so returning to the Library restores the last show-type selection you used.
 

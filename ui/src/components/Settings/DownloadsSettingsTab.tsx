@@ -73,11 +73,11 @@ export function EnsureSafeDelayToggle({
             help={
                 <ReadMore summary={<span>Use a deliberately conservative timestamp when applying the episode download delay.</span>}>
                     <p>
-                        Unfortunately, The Daily Wire does not currently provide an accurate time at which an episode was published.
+                        Unfortunately, a source does not always provide an accurate time at which an episode was published.
                         The time they define as published differs wildly per show, and is at times very inaccurate. Therefore, to
                         apply the download delay, VODLoft tries to make a best- effort guess when the episode was published based
                         primarily on when it observed it being published, but with with fallback to other timestamps or the official
-                        time as reported by The Daily Wire if VODLoft cannot prove it was online while the episode was published.
+                        time as reported by the source if VODLoft cannot prove it was online while the episode was published.
                     </p>
                     <p>
                         When this setting is enabled, that best- effort guess is replaced by the timestamp VODLoft first recorded
@@ -260,7 +260,7 @@ export default function DownloadsSettingsTab({
                         next.downloadSettings.thumbnailMode = value as ThumbnailMode
                     })}
                     help={
-                        <ReadMore summary="Choose how VODLoft stores the Daily Wire thumbnail for downloaded media.">
+                        <ReadMore summary="Choose how VODLoft stores the source's thumbnail for downloaded media.">
                             <p><strong>No thumbnail</strong> keeps downloads media-only.</p>
                             <p><strong>Embed in media</strong> stores the thumbnail as cover artwork inside the downloaded media file.</p>
                             <p><strong>Download besides media</strong> writes the image alongside the final media file, using the same basename.</p>
@@ -360,7 +360,7 @@ export default function DownloadsSettingsTab({
                         <ReadMore summary={<span>Delay before downloading published episodes.</span>}>
                             <p>
                                 Sometimes when an episode has just been published, its length is mere minutes even for hours long
-                                episodes. Presumably, The Daily Wire is still processing it on their end even while their API reports
+                                episodes. Presumably, the source is still processing it on their end even while their API reports
                                 it as fully ready.
                             </p>
                             <p>

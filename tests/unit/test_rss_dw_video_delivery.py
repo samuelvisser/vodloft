@@ -224,7 +224,7 @@ def test_hls_endpoint_falls_back_directly_to_dailywire_without_mp4_preparation(
     )
     monkeypatch.setattr(
         feed_router,
-        "get_dailywire_stream_url",
+        "get_source_stream_url",
         lambda *_args, **_kwargs: "https://media.example/fresh/master.m3u8",
     )
     monkeypatch.setattr(

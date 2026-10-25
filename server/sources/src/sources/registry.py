@@ -1,7 +1,7 @@
 """Which Sources exist, and which Source handles a link."""
 from __future__ import annotations
 
-from .contract import Source
+from .contract import ANY_DOMAIN, Source
 
 
 class UnknownSourceError(LookupError):
@@ -30,5 +30,9 @@ def all_sources() -> list[Source]:
 
 
 def sources_for(url: str) -> list[Source]:
-    """All Sources that claim the link's domain, in registration order."""
-    return [source for source in _sources.values() if source.handles(url)]
+    """All Sources that claim the link's domain, in registration order.
+
+    Sources that claim every domain (``*``) come after the ones that name it.
+    """
+    matching = [source for source in _sources.values() if source.handles(url)]
+    return sorted(matching, key=lambda source: ANY_DOMAIN in source.domains)

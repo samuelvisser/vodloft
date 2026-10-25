@@ -2,6 +2,7 @@ import {z} from "zod";
 import {EpisodeIdentifierReg, ShowTypeReg} from "../show";
 import {DwMembershipLevelReg} from "../dailywire_user_info";
 import {ApiDateTimeSchema} from "./datetime";
+import {SourcedFields} from "./source";
 
 
 /** Ensure https:// if a scheme is missing */
@@ -113,7 +114,8 @@ export const ShowReadSchema = z.looseObject({
     id: z.int(),
     uuid: z.string(),
     slug: z.string(),
-    membershipLevel: z.union([z.enum(DwMembershipLevelReg.values), z.string()]),
+    ...SourcedFields,
+    membershipLevel: z.union([z.enum(DwMembershipLevelReg.values), z.string()]).optional(),
     type: z.union([z.enum(ShowTypeReg.values), z.string()]),
     episodeIdentifier: z.union([z.enum(EpisodeIdentifierReg.values), z.string()]),
     authorSlug: z.string(),

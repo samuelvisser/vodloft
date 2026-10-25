@@ -62,7 +62,7 @@ from backend.services.media_download_collection import (
 )
 from backend.services.media_download_history import record_media_download_history
 from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path
-from sources.dailywire.api.records import DwMovieRecord
+from sources import get_source
 from task_manager.scheduler.db import TaskRun
 from task_manager.tasks.media_download_operations import (
     get_active_media_download_operation,
@@ -171,6 +171,7 @@ def _load_media_items_for_view(
                     Episode.slug,
                     Episode.title,
                     Episode.episode_identifier,
+                    Episode.source_key,
                     raiseload=True,
                 ),
                 joinedload(Episode.show).load_only(
@@ -194,6 +195,7 @@ def _load_media_items_for_view(
                     Movie.id,
                     Movie.slug,
                     Movie.title,
+                    Movie.source_key,
                     raiseload=True,
                 ),
                 raiseload("*"),
@@ -212,6 +214,7 @@ def _load_media_items_for_view(
                     MovieExtra.movie_id,
                     MovieExtra.source_id,
                     MovieExtra.movie_extra_type,
+                    MovieExtra.source_key,
                     raiseload=True,
                 ),
                 joinedload(MovieExtra.movie).load_only(
@@ -601,14 +604,15 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
 
 def create_movie_download(
     s: Session,
-    movie_data: DwMovieRecord,
+    movie: Movie,
     body: MovieDownloadAPICreate,
 ) -> MovieMediaDownload:
+    """Persist a download target for an indexed movie."""
     profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.MOVIE)
-    if not movie_data.is_downloadable:
-        raise HTTPException(status_code=422, detail="Daily Wire marks this movie as unavailable for download")
+    if not movie.is_downloadable:
+        source_name = get_source(movie.source_key).name
+        raise HTTPException(status_code=422, detail=f"{source_name} marks this movie as unavailable for download")
 
-    movie = _get_or_create_movie(s, movie_data)
     existing: Optional[MovieMediaDownload] = (
         s.query(MovieMediaDownload)
         .filter(
@@ -650,24 +654,19 @@ def create_movie_download(
 
 def create_movie_extra_download(
     s: Session,
-    movie_data: DwMovieRecord,
+    movie: Movie,
     movie_extra_slug: str,
     body: MovieDownloadAPICreate,
 ) -> MovieExtraMediaDownload:
-    """Persist a browsed movie extra and queue it with a Movie profile."""
+    """Persist a download target for an extra of an indexed movie."""
     profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.MOVIE)
-    remote_extra = next((extra for extra in movie_data.movie_extras if extra.slug == movie_extra_slug), None)
-    if remote_extra is None:
-        raise HTTPException(status_code=404, detail="Movie extra not found for this movie")
-
-    movie = _get_or_create_movie(s, movie_data)
     movie_extra: Optional[MovieExtra] = (
         s.query(MovieExtra)
         .filter(MovieExtra.movie_id == movie.id, MovieExtra.slug == movie_extra_slug)
         .one_or_none()
     )
     if movie_extra is None:
-        raise HTTPException(status_code=404, detail="Movie extra could not be persisted for this movie")
+        raise HTTPException(status_code=404, detail="Movie extra not found for this movie")
 
     existing: Optional[MovieExtraMediaDownload] = (
         s.query(MovieExtraMediaDownload)
@@ -716,12 +715,6 @@ def _get_profile(s: Session, profile_id: int, expected_type: LocalMediaProfileTy
         label = "Movies and movie extras" if expected_type == LocalMediaProfileType.MOVIE else "Episodes"
         raise HTTPException(status_code=422, detail=f"{label} require a {expected_type.value.title()} Local Media Profile")
     return profile
-
-
-def _get_or_create_movie(s: Session, movie_data: DwMovieRecord) -> Movie:
-    from backend.services.movies import index_dailywire_movie
-    movie, _ = index_dailywire_movie(s, movie_data)
-    return movie
 
 
 def retry_media_download(s: Session, media_download_id: int) -> MediaDownloadBase:

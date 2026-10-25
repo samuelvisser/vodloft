@@ -3,7 +3,7 @@ import {Link, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {useShow, useEpisode, useEpisodeDownloads, useLocalMediaProfiles} from '../../lib/queries'
+import {useShow, useEpisode, useEpisodeDownloads, useLocalMediaProfiles, useSourceLookup} from '../../lib/queries'
 import {useSettings} from '../../lib/settings'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
 import {isShowLocalMediaProfileAvailableFor} from '../../types/local_media_profile'
@@ -64,6 +64,7 @@ export default function EpisodePage() {
         isFetching: isEpisodeFetching,
     } = useEpisode(episodeId)
     const {data: profiles, error: profilesError} = useLocalMediaProfiles()
+    const sourceName = useSourceLookup().name(episode?.sourceKey ?? show?.sourceKey)
     const {
         data: downloads,
         error: downloadsError,
@@ -342,14 +343,14 @@ export default function EpisodePage() {
                         disabled: earlyDeleteBusy,
                     }}>
                     <p>
-                        Daily Wire currently returns 404 for this episode, so VODLoft cannot recover media from its current slug.
+                        {sourceName} currently returns 404 for this episode, so VODLoft cannot recover media from its current slug.
                     </p>
                     <p>
                         VODLoft will normally keep checking it and only delete it automatically after
                         {' '}<strong>{formatDurationMinutes(earlyDeleteAfterMinutes)}</strong> in the continuous <code>no_usable_media</code> state.
                     </p>
                     <p>
-                        Deleting early skips that waiting period. However, if it turns out this episode slug returned to The Daily Wire, VODLoft
+                        Deleting early skips that waiting period. However, if it turns out this episode slug returned to {sourceName}, VODLoft
                         will refuse to delete it.
                     </p>
                 </ConfirmDialog>

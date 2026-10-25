@@ -136,6 +136,7 @@ def test_scheduler_accepts_movie_extra_resource_type() -> None:
 def test_download_view_uses_movie_extra_as_media_identity_and_movie_as_parent() -> None:
     import backend.db.models  # noqa: F401
     from backend.api.endpoints.media_downloads.service import get_media_downloads_view
+    from backend.services.movies import index_dailywire_movie
     from backend.db import Base
     from backend.db.models import Movie, MovieExtra, MovieLocalMediaProfile
     from backend.db.models.media_download import MovieExtraMediaDownload
@@ -268,6 +269,7 @@ def test_movie_extra_download_repairs_legacy_official_trailer_classification(
 
     import backend.db.models  # noqa: F401
     from backend.api.endpoints.media_downloads.service import create_movie_extra_download
+    from backend.services.movies import index_dailywire_movie
     from backend.api.models.media_download import MovieDownloadAPICreate
     from backend.db import Base
     from backend.db.models import Movie, MovieExtra, MovieLocalMediaProfile
@@ -352,7 +354,7 @@ def test_movie_extra_download_repairs_legacy_official_trailer_classification(
 
         download = create_movie_extra_download(
             session,
-            movie_data,
+            index_dailywire_movie(session, movie_data)[0],
             remote_interview.slug,
             MovieDownloadAPICreate(local_media_profile_id=profile.id),
         )

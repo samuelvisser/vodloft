@@ -3,11 +3,13 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Route, Routes, useNavigate} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import AddShowPage from '../AddShowPage/AddShowPage'
-import DailywireAuthCard from '../DailywireAuth/DailywireAuthCard'
+import AddMediaPage from '../../pages/AddMediaPage'
+import type {MediaLinkTarget} from '../../lib/sourceControls'
 import BrowsePage from '../../pages/BrowsePage'
 import MoviePage from '../../pages/movie/MoviePage'
-import {useMovies} from '../../lib/queries'
-import {DailywireCatalogMovieRead, DailywireCatalogShowRead} from '../../types/schemas/dailywire_catalog'
+import {useMovies, useSources} from '../../lib/queries'
+import {sourceComponents} from '../Source/sourceComponents'
+import {SourceFeature, sourceHas} from '../../types/schemas/source'
 import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {ShowRead} from '../../types/schemas/show'
 import OnboardingMovieProfileStep from './OnboardingMovieProfileStep'
@@ -15,18 +17,21 @@ import './Onboarding.css'
 import {faIcon} from '../../icons/faIcon'
 
 
-type OnboardingStep = 'welcome' | 'dailywire' | 'security' | 'browse' | 'show' | 'movie-profile' | 'movie'
+type OnboardingStep = 'welcome' | 'sources' | 'security' | 'add' | 'browse' | 'show' | 'movie-profile' | 'movie'
+
+/** The show or movie picked as the first media, from a link or from browsing. */
+type SelectedMedia = {slug: string; title: string; url: string}
 
 type Props = {
     adminPasswordConfigured: boolean
     onComplete: () => void
 }
 
-const STEP_LABELS = ['Welcome', 'Daily Wire', 'Security', 'First media']
+const STEP_LABELS = ['Welcome', 'Sources', 'Security', 'First media']
 
 function visibleStepIndex(step: OnboardingStep) {
     if (step === 'welcome') return 0
-    if (step === 'dailywire') return 1
+    if (step === 'sources') return 1
     if (step === 'security') return 2
     return 3
 }
@@ -36,10 +41,10 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
     const queryClient = useQueryClient()
     const {data: localMovies} = useMovies()
     const [step, setStep] = useState<OnboardingStep>('welcome')
-    const [dailyWireConnected, setDailyWireConnected] = useState<boolean | null>(null)
-    const [selectedShow, setSelectedShow] = useState<DailywireCatalogShowRead | null>(null)
+    const {data: sources} = useSources()
+    const [selectedShow, setSelectedShow] = useState<SelectedMedia | null>(null)
     const [selectedShowWasPresent, setSelectedShowWasPresent] = useState(false)
-    const [selectedMovie, setSelectedMovie] = useState<DailywireCatalogMovieRead | null>(null)
+    const [selectedMovie, setSelectedMovie] = useState<SelectedMedia | null>(null)
     const [movieProfile, setMovieProfile] = useState<LocalMediaProfileRead | null>(null)
     const [isCompleting, setIsCompleting] = useState(false)
     const completingRef = useRef(false)
@@ -65,31 +70,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
         }
     }, [onComplete])
 
-    useEffect(() => {
-        if (step !== 'dailywire') return
-        let cancelled = false
-
-        const refresh = async () => {
-            try {
-                const base = (window as any).appConfig.API_URL?.replace(/\/+$/, '')
-                const response = await fetch(`${base}/dailywire/auth/status`, {credentials: 'include'})
-                if (!response.ok) return
-                const status = await response.json()
-                if (!cancelled) setDailyWireConnected(Boolean(status?.authenticated))
-            } catch {
-                if (!cancelled) setDailyWireConnected(false)
-            }
-        }
-
-        void refresh()
-        const timer = window.setInterval(() => void refresh(), 2_000)
-        return () => {
-            cancelled = true
-            window.clearInterval(timer)
-        }
-    }, [step])
-
-    const selectShow = (show: DailywireCatalogShowRead) => {
+    const selectShow = (show: SelectedMedia) => {
         const currentShows = queryClient.getQueryData<ShowRead[]>(['shows']) ?? []
         setSelectedShowWasPresent(currentShows.some((item) => item.slug === show.slug))
         setSelectedShow(show)
@@ -110,12 +91,12 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                 }
             }
         } catch {
-            // Returning to browse still gives the user a safe way to finish or retry setup.
+            // Returning to the first-media step still gives the user a safe way to finish or retry setup.
         }
-        setStep('browse')
+        setStep('add')
     }
 
-    const selectMovie = (movie: DailywireCatalogMovieRead) => {
+    const selectMovie = (movie: SelectedMedia) => {
         setSelectedMovie(movie)
         setMovieProfile(null)
         setError(null)
@@ -163,36 +144,42 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                 <main className="onboarding-welcome">
                     <div className="onboarding-welcome-glow" aria-hidden="true"/>
                     <img className="onboarding-welcome-logo" src="/logo-wide-full.png" alt="VODLoft"/>
-                    <p>Bring your Daily Wire library home.</p>
-                    <button className="btn btn-primary onboarding-primary-action" type="button" onClick={() => setStep('dailywire')}>
+                    <p>Bring your library home.</p>
+                    <button className="btn btn-primary onboarding-primary-action" type="button" onClick={() => setStep('sources')}>
                         Continue
                         <FontAwesomeIcon icon={faIcon('fass', 'arrow-right')}/>
                     </button>
                 </main>
             )}
 
-            {step === 'dailywire' && (
+            {step === 'sources' && (
                 <main className="onboarding-stage onboarding-stage-narrow">
                     <div className="onboarding-section-heading">
-                        <span className="onboarding-eyebrow">Daily Wire account</span>
-                        <h1>Connect your subscription</h1>
+                        <span className="onboarding-eyebrow">Sources</span>
+                        <h1>Where your media comes from</h1>
                         <p>
-                            Sign in through Daily Wire's device authorization flow to access content included with your
-                            membership. VODLoft never asks for or stores your Daily Wire password.
+                            VODLoft adds shows and movies from these services. Signing in is optional: it is only
+                            needed for content that requires an account, and you can do it later in Settings › Sources.
                         </p>
                     </div>
-                    <DailywireAuthCard/>
+                    {(sources ?? []).map((source) => {
+                        const {SignIn} = sourceComponents(source.id)
+                        const canSignIn = sourceHas(source, SourceFeature.LOGIN) && SignIn
+                        return (
+                            <details className="onboarding-source" key={source.id} open={(sources?.length ?? 0) === 1}>
+                                <summary>
+                                    <strong>{source.name}</strong>
+                                    <small>{canSignIn ? 'Optional sign-in' : 'No sign-in needed'}</small>
+                                </summary>
+                                {canSignIn ? <SignIn/> : null}
+                            </details>
+                        )
+                    })}
                     <div className="onboarding-stage-actions">
                         <button className="btn" type="button" onClick={() => setStep('welcome')}>Back</button>
-                        {dailyWireConnected ? (
-                            <button className="btn btn-primary" type="button" onClick={() => setStep('security')}>
-                                Continue
-                            </button>
-                        ) : (
-                            <button className="btn" type="button" onClick={() => setStep('security')}>
-                                Skip for now
-                            </button>
-                        )}
+                        <button className="btn btn-primary" type="button" onClick={() => setStep('security')}>
+                            Continue
+                        </button>
                     </div>
                 </main>
             )}
@@ -238,20 +225,36 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                     </p>
 
                     <div className="onboarding-stage-actions">
-                        <button className="btn" type="button" onClick={() => setStep('dailywire')}>Back</button>
-                        <button className="btn btn-primary" type="button" onClick={() => setStep('browse')}>
+                        <button className="btn" type="button" onClick={() => setStep('sources')}>Back</button>
+                        <button className="btn btn-primary" type="button" onClick={() => setStep('add')}>
                             Continue to library setup
                         </button>
                     </div>
                 </main>
             )}
 
+            {step === 'add' && (
+                <main className="onboarding-stage onboarding-stage-wide">
+                    <AddMediaPage
+                        onboarding
+                        onShow={(target: MediaLinkTarget) => selectShow(target)}
+                        onMovie={(target: MediaLinkTarget) => selectMovie(target)}
+                        onBrowse={() => setStep('browse')}
+                        onSkip={() => void completeOnboarding()}
+                    />
+                    {isCompleting && <div className="onboarding-completing" role="status">Finishing setup…</div>}
+                </main>
+            )}
+
             {step === 'browse' && (
                 <main className="onboarding-stage onboarding-stage-wide">
+                    <button className="btn onboarding-movie-back" type="button" onClick={() => setStep('add')}>
+                        <FontAwesomeIcon icon={faIcon('fass', 'arrow-left')}/> Back to links
+                    </button>
                     <BrowsePage
                         onboarding
-                        onShowSelect={selectShow}
-                        onMovieSelect={selectMovie}
+                        onShowSelect={(show, url) => selectShow({slug: show.slug, title: show.title, url})}
+                        onMovieSelect={(movie, url) => selectMovie({slug: movie.slug, title: movie.title, url})}
                         onSkip={() => void completeOnboarding()}
                     />
                     {isCompleting && <div className="onboarding-completing" role="status">Finishing setup…</div>}
@@ -266,7 +269,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                         <p>The normal Add Show wizard will let you confirm a Local Media Profile before any downloads are configured.</p>
                     </div>
                     <AddShowPage
-                        initialUrl={`https://www.dailywire.com/show/${selectedShow.slug}`}
+                        initialUrl={selectedShow.url}
                         onCancel={() => void leaveShowWizard()}
                     />
                 </main>
@@ -278,7 +281,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                         movieTitle={selectedMovie.title}
                         onBack={() => {
                             navigate('/?type=movies', {replace: true})
-                            setStep('browse')
+                            setStep('add')
                         }}
                         onContinue={(profile) => {
                             queryClient.setQueryData<LocalMediaProfileRead[]>(['localMediaProfiles'], (current) => {
