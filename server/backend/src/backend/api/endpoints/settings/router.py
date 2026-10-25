@@ -18,7 +18,7 @@ router = APIRouter(prefix="/settings", tags=["Settings"])
 
 @router.get("", response_model=SettingsAPIRead)
 def settings_get():
-    """Return all settings intentionally exposed by the WireLoft UI."""
+    """Return all settings intentionally exposed by the VODLoft UI."""
     return get_ui_settings()
 
 

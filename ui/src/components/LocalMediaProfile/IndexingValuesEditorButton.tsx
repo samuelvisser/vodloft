@@ -100,7 +100,7 @@ export default function IndexingValuesEditorButton({
                             </p>
                             <p>
                                 For example, create a <code>'featurettes'</code> custom index. Add it to the output template
-                                in this profile. As soon as you save, every episode known to WireLoft that could be downloaded
+                                in this profile. As soon as you save, every episode known to VODLoft that could be downloaded
                                 using this profile gets a numbered index based on the conditions in the output template.
                             </p>
                             <p>
@@ -109,7 +109,7 @@ export default function IndexingValuesEditorButton({
                         </ReadMore>
                         <p className="custom-metadata-note">
                             Applying changes here only updates the Local Media Profile form. Nothing is saved to
-                            WireLoft until the Local Media Profile itself is saved.
+                            VODLoft until the Local Media Profile itself is saved.
                         </p>
 
                         <div className="custom-metadata-rows">

@@ -1,6 +1,6 @@
 # Download execution
 
-`dailywire_downloader` is a standalone package: it does not import WireLoft's ORM,
+`dailywire_downloader` is a standalone package: it does not import VODLoft's ORM,
 settings, HTTP response models, or task scheduler. It owns transfer, auxiliary
 acquisition, media rewrites, capacity limits, publication and filesystem recovery.
 

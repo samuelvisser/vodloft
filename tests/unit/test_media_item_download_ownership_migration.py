@@ -13,7 +13,7 @@ REVISION = "e1c7a4b9d302"
 
 def _ensure_historical_starter_profile(connection) -> int:
     profile_id = connection.execute(text(
-        "SELECT id FROM local_media_profiles WHERE slug = 'wireloft-shows-video'"
+        "SELECT id FROM local_media_profiles WHERE slug = 'vodloft-shows-video'"
     )).scalar_one_or_none()
     if profile_id is not None:
         return int(profile_id)
@@ -22,7 +22,7 @@ def _ensure_historical_starter_profile(connection) -> int:
         "INSERT INTO local_media_profiles "
         "(type, slug, name, output_template, preferred_format, "
         "append_media_type_to_filename) VALUES "
-        "('show', 'wireloft-shows-video', 'WireLoft Shows (Video)', "
+        "('show', 'vodloft-shows-video', 'VODLoft Shows (Video)', "
         "'/downloads/shows/{{ show_title }}/{{ season_name }}/{{ episode_title }}.ext', "
         "'format_1080p', 0)"
     )).lastrowid

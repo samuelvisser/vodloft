@@ -1,7 +1,7 @@
 [project]
 name = "controller"
 version = "0.2.4"
-description = "Task controller and definitions for WireLoft"
+description = "Task controller and definitions for VODLoft"
 authors = [{ name = "Samuël Visser", email = "samuvisser@gmail.com" }]
 requires-python = ">=3.13,<3.14"
 dependencies = [

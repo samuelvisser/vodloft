@@ -355,7 +355,7 @@ export default function LocalMediaProfilePage() {
                 </p>
                 {statistics.downloadProfileCount > 0 && (
                     <p>
-                        WireLoft will disable Download Profiles that use this Local Media Profile
+                        VODLoft will disable Download Profiles that use this Local Media Profile
                         before deleting files so automatic downloads do not immediately recreate them.
                     </p>
                 )}
@@ -397,7 +397,7 @@ export default function LocalMediaProfilePage() {
                 }}
             >
                 <p>
-                    Delete "{profile.name}"? WireLoft will remove attached MediaDownload records
+                    Delete "{profile.name}"? VODLoft will remove attached MediaDownload records
                     only when none of them still has a physical file.
                 </p>
                 {statistics.downloadProfileCount > 0 && (

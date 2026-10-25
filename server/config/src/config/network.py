@@ -104,7 +104,7 @@ def is_no_internet_error(error: BaseException | None) -> bool:
 
 
 def normalize_no_internet_error(error: BaseException) -> BaseException:
-    """Replace a library-specific outage exception with WireLoft's stable error."""
+    """Replace a library-specific outage exception with VODLoft's stable error."""
     if isinstance(error, NoInternetConnectionError):
         return error
     if is_no_internet_error(error):

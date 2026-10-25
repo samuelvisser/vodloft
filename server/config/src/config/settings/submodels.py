@@ -204,22 +204,22 @@ class AdminAuthSettings(SubmodelBase):
             pass
         else:
             # Check env-provided precomputed hash
-            env_hash = os.environ.get("WL_ADMIN_AUTH__PASSWORD_HASH")
+            env_hash = os.environ.get("VL_ADMIN_AUTH__PASSWORD_HASH")
             if isinstance(env_hash, str) and env_hash.startswith("scrypt$"):
                 self.password_hash = env_hash
             else:
                 # Compute from plaintext sources
-                plain = self.password or self._normalize_password(os.environ.get("WL_ADMIN_AUTH__PASSWORD"))
+                plain = self.password or self._normalize_password(os.environ.get("VL_ADMIN_AUTH__PASSWORD"))
                 if plain:
                     client_val = derive_admin_password_client_value(plain)
                     self.password_hash = hash_password_scrypt(client_val)
-                    os.environ["WL_ADMIN_AUTH__PASSWORD_HASH"] = str(self.password_hash)
+                    os.environ["VL_ADMIN_AUTH__PASSWORD_HASH"] = str(self.password_hash)
                 else:
                     self.password_hash = None
 
         # scrub plaintext from memory and environment
         self.password = None
-        os.environ.pop("WL_ADMIN_AUTH__PASSWORD", None)
+        os.environ.pop("VL_ADMIN_AUTH__PASSWORD", None)
 
         return self
 
@@ -366,7 +366,7 @@ class DownloadSettings(SubmodelBase):
     ensure_safe_delay: bool = Field(
         default=False,
         description=(
-            "For post-publication download safety checks, prefer a trusted final-publication timestamp and otherwise use WireLoft's first recorded final observation"
+            "For post-publication download safety checks, prefer a trusted final-publication timestamp and otherwise use VODLoft's first recorded final observation"
         ),
     )
     download_timeout_seconds: int = Field(

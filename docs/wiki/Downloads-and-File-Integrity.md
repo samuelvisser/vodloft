@@ -1,12 +1,12 @@
 # Downloads and File Integrity
 
-The **Downloads** page is the central place to see actual media-file activity in WireLoft. Profiles describe what WireLoft should do; this page shows what has actually been queued, downloaded, processed, or failed.
+The **Downloads** page is the central place to see actual media-file activity in VODLoft. Profiles describe what VODLoft should do; this page shows what has actually been queued, downloaded, processed, or failed.
 
 Each row represents one media item and Local Media Profile combination, so the same episode can appear more than once when you keep multiple formats.
 
 ## Download statuses
 
-WireLoft can show downloads as:
+VODLoft can show downloads as:
 
 - **Queued** — waiting for a download slot;
 - **Downloading** — media is currently being transferred;
@@ -14,8 +14,8 @@ WireLoft can show downloads as:
 - **Downloaded** — the local file completed successfully;
 - **Cancelled** — the download was stopped;
 - **Error** — the attempt failed;
-- **Missing** — WireLoft expected a completed file but cannot find it;
-- **Corrupted** — the file exists but failed WireLoft's integrity checks.
+- **Missing** — VODLoft expected a completed file but cannot find it;
+- **Corrupted** — the file exists but failed VODLoft's integrity checks.
 
 Completed downloads are hidden by the default Downloads-page filter so active/problems are easier to see. Enable the **Downloaded** filter when you want full history.
 
@@ -29,7 +29,7 @@ A queued item can be **Prioritized**. Prioritized items are chosen before ordina
 
 ### Cancel
 
-Active or queued work can be cancelled. Cancellation stops the WireLoft download operation; it does not delete a previously completed media file.
+Active or queued work can be cancelled. Cancellation stops the VODLoft download operation; it does not delete a previously completed media file.
 
 ### Retry
 
@@ -57,7 +57,7 @@ Higher concurrency is not always faster. Your internet connection, Daily Wire, C
 
 ## Direct and temporary download modes
 
-WireLoft supports two ways of handling incomplete downloads.
+VODLoft supports two ways of handling incomplete downloads.
 
 ### Save directly to downloads
 
@@ -73,7 +73,7 @@ The system default is configured in **Settings → Downloads**, and individual L
 
 ## Video MP4 output
 
-By default, WireLoft remuxes downloaded HLS video into MP4.
+By default, VODLoft remuxes downloaded HLS video into MP4.
 
 This changes the container format without re-encoding the video, so it is much faster than converting the video itself and does not intentionally reduce quality.
 
@@ -81,7 +81,7 @@ FFmpeg must be available at the configured path. The Docker image already includ
 
 ## Where files are stored
 
-A Local Media Profile produces a path beginning with `/downloads/`. WireLoft resolves that against the configured **Download root**.
+A Local Media Profile produces a path beginning with `/downloads/`. VODLoft resolves that against the configured **Download root**.
 
 The supplied Docker setup mounts the host's `./downloads` directory at `/downloads` inside the container.
 
@@ -89,7 +89,7 @@ See [[Local-Media-Profiles]] for output templates and filename rules.
 
 ## Automatic file checks
 
-WireLoft periodically checks recorded downloads so problems caused by external file changes do not remain invisible.
+VODLoft periodically checks recorded downloads so problems caused by external file changes do not remain invisible.
 
 By default:
 
@@ -100,19 +100,19 @@ These schedules can be changed in **Settings → Downloads**.
 
 ### Missing files and renames
 
-When a completed file is no longer at its recorded path, WireLoft can recognize some same-folder renames and update the stored path automatically.
+When a completed file is no longer at its recorded path, VODLoft can recognize some same-folder renames and update the stored path automatically.
 
-It does not treat your entire media library as a general filesystem index. If you manually move a file to another directory, WireLoft may mark the original download as missing.
+It does not treat your entire media library as a general filesystem index. If you manually move a file to another directory, VODLoft may mark the original download as missing.
 
-For reorganizing WireLoft-managed media, change the Local Media Profile output template and use WireLoft's own workflow rather than moving files around externally whenever possible.
+For reorganizing VODLoft-managed media, change the Local Media Profile output template and use VODLoft's own workflow rather than moving files around externally whenever possible.
 
 ### File-size verification
 
-With **Verify file size** enabled, WireLoft marks a completed file as corrupted if it is empty or smaller than the size recorded when the download completed.
+With **Verify file size** enabled, VODLoft marks a completed file as corrupted if it is empty or smaller than the size recorded when the download completed.
 
-This is a lightweight integrity safeguard. WireLoft does not continuously calculate a full checksum of every healthy media file.
+This is a lightweight integrity safeguard. VODLoft does not continuously calculate a full checksum of every healthy media file.
 
-If a file is marked corrupted, check the actual storage first if you suspect a disk, NAS, or filesystem problem, then use Retry when you want WireLoft to download it again.
+If a file is marked corrupted, check the actual storage first if you suspect a disk, NAS, or filesystem problem, then use Retry when you want VODLoft to download it again.
 
 ## Retention and automatic deletion
 

@@ -93,7 +93,7 @@ const wireloftFilterCompletionOptions: Completion[] = [
     filterCompletion(
         'strftime',
         'strftime(format)',
-        'Format a WireLoft date or time value using Python strftime directives.',
+        'Format a VODLoft date or time value using Python strftime directives.',
     ),
     filterCompletion(
         'regex_replace',

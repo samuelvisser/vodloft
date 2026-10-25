@@ -25,7 +25,7 @@ type IdentifierMaxValues = Dict[str, int]
 type EpisodeWithIdentifier = Tuple[str, DwEpisodeRecord]
 
 # The Daily Wire uses .01-.19 for content attached to an episode. Segment .20
-# and above is show-level auxiliary content and must use WireLoft's show-global
+# and above is show-level auxiliary content and must use VODLoft's show-global
 # AUX/TRAILER namespace instead of an episode-extra identifier.
 _SHOW_AUX_SEGMENT_START = 20
 _OFFICIAL_TRAILER_RE = re.compile(r"\bofficial\s+trailer\b", re.IGNORECASE)
@@ -54,7 +54,7 @@ def identify_episodes_in_season(
     """Assign canonical identifiers without using episode-number high-water marks.
 
     The Daily Wire's complete episode number is authoritative for normal episodes
-    and attached episode extras. WireLoft only allocates its own show-global
+    and attached episode extras. VODLoft only allocates its own show-global
     counters for standalone trailers and auxiliary content.
     """
     values = dict(current_values or {})

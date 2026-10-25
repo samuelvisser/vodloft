@@ -138,7 +138,7 @@ export default function AddStreamProfilePage() {
                                 description: (
                                     <ReadMore summary={<span>Open RSS feed for the show.</span>}>
                                         <p>RSS is the technology used to distribute podcast feeds.</p>
-                                        <p>With an RSS Stream Profile in WireLoft, you can effectively create your very own podcast from
+                                        <p>With an RSS Stream Profile in VODLoft, you can effectively create your very own podcast from
                                         Daily Wire content. This is great when you want to listen to premium versions of Daily Wire shows
                                         using your favorite podcast app.</p>
                                     </ReadMore>

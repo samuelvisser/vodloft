@@ -51,7 +51,7 @@ export default function App() {
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       setOnboardingStatus(await response.json())
     } catch {
-      setOnboardingError('WireLoft could not determine whether first-run setup is complete.')
+      setOnboardingError('VODLoft could not determine whether first-run setup is complete.')
     }
   }, [])
 
@@ -90,7 +90,7 @@ export default function App() {
           setOnboardingStatus((current) => current ? { ...current, completed: true } : current)
           navigate('/', { replace: true })
           toast.success(
-            'WireLoft is setup. Look around a little and explore your very own media manager for all things Daily Wire. Enjoy!',
+            'VODLoft is setup. Look around a little and explore your very own media manager for all things Daily Wire. Enjoy!',
             { duration: 8000 },
           )
         }}

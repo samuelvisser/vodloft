@@ -24,8 +24,8 @@ export default function AdvancedSettingsTab({draft, updateDraft, environmentVari
                     })}
                     placeholder={tokenConfigured ? 'Token configured — enter a new token to replace it' : 'Enter a TMDB API Read Access Token'}
                     help={tokenConfigured
-                        ? 'A token is configured. WireLoft never returns the stored token to the browser; entering a value here replaces it.'
-                        : 'Required for one-time release-date lookup when a movie is first added to WireLoft.'}
+                        ? 'A token is configured. VODLoft never returns the stored token to the browser; entering a value here replaces it.'
+                        : 'Required for one-time release-date lookup when a movie is first added to VODLoft.'}
                     inputType="password"
                     autoComplete="new-password"
                     wide
@@ -103,7 +103,7 @@ export default function AdvancedSettingsTab({draft, updateDraft, environmentVari
                         next.crypto.secretKeyFile = value || null
                     })}
                     placeholder="Leave empty to use the default key file"
-                    help="WireLoft reads key material from this file instead of the generated default when set."
+                    help="VODLoft reads key material from this file instead of the generated default when set."
                     wide
                 />
                 <TextField
@@ -115,14 +115,14 @@ export default function AdvancedSettingsTab({draft, updateDraft, environmentVari
                     onChange={(value) => updateDraft((next) => {
                         next.crypto.defaultSecretFile = value
                     })}
-                    help="Changing encryption key files can make existing encrypted tokens unreadable. Restart WireLoft after changing this."
+                    help="Changing encryption key files can make existing encrypted tokens unreadable. Restart VODLoft after changing this."
                     wide
                 />
             </SettingsDisclosure>
 
             <SettingsSection
                 title="Configuration precedence"
-                description="WireLoft resolves a setting from the highest available source."
+                description="VODLoft resolves a setting from the highest available source."
                 className="settings-section--informational"
             >
                 <ol className="settings-precedence-list settings-field--wide">

@@ -58,7 +58,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
             if (!response.ok) throw new Error(`HTTP ${response.status}`)
             onComplete()
         } catch {
-            setError('WireLoft could not finish onboarding. Please try again.')
+            setError('VODLoft could not finish onboarding. Please try again.')
         } finally {
             completingRef.current = false
             setIsCompleting(false)
@@ -138,7 +138,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
 
             {showTopbar && (
                 <header className="onboarding-topbar">
-                    <img src="/logo-wide-full.png" alt="WireLoft"/>
+                    <img src="/logo-wide-full.png" alt="VODLoft"/>
                     <ol className="onboarding-progress" aria-label="Onboarding progress">
                         {STEP_LABELS.map((label, index) => (
                             <li key={label} className={index === progress ? 'is-active' : index < progress ? 'is-complete' : ''}>
@@ -162,7 +162,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
             {step === 'welcome' && (
                 <main className="onboarding-welcome">
                     <div className="onboarding-welcome-glow" aria-hidden="true"/>
-                    <img className="onboarding-welcome-logo" src="/logo-wide-full.png" alt="WireLoft"/>
+                    <img className="onboarding-welcome-logo" src="/logo-wide-full.png" alt="VODLoft"/>
                     <p>Bring your Daily Wire library home.</p>
                     <button className="btn btn-primary onboarding-primary-action" type="button" onClick={() => setStep('dailywire')}>
                         Continue
@@ -178,7 +178,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                         <h1>Connect your subscription</h1>
                         <p>
                             Sign in through Daily Wire's device authorization flow to access content included with your
-                            membership. WireLoft never asks for or stores your Daily Wire password.
+                            membership. VODLoft never asks for or stores your Daily Wire password.
                         </p>
                     </div>
                     <DailywireAuthCard/>
@@ -200,11 +200,11 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
             {step === 'security' && (
                 <main className="onboarding-stage onboarding-stage-narrow">
                     <div className="onboarding-section-heading">
-                        <span className="onboarding-eyebrow">Protect WireLoft</span>
+                        <span className="onboarding-eyebrow">Protect VODLoft</span>
                         <h1>Create an administrator password</h1>
                         <p>
-                            Set the environment variable below on your WireLoft container and restart it. This is
-                            especially important when WireLoft is reachable through a reverse proxy.
+                            Set the environment variable below on your VODLoft container and restart it. This is
+                            especially important when VODLoft is reachable through a reverse proxy.
                         </p>
                     </div>
 
@@ -218,8 +218,8 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                             <strong>{adminPasswordConfigured ? 'Administrator authentication is configured' : 'Administrator authentication is not configured yet'}</strong>
                             <p>
                                 {adminPasswordConfigured
-                                    ? 'WireLoft will require the administrator password before showing protected pages.'
-                                    : 'Without this value, anyone who can reach WireLoft can control it and access its stored account session.'}
+                                    ? 'VODLoft will require the administrator password before showing protected pages.'
+                                    : 'Without this value, anyone who can reach VODLoft can control it and access its stored account session.'}
                             </p>
                         </div>
                     </div>
@@ -227,13 +227,13 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                     <div className="onboarding-env-example">
                         <div>
                             <span>Environment variable</span>
-                            <code>WL_ADMIN_AUTH__PASSWORD</code>
+                            <code>VL_ADMIN_AUTH__PASSWORD</code>
                         </div>
-                        <pre><code>{'environment:\n  WL_ADMIN_AUTH__PASSWORD: "choose-a-long-unique-password"'}</code></pre>
+                        <pre><code>{'environment:\n  VL_ADMIN_AUTH__PASSWORD: "choose-a-long-unique-password"'}</code></pre>
                     </div>
 
                     <p className="onboarding-security-note">
-                        A restart is required after changing the variable. On the next visit, WireLoft will show its own
+                        A restart is required after changing the variable. On the next visit, VODLoft will show its own
                         administrator login before loading the application.
                     </p>
 

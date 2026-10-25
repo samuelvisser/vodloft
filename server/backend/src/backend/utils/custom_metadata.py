@@ -60,7 +60,7 @@ def custom_metadata_from_items(items: Iterable[_MetadataItem]) -> dict[str, str]
 
 
 def get_custom_metadata(resource: _CustomMetadataResource) -> dict[str, str]:
-    """Return only user-editable metadata, isolated from WireLoft internal keys."""
+    """Return only user-editable metadata, isolated from VODLoft internal keys."""
     return custom_metadata_from_items(resource.meta_items)
 
 
@@ -68,7 +68,7 @@ def replace_custom_metadata(
     resource: _CustomMetadataResource,
     values: Mapping[str, str],
 ) -> None:
-    """Replace an item's custom values without touching WireLoft metadata."""
+    """Replace an item's custom values without touching VODLoft metadata."""
     storage_values = {
         custom_metadata_storage_key(key): value
         for key, value in values.items()

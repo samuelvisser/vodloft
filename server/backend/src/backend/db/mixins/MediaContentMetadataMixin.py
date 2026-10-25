@@ -7,7 +7,7 @@ class MediaContentMetadataMixin:
     """Reusable intrinsic media metadata stored by the content owner.
 
     MediaItemBase deliberately does not inherit this mixin: a media item models
-    WireLoft identity/placement and download state, while the concrete content
+    VODLoft identity/placement and download state, while the concrete content
     owner decides where these descriptive fields live. Episodes and movies own
     them directly; shared movie-extra sources own them for all of their placements.
     """

@@ -120,7 +120,7 @@ export default function LocalMediaProfileCommonFields({form}: { form: UseFormRet
                         </p>
                         <p>
                             Temporary mode is particularly useful when the destination is watched by a media server and you do not want it to pick up partly downloaded or empty media files.
-                            Save directly to downloads, due to its simple nature, is a little faster and less prone to errors. Though if errors do happen in either mode, WireLoft will
+                            Save directly to downloads, due to its simple nature, is a little faster and less prone to errors. Though if errors do happen in either mode, VODLoft will
                             automatically restore from them.
                         </p>
                     </ReadMore>
@@ -185,7 +185,7 @@ export default function LocalMediaProfileCommonFields({form}: { form: UseFormRet
                 <div className="help" id="local-media-metadata-mode-help">
                     <ReadMore summary="Choose how this profile stores metadata for downloaded media.">
                         <p><strong>System</strong> follows the current system-wide default.</p>
-                        <p><strong>No metadata</strong> leaves the downloaded media without WireLoft-generated metadata.</p>
+                        <p><strong>No metadata</strong> leaves the downloaded media without VODLoft-generated metadata.</p>
                         <p><strong>Embed in media</strong> writes useful media-server metadata directly into supported media containers.</p>
                         <p><strong>Download as NFO</strong> writes the same metadata in a same-basename NFO file beside the media.</p>
                         <p><strong>Both embed and download</strong> does both.</p>

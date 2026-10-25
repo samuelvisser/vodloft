@@ -16,7 +16,7 @@ def remove_download_artifacts(
     nfo_path: Optional[str] = None,
     *, sidecar_paths: tuple[str, ...] = (),
 ) -> None:
-    """Remove a download's owned final files and every temporary form WireLoft uses.
+    """Remove a download's owned final files and every temporary form VODLoft uses.
 
     HLS/direct downloads write ``.part`` files, while video remuxing also uses
     ``.rawts`` and ``.rawts.part``. Thumbnail embedding has its own temporary

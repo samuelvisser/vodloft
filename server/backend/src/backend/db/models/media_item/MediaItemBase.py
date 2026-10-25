@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 
 class MediaItemBase(Base):
-    """Polymorphic WireLoft identity for a downloadable media placement."""
+    """Polymorphic VODLoft identity for a downloadable media placement."""
 
     __tablename__ = "media_items"
     __mapper_args__ = {

@@ -126,7 +126,7 @@ export default function HomePage() {
             <div className="view-header">
                 <div>
                     <h1 id="home-title">Home</h1>
-                    <p className="view-description">What WireLoft is doing now and anything that needs your attention.</p>
+                    <p className="view-description">What VODLoft is doing now and anything that needs your attention.</p>
                 </div>
                 <button className="btn btn-primary" onClick={() => navigate('/browse')}>
                     <FontAwesomeIcon icon={faIcon('fass', 'plus')}/> Add media
@@ -136,12 +136,12 @@ export default function HomePage() {
             <div className={`system-health ${hasAttention ? 'needs-attention' : 'is-healthy'}`}>
                 <FontAwesomeIcon icon={faIcon('fass', hasAttention ? 'triangle-exclamation' : 'circle-check')}/>
                 <div>
-                    <strong>{hasAttention ? 'WireLoft needs attention' : 'WireLoft is running normally'}</strong>
+                    <strong>{hasAttention ? 'VODLoft needs attention' : 'VODLoft is running normally'}</strong>
                     <small>{hasAttention ? attentionSummary : 'No download, metadata or profile problems detected'}</small>
                 </div>
             </div>
 
-            <div className="operation-stats" aria-label="WireLoft status summary">
+            <div className="operation-stats" aria-label="VODLoft status summary">
                 <button type="button" onClick={() => navigate(downloadsUrlForStatusFilters('downloading', 'local_processing'))}><span>Active</span><strong>{IN_PROGRESS.reduce((total, status) => total + (downloadsQuery.facets[status] ?? 0), 0)}</strong></button>
                 <button type="button" onClick={() => navigate(downloadsUrlForStatusFilters('pending'))}><span>Queued</span><strong>{downloadsQuery.facets.pending ?? 0}</strong></button>
                 <button type="button" onClick={() => navigate(downloadsUrlForStatusFilters('error', 'missing', 'corrupted'))}><span>Failed</span><strong>{problemsQuery.total}</strong></button>

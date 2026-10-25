@@ -32,7 +32,7 @@ docker run -d \
 The normal `npm run build` path deliberately uses Font Awesome Free. The same
 build can be requested explicitly with `npm run build:free-icons`. The Free
 Font Awesome packages are pinned to Font Awesome 7, matching the artwork used
-by the paid WireLoft kit so icons available in both sets stay visually aligned.
+by the paid VODLoft kit so icons available in both sets stay visually aligned.
 
 For a credential-free checkout, install UI dependencies from the public npm
 registry:
@@ -73,7 +73,7 @@ never copied into the image.
 
 ## Publishing a release image
 `./deploy.sh [tag]` intentionally builds with Font Awesome Pro icons and pushes
-the image to `ghcr.io/samuelvisser/wireloft`. Because releases use the paid
+the image to `ghcr.io/samuelvisser/vodloft`. Because releases use the paid
 icon set, `ui/.npmrc` is required for this command. You can select the
 automatic channel tag explicitly with
 `./deploy.sh --tag-level main|pre-release|develop|test`. If no tag level is
@@ -185,8 +185,8 @@ backend-api db init
 backend-api db seed
 
 # Use a custom database path
-backend-api db init --db <DATA_DIR>/wireloft.db
-backend-api db seed --db <DATA_DIR>/wireloft.db
+backend-api db init --db <DATA_DIR>/vodloft.db
+backend-api db seed --db <DATA_DIR>/vodloft.db
 ```
 
 #### Backend API commands

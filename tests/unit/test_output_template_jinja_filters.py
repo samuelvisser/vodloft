@@ -40,7 +40,7 @@ def test_strftime_keeps_missing_date_empty() -> None:
 def test_strftime_rejects_non_date_values() -> None:
     from backend.utils.output_template import SHOW_OUTPUT_TEMPLATE_FIELDS, render_output_template
 
-    with pytest.raises(ValueError, match="strftime requires a WireLoft date/time value"):
+    with pytest.raises(ValueError, match="strftime requires a VODLoft date/time value"):
         render_output_template(
             '/downloads/{{ date | strftime("%Y%m%d") }}.ext',
             {"date": "not-a-date"},

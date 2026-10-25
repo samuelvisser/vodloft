@@ -123,7 +123,7 @@ class MiddlewareClient:
     def get_catalog(self, *, membership_plan: Optional[str] = None) -> DwCatalogRecord:
         """Return the shows and movies exposed by Daily Wire's browse page.
 
-        The upstream response repeats items across curated carousels. WireLoft
+        The upstream response repeats items across curated carousels. VODLoft
         deliberately flattens and de-duplicates those rows so the frontend can
         offer stable alphabetical and host-grouped browsing.
         """
@@ -160,7 +160,7 @@ class MiddlewareClient:
 
         The Daily Wire currently leaves images.thumbnail.square empty in this
         component and currently duplicates the square artwork into both the
-        land and port fields. WireLoft only interprets that duplicate pair as
+        land and port fields. VODLoft only interprets that duplicate pair as
         square art when those two URLs are exactly equal, so genuinely distinct
         future orientations are not mislabeled.
         """

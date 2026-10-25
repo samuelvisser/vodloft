@@ -2,76 +2,40 @@
   <picture>
     <source
       media="(prefers-color-scheme: dark)"
-      srcset="docs/assets/logos/logo-wide-wireloft-white.png"
+      srcset="docs/logos/logo-wide-vodloft-white.png"
     >
     <source
       media="(prefers-color-scheme: light)"
-      srcset="docs/assets/logos/logo-wide-wireloft-black.png"
+      srcset="docs/logos/logo-wide-vodloft-black.png"
     >
     <img
-      src="docs/assets/logos/logo-wide-wireloft-black.png"
-      alt="WireLoft Logo"
+      src="docs/logos/logo-wide-vodloft-black.png"
+      alt="VODLoft Logo"
       width="450"
     >
   </picture>
 </p>
 
-<h2 align="center">Higly polished self-hosted Local Media Manager and RSS generator for The Daily Wire</h2>
+<h2 align="center">Self-hosted media downloader and RSS generator for Daily Wire, YouTube, NPO and more</h2>
 
-
-<p align="center">
-  <picture>
-    <source
-      media="(prefers-color-scheme: dark)"
-      srcset="docs/assets/screenshots/1.2.2-library-dark.png"
-    >
-    <source
-      media="(prefers-color-scheme: light)"
-      srcset="docs/assets/screenshots/1.2.2-library-light.png"
-    >
-    <img
-      src="docs/assets/screenshots/1.2.2-library-light.png"
-      alt="WireLoft Home Screen"
-      width="700"
-    >
-  </picture>
-</p>
-
-<p align="center">
-  <picture>
-    <source
-      media="(prefers-color-scheme: dark)"
-      srcset="docs/assets/screenshots/1.2.2-collection-movie-episode-dark.png"
-    >
-    <source
-      media="(prefers-color-scheme: light)"
-      srcset="docs/assets/screenshots/1.2.2-collection-movie-episode-light.png"
-    >
-    <img
-      src="docs/assets/screenshots/1.2.2-collection-movie-episode-light.png"
-      alt="WireLoft Home Screen"
-      width="700"
-    >
-  </picture>
-</p>
+> [!IMPORTANT]
+> VODLoft is in early development and not ready for use yet. It is a fresh fork of
+> [WireLoft](https://github.com/samuelvisser/wireloft), a mature download manager for The Daily Wire.
+> Right now VODLoft behaves exactly like WireLoft. YouTube (through yt-dlp) and NPO.nl support are being
+> added for the 0.1.0 beta. If you only need The Daily Wire, use WireLoft.
 
 ## What it does
 
-WireLoft is an easy-to-use, highly polished self-hosted app for managing (premium) media from The Daily Wire. 
+VODLoft takes everything [WireLoft](https://github.com/samuelvisser/wireloft) does for The Daily Wire and extends it
+to more websites. Each website is handled by a **Source**: The Daily Wire through its own API, YouTube and hundreds
+of other sites through [yt-dlp](https://github.com/yt-dlp/yt-dlp), and NPO.nl through VODLoft's own NPO client.
+Whatever the Source, you get the same profiles, file naming, metadata, artwork, NFO files and RSS feeds.
 
-It is built for self-hosting nerds who want to enjoy premium shows from The Daily Wire without being limited to its website or app. WireLoft allows you to download individual show episodes to your server, or stream audio and video episodes straight to your RSS podcast client without having to download anything server-side first.
+VODLoft is highly customizable to fit your exact needs. You can automatically download audio for every item in a show while downloading video only for full episodes, do it the other way around, or configure something entirely different.
 
-WireLoft is highly customizable to fit your exact needs. You can automatically download audio for every item in a show while downloading video only for full episodes, do it the other way around, or configure something entirely different. You can simply index a show, stream its contents directly from The Daily Wire's servers to your favorite podcast app, download every episode, or download only the subset you are interested in. Whatever you want.
+This project was inspired by [Pinchflat](https://github.com/kieraneglin/pinchflat), an awesome project that allows you to automatically download videos from YouTube channels and playlists.
 
-WireLoft works with movies hosted by The Daily Wire as well. Download any movie you have access to and enjoy it through your local media server, such as Jellyfin or Plex, or simply watch it locally.
-
-This project was inspired by [Pinchflat](https://github.com/kieraneglin/pinchflat), an awesome project that allows you to automatically download videos from YouTube channels and playlists. WireLoft takes that concept to The Daily Wire and expands on it greatly. In addition to automatically managing shows, WireLoft supports individual episodes and movies, making it a true one-stop shop for all things The Daily Wire.
-
-WireLoft is not meant to be used for consuming the content itself; it downloads, organizes, or streams it for you. For downloaded content, use a self-hosted media server such as Plex or Jellyfin for video, or Audiobookshelf for podcasts and audio. For RSS, use the WireLoft- generated RSS stream in you favorite podcast app and consume the content there.  
-Despite everything it offers, WireLoft is designed to remain easy to install and use: launch the Docker container, open the Web UI, and everything will explain itself. My philosophy with this software is to
-allow basically any configuration you can think of, but help you through advisory messages where needed how your setup could improve, usually even with a button to apply it automatically. This keeps you
-in control while not throwing you in the dark.
-
+VODLoft is not meant to be used for consuming the content itself; it downloads, organizes, or streams it for you. For downloaded content, use a self-hosted media server such as Plex or Jellyfin for video, or Audiobookshelf for podcasts and audio. For RSS, use the VODLoft-generated RSS stream in your favorite podcast app and consume the content there.
 
 ## Features
 
@@ -89,7 +53,7 @@ in control while not throwing you in the dark.
 
 ## Running with Docker
 
-The best way to run WireLoft is using its Docker container. Everything is managed for you automatically within the container.
+The best way to run VODLoft is using its Docker container. Everything is managed for you automatically within the container.
 
 
 ### Quick start: use the published image
@@ -98,11 +62,11 @@ Run the following to get started immediately:
 
 ```bash
 mkdir wireloft && cd wireloft
-curl -O https://raw.githubusercontent.com/samuelvisser/wireloft/develop/.docker/docker-compose.yml
+curl -O https://raw.githubusercontent.com/samuelvisser/vodloft/develop/.docker/docker-compose.yml
 docker compose up -d
 ```
 
-Then open http://localhost:5273.
+Then open http://localhost:5274.
 
 See **Volumes** and **Useful environment variables** below for persistence and configuration options. Edit the Compose file in place if you want to change anything beyond the defaults.
 
@@ -112,10 +76,10 @@ See **Volumes** and **Useful environment variables** below for persistence and c
 ```yaml
 services:
   wireloft:
-    image: ghcr.io/samuelvisser/wireloft:latest
+    image: ghcr.io/samuelvisser/vodloft:latest
     restart: unless-stopped
     ports:
-      - "5273:80"
+      - "5274:80"
     volumes:
       - ./config:/config
       - ./downloads:/downloads
@@ -135,18 +99,18 @@ services:
 #### Useful environment variables
 
 * `TZ` -- Container timezone. Defaults to `UTC`.
-* `WL_ADMIN_AUTH__PASSWORD` -- Set this to require a password to access the Web UI. Leave it unset for open access on your local network. Always set this when exposing WireLoft through a reverse proxy.
+* `VL_ADMIN_AUTH__PASSWORD` -- Set this to require a password to access the Web UI. Leave it unset for open access on your local network. Always set this when exposing VODLoft through a reverse proxy.
 * `API_URL` -- Override the API base URL given to the Web UI. This defaults to the relative `/api`, which works out of the box regardless of which host port you map.
 
-Literally every setting WireLoft provides can be managed by environment variables, too. However, I generally do not advise
-using environment variables for anything but the above examples. Any setting configured by environment variable cannot be changed in the WireLoft UI.
+Literally every setting VODLoft provides can be managed by environment variables, too. However, I generally do not advise
+using environment variables for anything but the above examples. Any setting configured by environment variable cannot be changed in the VODLoft UI.
 
-See the [Settings documentation](https://github.com/samuelvisser/wireloft/wiki/Settings) for all available settings, including their `config.yml` keys, environment variables, defaults, and explanations.
+See the [Settings documentation](https://github.com/samuelvisser/vodloft/wiki/Settings) for all available settings, including their `config.yml` keys, environment variables, defaults, and explanations.
 
 
 ## Special thanks
 
-While WireLoft is built entirely from the ground up with original code, the open-source [DailyWirePodcastProxy](https://github.com/fpnewton/DailyWirePodcastProxy) project has helped tremendously in figuring out how The Daily Wire API works. 
+VODLoft is based on [WireLoft](https://github.com/samuelvisser/wireloft). The open-source [DailyWirePodcastProxy](https://github.com/fpnewton/DailyWirePodcastProxy) project has helped tremendously in figuring out how The Daily Wire API works. 
 DailyWirePodcastProxy allows you to access premium versions of Daily Wire shows directly from your podcast app. Definitely check it out if you're interested!
 
 

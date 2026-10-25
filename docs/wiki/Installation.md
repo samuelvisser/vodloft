@@ -1,19 +1,19 @@
 # Installation
 
-Docker is the recommended way to run WireLoft. The published container includes the backend, web interface, FFmpeg, and the web server used to expose them through one HTTP port.
+Docker is the recommended way to run VODLoft. The published container includes the backend, web interface, FFmpeg, and the web server used to expose them through one HTTP port.
 
 ## Quick start
 
 ```bash
 mkdir wireloft && cd wireloft
-curl -O https://raw.githubusercontent.com/samuelvisser/wireloft/main/.docker/docker-compose.yml
+curl -O https://raw.githubusercontent.com/samuelvisser/vodloft/main/.docker/docker-compose.yml
 docker compose up -d
 ```
 
 Open:
 
 ```text
-http://localhost:5273
+http://localhost:5274
 ```
 
 The supplied Compose file is equivalent to:
@@ -21,40 +21,40 @@ The supplied Compose file is equivalent to:
 ```yaml
 services:
   wireloft:
-    image: ghcr.io/samuelvisser/wireloft:latest
+    image: ghcr.io/samuelvisser/vodloft:latest
     container_name: wireloft
     restart: unless-stopped
     ports:
-      - "5273:80"
+      - "5274:80"
     volumes:
       - ./config:/config
       - ./downloads:/downloads
     environment:
       - TZ=UTC
-      # - WL_ADMIN_AUTH__PASSWORD=change-me
+      # - VL_ADMIN_AUTH__PASSWORD=change-me
 ```
 
-After WireLoft opens, continue with [[First-Run-Setup]]. 
+After VODLoft opens, continue with [[First-Run-Setup]]. 
 
 ## Persistent storage
 
-WireLoft keeps the application itself inside the container and stores persistent data in mounted directories. Recreating or upgrading the container is therefore safe as long as these mounts are preserved.
+VODLoft keeps the application itself inside the container and stores persistent data in mounted directories. Recreating or upgrading the container is therefore safe as long as these mounts are preserved.
 
 ### `/config` — required
 
-Persist the entire `/config` directory. It contains WireLoft's database, configuration, secret-key material, and Daily Wire authentication state.
+Persist the entire `/config` directory. It contains VODLoft's database, configuration, secret-key material, and Daily Wire authentication state.
 
-If `/config` is lost, WireLoft should be treated as a new installation.
+If `/config` is lost, VODLoft should be treated as a new installation.
 
 ### `/downloads` — your media library
 
 The supplied Compose file maps `./downloads` on the host to `/downloads` in the container. Set **Download root** to `/downloads` when using this layout.
 
-Local Media Profiles use paths beginning with `/downloads/`. WireLoft resolves that virtual prefix from the configured Download root. See [[Local-Media-Profiles]] and [[Settings#downloads]].
+Local Media Profiles use paths beginning with `/downloads/`. VODLoft resolves that virtual prefix from the configured Download root. See [[Local-Media-Profiles]] and [[Settings#downloads]].
 
 You can point Plex, Jellyfin, Audiobookshelf, or another media application at the appropriate folders inside the host's download directory.
 
-WireLoft uses temporary download mode by default. Its **Temporary download folder** defaults to container-local storage so remuxing and metadata processing stay off network media mounts. You can point it at another suitable local disk or mount if needed.
+VODLoft uses temporary download mode by default. Its **Temporary download folder** defaults to container-local storage so remuxing and metadata processing stay off network media mounts. You can point it at another suitable local disk or mount if needed.
 
 ## Set your timezone
 
@@ -66,15 +66,15 @@ environment:
   - TZ=Europe/Amsterdam
 ```
 
-The timezone affects scheduled jobs and how WireLoft displays and interprets time-based behavior.
+The timezone affects scheduled jobs and how VODLoft displays and interprets time-based behavior.
 
 ## Protect the web interface
 
-On a trusted LAN you can run WireLoft without its own administrator password. If other people can reach the service, or if you expose it through a reverse proxy, configure one:
+On a trusted LAN you can run VODLoft without its own administrator password. If other people can reach the service, or if you expose it through a reverse proxy, configure one:
 
 ```yaml
 environment:
-  - WL_ADMIN_AUTH__PASSWORD=choose-a-long-unique-password
+  - VL_ADMIN_AUTH__PASSWORD=choose-a-long-unique-password
 ```
 
 Restart the container after changing deployment environment variables:
@@ -83,11 +83,11 @@ Restart the container after changing deployment environment variables:
 docker compose up -d
 ```
 
-This password protects the WireLoft web interface. Private RSS feeds use their own secret URLs instead. See [[Security-and-Remote-Access]].
+This password protects the VODLoft web interface. Private RSS feeds use their own secret URLs instead. See [[Security-and-Remote-Access]].
 
 ## Configuration
 
-For normal use, configure WireLoft from **Settings** in the web interface. Changes are saved to the persistent `config.yml` under `/config`.
+For normal use, configure VODLoft from **Settings** in the web interface. Changes are saved to the persistent `config.yml` under `/config`.
 
 Environment variables can override settings when you need deployment-level control. If a setting is controlled by an environment variable, the Settings page shows that override and explains the UI cannot overwrite it.
 
@@ -95,17 +95,17 @@ See [[Settings]] for the full reference.
 
 ## Reverse proxy and remote access
 
-If WireLoft will be available outside your trusted local network:
+If VODLoft will be available outside your trusted local network:
 
 - use HTTPS;
-- enable the WireLoft administrator password;
+- enable the VODLoft administrator password;
 - make sure the hostname stored in RSS Stream Profiles is reachable by your podcast clients;
-- forward both the normal WireLoft application and `/feeds/rss/` paths;
+- forward both the normal VODLoft application and `/feeds/rss/` paths;
 - keep RSS feed URLs private, because the token in the URL is the feed credential.
 
-A VPN or private overlay network is also a good option when you do not want to expose WireLoft publicly. See [[Security-and-Remote-Access]].
+A VPN or private overlay network is also a good option when you do not want to expose VODLoft publicly. See [[Security-and-Remote-Access]].
 
-## Updating WireLoft
+## Updating VODLoft
 
 For a normal Compose installation:
 
@@ -114,4 +114,4 @@ docker compose pull
 docker compose up -d
 ```
 
-WireLoft applies database migrations when the container starts. Back up `/config` before important upgrades. See [[Backups-and-Upgrades]].
+VODLoft applies database migrations when the container starts. Back up `/config` before important upgrades. See [[Backups-and-Upgrades]].

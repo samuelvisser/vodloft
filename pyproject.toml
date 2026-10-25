@@ -1,6 +1,6 @@
 [project]
-name = "Wireloft"
-version = "1.2.4"
+name = "VODLoft"
+version = "0.1.0"
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "backend",

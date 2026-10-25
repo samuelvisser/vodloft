@@ -308,7 +308,7 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
 
     const totalSteps = showAction === 'download-stream' ? 5 : showAction === 'download' ? 4 : showAction === 'stream' ? 3 : 2
     const stepTitle = step === 1 ? 'Choose show'
-        : step === 2 ? 'Choose what WireLoft should do'
+        : step === 2 ? 'Choose what VODLoft should do'
         : showAction === 'stream' ? 'Stream Profile'
         : step === 3 ? 'Media Profile'
         : step === 4

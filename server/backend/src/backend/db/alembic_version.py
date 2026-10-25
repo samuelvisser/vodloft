@@ -26,7 +26,7 @@ def apply_settings_version_table(context: MigrationContext) -> None:
     """Use ``settings.alembic_version_num`` as Alembic's version store.
 
     Alembic expects the Python-side key ``version_num``. SQLAlchemy allows that
-    key to map to WireLoft's clearer physical column name without making the
+    key to map to VODLoft's clearer physical column name without making the
     whole Settings table Alembic's logical version table. Keeping Alembic's
     configured version-table name unchanged also means autogenerate continues to
     compare the Settings model normally.

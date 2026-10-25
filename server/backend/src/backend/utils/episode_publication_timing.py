@@ -102,7 +102,7 @@ def _invalidate_publication_lifecycle_timing(
         published_final: bool = False,
         observed_at: datetime | None = None,
 ) -> None:
-    """Invalidate WireLoft-derived timing facts when a new publication lifecycle starts."""
+    """Invalidate VODLoft-derived timing facts when a new publication lifecycle starts."""
     current = utc_datetime(observed_at or datetime.now(timezone.utc))
     invalidate_safe_publication_timing(
         episode,
@@ -175,7 +175,7 @@ def record_published_final_observation(
         *,
         observed_at: datetime | None = None,
 ) -> datetime:
-    """Persist the first time WireLoft recorded PUBLISHED_FINAL this lifecycle."""
+    """Persist the first time VODLoft recorded PUBLISHED_FINAL this lifecycle."""
     existing = episode.recorded_published_final
     if existing is not None:
         return existing
@@ -189,12 +189,12 @@ def record_published_final_observation(
 
 
 def best_effort_published_date(episode: Episode) -> datetime | None:
-    """Return WireLoft's best available publication timestamp for automation.
+    """Return VODLoft's best available publication timestamp for automation.
 
     A trusted continuously observed final transition wins. When a restart broke
     monitoring continuity, last_known_pending is only a lower bound; combine it
     with The Daily Wire's timestamp and use whichever is later. The first time
-    WireLoft recorded PUBLISHED_FINAL is deliberately not used because it is an
+    VODLoft recorded PUBLISHED_FINAL is deliberately not used because it is an
     upper bound and may be hours late after downtime.
     """
     safe_published_final = episode.safe_published_final

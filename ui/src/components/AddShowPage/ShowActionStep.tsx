@@ -21,7 +21,7 @@ const OPTIONS: Array<{
         value: 'index',
         eyebrow: 'Index',
         title: 'Only index this show',
-        description: 'Have WireLoft keep track of the show and its episodes, letting you download individual episodes manually.',
+        description: 'Have VODLoft keep track of the show and its episodes, letting you download individual episodes manually.',
     },
     {
         value: 'stream',
@@ -39,7 +39,7 @@ const OPTIONS: Array<{
         value: 'download-stream',
         eyebrow: 'Index + Download + Stream',
         title: 'Index, download and stream downloaded files',
-        description: 'Archive The Daily Wire content and serve it from your own server. WireLoft downloads episodes automatically and exposes them through a stream.',
+        description: 'Archive The Daily Wire content and serve it from your own server. VODLoft downloads episodes automatically and exposes them through a stream.',
     },
 ]
 
@@ -47,8 +47,8 @@ export default function ShowActionStep({value, onChange, onBack, onContinue, onC
     return (
         <div className="show-action-step">
             <div className="show-action-heading">
-                <h2>What do you want WireLoft to do with this show?</h2>
-                <p>Choose how WireLoft should handle new episodes. You can add or change profiles later.</p>
+                <h2>What do you want VODLoft to do with this show?</h2>
+                <p>Choose how VODLoft should handle new episodes. You can add or change profiles later.</p>
             </div>
 
             <div className="show-action-options" role="radiogroup" aria-label="Show setup mode">

@@ -35,7 +35,7 @@ export default function Sidebar() {
         <aside className="sidebar" aria-label="Sidebar">
             <header className="sidebar-header" style={{display: 'flex', justifyContent: 'center', paddingTop: 6}}>
                 <NavLink to="/" className="brand" style={{display: 'flex', alignItems: 'center', gap: 2}}>
-                    <img src="/logo-wide-wireloft.png" alt="WireLoft logo" width={150} style={{borderRadius: 2}} />
+                    <img src="/logo-wide-vodloft.png" alt="VODLoft logo" width={150} style={{borderRadius: 2}} />
                 </NavLink>
             </header>
 

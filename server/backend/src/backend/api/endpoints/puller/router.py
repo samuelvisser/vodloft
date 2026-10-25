@@ -9,5 +9,5 @@ router = APIRouter(prefix="/pull", tags=["Frontend Puller"])
 
 @router.get("", response_model=FrontendPullAPIRead)
 def frontend_pull():
-    """Return WireLoft's generic changing-execution snapshot."""
+    """Return VODLoft's generic changing-execution snapshot."""
     return get_frontend_pull()

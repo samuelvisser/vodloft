@@ -693,7 +693,7 @@ def record_interrupted_media_download_run_history(
     *,
     occurred_at: datetime,
 ) -> int:
-    """Record download attempts that were still running when WireLoft stopped."""
+    """Record download attempts that were still running when VODLoft stopped."""
     download_definition_ids = set(
         session.scalars(
             select(TaskDefinition.id).where(TaskDefinition.key.in_(_DOWNLOAD_TASK_KEYS))

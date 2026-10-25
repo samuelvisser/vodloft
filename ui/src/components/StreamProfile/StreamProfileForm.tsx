@@ -233,7 +233,7 @@ export default function StreamProfileForm({
                             label: 'Use Downloads',
                             description: (
                                 <ReadMore summary={<span>Stream downloaded media when available.</span>}>
-                                    <p>If enabled, downloaded media within WireLoft can be used when streaming.</p>
+                                    <p>If enabled, downloaded media within VODLoft can be used when streaming.</p>
                                     <p>Streaming downloaded media usually improves the stability of the stream
                                         and ensures a consistent experience.</p>
                                 </ReadMore>
@@ -245,7 +245,7 @@ export default function StreamProfileForm({
                             description: (
                                 <ReadMore summary={<span>Stream directly from The Daily Wire.</span>}>
                                     <p>If enabled, streamed media can come directly from The Daily Wire's own servers.</p>
-                                    <p>If Use Downloads is enabled too, WireLoft will prefer downloaded media,
+                                    <p>If Use Downloads is enabled too, VODLoft will prefer downloaded media,
                                         but stream directly when no downloaded media exists.
                                     </p>
                                     <p>This could come in handy if you only intend to download a few of the latest episodes,
@@ -290,7 +290,7 @@ export default function StreamProfileForm({
                     </div>
                 )}
                 <div className="help" id="enable-profile-help">
-                    <ReadMore summary={<span>Enable streaming the content from WireLoft.</span>}>
+                    <ReadMore summary={<span>Enable streaming the content from VODLoft.</span>}>
                         <p>When enabled, this stream profile will do its job and open your chosen stream (for now, RSS).</p>
                         <p>You can disable it if you want to retain all the stream profile settings but for whatever reason do not want
                             the streaming enabled.</p>
@@ -357,9 +357,9 @@ export default function StreamProfileForm({
                     )}
                     <div className="help" id="sp-pref-format-help">
                         <ReadMore summary={<span>Whether to stream video or audio from DW.</span>}>
-                            <p>WireLoft cannot control what format the video or audio that DW provides will be in. Therefore, when Use Downloads
+                            <p>VODLoft cannot control what format the video or audio that DW provides will be in. Therefore, when Use Downloads
                             is disabled in streaming sources, you cannot select the exact video format you prefer.</p>
-                            <p>Setting this to video will set the resolution to 1080p in the background. That wont matter much as again, WireLoft
+                            <p>Setting this to video will set the resolution to 1080p in the background. That wont matter much as again, VODLoft
                                 will just stream whatever video DW gives it.</p>
                         </ReadMore>
                     </div>
@@ -403,7 +403,7 @@ export default function StreamProfileForm({
                         <p><b>Ep. Extra</b> is auxiliary content for a specific episode.</p>
                         <p><b>Trailer</b> is a trailer for the show or auxiliary content.</p>
                         <p><b>Auxiliary</b> is auxiliary content for the show.</p>
-                        <p>Until you change this selection manually, WireLoft uses Episode and Auxiliary by default. When Use Downloads is enabled and a Download Profile for the same show has the selected Preferred format, its episode types are used as the default instead.</p>
+                        <p>Until you change this selection manually, VODLoft uses Episode and Auxiliary by default. When Use Downloads is enabled and a Download Profile for the same show has the selected Preferred format, its episode types are used as the default instead.</p>
                     </ReadMore>
                 </div>
             </div>
@@ -431,16 +431,16 @@ export default function StreamProfileForm({
                         <ReadMore summary={<span>Match downloaded episodes using strict rules.</span>}>
                             <p>
                                 When this setting is <strong>enabled</strong>, if say, you have a 720p version downloaded but your preferred format is
-                                1080p, instead of using the 720p version, WireLoft will stream from DW directly (in whatever format it happens to provide).<br/>
+                                1080p, instead of using the 720p version, VODLoft will stream from DW directly (in whatever format it happens to provide).<br/>
                                 When the setting is <strong>disabled</strong>, it tries to match your preferred format but will stream other video
                                 formats from your downloaded files if they are the only ones available locally.
                             </p>
                             <p>
-                                Obviously, no matter what this setting is set to, WireLoft will only consider video downloads when trying to match local
+                                Obviously, no matter what this setting is set to, VODLoft will only consider video downloads when trying to match local
                                 files to your video streaming request. Audio will never be send in the place of video merely because you had it downloaded.
                             </p>
                             <p>
-                                <strong>Note:</strong> WireLoft cannot control what DW provides. This preference only controls whether WireLoft accepts
+                                <strong>Note:</strong> VODLoft cannot control what DW provides. This preference only controls whether VODLoft accepts
                                 a non-exact local video format before falling back to DW. It does not guarantee that the stream DW provides will be
                                 in the exact format you prefer.
                             </p>

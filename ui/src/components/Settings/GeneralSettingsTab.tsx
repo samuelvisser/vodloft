@@ -21,7 +21,7 @@ export default function GeneralSettingsTab({draft, updateDraft, environmentVaria
         <>
             <SettingsSection
                 title="Application"
-                description="Common settings that affect WireLoft throughout the interface and background services."
+                description="Common settings that affect VODLoft throughout the interface and background services."
             >
                 <TextField
                     id="settings-timezone"

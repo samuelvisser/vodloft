@@ -261,7 +261,7 @@ export default function CronEditor({
     onEnabledChange,
     environmentVariable,
     enabledEnvironmentVariable,
-    help = 'Schedules use WireLoft’s configured timezone.',
+    help = 'Schedules use VODLoft’s configured timezone.',
     error,
     runNow,
 }: CronEditorProps) {
@@ -556,12 +556,12 @@ export default function CronEditor({
             </div>
             {enabledEnvironmentVariable ? (
                 <div className="settings-field__environment-note">
-                    The enable setting is managed by environment variable <code>{enabledEnvironmentVariable}</code>. Change or remove that environment override and restart WireLoft to edit it here.
+                    The enable setting is managed by environment variable <code>{enabledEnvironmentVariable}</code>. Change or remove that environment override and restart VODLoft to edit it here.
                 </div>
             ) : null}
             {environmentVariable ? (
                 <div className="settings-field__environment-note">
-                    The cron expression is managed by environment variable <code>{environmentVariable}</code>. Change or remove that environment override and restart WireLoft to edit it here.
+                    The cron expression is managed by environment variable <code>{environmentVariable}</code>. Change or remove that environment override and restart VODLoft to edit it here.
                 </div>
             ) : null}
             {runNow ? (

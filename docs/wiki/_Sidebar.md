@@ -1,4 +1,4 @@
-**WireLoft Wiki**
+**VODLoft Wiki**
 
 - [[Home]]
 
@@ -6,14 +6,14 @@
 - [[Installation]]
 - [[First-Run-Setup]]
 
-**Using WireLoft**
+**Using VODLoft**
 - [[Shows-and-Library]]
 - [[Local-Media-Profiles]]
 - [[Download-Profiles]]
 - [[Downloads-and-File-Integrity]]
 - [[Podcast-RSS-Feeds]]
 
-**How WireLoft stays current**
+**How VODLoft stays current**
 - [[Daily-Wire-Integration]]
 - [[Automation-and-Background-Tasks]]
 
@@ -25,4 +25,4 @@
 
 ---
 
-[WireLoft repository](https://github.com/samuelvisser/wireloft)
+[VODLoft repository](https://github.com/samuelvisser/vodloft)

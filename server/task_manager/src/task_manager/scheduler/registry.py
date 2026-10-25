@@ -80,7 +80,7 @@ def task(
     indeterminate until completion, while messages, waits and cancellation still
     use the normal execution channel.
 
-    ``pauses_scheduled_work`` routes the task through WireLoft's critical
+    ``pauses_scheduled_work`` routes the task through VODLoft's critical
     execution lane. Normal scheduler work remains paused from the first attempt
     through any retries until that TaskRun reaches a terminal state.
 

@@ -12,7 +12,7 @@ _SETTINGS: Optional[AppSettings] = None
 def get_settings() -> AppSettings:
     """
     Return the process-wide AppSettings instance.
-    The first call constructs it (reading YAML/.env/env, hashing admin pass, scrubbing WL_ADMIN_PASS).
+    The first call constructs it (reading YAML/.env/env, hashing admin pass, scrubbing VL_ADMIN_PASS).
     Subsequent calls return the cached instance.
     """
     global _SETTINGS

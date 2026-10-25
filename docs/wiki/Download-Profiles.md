@@ -1,6 +1,6 @@
 # Download Profiles
 
-Download Profiles decide **which show episodes WireLoft should download automatically**. The attached Local Media Profile decides the file format, download behavior, and output path. See [[Local-Media-Profiles]].
+Download Profiles decide **which show episodes VODLoft should download automatically**. The attached Local Media Profile decides the file format, download behavior, and output path. See [[Local-Media-Profiles]].
 
 A show can have more than one Download Profile. For example, you can keep audio for every episode while retaining video only for the newest five.
 
@@ -32,7 +32,7 @@ Choose how many episodes the profile should consider:
 
 When **No limits** is selected, you can optionally set **Download starting from** to establish a fixed cutoff date.
 
-WireLoft will ignore eligible episodes older than that date and continue downloading new episodes published after it. Existing files are not deleted simply because they predate the cutoff.
+VODLoft will ignore eligible episodes older than that date and continue downloading new episodes published after it. Existing files are not deleted simply because they predate the cutoff.
 
 This is useful when you want to begin archiving a show from a particular date without downloading its complete history.
 
@@ -46,7 +46,7 @@ Leave it disabled if you only want the limit to control which new episodes are s
 
 Some Daily Wire episodes appear with temporary countdown media before the final episode is ready.
 
-- **Download with countdown** allows WireLoft to download that early version.
+- **Download with countdown** allows VODLoft to download that early version.
 - **Redownload final version** replaces the early version after the final media becomes available.
 
 If you only want the finished episode, leave countdown downloading disabled.

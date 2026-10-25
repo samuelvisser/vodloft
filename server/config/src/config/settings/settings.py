@@ -22,10 +22,10 @@ def get_app_version() -> str:
         with manifest.open("rb") as file:
             version = tomllib.load(file).get("project", {}).get("version")
     except (OSError, tomllib.TOMLDecodeError) as exc:
-        raise RuntimeError(f"Could not read WireLoft version from {manifest}") from exc
+        raise RuntimeError(f"Could not read VODLoft version from {manifest}") from exc
 
     if not isinstance(version, str) or not version:
-        raise RuntimeError(f"WireLoft version is missing from {manifest}")
+        raise RuntimeError(f"VODLoft version is missing from {manifest}")
     return version
 
 
@@ -45,10 +45,10 @@ def _environment_value(source, name: str) -> Any:
 
 
 def environment_settings_source_data(source, settings_cls) -> dict[str, Any]:
-    """Return normalized environment settings with WireLoft's TZ exception."""
+    """Return normalized environment settings with VODLoft's TZ exception."""
     data = normalize_settings_source_keys(source(), settings_cls)
 
-    # EnvSettingsSource exposes WL_TIMEZONE as ``timezone``. DotEnvSettingsSource
+    # EnvSettingsSource exposes VL_TIMEZONE as ``timezone``. DotEnvSettingsSource
     # can additionally pass an unrecognised TZ key through as ``tz``/``TZ``.
     # Neither should survive before the canonical TZ value is inserted below.
     for key in ("timezone", "tz", "TZ"):
@@ -77,7 +77,7 @@ class AppSettings(SettingsBase):
 
     app_version: str = Field(default_factory=get_app_version, frozen=True)
 
-    database_path: Path = PROJECT_ROOT / "config" / "wireloft.db"
+    database_path: Path = PROJECT_ROOT / "config" / "vodloft.db"
 
     @computed_field
     @property
@@ -165,7 +165,7 @@ class AppSettings(SettingsBase):
         dotenv_settings,
         file_secret_settings,
     ):
-        # kwargs > environment (WL_* plus TZ) > .env > config.yml > file secrets > defaults
+        # kwargs > environment (VL_* plus TZ) > .env > config.yml > file secrets > defaults
         yaml_source = _NormalizingYamlSource(settings_cls)
 
         def normalized(source):

@@ -1,6 +1,6 @@
 # Custom Index advice in the template editor
 
-WireLoft uses normal Jinja execution for output templates. The editor can now
+VODLoft uses normal Jinja execution for output templates. The editor can now
 explain likely mistakes without changing the template's meaning or preventing
 an otherwise valid Local Media Profile from being saved.
 
@@ -21,7 +21,7 @@ library. Preview requests continue independently and never wait for advice.
 
 ## Use the existing episode index for show-wide numbering
 
-`episode_index` is WireLoft's stored index for that episode within its show.
+`episode_index` is VODLoft's stored index for that episode within its show.
 It includes all episode types, does not restart for each season or type, and is
 not the database row ID or the media-facing `episode_number`.
 

@@ -31,7 +31,7 @@ export default function MovieLocalMediaProfileForm({form}: { form: UseFormReturn
                         <p>
                             Unprefixed date variables use the current item's date: the release date for a movie or the
                             publication timestamp for an extra. The <b>movie_</b> date variables always use the parent
-                            movie's release date. Dates WireLoft does not know are empty, so a conditional can omit them.
+                            movie's release date. Dates VODLoft does not know are empty, so a conditional can omit them.
                         </p>
                         <p>
                             Daily Wire does not currently provide separate author or rating metadata for movie extras, so

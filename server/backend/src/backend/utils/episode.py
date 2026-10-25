@@ -17,7 +17,7 @@ _NUMBER = re.compile(r"^\d+$")
 
 
 def episode_identifier_type_predicate(identifier_column, allowed_types: set[str]):
-    """SQL predicate matching WireLoft's canonical episode identifier type."""
+    """SQL predicate matching VODLoft's canonical episode identifier type."""
     patterns = {
         str(EpIdType.EP): "ep.%",
         str(EpIdType.EP_EXTRA): "ep-extra.%",
@@ -34,7 +34,7 @@ def episode_identifier_type_predicate(identifier_column, allowed_types: set[str]
 
 @dataclass(frozen=True)
 class EpisodeIdentifierInfo:
-    """Structured semantics encoded in one canonical WireLoft episode identifier."""
+    """Structured semantics encoded in one canonical VODLoft episode identifier."""
 
     type: str | None
     extra_type: str | None = None
@@ -53,7 +53,7 @@ class EpisodeIdentifierInfo:
 
         episode_type, separator, payload = identifier.partition(".")
         if not separator or not payload:
-            raise ValueError(f"Invalid WireLoft episode identifier: {identifier!r}")
+            raise ValueError(f"Invalid VODLoft episode identifier: {identifier!r}")
 
         if episode_type == EpIdType.EP:
             seasonal = _SEASONAL_EPISODE.fullmatch(payload)
@@ -77,7 +77,7 @@ class EpisodeIdentifierInfo:
             "not-usable",
         }:
             if not _NUMBER.fullmatch(payload):
-                raise ValueError(f"Invalid WireLoft episode identifier: {identifier!r}")
+                raise ValueError(f"Invalid VODLoft episode identifier: {identifier!r}")
             number = str(int(payload))
             return cls(
                 type=episode_type,
@@ -85,13 +85,13 @@ class EpisodeIdentifierInfo:
                 label=number,
             )
 
-        raise ValueError(f"Unsupported WireLoft episode identifier type: {episode_type!r}")
+        raise ValueError(f"Unsupported VODLoft episode identifier type: {episode_type!r}")
 
     @classmethod
     def _parse_episode_extra(cls, identifier: str) -> "EpisodeIdentifierInfo":
         parts = identifier.split(".")
         if len(parts) < 4:
-            raise ValueError(f"Invalid WireLoft episode-extra identifier: {identifier!r}")
+            raise ValueError(f"Invalid VODLoft episode-extra identifier: {identifier!r}")
 
         _, extra_type, *payload_parts = parts
         if extra_type not in {
@@ -99,7 +99,7 @@ class EpisodeIdentifierInfo:
             EpisodeExtraType.TRAILER,
         }:
             raise ValueError(
-                f"Unsupported WireLoft episode-extra type: {extra_type!r}"
+                f"Unsupported VODLoft episode-extra type: {extra_type!r}"
             )
 
         payload = ".".join(payload_parts)
@@ -120,10 +120,10 @@ class EpisodeIdentifierInfo:
             )
 
         if len(payload_parts) != 2:
-            raise ValueError(f"Invalid WireLoft episode-extra identifier: {identifier!r}")
+            raise ValueError(f"Invalid VODLoft episode-extra identifier: {identifier!r}")
         episode_number, sub_number = payload_parts
         if not _NUMBER.fullmatch(episode_number) or not _NUMBER.fullmatch(sub_number):
-            raise ValueError(f"Invalid WireLoft episode-extra identifier: {identifier!r}")
+            raise ValueError(f"Invalid VODLoft episode-extra identifier: {identifier!r}")
 
         episode_number = str(int(episode_number))
         sub_number = str(int(sub_number))

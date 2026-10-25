@@ -13,14 +13,14 @@ from config.settings.settings import AppSettings
 
 
 def _point_settings_at(config_path, monkeypatch):
-    monkeypatch.setenv("WL_CONFIG_FILE", str(config_path))
+    monkeypatch.setenv("VL_CONFIG_FILE", str(config_path))
     monkeypatch.setitem(AppSettings.model_config, "yaml_file", config_path)
     return reload_settings()
 
 
 def test_settings_use_one_config_yml(tmp_path, monkeypatch):
     config_path = tmp_path / "nested" / "config.yml"
-    monkeypatch.setenv("WL_CONFIG_FILE", str(config_path))
+    monkeypatch.setenv("VL_CONFIG_FILE", str(config_path))
 
     assert get_config_path() == config_path
 
@@ -28,7 +28,7 @@ def test_settings_use_one_config_yml(tmp_path, monkeypatch):
 def test_yaml_settings_source_is_registered_and_reads_config(tmp_path, monkeypatch):
     config_path = tmp_path / "config.yml"
     config_path.write_text("logLevel: DEBUG\n", encoding="utf-8")
-    monkeypatch.delenv("WL_LOG_LEVEL", raising=False)
+    monkeypatch.delenv("VL_LOG_LEVEL", raising=False)
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -65,7 +65,7 @@ def test_episode_download_delay_uses_new_config_and_api_name(tmp_path, monkeypat
     from backend.api.endpoints.settings.service import get_ui_settings, save_ui_settings
     from backend.api.models.settings import SettingsAPIUpdate
 
-    monkeypatch.delenv("WL_DOWNLOAD_SETTINGS__EPISODE_DOWNLOAD_DELAY_MINUTES", raising=False)
+    monkeypatch.delenv("VL_DOWNLOAD_SETTINGS__EPISODE_DOWNLOAD_DELAY_MINUTES", raising=False)
     config_path = tmp_path / "config.yml"
     config_path.write_text(
         "downloadSettings:\n"
@@ -98,7 +98,7 @@ def test_episode_download_delay_environment_override_uses_new_name(tmp_path, mon
 
     config_path = tmp_path / "config.yml"
     config_path.write_text("downloadSettings:\n  episodeDownloadDelayMinutes: 17\n", encoding="utf-8")
-    env_name = "WL_DOWNLOAD_SETTINGS__EPISODE_DOWNLOAD_DELAY_MINUTES"
+    env_name = "VL_DOWNLOAD_SETTINGS__EPISODE_DOWNLOAD_DELAY_MINUTES"
     monkeypatch.setenv(env_name, "23")
     _point_settings_at(config_path, monkeypatch)
 
@@ -304,7 +304,7 @@ def test_environment_overrides_are_snapshotted_until_settings_reload(tmp_path, m
         "  maxConcurrentDownloads: 3\n",
         encoding="utf-8",
     )
-    monkeypatch.delenv("WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS", raising=False)
+    monkeypatch.delenv("VL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS", raising=False)
     _point_settings_at(config_path, monkeypatch)
 
     initial = get_ui_settings()
@@ -313,8 +313,8 @@ def test_environment_overrides_are_snapshotted_until_settings_reload(tmp_path, m
     assert path not in initial.environment_overrides
 
     # Runtime environment changes are intentionally ignored until settings are
-    # reloaded (normally a WireLoft restart).
-    monkeypatch.setenv("WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS", "8")
+    # reloaded (normally a VODLoft restart).
+    monkeypatch.setenv("VL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS", "8")
     unchanged = get_ui_settings()
     assert unchanged.values.download_settings.max_concurrent_downloads == 3
     assert path not in unchanged.environment_overrides
@@ -322,17 +322,17 @@ def test_environment_overrides_are_snapshotted_until_settings_reload(tmp_path, m
     reload_settings()
     current = get_ui_settings()
     assert current.values.download_settings.max_concurrent_downloads == 8
-    assert current.environment_overrides[path] == "WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS"
+    assert current.environment_overrides[path] == "VL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS"
 
     values = current.values.model_copy(deep=True)
     values.download_settings.max_concurrent_downloads = 4
-    with pytest.raises(SettingsManagedByEnvironmentError, match="WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS"):
+    with pytest.raises(SettingsManagedByEnvironmentError, match="VL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS"):
         save_ui_settings(SettingsAPIUpdate(values=values, changed_fields=[path]))
 
     document = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     assert document["downloadSettings"]["maxConcurrentDownloads"] == 3
 
-    monkeypatch.delenv("WL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS", raising=False)
+    monkeypatch.delenv("VL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS", raising=False)
     reload_settings()
 
 
@@ -347,7 +347,7 @@ def test_timezone_is_managed_by_tz_after_settings_reload(tmp_path, monkeypatch):
     config_path = tmp_path / "config.yml"
     config_path.write_text("timezone: America/Nome\n", encoding="utf-8")
     monkeypatch.delenv("TZ", raising=False)
-    monkeypatch.setenv("WL_TIMEZONE", "Asia/Tokyo")
+    monkeypatch.setenv("VL_TIMEZONE", "Asia/Tokyo")
     _point_settings_at(config_path, monkeypatch)
 
     without_tz = get_ui_settings()
@@ -372,7 +372,7 @@ def test_timezone_is_managed_by_tz_after_settings_reload(tmp_path, monkeypatch):
     assert yaml.safe_load(config_path.read_text(encoding="utf-8"))["timezone"] == "America/Nome"
 
     monkeypatch.delenv("TZ", raising=False)
-    monkeypatch.delenv("WL_TIMEZONE", raising=False)
+    monkeypatch.delenv("VL_TIMEZONE", raising=False)
     reload_settings()
 
 

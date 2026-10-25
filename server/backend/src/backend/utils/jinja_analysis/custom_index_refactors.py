@@ -566,7 +566,7 @@ def _container_lookup(source, tree, key, environment, context):
                     return True
                 if isinstance(value, nodes.Name):
                     if context.writes[value.name] == 0:
-                        return True  # WireLoft supplies media input values as text.
+                        return True  # VODLoft supplies media input values as text.
                     binding = next((n for n in tree.body if isinstance(n, nodes.Assign) and isinstance(n.target, nodes.Name) and n.target.name == value.name), None)
                     return binding is not None and context.writes[value.name] == 1 and tree.body.index(binding) < tree.body.index(context.top_level(container))
                 return isinstance(value, nodes.Concat) and all(scalar_read(n) for n in value.nodes)

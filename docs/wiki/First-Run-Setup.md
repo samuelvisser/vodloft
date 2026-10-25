@@ -1,26 +1,26 @@
 # First-Run Setup
 
-On first launch, WireLoft guides you through connecting The Daily Wire, reviewing security, and adding your first media. You can skip optional steps and finish them later from the normal interface.
+On first launch, VODLoft guides you through connecting The Daily Wire, reviewing security, and adding your first media. You can skip optional steps and finish them later from the normal interface.
 
 ## 1. Connect to The Daily Wire
 
-WireLoft uses The Daily Wire's device authorization flow. Follow the instructions shown by WireLoft and authorize the connection on The Daily Wire's own site.
+VODLoft uses The Daily Wire's device authorization flow. Follow the instructions shown by VODLoft and authorize the connection on The Daily Wire's own site.
 
-WireLoft does **not** ask for your The Daily Wire password.
+VODLoft does **not** ask for your The Daily Wire password.
 
 Connecting an account is required for member-exclusive content. You can skip this step if you only want to use content that The Daily Wire makes publicly available without signing in.
 
 You can reconnect or change the Daily Wire session later from **Settings → DailyWire**.
 
-## 2. Decide how WireLoft should be protected
+## 2. Decide how VODLoft should be protected
 
-WireLoft's administrator login is separate from your The Daily Wire account.
+VODLoft's administrator login is separate from your The Daily Wire account.
 
-If your installation is only reachable on a trusted private network, the administrator login is optional. If WireLoft is reachable through a reverse proxy or from an untrusted network, configure a long unique password with:
+If your installation is only reachable on a trusted private network, the administrator login is optional. If VODLoft is reachable through a reverse proxy or from an untrusted network, configure a long unique password with:
 
 ```yaml
 environment:
-  - WL_ADMIN_AUTH__PASSWORD=choose-a-long-unique-password
+  - VL_ADMIN_AUTH__PASSWORD=choose-a-long-unique-password
 ```
 
 Restart the container after changing it.
@@ -55,11 +55,11 @@ For most installations:
 1. Make sure `/config` and `/downloads` are persistent.
 2. Set `TZ` to your local timezone.
 3. Connect your Daily Wire account if you use member content.
-4. Protect the WireLoft UI if it is not confined to a trusted network.
+4. Protect the VODLoft UI if it is not confined to a trusted network.
 5. Add one show from Browse.
 6. Create a Local Media Profile with the format and folder structure you want.
 7. Add a Download Profile if you want automatic downloads.
-8. Add an RSS Stream Profile only if you want to use WireLoft as a private podcast/video feed.
+8. Add an RSS Stream Profile only if you want to use VODLoft as a private podcast/video feed.
 
 From there, **Home** shows the current health of the instance, **Library** contains your managed media, and **Downloads** shows actual file activity.
 

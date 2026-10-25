@@ -71,13 +71,13 @@ export default function ShowAssetsField({form, preview}: {
                         Existing custom artwork is preserved.
                     </p>
                     <p>
-                        WireLoft dynamically tries to resolve the root folder for your show. This resolver is very powerful
-                        and takes into account even conditional Jinja paths. To make sure WireLoft actually finds your show
+                        VODLoft dynamically tries to resolve the root folder for your show. This resolver is very powerful
+                        and takes into account even conditional Jinja paths. To make sure VODLoft actually finds your show
                         root folder correctly, select any episode in the 'example source' below, and the path above will automatically
-                        show you what WireLoft resolved as your show root, without changing any files or saving anything yet.
+                        show you what VODLoft resolved as your show root, without changing any files or saving anything yet.
                     </p>
                     <p>
-                        If the show root WireLoft found is not correct, this is likely due to an ambiguous path in your output
+                        If the show root VODLoft found is not correct, this is likely due to an ambiguous path in your output
                         template. Please review it below.
                     </p>
                 </ReadMore>

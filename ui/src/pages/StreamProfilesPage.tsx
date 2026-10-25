@@ -95,10 +95,10 @@ export default function StreamProfilesPage() {
         <section className="view" aria-labelledby="stream-profiles-title">
             <div className="view-header">
                 <h1 id="stream-profiles-title">Stream Profiles</h1>
-                <PageSubtitle summary={<>Control how WireLoft streams each show.</>}>
+                <PageSubtitle summary={<>Control how VODLoft streams each show.</>}>
                     <p>Stream Profiles allow you to control how each show is streamed. You can stream episodes straight from the files
                         you downloaded, or directly from DW. </p>
-                    <p>For now, a stream within WireLoft just means opening an RSS feed for it. More streaming options might come later.</p>
+                    <p>For now, a stream within VODLoft just means opening an RSS feed for it. More streaming options might come later.</p>
                     <p>Use multiple profiles per show to fit different listening or
                         viewing needs.</p>
                 </PageSubtitle>

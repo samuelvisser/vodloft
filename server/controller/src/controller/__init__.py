@@ -1,4 +1,4 @@
-"""WireLoft Controller
+"""VODLoft Controller
 
 Provides application initialization and lifecycle management.
 Also contains shared utilities (db_utils, m3u8, util).

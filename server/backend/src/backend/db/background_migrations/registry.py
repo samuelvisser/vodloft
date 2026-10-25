@@ -10,7 +10,7 @@ from typing import Any, Callable
 
 
 class BackgroundMigrationError(RuntimeError):
-    """Raised when WireLoft cannot safely resolve background migration history."""
+    """Raised when VODLoft cannot safely resolve background migration history."""
 
 
 class UnknownBackgroundMigrationRevisionError(BackgroundMigrationError):
@@ -32,10 +32,10 @@ class UnknownBackgroundMigrationRevisionError(BackgroundMigrationError):
 
         super().__init__(
             f"Database is at background migration revision {current_revision!r}, but this "
-            "WireLoft build does not contain that revision. "
+            "VODLoft build does not contain that revision. "
             f"Known revisions: {known_label}. Latest known revision: {head_label}. "
-            "WireLoft cannot safely determine which background migrations are pending. "
-            "This usually means the database was used by a newer or different WireLoft "
+            "VODLoft cannot safely determine which background migrations are pending. "
+            "This usually means the database was used by a newer or different VODLoft "
             "build, or the background migration history was changed or squashed without "
             "preserving its latest applied revision."
         )

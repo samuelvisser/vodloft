@@ -10,9 +10,9 @@ from dailywire_api.config import PROJECT_ROOT
 
 
 def get_config_path() -> Path:
-    """Return the single YAML configuration file used by WireLoft."""
+    """Return the single YAML configuration file used by VODLoft."""
     return Path(
-        getenv("WL_CONFIG_FILE", str(PROJECT_ROOT / "config" / "config.yml"))
+        getenv("VL_CONFIG_FILE", str(PROJECT_ROOT / "config" / "config.yml"))
     ).expanduser()
 
 
@@ -66,9 +66,9 @@ class SettingsBase(BaseSettings):
     model_config = SettingsConfigDict(
         alias_generator=to_camel,
         populate_by_name=True,
-        env_prefix="WL_",
+        env_prefix="VL_",
         env_nested_delimiter="__",
-        env_file=getenv("WL_ENV_FILE", PROJECT_ROOT / ".env"),
+        env_file=getenv("VL_ENV_FILE", PROJECT_ROOT / ".env"),
         yaml_file=get_config_path(),
         extra="ignore",
         nested_model_default_partial_update=True,

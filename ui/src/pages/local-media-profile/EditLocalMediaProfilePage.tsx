@@ -230,7 +230,7 @@ export default function EditLocalMediaProfilePage() {
                     <div>
                         <strong>Unsaved changes restored</strong>
                         <span>
-                            This form was restored from changes saved in this browser. They have not been saved to WireLoft yet.
+                            This form was restored from changes saved in this browser. They have not been saved to VODLoft yet.
                         </span>
                     </div>
                     <div className="local-media-profile-restored-draft__buttons">
@@ -273,7 +273,7 @@ export default function EditLocalMediaProfilePage() {
                 }}
             >
                 <p>
-                    The output path rules changed. WireLoft will reconcile Episode indexes before renaming existing files that use this Local Media Profile.
+                    The output path rules changed. VODLoft will reconcile Episode indexes before renaming existing files that use this Local Media Profile.
                 </p>
                 <p>
                     Close this dialog to keep editing, or save without moving existing files and run File Rename later from a show's Actions menu.

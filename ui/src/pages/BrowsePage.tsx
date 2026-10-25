@@ -114,7 +114,7 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
                     <h1 id="browse-title">{onboarding ? 'Add your first media' : 'Browse Daily Wire'}</h1>
                     <p className="view-description">
                         {onboarding
-                            ? 'Choose a show or movie. WireLoft will let you confirm its download location before anything is saved.'
+                            ? 'Choose a show or movie. VODLoft will let you confirm its download location before anything is saved.'
                             : 'Choose a show or movie to add, view, or download.'}
                     </p>
                 </div>

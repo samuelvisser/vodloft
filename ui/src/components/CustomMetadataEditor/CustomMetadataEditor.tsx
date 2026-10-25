@@ -181,7 +181,7 @@ export default function CustomMetadataEditor({
                             )}
                             {fieldsFailed && (
                                 <div className="form-error-card" role="alert">
-                                    WireLoft could not load metadata fields used by other {scopeLabel.plural}. Existing values can still be edited.
+                                    VODLoft could not load metadata fields used by other {scopeLabel.plural}. Existing values can still be edited.
                                 </div>
                             )}
 

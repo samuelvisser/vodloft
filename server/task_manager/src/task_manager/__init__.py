@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """
-WireLoft Task Manager - Task scheduling and event management.
+VODLoft Task Manager - Task scheduling and event management.
 
 Provides:
 - Task workers for background processing

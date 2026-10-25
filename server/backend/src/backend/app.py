@@ -142,16 +142,16 @@ def create_app() -> FastAPI:
     install_application_log_handler(settings.log_level)
 
     app = FastAPI(
-        title="WireLoft API",
-        summary="Internal API for WireLoft",
+        title="VODLoft API",
+        summary="Internal API for VODLoft",
         version=settings.app_version,
         lifespan=application_lifespan,
     )
 
     # Allow the React dev server to call the API during development (with credentials)
-    # Configure allowed origins via WL_CORS_ORIGINS (comma-separated). Defaults include common Vite dev hosts.
+    # Configure allowed origins via VL_CORS_ORIGINS (comma-separated). Defaults include common Vite dev hosts.
     import os
-    origins_env = os.environ.get("WL_CORS_ORIGINS", "").strip()
+    origins_env = os.environ.get("VL_CORS_ORIGINS", "").strip()
     if origins_env:
         allow_origins = [o.strip() for o in origins_env.split(",") if o.strip()]
     else:

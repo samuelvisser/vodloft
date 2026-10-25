@@ -10,11 +10,11 @@ from .registry import get_settings
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Print the current WireLoft configuration")
+    parser = argparse.ArgumentParser(description="Print the current VODLoft configuration")
     parser.add_argument("--format", "-f", choices=["json", "yaml"], default="json", help="Output format")
     args = parser.parse_args(argv)
 
-    print("# WireLoft Settings\n")
+    print("# VODLoft Settings\n")
     if args.format == "yaml":
         data: dict[str, Any] = get_settings().model_dump(mode="python", by_alias=True)
         print(yaml.safe_dump(data, sort_keys=False))

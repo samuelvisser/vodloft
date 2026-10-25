@@ -191,7 +191,7 @@ def path_changed_since(tag: str, path: Path) -> bool:
 def ensure_git_repository() -> None:
     repository_root = Path(git("rev-parse", "--show-toplevel")).resolve()
     if repository_root != ROOT.resolve():
-        raise ReleaseError(f"release.py must live at the WireLoft repository root ({ROOT}).")
+        raise ReleaseError(f"release.py must live at the VODLoft repository root ({ROOT}).")
 
 
 def ensure_clean_worktree() -> None:
@@ -293,7 +293,7 @@ def validate_new_app_version(version: str) -> None:
     previous = latest_tag_version("v")
     if previous is not None and parse_semver(version) <= parse_semver(previous):
         raise ReleaseError(
-            f"WireLoft {version} must be newer than the latest release tag v{previous}."
+            f"VODLoft {version} must be newer than the latest release tag v{previous}."
         )
 
 
@@ -331,7 +331,7 @@ def prepare_release(args: argparse.Namespace) -> None:
         package_versions[component.name] = choose_package_bump(component, tag)
 
     print("\nRelease plan")
-    print(f"  WireLoft: {current_app_version} -> {new_app_version}")
+    print(f"  VODLoft: {current_app_version} -> {new_app_version}")
     components = {component.name: component for component in discover_components()}
     for name, version in package_versions.items():
         component = components[name]
@@ -442,7 +442,7 @@ def publish_release(args: argparse.Namespace) -> None:
     if not args.skip_container:
         print("GHCR image tags to publish:")
         for tag in [*image_tags, "latest"]:
-            print(f"  ghcr.io/samuelvisser/wireloft:{tag}")
+            print(f"  ghcr.io/samuelvisser/vodloft:{tag}")
 
     if not args.yes:
         answer = input("Publish this release? [y/N] ").strip().lower()
@@ -462,7 +462,7 @@ def publish_release(args: argparse.Namespace) -> None:
     created: list[str] = []
     try:
         for tag in tags:
-            message = f"WireLoft {tag.removeprefix('v')}" if tag.startswith("v") else f"Release {tag}"
+            message = f"VODLoft {tag.removeprefix('v')}" if tag.startswith("v") else f"Release {tag}"
             run("git", "tag", "-a", tag, "-m", message, capture_output=False)
             created.append(tag)
         push_release_tags(package_tags, app_release_tag)
@@ -479,14 +479,14 @@ def publish_release(args: argparse.Namespace) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Prepare and publish WireLoft application and workspace package releases."
+        description="Prepare and publish VODLoft application and workspace package releases."
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("status", help="Show application/package versions and changed-package state.")
 
     prepare = subparsers.add_parser("prepare", help="Prompt for release versions and update manifests.")
-    prepare.add_argument("--app-version", help="Set an exact WireLoft MAJOR.MINOR.PATCH version.")
+    prepare.add_argument("--app-version", help="Set an exact VODLoft MAJOR.MINOR.PATCH version.")
     prepare.add_argument("--app-bump", choices=("major", "minor", "patch"))
     prepare.add_argument("--dry-run", action="store_true", help="Show the release plan without writing files.")
 

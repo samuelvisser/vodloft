@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 class MovieExtra(MediaItemBase, HasTaskResourcesMixin):
     """A movie-specific placement of one globally identified extra clip.
 
-    MovieExtra records are unique within WireLoft in that the media it represents
+    MovieExtra records are unique within VODLoft in that the media it represents
     might be shared over multiple movies. Therefore, MovieExtra does not directly represent
     the media itself and intentionally does not use the MediaContentMetadataMixin.
 

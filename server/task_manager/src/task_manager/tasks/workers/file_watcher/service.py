@@ -268,7 +268,7 @@ def _size_problem(
         if not is_hls_bundle:
             return (
                 MediaDownloadArtifactStatus.CORRUPTED,
-                f"Local HLS bundle for '{path}' is missing its WireLoft asset directory",
+                f"Local HLS bundle for '{path}' is missing its VODLoft asset directory",
             )
         missing_files = missing_hls_bundle_files(path)
         if missing_files:

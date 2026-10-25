@@ -13,7 +13,7 @@ COPY ui/package.json ui/package-lock.json ./
 
 # Keep npm's package download cache independently of Docker's normal layer cache
 RUN --mount=type=secret,id=npmrc,target=/ui/.npmrc,required=false \
-    --mount=type=cache,id=wireloft-npm,target=/root/.npm,sharing=locked \
+    --mount=type=cache,id=vodloft-npm,target=/root/.npm,sharing=locked \
     if [ "$WIRELOFT_PRO_ICONS" = "true" ]; then \
         npm ci \
             --include=optional \
@@ -72,7 +72,7 @@ COPY pyproject.toml uv.lock ./
 COPY server ./server
 
 # Preserve uv's download/build cache independently of Docker's normal layer cache
-RUN --mount=type=cache,id=wireloft-uv,target=/root/.cache/uv,sharing=locked \
+RUN --mount=type=cache,id=vodloft-uv,target=/root/.cache/uv,sharing=locked \
     uv sync --frozen --no-dev
 
 # Default config seed, copied into the /config volume on first run if missing.
@@ -93,8 +93,8 @@ RUN chmod +x /entrypoint.sh
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONUNBUFFERED=1 \
     TZ=UTC \
-    WL_CONFIG_FILE=/config/config.yml \
-    WL_DATABASE_PATH=/config/wireloft.db \
+    VL_CONFIG_FILE=/config/config.yml \
+    VL_DATABASE_PATH=/config/vodloft.db \
     PYTHON_KEYRING_BACKEND=keyrings.alt.file.PlaintextKeyring \
     XDG_DATA_HOME=/config/keyring/data \
     XDG_CONFIG_HOME=/config/keyring/config
@@ -103,8 +103,8 @@ ENV PATH="/app/.venv/bin:${PATH}" \
 ARG WIRELOFT_VERSION=development
 ARG WIRELOFT_REVISION=unknown
 
-LABEL org.opencontainers.image.title="WireLoft" \
-      org.opencontainers.image.source="https://github.com/samuelvisser/wireloft" \
+LABEL org.opencontainers.image.title="VODLoft" \
+      org.opencontainers.image.source="https://github.com/samuelvisser/vodloft" \
       org.opencontainers.image.version="${WIRELOFT_VERSION}" \
       org.opencontainers.image.revision="${WIRELOFT_REVISION}"
 

@@ -10,7 +10,7 @@ from pyventus.events import EventEmitter, EventLinker
 
 
 class WireloftEventLinker(EventLinker):
-    """Private Pyventus namespace for WireLoft domain events."""
+    """Private Pyventus namespace for VODLoft domain events."""
 
 
 class TrackedExecutorProcessingService(ExecutorProcessingService):

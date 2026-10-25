@@ -17,7 +17,7 @@ class EpisodePublishStatus(StrEnum):
     # Daily Wire explicitly reports the episode as live.
     LIVE = "live"
 
-    # WireLoft quarantines the episode because Daily Wire currently exposes no settled usable media.
+    # VODLoft quarantines the episode because Daily Wire currently exposes no settled usable media.
     NO_USABLE_MEDIA = "no_usable_media"
 
     # Daily Wire reports PUBLISHED while metadata duration is still below 12 seconds,
@@ -29,7 +29,7 @@ class EpisodePublishStatus(StrEnum):
     PUBLISHED_WITH_COUNTDOWN = "published_with_countdown"
 
     # Daily Wire reports PUBLISHED with settled usable media, and the episode is downloadable,
-    # or WireLoft's countdown-only final safeguard has elapsed.
+    # or VODLoft's countdown-only final safeguard has elapsed.
     PUBLISHED_FINAL = "published_final"
 
 

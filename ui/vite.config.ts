@@ -7,21 +7,21 @@ import {fontAwesomeCompiler} from './scripts/font-awesome-compiler.mjs'
 const VIRTUAL_VERSION_MODULE = 'virtual:wireloft-version'
 const RESOLVED_VIRTUAL_VERSION_MODULE = '\0' + VIRTUAL_VERSION_MODULE
 
-function findWireLoftManifest(): string {
+function findVODLoftManifest(): string {
   const manifestPath = [
     resolve(process.cwd(), '../pyproject.toml'),
     resolve(process.cwd(), 'pyproject.toml'),
   ].find(existsSync)
 
   if (!manifestPath) {
-    throw new Error('Could not find the root WireLoft pyproject.toml')
+    throw new Error('Could not find the root VODLoft pyproject.toml')
   }
   return manifestPath
 }
 
-const wireLoftManifest = findWireLoftManifest()
+const wireLoftManifest = findVODLoftManifest()
 
-function readWireLoftVersion(): string {
+function readVODLoftVersion(): string {
   const manifest = readFileSync(wireLoftManifest, 'utf8')
   const projectStart = manifest.indexOf('[project]')
   if (projectStart < 0) {
@@ -51,12 +51,12 @@ function wireLoftVersionPlugin(): Plugin {
     },
     load(id) {
       if (id !== RESOLVED_VIRTUAL_VERSION_MODULE) return
-      return `export const WIRELOFT_VERSION = ${JSON.stringify(readWireLoftVersion())}`
+      return `export const WIRELOFT_VERSION = ${JSON.stringify(readVODLoftVersion())}`
     },
   }
 }
 
-// Normal WireLoft development and production builds deliberately use Font Awesome Free.
+// Normal VODLoft development and production builds deliberately use Font Awesome Free.
 // The paid kit is opt-in through `npm run dev:pro-icons` / `build:pro-icons`.
 export default defineConfig(({mode}) => ({
   plugins: [

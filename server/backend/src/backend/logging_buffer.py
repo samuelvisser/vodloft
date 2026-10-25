@@ -83,7 +83,7 @@ _handler.setLevel(logging.NOTSET)
 
 
 def install_application_log_handler(log_level: str | None = None) -> None:
-    """Capture records from WireLoft and uvicorn at the configured application level."""
+    """Capture records from VODLoft and uvicorn at the configured application level."""
 
     root = logging.getLogger()
     if log_level:

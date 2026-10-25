@@ -146,9 +146,9 @@ export default function EpisodePage() {
         : earlyDeleteOperation
             ? 'An early delete is running for this episode.'
             : settingsQuery.error
-                ? 'WireLoft could not load the automatic deletion delay.'
+                ? 'VODLoft could not load the automatic deletion delay.'
                 : earlyDeleteAfterMinutes === undefined
-                    ? 'WireLoft is loading the automatic deletion delay.'
+                    ? 'VODLoft is loading the automatic deletion delay.'
                     : undefined
 
     const coverUrl: string = episode.thumbnailLandscapePath
@@ -342,14 +342,14 @@ export default function EpisodePage() {
                         disabled: earlyDeleteBusy,
                     }}>
                     <p>
-                        Daily Wire currently returns 404 for this episode, so WireLoft cannot recover media from its current slug.
+                        Daily Wire currently returns 404 for this episode, so VODLoft cannot recover media from its current slug.
                     </p>
                     <p>
-                        WireLoft will normally keep checking it and only delete it automatically after
+                        VODLoft will normally keep checking it and only delete it automatically after
                         {' '}<strong>{formatDurationMinutes(earlyDeleteAfterMinutes)}</strong> in the continuous <code>no_usable_media</code> state.
                     </p>
                     <p>
-                        Deleting early skips that waiting period. However, if it turns out this episode slug returned to The Daily Wire, WireLoft
+                        Deleting early skips that waiting period. However, if it turns out this episode slug returned to The Daily Wire, VODLoft
                         will refuse to delete it.
                     </p>
                 </ConfirmDialog>
