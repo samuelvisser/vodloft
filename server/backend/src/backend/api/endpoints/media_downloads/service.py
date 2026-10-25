@@ -40,11 +40,13 @@ from backend.db.models import (
     MovieExtra,
     MovieExtraSource,
     Show,
+    Video,
 )
 from backend.db.models.media_download import (
     EpisodeMediaDownload,
     MovieExtraMediaDownload,
     MovieMediaDownload,
+    VideoMediaDownload,
 )
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
@@ -61,7 +63,11 @@ from backend.services.media_download_collection import (
     stored_sort_text,
 )
 from backend.services.media_download_history import record_media_download_history
-from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path
+from backend.utils.output_template import (
+    resolve_episode_output_path,
+    resolve_movie_output_path,
+    resolve_video_output_path,
+)
 from sources import get_source
 from task_manager.scheduler.db import TaskRun
 from task_manager.tasks.media_download_operations import (
@@ -95,7 +101,7 @@ class _MediaDownloadViewSource:
     """Typed sources consumed declaratively by MediaDownloadAPIReadView."""
 
     download: MediaDownloadBase
-    media: Episode | Movie | MovieExtra | None
+    media: Episode | Movie | MovieExtra | Video | None
     latest_run: TaskRun | None
     queue_position: int | None
 
@@ -147,7 +153,7 @@ def _run_is_redownload(run: TaskRun | None) -> Optional[bool]:
 def _load_media_items_for_view(
         s: Session,
         downloads: list[MediaDownloadBase],
-) -> dict[int, Episode | Movie | MovieExtra]:
+) -> dict[int, Episode | Movie | MovieExtra | Video]:
     """Load the small media context required by the view in bounded ORM queries.
 
     Keeping this separate from the download query avoids both a wide positional
@@ -158,7 +164,7 @@ def _load_media_items_for_view(
     for download in downloads:
         ids_by_type.setdefault(download.type, []).append(download.media_item_id)
 
-    media_by_id: dict[int, Episode | Movie | MovieExtra] = {}
+    media_by_id: dict[int, Episode | Movie | MovieExtra | Video] = {}
 
     episode_ids = ids_by_type.get(MediaType.EPISODE.value, [])
     if episode_ids:
@@ -234,6 +240,24 @@ def _load_media_items_for_view(
         )
         media_by_id.update((movie_extra.id, movie_extra) for movie_extra in movie_extras)
 
+    video_ids = ids_by_type.get(MediaType.VIDEO.value, [])
+    if video_ids:
+        videos = s.scalars(
+            select(Video)
+            .where(Video.id.in_(video_ids))
+            .options(
+                load_only(
+                    Video.id,
+                    Video.slug,
+                    Video.title,
+                    Video.source_key,
+                    raiseload=True,
+                ),
+                raiseload("*"),
+            )
+        )
+        media_by_id.update((video.id, video) for video in videos)
+
     return media_by_id
 
 
@@ -245,6 +269,7 @@ def _media_download_view_statement(
         statuses: Optional[list[str]],
         limit: Optional[int],
         ids: Optional[list[int]] = None,
+        video_id: Optional[int] = None,
 ):
     """Build the scoped download query while returning complete ORM models."""
     download = with_polymorphic(MediaDownloadBase, "*")
@@ -291,6 +316,12 @@ def _media_download_view_statement(
             download.media_item_id.in_(movie_extra_ids),
         ))
 
+    if video_id is not None:
+        stmt = stmt.where(
+            download.type == MediaType.VIDEO.value,
+            download.media_item_id == video_id,
+        )
+
     if limit is not None:
         stmt = stmt.limit(limit)
 
@@ -333,6 +364,7 @@ def get_media_downloads_view(
         episode_slug: Optional[str] = None,
         movie_slug: Optional[str] = None,
         show_slug: Optional[str] = None,
+        video_id: Optional[int] = None,
         statuses: Optional[list[str]] = None,
         limit: Optional[int] = None,
 ) -> list[MediaDownloadAPIReadView]:
@@ -341,6 +373,7 @@ def get_media_downloads_view(
         episode_slug=episode_slug,
         movie_slug=movie_slug,
         show_slug=show_slug,
+        video_id=video_id,
         statuses=statuses,
         limit=limit,
     )))
@@ -707,12 +740,65 @@ def create_movie_extra_download(
     return download
 
 
+def create_video_download(
+    s: Session,
+    video: Video,
+    body: MovieDownloadAPICreate,
+) -> VideoMediaDownload:
+    """Persist a download target for a single video."""
+    profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.VIDEO)
+    existing: Optional[VideoMediaDownload] = (
+        s.query(VideoMediaDownload)
+        .filter(
+            VideoMediaDownload.media_item_id == video.id,
+            VideoMediaDownload.local_media_profile_id == profile.id,
+        )
+        .one_or_none()
+    )
+    if existing is not None:
+        _assert_no_active_attempt(s, existing)
+        _reconcile_existing_artifact(s, existing)
+        if existing.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value:
+            raise HTTPException(status_code=409, detail=f"Video already has a downloaded file for profile '{profile.name}'")
+        prepare_media_download_artifact(s, existing)
+        existing.file_path = str(resolve_video_output_path(profile.output_template, video=video))
+        s.flush()
+        return existing
+
+    download = VideoMediaDownload(
+        type=MediaType.VIDEO.value,
+        media_item_id=video.id,
+        local_media_profile_id=profile.id,
+        artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
+        file_path=str(resolve_video_output_path(profile.output_template, video=video)),
+    )
+    s.add(download)
+    s.flush()
+    record_media_download_history(
+        s,
+        download.id,
+        MediaDownloadHistoryAction.CREATED,
+        metadata={
+            "file_path": download.file_path,
+            "local_media_profile_id": profile.id,
+        },
+    )
+    return download
+
+
+_PROFILE_TYPE_LABELS = {
+    LocalMediaProfileType.SHOW: "Episodes",
+    LocalMediaProfileType.MOVIE: "Movies and movie extras",
+    LocalMediaProfileType.VIDEO: "Videos",
+}
+
+
 def _get_profile(s: Session, profile_id: int, expected_type: LocalMediaProfileType) -> LocalMediaProfileBase:
     profile: Optional[LocalMediaProfileBase] = s.get(LocalMediaProfileBase, profile_id)
     if profile is None:
         raise HTTPException(status_code=404, detail="Local media profile not found")
     if profile.type != expected_type.value:
-        label = "Movies and movie extras" if expected_type == LocalMediaProfileType.MOVIE else "Episodes"
+        label = _PROFILE_TYPE_LABELS[expected_type]
         raise HTTPException(status_code=422, detail=f"{label} require a {expected_type.value.title()} Local Media Profile")
     return profile
 

@@ -3,6 +3,7 @@ from .local_media_profile import (
     LocalMediaProfileBase,
     MovieLocalMediaProfile,
     ShowLocalMediaProfile,
+    VideoLocalMediaProfile,
 )
 
 # Existing code and third-party integrations historically constructed
@@ -27,8 +28,10 @@ from .download_profile import SeriesDownloadProfile
 from .media_download import EpisodeMediaDownload
 from .media_download import MovieMediaDownload
 from .media_download import MovieExtraMediaDownload
+from .media_download import VideoMediaDownload
 from .media_item import Episode
 from .media_item import Movie
 from .media_item import MovieExtraSource
 from .media_item import MovieExtra
+from .media_item import Video
 from .stream_profile import RssStreamProfile

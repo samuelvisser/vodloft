@@ -538,6 +538,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
     )
     const usedVariablesKey = usedVariables.map(({name}) => name).join('|')
     const missingMetadataVariables = useMemo(() => {
+        if (mode === 'video') return []
         const prefix = mode === 'movie' ? 'meta_movie_' : 'meta_show_'
         const available = new Set(customVariables.map(({name}) => name))
         return [...new Set(
@@ -906,7 +907,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
                             <p className="error" role="alert">Examples could not be loaded. Try refreshing the page.</p>
                         )}
                         {selectedSource?.fallback && (
-                            <p className="template-preview-status">No {mode === 'movie' ? 'movies' : 'episodes'} found yet, so example values are
+                            <p className="template-preview-status">No {({show: 'episodes', movie: 'movies', video: 'videos'} as const)[mode]} found yet, so example values are
                                 being used.</p>
                         )}
 

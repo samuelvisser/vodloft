@@ -14,7 +14,7 @@ from backend.api.models.local_media_profile_preview import (
     LocalMediaProfileShowPreview,
 )
 from backend.app import db_session
-from backend.db.models import Episode, Movie, MovieExtra, ShowLocalMediaProfile
+from backend.db.models import Episode, Movie, MovieExtra, ShowLocalMediaProfile, Video
 from backend.services.custom_index_preview import plan_custom_index_preview
 from backend.services.show_assets import get_show_asset_root_preview
 from backend.utils.custom_index import indexing_value_definition_keys
@@ -22,6 +22,7 @@ from backend.utils.output_template import (
     _finish_output_path,
     episode_output_template_values,
     movie_output_template_values,
+    video_output_template_values,
     output_template_custom_index_keys,
     output_template_fields,
 )
@@ -30,6 +31,7 @@ from config import get_settings
 from .output_template import (
     _EXAMPLE_MOVIE_VALUES,
     _EXAMPLE_SHOW_VALUES,
+    _EXAMPLE_VIDEO_VALUES,
     get_output_template_preview,
 )
 
@@ -40,10 +42,18 @@ def _example_values(session: Session, body: LocalMediaProfilePreviewRequest) -> 
     """Resolve the selected source metadata, then overlay even explicitly empty edits."""
     source_id = body.source_id
     if source_id is None or source_id == f"example:{body.type}":
-        original = _EXAMPLE_SHOW_VALUES if body.type == "show" else _EXAMPLE_MOVIE_VALUES
+        original = {
+            "show": _EXAMPLE_SHOW_VALUES,
+            "movie": _EXAMPLE_MOVIE_VALUES,
+            "video": _EXAMPLE_VIDEO_VALUES,
+        }[body.type]
     else:
         kind, separator, identifier = source_id.partition(":")
-        models = {"episode": Episode} if body.type == "show" else {"movie": Movie, "movie-extra": MovieExtra}
+        models = {
+            "show": {"episode": Episode},
+            "movie": {"movie": Movie, "movie-extra": MovieExtra},
+            "video": {"video": Video},
+        }[body.type]
         if not separator or kind not in models or not identifier.isascii() or not identifier.isdigit() or int(identifier) <= 0:
             raise ValueError("Select an example that belongs to this Local Media Profile type.")
         source = session.get(models[kind], int(identifier))
@@ -53,6 +63,8 @@ def _example_values(session: Session, body: LocalMediaProfilePreviewRequest) -> 
             original = episode_output_template_values(source)
         elif kind == "movie-extra":
             original = movie_output_template_values(source.movie, source)
+        elif kind == "video":
+            original = video_output_template_values(source)
         else:
             original = movie_output_template_values(source)
     return {**original, **body.values}

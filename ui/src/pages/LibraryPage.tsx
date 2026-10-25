@@ -12,7 +12,7 @@ import ShowTypeFilter, {
 } from '../components/common/ShowTypeFilter'
 import SourceBadge from '../components/Source/SourceBadge'
 import SourceFilter, {matchesSourceFilter} from '../components/Source/SourceFilter'
-import {useMediaDownloadsView, useMovies, useShowsView} from '../lib/queries'
+import {useMediaDownloadsView, useMovies, useShowsView, useVideos} from '../lib/queries'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {ShowTypeReg, ShowTypeValue} from '../types/show'
 
@@ -49,6 +49,33 @@ function latestMovieDownload(downloads: MediaDownloadViewRead[] | undefined, slu
     return downloads?.find((download) => download.movieSlug === slug)
 }
 
+function latestVideoDownload(downloads: MediaDownloadViewRead[] | undefined, videoId: number) {
+    return downloads?.find((download) => download.type === 'video' && download.mediaItemId === videoId)
+}
+
+function DownloadStateBadge({download}: {download?: MediaDownloadViewRead}) {
+    const status = String(download?.downloadStatus || '')
+    if (status === 'downloaded' || status === 'redownloaded') {
+        return <span className="movie-state is-complete" aria-label="Downloaded"><FontAwesomeIcon icon={faIcon('fass', 'check')}/></span>
+    }
+    if (status === 'downloading' || status === 'pending') {
+        return <span className="movie-state is-active" aria-label="Downloading"><FontAwesomeIcon icon={faIcon('fass', 'circle-down')}/></span>
+    }
+    if (status === 'error') {
+        return <span className="movie-state is-error" aria-label="Download failed"><FontAwesomeIcon icon={faIcon('fass', 'triangle-exclamation')}/></span>
+    }
+    return null
+}
+
+function formatVideoDuration(seconds: number) {
+    if (!seconds) return null
+    const total = Math.round(seconds)
+    const hours = Math.floor(total / 3600)
+    const minutes = Math.floor((total % 3600) / 60)
+    const rest = String(total % 60).padStart(2, '0')
+    return hours ? `${hours}:${String(minutes).padStart(2, '0')}:${rest}` : `${minutes}:${rest}`
+}
+
 export default function LibraryPage() {
     const navigate = useNavigate()
     const [params, setParams] = useSearchParams()
@@ -56,10 +83,11 @@ export default function LibraryPage() {
     const [sourceFilter, setSourceFilter] = useState<Set<string>>(() => new Set())
     const {data: shows, isLoading: showsLoading, error: showsError} = useShowsView()
     const {data: movies, isLoading: moviesLoading, error: moviesError} = useMovies()
+    const {data: videos, isLoading: videosLoading, error: videosError} = useVideos()
     const {data: downloads} = useMediaDownloadsView()
     const sourceKeys = useMemo(
-        () => [...new Set([...(shows ?? []), ...(movies ?? [])].map((item) => item.sourceKey))].sort(),
-        [shows, movies],
+        () => [...new Set([...(shows ?? []), ...(movies ?? []), ...(videos ?? [])].map((item) => item.sourceKey))].sort(),
+        [shows, movies, videos],
     )
     const filteredShows = useMemo(
         () => shows?.filter((show) => (
@@ -71,8 +99,21 @@ export default function LibraryPage() {
         () => movies?.filter((movie) => matchesSourceFilter(movie.sourceKey, sourceFilter)) ?? [],
         [movies, sourceFilter],
     )
+    const filteredVideos = useMemo(
+        () => videos?.filter((video) => matchesSourceFilter(video.sourceKey, sourceFilter)) ?? [],
+        [videos, sourceFilter],
+    )
     const hasShows = !!shows?.length
     const hasMovies = !!movies?.length
+    const hasVideos = !!videos?.length
+    const hasAny = hasShows || hasMovies || hasVideos
+    const presentTypes = useMemo(() => {
+        const types: MediaType[] = []
+        if (hasShows) types.push('shows')
+        if (hasMovies) types.push('movies')
+        if (hasVideos) types.push('videos')
+        return types
+    }, [hasShows, hasMovies, hasVideos])
 
     useEffect(() => {
         try {
@@ -89,22 +130,26 @@ export default function LibraryPage() {
     // The URL is the single source of truth for the selected library type, just
     // like on the Browse page. Never switch away from an explicitly requested
     // type based on which query happens to finish first.
-    const activeType: MediaType = params.get('type') === 'movies' ? 'movies' : 'shows'
+    // Without one, open the first type the library has.
+    const requestedType = params.get('type')
+    const activeType: MediaType = requestedType === 'shows' || requestedType === 'movies' || requestedType === 'videos'
+        ? requestedType
+        : presentTypes[0] ?? 'shows'
 
     const chooseType = (type: MediaType) => {
         setParams({type}, {replace: true})
     }
 
-    const loading = showsLoading || moviesLoading
-    const error = showsError || moviesError
-    const showTabs = hasShows && hasMovies
+    const loading = showsLoading || moviesLoading || videosLoading
+    const error = showsError || moviesError || videosError
+    const showTabs = presentTypes.length > 1
 
     return (
         <section className="view library-view" aria-labelledby="library-title">
             <div className="view-header">
                 <div>
                     <h1 id="library-title">Library</h1>
-                    <p className="view-description">Shows and movies indexed by VODLoft.</p>
+                    <p className="view-description">Shows, movies and videos indexed by VODLoft.</p>
                 </div>
                 <button className="btn btn-primary" onClick={() => navigate('/add')}>
                     <FontAwesomeIcon icon={faIcon('fass', 'plus')}/>
@@ -117,12 +162,12 @@ export default function LibraryPage() {
                     activeType={activeType}
                     onChange={chooseType}
                     ariaLabel="Library media type"
-                    showCount={shows?.length ?? 0}
-                    movieCount={movies?.length ?? 0}
+                    types={presentTypes}
+                    counts={{shows: shows?.length ?? 0, movies: movies?.length ?? 0, videos: videos?.length ?? 0}}
                 />
             )}
 
-            {(hasShows || hasMovies) && (
+            {hasAny && (
                 <SourceFilter
                     sourceKeys={sourceKeys}
                     selected={sourceFilter}
@@ -139,15 +184,15 @@ export default function LibraryPage() {
                 />
             )}
 
-            {loading && !hasShows && !hasMovies ? (
+            {loading && !hasAny ? (
                 <p>Loading library…</p>
-            ) : error && !hasShows && !hasMovies ? (
+            ) : error && !hasAny ? (
                 <div className="form-error-card" role="alert">{error.message}</div>
-            ) : !hasShows && !hasMovies ? (
+            ) : !hasAny ? (
                 <div className="library-empty">
                     <FontAwesomeIcon icon={faIcon('fass', 'book-open')}/>
                     <h2>Your library is empty</h2>
-                    <p>Paste a link to a show or movie to add it.</p>
+                    <p>Paste a link to a show, a movie or a video to add it.</p>
                     <button className="btn btn-primary" onClick={() => navigate('/add')}>Add media</button>
                 </div>
             ) : activeType === 'shows' && hasShows ? (
@@ -196,7 +241,6 @@ export default function LibraryPage() {
                             || movie.logoImagePath,
                         )
                         const download = latestMovieDownload(downloads, movie.slug)
-                        const status = String(download?.downloadStatus || '')
                         return (
                             <Link className="movie-poster-card" to={`/movie/${movie.slug}`} key={movie.slug} role="listitem">
                                 <span className="movie-poster-art">
@@ -204,13 +248,7 @@ export default function LibraryPage() {
                                         ? <img src={image} alt="" loading="lazy" decoding="async"/>
                                         : <FontAwesomeIcon icon={faIcon('fass', 'clapperboard')}/>
                                     }
-                                    {status === 'downloaded' || status === 'redownloaded' ? (
-                                        <span className="movie-state is-complete" aria-label="Downloaded"><FontAwesomeIcon icon={faIcon('fass', 'check')}/></span>
-                                    ) : status === 'downloading' || status === 'pending' ? (
-                                        <span className="movie-state is-active" aria-label="Downloading"><FontAwesomeIcon icon={faIcon('fass', 'circle-down')}/></span>
-                                    ) : status === 'error' ? (
-                                        <span className="movie-state is-error" aria-label="Download failed"><FontAwesomeIcon icon={faIcon('fass', 'triangle-exclamation')}/></span>
-                                    ) : null}
+                                    <DownloadStateBadge download={download}/>
                                 </span>
                                 <span className="movie-poster-title">{movie.title}</span>
                                 {movie.authorName && <span className="movie-poster-meta">{movie.authorName}</span>}
@@ -219,6 +257,35 @@ export default function LibraryPage() {
                         )
                     })}
                 </div>
+            ) : activeType === 'videos' && hasVideos ? (
+                filteredVideos.length > 0 ? (
+                    <div className="video-card-grid" role="list" aria-label="Videos">
+                        {filteredVideos.map((video) => {
+                            const image = toImageUrl(video.thumbnailLandscapePath || video.backgroundImagePath)
+                            const duration = formatVideoDuration(video.duration)
+                            return (
+                                <Link className="video-card" to={`/video/${video.id}`} key={video.id} role="listitem">
+                                    <span className="movie-poster-art">
+                                        {image
+                                            ? <img src={image} alt="" loading="lazy" decoding="async"/>
+                                            : <FontAwesomeIcon icon={faIcon('fass', 'film')}/>
+                                        }
+                                        {duration && <span className="video-card-duration">{duration}</span>}
+                                        <DownloadStateBadge download={latestVideoDownload(downloads, video.id)}/>
+                                    </span>
+                                    <span className="movie-poster-title">{video.title}</span>
+                                    {video.authorName && <span className="movie-poster-meta">{video.authorName}</span>}
+                                    <SourceBadge sourceKey={video.sourceKey}/>
+                                </Link>
+                            )
+                        })}
+                    </div>
+                ) : (
+                    <div className="catalog-empty">
+                        <FontAwesomeIcon icon={faIcon('fass', 'filter')}/>
+                        <p>No videos match the selected filters.</p>
+                    </div>
+                )
             ) : null}
         </section>
     )

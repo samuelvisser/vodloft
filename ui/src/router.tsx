@@ -31,6 +31,7 @@ import BrowsePage from './pages/BrowsePage'
 import AddMediaPage from './pages/AddMediaPage'
 import MoviePage from './pages/movie/MoviePage'
 import EditMoviePage from './pages/movie/EditMoviePage'
+import VideoPage from './pages/video/VideoPage'
 
 function RootRoute() {
   return (
@@ -72,6 +73,7 @@ export const router = createBrowserRouter(
       <Route path="show/:id" element={<ShowPage />} />
       <Route path="movie/:slug" element={<MoviePage />} />
       <Route path="edit-movie/:slug" element={<EditMoviePage />} />
+      <Route path="video/:id" element={<VideoPage />} />
       <Route path="show/:id/episode/:episodeId" element={<EpisodePage />} />
       <Route path="edit-show/:id" element={<EditShow />} />
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -5,7 +5,7 @@ import {useLazyCollection} from './lazyCollection'
 
 import type {ShowLocalMediaProfileScope} from '../types/local_media_profile'
 
-export type LocalMediaProfileTemplateSourceMode = 'show' | 'movie'
+export type LocalMediaProfileTemplateSourceMode = 'show' | 'movie' | 'video'
 
 export type LocalMediaProfileTemplateVariable = {
     name: string

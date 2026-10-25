@@ -26,7 +26,7 @@ from config import get_settings
 from config.settings.submodels import FilenameRestrictionMode
 
 if TYPE_CHECKING:
-    from backend.db.models import Episode, Movie, MovieExtra
+    from backend.db.models import Episode, Movie, MovieExtra, Video
     from backend.db.models.media_download import MediaDownloadBase
 
 _DOWNLOADS_PREFIX = "/downloads/"
@@ -58,6 +58,10 @@ MOVIE_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "slug", "title", "extended_title",
     "author", "mature_rating", "rating", "duration_seconds", "media_type",
 }) | DATE_OUTPUT_TEMPLATE_FIELDS | MOVIE_DATE_OUTPUT_TEMPLATE_FIELDS
+
+VIDEO_OUTPUT_TEMPLATE_FIELDS = frozenset({
+    "slug", "title", "author", "duration_seconds", "source",
+}) | DATE_OUTPUT_TEMPLATE_FIELDS
 
 SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES: frozenset[CustomMetadataScope] = frozenset({"show"})
 MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES: frozenset[CustomMetadataScope] = frozenset({"movie"})
@@ -399,6 +403,24 @@ def movie_output_template_values(
     return values
 
 
+def video_output_template_values(video: "Video") -> dict[str, str]:
+    """Build the complete Video-profile context for a single video."""
+    from sources import UnknownSourceError, get_source
+
+    try:
+        source_name = get_source(video.source_key).name
+    except UnknownSourceError:
+        source_name = video.source_key
+    return {
+        "slug": video.slug,
+        "title": video.title,
+        "author": video.author_name or "",
+        "duration_seconds": str(round(video.duration or 0)),
+        "source": source_name,
+        **_date_substitutions(video.published_at),
+    }
+
+
 class PreparedOutputTemplate:
     """Validated and compiled output template reusable across many renders."""
 
@@ -581,6 +603,23 @@ def resolve_movie_output_path(
     )
     if append_media_type_to_filename and values["media_type"] != "movie":
         rendered = _append_filename_suffix(rendered, f"-{values['media_type']}")
+    return _finish_output_path(rendered, extension=extension)
+
+
+def resolve_video_output_path(
+    output_template: str,
+    *,
+    video: "Video",
+    extension: Optional[str] = None,
+) -> Path:
+    """Resolve a Video Local Media Profile for a single video."""
+    if output_template_custom_index_keys(output_template):
+        raise ValueError("custom_index is only available to Show Local Media Profiles")
+    rendered = render_output_template(
+        output_template,
+        video_output_template_values(video),
+        allowed_fields=VIDEO_OUTPUT_TEMPLATE_FIELDS,
+    )
     return _finish_output_path(rendered, extension=extension)
 
 

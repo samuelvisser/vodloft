@@ -7,14 +7,14 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from backend.db.models import Episode, Movie, MovieExtra
+from backend.db.models import Episode, Movie, MovieExtra, Video
 from backend.db.models.media_download import MediaDownloadBase
-from backend.services.download_metadata import build_episode_metadata, build_movie_metadata, select_thumbnail_url
+from backend.services.download_metadata import build_episode_metadata, build_movie_metadata, build_video_metadata, select_thumbnail_url
 from backend.services.download_options import effective_download_mode, effective_metadata_mode, effective_thumbnail_mode
 from backend.services.movies import update_movie_extra_source_metadata
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
-from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path
+from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path, resolve_video_output_path
 from config import get_settings
 from config.network import is_no_internet_error
 from config.settings.submodels import MetadataMode, ThumbnailMode
@@ -34,16 +34,23 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     profile = download.local_media_profile
     episode = media if isinstance(media, Episode) else None
     movie = media if isinstance(media, Movie) else media.movie if isinstance(media, MovieExtra) else None
+    video = media if isinstance(media, Video) else None
     is_extra = isinstance(media, MovieExtra)
-    if episode is None and movie is None:
+    if episode is None and movie is None and video is None:
         raise DownloadError("Unsupported media type")
-    expected_type = LocalMediaProfileType.SHOW.value if episode is not None else LocalMediaProfileType.MOVIE.value
+    expected_type = (
+        LocalMediaProfileType.SHOW.value if episode is not None
+        else LocalMediaProfileType.VIDEO.value if video is not None
+        else LocalMediaProfileType.MOVIE.value
+    )
     if profile.type != expected_type:
         raise DownloadError("The Local Media Profile does not match the media type")
     preferred = profile.preferred_format
     audio_only = preferred == PreferredFormat.FORMAT_AUDIO_ONLY.value
     if movie is not None and preferred in (PreferredFormat.FORMAT_AUDIO_ONLY.value, PreferredFormat.FORMAT_HLS.value):
         raise DownloadError("Movies and extras require a normal video Local Media Profile")
+    if video is not None and preferred == PreferredFormat.FORMAT_HLS.value:
+        raise DownloadError("Videos cannot be kept as an HLS bundle")
 
     # Snapshot configuration before network I/O; later setting edits apply only
     # to later attempts. ORM reads are released before every remote call.
@@ -113,6 +120,14 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
                 # also gives an audio request a chance to switch between the
                 # direct audio source and the video fallback.
                 video_url = audio_url = None
+    elif video is not None:
+        video_url = video.sharing_url
+        session.rollback()
+        tracker.preparing("resolve_playback")
+        playback = media_source.video_playback(slug=slug, url=video_url)
+        tracker.ensure_active()
+        tracker.preparing("inspect_stream")
+        source = resolve_download_source(playback.url, preferred_format=preferred, audio_only=audio_only, remux_video_to_mp4=remux, cancellation=tracker.is_canceled)
     else:
         assert movie is not None
         movie_slug, duration = movie.slug, movie.duration
@@ -146,6 +161,9 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     if isinstance(media, Episode):
         destination = resolve_episode_output_path(output_template, episode=media, local_media_profile=download.local_media_profile, media_download=download, extension=source.extension)
         metadata = build_episode_metadata(media, media.show)
+    elif isinstance(media, Video):
+        destination = resolve_video_output_path(output_template, video=media, extension=source.extension)
+        metadata = build_video_metadata(media, source_name=media_source.name)
     else:
         movie = media.movie if isinstance(media, MovieExtra) else media
         destination = resolve_movie_output_path(output_template, movie=movie, media_item=media, extension=source.extension)

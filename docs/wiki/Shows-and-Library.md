@@ -10,7 +10,7 @@ Use Home when you want to know whether VODLoft is operating normally or somethin
 
 ## Add media
 
-**Add media** in the Library takes a link to a show, an episode or a movie. VODLoft asks each Source that claims the link's website whether it recognises it, and shows a preview from the first one that does. Continuing opens the normal Add Show wizard, or the movie page, already filled in. A link to an episode opens the show it belongs to. If no Source recognises the link, VODLoft says so instead of guessing.
+**Add media** in the Library takes a link to a show, an episode, a movie or a single video. VODLoft asks each Source that claims the link's website whether it recognises it, and shows a preview from the first one that does. Continuing opens the normal Add Show wizard, or the movie page, already filled in. A single video is added straight away and opens its video page. A link to an episode opens the show it belongs to. If no Source recognises the link, VODLoft says so instead of guessing.
 
 ## Browse
 
@@ -20,9 +20,9 @@ Adding an item from Browse creates a managed entry in your Library. For shows, V
 
 ## Library
 
-Library contains the shows and movies you have chosen to manage. Each card names the Source it comes from, and when your Library holds items from more than one Source, you can filter it by Source.
+Library contains the shows, movies and videos you have chosen to manage. Each card names the Source it comes from, and when your Library holds items from more than one Source, you can filter it by Source.
 
-It has separate Shows and Movies views. Show filters are remembered in that browser, so returning to the Library restores the last show-type selection you used.
+It has separate Shows, Movies and Videos views; a view appears once the Library holds that kind of media. Show filters are remembered in that browser, so returning to the Library restores the last show-type selection you used.
 
 ### Shows
 
@@ -70,6 +70,10 @@ A movie page can include the main movie, descriptive and release metadata, avail
 Upcoming movies can be added to the Library before their final media is available. VODLoft keeps the local movie entry available and can refresh its Daily Wire metadata as the release approaches.
 
 Movie output templates should distinguish the main movie from extras so different items cannot use the same filename. See [[Local-Media-Profiles#movies-and-extras]].
+
+## Single videos
+
+A single video is one video added on its own, outside any show. It appears under **Videos** in the Library. Its page shows the uploader, upload date and description, and one download row for each Video Local Media Profile. Single videos are downloaded manually. **Refresh details** asks the site for the current title, description and thumbnail.
 
 ## Profiles and files are separate
 

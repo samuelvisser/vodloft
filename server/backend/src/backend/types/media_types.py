@@ -5,6 +5,7 @@ class MediaType(Enum):
     EPISODE = "episode"
     MOVIE = "movie"
     MOVIE_EXTRA = "movie_extra"
+    VIDEO = "video"
 
     # For instances of parent class
     BASE = "base"

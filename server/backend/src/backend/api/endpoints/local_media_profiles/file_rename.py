@@ -9,6 +9,7 @@ from backend.db.models import (
     LocalMediaProfileBase,
     MovieLocalMediaProfile,
     ShowLocalMediaProfile,
+    VideoLocalMediaProfile,
 )
 from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
@@ -93,15 +94,19 @@ def request_show_local_media_profile_file_rename(
 
 def request_movie_local_media_profile_file_rename(
         s: Session,
-        local_media_profile: MovieLocalMediaProfile,
+        local_media_profile: MovieLocalMediaProfile | VideoLocalMediaProfile,
 ) -> dict[str, bool | int | str]:
+    """Rename the files of a Movie or Video profile, which one task handles."""
+    media_types = (
+        (MediaType.VIDEO.value,)
+        if isinstance(local_media_profile, VideoLocalMediaProfile)
+        else (MediaType.MOVIE.value, MediaType.MOVIE_EXTRA.value)
+    )
     download_ids = tuple(s.scalars(
         select(MediaDownloadBase.id)
         .where(
             MediaDownloadBase.local_media_profile_id == local_media_profile.id,
-            MediaDownloadBase.type.in_(
-                (MediaType.MOVIE.value, MediaType.MOVIE_EXTRA.value)
-            ),
+            MediaDownloadBase.type.in_(media_types),
             MediaDownloadBase.artifact_status.in_(_PHYSICAL_ARTIFACT_STATUSES),
         )
         .order_by(MediaDownloadBase.id.asc())
@@ -165,6 +170,11 @@ def request_local_media_profile_file_rename(
         if movie_profile is None:
             raise HTTPException(status_code=404, detail="Media profile not found")
         return request_movie_local_media_profile_file_rename(s, movie_profile)
+    if profile.type == LocalMediaProfileType.VIDEO.value:
+        video_profile = s.get(VideoLocalMediaProfile, profile.id)
+        if video_profile is None:
+            raise HTTPException(status_code=404, detail="Media profile not found")
+        return request_movie_local_media_profile_file_rename(s, video_profile)
 
     raise HTTPException(
         status_code=422,

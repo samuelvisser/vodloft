@@ -20,7 +20,7 @@ export function sourceControls(item: SourcedItem) {
 
 export type ResolvedLinkLike = {
     source: {id: string}
-    kind: 'show' | 'movie' | 'episode'
+    kind: 'show' | 'movie' | 'episode' | 'video'
     slug: string
     url: string
     showSlug?: string | null
@@ -28,20 +28,21 @@ export type ResolvedLinkLike = {
     preview: {title: string}
 }
 
-/** What a link hands off to: a show to add or open, or a movie page. */
+/** What a link hands off to: a show to add or open, a movie page, or a single video to add. */
 export type MediaLinkTarget = {
-    kind: 'show' | 'movie'
+    kind: 'show' | 'movie' | 'video'
     sourceKey: string
     slug: string
     url: string
     title: string
 }
 
-/** The show or movie a resolved link should open. An episode opens its show. */
+/** The show, movie or video a resolved link should open. An episode opens its show. */
 export function linkTarget(link: ResolvedLinkLike): MediaLinkTarget | null {
     const base = {sourceKey: link.source.id, title: link.preview.title}
     if (link.kind === 'movie') return {...base, kind: 'movie', slug: link.slug, url: link.url}
     if (link.kind === 'show') return {...base, kind: 'show', slug: link.slug, url: link.url}
+    if (link.kind === 'video') return {...base, kind: 'video', slug: link.slug, url: link.url}
     if (link.showSlug && link.showUrl) return {...base, kind: 'show', slug: link.showSlug, url: link.showUrl}
     return null
 }

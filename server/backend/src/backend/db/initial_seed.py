@@ -28,12 +28,19 @@ _MOVIE_TEMPLATE = (
     "{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext"
 )
 
+_VIDEO_TEMPLATE = (
+    "{% set output_date = date ~ ' - ' if date %}"
+    "/downloads/videos/{{ author or source }}/"
+    "{{ output_date }}{{ title }} [{{ slug }}].ext"
+)
+
 
 def _seed_local_media_profiles(session: Session) -> None:
     from backend.db.models import (
         LocalMediaProfileBase,
         MovieLocalMediaProfile,
         ShowLocalMediaProfile,
+        VideoLocalMediaProfile,
     )
 
     profiles = (
@@ -53,6 +60,12 @@ def _seed_local_media_profiles(session: Session) -> None:
             slug="vodloft-movies",
             name="VODLoft Movies",
             output_template=_MOVIE_TEMPLATE,
+            preferred_format="format_1080p",
+        ),
+        VideoLocalMediaProfile(
+            slug="vodloft-videos",
+            name="VODLoft Videos",
+            output_template=_VIDEO_TEMPLATE,
             preferred_format="format_1080p",
         ),
     )

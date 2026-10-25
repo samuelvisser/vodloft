@@ -24,6 +24,7 @@ import {
 } from '../../types/local_media_profile'
 import {formatBytes} from '../../utils/formatting'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
+import {localMediaProfileEndpoint} from '../../types/local_media_profile'
 import './LocalMediaProfilePage.css'
 
 const OPERATION_WAITING_MESSAGE = 'Operation is waiting, it should resume soon.'
@@ -138,9 +139,7 @@ export default function LocalMediaProfilePage() {
         if (deletingProfile || actionBusy) return
         setDeletingProfile(true)
         try {
-            const endpoint = profile.type === 'movie'
-                ? 'movie-local-media-profiles'
-                : 'show-local-media-profiles'
+            const endpoint = localMediaProfileEndpoint(profile.type)
             const base = (window as any).appConfig?.API_URL || '/api'
             const response = await fetch(
                 `${base}/${endpoint}/${encodeURIComponent(profile.slug)}`,

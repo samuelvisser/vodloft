@@ -14,6 +14,7 @@ import DataTable, { Column } from '../components/DataTable/DataTable';
 import ConfirmDeleteDialog, { ConfirmDeleteDialogRef } from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
 import PageSubtitle from "../components/common/PageSubtitle";
 import OpaqueOutputTemplateCode from '../components/LocalMediaProfile/OpaqueOutputTemplateCode'
+import {localMediaProfileEndpoint} from '../types/local_media_profile'
 import './LocalMediaProfilesPage.css'
 
 type LocalMediaProfileOverviewRow = LocalMediaProfileRead & {
@@ -155,9 +156,7 @@ export default function LocalMediaProfilesPage() {
                 title="Delete media profile"
                 subjectProp="name"
                 deleteRequest={(p) => {
-                    const endpoint = p.type === 'movie'
-                        ? 'movie-local-media-profiles'
-                        : 'show-local-media-profiles'
+                    const endpoint = localMediaProfileEndpoint(p.type)
                     const path = `${endpoint}/${p.slug}`
                     return fetch(`${(window as any).appConfig.API_URL}/${path}`, { method: 'DELETE', credentials: 'include' })
                 }}

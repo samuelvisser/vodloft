@@ -74,3 +74,16 @@ test('links hand off to a show or a movie, and an episode opens its show', () =>
     )
     assert.equal(linkTarget({...base, kind: 'episode', slug: 'ep', url: 'e'}), null)
 })
+
+test('a video link hands off to the video itself', () => {
+    const base = {source: {id: 'clips'}, preview: {title: 'A clip'}}
+    assert.deepEqual(
+        plain(linkTarget({...base, kind: 'video', slug: 'abc', url: 'https://clips.example/v/abc'})),
+        {sourceKey: 'clips', title: 'A clip', kind: 'video', slug: 'abc', url: 'https://clips.example/v/abc'},
+    )
+    const parsed = sourceSchemas.ResolvedLinkReadSchema.parse({
+        source: {id: 'clips', name: 'Clips', domains: ['clips.example'], features: ['videos']},
+        kind: 'video', slug: 'abc', url: 'https://clips.example/v/abc', preview: {title: 'A clip'},
+    })
+    assert.equal(sourceSchemas.sourceHas(parsed.source, sourceSchemas.SourceFeature.VIDEOS), true)
+})

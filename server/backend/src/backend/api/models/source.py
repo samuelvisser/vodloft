@@ -67,7 +67,7 @@ class ResolvedLinkPreviewAPIRead(ResponseBase):
 
 class ResolvedLinkAPIRead(ResponseBase):
     source: SourceAPIRead
-    kind: Literal["show", "movie", "episode"]
+    kind: Literal["show", "movie", "episode", "video"]
     slug: str
     url: str
     show_slug: Optional[str] = None

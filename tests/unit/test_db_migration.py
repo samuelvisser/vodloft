@@ -9,7 +9,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "a3e7c1d9f052"
+HEAD_REVISION = "b5d2e8a4c716"
+VODLOFT_SOURCES_REVISION = "a3e7c1d9f052"
 WIRELOFT_1_2_3_REVISION = "a4e7c19b2d53"
 WIRELOFT_1_2_1_REVISION = "f2a6c93d8b14"
 WIRELOFT_1_2_REVISION = "6d4a8c1f2b90"
@@ -240,7 +241,8 @@ def test_migration_history_has_one_head(migration_database):
     )
 
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == WIRELOFT_1_2_3_REVISION
+    assert script.get_revision(HEAD_REVISION).down_revision == VODLOFT_SOURCES_REVISION
+    assert script.get_revision(VODLOFT_SOURCES_REVISION).down_revision == WIRELOFT_1_2_3_REVISION
     assert script.get_revision(WIRELOFT_1_2_3_REVISION).down_revision == WIRELOFT_1_2_1_REVISION
     assert script.get_revision(WIRELOFT_1_2_1_REVISION).down_revision == WIRELOFT_1_2_REVISION
     assert (
@@ -409,13 +411,17 @@ def test_fresh_database_upgrades_to_wireloft_1_1(migration_database):
             "vodloft-movies",
             "vodloft-shows-audio",
             "vodloft-shows-video",
+            "vodloft-videos",
         ]
-        assert {profile["type"] for profile in profiles} == {"movie", "show"}
+        assert {profile["type"] for profile in profiles} == {"movie", "show", "video"}
         assert connection.execute(text(
             "SELECT COUNT(*) FROM local_media_profiles_show"
         )).scalar_one() == 2
         assert connection.execute(text(
             "SELECT COUNT(*) FROM local_media_profiles_movie"
+        )).scalar_one() == 1
+        assert connection.execute(text(
+            "SELECT COUNT(*) FROM local_media_profiles_video"
         )).scalar_one() == 1
 
     from backend.db.initial_seed import seed_initial_database
@@ -424,7 +430,7 @@ def test_fresh_database_upgrades_to_wireloft_1_1(migration_database):
     with engine.connect() as connection:
         assert connection.execute(text(
             "SELECT COUNT(*) FROM local_media_profiles"
-        )).scalar_one() == 3
+        )).scalar_one() == 4
 
 
 def test_existing_database_upgrade_does_not_run_initial_seed(migration_database):

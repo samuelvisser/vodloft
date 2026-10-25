@@ -5,13 +5,14 @@ import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import LocalMediaProfileCommonFields from './LocalMediaProfileCommonFields'
 import MovieLocalMediaProfileForm from './MovieLocalMediaProfileForm'
 import ShowLocalMediaProfileForm from './ShowLocalMediaProfileForm'
+import VideoLocalMediaProfileForm from './VideoLocalMediaProfileForm'
 
 type Props = {
     mode: LocalMediaProfileMode
     form: UseFormReturn<any>
 }
 
-export type LocalMediaProfileMode = 'show' | 'movie'
+export type LocalMediaProfileMode = 'show' | 'movie' | 'video'
 
 export function buildLocalMediaProfileOnSubmit<TIn extends FieldValues, TOut extends FieldValues = TIn>(
     form: UseFormReturn<TIn>,
@@ -32,10 +33,9 @@ export default function LocalMediaProfileForm({form, mode}: Props) {
     return (
         <>
             <LocalMediaProfileCommonFields form={form}/>
-            {mode === 'movie'
-                ? <MovieLocalMediaProfileForm form={form}/>
-                : <ShowLocalMediaProfileForm form={form}/>
-            }
+            {mode === 'movie' && <MovieLocalMediaProfileForm form={form}/>}
+            {mode === 'video' && <VideoLocalMediaProfileForm form={form}/>}
+            {mode === 'show' && <ShowLocalMediaProfileForm form={form}/>}
         </>
     )
 }

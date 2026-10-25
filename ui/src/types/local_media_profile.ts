@@ -17,9 +17,17 @@ export const MoviePreferredFormatReg = createSelectRegistry("MoviePreferredForma
   'format_720p': { label: "720p", help: "Download a 720p video" },
 });
 
+export const VideoPreferredFormatReg = createSelectRegistry("VideoPreferredFormat", {
+  'format_4k': { label: "4k", help: "Download a 4k video, or the best the site has" },
+  'format_1080p': { label: "1080p", help: "Download a 1080p video, or the best below it" },
+  'format_720p': { label: "720p", help: "Download a 720p video, or the best below it" },
+  'format_audio_only': { label: "Audio Only", help: "Download audio only" },
+});
+
 export const LocalMediaProfileTypeReg = createSelectRegistry("LocalMediaProfileType", {
   'show': { label: "Show", help: "Store downloaded show episodes" },
   'movie': { label: "Movie", help: "Store manually downloaded movies" },
+  'video': { label: "Video", help: "Store single videos added on their own" },
 });
 
 export const ShowLocalMediaProfileScopeReg = createSelectRegistry("ShowLocalMediaProfileScope", {
@@ -28,7 +36,12 @@ export const ShowLocalMediaProfileScopeReg = createSelectRegistry("ShowLocalMedi
   'series': { label: "Series", help: "Offer this profile only for Series" },
 });
 
-export type LocalMediaProfileType = 'show' | 'movie'
+export type LocalMediaProfileType = 'show' | 'movie' | 'video'
+/** The API collection that creates, updates and deletes profiles of one type. */
+export function localMediaProfileEndpoint(type: LocalMediaProfileType | string): string {
+    return `${type}-local-media-profiles`
+}
+
 export type ShowLocalMediaProfileScope = (typeof ShowLocalMediaProfileScopeReg)["values"][number]
 export type ShowLocalMediaProfileContext = 'podcast' | 'series'
 

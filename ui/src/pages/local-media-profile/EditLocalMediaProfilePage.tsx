@@ -19,9 +19,13 @@ import {
     ShowLocalMediaProfileUpdateIn,
     ShowLocalMediaProfileUpdateSchema,
 } from '../../types/schemas/show_local_media_profile'
+import {
+    VideoLocalMediaProfileUpdateIn,
+    VideoLocalMediaProfileUpdateSchema,
+} from '../../types/schemas/video_local_media_profile'
 import {WithRoot} from '../../types/form'
 import {buildLocalMediaProfileOnSubmit} from '../../components/LocalMediaProfile/LocalMediaProfileForm'
-import {LocalMediaProfileTypeReg} from '../../types/local_media_profile'
+import {LocalMediaProfileTypeReg, localMediaProfileEndpoint} from '../../types/local_media_profile'
 import {
     clearLocalMediaProfileDraft,
     editLocalMediaProfileDraftKey,
@@ -29,6 +33,12 @@ import {
     saveLocalMediaProfileDraft,
 } from '../../components/LocalMediaProfile/localMediaProfileDraft'
 import './EditLocalMediaProfilePage.css'
+
+function canonicalProfileValues(profile: LocalMediaProfileRead): LocalMediaProfileUpdateIn {
+    if (profile.type === 'movie') return MovieLocalMediaProfileUpdateSchema.parse(profile)
+    if (profile.type === 'video') return VideoLocalMediaProfileUpdateSchema.parse(profile)
+    return ShowLocalMediaProfileUpdateSchema.parse(profile)
+}
 
 export default function EditLocalMediaProfilePage() {
     const navigate = useNavigate()
@@ -63,14 +73,20 @@ export default function EditLocalMediaProfilePage() {
         shouldFocusError: true,
     })
 
-    const form = (profile?.type === 'movie' ? formMovie : formShow) as UseFormReturn<any>
+    const formVideo = useForm<WithRoot<VideoLocalMediaProfileUpdateIn>>({
+        resolver: zodResolver(VideoLocalMediaProfileUpdateSchema),
+        mode: 'onBlur',
+        shouldFocusError: true,
+    })
+
+    const form = (
+        profile?.type === 'movie' ? formMovie : profile?.type === 'video' ? formVideo : formShow
+    ) as UseFormReturn<any>
 
     useEffect(() => {
         if (!profile || !slug || initializedSlug.current === slug) return
 
-        const canonical = profile.type === 'movie'
-            ? MovieLocalMediaProfileUpdateSchema.parse(profile)
-            : ShowLocalMediaProfileUpdateSchema.parse(profile)
+        const canonical = canonicalProfileValues(profile)
         const draftKey = editLocalMediaProfileDraftKey(slug)
         const draft = loadLocalMediaProfileDraft<LocalMediaProfileUpdateIn>(draftKey)
         const restoredValues = draft?.mode === profile.type
@@ -138,9 +154,7 @@ export default function EditLocalMediaProfilePage() {
 
     const submitFn = async (data: LocalMediaProfileUpdateOut) => {
         try {
-            const endpoint = profile.type === 'movie'
-                ? 'movie-local-media-profiles'
-                : 'show-local-media-profiles'
+            const endpoint = localMediaProfileEndpoint(profile.type)
             const renameQuery = renameDecisionRef.current ? '?rename_files=true' : ''
             const response = await fetch(`${(window as any).appConfig.API_URL}/${endpoint}/${data.slug}${renameQuery}`, {
                 method: 'PATCH',
@@ -192,9 +206,7 @@ export default function EditLocalMediaProfilePage() {
     }
 
     const discardRestoredDraft = () => {
-        const canonical = profile.type === 'movie'
-            ? MovieLocalMediaProfileUpdateSchema.parse(profile)
-            : ShowLocalMediaProfileUpdateSchema.parse(profile)
+        const canonical = canonicalProfileValues(profile)
         form.reset(canonical)
         clearLocalMediaProfileDraft(editLocalMediaProfileDraftKey(slug))
         renameDecisionRef.current = null
