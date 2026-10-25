@@ -8,6 +8,7 @@ import sources
 from sources import Feature, UnknownSourceError, get_source, sources_for
 from sources.dailywire import DailyWireSource
 from sources.dailywire import source as dailywire_source
+from sources.ytdlp import YtDlpSource
 
 
 def test_daily_wire_is_registered():
@@ -15,7 +16,14 @@ def test_daily_wire_is_registered():
     assert isinstance(source, DailyWireSource)
     assert source.name == "The Daily Wire"
     assert source.has(Feature.RSS_STREAMING)
-    assert sources.all_sources() == [source]
+    assert sources.all_sources() == [source, get_source("ytdlp")]
+
+
+def test_ytdlp_claims_every_link_after_the_dedicated_sources():
+    ytdlp = get_source("ytdlp")
+    assert isinstance(ytdlp, YtDlpSource)
+    assert sources_for("https://www.dailywire.com/show/x") == [get_source(sources.DAILYWIRE), ytdlp]
+    assert sources_for("https://www.youtube.com/watch?v=x") == [ytdlp]
 
 
 def test_unknown_source_raises():
@@ -37,7 +45,7 @@ def test_registering_an_id_twice_fails():
     ("not a url", False),
 ])
 def test_sources_for_matches_domain_and_subdomains(url, handled):
-    assert (sources_for(url) == [get_source(sources.DAILYWIRE)]) is handled
+    assert (get_source(sources.DAILYWIRE) in sources_for(url)) is handled
 
 
 def test_episode_media_uses_member_lookup(monkeypatch):

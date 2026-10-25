@@ -23,7 +23,8 @@ from downloader.lifecycle import DownloadTracker
 from downloader.metadata import render_nfo
 from downloader.plan import DownloadPlan, SidecarSpec, build_download_plan
 from downloader.source import resolve_download_source
-from sources import get_source
+from downloader.ytdlp import resolve_ytdlp_source
+from sources import PlaybackKind, get_source
 
 
 def prepare_download_plan(session: Session, media_download_id: int, tracker: DownloadTracker) -> DownloadPlan:
@@ -126,8 +127,11 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         tracker.preparing("resolve_playback")
         playback = media_source.video_playback(slug=slug, url=video_url)
         tracker.ensure_active()
-        tracker.preparing("inspect_stream")
-        source = resolve_download_source(playback.url, preferred_format=preferred, audio_only=audio_only, remux_video_to_mp4=remux, cancellation=tracker.is_canceled)
+        if playback.kind is PlaybackKind.YTDLP:
+            source = resolve_ytdlp_source(playback.url, command=playback.command, preferred_format=preferred, audio_only=audio_only, ffmpeg_path=ffmpeg_path)
+        else:
+            tracker.preparing("inspect_stream")
+            source = resolve_download_source(playback.url, preferred_format=preferred, audio_only=audio_only, remux_video_to_mp4=remux, cancellation=tracker.is_canceled)
     else:
         assert movie is not None
         movie_slug, duration = movie.slug, movie.duration

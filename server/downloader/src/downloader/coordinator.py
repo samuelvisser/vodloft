@@ -6,6 +6,7 @@ import os
 import shutil
 from contextlib import contextmanager
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Callable, Iterator
 
@@ -23,6 +24,7 @@ from .storage.artifacts import remove_download_artifacts
 from .storage.copying import copy_file
 from .storage.identity import ArtifactIdentity, inspect_artifact
 from .storage.publication import PublicationJournal
+from .ytdlp import download_ytdlp
 
 
 @dataclass(frozen=True)
@@ -154,7 +156,10 @@ def execute_download_plan(
                 should_cancel=tracker.is_canceled,
                 waiting=lambda value: tracker.wait("media", "download_capacity" if value else None),
             ):
-                transfer = download_hls_bundle if plan.source.hls_bundle else download_hls if plan.source.use_hls else download_file
+                if plan.source.ytdlp_command:
+                    transfer = partial(download_ytdlp, command=plan.source.ytdlp_command)
+                else:
+                    transfer = download_hls_bundle if plan.source.hls_bundle else download_hls if plan.source.use_hls else download_file
                 result = transfer(
                     plan.source.url, str(transfer_path),
                     progress=lambda value: tracker.progress("media", value), should_cancel=tracker.is_canceled,

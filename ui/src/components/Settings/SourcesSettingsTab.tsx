@@ -1,5 +1,7 @@
 import {useSources} from '../../lib/queries'
 import {SourceFeature, SourceRead, sourceHas} from '../../types/schemas/source'
+import SourceCookiesCard from '../Source/SourceCookiesCard'
+import SourceProgramCard from '../Source/SourceProgramCard'
 import {sourceComponents} from '../Source/sourceComponents'
 import type {SettingsTabProps} from './SettingsTabTypes'
 
@@ -12,7 +14,11 @@ const FEATURE_LABELS: Record<string, string> = {
     [SourceFeature.LIVE_EPISODES]: 'Live episodes',
     [SourceFeature.MEMBERSHIP_LEVELS]: 'Membership levels',
     [SourceFeature.RSS_STREAMING]: 'RSS streaming',
+    [SourceFeature.VIDEOS]: 'Single videos',
 }
+
+// Features that are settings rather than kinds of content.
+const SETTING_FEATURES: readonly string[] = [SourceFeature.PROGRAM_UPDATES, SourceFeature.COOKIES]
 
 function SourceCard({source, tabProps}: {source: SourceRead; tabProps: SettingsTabProps}) {
     const {SignIn, Settings} = sourceComponents(source.id)
@@ -21,15 +27,19 @@ function SourceCard({source, tabProps}: {source: SourceRead; tabProps: SettingsT
             <div className="card-body">
                 <div className="source-card-header">
                     <h3 id={`source-${source.id}-title`}>{source.name}</h3>
-                    <span className="source-card-domains">{source.domains.join(', ')}</span>
+                    <span className="source-card-domains">
+                        {source.domains.includes('*') ? 'Many sites' : source.domains.join(', ')}
+                    </span>
                 </div>
                 <ul className="source-feature-list" aria-label={`What ${source.name} supports`}>
-                    {source.features.map((feature) => (
+                    {source.features.filter((feature) => !SETTING_FEATURES.includes(feature)).map((feature) => (
                         <li key={feature} className="source-badge">{FEATURE_LABELS[feature] ?? feature}</li>
                     ))}
                 </ul>
             </div>
             {sourceHas(source, SourceFeature.LOGIN) && SignIn ? <SignIn/> : null}
+            {sourceHas(source, SourceFeature.PROGRAM_UPDATES) ? <SourceProgramCard source={source}/> : null}
+            {sourceHas(source, SourceFeature.COOKIES) ? <SourceCookiesCard source={source}/> : null}
             {Settings ? <Settings {...tabProps}/> : null}
         </section>
     )

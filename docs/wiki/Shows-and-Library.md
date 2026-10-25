@@ -75,6 +75,8 @@ Movie output templates should distinguish the main movie from extras so differen
 
 A single video is one video added on its own, outside any show. It appears under **Videos** in the Library. Its page shows the uploader, upload date and description, and one download row for each Video Local Media Profile. Single videos are downloaded manually. **Refresh details** asks the site for the current title, description and thumbnail.
 
+Single videos come from yt-dlp, which supports YouTube and well over a thousand other sites. A link to a page yt-dlp has no dedicated support for is shown as "Other sites · best effort": VODLoft tries to find a video on the page, which often works for plain video pages but not always. Videos protected by DRM cannot be downloaded. Channels and playlists cannot be added as shows yet.
+
 ## Profiles and files are separate
 
 A Local Media Profile describes the local file VODLoft should create. A Download Profile describes which show episodes should be downloaded automatically. An RSS Stream Profile describes a private feed. A download record represents actual file activity.

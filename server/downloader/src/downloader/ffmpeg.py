@@ -210,7 +210,8 @@ def embed_media(
         command = [ffmpeg_path, "-y", "-i", media_path]
         if thumbnail_path is not None:
             command += ["-i", thumbnail_path]
-        command += ["-map", "0"]
+        # Data streams (such as RTP hint tracks) cannot be copied into MP4.
+        command += ["-map", "0", "-map", "-0:d?"]
         if thumbnail_path is not None:
             command += ["-map", "1:v:0"]
         command += ["-c", "copy"]
