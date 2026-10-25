@@ -1048,7 +1048,7 @@ def test_prioritize_queued_download_records_the_click_time():
         engine.dispose()
 
 
-def test_prioritized_downloads_dispatch_first_in_click_order(monkeypatch):
+def test_prioritized_downloads_dispatch_first_latest_click_in_front(monkeypatch):
     from task_manager.tasks import media_download_operations
 
     session, engine = _session()
@@ -1074,7 +1074,8 @@ def test_prioritized_downloads_dispatch_first_in_click_order(monkeypatch):
         monkeypatch.setattr(media_download_operations, "_reserve_target_dispatch", capture_dispatch)
 
         assert media_download_operations.dispatch_queued_media_download_operations(session, budget=3) == 3
-        assert dispatched == [first.id, second.id, normal.id]
+        # Each click moves a download to the front of the queue.
+        assert dispatched == [second.id, first.id, normal.id]
     finally:
         session.close()
         engine.dispose()

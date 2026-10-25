@@ -186,7 +186,11 @@ def test_show_scope_selection_uses_one_query_on_the_success_path():
         assert [download.id for download in scope.downloads] == [
             audio_download_id
         ]
-        assert len(statements) == 1
+        # Model-level selectin relationships (assets, metadata) add one batched
+        # "IN (...)" load each; the selection itself must stay a single query.
+        selection = [statement for statement in statements if " IN (" not in statement]
+        assert len(selection) == 1
+        assert "EXISTS" not in " ".join(statements)
     finally:
         session.close()
         engine.dispose()
