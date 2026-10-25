@@ -9,7 +9,7 @@
  * This uses the pure-JS `js-sha256` rather than the native
  * `crypto.subtle.digest`: SubtleCrypto is only exposed by browsers in a
  * "secure context" (HTTPS, or the special-cased http://localhost), so on a
- * plain-HTTP LAN address WireLoft is commonly reached at (e.g.
+ * plain-HTTP LAN address VODLoft is commonly reached at (e.g.
  * http://192.168.1.50:8080) `crypto.subtle` is `undefined` and calling it
  * throws -- which login's generic error handling then surfaces as a
  * misleading "Network error, please try again." js-sha256 produces a

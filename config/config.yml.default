@@ -1,4 +1,4 @@
-# Default WireLoft configuration, seeded into /config/config.yml on first
+# Default VODLoft configuration, seeded into /config/config.yml on first
 # container start (see .docker/app/scripts/entrypoint.sh). Safe to edit
 # in-place afterwards -- it is only ever copied once, when config.yml does
 # not yet exist.
@@ -11,7 +11,7 @@
 # The Settings screen writes changes directly into this same file. It only
 # inserts or updates fields that were actually changed in the UI; opening or
 # saving Settings does not populate config.yml with every application default.
-# WL_* environment variables and .env values take precedence over this file.
+# VL_* environment variables and .env values take precedence over this file.
 
 crypto:
   # Fallback location for the auto-generated session-signing key, used when

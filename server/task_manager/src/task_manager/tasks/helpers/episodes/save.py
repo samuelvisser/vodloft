@@ -108,7 +108,7 @@ def resolve_dw_episodes(
         require_member_exclusive: bool,
         always_resolve_details: bool = False,
 ) -> list[ResolvedEpisode]:
-    """Resolve remote snapshot + WireLoft transition policy before database writes."""
+    """Resolve remote snapshot + VODLoft transition policy before database writes."""
     resolved: list[ResolvedEpisode] = []
     for ep_id, ep in episodes:
         reason: NoUsableMediaReason | None = None

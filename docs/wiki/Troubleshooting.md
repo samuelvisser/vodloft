@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Start with the symptom you can see in the WireLoft interface. The **Home** page highlights downloads and movie metadata that need attention, while individual downloads have their own logs.
+Start with the symptom you can see in the VODLoft interface. The **Home** page highlights downloads and movie metadata that need attention, while individual downloads have their own logs.
 
 For exact setting names and defaults, see [[Settings]].
 
@@ -8,14 +8,14 @@ For exact setting names and defaults, see [[Settings]].
 
 1. Open the show and check its recent sync history.
 2. Use **Sync now** if you do not want to wait for the next automatic check.
-3. If a sync completed but found nothing, Daily Wire may not be exposing the episode to WireLoft yet.
-4. If the episode is already listed but is live or still publishing, WireLoft will continue monitoring it automatically.
+3. If a sync completed but found nothing, Daily Wire may not be exposing the episode to VODLoft yet.
+4. If the episode is already listed but is live or still publishing, VODLoft will continue monitoring it automatically.
 
 New-episode discovery runs every **30 minutes** by default. Known episodes that are still publishing are checked every **2 minutes**.
 
 ## An episode has an old title, image, or number
 
-Daily Wire can change metadata after publication. WireLoft refreshes recently published episode metadata by default after:
+Daily Wire can change metadata after publication. VODLoft refreshes recently published episode metadata by default after:
 
 ```text
 15m,30m,1h,3h,6h,24h,3d
@@ -29,13 +29,13 @@ Seeing an episode in the Library does not necessarily mean final downloadable me
 
 For Podcast Download Profiles, check:
 
-- **Download with countdown** — whether WireLoft may download the early countdown version;
+- **Download with countdown** — whether VODLoft may download the early countdown version;
 - **Redownload final version** — whether an early copy should later be replaced;
 - whether the profile's episode types include this item.
 
 If countdown downloading is disabled, waiting for the final version is expected behavior.
 
-## WireLoft stopped discovering episodes automatically
+## VODLoft stopped discovering episodes automatically
 
 Check:
 
@@ -49,7 +49,7 @@ Try **Sync now** on one show. If manual sync works, the problem is more likely r
 
 ## Downloads stay queued
 
-WireLoft allows **5 simultaneous downloads** by default. When all slots are occupied, additional items wait as Queued.
+VODLoft allows **5 simultaneous downloads** by default. When all slots are occupied, additional items wait as Queued.
 
 You can use **Prioritize** on a queued item when you want it selected before ordinary queued work as soon as a slot becomes available.
 
@@ -95,13 +95,13 @@ Remuxing changes the container format without re-encoding the video.
 
 That is expected while the download or local processing is incomplete.
 
-With **Save to temporary folder first**, WireLoft keeps incomplete work in the configured temporary folder and only publishes the completed media into its final destination afterwards.
+With **Save to temporary folder first**, VODLoft keeps incomplete work in the configured temporary folder and only publishes the completed media into its final destination afterwards.
 
 Check the Download page for the current progress/status before looking for the final file.
 
 ## A downloaded file is marked Missing
 
-WireLoft could no longer find the completed file at the path it recorded.
+VODLoft could no longer find the completed file at the path it recorded.
 
 Check:
 
@@ -110,11 +110,11 @@ Check:
 - whether a NAS or network share is currently mounted and reachable;
 - permissions on the media directory.
 
-WireLoft can recover some same-folder renames, but it is not a general filesystem index and may not follow a file moved into another directory.
+VODLoft can recover some same-folder renames, but it is not a general filesystem index and may not follow a file moved into another directory.
 
 ## A file is marked Corrupted
 
-With **Verify file size** enabled, WireLoft considers a completed file corrupted when it is empty or smaller than the size recorded when the download completed.
+With **Verify file size** enabled, VODLoft considers a completed file corrupted when it is empty or smaller than the size recorded when the download completed.
 
 Check the actual file and storage health. If the storage is healthy and you want a fresh copy, use **Retry**.
 
@@ -158,7 +158,7 @@ The timezone uses `TZ`.
 
 ## The Settings UI did not write every default to `config.yml`
 
-That is normal. WireLoft stores only values you changed. Missing keys continue to use their current defaults.
+That is normal. VODLoft stores only values you changed. Missing keys continue to use their current defaults.
 
 ## RSS feed returns 404 or is unavailable
 
@@ -167,7 +167,7 @@ Check:
 - the Stream Profile is enabled;
 - the URL uses the current token;
 - the token was not regenerated while the podcast app still has the old URL;
-- your reverse proxy forwards `/feeds/rss/` to WireLoft.
+- your reverse proxy forwards `/feeds/rss/` to VODLoft.
 
 ## RSS feed is empty or some episodes are missing
 
@@ -204,29 +204,29 @@ Try **Serve as locally cached MP4** for broader video compatibility or **Direct 
 
 ## RSS MP4 takes a long time to start
 
-If the episode is not already downloaded or cached, WireLoft must prepare the complete MP4 before conventional playback can begin.
+If the episode is not already downloaded or cached, VODLoft must prepare the complete MP4 before conventional playback can begin.
 
 For faster access to recent episodes, keep a small recent video window downloaded locally and enable **Use Downloads** on the RSS profile.
 
 ## Premium Daily Wire media fails
 
-Open **Settings → DailyWire** and confirm WireLoft is still connected. Also confirm that the same account still has access to the content on Daily Wire itself.
+Open **Settings → DailyWire** and confirm VODLoft is still connected. Also confirm that the same account still has access to the content on Daily Wire itself.
 
 If you changed advanced endpoints, OAuth settings, or request pacing, restore their defaults before continuing diagnosis.
 
-## WireLoft says an episode has no usable media
+## VODLoft says an episode has no usable media
 
 Daily Wire can temporarily list an episode before usable media is available, or an old placeholder can remain in the catalog.
 
-WireLoft rechecks these episodes every **20 minutes** by default. It normally waits **4 hours** before an episode that remains unavailable can be cleaned up.
+VODLoft rechecks these episodes every **20 minutes** by default. It normally waits **4 hours** before an episode that remains unavailable can be cleaned up.
 
-If you are certain the entry should be removed immediately, use **Early Delete** from the episode actions. WireLoft checks its current Daily Wire state again before removal.
+If you are certain the entry should be removed immediately, use **Early Delete** from the episode actions. VODLoft checks its current Daily Wire state again before removal.
 
 ## Database errors or `database disk image is malformed`
 
-Stop WireLoft before doing anything else and make a copy of the complete `/config` directory.
+Stop VODLoft before doing anything else and make a copy of the complete `/config` directory.
 
-Do not run multiple WireLoft backends against the same SQLite database. A common development mistake is running a local backend and a Docker instance that both use the same `wireloft.db` at the same time.
+Do not run multiple VODLoft backends against the same SQLite database. A common development mistake is running a local backend and a Docker instance that both use the same `wireloft.db` at the same time.
 
 If the database reports structural corruption, restore a known-good `/config` backup when available. Avoid repeatedly restarting or running migration commands against a database that is already reporting corruption.
 

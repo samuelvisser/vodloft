@@ -70,7 +70,7 @@ def update_episode_from_dailywire(
         episode: Episode,
         dw_episode: DwEpisodeDetailRecord,
 ) -> None:
-    """Refresh Daily Wire metadata without changing WireLoft-owned lifecycle state."""
+    """Refresh Daily Wire metadata without changing VODLoft-owned lifecycle state."""
     protected_fields = {
         "id",
         "show_id",

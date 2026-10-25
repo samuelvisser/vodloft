@@ -57,7 +57,7 @@ class MediaDownloadBase(HasMetadataMixin, HasTaskResourcesMixin, Base):
     )
     artifact_error: Mapped[Optional[str]] = mapped_column(Text)
 
-    # Filesystem identity exists only when WireLoft has successfully inspected a
+    # Filesystem identity exists only when VODLoft has successfully inspected a
     # physical artifact. ABSENT rows therefore have no identity, and a MISSING
     # row discovered while the file is unavailable may also have none. AVAILABLE
     # and CORRUPTED artifacts always carry the complete tuple. st_dev/st_ino are

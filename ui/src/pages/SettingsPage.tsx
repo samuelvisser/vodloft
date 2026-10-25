@@ -219,7 +219,7 @@ export default function SettingsPage() {
             <div className="settings-page__heading">
                 <div>
                     <h1 id="settings-title">Settings</h1>
-                    <p>Configure how WireLoft downloads, monitors and serves your media.</p>
+                    <p>Configure how VODLoft downloads, monitors and serves your media.</p>
                 </div>
                 <div className="settings-source-status" aria-live="polite">
                     <span className="settings-source-badge is-active">config.yml</span>
@@ -232,8 +232,8 @@ export default function SettingsPage() {
                     <div className="settings-validation-issues" role="alert">
                         <strong>Configuration needs attention</strong>
                         <p>
-                            WireLoft found settings validation problems during startup. Invalid automatic schedules
-                            were not started. Correct the source shown below, then restart WireLoft to restore those schedules.
+                            VODLoft found settings validation problems during startup. Invalid automatic schedules
+                            were not started. Correct the source shown below, then restart VODLoft to restore those schedules.
                         </p>
                         <ul>
                             {settingsQuery.data.validationIssues.map((issue) => (

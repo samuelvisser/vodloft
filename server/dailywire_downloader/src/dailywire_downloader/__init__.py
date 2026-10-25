@@ -1,6 +1,6 @@
 """Standalone media download planning, coordination, assets and publication.
 
-The package has no dependency on WireLoft's ORM, API response models, settings,
+The package has no dependency on VODLoft's ORM, API response models, settings,
 Task Manager, or frontend. Callers prepare immutable plans and consume lifecycle
 snapshots; filesystem ownership and optional download behavior live here.
 """

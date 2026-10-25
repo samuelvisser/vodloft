@@ -50,7 +50,7 @@ export default function LoginPage() {
     <div className="login-page" style={{ display: 'grid', placeItems: 'center', minHeight: '100vh', background: 'linear-gradient(135deg, #0b1020, #1b1f3b)' }}>
       <div style={{ width: 'min(440px, 92vw)', background: 'rgba(0,0,0,0.4)', borderRadius: 16, padding: 28, boxShadow: '0 20px 60px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.08)' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, marginBottom: 18 }}>
-          <img src="/logo-square-full.png" alt="WireLoft" style={{ width: 200, objectFit: 'contain', filter: 'drop-shadow(0 6px 16px rgba(0,0,0,0.5))' }} />
+          <img src="/logo-square-full.png" alt="VODLoft" style={{ width: 200, objectFit: 'contain', filter: 'drop-shadow(0 6px 16px rgba(0,0,0,0.5))' }} />
           <h1 style={{ color: 'white', fontSize: 24, margin: 0, fontWeight: 600 }}>Welcome</h1>
           <p style={{ color: 'rgba(255,255,255,0.7)', margin: 0, fontSize: 14 }}>Enter the admin password to continue</p>
         </div>
@@ -94,7 +94,7 @@ export default function LoginPage() {
         </form>
 
         <div style={{ marginTop: 18, textAlign: 'center', color: 'rgba(255,255,255,0.55)', fontSize: 12 }}>
-          Protected by local password set by the admin. Only authorized users are allowed to access WireLoft.
+          Protected by local password set by the admin. Only authorized users are allowed to access VODLoft.
         </div>
       </div>
     </div>

@@ -1,5 +1,5 @@
 /**
- * Subset of the backend WireLoft settings
+ * Subset of the backend VODLoft settings
  *
  * Only exposes things here that React might actually need (ignores secrets or backend-only config)
  */

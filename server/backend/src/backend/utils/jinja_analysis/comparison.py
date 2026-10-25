@@ -53,7 +53,7 @@ class _SubstituteEqualities(NodeTransformer):
 
 
 def _fragments(expression: nodes.Expr, environment: Environment, *, concatenated: bool = False):
-    # WireLoft's emitted-value finalizer is character-wise and idempotent. Thus
+    # VODLoft's emitted-value finalizer is character-wise and idempotent. Thus
     # string concatenation and repeated finalization can be normalized without
     # injecting marker values into filters or changing Jinja filter semantics.
     if isinstance(expression, nodes.Concat):

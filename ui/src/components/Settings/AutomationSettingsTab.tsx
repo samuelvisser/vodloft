@@ -18,7 +18,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
         <>
             <SettingsSection
                 title="Scheduler"
-                description="Global execution and retry settings for WireLoft background work."
+                description="Global execution and retry settings for VODLoft background work."
             >
                 <ToggleField
                     id="settings-scheduler-enabled"
@@ -106,9 +106,9 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                         next.newEpisodeSchedule.findEpisodesCronEnabled = enabled
                     })}
                     help={
-                        <ReadMore summary={<span>Finds new episodes for every show indexed in WireLoft.</span>}>
+                        <ReadMore summary={<span>Finds new episodes for every show indexed in VODLoft.</span>}>
                             <p>
-                                This cron schedule determines how often WireLoft will search for new episodes across all shows.
+                                This cron schedule determines how often VODLoft will search for new episodes across all shows.
                                 It is recommended to set this to a value that is not too frequent, as it can impact performance.
                             </p>
                         </ReadMore>
@@ -136,7 +136,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     help={
                         <ReadMore summary={<span>Monitors scheduled, delayed, live, processing and countdown episodes.</span>}>
                             <p>
-                                This cron schedule determines how often WireLoft monitors an episode after the <code>Find new episodes</code> worker
+                                This cron schedule determines how often VODLoft monitors an episode after the <code>Find new episodes</code> worker
                                 found it.
                             </p>
                             <p>
@@ -172,7 +172,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     help={
                         <ReadMore summary={<span>Rechecks every episode without usable media for recovery or confirmed removal.</span>}>
                             <p>
-                                WireLoft rechecks all <code>no_usable_media</code> episodes on this schedule, regardless of why
+                                VODLoft rechecks all <code>no_usable_media</code> episodes on this schedule, regardless of why
                                 they entered quarantine.
                             </p>
                             <p>
@@ -196,7 +196,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     help={
                         <ReadMore summary={<span>Intervals to refresh episode metadata after it is published.</span>}>
                             <p>
-                                While a Daily Wire episode is live, WireLoft closely monitors it for status, title and thumbnail updates. After
+                                While a Daily Wire episode is live, VODLoft closely monitors it for status, title and thumbnail updates. After
                                 publication, these targeted metadata refreshes keep reconciling late Daily Wire changes, including corrected episode
                                 numbers.
                             </p>
@@ -225,7 +225,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     help={
                         <ReadMore summary={<span>Set to published final if still at published with countdown after this duration.</span>}>
                             <p>
-                                Usually, WireLoft can determine an episode's status accurately. However, sometimes it might get stuck in <code>published
+                                Usually, VODLoft can determine an episode's status accurately. However, sometimes it might get stuck in <code>published
                                 with countdown</code>.
                                 If your download profiles are setup to only download <code>published final</code> episodes, this means they still skip
                                 it. This setting acts
@@ -252,7 +252,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     help={
                         <ReadMore summary={<span>Set to no usable media if still at DW processing after this duration.</span>}>
                             <p>
-                                Usually, WireLoft can determine an episode's status accurately. However, sometimes it might get stuck in <code>DW
+                                Usually, VODLoft can determine an episode's status accurately. However, sometimes it might get stuck in <code>DW
                                 processing</code>.
                                 This setting acts as a safety net to ensure <code>DW processing</code> episodes will be considered <code>no usable
                                 media</code> if
@@ -279,7 +279,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                             <p>
                                 An episode is considered in <code>no usable media</code> if it contains no media, its media is corrupted,
                                 or if it returns <code>404</code> from The Daily Wire. In all of these case, this might be a temporary issue.
-                                However, if it remains in this state after this duration, it may be deleted from WireLoft.
+                                However, if it remains in this state after this duration, it may be deleted from VODLoft.
                             </p>
                             <p>
                                 This duration is measured starting from the time the episode was marked as <code>no usable media</code>.

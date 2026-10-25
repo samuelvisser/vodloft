@@ -1,7 +1,7 @@
 [project]
 name = "config"
 version = "0.1.5"
-description = "Central configuration package for WireLoft"
+description = "Central configuration package for VODLoft"
 authors = [{ name = "Samuël Visser", email = "samuvisser@gmail.com" }]
 requires-python = ">=3.13,<3.14"
 dependencies = [

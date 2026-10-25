@@ -58,7 +58,7 @@ export default function OnboardingMovieProfileStep({movieTitle, onBack, onContin
     useEffect(() => {
         if (initialized.current || profilesQuery.isPending || profilesQuery.isError) return
         initialized.current = true
-        const starter = movieProfiles.find((profile) => profile.slug === 'wireloft-movies') ?? movieProfiles[0]
+        const starter = movieProfiles.find((profile) => profile.slug === 'vodloft-movies') ?? movieProfiles[0]
         if (starter) selectProfile(starter)
     }, [movieProfiles, profilesQuery.isError, profilesQuery.isPending, selectProfile])
 

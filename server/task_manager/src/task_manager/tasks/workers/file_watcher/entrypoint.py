@@ -23,14 +23,14 @@ from .service import run_file_watcher
 @task(
     key="file_watcher",
     title="Watch local files",
-    description="Watch local files to keep them in sync with WireLoft database.",
+    description="Watch local files to keep them in sync with VODLoft database.",
     allowed_resource_types=("show",),
     default_max_retries=5,
     tracks_progress=False,
 )
 async def file_watcher(*, resource_id: Optional[int] = None, slug: Optional[str] = None, progress=None) -> None:
     """
-    Reconciles downloaded episode files on disk with the WireLoft database.
+    Reconciles downloaded episode files on disk with the VODLoft database.
 
     Parameters:
     resource_id : Optional[int]

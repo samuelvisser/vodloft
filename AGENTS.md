@@ -21,22 +21,22 @@ If the GitHub connector still stalls, please try to sleep for a little and then 
 of stalling the entire session.
 
 ## Migrations
-WireLoft knows about two separate migration paths, each to serve a separate need:
+VODLoft knows about two separate migration paths, each to serve a separate need:
 - Database migrations
 - Background migrations
 
 Database migrations should be used strictly to change the database schema. It can move local data
 around if needed, but it can never use external resources such as API calls or the filesystem.
 Database migrations are expected to finish relatively quickly due to their local- only nature.
-They run before WireLoft starts anything else.
+They run before VODLoft starts anything else.
 
-Background migrations run in the background while WireLoft is running. They can use external resources
+Background migrations run in the background while VODLoft is running. They can use external resources
 such as API calls or the filesystem if needed. They are designed specifically for migrations that are
-expected to take longer and therefore do not interrupt the WireLoft startup process.
+expected to take longer and therefore do not interrupt the VODLoft startup process.
 Background migrations do, however, pause all scheduled work while they are running.
 
 ### Initial database seed
-Data that every brand-new WireLoft installation should start with belongs in
+Data that every brand-new VODLoft installation should start with belongs in
 `server/backend/src/backend/db/initial_seed.py`. The initial seed runs only after a fresh database has
 been migrated to the current schema. Add new first-install defaults there instead of putting them in
 Alembic migrations. Database migrations may still transform or backfill data when an existing
@@ -64,20 +64,20 @@ or fix faulty data caused by a historical bug, please follow these guidelines:
 migration heads exist.
 
 ### Legacy stored values
-WireLoft is still in an early stage and application code should not contain compatibility handling
+VODLoft is still in an early stage and application code should not contain compatibility handling
 for legacy persisted values. If a change renames or otherwise changes the representation of a stored
 configuration value, key, enum/string value, profile option, or other persisted database value, add
 a data migration that rewrites existing stored data to the new canonical representation.
 
 After that migration, frontend and backend application code must only know about the current canonical
 values. Do not add aliases, legacy-value normalization, fallback branches, dual-read/dual-write logic,
-or other runtime handling whose only purpose is to support values used by an older WireLoft version.
+or other runtime handling whose only purpose is to support values used by an older VODLoft version.
 Legacy identifiers may appear in the migration file itself and in migration-specific tests or
 fixtures needed to verify that migration, but not in normal application code. Treat legacy data
 compatibility as a one-time migration concern rather than a permanent application-code concern.
 
 ## API model boundaries
-WireLoft uses Pydantic as the API mapping and serialization boundary. Keep that boundary declarative:
+VODLoft uses Pydantic as the API mapping and serialization boundary. Keep that boundary declarative:
 - Prefer `model_validate()`, `from_attributes`, field aliases/`AliasPath`, discriminated unions, and small typed
   source envelopes over manually building dictionaries that mirror response models.
 - Services should compute business facts and select data sources, but must not manually serialize enums/datetimes,
@@ -91,11 +91,11 @@ WireLoft uses Pydantic as the API mapping and serialization boundary. Keep that 
   data merely because the fields currently happen to overlap.
 
 ## Forms
-WireLoft forms are configured within React Hook Form and Zod to ensure field validation in the frontend.
+VODLoft forms are configured within React Hook Form and Zod to ensure field validation in the frontend.
 However, all backend API endpoints use Pydantic models to do their own validation. In most cases,
 validation should always happen in both the frontend (user-friendly) and the backend for security.
 
-To handle backend validation errors gracefully, WireLoft provides a ServerAwareSubmit helper that
+To handle backend validation errors gracefully, VODLoft provides a ServerAwareSubmit helper that
 makes sure backend validation errors still end up showing under fields that caused them, including a
 fallback field as a 'catch all'. This goes not only for Pydantic validation errors, but also errors
 thrown by the SQLAlchemy database layer. It even tries to map database field errors to the correct
@@ -113,13 +113,13 @@ Enable search only if there are a lot of items. Keep most select components simp
 Select options should always be build with a SelectRegistry.
 
 ## Wiki
-When making big changes, you are allowed to update the WireLoft Wiki, too. 
+When making big changes, you are allowed to update the VODLoft Wiki, too. 
 However, keep in mind that the Wiki’s goal is user-facing: it should tell users things 
-they might want to know for using WireLoft as a product. 
+they might want to know for using VODLoft as a product. 
 The wiki is not for documenting exact development implementations. 
 It should also be easy to understand for a moderately tech-literate audience.
 
-The wiki should document the big picture for WireLoft: code comments are for explaining 
+The wiki should document the big picture for VODLoft: code comments are for explaining 
 programming implementation details.
 
 ## The Daily Wire
@@ -142,9 +142,9 @@ The backend is started with: `backend-api run` and the frontend is started with 
 If your environment is not able to run any of these tests, you can skip this step.
 
 ## Font Awesome pro and free icon versions
-WireLoft uses Font Awesome for both its public Free icon packs and its paid kit. Access to the paid kit is not required for normal development, automated agents, CI, or public contributors.
+VODLoft uses Font Awesome for both its public Free icon packs and its paid kit. Access to the paid kit is not required for normal development, automated agents, CI, or public contributors.
 
-Do not replace or remove an intended Pro icon merely because the paid kit is unavailable in your environment. Application code must reference icons through `ui/src/icons/faIcon.ts`; do not import Font Awesome icon packs directly or register icon families in feature code. The Vite compiler in `ui/scripts/font-awesome-compiler.mjs` scans those references, validates them, and bundles only the icon definitions WireLoft uses.
+Do not replace or remove an intended Pro icon merely because the paid kit is unavailable in your environment. Application code must reference icons through `ui/src/icons/faIcon.ts`; do not import Font Awesome icon packs directly or register icon families in feature code. The Vite compiler in `ui/scripts/font-awesome-compiler.mjs` scans those references, validates them, and bundles only the icon definitions VODLoft uses.
 
 Keep both `faIcon()` arguments statically analyzable: use literal strings or conditional expressions whose branches are literal strings. When a Pro icon has no automatic Font Awesome Free equivalent, add a prefix-qualified mapping to `ui/src/icons/freeIconFallbacks.json`.
 
@@ -162,9 +162,9 @@ For the remaining branches, tell me what changed in them compared to develop, an
 do with those.
 
 ### Migration squashing
-When releasing a new version of WireLoft, I will often ask you to merge all migrations after the last
+When releasing a new version of VODLoft, I will often ask you to merge all migrations after the last
 migration in the previous official release into one, making it one big migration from the previous
-WireLoft version into the next. When I ask you to do this, please make sure the new merged migration 
+VODLoft version into the next. When I ask you to do this, please make sure the new merged migration 
 file uses the same version number as the last pre-merge migration did. In this way, my testing 
 environments that have been upgrading through these smaller upgrades, will know they are already 
 up-to-date and do not require an update even if the migration file merged everything together.

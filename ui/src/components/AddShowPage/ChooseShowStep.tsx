@@ -233,12 +233,12 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
                                     <ReadMore summary={
                                         <span>Current Daily Wire membership level: {DwMembershipLevelReg.getLabelLoose(dwAccessLevel ?? 'Unknown')}</span>}>
                                         <p>This sets the membership level used when indexing episodes for this show.</p>
-                                        <p>WireLoft will make sure to only index episodes with at least this membership level.
+                                        <p>VODLoft will make sure to only index episodes with at least this membership level.
                                             If your subscription expires, gives access to a lower level membership than configured here, or
-                                            WireLoft looses access to your DailyWire account alltogether, indexing will be paused.</p>
-                                        <p>If you choose <strong>Highest allowed</strong>, WireLoft will index episodes using the membership level
+                                            VODLoft looses access to your DailyWire account alltogether, indexing will be paused.</p>
+                                        <p>If you choose <strong>Highest allowed</strong>, VODLoft will index episodes using the membership level
                                             currently available on your connected DailyWire account. However, if this ever changes or
-                                            WireLoft looses access to your account, episodes of a different membership level will
+                                            VODLoft looses access to your account, episodes of a different membership level will
                                             be indexed. This might result in a confusing mix of episodes from different membership
                                             levels combined.</p>
                                     </ReadMore>
@@ -275,7 +275,7 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
                                         <p><b>Podcast</b> shows download and stream episodes from <i>newest</i> to <i>oldest</i>.</p>
                                         <p><b>Series</b> shows download and stream episodes from <i>oldest</i> to <i>newest</i>.</p>
                                         <p>Further, the show type also defines what filters are available in the download- and stream profiles.</p>
-                                        <p>Though WireLoft tries to guess the show type automatically based on various factors, Daily&nbsp;Wire
+                                        <p>Though VODLoft tries to guess the show type automatically based on various factors, Daily&nbsp;Wire
                                             unfortunately does not provide a reliable way to determine this. If you're unsure, select "Podcast".</p>
                                     </ReadMore>
                                 </div>
@@ -315,7 +315,7 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
                                             <p><b>Numbered</b> episodes are identified by an episode number. Wireloft will know
                                                 when an episode is part of another episode (e.g. a clip) and label it as such.</p>
                                             <p><b>Date-based</b> episodes are identified simply by their publish date.</p>
-                                            <p><b>Seasonal</b> episodes are identified by a season number and an episode number. WireLoft will count
+                                            <p><b>Seasonal</b> episodes are identified by a season number and an episode number. VODLoft will count
                                                 episodes by season and identify them like "S01E01". Auxiliary content like trailers will be identified
                                                 separately. Episodes in a show of type series are automatically assigned this seasonal identification.
                                                 Generally, we do not recommend it for Podcasts.</p>

@@ -75,18 +75,18 @@ export function EnsureSafeDelayToggle({
                     <p>
                         Unfortunately, The Daily Wire does not currently provide an accurate time at which an episode was published.
                         The time they define as published differs wildly per show, and is at times very inaccurate. Therefore, to
-                        apply the download delay, WireLoft tries to make a best- effort guess when the episode was published based
+                        apply the download delay, VODLoft tries to make a best- effort guess when the episode was published based
                         primarily on when it observed it being published, but with with fallback to other timestamps or the official
-                        time as reported by The Daily Wire if WireLoft cannot prove it was online while the episode was published.
+                        time as reported by The Daily Wire if VODLoft cannot prove it was online while the episode was published.
                     </p>
                     <p>
-                        When this setting is enabled, that best- effort guess is replaced by the timestamp WireLoft first recorded
+                        When this setting is enabled, that best- effort guess is replaced by the timestamp VODLoft first recorded
                         the episode being published. In this way, you can be sure downloads never automatically happen before at
                         least it's configured delay after publishing.
                     </p>
                     <p>
-                        The disadvantage of that approach is that, if WireLoft was shut down when the episode was published, the
-                        date at which it recorded it being published might vary wildly from the actual date, especially if WireLoft
+                        The disadvantage of that approach is that, if VODLoft was shut down when the episode was published, the
+                        date at which it recorded it being published might vary wildly from the actual date, especially if VODLoft
                         was down for an extended time. Therefore this conservative value is not used by default.
                     </p>
                 </ReadMore>
@@ -171,7 +171,7 @@ export default function DownloadsSettingsTab({
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.temporaryDownloadRoot = value
                     })}
-                    help="Used whenever the system default or a Local Media Profile is set to save to a temporary folder first. By default WireLoft uses local temporary storage so remuxing and metadata processing do not repeatedly read and rewrite a network media library."
+                    help="Used whenever the system default or a Local Media Profile is set to save to a temporary folder first. By default VODLoft uses local temporary storage so remuxing and metadata processing do not repeatedly read and rewrite a network media library."
                     wide
                 />
                 {storageAdvisory ? (
@@ -190,12 +190,12 @@ export default function DownloadsSettingsTab({
                         next.downloadSettings.rssCacheRoot = value
                     })}
                     help={
-                        <ReadMore summary="Stores media WireLoft prepares or caches while fulfilling RSS requests.">
+                        <ReadMore summary="Stores media VODLoft prepares or caches while fulfilling RSS requests.">
                             <p>
                                 By default, the cache lives in <code>.wireloft-rss-cache</code> inside the download root.
                             </p>
                             <p>
-                                You may explicitly place it anywhere WireLoft can write, including container-local storage such
+                                You may explicitly place it anywhere VODLoft can write, including container-local storage such
                                 as <code>/tmp/wireloft-rss-cache</code>. A container-local cache does not need a host volume, but is lost when the
                                 container is recreated.
                             </p>
@@ -233,11 +233,11 @@ export default function DownloadsSettingsTab({
                             </p>
                             <p>
                                 <strong>Save to temporary folder first</strong> keeps all download and remux work in the temporary folder. Only after
-                                the media is complete does WireLoft choose an unused final filename and publish it to the destination.
+                                the media is complete does VODLoft choose an unused final filename and publish it to the destination.
                             </p>
                             <p>
                                 The temporary folder may be on a different filesystem from the media library, including local storage while the
-                                library itself is on SMB, NFS, or another network mount. If a cross-filesystem copy is required, WireLoft copies the
+                                library itself is on SMB, NFS, or another network mount. If a cross-filesystem copy is required, VODLoft copies the
                                 already-complete media to a hidden <code>.part</code> publication file on the destination filesystem and only then
                                 renames it to the final media filename.
                             </p>
@@ -260,7 +260,7 @@ export default function DownloadsSettingsTab({
                         next.downloadSettings.thumbnailMode = value as ThumbnailMode
                     })}
                     help={
-                        <ReadMore summary="Choose how WireLoft stores the Daily Wire thumbnail for downloaded media.">
+                        <ReadMore summary="Choose how VODLoft stores the Daily Wire thumbnail for downloaded media.">
                             <p><strong>No thumbnail</strong> keeps downloads media-only.</p>
                             <p><strong>Embed in media</strong> stores the thumbnail as cover artwork inside the downloaded media file.</p>
                             <p><strong>Download besides media</strong> writes the image alongside the final media file, using the same basename.</p>
@@ -281,8 +281,8 @@ export default function DownloadsSettingsTab({
                         next.downloadSettings.metadataMode = value as MetadataMode
                     })}
                     help={
-                        <ReadMore summary="Choose how WireLoft stores metadata for downloaded media.">
-                            <p><strong>No metadata</strong> leaves the downloaded media without WireLoft-generated metadata.</p>
+                        <ReadMore summary="Choose how VODLoft stores metadata for downloaded media.">
+                            <p><strong>No metadata</strong> leaves the downloaded media without VODLoft-generated metadata.</p>
                             <p><strong>Embed in media</strong> writes metadata such as titles, dates and available episode or movie details into
                                 supported media containers.</p>
                             <p><strong>Download as NFO</strong> writes a same-basename NFO file beside the downloaded media.</p>
@@ -344,7 +344,7 @@ export default function DownloadsSettingsTab({
 
             <SettingsSection
                 title="Download processing"
-                description="Limits and retry behaviour for downloads started by WireLoft."
+                description="Limits and retry behaviour for downloads started by VODLoft."
             >
                 <DurationField
                     id="settings-episode-download-delay"
@@ -447,7 +447,7 @@ export default function DownloadsSettingsTab({
 
             <SettingsDisclosure
                 title="Verification and file watcher"
-                description="Periodic integrity checks and detection of files changed outside WireLoft."
+                description="Periodic integrity checks and detection of files changed outside VODLoft."
             >
                 <CronEditor
                     id="settings-verify-downloads-cron"
@@ -477,7 +477,7 @@ export default function DownloadsSettingsTab({
                     onChange={(checked) => updateDraft((next) => {
                         next.fileWatcher.enabled = checked
                     })}
-                    help="Scans tracked downloads for files missing, renamed or otherwise changed outside WireLoft."
+                    help="Scans tracked downloads for files missing, renamed or otherwise changed outside VODLoft."
                 />
                 <CronEditor
                     id="settings-file-watcher-cron"
@@ -510,7 +510,7 @@ export default function DownloadsSettingsTab({
                     help={
                         <ReadMore summary="Detects truncated or externally replaced files in addition to missing files.">
                             <p>
-                                If this setting is enabled, WireLoft will consider a file whose size is either zero
+                                If this setting is enabled, VODLoft will consider a file whose size is either zero
                                 or smaller than it was when it was first downloaded a corrupt file and treats it as such.
                             </p>
                         </ReadMore>

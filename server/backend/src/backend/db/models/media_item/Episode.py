@@ -92,7 +92,7 @@ class Episode(
 
     @property
     def safe_live_ended(self) -> datetime | None:
-        """Trusted observed end of LIVE, or None when WireLoft cannot prove it."""
+        """Trusted observed end of LIVE, or None when VODLoft cannot prove it."""
         return safe_live_ended_from_meta(
             self.get_meta(TRUSTED_LIVE_ENDED_META_KEY)
         )
@@ -113,7 +113,7 @@ class Episode(
 
     @property
     def recorded_published_final(self) -> datetime | None:
-        """First time WireLoft recorded this lifecycle as PUBLISHED_FINAL."""
+        """First time VODLoft recorded this lifecycle as PUBLISHED_FINAL."""
         return recorded_published_final_from_meta(
             self.get_meta(RECORDED_PUBLISHED_FINAL_META_KEY)
         )

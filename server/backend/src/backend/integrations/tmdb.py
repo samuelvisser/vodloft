@@ -86,7 +86,7 @@ class TMDbClient:
         language: str = "en-US",
         timeout_seconds: float = 10.0,
         max_retries: int = 2,
-        user_agent: str = "WireLoft",
+        user_agent: str = "VODLoft",
     ) -> None:
         token = access_token.strip()
         if not token:
@@ -286,7 +286,7 @@ def lookup_movie_release_metadata(
         language=metadata_settings.language,
         timeout_seconds=metadata_settings.request_timeout_seconds,
         max_retries=metadata_settings.max_retries,
-        user_agent=f"WireLoft/{settings.app_version}",
+        user_agent=f"VODLoft/{settings.app_version}",
     )
     try:
         result = client.lookup_movie(

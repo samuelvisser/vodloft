@@ -24,7 +24,7 @@ _UNMANAGED_TABLES = {"apscheduler_jobs"}
 
 
 class DatabaseMigrationError(RuntimeError):
-    """Raised when WireLoft cannot safely use or migrate the database."""
+    """Raised when VODLoft cannot safely use or migrate the database."""
 
 
 def get_alembic_config(*, allow_version_storage_migration: bool = False) -> Config:
@@ -50,17 +50,17 @@ def get_head_revision() -> str:
     heads = get_head_revisions()
     if len(heads) != 1:
         raise DatabaseMigrationError(
-            f"WireLoft must have exactly one Alembic head, found {len(heads)}: {heads}"
+            f"VODLoft must have exactly one Alembic head, found {len(heads)}: {heads}"
         )
     return heads[0]
 
 
 def _settings_revisions(connection: Connection) -> tuple[str, ...]:
-    """Read the current revision from WireLoft's only supported version store."""
+    """Read the current revision from VODLoft's only supported version store."""
     inspector = sa_inspect(connection)
     if not inspector.has_table(SETTINGS_VERSION_TABLE):
         raise DatabaseMigrationError(
-            f"Database '{get_db_path()}' does not contain current WireLoft migration metadata. "
+            f"Database '{get_db_path()}' does not contain current VODLoft migration metadata. "
             "Run 'backend-api db upgrade' to migrate it."
         )
 
@@ -69,7 +69,7 @@ def _settings_revisions(connection: Connection) -> tuple[str, ...]:
     }
     if SETTINGS_VERSION_COLUMN not in settings_columns:
         raise DatabaseMigrationError(
-            f"Database '{get_db_path()}' predates the current WireLoft migration metadata. "
+            f"Database '{get_db_path()}' predates the current VODLoft migration metadata. "
             "Run 'backend-api db upgrade' to migrate it."
         )
 
@@ -108,7 +108,7 @@ def _database_tables() -> set[str]:
 
 
 def validate_database_migration_state() -> None:
-    """Reject application schemas without valid current WireLoft revision state."""
+    """Reject application schemas without valid current VODLoft revision state."""
     tables = _database_tables()
     application_tables = tables - _UNMANAGED_TABLES
     if not application_tables:
@@ -117,7 +117,7 @@ def validate_database_migration_state() -> None:
     current = get_current_revisions()
     if not current:
         raise DatabaseMigrationError(
-            f"Database '{get_db_path()}' contains WireLoft tables but its Alembic revision is empty. "
+            f"Database '{get_db_path()}' contains VODLoft tables but its Alembic revision is empty. "
             "Refusing to guess the schema version."
         )
 

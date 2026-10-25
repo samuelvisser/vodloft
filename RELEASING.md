@@ -1,10 +1,10 @@
-# Releasing WireLoft
+# Releasing VODLoft
 
-WireLoft has one application version and independent versions for each Python workspace package.
+VODLoft has one application version and independent versions for each Python workspace package.
 
 - Application releases use Git tags such as `v1.0.0`.
 - Python packages use scoped tags such as `backend-v0.1.0` and `dailywire-api-v0.1.0`.
-- The root `pyproject.toml` is the single source of truth for the WireLoft application version. The backend settings API reads that value at runtime, so the API and UI always report the same application version.
+- The root `pyproject.toml` is the single source of truth for the VODLoft application version. The backend settings API reads that value at runtime, so the API and UI always report the same application version.
 - Package versions live in each package's `server/*/pyproject.toml`. If a package also exposes `__version__`, the release tool keeps it in sync.
 - Release containers carry OCI `version`, `revision`, and `source` metadata in addition to their GHCR tags.
 
@@ -19,7 +19,7 @@ Start from a clean branch containing everything intended for the release, then r
 
 `prepare` fetches the latest tags and checks every `server/*` Python package independently. A package is only considered changed when files under that package changed since its latest scoped tag. For every changed package it prompts for a major, minor, or patch bump. Packages with no tag yet keep their current manifest version so their first release establishes a baseline.
 
-WireLoft itself is prompted separately. You can choose major, minor, patch, or enter an exact semantic version. The command updates the root `pyproject.toml`, updates any changed package manifests and `__version__` constants, then runs `uv lock` once so the workspace lockfile stays consistent.
+VODLoft itself is prompted separately. You can choose major, minor, patch, or enter an exact semantic version. The command updates the root `pyproject.toml`, updates any changed package manifests and `__version__` constants, then runs `uv lock` once so the workspace lockfile stays consistent.
 
 For automation or a known application version, use:
 
@@ -66,6 +66,6 @@ For non-interactive publishing after you have reviewed the planned tags:
 ./release.py publish --yes
 ```
 
-## WireLoft 1.0
+## VODLoft 0.1.0
 
-WireLoft `1.0.0` is the first release under this scheme. Because no package tags existed before it, the first `publish` establishes these package baselines without changing their independent package versions. Future runs can then reliably detect package changes from those tags.
+VODLoft starts at `0.1.0`, forked from WireLoft `1.2.4`. The package tags inherited from WireLoft (`backend-v…`, `dailywire-api-v…` and so on) are not present in this repository, so the first `publish` establishes new package baselines without changing their independent package versions.

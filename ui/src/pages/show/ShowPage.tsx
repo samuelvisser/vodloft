@@ -250,9 +250,9 @@ export default function ShowPage() {
   const downloadStateUnknown = downloadsLoading && downloads === undefined
   const downloadStateFailed = Boolean(downloadsError) && downloads === undefined
   const downloadStateDisabledReason = downloadStateUnknown
-    ? 'WireLoft is still checking for downloaded episodes in this show.'
+    ? 'VODLoft is still checking for downloaded episodes in this show.'
     : downloadStateFailed
-      ? 'WireLoft could not determine whether this show has downloaded episodes.'
+      ? 'VODLoft could not determine whether this show has downloaded episodes.'
       : downloadLocalMediaProfiles.length === 0
         ? `No downloaded episodes exist for ${show.title}.`
         : undefined
@@ -658,7 +658,7 @@ export default function ShowPage() {
           Delete downloaded episode files in "{show.title}".
         </p>
         <p>
-          Before deletion, WireLoft will disable any Download Profiles attached to the selected Local Media Profile or Profiles. Re-enable a disabled Download Profile whenever you want WireLoft to download its eligible episodes again.
+          Before deletion, VODLoft will disable any Download Profiles attached to the selected Local Media Profile or Profiles. Re-enable a disabled Download Profile whenever you want VODLoft to download its eligible episodes again.
         </p>
       </ActionConfirmDialogue>
 

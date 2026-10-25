@@ -352,7 +352,7 @@ def _publish_complete_file(source: Path, destination: Path) -> None:
         return
 
     # POSIX rename normally replaces an existing destination. The hidden
-    # filesystem lock serializes all WireLoft publishers, and we re-check the
+    # filesystem lock serializes all VODLoft publishers, and we re-check the
     # final path immediately before this fallback. Generic POSIX has no portable
     # no-replace rename primitive, so an unrelated external writer racing in this
     # tiny window cannot be made atomic on every filesystem.
@@ -370,12 +370,12 @@ def publish_temporary_download(
 ) -> Path:
     """Publish a completed staged file under the first unused exact filename.
 
-    The primary staging directory may live on any filesystem. WireLoft first
+    The primary staging directory may live on any filesystem. VODLoft first
     moves the completed file into a hidden ``.part`` path beside its destination;
     if the filesystems differ it copies the already-complete file there instead.
     The final media filename is then created only by a same-filesystem rename.
 
-    A hidden per-candidate lock keeps concurrent WireLoft workers collision-safe.
+    A hidden per-candidate lock keeps concurrent VODLoft workers collision-safe.
     Linux ``RENAME_NOREPLACE`` and Windows' non-overwriting rename semantics are
     used when available; other filesystems use the lock plus an immediate final
     existence check before the portable rename fallback.
@@ -503,7 +503,7 @@ def cleanup_abandoned_publication_locks(download_root: str | Path) -> int:
 
     if removed:
         logger.warning(
-            "Removed %s abandoned download publication lock(s) from a previous WireLoft process",
+            "Removed %s abandoned download publication lock(s) from a previous VODLoft process",
             removed,
         )
     return removed
@@ -653,7 +653,7 @@ def cleanup_abandoned_temporary_downloads(
                 if candidate_identity is not None:
                     if not _artifact_matches_record(candidate_identity, portable_record):
                         logger.warning(
-                            "Published temporary path '%s' no longer matches WireLoft's publication record; preserving it",
+                            "Published temporary path '%s' no longer matches VODLoft's publication record; preserving it",
                             candidate,
                         )
                         continue
@@ -759,7 +759,7 @@ def cleanup_abandoned_temporary_downloads(
 
     if removed:
         logger.warning(
-            "Removed %s abandoned temporary download workspace(s) from a previous WireLoft process",
+            "Removed %s abandoned temporary download workspace(s) from a previous VODLoft process",
             removed,
         )
     return removed

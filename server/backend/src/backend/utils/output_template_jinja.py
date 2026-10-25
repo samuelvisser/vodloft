@@ -61,12 +61,12 @@ def _parse_strftime_value(value: object) -> date | datetime | time | None:
         pass
 
     raise TemplateRuntimeError(
-        "strftime requires a WireLoft date/time value in ISO format"
+        "strftime requires a VODLoft date/time value in ISO format"
     )
 
 
 def strftime(value: object, format_string: object) -> str:
-    """Format a WireLoft date/time value with Python strftime directives."""
+    """Format a VODLoft date/time value with Python strftime directives."""
     parsed = _parse_strftime_value(value)
     if parsed is None:
         return ""
@@ -81,7 +81,7 @@ def create_output_template_environment(
     *,
     custom_index_resolver: Callable[[str], object] | None = None,
 ) -> ImmutableSandboxedEnvironment:
-    """Create WireLoft's isolated sandbox for Local Media Profile path templates."""
+    """Create VODLoft's isolated sandbox for Local Media Profile path templates."""
     environment = ImmutableSandboxedEnvironment(
         autoescape=False,
         undefined=StrictUndefined,

@@ -80,7 +80,7 @@ export default function LogsPage() {
         <section className="view logs-view" aria-labelledby="logs-title">
             <div className="view-header">
                 <h1 id="logs-title">Log</h1>
-                <PageSubtitle summary={<>Application-wide WireLoft log output.</>}>
+                <PageSubtitle summary={<>Application-wide VODLoft log output.</>}>
                     <p>
                         Logs from the backend, scheduler, task workers, downloads and web server are collected here.
                         The latest 20,000 records from the current server process are retained.

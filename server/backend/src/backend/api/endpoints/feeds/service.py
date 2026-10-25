@@ -867,7 +867,7 @@ def _append_podcast_item_metadata(
     podcast_season.text = str(season_number)
 
     # Only source-backed seasonal identifiers have a real episode number.
-    # Standalone auxiliary/trailer counters are show-global WireLoft identifiers
+    # Standalone auxiliary/trailer counters are show-global VODLoft identifiers
     # and must not be exposed as season episode numbers.
     if info.season_number != season_number:
         return
@@ -1018,7 +1018,7 @@ def render_rss_feed(
         _escape_bare_html_ampersands(show.description or effective_title),
     )
     _sub_text(channel, "language", "en-us")
-    _sub_text(channel, "generator", "WireLoft")
+    _sub_text(channel, "generator", "VODLoft")
     _sub_text(channel, "itunes:author", show.author_name)
     _sub_text(channel, "itunes:explicit", "false")
     _sub_text(

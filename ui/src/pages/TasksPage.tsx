@@ -272,7 +272,7 @@ export default function TasksPage() {
         <section className="view" aria-labelledby="tasks-title">
             <div className="view-header">
                 <h1 id="tasks-title">Tasks</h1>
-                <PageSubtitle summary={<>Background and user-triggered work performed by WireLoft.</>}>
+                <PageSubtitle summary={<>Background and user-triggered work performed by VODLoft.</>}>
                     <p>
                         This ledger contains every task execution. Active tasks report progress when available.
                     </p>

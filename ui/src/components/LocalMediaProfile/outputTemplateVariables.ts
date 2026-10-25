@@ -28,13 +28,13 @@ const SHOW_VARIABLES: readonly OutputTemplateVariable[] = [
     {name: 'show_title', description: 'Show title'},
     {name: 'season', description: 'Season URL slug'},
     {name: 'season_name', description: 'Season name'},
-    {name: 'season_index', description: 'WireLoft internal season index'},
+    {name: 'season_index', description: 'VODLoft internal season index'},
     {
         name: 'season_type',
         description: 'Season type: normal or extra',
         readMore: {
             paragraphs: [
-                'WireLoft attempts to classify whether a season is regular or extra based on it\'s title. ' +
+                'VODLoft attempts to classify whether a season is regular or extra based on it\'s title. ' +
                 'Use this value in Jinja conditions when normal and extra seasons need different paths.',
                 '<strong>normal</strong> season contains regular show episodes',
                 '<strong>extra</strong> season contains extra\'s for the show'
@@ -59,10 +59,10 @@ const SHOW_VARIABLES: readonly OutputTemplateVariable[] = [
     {name: 'episode_extra_type', description: 'Episode-extra subtype: other or trailer; empty otherwise'},
     {
         name: 'episode_index',
-        description: 'WireLoft episode index across the whole show, including extras',
+        description: 'VODLoft episode index across the whole show, including extras',
         readMore: {
             paragraphs: [
-                'WireLoft\'s internal episode index, in ascending order.',
+                'VODLoft\'s internal episode index, in ascending order.',
                 'Unlike <code>episode_number</code>, it does not restart for a season or episode type. It is the stored Episode index, ' +
                 'not a database ID or a newly calculated counter. Gaps caused by episodes that disappear from The Daily ' +
                 'Wire are preserved.',
@@ -73,16 +73,16 @@ const SHOW_VARIABLES: readonly OutputTemplateVariable[] = [
             ],
         },
     },
-    {name: 'episode_number', description: 'Main episode number, or WireLoft counter for aux/trailer'},
+    {name: 'episode_number', description: 'Main episode number, or VODLoft counter for aux/trailer'},
     {name: 'episode_sub_number', description: 'The Daily Wire sub-episode number for episode extras; empty otherwise'},
     {name: 'episode_label', description: 'Canonical label without the type prefix (e.g. 2497, 2497.1, S01E07, S01E07.1)'},
     {
         name: 'episode_identifier',
-        description: 'Guaranteed unique WireLoft episode identifier',
+        description: 'Guaranteed unique VODLoft episode identifier',
         readMore: {
             paragraphs: [
-                'The full WireLoft episode identifier includes the type prefix, making it guaranteed unique within the show.',
-                'This is mainly meant for WireLoft internal usage, but can be handy nevertheless due to its guaranteed unique nature for naming files.'
+                'The full VODLoft episode identifier includes the type prefix, making it guaranteed unique within the show.',
+                'This is mainly meant for VODLoft internal usage, but can be handy nevertheless due to its guaranteed unique nature for naming files.'
             ]
         }
     },

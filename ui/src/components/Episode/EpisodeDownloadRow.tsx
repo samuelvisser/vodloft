@@ -325,7 +325,7 @@ export function EpisodeDownloadRow({
                     This episode is published, but its current media still contains The Daily Wire countdown.
                 </p>
                 <p>
-                    If you continue, WireLoft will download the current media as-is, including that countdown.
+                    If you continue, VODLoft will download the current media as-is, including that countdown.
                 </p>
                 <label className="confirm-dialog-option">
                     <input

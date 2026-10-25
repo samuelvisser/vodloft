@@ -75,7 +75,7 @@ def clear_interrupted_task_runs() -> int:
         for run in interrupted_runs:
             interrupted_ids.append(run.id)
             run.status = TaskStatus.CANCELED
-            run.message = "Interrupted by WireLoft restart"
+            run.message = "Interrupted by VODLoft restart"
             run.finished_at = finished_at
             run.next_retry_at = None
 
@@ -88,7 +88,7 @@ def clear_interrupted_task_runs() -> int:
         session.commit()
 
     logger.warning(
-        "Canceled %s task run(s) that could not survive the previous WireLoft process",
+        "Canceled %s task run(s) that could not survive the previous VODLoft process",
         len(interrupted_runs),
     )
     return len(interrupted_runs)

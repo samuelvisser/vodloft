@@ -177,7 +177,7 @@ def test_unknown_stored_background_revision_reports_history_mismatch(monkeypatch
     assert "does not contain that revision" in message
     assert f"Known revisions: {first!r}, {head!r}" in message
     assert f"Latest known revision: {head!r}" in message
-    assert "newer or different WireLoft build" in message
+    assert "newer or different VODLoft build" in message
     assert "squashed without preserving its latest applied revision" in message
 
 

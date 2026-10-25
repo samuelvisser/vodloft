@@ -247,7 +247,7 @@ export default function MoviePage() {
                 toast.error(message || `Could not start the ${label.toLocaleLowerCase()} download`)
                 return
             }
-            if (!movieWasAlreadyIndexed) toast.success(`${movie.title} added to WireLoft`)
+            if (!movieWasAlreadyIndexed) toast.success(`${movie.title} added to VODLoft`)
             toast.success(successMessage)
             await Promise.all([
                 queryClient.invalidateQueries({queryKey: ['movies']}),
@@ -301,14 +301,14 @@ export default function MoviePage() {
             )
             if (!response.ok) {
                 const {error: message} = await getErrorMessageFromResponse(response)
-                toast.error(message || `Could not add ${movie.title} to WireLoft`)
+                toast.error(message || `Could not add ${movie.title} to VODLoft`)
                 return
             }
-            toast.success(`${movie.title} added to WireLoft`)
+            toast.success(`${movie.title} added to VODLoft`)
             await queryClient.invalidateQueries({queryKey: ['movies']})
             navigate(`/movie/${encodeURIComponent(slug)}`, {replace: true})
         } catch {
-            toast.error(`Could not add ${movie.title} to WireLoft`)
+            toast.error(`Could not add ${movie.title} to VODLoft`)
         } finally {
             setAddingMovie(false)
         }
@@ -484,7 +484,7 @@ export default function MoviePage() {
                 {localMovies && !localMovie && (
                     <button type="button" className="btn btn-primary" onClick={() => void addMovie()} disabled={addingMovie || submitting !== null}>
                         <FontAwesomeIcon icon={faIcon('fass', 'plus')}/>
-                        {addingMovie ? 'Adding to WireLoft…' : 'Add to WireLoft'}
+                        {addingMovie ? 'Adding to VODLoft…' : 'Add to VODLoft'}
                     </button>
                 )}
                 {localMovie && slug && (
@@ -724,8 +724,8 @@ export default function MoviePage() {
                 }}
             >
                 <p>
-                    Are you sure you want to delete "{movie.title}" from WireLoft? This removes the movie, its
-                    indexed extras, and their download history from the WireLoft database. Downloaded files
+                    Are you sure you want to delete "{movie.title}" from VODLoft? This removes the movie, its
+                    indexed extras, and their download history from the VODLoft database. Downloaded files
                     already on disk are not removed.
                 </p>
             </ConfirmDialog>

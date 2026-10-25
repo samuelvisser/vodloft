@@ -1,7 +1,7 @@
-# WireLoft Controller
+# VODLoft Controller
 
 ### Purpose
-- Provides the background task “controller” layer for WireLoft.
+- Provides the background task “controller” layer for VODLoft.
 - Central place to define and register task definitions that are executed by the scheduler.
 - Simple registry API to declare capabilities like default max retries and whether a task tracks progress.
 

@@ -5,7 +5,7 @@ user might be creating unintentional side-effects or other obvious improvements
 could be made.
 
 Unknown syntax/data flow means no suggestion, it does not mean the Jinja is
-faulty and therefore WireLoft simply omits a suggestion in this case.
+faulty and therefore VODLoft simply omits a suggestion in this case.
 """
 from __future__ import annotations
 

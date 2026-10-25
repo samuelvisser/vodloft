@@ -177,6 +177,6 @@ def test_db_current_handler_reports_multiple_script_heads(
     validate.assert_called_once_with()
     assert capsys.readouterr().out == (
         "Current database revision: left_head\n"
-        "Latest WireLoft revisions:  left_head, right_head\n"
+        "Latest VODLoft revisions:  left_head, right_head\n"
         "Status: multiple Alembic heads (2)\n"
     )

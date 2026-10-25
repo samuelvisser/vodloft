@@ -24,7 +24,7 @@ export default function BackgroundMigrationBanner() {
       </strong>
       <p>
         A background migration is currently running. Other scheduled work is temporarily paused.
-        Please keep WireLoft running while the migration is in progress.
+        Please keep VODLoft running while the migration is in progress.
       </p>
       {operation.message && operation.message !== 'Running' && (
         <span>{operation.message}</span>

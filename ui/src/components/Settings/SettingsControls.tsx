@@ -55,7 +55,7 @@ export function SettingsDisclosure({
 function EnvironmentManagedNote({variable}: {variable: string}) {
     return (
         <div className="settings-field__environment-note">
-            Managed by environment variable <code>{variable}</code>. Change or remove that environment override and restart WireLoft to edit this setting here.
+            Managed by environment variable <code>{variable}</code>. Change or remove that environment override and restart VODLoft to edit this setting here.
         </div>
     )
 }

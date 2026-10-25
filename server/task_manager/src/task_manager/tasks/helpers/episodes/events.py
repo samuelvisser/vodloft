@@ -121,7 +121,7 @@ def queue_episode_status_events(
     the monitor-completed event) are intentionally left to their owning worker.
 
     Publication history is also remembered independently of the current status so
-    a later Daily Wire 404/NO_USABLE_MEDIA regression cannot make WireLoft forget
+    a later Daily Wire 404/NO_USABLE_MEDIA regression cannot make VODLoft forget
     that identifier changes may already invalidate downloaded files.
     """
     _remember_episode_was_published(

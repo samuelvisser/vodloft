@@ -12,7 +12,7 @@ export const RssVideoOutputModeReg = createSelectRegistry("RssVideoOutputMode", 
   },
   'audio_mp4': {
     label: "Serve as mp4 with audio fallback (full compatibility)",
-    help: "Stream as mp4 downloaded by WireLoft. Requires the mp4 to be downloaded by WireLoft before it can start streaming. Provides an audio fallback for compatibility.",
+    help: "Stream as mp4 downloaded by VODLoft. Requires the mp4 to be downloaded by VODLoft before it can start streaming. Provides an audio fallback for compatibility.",
   },
   'mp4': {
     label: "Serve mp4 video only",
@@ -20,7 +20,7 @@ export const RssVideoOutputModeReg = createSelectRegistry("RssVideoOutputMode", 
   },
   'mp4_hls': {
     label: "HLS video stream with mp4 fallback",
-    help: "Streams video using HLS, and provides mp4 as the fallback. This ensures the podcasting app will always play video if it supports video at all. Might be unexpectedly slow however because mp4 videos still need to be pre- downloaded by WireLoft.",
+    help: "Streams video using HLS, and provides mp4 as the fallback. This ensures the podcasting app will always play video if it supports video at all. Might be unexpectedly slow however because mp4 videos still need to be pre- downloaded by VODLoft.",
   },
 });
 

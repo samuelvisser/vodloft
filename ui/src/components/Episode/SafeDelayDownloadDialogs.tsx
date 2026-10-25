@@ -115,12 +115,12 @@ export function SafeDelayConfirmDialog({
             }}
         >
             <p>
-                WireLoft&apos;s configured post-publication safety delay has not passed yet. The Daily Wire may still be
+                VODLoft&apos;s configured post-publication safety delay has not passed yet. The Daily Wire may still be
                 processing this episode, so the current file may be incomplete.
             </p>
             {safeDelayReadyLabel && (
                 <p>
-                    WireLoft considers this episode safe to download at <strong>{safeDelayReadyLabel}</strong>.
+                    VODLoft considers this episode safe to download at <strong>{safeDelayReadyLabel}</strong>.
                 </p>
             )}
             <p>
@@ -174,7 +174,7 @@ export function ImmediateSafeDelayConfirmDialog({
             }}
         >
             <p>
-                This download will start immediately, before WireLoft considers the episode safely ready.
+                This download will start immediately, before VODLoft considers the episode safely ready.
             </p>
             <RedownloadAfterDelayOption
                 checked={redownloadWhenDelayPassed}

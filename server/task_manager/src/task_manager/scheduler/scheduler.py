@@ -174,7 +174,7 @@ def _execute_task_job(**kwargs) -> None:
 
 def get_trigger(name: str, args: dict):
     trigger_args = dict(args)
-    # Legacy: remove timezone from trigger, we use the WireLoft TZ timezone
+    # Legacy: remove timezone from trigger, we use the VODLoft TZ timezone
     trigger_args.pop("timezone", None)
     app_timezone = get_settings().timezone
 

@@ -361,10 +361,10 @@ export default function StreamProfileAdvisory({
                 help={(
                     <>
                         <p>
-                            MP4 clients expect one complete seekable file. WireLoft cannot return the beginning of that MP4 while it is still building the rest of the file from The Daily Wire&apos;s HLS stream.
+                            MP4 clients expect one complete seekable file. VODLoft cannot return the beginning of that MP4 while it is still building the rest of the file from The Daily Wire&apos;s HLS stream.
                         </p>
                         <p>
-                            Keep matching video episodes downloaded and use those local files for immediate MP4 playback. After disabling Daily Wire streaming, WireLoft will show whether matching Download Profile coverage is missing.
+                            Keep matching video episodes downloaded and use those local files for immediate MP4 playback. After disabling Daily Wire streaming, VODLoft will show whether matching Download Profile coverage is missing.
                         </p>
                     </>
                 )}
@@ -374,7 +374,7 @@ export default function StreamProfileAdvisory({
                     </button>
                 )}
             >
-                The Daily Wire provides video as HLS, not as a ready-to-stream MP4. If a podcast app requests the stable MP4 URL before a local video download exists, WireLoft must first download and prepare the complete episode, which can make playback take several minutes to start.
+                The Daily Wire provides video as HLS, not as a ready-to-stream MP4. If a podcast app requests the stable MP4 URL before a local video download exists, VODLoft must first download and prepare the complete episode, which can make playback take several minutes to start.
             </AdvisoryCard>
         )
     }

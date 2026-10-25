@@ -1,4 +1,4 @@
-"""Scoped expression normalization. Jinja, not WireLoft, evaluates constants."""
+"""Scoped expression normalization. Jinja, not VODLoft, evaluates constants."""
 from __future__ import annotations
 
 from collections.abc import Mapping

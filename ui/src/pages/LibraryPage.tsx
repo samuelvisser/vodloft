@@ -92,7 +92,7 @@ export default function LibraryPage() {
             <div className="view-header">
                 <div>
                     <h1 id="library-title">Library</h1>
-                    <p className="view-description">Shows and movies indexed by WireLoft.</p>
+                    <p className="view-description">Shows and movies indexed by VODLoft.</p>
                 </div>
                 <button className="btn btn-primary" onClick={() => navigate(browseUrl)}>
                     <FontAwesomeIcon icon={faIcon('fass', 'compass')}/>

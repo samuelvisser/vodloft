@@ -10,7 +10,7 @@ from .client import MiddlewareAPIError, MiddlewareClient
 class MovieMiddlewareClient(MiddlewareClient):
     """Daily Wire client for the current movie metadata contract.
 
-    ``v4/getMoviePage`` is the canonical metadata source used by WireLoft. Movie
+    ``v4/getMoviePage`` is the canonical metadata source used by VODLoft. Movie
     playback intentionally remains separate: Daily Wire's own current web player
     still obtains the signed movie stream through ``v2/getVideo``.
     """

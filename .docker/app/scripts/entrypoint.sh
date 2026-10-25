@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CONFIG_FILE="${WL_CONFIG_FILE:-/config/config.yml}"
-DATABASE_PATH="${WL_DATABASE_PATH:-/config/wireloft.db}"
+CONFIG_FILE="${VL_CONFIG_FILE:-/config/config.yml}"
+DATABASE_PATH="${VL_DATABASE_PATH:-/config/vodloft.db}"
 # Matches downloadSettings.downloadRoot in config/config.yml.default; not an
 # env var since download_root is set via that file (see its header comment).
 DOWNLOAD_ROOT=/downloads
@@ -32,7 +32,7 @@ cat > /usr/share/nginx/html/config.json <<EOF
 EOF
 
 run_supervised() {
-    echo "[entrypoint] Starting WireLoft backend on 127.0.0.1:5001"
+    echo "[entrypoint] Starting VODLoft backend on 127.0.0.1:5001"
     backend-api run --host 127.0.0.1 --port 5001 &
     backend_pid=$!
 
@@ -61,6 +61,6 @@ if [ "$#" -eq 0 ]; then
     run_supervised
 else
     # Escape hatch for one-off maintenance, e.g.:
-    #   docker compose run --rm wireloft backend-api db current
+    #   docker compose run --rm vodloft backend-api db current
     exec "$@"
 fi

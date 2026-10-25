@@ -40,7 +40,7 @@ def hls_asset_marker(master_path: str | Path) -> Path:
 
 
 def missing_hls_bundle_files(master_path: str | Path) -> list[Path]:
-    """Return missing/unsafe files referenced by a WireLoft local HLS bundle."""
+    """Return missing/unsafe files referenced by a VODLoft local HLS bundle."""
     root = hls_asset_root(master_path)
     missing: list[Path] = []
 
@@ -73,7 +73,7 @@ def download_hls_bundle(
 
     Each rendition is stored as one byte-range-addressed media file instead of
     hundreds of loose segment files. The master and media playlists remain
-    normal HLS and use paths served by WireLoft's stable RSS endpoint.
+    normal HLS and use paths served by VODLoft's stable RSS endpoint.
     """
     _ensure_not_cancelled(should_cancel)
     master_text = http_get_text(master_url)
@@ -95,11 +95,11 @@ def download_hls_bundle(
                 shutil.rmtree(asset_root)
             else:
                 raise DownloadError(
-                    f"HLS asset destination already exists and is not owned by WireLoft: {asset_root}"
+                    f"HLS asset destination already exists and is not owned by VODLoft: {asset_root}"
                 )
         staging_asset_root.mkdir(parents=True, exist_ok=False)
         (staging_asset_root / _HLS_BUNDLE_MARKER).write_text(
-            "WireLoft local HLS bundle\n",
+            "VODLoft local HLS bundle\n",
             encoding="utf-8",
         )
         Path(master_path).parent.mkdir(parents=True, exist_ok=True)

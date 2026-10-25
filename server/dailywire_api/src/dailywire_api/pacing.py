@@ -120,7 +120,7 @@ class RequestPacer:
     def record_unpaced(self) -> None:
         """Record an interactive request without making it wait.
 
-        Interactive requests use WireLoft's explicit pacing override, but
+        Interactive requests use VODLoft's explicit pacing override, but
         every actual Daily Wire request still contributes to the shared burst
         history seen by paced bulk/background work.
 

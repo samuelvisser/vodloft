@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing WireLoft release tag (for example v1.0.0)"
+        description: "Existing VODLoft release tag (for example v1.0.0)"
         required: true
         type: string
 
@@ -31,7 +31,7 @@ jobs:
           fi
 
           if [[ ! "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Invalid WireLoft release tag: $release_tag" >&2
+            echo "Invalid VODLoft release tag: $release_tag" >&2
             exit 1
           fi
 
@@ -41,7 +41,7 @@ jobs:
         with:
           ref: ${{ steps.release.outputs.tag }}
 
-      - name: Verify tag matches WireLoft version
+      - name: Verify tag matches VODLoft version
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         shell: bash
@@ -57,7 +57,7 @@ jobs:
           actual = os.environ["RELEASE_TAG"]
           if actual != expected:
               raise SystemExit(
-                  f"Release tag {actual} does not match WireLoft version {expected}"
+                  f"Release tag {actual} does not match VODLoft version {expected}"
               )
           PY
 
@@ -76,4 +76,4 @@ jobs:
             --draft \
             --generate-notes \
             --latest \
-            --title "WireLoft ${RELEASE_TAG#v}"
+            --title "VODLoft ${RELEASE_TAG#v}"

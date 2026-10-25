@@ -88,7 +88,7 @@ def configure_db() -> None:
         return
 
     os.makedirs(path.parent, exist_ok=True)
-    # A bounded QueuePool is a poor fit for WireLoft's threaded SQLite workload.
+    # A bounded QueuePool is a poor fit for VODLoft's threaded SQLite workload.
     # The scheduler may run as many workers as the old default pool could serve,
     # leaving no connection headroom for API requests. SQLite connections are
     # cheap, and the busy timeout/WAL settings below already govern the actual

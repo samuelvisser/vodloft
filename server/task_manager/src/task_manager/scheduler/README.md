@@ -1,6 +1,6 @@
-# WireLoft Scheduler
+# VODLoft Scheduler
 
-A lightweight, APScheduler-powered task scheduler integrated into the WireLoft backend. It lets you:
+A lightweight, APScheduler-powered task scheduler integrated into the VODLoft backend. It lets you:
 - Register internal tasks bound to a resource (show/season/episode/movie)
 - Schedule tasks via cron/interval/date triggers
 - Trigger ad-hoc runs immediately
@@ -54,7 +54,7 @@ print(get_settings().scheduler.default_max_retries)
 
 
 ## Database and initialization
-- Scheduler tables that belong to WireLoft are part of the shared SQLAlchemy metadata and are created or upgraded by the backend's Alembic migrations. APScheduler alone owns its separate `apscheduler_jobs` table.
+- Scheduler tables that belong to VODLoft are part of the shared SQLAlchemy metadata and are created or upgraded by the backend's Alembic migrations. APScheduler alone owns its separate `apscheduler_jobs` table.
 - During the FastAPI application lifespan, if the scheduler is enabled:
   1) `task_manager.scheduler.registry.sync_registry_to_db()` synchronizes registered tasks into `TaskDefinition`.
   2) `task_manager.scheduler.scheduler.start_scheduler()` starts APScheduler on the ASGI event loop.

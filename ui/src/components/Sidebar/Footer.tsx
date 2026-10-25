@@ -27,7 +27,7 @@ export default function Footer({ wrapperClass }: FooterProps) {
     <footer className={wrapperClass} aria-label="Footer">
       <div className="footer-links">
         <a
-          href="https://github.com/samuelvisser/wireloft"
+          href="https://github.com/samuelvisser/vodloft"
           target="_blank"
           rel="noreferrer"
           className="footer-link"

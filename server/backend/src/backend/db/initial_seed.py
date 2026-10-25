@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from .core import get_session, load_database_models
 
 
-# Data every brand-new WireLoft installation should start with belongs here.
+# Data every brand-new VODLoft installation should start with belongs here.
 #
 # This module runs only after Alembic has brought a fresh database to the
 # current schema. Keep schema/data transformations for existing installations
@@ -38,20 +38,20 @@ def _seed_local_media_profiles(session: Session) -> None:
 
     profiles = (
         ShowLocalMediaProfile(
-            slug="wireloft-shows-video",
-            name="WireLoft Shows (Video)",
+            slug="vodloft-shows-video",
+            name="VODLoft Shows (Video)",
             output_template=_SHOW_VIDEO_TEMPLATE,
             preferred_format="format_1080p",
         ),
         ShowLocalMediaProfile(
-            slug="wireloft-shows-audio",
-            name="WireLoft Shows (Audio)",
+            slug="vodloft-shows-audio",
+            name="VODLoft Shows (Audio)",
             output_template=_SHOW_AUDIO_TEMPLATE,
             preferred_format="format_audio_only",
         ),
         MovieLocalMediaProfile(
-            slug="wireloft-movies",
-            name="WireLoft Movies",
+            slug="vodloft-movies",
+            name="VODLoft Movies",
             output_template=_MOVIE_TEMPLATE,
             preferred_format="format_1080p",
         ),
@@ -75,7 +75,7 @@ _INITIAL_SEED_STEPS: tuple[Callable[[Session], None], ...] = (
 
 
 def seed_initial_database() -> None:
-    """Populate the application data for a brand-new WireLoft database."""
+    """Populate the application data for a brand-new VODLoft database."""
     load_database_models()
 
     session = get_session()

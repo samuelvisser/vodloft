@@ -10,14 +10,14 @@ from sqlalchemy.types import TypeDecorator
 def utc_datetime(value: datetime, *, assume_naive_utc: bool = False) -> datetime:
     """Return an aware UTC datetime for one absolute instant.
 
-    New values must be timezone-aware so WireLoft never guesses what a naive
+    New values must be timezone-aware so VODLoft never guesses what a naive
     wall-clock time meant. The opt-in naive path exists only for values read
     from SQLite databases created before the UTC datetime contract, where
-    WireLoft historically persisted UTC wall-clock values without an offset.
+    VODLoft historically persisted UTC wall-clock values without an offset.
     """
     if value.tzinfo is None or value.utcoffset() is None:
         if not assume_naive_utc:
-            raise ValueError("Datetime values persisted by WireLoft must include a timezone")
+            raise ValueError("Datetime values persisted by VODLoft must include a timezone")
         value = value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
 
@@ -25,7 +25,7 @@ def utc_datetime(value: datetime, *, assume_naive_utc: bool = False) -> datetime
 class UTCDateTime(TypeDecorator):
     """Persist absolute datetimes as UTC and always return aware UTC values.
 
-    SQLite has no timezone-aware datetime storage. WireLoft therefore stores the
+    SQLite has no timezone-aware datetime storage. VODLoft therefore stores the
     UTC wall-clock representation there and restores UTC awareness when reading
     it back. Other SQLAlchemy dialects receive an aware UTC datetime directly.
     """

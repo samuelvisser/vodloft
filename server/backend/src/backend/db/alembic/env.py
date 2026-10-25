@@ -14,7 +14,7 @@ load_database_models()
 target_metadata = Base.metadata
 
 # APScheduler's SQLAlchemy job store owns this table itself. It deliberately
-# lives in the same database, but it is not part of WireLoft's ORM schema and
+# lives in the same database, but it is not part of VODLoft's ORM schema and
 # must never be considered a candidate for Alembic removal/autogeneration.
 _UNMANAGED_TABLES = {"apscheduler_jobs"}
 

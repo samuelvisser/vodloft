@@ -11,7 +11,7 @@ from config import get_settings
 
 
 def tz_datetime(value: datetime) -> datetime:
-    """Return an instant in WireLoft's TZ timezone.
+    """Return an instant in VODLoft's TZ timezone.
 
     Runtime values must already identify an absolute instant. Legacy naive SQLite
     values are made aware when they cross the database type boundary, so seeing a
@@ -22,14 +22,14 @@ def tz_datetime(value: datetime) -> datetime:
 
 
 def api_datetime(value: datetime) -> str:
-    """Serialize an instant with WireLoft's configured UTC offset."""
+    """Serialize an instant with VODLoft's configured UTC offset."""
     return tz_datetime(value).isoformat()
 
 
 def api_timezone_payload(value: Any) -> Any:
     """Recursively prepare non-ResponseBase API data for configured-TZ output.
 
-    Most WireLoft response models inherit ``ResponseBase`` and therefore use
+    Most VODLoft response models inherit ``ResponseBase`` and therefore use
     ``api_datetime`` automatically. Daily Wire proxy records live in a separate
     package, so this converts their aware datetime values before FastAPI validates
     and serializes the declared response model.

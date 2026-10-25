@@ -39,7 +39,7 @@ from .config import PROJECT_ROOT
 def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="backend-api",
-        description="WireLoft backend API and DB utilities",
+        description="VODLoft backend API and DB utilities",
     )
     subparsers = parser.add_subparsers(dest="command", required=True, help="Command to execute")
 
@@ -206,7 +206,7 @@ def _stop_backend() -> None:
 
 
 def _configure_database_for_args(args: argparse.Namespace) -> None:
-    os.environ["WL_DATABASE_PATH"] = str(_get_db_path(args))
+    os.environ["VL_DATABASE_PATH"] = str(_get_db_path(args))
     configure_db()
 
 
@@ -246,7 +246,7 @@ def _handle_db_command(args: argparse.Namespace) -> None:
         else:
             status = "upgrade required"
         print(f"Current database {current_noun}: {current_label}")
-        print(f"Latest WireLoft {head_noun}:  {head_label}")
+        print(f"Latest VODLoft {head_noun}:  {head_label}")
         print(f"Status: {status}")
         return
 

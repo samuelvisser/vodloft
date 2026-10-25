@@ -1,6 +1,6 @@
 # Show artwork
 
-WireLoft can save shared show artwork alongside your downloaded library. This is separate from the episode thumbnail setting, which embeds images in individual media files or saves episode-level sidecars.
+VODLoft can save shared show artwork alongside your downloaded library. This is separate from the episode thumbnail setting, which embeds images in individual media files or saves episode-level sidecars.
 
 ## Enable or override
 
@@ -17,7 +17,7 @@ The help text underneath the profile setting shows the resolved show root for th
 
 ## Files and sources
 
-WireLoft preserves native JPEG and PNG show artwork. JPEG sources are stored as `.jpg`, PNG sources remain `.png`, and other image formats are converted using **Show artwork fallback format** (JPEG by default). The transparent show logo is always stored as `clearlogo.png` so transparency is retained.
+VODLoft preserves native JPEG and PNG show artwork. JPEG sources are stored as `.jpg`, PNG sources remain `.png`, and other image formats are converted using **Show artwork fallback format** (JPEG by default). The transparent show logo is always stored as `clearlogo.png` so transparency is retained.
 
 | File | Source, in preference order |
 | --- | --- |
@@ -37,7 +37,7 @@ downloadSettings:
 
 ## How the show folder is chosen
 
-There is no separate root path to configure. WireLoft analyzes the Local Media Profile's Jinja template, including show metadata, variable dependencies, aliases, conditionals and known season names. The root must contain show-specific information and remain inside the download root.
+There is no separate root path to configure. VODLoft analyzes the Local Media Profile's Jinja template, including show metadata, variable dependencies, aliases, conditionals and known season names. The root must contain show-specific information and remain inside the download root.
 
 For example:
 
@@ -55,6 +55,6 @@ Layouts that put different episode types in unrelated trees, omit a show-specifi
 
 Artwork reconciliation runs after indexing, relevant show/profile/settings changes, successful episode downloads, file renames, and at startup. Initial creation waits for at least one indexed episode. Normal episode scans also refresh available artwork URLs from the already-fetched show page. Existing managed images are checked again on reconciliation after a day.
 
-WireLoft tracks artwork ownership, upstream format and content hashes. It leaves pre-existing custom artwork, alternate image formats, and externally modified files untouched. If a managed upstream asset changes between JPEG and PNG, WireLoft safely publishes the new variant and removes the old managed variant only after the replacement is verified. Managed replacements are staged on the destination filesystem and published atomically. Failures leave existing files untouched and are reported in task logs.
+VODLoft tracks artwork ownership, upstream format and content hashes. It leaves pre-existing custom artwork, alternate image formats, and externally modified files untouched. If a managed upstream asset changes between JPEG and PNG, VODLoft safely publishes the new variant and removes the old managed variant only after the replacement is verified. Managed replacements are staged on the destination filesystem and published atomically. Failures leave existing files untouched and are reported in task logs.
 
-When a template changes, WireLoft creates artwork in the new root. An old managed copy is removed only after a verified replacement exists and tracked media no longer needs the old location. Artwork still shared by another profile is retained. Disabling artwork or deleting a show/profile does not delete existing artwork files.
+When a template changes, VODLoft creates artwork in the new root. An old managed copy is removed only after a verified replacement exists and tracked media no longer needs the old location. Artwork still shared by another profile is retained. Disabling artwork or deleting a show/profile does not delete existing artwork files.

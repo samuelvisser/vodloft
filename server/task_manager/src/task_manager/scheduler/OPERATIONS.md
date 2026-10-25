@@ -14,7 +14,7 @@ Keeping those concepts separate is what allows one UI action to fan out over man
 
 Anything that is still happening belongs to `TaskRun`/`TaskOperation`: queued/running state, progress, retry state, cancellation, execution errors and timing. Domain models must not duplicate that lifecycle state.
 
-Anything that has happened and is now part of WireLoft's library belongs to ordinary domain data. `MediaDownload` is the canonical example: it stores the desired/current artifact path, whether the artifact is available/missing/corrupt, downloaded size/format/time and immutable attempt history. It does not store a live download status or live progress percentage. The UI combines the persistent artifact with an active `media.download` TaskOperation when it needs a presentation such as "Queued" or "Downloading 63%".
+Anything that has happened and is now part of VODLoft's library belongs to ordinary domain data. `MediaDownload` is the canonical example: it stores the desired/current artifact path, whether the artifact is available/missing/corrupt, downloaded size/format/time and immutable attempt history. It does not store a live download status or live progress percentage. The UI combines the persistent artifact with an active `media.download` TaskOperation when it needs a presentation such as "Queued" or "Downloading 63%".
 
 This boundary is intentional. A backend restart can reconstruct unfinished execution entirely from scheduler state without guessing from domain rows, while completed library facts remain useful even after the operation that produced them is no longer active.
 
@@ -129,7 +129,7 @@ This is why recovery and control state must live in scheduler infrastructure rat
 
 Some maintenance must complete without normal scheduled work changing the same application state. A worker can declare this with `@task(..., pauses_scheduled_work=True)`.
 
-Critical tasks run on a dedicated serialized scheduler lane. When the first critical attempt starts, WireLoft acquires a reference-counted scheduled-work pause before preparing the TaskRun. The pause is retained across retries and released only when that TaskRun becomes terminal. Normal recurring jobs, immediate operations and retries remain queued in the normal scheduler while the pause is active.
+Critical tasks run on a dedicated serialized scheduler lane. When the first critical attempt starts, VODLoft acquires a reference-counted scheduled-work pause before preparing the TaskRun. The pause is retained across retries and released only when that TaskRun becomes terminal. Normal recurring jobs, immediate operations and retries remain queued in the normal scheduler while the pause is active.
 
 Non-task startup maintenance uses the same pause-lease API directly. Download filesystem recovery acquires its lease before controller recovery begins and releases it when the filesystem scan finishes. If filesystem recovery and a background migration overlap, both leases coexist and normal work resumes only after both have completed.
 
@@ -137,7 +137,7 @@ The critical lane exists only to execute work responsible for a pause; it is not
 
 ## Stalled-work watchdog
 
-APScheduler can limit concurrent jobs and decide how to handle late/misfired jobs, but it cannot decide whether WireLoft's application-level progress percentage has stopped changing. WireLoft installs a lightweight watchdog job for that purpose.
+APScheduler can limit concurrent jobs and decide how to handle late/misfired jobs, but it cannot decide whether VODLoft's application-level progress percentage has stopped changing. VODLoft installs a lightweight watchdog job for that purpose.
 
 Once per minute, the watchdog samples only `RUNNING` TaskOperation percentages and standalone `RUNNING` TaskRun percentages. Queued, scheduled, retry-waiting work, and operations intentionally in `WAITING` on an external dependency are ignored until execution can actually make progress. If a running percentage remains unchanged for `scheduler.stalledTaskTimeoutMinutes` (20 minutes by default), the work is canceled with a durable reason. A progress change resets the timer.
 

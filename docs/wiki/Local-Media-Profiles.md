@@ -1,6 +1,6 @@
 # Local Media Profiles
 
-A Local Media Profile describes **the local file WireLoft should create**. It controls the preferred format, where the file is stored, and whether incomplete download work is written directly in the library or staged elsewhere first.
+A Local Media Profile describes **the local file VODLoft should create**. It controls the preferred format, where the file is stored, and whether incomplete download work is written directly in the library or staged elsewhere first.
 
 Download Profiles use Local Media Profiles for automatic show downloads. Movies also use Local Media Profiles, but movie downloads are started manually.
 
@@ -15,7 +15,7 @@ Show profiles can use:
 - 720p video;
 - audio only.
 
-A Show profile also has an **Available for** setting. This controls where WireLoft offers the profile in the interface.
+A Show profile also has an **Available for** setting. This controls where VODLoft offers the profile in the interface.
 
 ### Movie profiles
 
@@ -35,13 +35,13 @@ The temporary folder may be on different storage from the final library. Configu
 
 ## Preferred format
 
-The preferred format is the quality or media type WireLoft should request when this profile is used.
+The preferred format is the quality or media type VODLoft should request when this profile is used.
 
 A profile represents one local variant. If you want both audio and 1080p copies of the same episode, create separate Local Media Profiles and use them from separate Download Profiles.
 
 ## Output templates
 
-The output template controls the folder structure and filename. WireLoft uses Jinja variables so one template can produce a unique path for every episode, movie, or extra.
+The output template controls the folder structure and filename. VODLoft uses Jinja variables so one template can produce a unique path for every episode, movie, or extra.
 
 A simple show example is:
 
@@ -55,7 +55,7 @@ A media-server-friendly series example is:
 /downloads/TV Shows/{{ show_title }}/Season {{ season_number }}/{{ show_title }} - {{ episode_label }} - {{ title }}.ext
 ```
 
-`.ext` is a WireLoft placeholder. It is replaced with the extension that matches the file WireLoft actually produces.
+`.ext` is a VODLoft placeholder. It is replaced with the extension that matches the file VODLoft actually produces.
 
 ### Path requirements
 
@@ -72,7 +72,7 @@ For example:
 {% set folder = show_title %}/downloads/{{ folder }}/{{ episode_title }}.ext
 ```
 
-The `/downloads/` prefix maps to WireLoft's configured **Download root**. In a normal Docker installation that is the mounted media directory.
+The `/downloads/` prefix maps to VODLoft's configured **Download root**. In a normal Docker installation that is the mounted media directory.
 
 ### Use the editor preview
 
@@ -96,7 +96,7 @@ Most of our date variables have conveniently preformatted values, such as `date`
 /downloads/{{ show_title }}/{{ date | strftime("%d %B %Y") }} - {{ episode_title }}.ext
 ```
 
-For a date of September 24, 2026, that expression renders as `24 September 2026`. The filter uses Python `strftime` directives, so formats such as `%Y%m%d`, `%d-%m-%Y`, and `%H-%M` are also available. It works with WireLoft's date, time, and datetime template values; a missing value remains empty.
+For a date of September 24, 2026, that expression renders as `24 September 2026`. The filter uses Python `strftime` directives, so formats such as `%Y%m%d`, `%d-%m-%Y`, and `%H-%M` are also available. It works with VODLoft's date, time, and datetime template values; a missing value remains empty.
 
 ## Show template variable reference
 
@@ -106,7 +106,7 @@ For a date of September 24, 2026, that expression renders as `24 September 2026`
 | `show_title` | Show title |
 | `season` | Season slug, or empty when unavailable |
 | `season_name` | Season name, or empty when unavailable |
-| `season_index` | WireLoft's internal persistent season index |
+| `season_index` | VODLoft's internal persistent season index |
 | `season_type` | `normal` or `extra` |
 | `season_number` | Stable media-library season number; Extras seasons use `0` |
 | `episode` | Episode slug |
@@ -115,10 +115,10 @@ For a date of September 24, 2026, that expression renders as `24 September 2026`
 | `dw_episode_number` | Raw episode number exactly as returned by The Daily Wire |
 | `episode_type` | `ep`, `ep-extra`, `aux`, or `trailer` |
 | `episode_extra_type` | `other` or `trailer` for attached episode extras; empty otherwise |
-| `episode_number` | The Daily Wire main episode number for `ep`/`ep-extra`, or WireLoft's show-global counter for `aux`/`trailer` |
+| `episode_number` | The Daily Wire main episode number for `ep`/`ep-extra`, or VODLoft's show-global counter for `aux`/`trailer` |
 | `episode_sub_number` | The Daily Wire fractional/sub-episode number for `ep-extra`; empty otherwise |
 | `episode_label` | Canonical identifier label without the type prefix |
-| `episode_identifier` | Full WireLoft episode identifier; unique within the show |
+| `episode_identifier` | Full VODLoft episode identifier; unique within the show |
 | `episode_published_date` | Publication date as `YYYY-MM-DD` |
 | `episode_published_time` | Publication time as `HH:MM:SS` |
 | `episode_published_datetime` | Publication date and time |
@@ -132,9 +132,9 @@ For a date of September 24, 2026, that expression renders as `24 September 2026`
 | `minute` | Minute value |
 | `second` | Second value |
 
-`season_number` is the value intended for media-library season numbering. It ignores Daily Wire Extras collections and remains stable if another Extras season appears later. `season_index` is used by WireLoft to order the seasons themselves and is unique for a season within a show.
+`season_number` is the value intended for media-library season numbering. It ignores Daily Wire Extras collections and remains stable if another Extras season appears later. `season_index` is used by VODLoft to order the seasons themselves and is unique for a season within a show.
 
-WireLoft preserves The Daily Wire's episode number for full episodes and attached episode extras. It only invents show-global numbers for auxiliary content and standalone show trailers. Extras seasons use `season_type == 'extra'` and `season_number == 0`, which is handy if you want specials to end up in a different 'Specials' directory, for example.
+VODLoft preserves The Daily Wire's episode number for full episodes and attached episode extras. It only invents show-global numbers for auxiliary content and standalone show trailers. Extras seasons use `season_type == 'extra'` and `season_number == 0`, which is handy if you want specials to end up in a different 'Specials' directory, for example.
 
 ## Movies and extras
 
@@ -152,7 +152,7 @@ Example:
 ```
 
 A movie template must use an item-specific value such as `{{ title }}`, `{{ slug }}`, or `{{ media_type }}` so the main movie and an extra cannot resolve to the same output path.  
-WireLoft never overwrites existing files if the same output path is generated for multiple items, but it is
+VODLoft never overwrites existing files if the same output path is generated for multiple items, but it is
 still a case that should be avoided to make it obvious what content is in a file.
 
 ### Parent movie variables
@@ -213,4 +213,4 @@ A common arrangement is:
 - one Show audio profile for podcast-style storage or Audiobookshelf;
 - one Movie profile with a conventional movie folder and item-specific extra names.
 
-Local Media Profiles only control files WireLoft creates. Your media server can independently scan whichever subfolders you want.
+Local Media Profiles only control files VODLoft creates. Your media server can independently scan whichever subfolders you want.

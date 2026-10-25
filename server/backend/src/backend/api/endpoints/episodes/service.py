@@ -246,7 +246,7 @@ def get_recently_indexed_episodes(
         *,
         limit: int,
 ) -> list[EpisodeIndexedActivityAPIRead]:
-    """Return the newest episode records by the time WireLoft indexed them."""
+    """Return the newest episode records by the time VODLoft indexed them."""
     rows = s.execute(
         select(
             Episode.id.label("id"),

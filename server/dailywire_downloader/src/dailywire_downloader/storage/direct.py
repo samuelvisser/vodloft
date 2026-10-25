@@ -87,10 +87,10 @@ def reserve_unique_download_path(path: str | Path) -> DownloadPathReservation:
     entries with other extensions do not collide. If the requested filename is
     occupied, ``-1``, ``-2``, and so on are inserted before the extension.
 
-    A hidden WireLoft marker is claimed first and the empty destination itself is
+    A hidden VODLoft marker is claimed first and the empty destination itself is
     then created with ``O_EXCL``. The marker makes an abandoned placeholder
     discoverable after an unclean shutdown without treating unrelated zero-byte
-    files as WireLoft artifacts. The downloader later atomically replaces the
+    files as VODLoft artifacts. The downloader later atomically replaces the
     empty destination with its completed temporary file.
     """
     requested = Path(path)
@@ -252,7 +252,7 @@ def cleanup_abandoned_direct_download_path_reservations(download_root: str | Pat
 
     if removed:
         logger.warning(
-            "Removed %s abandoned download filesystem reservation(s) from a previous WireLoft process",
+            "Removed %s abandoned download filesystem reservation(s) from a previous VODLoft process",
             removed,
         )
     return removed

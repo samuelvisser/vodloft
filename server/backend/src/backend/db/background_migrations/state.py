@@ -26,7 +26,7 @@ def get_current_background_migration_revision() -> str | None:
 
     if len(values) != 1:
         raise BackgroundMigrationError(
-            "WireLoft requires exactly one settings row to store the background migration revision; "
+            "VODLoft requires exactly one settings row to store the background migration revision; "
             f"found {len(values)}."
         )
     return values[0]

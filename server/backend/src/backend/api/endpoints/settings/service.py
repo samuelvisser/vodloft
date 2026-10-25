@@ -146,7 +146,7 @@ def _read_config_text(path: Path) -> str:
     except FileNotFoundError:
         return ""
     except OSError as exc:
-        raise SettingsPersistenceError(f"WireLoft could not read {path}.") from exc
+        raise SettingsPersistenceError(f"VODLoft could not read {path}.") from exc
 
 
 def _load_config_document(path: Path) -> tuple[str, dict[str, Any]]:
@@ -174,7 +174,7 @@ def _configured_fields(document: dict[str, Any]) -> tuple[SettingFieldPath, ...]
 def _environment_variable_name(path: str) -> str:
     if path == "timezone":
         return TIMEZONE_ENVIRONMENT_VARIABLE
-    return "WL_" + "__".join(to_snake(segment).upper() for segment in path.split("."))
+    return "VL_" + "__".join(to_snake(segment).upper() for segment in path.split("."))
 
 
 def _environment_sources() -> tuple[dict[str, Any], dict[str, Any]]:
@@ -203,7 +203,7 @@ def _environment_overrides(
             managed[path] = canonical_name
             continue
 
-        parent_name = "WL_" + to_snake(path.split(".", 1)[0]).upper()
+        parent_name = "VL_" + to_snake(path.split(".", 1)[0]).upper()
         actual_name = next(
             (
                 name
@@ -568,7 +568,7 @@ def save_ui_settings(body: SettingsAPIUpdate) -> SettingsAPIRead:
             text = ""
             previous_file_existed = False
         except (OSError, UnicodeDecodeError) as exc:
-            raise SettingsPersistenceError(f"WireLoft could not read {path}.") from exc
+            raise SettingsPersistenceError(f"VODLoft could not read {path}.") from exc
 
         values_document = body.values.to_config_document()
         changes = {
@@ -639,7 +639,7 @@ def save_ui_settings(body: SettingsAPIUpdate) -> SettingsAPIRead:
             if isinstance(exc, SettingsPersistenceError):
                 raise
             raise SettingsPersistenceError(
-                "WireLoft could not save config.yml. Check the config file and directory permissions."
+                "VODLoft could not save config.yml. Check the config file and directory permissions."
             ) from exc
 
 

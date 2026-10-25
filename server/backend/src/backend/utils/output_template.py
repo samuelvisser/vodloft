@@ -83,7 +83,7 @@ def _reject_single_brace_template_variables(output_template: str) -> None:
 
 
 def _parse_output_template(output_template: str) -> nodes.Template:
-    """Parse an output template with WireLoft's sandbox and normalized errors."""
+    """Parse an output template with VODLoft's sandbox and normalized errors."""
     _reject_single_brace_template_variables(output_template)
     environment = create_output_template_environment()
     try:
@@ -180,7 +180,7 @@ def validate_output_template_path_requirements(
     Non-outputting Jinja statements may precede the literal ``/downloads/``
     prefix. Any statement that can render text before that prefix is rejected.
     The raw template still has to end in ``.ext`` so the resulting filename keeps
-    WireLoft's extension marker.
+    VODLoft's extension marker.
     """
     validate_output_template_fields(
         output_template,
@@ -610,7 +610,7 @@ def _append_filename_suffix(path: str, suffix: str) -> str:
 
 
 def replace_output_extension(resolved: str, extension: Optional[str]) -> str:
-    """Replace WireLoft's .ext marker with a concrete media extension."""
+    """Replace VODLoft's .ext marker with a concrete media extension."""
     if extension is not None and resolved.endswith(".ext"):
         return resolved[:-len("ext")] + extension.lstrip(".")
     return resolved

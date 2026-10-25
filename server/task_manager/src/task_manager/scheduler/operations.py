@@ -246,7 +246,7 @@ def create_operation(
             refresh=False,
         )
 
-    # A UI request may overlap work WireLoft already started automatically. Link
+    # A UI request may overlap work VODLoft already started automatically. Link
     # compatible active runs immediately so the existing worker can satisfy the
     # operation instead of forcing the UI to maintain a separate correlation ID.
     for target in created_targets:
@@ -428,7 +428,7 @@ def link_run_to_operations(
 
     Explicit operation IDs are infrastructure context passed by the dispatcher.
     Independently, compatible active targets are discovered by task/resource and
-    task inputs, allowing automatic WireLoft work to satisfy an overlapping UI
+    task inputs, allowing automatic VODLoft work to satisfy an overlapping UI
     request without any worker-specific request-ID plumbing.
 
     The executor commits this lightweight association before refreshing aggregate
@@ -921,7 +921,7 @@ def mark_interrupted_operations_for_recovery(
         ):
             continue
         operation.status = OperationStatus.QUEUED.value
-        operation.message = "Recovering after WireLoft restart"
+        operation.message = "Recovering after VODLoft restart"
         operation.finished_at = None
         operation.error = None
 

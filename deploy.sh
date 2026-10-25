@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the WireLoft image and push it to GitHub Container Registry.
+# Build the VODLoft image and push it to GitHub Container Registry.
 #
 # Usage:
 #   ./deploy.sh [--tag-level main|pre-release|develop|test] [tag ...]

@@ -35,8 +35,8 @@ export default function ShowLocalMediaProfileFields({form}: { form: UseFormRetur
                     </div>
                 )}
                 <div className="help" id="mp-show-scope-help">
-                    <ReadMore summary={<span>Controls where this profile is offered within WireLoft</span>}>
-                        <p>This will not change anything technical about this Local Media Profile, but acts as a filter where WireLoft shows this profile as an option</p>
+                    <ReadMore summary={<span>Controls where this profile is offered within VODLoft</span>}>
+                        <p>This will not change anything technical about this Local Media Profile, but acts as a filter where VODLoft shows this profile as an option</p>
                     </ReadMore>
                 </div>
             </div>

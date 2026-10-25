@@ -616,7 +616,7 @@ export default function DownloadsPage() {
             >
                 <p>
                     Delete {deletableCount} filtered {deletableCount === 1 ? 'record' : 'records'} whose artifact is Absent or Missing?
-                    WireLoft will verify that no artifact is available before deleting each download record.
+                    VODLoft will verify that no artifact is available before deleting each download record.
                     Records with an available artifact will be kept.
                 </p>
             </ConfirmDialog>
@@ -641,7 +641,7 @@ export default function DownloadsPage() {
             >
                 <p>
                     Delete the download record for &quot;{deleteRow ? rowTitle(deleteRow) : ''}&quot;?
-                    WireLoft will verify that no artifact is available before removing its history record.
+                    VODLoft will verify that no artifact is available before removing its history record.
                 </p>
             </ConfirmDialog>
         </section>

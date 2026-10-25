@@ -126,7 +126,7 @@ def monitor_stalled_work(
     """Cancel stalled work using its own reporting semantics.
 
     APScheduler controls when jobs may start and how many may run concurrently,
-    but it has no progress-aware runtime timeout. WireLoft samples RUNNING work
+    but it has no progress-aware runtime timeout. VODLoft samples RUNNING work
     once per minute. Structured download/batch activity is authoritative; other
     workers retain their generic percentage-based watchdog. Work that is
     merely queued, scheduled, waiting on an external dependency, or waiting for a

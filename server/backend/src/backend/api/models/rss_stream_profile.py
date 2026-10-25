@@ -87,7 +87,7 @@ class _RssStreamProfileAPIBaseIn(RequestBase):
 class RssStreamProfileAPICreate(_RssStreamProfileAPIBaseIn):
     """Request body for creating an RSS stream profile.
 
-    ``feed_url`` is optional: leave it unset (or blank) to have WireLoft
+    ``feed_url`` is optional: leave it unset (or blank) to have VODLoft
     generate one automatically from the request host and the profile's
     secret token. It can always be edited afterwards.
     """

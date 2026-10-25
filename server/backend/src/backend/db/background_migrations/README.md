@@ -1,6 +1,6 @@
 # Background migrations
 
-Background migrations repair historical application data without blocking WireLoft startup.
+Background migrations repair historical application data without blocking VODLoft startup.
 They are intentionally separate from Alembic:
 
 - Alembic makes the database schema compatible before the backend starts.
@@ -34,7 +34,7 @@ A later migration sets `down_revision` to the previous migration's `revision`. T
 verifies that the filename begins with its declared revision and rejects descriptive/non-Alembic-style
 revision IDs, duplicate revisions, missing down revisions, branches, cycles and disconnected histories.
 
-When prerelease background migrations are consolidated for a WireLoft release, the consolidated
+When prerelease background migrations are consolidated for a VODLoft release, the consolidated
 migration must keep the revision of the latest migration it replaces. Databases that already reached
 that revision then remain current without rerunning the consolidated work.
 
@@ -74,4 +74,4 @@ backend-api migrate check
 ```
 
 There is deliberately no background-migration `upgrade` CLI command. Pending migrations are run by
-the normal background runner after WireLoft starts.
+the normal background runner after VODLoft starts.

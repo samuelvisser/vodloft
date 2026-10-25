@@ -59,7 +59,7 @@ def track_monitor_publication_timing(
 
     Saves episode metadata regarding its publication timing. As The Daily Wire-provided
     publication timestamp sometimes is not accurate to its actual publication, for
-    WireLoft automations, this trusted timing might be used instead.
+    VODLoft automations, this trusted timing might be used instead.
 
     safe_live_ended requires a LIVE -> LIVE observation before the episode leaves
     LIVE. safe_published_final requires an earlier pending-state observation in
@@ -67,7 +67,7 @@ def track_monitor_publication_timing(
 
     When a previous process observed a pending state but restarted before it could
     observe PUBLISHED_FINAL, that old observation is materialized as last_known_pending.
-    recorded_published_final stores the first time WireLoft observed
+    recorded_published_final stores the first time VODLoft observed
     the final state regardless of monitor continuity.
     """
     current = utc_datetime(observed_at or datetime.now(timezone.utc))

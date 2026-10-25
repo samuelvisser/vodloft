@@ -147,7 +147,7 @@ export default function RssStreamProfileForm({
                                 <strong>{RssVideoOutputModeReg.getLabel('mp4_hls')}</strong> {RssVideoOutputModeReg.getHelp('mp4_hls')}
                             </p>
                             <p>
-                                The episode URLs in the RSS never change when a local download appears. The same WireLoft URL resolves to local media when available and to The Daily Wire only when the profile permits that fallback.
+                                The episode URLs in the RSS never change when a local download appears. The same VODLoft URL resolves to local media when available and to The Daily Wire only when the profile permits that fallback.
                             </p>
                         </ReadMore>
                     </div>
@@ -191,7 +191,7 @@ export default function RssStreamProfileForm({
                                 <>
                                     <p>
                                         Even though streaming from Daily Wire is disabled for this stream profile, streaming live episodes from DW
-                                        still works. WireLoft even provides a clean handoff to the downloaded HLS file after the episode is no longer
+                                        still works. VODLoft even provides a clean handoff to the downloaded HLS file after the episode is no longer
                                         live: it waits for the download to finish first, and only then switches to streaming from your local file.
                                         Your podcasting app should not even notice this switch!
                                     </p>
@@ -272,7 +272,7 @@ export default function RssStreamProfileForm({
                     <div className="help" id="feed-url-help">
                         <ReadMore summary={<span>Paste this URL into your podcast app.</span>}>
                             <p>
-                                This feed stays reachable even when local authentication is enabled for the WireLoft UI, so your podcast app never needs to log in. You can freely edit this text, for example to use a different hostname.
+                                This feed stays reachable even when local authentication is enabled for the VODLoft UI, so your podcast app never needs to log in. You can freely edit this text, for example to use a different hostname.
                             </p>
                             <p>
                                 If this URL ever leaks, use <strong>Regenerate</strong> to mint a new one and immediately invalidate the old one.

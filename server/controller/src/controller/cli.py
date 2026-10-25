@@ -51,7 +51,7 @@ def _parse_kv_list(kvs: list[str]) -> Dict[str, Any]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="wireloft-controller",
-        description="WireLoft Controller CLI — list and run controller workers",
+        description="VODLoft Controller CLI — list and run controller workers",
     )
 
     sub = parser.add_subparsers(dest="command")

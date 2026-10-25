@@ -62,14 +62,14 @@ def _seed_wireloft_1_0_data(database_path: Path, engine) -> dict[str, int | str]
     with engine.begin() as connection:
         profile_id = connection.execute(text(
             "SELECT id FROM local_media_profiles "
-            "WHERE slug = 'wireloft-shows-video'"
+            "WHERE slug = 'vodloft-shows-video'"
         )).scalar_one_or_none()
         if profile_id is None:
             profile_id = connection.execute(text(
                 "INSERT INTO local_media_profiles "
                 "(type, slug, name, output_template, preferred_format, "
                 "append_media_type_to_filename) VALUES "
-                "('show', 'wireloft-shows-video', 'WireLoft Shows (Video)', "
+                "('show', 'vodloft-shows-video', 'VODLoft Shows (Video)', "
                 "'/downloads/shows/{{ show_title }}/{{ season_name }}/{{ episode_title }}.ext', "
                 "'format_1080p', 0)"
             )).lastrowid
@@ -500,9 +500,9 @@ def test_fresh_database_upgrades_to_wireloft_1_1(migration_database):
             "FROM local_media_profiles ORDER BY slug"
         )).mappings().all()
         assert [profile["slug"] for profile in profiles] == [
-            "wireloft-movies",
-            "wireloft-shows-audio",
-            "wireloft-shows-video",
+            "vodloft-movies",
+            "vodloft-shows-audio",
+            "vodloft-shows-video",
         ]
         assert {profile["type"] for profile in profiles} == {"movie", "show"}
         assert connection.execute(text(

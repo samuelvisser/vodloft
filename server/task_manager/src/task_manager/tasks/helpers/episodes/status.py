@@ -69,7 +69,7 @@ def has_usable_media(
     *,
     hls_duration_seconds: float | None = None,
 ) -> bool:
-    """Whether the detail record exposes settled media WireLoft may publish.
+    """Whether the detail record exposes settled media VODLoft may publish.
 
     Recovery requires all three agreed signals: a media playlist, Daily Wire
     metadata duration above 12 seconds, and an HLS duration above 12 seconds.
@@ -94,7 +94,7 @@ def observe_episode_detail(
     *,
     inspect_static_media: bool = False,
 ) -> EpisodeRemoteSnapshot:
-    """Interpret one Daily Wire response without applying WireLoft state/history.
+    """Interpret one Daily Wire response without applying VODLoft state/history.
 
     Authoritative scheduled/live/delayed states normally do not need HLS probing.
     Quarantine recovery and final metadata settling can opt into media inspection
@@ -166,7 +166,7 @@ def resolve_episode_status(
     timing = get_settings().episode_status_timing
 
     # Daily Wire directly exposes these states (or, for delayed, the stable slug
-    # marker). They are stronger evidence than WireLoft's inferred publication
+    # marker). They are stronger evidence than VODLoft's inferred publication
     # states and may therefore move a previously-final row back to pending.
     if snapshot.status in _AUTHORITATIVE_REMOTE_STATUSES:
         return snapshot
