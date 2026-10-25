@@ -57,6 +57,8 @@ class SourceAPIRead(ResponseBase):
 
 class ResolveAPIRequest(RequestBase):
     url: str = Field(min_length=1, max_length=2048)
+    # Ask only this Source, when the user picked one of several that claim the link.
+    source_key: Optional[str] = None
 
 
 class ResolvedLinkPreviewAPIRead(ResponseBase):
@@ -104,3 +106,30 @@ class ResolvedLinkAPIRead(ResponseBase):
     site: Optional[str] = None
     drm_protected: bool = False
     preview: ResolvedLinkPreviewAPIRead
+    # Every Source that claims the link's domain, preferred first, to look the link up with another one.
+    candidates: list[SourceAPIRead] = Field(default_factory=list)
+
+
+class SearchResultAPIRead(ResponseBase):
+    kind: Literal["show", "movie", "episode", "video"]
+    slug: str
+    url: str
+    title: str
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    author_name: Optional[str] = None
+    show_slug: Optional[str] = None
+    show_url: Optional[str] = None
+
+
+class SourceDomainAPIRead(ResponseBase):
+    domain: str
+    # The Sources that can handle links on this domain, in the order VODLoft asks them by default.
+    source_keys: list[str]
+    default_source_key: str
+    preferred_source_key: Optional[str] = None
+
+
+class SourceDomainAPIUpdate(RequestBase):
+    # None goes back to the default order.
+    preferred_source_key: Optional[str] = None

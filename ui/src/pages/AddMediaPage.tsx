@@ -8,7 +8,7 @@ import SourceBadge from '../components/Source/SourceBadge'
 import {useQueryClient} from '@tanstack/react-query'
 import {addVideo, resolveLink, useMovies, useShows, useSources, useVideos} from '../lib/queries'
 import {linkTarget, type MediaLinkTarget} from '../lib/sourceControls'
-import {ResolvedLinkRead, SourceFeature, sourceHas} from '../types/schemas/source'
+import {ResolvedLinkRead, SourceFeature, SourceRead, sourceHas} from '../types/schemas/source'
 import {DrmNotice} from '../components/common/DrmProtected'
 
 type AddMediaPageProps = {
@@ -39,11 +39,16 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
     const [link, setLink] = useState<ResolvedLinkRead | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [resolving, setResolving] = useState(false)
+    // The Sources that can handle the link's site, kept while another one is tried.
+    const [candidates, setCandidates] = useState<SourceRead[]>([])
+    const [askedSource, setAskedSource] = useState<string | null>(null)
     const requestRef = useRef<AbortController | null>(null)
 
-    const lookUp = async (value: string) => {
+    const lookUp = async (value: string, sourceKey?: string) => {
         const trimmed = value.trim()
         if (!trimmed) return
+        if (!sourceKey) setCandidates([])
+        setAskedSource(sourceKey ?? null)
         requestRef.current?.abort()
         const controller = new AbortController()
         requestRef.current = controller
@@ -51,8 +56,11 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
         setError(null)
         setLink(null)
         try {
-            const resolved = await resolveLink(trimmed, controller.signal)
-            if (!controller.signal.aborted) setLink(resolved)
+            const resolved = await resolveLink(trimmed, controller.signal, sourceKey)
+            if (!controller.signal.aborted) {
+                setLink(resolved)
+                if (resolved.candidates.length) setCandidates(resolved.candidates)
+            }
         } catch (exc) {
             if (!controller.signal.aborted) setError(exc instanceof Error ? exc.message : String(exc))
         } finally {
@@ -124,9 +132,11 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
         else navigate(`/add-show?url=${encodeURIComponent(target.url)}`)
     }
 
-    const browseSources = (sources ?? []).filter((source) => sourceHas(source, SourceFeature.BROWSE))
-    const browse = (sourceId: string) => {
-        if (onBrowse) onBrowse(sourceId)
+    // A Source with a catalogue is browsed; one without is searched. Onboarding only browses.
+    const browseSources = (sources ?? []).filter((source) => sourceHas(source, SourceFeature.BROWSE) || (!onboarding && sourceHas(source, SourceFeature.SEARCH)))
+    const browse = (source: SourceRead) => {
+        if (!sourceHas(source, SourceFeature.BROWSE)) navigate(`/browse/${encodeURIComponent(source.id)}`)
+        else if (onBrowse) onBrowse(source.id)
         else navigate('/browse')
     }
 
@@ -171,6 +181,27 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
                 </button>
             </form>
 
+            {candidates.length > 1 && (
+                <div className="add-media-sources" role="group" aria-label="Source to look the link up with">
+                    <span>Look up with</span>
+                    {candidates.map((candidate) => {
+                        const current = (link?.source.id ?? askedSource) === candidate.id
+                        return (
+                            <button
+                                key={candidate.id}
+                                type="button"
+                                className={`btn${current ? ' btn-primary' : ''}`}
+                                aria-pressed={current}
+                                disabled={resolving}
+                                onClick={() => { if (!current) void lookUp(url, candidate.id) }}
+                            >
+                                {candidate.name}
+                            </button>
+                        )
+                    })}
+                </div>
+            )}
+
             {error && <div className="form-error-card add-media-error" role="alert">{error}</div>}
 
             {link && (
@@ -213,9 +244,9 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
                     <h2>Or browse</h2>
                     <div className="add-media-browse-list">
                         {browseSources.map((source) => (
-                            <button key={source.id} className="btn" type="button" onClick={() => browse(source.id)}>
-                                <FontAwesomeIcon icon={faIcon('fass', 'compass')}/>
-                                Browse {source.name}
+                            <button key={source.id} className="btn" type="button" onClick={() => browse(source)}>
+                                <FontAwesomeIcon icon={faIcon('fass', sourceHas(source, SourceFeature.BROWSE) ? 'compass' : 'magnifying-glass')}/>
+                                {sourceHas(source, SourceFeature.BROWSE) ? 'Browse' : 'Search'} {source.name}
                             </button>
                         ))}
                     </div>

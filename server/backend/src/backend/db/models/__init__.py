@@ -12,6 +12,7 @@ from .local_media_profile import (
 LocalMediaProfile = ShowLocalMediaProfile
 from .Season import Season
 from .Settings import Settings
+from .SourceDomainPreference import SourceDomainPreference
 from .Show import Show
 from .ShowLocalAsset import ShowLocalAsset
 from .Metadata import Metadata

@@ -61,7 +61,8 @@ import {MovieRead, MovieReadSchema} from "../types/schemas/movie";
 import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
     CookiesRead, CookiesReadSchema, DEFAULT_SOURCE_KEY, ProgramStatusRead, ProgramStatusReadSchema, ResolvedLinkRead,
-    ResolvedLinkReadSchema, ShowDetailsRead, ShowDetailsReadSchema, SourceRead, SourceReadSchema,
+    ResolvedLinkReadSchema, SearchResultRead, SearchResultReadSchema, ShowDetailsRead, ShowDetailsReadSchema, SourceDomainRead, SourceDomainReadSchema, SourceRead,
+    SourceReadSchema,
 } from "../types/schemas/source";
 import {
     DailywireCatalogRead,
@@ -338,6 +339,48 @@ export async function saveSourceCookies(sourceId: string, content: string | null
     return CookiesReadSchema.parse(await response.json())
 }
 
+/** Every site a Source names, and the Source VODLoft asks first for its links. */
+export function useSourceDomains() {
+    return useQuery<SourceDomainRead[], Error, SourceDomainRead[], readonly ['sourceDomains']>({
+        queryKey: ['sourceDomains'] as const,
+        queryFn: async ({signal}) => {
+            const value = await fetchJSON<unknown>(`${(window as any).appConfig.API_URL}/sources/domains`, signal)
+            return SourceDomainReadSchema.array().parse(value)
+        },
+    })
+}
+
+/** Choose the Source to ask first for a site's links; ``null`` goes back to the default. */
+export async function saveSourceDomain(domain: string, preferredSourceKey: string | null): Promise<SourceDomainRead> {
+    const response = await fetch(`${(window as any).appConfig.API_URL}/sources/domains/${encodeURIComponent(domain)}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({preferredSourceKey}),
+    })
+    if (!response.ok) throw await responseError(response)
+    return SourceDomainReadSchema.parse(await response.json())
+}
+
+/** Shows and videos at a Source whose name matches the query. */
+export function useSourceSearch(sourceId: string | undefined, query: string) {
+    return useQuery<SearchResultRead[], Error, SearchResultRead[], readonly ['sourceSearch', string | undefined, string]>({
+        queryKey: ['sourceSearch', sourceId, query] as const,
+        enabled: !!sourceId && !!query,
+        queryFn: async ({signal}) => {
+            const params = new URLSearchParams({q: query})
+            const response = await fetch(
+                `${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceId!)}/search?${params}`,
+                {signal, credentials: 'include'},
+            )
+            if (!response.ok) throw await responseError(response)
+            return SearchResultReadSchema.array().parse(await response.json())
+        },
+        staleTime: 5 * 60 * 1000,
+        retry: false,
+    })
+}
+
 /** Which Source recognises a link, for pages that need to know before anything is added. */
 export function useResolvedLink(url: string | undefined) {
     return useQuery<ResolvedLinkRead, Error, ResolvedLinkRead, readonly ['resolvedLink', string | undefined]>({
@@ -368,13 +411,13 @@ export function useListedShowDetails(sourceId: string | undefined, url: string |
     })
 }
 
-/** Ask the backend which Source recognises a link, and what it points to. */
-export async function resolveLink(url: string, signal?: AbortSignal): Promise<ResolvedLinkRead> {
+/** Ask the backend which Source recognises a link, and what it points to. ``sourceKey`` asks only that Source. */
+export async function resolveLink(url: string, signal?: AbortSignal, sourceKey?: string): Promise<ResolvedLinkRead> {
     const response = await fetch(`${(window as any).appConfig.API_URL}/resolve`, {
         method: 'POST',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({url}),
+        body: JSON.stringify(sourceKey ? {url, sourceKey} : {url}),
         signal,
     })
     if (!response.ok) throw await responseError(response)

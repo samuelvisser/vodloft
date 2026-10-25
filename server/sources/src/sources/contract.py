@@ -29,8 +29,10 @@ class Feature(StrEnum):
     RSS_STREAMING = "rss_streaming"
     VIDEOS = "videos"
     EPISODE_LISTS = "episode_lists"
-    """Shows whose episodes the Source lists with ``list_episodes``; VODLoft
-    groups them into one season per upload year."""
+    """Shows whose episodes the Source lists with ``list_episodes``. VODLoft
+    keeps the Source's own seasons, or makes one season per upload year."""
+    SEARCH = "search"
+    """Finding shows and videos at the Source by name, with ``search``."""
     PROGRAM_UPDATES = "program_updates"
     COOKIES = "cookies"
 
@@ -117,6 +119,20 @@ class VideoDetails:
     published_at: datetime | None = None
     drm_protected: bool = False
     """The video is protected by DRM, so it can be added but not downloaded."""
+    season: "SeasonRef | None" = None
+    """The show season a listed episode belongs to, for a Source with real seasons.
+    Without one, VODLoft puts the episode in a season per upload year."""
+    episode_number: int | None = None
+    """The episode's number in its season, when the Source has one."""
+
+
+@dataclass(frozen=True)
+class SeasonRef:
+    """A season as the Source names it."""
+
+    slug: str
+    number: int
+    title: str | None = None
 
 
 @dataclass(frozen=True)
@@ -199,6 +215,10 @@ class Source(ABC):
         scan tries it again.
         """
         raise NotImplementedError(f"{self.name} does not list episodes")
+
+    def search(self, query: str) -> list[ResolvedLink]:
+        """Shows and videos whose name matches the query. Only Sources with ``Feature.SEARCH`` implement it."""
+        raise NotImplementedError(f"{self.name} cannot be searched")
 
     def program_status(self) -> ProgramStatus:
         """The program this Source runs. Only Sources with ``Feature.PROGRAM_UPDATES`` implement it."""

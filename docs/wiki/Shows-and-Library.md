@@ -85,6 +85,12 @@ These shows have no seasons of their own, so VODLoft makes one season per upload
 
 VODLoft checks the channel or playlist for new videos on the usual schedule. It looks up each new video once and pauses between lookups, so the first scan of a large channel takes a while. Private and deleted videos are skipped.
 
+## NPO Start
+
+Series and programmes from NPO Start (npo.nl) can be added without an NPO account. **Search NPO Start** on the Add media page finds series and programmes by name, or paste a link to a series, season or episode. A series is added as a show with NPO's own seasons and episode numbers, such as S02E05. A programme outside a series is added as a single video.
+
+Many NPO programmes are protected by DRM, often whole seasons, and VODLoft marks them as described below. The rest download in the best quality NPO offers without an account. Programmes that need an NPO Plus subscription cannot be downloaded yet.
+
 ## Media protected by DRM
 
 VODLoft cannot download media that is protected by DRM. Such an episode, movie or video shows a DRM badge, and its page says "Protected by DRM, cannot be downloaded" where the download controls would be. VODLoft marks an item this way when its Source reports DRM, or when a download fails because of it. Download Profiles skip protected episodes, and a download that fails because of DRM is not retried.

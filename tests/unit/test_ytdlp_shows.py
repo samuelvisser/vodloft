@@ -199,6 +199,29 @@ def test_listed_episodes_download_through_the_page(listed, session, monkeypatch)
     assert str(plan.requested_destination).endswith("/shows/A playlist/2024/Video a.mp4")
 
 
+def test_a_listed_episode_whose_playback_is_protected_is_not_downloaded(listed, session, monkeypatch):
+    from backend.db.models import ShowLocalMediaProfile
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from backend.services import download_plans
+    from downloader import EncryptedMediaError
+    from downloader.lifecycle import DownloadTracker
+    from task_manager.tasks.helpers.listed_shows import index_listed_show
+
+    show = _show(session)
+    listed.videos = [_video("a", 2024, 2, 3)]
+    index_listed_show(session, show_id=show.id, source=listed)
+    profile = ShowLocalMediaProfile(slug="shows", name="Shows", preferred_format="format_1080p", output_template="/downloads/{{ episode_title }}.ext")
+    session.add(profile)
+    session.flush()
+    download = EpisodeMediaDownload(media=show.episodes[0], local_media_profile=profile, type="episode", file_path="/downloads/x.ext")
+    session.add(download)
+    session.commit()
+    monkeypatch.setattr(listed, "video_playback", lambda **_: MoviePlayback(url="https://cdn.example/drm.m3u8", drm_protected=True))
+
+    with pytest.raises(EncryptedMediaError, match="Listed protects 'Video a' with DRM"):
+        download_plans.prepare_download_plan(session, download.id, DownloadTracker())
+
+
 def test_a_listed_show_bundle_is_seasonal_and_streams_only_downloads(listed, session):
     from fastapi import HTTPException
 
