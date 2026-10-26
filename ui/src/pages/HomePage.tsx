@@ -128,7 +128,7 @@ export default function HomePage() {
                     <h1 id="home-title">Home</h1>
                     <p className="view-description">What VODLoft is doing now and anything that needs your attention.</p>
                 </div>
-                <button className="btn btn-primary" onClick={() => navigate('/browse')}>
+                <button className="btn btn-primary" onClick={() => navigate('/add')}>
                     <FontAwesomeIcon icon={faIcon('fass', 'plus')}/> Add media
                 </button>
             </div>
