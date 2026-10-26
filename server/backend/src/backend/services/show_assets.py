@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import exists, or_, select, union
 from sqlalchemy.orm import Session, selectinload
 
-from backend.db.models import DownloadProfileBase, Episode, EpisodeMediaDownload, Show, ShowLocalMediaProfile
+from backend.db.models import DownloadProfile, Episode, EpisodeMediaDownload, Show, ShowLocalMediaProfile
 from backend.db.models.ShowLocalAsset import ShowLocalAsset
 from backend.utils.custom_metadata import custom_metadata_template_values, get_custom_metadata
 from backend.utils.output_template import (
@@ -55,9 +55,9 @@ def show_profile_is_managed(
 ) -> bool:
     """Return whether one show/profile pair is still managed without loading all pairs."""
     profile_assignment = exists(
-        select(DownloadProfileBase.id).where(
-            DownloadProfileBase.show_id == show_id,
-            DownloadProfileBase.local_media_profile_id == profile_id,
+        select(DownloadProfile.id).where(
+            DownloadProfile.show_id == show_id,
+            DownloadProfile.local_media_profile_id == profile_id,
         )
     )
     manual_download = exists(
@@ -75,11 +75,11 @@ def managed_show_profile_pairs(session: Session) -> set[tuple[int, int]]:
     """Include manual downloads as well as Download Profile assignments."""
     pairs = union(
         select(
-            DownloadProfileBase.show_id.label("show_id"),
-            DownloadProfileBase.local_media_profile_id.label("profile_id"),
+            DownloadProfile.show_id.label("show_id"),
+            DownloadProfile.local_media_profile_id.label("profile_id"),
         ).where(
-            DownloadProfileBase.show_id.is_not(None),
-            DownloadProfileBase.local_media_profile_id.is_not(None),
+            DownloadProfile.show_id.is_not(None),
+            DownloadProfile.local_media_profile_id.is_not(None),
         ),
         select(
             Episode.show_id.label("show_id"),
@@ -235,9 +235,9 @@ def request_show_asset_reconciliation(session: Session, show_id: int = 0) -> Non
 
 def request_profile_show_assets(session: Session, profile_id: int) -> None:
     show_ids = union(
-        select(DownloadProfileBase.show_id.label("show_id")).where(
-            DownloadProfileBase.local_media_profile_id == profile_id,
-            DownloadProfileBase.show_id.is_not(None),
+        select(DownloadProfile.show_id.label("show_id")).where(
+            DownloadProfile.local_media_profile_id == profile_id,
+            DownloadProfile.show_id.is_not(None),
         ),
         select(Episode.show_id.label("show_id"))
         .join(

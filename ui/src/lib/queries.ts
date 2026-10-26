@@ -33,9 +33,7 @@ import {
     LocalMediaProfileViewRead,
     LocalMediaProfileViewReadSchema,
 } from "../types/schemas/local_media_profile";
-import {PodcastDownloadProfileRead, PodcastDownloadProfileReadSchema} from "../types/schemas/podcast_download_profile";
-import {SeriesDownloadProfileRead, SeriesDownloadProfileReadSchema} from "../types/schemas/series_download_profile";
-import {DownloadProfileRead, DownloadProfileReadSchema} from "../types/schemas/download_profile_base";
+import {DownloadProfileRead, DownloadProfileReadSchema} from "../types/schemas/download_profile";
 import {DownloadProfileReadView, DownloadProfileReadViewSchema} from "../types/schemas/download_profile_view";
 import {StreamProfileRead, StreamProfileReadSchema, StreamProfileReadView, StreamProfileReadViewSchema} from "../types/schemas/stream_profile_base";
 import {ShowRead, ShowReadView, ShowReadViewSchema} from "../types/schemas/show";
@@ -122,30 +120,6 @@ export function useLocalMediaProfileView(slug?: string) {
         queryFn: ({signal}) => fetchParsed(
             `${(window as any).appConfig.API_URL}/local-media-profiles/${encodeURIComponent(slug!)}/view`,
             LocalMediaProfileViewReadSchema,
-            signal,
-        ),
-        refetchOnMount: 'always',
-    })
-}
-
-export function usePodcastDownloadProfiles() {
-    return useQuery<PodcastDownloadProfileRead[], Error, PodcastDownloadProfileRead[], readonly ['podcastDownloadProfiles']>({
-        queryKey: ['podcastDownloadProfiles'] as const,
-        queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/podcast-download-profiles`,
-            PodcastDownloadProfileReadSchema.array(),
-            signal,
-        ),
-        refetchOnMount: 'always',
-    })
-}
-
-export function useSeriesDownloadProfiles() {
-    return useQuery<SeriesDownloadProfileRead[], Error, SeriesDownloadProfileRead[], readonly ['seriesDownloadProfiles']>({
-        queryKey: ['seriesDownloadProfiles'] as const,
-        queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/series-download-profiles`,
-            SeriesDownloadProfileReadSchema.array(),
             signal,
         ),
         refetchOnMount: 'always',
@@ -1298,22 +1272,6 @@ export function prefetchCoreData(qc: QueryClient) {
             const profiles = qc.getQueryData<LocalMediaProfileRead[]>(['localMediaProfiles'])
             if (profiles) saveProfilesToStorage(profiles)
         })
-    void qc.prefetchQuery({
-        queryKey: ['podcastDownloadProfiles'],
-        queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/podcast-download-profiles`,
-            PodcastDownloadProfileReadSchema.array(),
-            signal,
-        ),
-    })
-    void qc.prefetchQuery({
-        queryKey: ['seriesDownloadProfiles'],
-        queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/series-download-profiles`,
-            SeriesDownloadProfileReadSchema.array(),
-            signal,
-        ),
-    })
     void qc.prefetchQuery({
         queryKey: ['downloadProfilesView'],
         queryFn: ({signal}) => fetchParsed(

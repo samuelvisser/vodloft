@@ -8,7 +8,7 @@ def test_profile_reconciliation_reloads_current_enabled_state():
     import backend.db.models  # noqa: F401
     import task_manager.scheduler.db  # noqa: F401
     from backend.db import Base
-    from backend.db.models import LocalMediaProfile, PodcastDownloadProfile, Show
+    from backend.db.models import LocalMediaProfile, DownloadProfile, Show
     from backend.types.download_profile_types import EpIdType
     from backend.types.show_types import EpisodeIdentifier, ShowType
     from task_manager.tasks.helpers.download_profiles import lock_enabled_download_profile
@@ -37,7 +37,7 @@ def test_profile_reconciliation_reloads_current_enabled_state():
         )
         session.add_all([show, local_media_profile])
         session.flush()
-        profile = PodcastDownloadProfile(
+        profile = DownloadProfile(
             show_id=show.id,
             local_media_profile_id=local_media_profile.id,
             enable_profile=True,
@@ -54,7 +54,7 @@ def test_profile_reconciliation_reloads_current_enabled_state():
         # Keep an intentionally stale enabled object in this worker session.
         assert profile.enable_profile is True
         with Session(engine) as other:
-            current = other.get(PodcastDownloadProfile, profile.id)
+            current = other.get(DownloadProfile, profile.id)
             assert current is not None
             current.enable_profile = False
             other.commit()

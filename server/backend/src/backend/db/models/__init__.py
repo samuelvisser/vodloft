@@ -18,14 +18,12 @@ from .ShowLocalAsset import ShowLocalAsset
 from .Metadata import Metadata
 from .CustomIndexState import CustomIndexState
 
-from .download_profile import DownloadProfileBase
+from .download_profile import DownloadProfile
 from .media_download import MediaDownloadBase
 from .media_download import MediaDownloadHistory
 from .media_item import MediaItemBase
 from .stream_profile import StreamProfileBase
 
-from .download_profile import PodcastDownloadProfile
-from .download_profile import SeriesDownloadProfile
 from .media_download import EpisodeMediaDownload
 from .media_download import MovieMediaDownload
 from .media_download import MovieExtraMediaDownload

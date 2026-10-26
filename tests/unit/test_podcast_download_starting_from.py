@@ -77,13 +77,12 @@ def _make_local_media_profile(session):
 
 
 def _make_podcast_profile(session, show, local_media_profile, *, starting_from: date):
-    from backend.db.models.download_profile import PodcastDownloadProfile
+    from backend.db.models.download_profile import DownloadProfile
     from backend.types.download_profile_types import EpIdType
 
-    profile = PodcastDownloadProfile(
+    profile = DownloadProfile(
         show=show,
         local_media_profile=local_media_profile,
-        type="podcast",
         enable_profile=True,
         ep_id_type_list=[EpIdType.EP.value],
         download_with_countdown=False,
@@ -199,10 +198,10 @@ def test_starting_from_never_deletes_older_downloads(db_session, tmp_path):
 
 
 def test_api_rejects_starting_from_with_rolling_limit():
-    from backend.api.models.podcast_download_profile import PodcastDownloadProfileAPICreate
+    from backend.api.models.download_profile import DownloadProfileAPICreate
 
     with pytest.raises(ValidationError, match="Download starting from can only be used"):
-        PodcastDownloadProfileAPICreate(
+        DownloadProfileAPICreate(
             show_id=1,
             local_media_profile_id=1,
             enable_profile=True,
@@ -213,14 +212,16 @@ def test_api_rejects_starting_from_with_rolling_limit():
             download_episode_count=0,
             download_starting_from=date(2026, 1, 1),
             delete_older_episodes=True,
+            seasons=[],
+            include_upcoming_seasons=True,
         )
 
 
 def test_api_rejects_date_and_episode_count_limits_together():
-    from backend.api.models.podcast_download_profile import PodcastDownloadProfileAPICreate
+    from backend.api.models.download_profile import DownloadProfileAPICreate
 
     with pytest.raises(ValidationError, match="Choose either a date limit or an episode-count limit, not both"):
-        PodcastDownloadProfileAPICreate(
+        DownloadProfileAPICreate(
             show_id=1,
             local_media_profile_id=1,
             enable_profile=True,
@@ -231,4 +232,6 @@ def test_api_rejects_date_and_episode_count_limits_together():
             download_episode_count=5,
             download_starting_from=None,
             delete_older_episodes=True,
+            seasons=[],
+            include_upcoming_seasons=True,
         )

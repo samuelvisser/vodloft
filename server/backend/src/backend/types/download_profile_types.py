@@ -1,14 +1,6 @@
 from enum import Enum, StrEnum
 
 
-class DownloadProfileType(Enum):
-    PODCAST = "podcast"
-    SERIES = "series"
-
-    # For instances of DownloadProfileBase class (parent class)
-    BASE = "base"
-
-
 class MediaDownloadArtifactStatus(StrEnum):
     """Persistent state of the file represented by a MediaDownload.
 

@@ -68,7 +68,7 @@ export const router = createBrowserRouter(
       <Route path="edit-local-media-profile/:slug" element={<EditLocalMediaProfilePage />} />
       <Route path="download-profiles" element={<DownloadProfilesPage />} />
       <Route path="add-download-profile" element={<AddDownloadProfilePage />} />
-      <Route path="edit-download-profile/:type/:id" element={<EditDownloadProfilePage />} />
+      <Route path="edit-download-profile/:id" element={<EditDownloadProfilePage />} />
       <Route path="stream-profiles" element={<StreamProfilesPage />} />
       <Route path="add-stream-profile" element={<AddStreamProfilePage />} />
       <Route path="edit-stream-profile/:type/:id" element={<EditStreamProfilePage />} />

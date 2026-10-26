@@ -3,32 +3,25 @@ import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate, useParams} from 'react-router-dom'
 import {useDownloadProfilesByShowSlug, useLocalMediaProfiles, useShowSeasons} from '../../lib/queries'
-import DownloadProfileForm, {DownloadProfileMode} from '../../components/DownloadProfile/DownloadProfileForm'
+import DownloadProfileForm from '../../components/DownloadProfile/DownloadProfileForm'
 import {
-    PodcastDownloadProfileUpdateIn,
-    PodcastDownloadProfileUpdateSchema
-} from '../../types/schemas/podcast_download_profile'
-import {
-    SeriesDownloadProfileUpdateIn,
-    SeriesDownloadProfileUpdateSchema
-} from '../../types/schemas/series_download_profile'
+    DownloadProfileUpdateIn, DownloadProfileUpdateOut, DownloadProfileUpdateSchema, forEpisodeIdentifier,
+} from '../../types/schemas/download_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import Select from 'react-select'
 import {useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
 import {DownloadProfileReadView} from "../../types/schemas/download_profile_view";
 import {useQuery, useQueryClient} from "@tanstack/react-query";
 import ReadMore from "../../utils/ReadMore";
+import {EpisodeIdentifierReg} from "../../types/show";
 
-type RouteParams = { type?: DownloadProfileMode; id?: string }
-
-type AnyUpdate = PodcastDownloadProfileUpdateIn | SeriesDownloadProfileUpdateIn
+type RouteParams = { id?: string }
 
 export default function EditDownloadProfilePage() {
     const navigate = useNavigate()
-    const {type, id} = useParams<RouteParams>()
+    const {id} = useParams<RouteParams>()
     const qc = useQueryClient()
 
-    const mode: DownloadProfileMode | undefined = (type === 'podcast' || type === 'series') ? type : undefined
     const profileId = id ? Number(id) : undefined
 
     // Fetch the latest profile by id
@@ -48,35 +41,29 @@ export default function EditDownloadProfilePage() {
     const {data: seasonsData} = useShowSeasons(downloadProfile?.showSlug)
     const {data: showProfiles} = useDownloadProfilesByShowSlug(downloadProfile?.showSlug)
 
-    const formPodcast = useForm<PodcastDownloadProfileUpdateIn>({
-        resolver: zodResolver(PodcastDownloadProfileUpdateSchema),
+    const episodeIdentifier = downloadProfile?.showEpisodeIdentifier
+    const schema = useMemo(
+        () => forEpisodeIdentifier(DownloadProfileUpdateSchema, episodeIdentifier),
+        [episodeIdentifier],
+    )
+    const form = useForm<DownloadProfileUpdateIn>({
+        resolver: zodResolver(schema),
         mode: 'onBlur',
         shouldFocusError: true,
     })
-
-    const formSeries = useForm<SeriesDownloadProfileUpdateIn>({
-        resolver: zodResolver(SeriesDownloadProfileUpdateSchema),
-        mode: 'onBlur',
-        shouldFocusError: true,
-    })
-
-    const form = (mode === 'podcast' ? formPodcast : formSeries) as any
     const {formState: {errors}} = form
 
     // Populate form with existing data once it’s loaded
     useEffect(() => {
         if (!downloadProfile) return
-        if (downloadProfile.downloadProfileImpl.type === 'podcast') {
-            form.reset(PodcastDownloadProfileUpdateSchema.parse(downloadProfile.downloadProfileImpl))
-        } else if (downloadProfile.downloadProfileImpl.type === 'series') {
-            form.reset(SeriesDownloadProfileUpdateSchema.parse(downloadProfile.downloadProfileImpl))
-        }
+        form.reset(DownloadProfileUpdateSchema.parse(downloadProfile))
     }, [downloadProfile, form])
 
+    const showType = downloadProfile?.showType
     const mediaProfileReg = useLocalMediaProfileSelectRegistry(
         mediaProfiles,
         'show',
-        mode === 'podcast' || mode === 'series' ? mode : undefined,
+        showType === 'podcast' || showType === 'series' ? showType : undefined,
     )
     const selectedLocalMediaProfileId = form.watch('localMediaProfileId')
 
@@ -94,11 +81,8 @@ export default function EditDownloadProfilePage() {
 
     const onCancel = useCallback(() => navigate('/download-profiles'), [navigate])
 
-    const submitFn = async (data: AnyUpdate) => {
-        if (!mode || !profileId) return undefined as any
-        const base = (window as any).appConfig.API_URL
-        const endpoint = mode === 'podcast' ? 'podcast-download-profiles' : 'series-download-profiles'
-        return fetch(`${base}/${endpoint}/${profileId}`, {
+    const submitFn = async (data: DownloadProfileUpdateOut) => {
+        return fetch(`${(window as any).appConfig.API_URL}/download-profiles/${profileId}`, {
             method: 'PATCH',
             headers: {'Content-Type': 'application/json'},
             credentials: 'include',
@@ -107,14 +91,13 @@ export default function EditDownloadProfilePage() {
     }
 
     const onSuccess = async () => {
-        await qc.invalidateQueries({queryKey: ['podcastDownloadProfiles']})
-        await qc.invalidateQueries({queryKey: ['seriesDownloadProfiles']})
         await qc.invalidateQueries({queryKey: ['downloadProfilesView']})
+        await qc.invalidateQueries({queryKey: ['downloadProfilesByShowSlug']})
 
         navigate('/download-profiles')
     }
 
-    const onSubmit = buildServerAwareSubmit(form as any, async (dataOut: AnyUpdate) => {
+    const onSubmit = buildServerAwareSubmit(form, async (dataOut: DownloadProfileUpdateOut) => {
         const res = await submitFn(dataOut)
         if (res?.ok) await onSuccess()
         return res
@@ -122,7 +105,7 @@ export default function EditDownloadProfilePage() {
 
     const {formState: {isSubmitting}} = form
 
-    if (!mode || !profileId) {
+    if (!profileId) {
         return (
             <section className="view" aria-labelledby="edit-download-profile-title">
                 <div className="view-header">
@@ -155,20 +138,20 @@ export default function EditDownloadProfilePage() {
                     )}
 
                     <div className="form-row">
-                        <label>Profile type</label>
-                        <div style={{padding: '6px 0'}}>{mode === 'podcast' ? 'Podcast' : 'Series'}</div>
-                    </div>
-
-                    <div className="form-row">
                         <label>Show</label>
                         <div style={{padding: '6px 0'}}>{showTitle}</div>
                     </div>
 
                     <div className="form-row">
+                        <label>Episode identification</label>
+                        <div style={{padding: '6px 0'}}>{EpisodeIdentifierReg.getLabelLoose(episodeIdentifier ?? '')}</div>
+                    </div>
+
+                    <div className="form-row">
                         <label htmlFor="local-media-profile">Local Media Profile</label>
                         <Controller
-                            control={(form as any).control}
-                            name={"localMediaProfileId" as any}
+                            control={form.control}
+                            name="localMediaProfileId"
                             render={({field}) => (
                                 <Select
                                     inputId="local-media-profile"
@@ -199,8 +182,9 @@ export default function EditDownloadProfilePage() {
                     </div>
 
                     <DownloadProfileForm
-                        form={form as any}
-                        mode={mode}
+                        form={form}
+                        episodeIdentifier={episodeIdentifier}
+                        showId={downloadProfile?.showId}
                         seasons={seasonsData}
                         showRoot={false}
                         disabledEpisodeTypes={disabledEpisodeTypes}

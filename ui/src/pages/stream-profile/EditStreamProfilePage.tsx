@@ -40,9 +40,8 @@ export default function EditStreamProfilePage() {
             .filter((profile) => profile.showSlug === streamProfile.showSlug)
             .map((profile) => ({
                 id: profile.id,
-                type: profile.type,
                 preferredFormat: profile.localMediaProfilePreferredFormat,
-                episodeTypes: profile.downloadProfileImpl.epIdTypeList,
+                episodeTypes: profile.epIdTypeList,
                 enabled: profile.enableProfile,
             }))
     }, [downloadProfiles, streamProfile?.showSlug])

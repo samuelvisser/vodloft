@@ -212,8 +212,6 @@ def create_app() -> FastAPI:
     # Import routers lazily to avoid circular imports during app module import
     from backend.api.endpoints import (
         dailywire_router,
-        download_profile_podcast_router,
-        download_profile_series_router,
         download_profile_router,
         media_download_router,
         show_router,
@@ -249,8 +247,6 @@ def create_app() -> FastAPI:
 
     # Protected API endpoints (shielded by middleware above)
     app.include_router(dailywire_router, prefix="/api")
-    app.include_router(download_profile_podcast_router, prefix="/api")
-    app.include_router(download_profile_series_router, prefix="/api")
     app.include_router(download_profile_router, prefix="/api")
     app.include_router(episode_router, prefix="/api")
     app.include_router(season_router, prefix="/api")

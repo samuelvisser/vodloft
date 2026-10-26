@@ -12,7 +12,7 @@ from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 if TYPE_CHECKING:
     from backend.db.models.media_item import Episode
     from backend.db.models.stream_profile import StreamProfileBase
-    from backend.db.models import Season, PodcastDownloadProfile, SeriesDownloadProfile
+    from backend.db.models import Season, DownloadProfile
     from backend.db.models import CustomIndexState
 
 
@@ -54,8 +54,7 @@ class Show(Base, HasMetadataMixin, HasTaskResourcesMixin):
     seasons: Mapped[list["Season"]] = relationship(
         back_populates="show", cascade="all, delete-orphan", order_by="desc(Season.index)"
     )
-    download_profiles: Mapped[list["SeriesDownloadProfile | PodcastDownloadProfile"]] = relationship(
-        "DownloadProfileBase",
+    download_profiles: Mapped[list["DownloadProfile"]] = relationship(
         back_populates="show", cascade="all, delete-orphan"
     )
     stream_profiles: Mapped[list["StreamProfileBase"]] = relationship(

@@ -231,8 +231,7 @@ function invalidateLocalMediaProfileDownloadDeletion(
   invalidateLocalMediaProfileFiles(queryClient, operation, invalidations)
   invalidations.push(
     queryClient.invalidateQueries({queryKey: ['downloadProfilesView']}),
-    queryClient.invalidateQueries({queryKey: ['podcastDownloadProfiles']}),
-    queryClient.invalidateQueries({queryKey: ['seriesDownloadProfiles']}),
+    queryClient.invalidateQueries({queryKey: ['downloadProfilesByShowSlug']}),
   )
 }
 

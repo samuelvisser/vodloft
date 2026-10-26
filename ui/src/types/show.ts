@@ -10,7 +10,7 @@ export const ShowTypeReg = createSelectRegistry("ShowType", {
 export type ShowTypeValue = (typeof ShowTypeReg)["values"][number];
 
 
-// EpisodeIdentifier (only for podcasts)
+// EpisodeIdentifier: how a show identifies its episodes
 export const EpisodeIdentifierReg = createSelectRegistry("EpisodeIdentifier", {
     numbered: {label: "Numbered", help: "Parse 'Ep. N' from the title"},
     date_based: {label: "Date-based", help: "Use release date as identity"},

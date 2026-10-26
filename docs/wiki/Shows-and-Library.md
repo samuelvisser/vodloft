@@ -30,12 +30,12 @@ A show page brings together its seasons and episodes, current publication state,
 
 A show can stay in the Library without any download or RSS profiles. This is useful when you only want VODLoft to index it for now.
 
-### Podcast and Series shows
+### Automatic download rules
 
-VODLoft distinguishes Podcast and Series shows because their automatic download rules are different.
+Which automatic download options a show offers follows its episode identification, whether the show is a Podcast or a Series.
 
-- Podcast Download Profiles are usually based on a rolling date window, a number of recent episodes, or no limit.
-- Series Download Profiles are based on selected seasons and can automatically include future seasons.
+- Download Profiles can use a rolling date window, a number of recent episodes, or no limit.
+- For a show identified by season, Download Profiles also choose seasons and can automatically include future seasons.
 
 See [[Download-Profiles]].
 

@@ -1,6 +1,4 @@
 from .dailywire import dailywire_router
-from .podcast_download_profiles import download_profile_podcast_router
-from .series_download_profiles import download_profile_series_router
 from .download_profiles import download_profile_router
 from .seasons import season_router
 from .episodes import episode_router

@@ -12,12 +12,10 @@ from backend.api.models.show_as_bundle import (
     ShowLocalMediaProfileAPIUpsert,
     ShowLocalMediaProfileCreateNew,
     ShowLocalMediaProfileUpdateBySlug,
-    PodcastDownloadProfileCreateInBundle,
-    SeriesDownloadProfileCreateInBundle,
     ShowAPICreateBundle,
 )
 from backend.db.models import Season, Show, ShowLocalMediaProfile
-from backend.db.models.download_profile import PodcastDownloadProfile, SeriesDownloadProfile
+from backend.db.models.download_profile import DownloadProfile
 from backend.db.models.stream_profile import RssStreamProfile
 from backend.utils.feed_urls import build_rss_feed_url
 from backend.utils.helpers import generate_stream_profile_token
@@ -94,29 +92,17 @@ def create_show_bundle(s: Session, request: Request, payload: ShowAPICreateBundl
         if local_media_profile is None:
             raise ValueError("A local media profile is required when creating a download profile")
 
-        if isinstance(payload.download_profile, PodcastDownloadProfileCreateInBundle):
-            download_profile = create_database_fields(
-                PodcastDownloadProfile,
-                payload.download_profile,
-                exclude_fields={"op"},
-            )
-        elif isinstance(payload.download_profile, SeriesDownloadProfileCreateInBundle):
-            download_profile = create_database_fields(
-                SeriesDownloadProfile,
-                payload.download_profile,
-                exclude_fields={"op", "seasons"},
-            )
-            selected_slugs = {
-                season.slug for season in payload.download_profile.seasons
-            }
-            download_profile.seasons = [
-                season for season in seasons if season.slug in selected_slugs
-            ]
-        else:
-            raise TypeError(
-                f"Unsupported download profile input {type(payload.download_profile).__name__}"
-            )
-
+        download_profile = create_database_fields(
+            DownloadProfile,
+            payload.download_profile,
+            exclude_fields={"seasons"},
+        )
+        selected_slugs = {
+            season.slug for season in payload.download_profile.seasons
+        }
+        download_profile.seasons = [
+            season for season in seasons if season.slug in selected_slugs
+        ]
         s.add(download_profile)
         download_profile.show = show
         download_profile.local_media_profile = local_media_profile

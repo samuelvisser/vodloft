@@ -24,7 +24,7 @@ def _library(session: Session, tmp_path: Path):
     from backend.db.models import (
         Episode,
         LocalMediaProfile,
-        PodcastDownloadProfile,
+        DownloadProfile,
         Season,
         Show,
     )
@@ -83,7 +83,7 @@ def _library(session: Session, tmp_path: Path):
     session.flush()
 
     def add_download_profile(local_media_profile):
-        profile = PodcastDownloadProfile(
+        profile = DownloadProfile(
             show_id=show.id,
             local_media_profile_id=local_media_profile.id,
             enable_profile=True,
@@ -148,7 +148,7 @@ def _library(session: Session, tmp_path: Path):
 
 def test_show_delete_downloads_request_disables_profiles_before_worker_dispatch(tmp_path):
     from backend.api.endpoints.shows import service
-    from backend.db.models import DownloadProfileBase
+    from backend.db.models import DownloadProfile
     from task_manager.scheduler.db import TaskOperationTarget
 
     session, engine = _session()
@@ -180,9 +180,9 @@ def test_show_delete_downloads_request_disables_profiles_before_worker_dispatch(
             "download_profiles_disabled": 2,
         }
 
-        assert session.get(DownloadProfileBase, audio_download_profile.id).enable_profile is False
-        assert session.get(DownloadProfileBase, video_download_profile.id).enable_profile is False
-        assert session.get(DownloadProfileBase, unused_download_profile.id).enable_profile is True
+        assert session.get(DownloadProfile, audio_download_profile.id).enable_profile is False
+        assert session.get(DownloadProfile, video_download_profile.id).enable_profile is False
+        assert session.get(DownloadProfile, unused_download_profile.id).enable_profile is True
 
         # The request has not been committed in this service-level test. Roll it
         # back so the scoped case starts from the original enabled state.
@@ -202,9 +202,9 @@ def test_show_delete_downloads_request_disables_profiles_before_worker_dispatch(
             "local_media_profile_id": audio_profile.id,
             "download_profiles_disabled": 1,
         }
-        assert session.get(DownloadProfileBase, audio_download_profile.id).enable_profile is False
-        assert session.get(DownloadProfileBase, video_download_profile.id).enable_profile is True
-        assert session.get(DownloadProfileBase, unused_download_profile.id).enable_profile is True
+        assert session.get(DownloadProfile, audio_download_profile.id).enable_profile is False
+        assert session.get(DownloadProfile, video_download_profile.id).enable_profile is True
+        assert session.get(DownloadProfile, unused_download_profile.id).enable_profile is True
 
         session.rollback()
         with pytest.raises(HTTPException) as exc:
@@ -220,7 +220,7 @@ def test_show_delete_downloads_request_disables_profiles_before_worker_dispatch(
 
 
 def test_delete_show_downloads_worker_disables_only_profiles_in_selected_scope_and_leaves_deleted_rows_retryable(tmp_path):
-    from backend.db.models import DownloadProfileBase
+    from backend.db.models import DownloadProfile
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from task_manager.tasks.workers.delete_show_downloads_worker.service import (
@@ -271,9 +271,9 @@ def test_delete_show_downloads_worker_disables_only_profiles_in_selected_scope_a
         assert untouched.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
 
         audio_download_profile, video_download_profile, unused_download_profile = download_profiles
-        audio_profile_state = session.get(DownloadProfileBase, audio_download_profile.id)
-        video_profile_state = session.get(DownloadProfileBase, video_download_profile.id)
-        unused_profile_state = session.get(DownloadProfileBase, unused_download_profile.id)
+        audio_profile_state = session.get(DownloadProfile, audio_download_profile.id)
+        video_profile_state = session.get(DownloadProfile, video_download_profile.id)
+        unused_profile_state = session.get(DownloadProfile, unused_download_profile.id)
         assert audio_profile_state is not None and audio_profile_state.enable_profile is False
         assert video_profile_state is not None and video_profile_state.enable_profile is True
         assert unused_profile_state is not None and unused_profile_state.enable_profile is True
@@ -283,7 +283,7 @@ def test_delete_show_downloads_worker_disables_only_profiles_in_selected_scope_a
 
 
 def test_delete_show_downloads_worker_all_scope_disables_only_profiles_with_deleted_downloads(tmp_path):
-    from backend.db.models import DownloadProfileBase
+    from backend.db.models import DownloadProfile
     from task_manager.tasks.workers.delete_show_downloads_worker.service import (
         run_delete_show_downloads_worker,
     )
@@ -311,9 +311,9 @@ def test_delete_show_downloads_worker_all_scope_disables_only_profiles_with_dele
 
         session.expire_all()
         audio_download_profile, video_download_profile, unused_download_profile = download_profiles
-        audio_profile_state = session.get(DownloadProfileBase, audio_download_profile.id)
-        video_profile_state = session.get(DownloadProfileBase, video_download_profile.id)
-        unused_profile_state = session.get(DownloadProfileBase, unused_download_profile.id)
+        audio_profile_state = session.get(DownloadProfile, audio_download_profile.id)
+        video_profile_state = session.get(DownloadProfile, video_download_profile.id)
+        unused_profile_state = session.get(DownloadProfile, unused_download_profile.id)
         assert audio_profile_state is not None and audio_profile_state.enable_profile is False
         assert video_profile_state is not None and video_profile_state.enable_profile is False
         assert unused_profile_state is not None and unused_profile_state.enable_profile is True

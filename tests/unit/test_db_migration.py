@@ -9,7 +9,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "f7b2d4e6a913"
+HEAD_REVISION = "72dc6dfbcb05"
+VODLOFT_SOURCE_DOMAINS_REVISION = "f7b2d4e6a913"
 VODLOFT_DRM_REVISION = "e3c9a7b5d214"
 VODLOFT_VIDEOS_REVISION = "b5d2e8a4c716"
 VODLOFT_SOURCES_REVISION = "a3e7c1d9f052"
@@ -243,7 +244,8 @@ def test_migration_history_has_one_head(migration_database):
     )
 
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == VODLOFT_DRM_REVISION
+    assert script.get_revision(HEAD_REVISION).down_revision == VODLOFT_SOURCE_DOMAINS_REVISION
+    assert script.get_revision(VODLOFT_SOURCE_DOMAINS_REVISION).down_revision == VODLOFT_DRM_REVISION
     assert script.get_revision(VODLOFT_DRM_REVISION).down_revision == VODLOFT_VIDEOS_REVISION
     assert script.get_revision(VODLOFT_VIDEOS_REVISION).down_revision == VODLOFT_SOURCES_REVISION
     assert script.get_revision(VODLOFT_SOURCES_REVISION).down_revision == WIRELOFT_1_2_3_REVISION
@@ -663,3 +665,118 @@ def test_sources_migration_marks_existing_rows_as_daily_wire(migration_database)
     inspector = inspect(engine)
     for table in ("shows", "media_items"):
         assert "source_key" not in {column["name"] for column in inspector.get_columns(table)}
+
+
+def test_unified_download_profiles_migration_keeps_every_profile_setting(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config(allow_version_storage_migration=True)
+    command.upgrade(config, VODLOFT_SOURCE_DOMAINS_REVISION)
+    with engine.begin() as connection:
+        local_media_profile_id = connection.execute(text(
+            "INSERT INTO local_media_profiles (slug, name, output_template, preferred_format) "
+            "VALUES ('shows', 'Shows', '/downloads/{{ show_title }}.ext', 'format_1080p')"
+        )).lastrowid
+
+        def show(slug: str, show_type: str, episode_identifier: str) -> int:
+            return connection.execute(text(
+                "INSERT INTO shows (uuid, slug, title, sharing_url, membership_level, type, "
+                "episode_identifier, author_name, author_slug) VALUES "
+                "(:slug, :slug, :slug, :url, 'FREE', :type, :identifier, 'A', 'a')"
+            ), {
+                "slug": slug, "url": f"https://example.test/{slug}",
+                "type": show_type, "identifier": episode_identifier,
+            }).lastrowid
+
+        def season(show_id: int, index: int) -> int:
+            return connection.execute(text(
+                "INSERT INTO seasons (show_id, \"index\", slug, name) VALUES (:show_id, :index, :slug, :slug)"
+            ), {"show_id": show_id, "index": index, "slug": f"s{index}"}).lastrowid
+
+        def profile(show_id: int, profile_type: str) -> int:
+            return connection.execute(text(
+                "INSERT INTO download_profiles (show_id, local_media_profile_id, type, enable_profile, ep_id_type_list) "
+                "VALUES (:show_id, :lmp, :type, 1, '[\"ep\"]')"
+            ), {"show_id": show_id, "lmp": local_media_profile_id, "type": profile_type}).lastrowid
+
+        podcast_show = show("podcast", "podcast", "date_based")
+        podcast_profile = profile(podcast_show, "podcast")
+        connection.execute(text(
+            "INSERT INTO download_profiles_podcast (id, download_with_countdown, redownload_final, "
+            "download_days_in_past, download_episode_count, download_starting_from, delete_older_episodes) "
+            "VALUES (:id, 1, 1, 30, 0, NULL, 0)"
+        ), {"id": podcast_profile})
+
+        seasonal_podcast_show = show("seasonal-podcast", "podcast", "seasonal")
+        seasonal_podcast_seasons = {season(seasonal_podcast_show, 1), season(seasonal_podcast_show, 2)}
+        seasonal_podcast_profile = profile(seasonal_podcast_show, "podcast")
+        connection.execute(text(
+            "INSERT INTO download_profiles_podcast (id, download_with_countdown, redownload_final, "
+            "download_days_in_past, download_episode_count, download_starting_from, delete_older_episodes) "
+            "VALUES (:id, 0, 0, 0, 5, NULL, 1)"
+        ), {"id": seasonal_podcast_profile})
+
+        series_show = show("series", "series", "seasonal")
+        chosen_season = season(series_show, 1)
+        season(series_show, 2)
+        series_profile = profile(series_show, "series")
+        connection.execute(text(
+            "INSERT INTO download_profiles_series (id, include_upcoming_seasons) VALUES (:id, 0)"
+        ), {"id": series_profile})
+        connection.execute(text(
+            "INSERT INTO download_profile_series_seasons (download_profiles_series_id, season_id) "
+            "VALUES (:profile, :season)"
+        ), {"profile": series_profile, "season": chosen_season})
+
+        connection.execute(text(
+            "INSERT INTO task_definitions (key, title) VALUES ('download_profile_worker', 'Download profiles')"
+        ))
+        connection.execute(text(
+            "INSERT INTO task_schedules (definition_id, resource_id, resource_type, \"trigger\", trigger_args, active) "
+            "VALUES (1, :id, 'DOWNLOAD_PROFILE_SERIES', 'interval', '{}', 1)"
+        ), {"id": series_profile})
+
+    command.upgrade(config, HEAD_REVISION)
+    with engine.connect() as connection:
+        rows = {
+            row.id: row
+            for row in connection.execute(text("SELECT * FROM download_profiles"))
+        }
+        assert (
+            rows[podcast_profile].download_with_countdown,
+            rows[podcast_profile].redownload_final,
+            rows[podcast_profile].download_days_in_past,
+            rows[podcast_profile].delete_older_episodes,
+        ) == (1, 1, 30, 0)
+        assert rows[seasonal_podcast_profile].download_episode_count == 5
+        assert rows[series_profile].include_upcoming_seasons == 0
+        assert rows[series_profile].download_days_in_past == 0
+
+        def profile_seasons(profile_id: int) -> set[int]:
+            return set(connection.execute(text(
+                "SELECT season_id FROM download_profile_seasons WHERE download_profile_id = :id"
+            ), {"id": profile_id}).scalars())
+
+        assert profile_seasons(series_profile) == {chosen_season}
+        assert profile_seasons(seasonal_podcast_profile) == seasonal_podcast_seasons
+        assert profile_seasons(podcast_profile) == set()
+        assert connection.execute(text(
+            "SELECT resource_type FROM task_schedules"
+        )).scalar_one() == "DOWNLOAD_PROFILE"
+
+    tables = set(inspect(engine).get_table_names())
+    assert {"download_profiles_podcast", "download_profiles_series", "download_profile_series_seasons"}.isdisjoint(tables)
+    assert "type" not in {column["name"] for column in inspect(engine).get_columns("download_profiles")}
+
+    command.downgrade(config, VODLOFT_SOURCE_DOMAINS_REVISION)
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT type FROM download_profiles WHERE id = :id"
+        ), {"id": series_profile}).scalar_one() == "series"
+        assert connection.execute(text(
+            "SELECT download_days_in_past FROM download_profiles_podcast WHERE id = :id"
+        ), {"id": podcast_profile}).scalar_one() == 30
+        assert connection.execute(text(
+            "SELECT season_id FROM download_profile_series_seasons WHERE download_profiles_series_id = :id"
+        ), {"id": series_profile}).scalar_one() == chosen_season

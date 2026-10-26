@@ -509,10 +509,10 @@ export default function ShowPage() {
                   <div className="show-profile-links">
                     {attachedDownloadProfiles.map((profile) => (
                       <button
-                        key={`${profile.type}-${profile.id}`}
+                        key={profile.id}
                         type="button"
                         className="show-profile-chip"
-                        onClick={() => navigate(`/edit-download-profile/${profile.type}/${profile.id}`, {state: profile})}
+                        onClick={() => navigate(`/edit-download-profile/${profile.id}`, {state: profile})}
                         title={`Open ${preferredFormatLabel(profile.localMediaProfilePreferredFormat)} download profile`}
                       >
                         <span>{preferredFormatLabel(profile.localMediaProfilePreferredFormat)}</span>

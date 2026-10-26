@@ -173,6 +173,14 @@ def test_download_profile_no_longer_contains_storage_mode():
         local_media_profile_id=2,
         enable_profile=True,
         ep_id_type_list=[],
+        download_with_countdown=False,
+        redownload_final=False,
+        download_days_in_past=0,
+        download_episode_count=0,
+        download_starting_from=None,
+        delete_older_episodes=False,
+        seasons=[],
+        include_upcoming_seasons=True,
     )
 
     assert "download_mode" not in body.model_dump(by_alias=True, mode="json")

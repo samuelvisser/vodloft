@@ -20,7 +20,7 @@ class TaskDefinitionRead(ResponseBase):
 
 class TaskScheduleCreate(RequestBase):
     definition_key: str
-    resource_type: Literal["show", "season", "episode", "movie", "download_profile_podcast", "download_profile_series"]
+    resource_type: Literal["show", "season", "episode", "movie", "download_profile"]
     resource_id: int
     trigger: Literal["cron", "interval", "date"]
     trigger_args: dict

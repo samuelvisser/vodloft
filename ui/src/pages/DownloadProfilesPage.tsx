@@ -9,9 +9,8 @@ import DataTable, {Column} from '../components/DataTable/DataTable'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
 import PageSubtitle from "../components/common/PageSubtitle";
 import ProfileEnabledSwitch from '../components/common/ProfileEnabledSwitch'
-import {ShowTypeReg} from "../types/show";
-import {PodcastDownloadProfileUpdateSchema} from '../types/schemas/podcast_download_profile'
-import {SeriesDownloadProfileUpdateSchema} from '../types/schemas/series_download_profile'
+import {EpisodeIdentifierReg} from "../types/show";
+import {DownloadProfileUpdateSchema} from '../types/schemas/download_profile'
 import {faIcon} from '../icons/faIcon'
 
 export default function DownloadProfilesPage() {
@@ -25,12 +24,9 @@ export default function DownloadProfilesPage() {
 
     const setProfileEnabled = useCallback(async (profile: DownloadProfileReadView, enableProfile: boolean) => {
         try {
-            const endpoint = profile.type === 'podcast' ? 'podcast-download-profiles' : 'series-download-profiles'
-            const body = profile.type === 'podcast'
-                ? PodcastDownloadProfileUpdateSchema.parse({...profile.downloadProfileImpl, enableProfile})
-                : SeriesDownloadProfileUpdateSchema.parse({...profile.downloadProfileImpl, enableProfile})
+            const body = DownloadProfileUpdateSchema.parse({...profile, enableProfile})
 
-            const response = await fetch(`${(window as any).appConfig.API_URL}/${endpoint}/${profile.id}`, {
+            const response = await fetch(`${(window as any).appConfig.API_URL}/download-profiles/${profile.id}`, {
                 method: 'PATCH',
                 headers: {'Content-Type': 'application/json'},
                 credentials: 'include',
@@ -40,7 +36,7 @@ export default function DownloadProfilesPage() {
 
             queryClient.setQueryData<DownloadProfileReadView[]>(['downloadProfilesView'], (current) => (
                 current?.map((item) => (
-                    item.id === profile.id && item.type === profile.type
+                    item.id === profile.id
                         ? {...item, enableProfile}
                         : item
                 ))
@@ -48,8 +44,7 @@ export default function DownloadProfilesPage() {
 
             await Promise.allSettled([
                 queryClient.invalidateQueries({queryKey: ['downloadProfilesView']}),
-                queryClient.invalidateQueries({queryKey: ['podcastDownloadProfiles']}),
-                queryClient.invalidateQueries({queryKey: ['seriesDownloadProfiles']}),
+                queryClient.invalidateQueries({queryKey: ['downloadProfilesByShowSlug']}),
             ])
         } catch (updateError) {
             toast.error(`Failed to ${enableProfile ? 'enable' : 'disable'} download profile`)
@@ -72,8 +67,8 @@ export default function DownloadProfilesPage() {
             accessor: (p) => PreferredFormatReg.getLabelLoose(p.localMediaProfilePreferredFormat),
         },
         {
-            header: 'Type',
-            accessor: (p) => ShowTypeReg.getLabelLoose(p.type),
+            header: 'Episode identification',
+            accessor: (p) => EpisodeIdentifierReg.getLabelLoose(p.showEpisodeIdentifier),
         },
         {
             header: 'Enabled',
@@ -109,8 +104,8 @@ export default function DownloadProfilesPage() {
                     data={profiles}
                     loading={isLoading}
                     error={error}
-                    rowKey={(p) => `${p.type}-${p.id}`}
-                    rowAriaLabel={(p) => `${p.type} ${p.showTitle}`}
+                    rowKey={(p) => String(p.id)}
+                    rowAriaLabel={(p) => p.showTitle}
                     mobileSummary={(p) => (
                         <>
                             <span className="mobile-summary-title">{p.showTitle}</span>
@@ -119,17 +114,17 @@ export default function DownloadProfilesPage() {
                                 <span aria-hidden="true">•</span>
                                 <span>{PreferredFormatReg.getLabelLoose(p.localMediaProfilePreferredFormat)}</span>
                                 <span aria-hidden="true">•</span>
-                                <span>{ShowTypeReg.getLabelLoose(p.type)}</span>
+                                <span>{EpisodeIdentifierReg.getLabelLoose(p.showEpisodeIdentifier)}</span>
                                 <span className={`mobile-summary-status ${p.enableProfile ? 'is-success' : ''}`}>
                                     {p.enableProfile ? 'Enabled' : 'Disabled'}
                                 </span>
                             </span>
                         </>
                     )}
-                    onRowClick={(p) => navigate(`/edit-download-profile/${p.type}/${p.id}`, {state: p})}
+                    onRowClick={(p) => navigate(`/edit-download-profile/${p.id}`, {state: p})}
                     actions={(p) => [
                         {
-                            onClick: () => navigate(`/edit-download-profile/${p.type}/${p.id}`, {state: p}),
+                            onClick: () => navigate(`/edit-download-profile/${p.id}`, {state: p}),
                             icon: faIcon('fass', 'pen-to-square'),
                             text: 'Edit',
                             classes: 'btn',
@@ -148,11 +143,11 @@ export default function DownloadProfilesPage() {
                 ref={confirmRef}
                 title="Delete download profile"
                 subjectProp="showTitle"
-                deleteRequest={(p) => {
-                    const path = `${p.type === 'podcast' ? 'podcast-download-profiles' : 'series-download-profiles'}/${p.id}`
-                    return fetch(`${(window as any).appConfig.API_URL}/${path}`, {method: 'DELETE', credentials: 'include'})
-                }}
-                invalidateQueries={[["downloadProfilesView"], ["podcastDownloadProfiles"], ["seriesDownloadProfiles"]]}
+                deleteRequest={(p) => fetch(
+                    `${(window as any).appConfig.API_URL}/download-profiles/${p.id}`,
+                    {method: 'DELETE', credentials: 'include'},
+                )}
+                invalidateQueries={[["downloadProfilesView"], ["downloadProfilesByShowSlug"]]}
                 inUseMessage="This download profile is in use, it cannot be deleted"
             />
         </section>

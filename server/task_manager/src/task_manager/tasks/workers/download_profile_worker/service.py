@@ -5,7 +5,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from backend.db.models import DownloadProfileBase, Episode, PodcastDownloadProfile
+from backend.db.models import DownloadProfile, Episode
 from backend.db.models.media_download import MediaDownloadBase
 from backend.services.episode_download_delay import episode_download_delay_ready_at
 from task_manager.scheduler.types import OperationSource
@@ -55,7 +55,7 @@ async def run_download_profile_worker(
     total = len(profile_ids)
 
     for index, profile_id in enumerate(profile_ids):
-        pending_profile = s.get(DownloadProfileBase, profile_id)
+        pending_profile = s.get(DownloadProfile, profile_id)
         pair = (pending_profile.show_id, pending_profile.local_media_profile_id) if pending_profile is not None else None
         s.rollback()
         if pair is not None:
@@ -117,10 +117,9 @@ async def run_download_profile_worker(
             )
             created += 1
 
-        if isinstance(profile, PodcastDownloadProfile):
-            should_cleanup = only_episode is None or profile.download_episode_count > 0
-            if should_cleanup:
-                cleanup_older_episodes(s, profile)
+        should_cleanup = only_episode is None or profile.download_episode_count > 0
+        if should_cleanup:
+            cleanup_older_episodes(s, profile)
 
         # The profile lock is held through this commit. A concurrent disable can
         # only proceed after every operation created from this enabled snapshot is

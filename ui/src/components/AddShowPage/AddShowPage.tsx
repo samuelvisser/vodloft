@@ -10,15 +10,14 @@ import type {Versioned} from '../../types/data'
 import {ShowCreatePayloadOut, ShowCreatePayloadIn, ShowCreatePayloadSchema} from "../../types/schemas/show";
 import {getZodDefaults} from "../../utils/defaultZod";
 import {
-    PodcastDownloadProfileBundleSchema,
-    SeriesDownloadProfileBundleSchema, DownloadProfileUnifiedCreateIn, DownloadProfileUnifiedCreateOut,
+    DownloadProfileBundleSchema, DownloadProfileBundleIn, DownloadProfileBundleOut,
     LocalMediaProfileCreateUnionSchema,
     LocalMediaProfileUpsertIn,
     LocalMediaProfileUpsertOut,
     RssStreamProfileBundleIn,
     RssStreamProfileBundleOut,
 } from "../../types/schemas/show_as_bundle";
-import {ShowTypeReg} from "../../types/show";
+import {downloadProfileDefaultsFor} from "../../types/schemas/download_profile";
 import {useQueryClient} from "@tanstack/react-query";
 import {SeasonDetachedOut} from "../../types/schemas/season";
 import {useSourceLookup} from "../../lib/queries";
@@ -29,7 +28,7 @@ export type Props = {
     initialUrl?: string
 }
 
-const STORAGE_KEY = 'addShowWizardV9'
+const STORAGE_KEY = 'addShowWizardV10'
 
 type WizardType = 'ERROR' | 'INFO'
 type WizardMessage = { text: string; type: WizardType }
@@ -47,14 +46,8 @@ type WizardState = {
         submit: LocalMediaProfileUpsertOut | undefined,
     },
     downloadProfile: {
-        podcast: {
-            input: Partial<DownloadProfileUnifiedCreateIn>,
-            submit: DownloadProfileUnifiedCreateOut | undefined,
-        },
-        series: {
-            input: Partial<DownloadProfileUnifiedCreateIn>,
-            submit: DownloadProfileUnifiedCreateOut | undefined,
-        }
+        input: Partial<DownloadProfileBundleIn>,
+        submit: DownloadProfileBundleOut | undefined,
     }
     streamProfile: {
         input: Partial<RssStreamProfileBundleIn>,
@@ -105,6 +98,11 @@ function clearWizardState() {
     }
 }
 
+const defaultDownloadProfile = (episodeIdentifier?: string): Partial<DownloadProfileBundleIn> => ({
+    ...getZodDefaults(DownloadProfileBundleSchema),
+    ...downloadProfileDefaultsFor(episodeIdentifier),
+})
+
 const defaultStreamProfile = (action?: ShowAction): Partial<RssStreamProfileBundleIn> => ({
     enableProfile: true,
     useDownloads: true,
@@ -139,13 +137,9 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
         () => persisted?.localMediaProfile.input ?? getZodDefaults(LocalMediaProfileCreateUnionSchema))
     const [localMediaProfileSubmit, setLocalMediaProfileSubmit] = useState<LocalMediaProfileUpsertOut | undefined>(() => persisted?.localMediaProfile.submit)
 
-    const [downloadProfilePodcastInput, setPodcastDownloadProfileInput] = useState<Partial<DownloadProfileUnifiedCreateIn>>(
-        () => persisted?.downloadProfile.podcast.input ?? getZodDefaults(PodcastDownloadProfileBundleSchema))
-    const [downloadProfilePodcastSubmit, setPodcastDownloadProfileSubmit] = useState<DownloadProfileUnifiedCreateOut | undefined>(() => persisted?.downloadProfile.podcast.submit)
-
-    const [downloadProfileSeriesInput, setSeriesDownloadProfileInput] = useState<Partial<DownloadProfileUnifiedCreateIn>>(
-        () => persisted?.downloadProfile.series.input ?? getZodDefaults(SeriesDownloadProfileBundleSchema))
-    const [downloadProfileSeriesSubmit, setSeriesDownloadProfileSubmit] = useState<DownloadProfileUnifiedCreateOut | undefined>(() => persisted?.downloadProfile.series.submit)
+    const [downloadProfileInput, setDownloadProfileInput] = useState<Partial<DownloadProfileBundleIn>>(
+        () => persisted?.downloadProfile.input ?? defaultDownloadProfile(persisted?.show.submit?.episodeIdentifier))
+    const [downloadProfileSubmit, setDownloadProfileSubmit] = useState<DownloadProfileBundleOut | undefined>(() => persisted?.downloadProfile.submit)
 
     const [streamProfileInput, setStreamProfileInput] = useState<Partial<RssStreamProfileBundleIn>>(
         () => persisted?.streamProfile?.input ?? defaultStreamProfile(persisted?.action))
@@ -157,24 +151,17 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
 
     const [seasonsSubmit, setSeasonsSubmit] = useState<SeasonDetachedOut[] | undefined>(() => persisted?.seasons ?? [])
 
-    const downloadProfilePodcastSubmitRef = useRef(downloadProfilePodcastSubmit)
-    const downloadProfileSeriesSubmitRef = useRef(downloadProfileSeriesSubmit)
+    const downloadProfileSubmitRef = useRef(downloadProfileSubmit)
     const streamProfileSubmitRef = useRef(streamProfileSubmit)
 
-    const selectedDownloadProfileSubmit = showSubmit?.type === ShowTypeReg.Enum.podcast
-        ? downloadProfilePodcastSubmit
-        : showSubmit?.type === ShowTypeReg.Enum.series
-            ? downloadProfileSeriesSubmit
-            : undefined
-
     const wizardDownloadProfileDefaults = useMemo(() => {
-        if (!localMediaProfileSubmit || !selectedDownloadProfileSubmit) return []
+        if (!localMediaProfileSubmit || !downloadProfileSubmit) return []
         return [{
             preferredFormat: localMediaProfileSubmit.preferredFormat,
-            episodeTypes: selectedDownloadProfileSubmit.epIdTypeList,
-            enabled: selectedDownloadProfileSubmit.enableProfile,
+            episodeTypes: downloadProfileSubmit.epIdTypeList,
+            enabled: downloadProfileSubmit.enableProfile,
         }]
-    }, [localMediaProfileSubmit, selectedDownloadProfileSubmit])
+    }, [localMediaProfileSubmit, downloadProfileSubmit])
 
     useEffect(() => {
         const previousStep = previousStepRef.current
@@ -190,10 +177,7 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
             action: showAction,
             show: {input: showInput, submit: showSubmit},
             localMediaProfile: {input: localMediaProfileInput, submit: localMediaProfileSubmit},
-            downloadProfile: {
-                podcast: {input: downloadProfilePodcastInput, submit: downloadProfilePodcastSubmit},
-                series: {input: downloadProfileSeriesInput, submit: downloadProfileSeriesSubmit},
-            },
+            downloadProfile: {input: downloadProfileInput, submit: downloadProfileSubmit},
             streamProfile: {
                 input: streamProfileInput,
                 submit: streamProfileSubmit,
@@ -203,8 +187,7 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
             globalMessage,
         })
     }, [step, showAction, showInput, showSubmit, localMediaProfileInput, localMediaProfileSubmit,
-        downloadProfilePodcastInput, downloadProfilePodcastSubmit, downloadProfileSeriesInput,
-        downloadProfileSeriesSubmit, streamProfileInput, streamProfileSubmit, streamEpisodeTypesManuallyChanged,
+        downloadProfileInput, downloadProfileSubmit, streamProfileInput, streamProfileSubmit, streamEpisodeTypesManuallyChanged,
         seasonsSubmit, globalMessage])
 
     function handleCancel() {
@@ -223,7 +206,7 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
         }
 
         let localMediaProfile: LocalMediaProfileUpsertOut | undefined
-        let downloadProfile: DownloadProfileUnifiedCreateOut | undefined
+        let downloadProfile: DownloadProfileBundleOut | undefined
         let streamProfile: RssStreamProfileBundleOut | undefined
 
         if (action === 'download' || action === 'download-stream') {
@@ -232,9 +215,7 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
                 setWizardMessage('Please complete the Media Profile step before finishing.', 'ERROR')
                 return
             }
-            downloadProfile = show.type === ShowTypeReg.Enum.podcast
-                ? (downloadProfilePodcastSubmitRef.current ?? downloadProfilePodcastSubmit)
-                : (downloadProfileSeriesSubmitRef.current ?? downloadProfileSeriesSubmit)
+            downloadProfile = downloadProfileSubmitRef.current ?? downloadProfileSubmit
             if (!downloadProfile) {
                 setWizardMessage('Please complete the Download Profile step before finishing.', 'ERROR')
                 return
@@ -314,10 +295,8 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
         : step === 2 ? 'Choose what VODLoft should do'
         : showAction === 'stream' ? 'Stream Profile'
         : step === 3 ? 'Media Profile'
-        : step === 4
-            ? (showSubmit?.type === ShowTypeReg.Enum.podcast ? 'Download Profile for Podcasts'
-                : showSubmit?.type === ShowTypeReg.Enum.series ? 'Download Profile for Series' : 'Download Profile')
-            : 'Stream Profile'
+        : step === 4 ? 'Download Profile'
+        : 'Stream Profile'
 
     return (
         <div ref={wizardRootRef}>
@@ -344,6 +323,12 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
                         if (showSubmit?.type && showSubmit.type !== value.type) {
                             setLocalMediaProfileInput(getZodDefaults(LocalMediaProfileCreateUnionSchema))
                             setLocalMediaProfileSubmit(undefined)
+                        }
+                        // The download options follow how the show identifies its episodes.
+                        if (showSubmit?.episodeIdentifier !== value.episodeIdentifier) {
+                            setDownloadProfileInput(defaultDownloadProfile(value.episodeIdentifier))
+                            setDownloadProfileSubmit(undefined)
+                            downloadProfileSubmitRef.current = undefined
                         }
                         setShowSubmit(value)
                     }}
@@ -409,17 +394,11 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
 
             {step === 4 && (showAction === 'download' || showAction === 'download-stream') && (
                 <DownloadProfileStep
-                    value={{podcast: downloadProfilePodcastInput, series: downloadProfileSeriesInput}}
-                    onChange={{podcast: setPodcastDownloadProfileInput, series: setSeriesDownloadProfileInput}}
-                    onSubmit={{
-                        podcast: (value) => {
-                            setPodcastDownloadProfileSubmit(value)
-                            downloadProfilePodcastSubmitRef.current = value
-                        },
-                        series: (value) => {
-                            setSeriesDownloadProfileSubmit(value)
-                            downloadProfileSeriesSubmitRef.current = value
-                        },
+                    value={downloadProfileInput}
+                    onChange={setDownloadProfileInput}
+                    onSubmit={(value) => {
+                        setDownloadProfileSubmit(value)
+                        downloadProfileSubmitRef.current = value
                     }}
                     onBack={() => setStep(3)}
                     onContinue={() => {
@@ -430,10 +409,8 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
                         setStep(5)
                     }}
                     onCancel={handleCancel}
-                    showSlug={showSubmit?.slug}
                     show={showSubmit}
-                    showType={showSubmit?.type}
-                    seasons={seasonsSubmit as any}
+                    seasons={seasonsSubmit ?? []}
                     continueLabel={showAction === 'download' ? 'Save show' : 'Continue'}
                 />
             )}

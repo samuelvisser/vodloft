@@ -259,7 +259,7 @@ def test_episode_api_does_not_return_is_no_show_today(db_session):
 # ---------- profile eligibility remains generic ----------
 
 def test_download_profile_excludes_unusable_and_processing_statuses(db_session):
-    from backend.db.models.download_profile import PodcastDownloadProfile
+    from backend.db.models.download_profile import DownloadProfile
     from backend.types.download_profile_types import EpIdType
     from backend.types.episode_types import EpisodePublishStatus
     from task_manager.tasks.workers.download_profile_worker._helpers import (
@@ -300,10 +300,9 @@ def test_download_profile_excludes_unusable_and_processing_statuses(db_session):
         publish_status=EpisodePublishStatus.DW_PROCESSING.value,
     )
 
-    profile = PodcastDownloadProfile(
+    profile = DownloadProfile(
         show=show,
         local_media_profile=lmp,
-        type="podcast",
         enable_profile=True,
         ep_id_type_list=[EpIdType.EP.value, EpIdType.AUX.value],
         download_with_countdown=False,

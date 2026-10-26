@@ -16,13 +16,34 @@ Every Download Profile lets you choose:
 
 Disabling a profile keeps its configuration but stops it from automatically selecting new downloads.
 
-## Podcast Download Profiles
+## Which options a profile shows
 
-Podcast profiles are designed for shows where you usually care about a rolling set of episodes rather than individual seasons.
+The options follow how the show identifies its episodes (its **Episode identification**, chosen when you add the show), not whether it is a podcast or a series:
+
+- a **Seasonal** show filters by season first, and can use every date option below on top of that;
+- a **Date-based** or **Numbered** show uses the date options only.
+
+If you change a show's episode identification later, its Download Profiles follow: the season choice only counts while the show is seasonal.
+
+## Seasons
+
+### Seasons to download
+
+Select the known seasons that should be covered by the profile. Only selected episode types inside those seasons are eligible.
+
+### Include upcoming seasons
+
+Enable **Include upcoming seasons** when the same rules should automatically apply to seasons added later.
+
+This is useful for an ongoing series where you do not want to edit the profile every time a new season appears.
+
+Selecting all seasons in the UI also enables future seasons so the profile keeps following the complete series.
+
+## Date options
 
 ### Limit by
 
-Choose how many episodes the profile should consider:
+Choose how many episodes the profile should consider. On a seasonal show the limit counts only episodes in the chosen seasons:
 
 - **No limits** — every eligible episode can be downloaded.
 - **Date** — only episodes inside a recent number-of-days window are eligible.
@@ -50,22 +71,6 @@ Some Daily Wire episodes appear with temporary countdown media before the final 
 - **Redownload final version** replaces the early version after the final media becomes available.
 
 If you only want the finished episode, leave countdown downloading disabled.
-
-## Series Download Profiles
-
-Series profiles work by season instead of a rolling podcast window.
-
-### Seasons to download
-
-Select the known seasons that should be covered by the profile. Only selected episode types inside those seasons are eligible.
-
-### Include upcoming seasons
-
-Enable **Include upcoming seasons** when the same rules should automatically apply to seasons The Daily Wire adds later.
-
-This is useful for an ongoing series where you do not want to edit the profile every time a new season appears.
-
-Selecting all seasons in the UI also enables future seasons so the profile keeps following the complete series.
 
 ## Using multiple profiles
 

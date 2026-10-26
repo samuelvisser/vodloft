@@ -16,7 +16,7 @@ from backend.types.local_media_profile_types import (
 )
 
 if TYPE_CHECKING:
-    from backend.db.models.download_profile import DownloadProfileBase
+    from backend.db.models.download_profile import DownloadProfile
     from backend.db.models.media_download import MediaDownloadBase
 
 
@@ -78,7 +78,7 @@ class LocalMediaProfileBase(Base):
         UTCDateTime(), server_default=func.now(), onupdate=func.now()
     )
 
-    download_profiles: Mapped[list["DownloadProfileBase"]] = relationship(
+    download_profiles: Mapped[list["DownloadProfile"]] = relationship(
         back_populates="local_media_profile",
         passive_deletes="all",
     )

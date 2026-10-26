@@ -75,13 +75,12 @@ def _make_local_media_profile(session):
 
 
 def _make_podcast_profile(session, show, local_media_profile, *, count: int, delete_older: bool = False):
-    from backend.db.models.download_profile import PodcastDownloadProfile
+    from backend.db.models.download_profile import DownloadProfile
     from backend.types.download_profile_types import EpIdType
 
-    profile = PodcastDownloadProfile(
+    profile = DownloadProfile(
         show=show,
         local_media_profile=local_media_profile,
-        type="podcast",
         enable_profile=True,
         ep_id_type_list=[EpIdType.EP.value],
         download_with_countdown=False,

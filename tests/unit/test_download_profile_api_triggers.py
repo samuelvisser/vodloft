@@ -69,13 +69,13 @@ def _capture_event(event_name: str) -> list[dict]:
 
 
 def test_podcast_profile_create_and_update_fire_transactional_events(db_session):
-    from backend.api.endpoints.podcast_download_profiles.service import (
-        create_download_profile_podcast,
-        update_download_profile_podcast,
+    from backend.api.endpoints.download_profiles.service import (
+        create_download_profile,
+        update_download_profile,
     )
-    from backend.api.models.podcast_download_profile import (
-        PodcastDownloadProfileAPICreate,
-        PodcastDownloadProfileAPIUpdate,
+    from backend.api.models.download_profile import (
+        DownloadProfileAPICreate,
+        DownloadProfileAPIUpdate,
     )
     from backend.types.download_profile_types import EpIdType
     from backend.types.show_types import ShowType
@@ -87,9 +87,9 @@ def test_podcast_profile_create_and_update_fire_transactional_events(db_session)
 
     added = _capture_event("download_profile.added")
     requested = _capture_event(DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT)
-    created = create_download_profile_podcast(
+    created = create_download_profile(
         db_session,
-        PodcastDownloadProfileAPICreate(
+        DownloadProfileAPICreate(
             show_id=show.id,
             local_media_profile_id=media_profile.id,
             enable_profile=True,
@@ -99,6 +99,9 @@ def test_podcast_profile_create_and_update_fire_transactional_events(db_session)
             download_days_in_past=0,
             download_episode_count=0,
             delete_older_episodes=False,
+            download_starting_from=None,
+            seasons=[],
+            include_upcoming_seasons=True,
         ),
     )
 
@@ -109,7 +112,6 @@ def test_podcast_profile_create_and_update_fire_transactional_events(db_session)
         "resource_id": created.id,
         "id": created.id,
         "show_id": show.id,
-        "profile_type": "podcast",
     }]
     assert requested == [{
         "resource_type": "download_profile",
@@ -119,10 +121,10 @@ def test_podcast_profile_create_and_update_fire_transactional_events(db_session)
     WireloftEventLinker.remove_all()
     updated = _capture_event("download_profile.updated")
     requested = _capture_event(DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT)
-    result = update_download_profile_podcast(
+    result = update_download_profile(
         db_session,
         created.id,
-        PodcastDownloadProfileAPIUpdate(
+        DownloadProfileAPIUpdate(
             local_media_profile_id=media_profile.id,
             enable_profile=True,
             ep_id_type_list=[EpIdType.EP.value],
@@ -131,6 +133,9 @@ def test_podcast_profile_create_and_update_fire_transactional_events(db_session)
             download_days_in_past=0,
             download_episode_count=0,
             delete_older_episodes=False,
+            download_starting_from=None,
+            seasons=[],
+            include_upcoming_seasons=True,
         ),
     )
 
@@ -142,7 +147,6 @@ def test_podcast_profile_create_and_update_fire_transactional_events(db_session)
         "resource_id": created.id,
         "id": created.id,
         "show_id": show.id,
-        "profile_type": "podcast",
     }]
     assert requested == [{
         "resource_type": "download_profile",
@@ -151,14 +155,14 @@ def test_podcast_profile_create_and_update_fire_transactional_events(db_session)
 
 
 def test_series_profile_create_and_update_fire_transactional_events(db_session):
-    from backend.api.endpoints.series_download_profiles.service import (
-        create_download_profile_series,
-        update_download_profile_series,
+    from backend.api.endpoints.download_profiles.service import (
+        create_download_profile,
+        update_download_profile,
     )
     from backend.api.models.season import SeasonAPIRequestDetached
-    from backend.api.models.series_download_profile import (
-        SeriesDownloadProfileAPICreate,
-        SeriesDownloadProfileAPIUpdate,
+    from backend.api.models.download_profile import (
+        DownloadProfileAPICreate,
+        DownloadProfileAPIUpdate,
     )
     from backend.db.models import Season
     from backend.types.download_profile_types import EpIdType
@@ -175,15 +179,21 @@ def test_series_profile_create_and_update_fire_transactional_events(db_session):
 
     added = _capture_event("download_profile.added")
     requested = _capture_event(DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT)
-    created = create_download_profile_series(
+    created = create_download_profile(
         db_session,
-        SeriesDownloadProfileAPICreate(
+        DownloadProfileAPICreate(
             show_id=show.id,
             local_media_profile_id=media_profile.id,
             enable_profile=True,
             ep_id_type_list=[EpIdType.EP.value],
             seasons=[season_input],
             include_upcoming_seasons=False,
+            download_with_countdown=False,
+            redownload_final=False,
+            download_days_in_past=0,
+            download_episode_count=0,
+            download_starting_from=None,
+            delete_older_episodes=False,
         ),
     )
 
@@ -194,7 +204,6 @@ def test_series_profile_create_and_update_fire_transactional_events(db_session):
         "resource_id": created.id,
         "id": created.id,
         "show_id": show.id,
-        "profile_type": "series",
     }]
     assert requested == [{
         "resource_type": "download_profile",
@@ -204,15 +213,21 @@ def test_series_profile_create_and_update_fire_transactional_events(db_session):
     WireloftEventLinker.remove_all()
     updated = _capture_event("download_profile.updated")
     requested = _capture_event(DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT)
-    result = update_download_profile_series(
+    result = update_download_profile(
         db_session,
         created.id,
-        SeriesDownloadProfileAPIUpdate(
+        DownloadProfileAPIUpdate(
             local_media_profile_id=media_profile.id,
             enable_profile=True,
             ep_id_type_list=[EpIdType.EP.value],
             seasons=[season_input],
             include_upcoming_seasons=True,
+            download_with_countdown=False,
+            redownload_final=False,
+            download_days_in_past=0,
+            download_episode_count=0,
+            download_starting_from=None,
+            delete_older_episodes=False,
         ),
     )
 
@@ -224,7 +239,6 @@ def test_series_profile_create_and_update_fire_transactional_events(db_session):
         "resource_id": created.id,
         "id": created.id,
         "show_id": show.id,
-        "profile_type": "series",
     }]
     assert requested == [{
         "resource_type": "download_profile",
@@ -233,8 +247,8 @@ def test_series_profile_create_and_update_fire_transactional_events(db_session):
 
 
 def test_download_profile_events_are_discarded_on_rollback(db_session):
-    from backend.api.endpoints.podcast_download_profiles.service import create_download_profile_podcast
-    from backend.api.models.podcast_download_profile import PodcastDownloadProfileAPICreate
+    from backend.api.endpoints.download_profiles.service import create_download_profile
+    from backend.api.models.download_profile import DownloadProfileAPICreate
     from backend.types.download_profile_types import EpIdType
     from backend.types.show_types import ShowType
     from task_manager.events.registry import wait_for_events
@@ -245,9 +259,9 @@ def test_download_profile_events_are_discarded_on_rollback(db_session):
     added = _capture_event("download_profile.added")
     requested = _capture_event(DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT)
 
-    create_download_profile_podcast(
+    create_download_profile(
         db_session,
-        PodcastDownloadProfileAPICreate(
+        DownloadProfileAPICreate(
             show_id=show.id,
             local_media_profile_id=media_profile.id,
             enable_profile=True,
@@ -257,6 +271,9 @@ def test_download_profile_events_are_discarded_on_rollback(db_session):
             download_days_in_past=0,
             download_episode_count=0,
             delete_older_episodes=False,
+            download_starting_from=None,
+            seasons=[],
+            include_upcoming_seasons=True,
         ),
     )
     db_session.rollback()

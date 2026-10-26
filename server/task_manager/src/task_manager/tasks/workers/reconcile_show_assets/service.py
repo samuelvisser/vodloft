@@ -11,7 +11,7 @@ from typing import Callable
 from downloader import DownloadCancelled
 from sqlalchemy import String, and_, cast, func, or_, select
 
-from backend.db.models import DownloadProfileBase, Episode, EpisodeMediaDownload, Show, ShowLocalMediaProfile
+from backend.db.models import DownloadProfile, Episode, EpisodeMediaDownload, Show, ShowLocalMediaProfile
 from backend.db.models.ShowLocalAsset import ShowLocalAsset
 from backend.services.show_assets import (
     managed_show_profile_pairs, resolve_show_media_directory, shared_root_conflict,
@@ -424,7 +424,7 @@ def run_reconcile_show_assets(
     download_root = Path(get_settings().download_settings.download_root).resolve()
     with db_session() as session:
         if resource_type == "download_profile" and resource_id:
-            profile = session.get(DownloadProfileBase, resource_id)
+            profile = session.get(DownloadProfile, resource_id)
             if profile is None:
                 return
             show_id = profile.show_id

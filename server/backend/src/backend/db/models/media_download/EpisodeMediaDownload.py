@@ -7,7 +7,7 @@ from .MediaDownloadBase import MediaDownloadBase
 from backend.types.media_types import MediaType
 
 if TYPE_CHECKING:
-    from backend.db.models import DownloadProfileBase
+    from backend.db.models import DownloadProfile
 
 
 class EpisodeMediaDownload(MediaDownloadBase):
@@ -22,7 +22,7 @@ class EpisodeMediaDownload(MediaDownloadBase):
     redownload_when_delay_passed: Mapped[bool] = mapped_column(default=False)
 
     # Relationships
-    download_profile: Mapped[Optional["DownloadProfileBase"]] = relationship(back_populates="episode_downloads")
+    download_profile: Mapped[Optional["DownloadProfile"]] = relationship(back_populates="episode_downloads")
 
     def __repr__(self) -> str:
         return (
