@@ -10,7 +10,6 @@ from backend.api.models.custom_metadata import CustomMetadataResponseBase
 from backend.api.models.source import SourcedResponse
 from backend.api.models.movie_extra import MovieExtraAPICreate, MovieExtraAPIRead
 from backend.utils.helpers import generate_uuid
-from sources import Feature
 
 
 # ---------- Strict input (create/update) ----------
@@ -75,13 +74,6 @@ class MovieAPIUpdate(_MovieAPIBaseIn):
 # ---------- Lenient output (read) ----------
 class _MovieAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     """Fields for responses: no validators, no constraints."""
-
-    source_feature_fields = {
-        "available_for": Feature.MEMBERSHIP_LEVELS,
-        "official_trailer_id": Feature.MOVIE_EXTRAS,
-        "official_trailer": Feature.MOVIE_EXTRAS,
-        "movie_extras": Feature.MOVIE_EXTRAS,
-    }
 
     id: int
     uuid: str

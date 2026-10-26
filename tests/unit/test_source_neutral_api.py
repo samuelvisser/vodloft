@@ -176,20 +176,19 @@ def test_source_list_names_each_source_and_its_features(client):
     assert sources["dailywire"]["domains"] == ["dailywire.com"]
 
 
-def test_show_response_leaves_out_daily_wire_only_fields_for_other_sources(stub_sources):
+def test_show_responses_have_the_same_shape_for_every_source(stub_sources):
     from backend.api.models.show import ShowAPIRead
 
     stub_show = ShowAPIRead.model_validate(_show("stub")).model_dump(by_alias=True)
+    dw_show = ShowAPIRead.model_validate(_show("dailywire")).model_dump(by_alias=True)
+
+    assert stub_show.keys() == dw_show.keys()
     assert stub_show["sourceKey"] == "stub"
     assert stub_show["sourceFeatures"] == []
-    assert "membershipLevel" not in stub_show
-
-    dw_show = ShowAPIRead.model_validate(_show("dailywire")).model_dump(by_alias=True)
-    assert dw_show["membershipLevel"] == "ALL_ACCESS"
     assert "live_episodes" in dw_show["sourceFeatures"]
 
 
-def test_movie_and_episode_responses_leave_out_daily_wire_only_fields(stub_sources):
+def test_movie_and_episode_responses_send_every_field(stub_sources):
     from backend.api.models.episode import EpisodeAPIRead
     from backend.api.models.movie import MovieAPIRead
 
@@ -207,9 +206,10 @@ def test_movie_and_episode_responses_leave_out_daily_wire_only_fields(stub_sourc
         "release_date_lookup_attempted_at": None, "release_date_lookup_error": None,
         "movie_extras": [], "created_at": now, "updated_at": now, "source_key": "stub",
     }).model_dump(by_alias=True)
-    for field in ("availableFor", "movieExtras", "officialTrailer", "officialTrailerId"):
-        assert field not in movie
-    assert movie["title"] == "M"
+    assert movie["availableFor"] == ["ALL_ACCESS"]
+    assert movie["movieExtras"] == []
+    assert movie["officialTrailer"] is None and movie["officialTrailerId"] is None
+    assert movie["sourceFeatures"] == []
 
     episode = EpisodeAPIRead.model_validate({
         "id": 1, "show_id": 1, "season_id": 1, "index": 1, "publish_status": "published_final",
@@ -221,12 +221,11 @@ def test_movie_and_episode_responses_leave_out_daily_wire_only_fields(stub_sourc
         "episode_extra_type": None, "episode_number": None, "episode_sub_number": None, "episode_label": "1",
         "created_at": now, "updated_at": now, "source_key": "stub",
     }).model_dump(by_alias=True)
-    assert "wentLiveDate" not in episode
+    assert episode["wentLiveDate"] == now
     assert episode["sourceKey"] == "stub"
 
 
-def test_api_routes_serialise_the_trimmed_show(stub_sources):
-    """FastAPI validates the dumped response again, which must not need the dropped field."""
+def test_api_routes_serialise_a_show_from_any_source(stub_sources):
     from backend.api.models.show import ShowAPIRead
 
     app = FastAPI()
@@ -237,7 +236,7 @@ def test_api_routes_serialise_the_trimmed_show(stub_sources):
 
     with TestClient(app) as test_client:
         body = test_client.get("/show").json()
-    assert "membershipLevel" not in body
+    assert body["membershipLevel"] == "ALL_ACCESS"
     assert body["sourceKey"] == "stub"
 
 

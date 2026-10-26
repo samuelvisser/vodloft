@@ -18,12 +18,13 @@ export const SourceFeature = {
 } as const
 export type SourceFeatureValue = typeof SourceFeature[keyof typeof SourceFeature]
 
-export const DEFAULT_SOURCE_KEY = 'dailywire'
+/** The Daily Wire, whose catalog and show endpoints the UI calls by name. */
+export const DAILYWIRE_SOURCE_KEY = 'dailywire'
 
 /** Fields every item from a Source carries. */
 export const SourcedFields = {
-    sourceKey: z.string().default(DEFAULT_SOURCE_KEY),
-    sourceFeatures: z.array(z.string()).default([]),
+    sourceKey: z.string(),
+    sourceFeatures: z.array(z.string()),
 }
 
 export function hasSourceFeature(
@@ -50,18 +51,18 @@ export const ResolvedLinkReadSchema = z.object({
     kind: z.enum(['show', 'movie', 'episode', 'video']),
     slug: z.string(),
     url: z.string(),
-    showSlug: z.string().nullable().optional(),
-    showUrl: z.string().nullable().optional(),
-    site: z.string().nullable().optional(),
-    drmProtected: z.boolean().optional().default(false),
+    showSlug: z.string().nullable(),
+    showUrl: z.string().nullable(),
+    site: z.string().nullable(),
+    drmProtected: z.boolean(),
     preview: z.object({
         title: z.string(),
-        description: z.string().nullable().optional(),
-        imageUrl: z.string().nullable().optional(),
-        authorName: z.string().nullable().optional(),
+        description: z.string().nullable(),
+        imageUrl: z.string().nullable(),
+        authorName: z.string().nullable(),
     }),
     /** Every Source that claims the link's site, preferred first. */
-    candidates: z.array(SourceReadSchema).optional().default([]),
+    candidates: z.array(SourceReadSchema),
 })
 export type ResolvedLinkRead = z.infer<typeof ResolvedLinkReadSchema>
 
@@ -70,11 +71,11 @@ export const SearchResultReadSchema = z.object({
     slug: z.string(),
     url: z.string(),
     title: z.string(),
-    description: z.string().nullable().optional(),
-    imageUrl: z.string().nullable().optional(),
-    authorName: z.string().nullable().optional(),
-    showSlug: z.string().nullable().optional(),
-    showUrl: z.string().nullable().optional(),
+    description: z.string().nullable(),
+    imageUrl: z.string().nullable(),
+    authorName: z.string().nullable(),
+    showSlug: z.string().nullable(),
+    showUrl: z.string().nullable(),
 })
 export type SearchResultRead = z.infer<typeof SearchResultReadSchema>
 
@@ -82,15 +83,15 @@ export const SourceDomainReadSchema = z.object({
     domain: z.string(),
     sourceKeys: z.array(z.string()),
     defaultSourceKey: z.string(),
-    preferredSourceKey: z.string().nullable().optional(),
+    preferredSourceKey: z.string().nullable(),
 })
 export type SourceDomainRead = z.infer<typeof SourceDomainReadSchema>
 
 export const ProgramStatusReadSchema = z.object({
     name: z.string(),
-    version: z.string().nullable().optional(),
-    lastUpdateAt: z.string().nullable().optional(),
-    lastUpdateError: z.string().nullable().optional(),
+    version: z.string().nullable(),
+    lastUpdateAt: z.string().nullable(),
+    lastUpdateError: z.string().nullable(),
 })
 export type ProgramStatusRead = z.infer<typeof ProgramStatusReadSchema>
 
@@ -102,12 +103,12 @@ export const ShowDetailsReadSchema = z.object({
     sourceKey: z.string(),
     slug: z.string(),
     title: z.string(),
-    description: z.string().nullable().optional(),
+    description: z.string().nullable(),
     sharingUrl: z.string(),
     authorName: z.string(),
     authorSlug: z.string(),
-    thumbnailLandscapePath: z.string().nullable().optional(),
+    thumbnailLandscapePath: z.string().nullable(),
     /** The show's own seasons, oldest first; empty when VODLoft makes a season per upload year. */
-    seasons: z.array(z.object({slug: z.string(), name: z.string()})).optional().default([]),
+    seasons: z.array(z.object({slug: z.string(), name: z.string()})),
 })
 export type ShowDetailsRead = z.infer<typeof ShowDetailsReadSchema>

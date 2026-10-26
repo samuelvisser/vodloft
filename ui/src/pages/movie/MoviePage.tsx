@@ -17,7 +17,7 @@ import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import {useDailywireMovie, useLocalMediaProfiles, useMovieDownloads, useMovies, useSourceLookup} from '../../lib/queries'
 import SourceBadge from '../../components/Source/SourceBadge'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
-import {DEFAULT_SOURCE_KEY} from '../../types/schemas/source'
+import {DAILYWIRE_SOURCE_KEY} from '../../types/schemas/source'
 import {sourceControls} from '../../lib/sourceControls'
 import {
     OperationControlError,
@@ -112,7 +112,7 @@ export default function MoviePage() {
     } = useDailywireMovie(localMovies && !localMovie ? slug : undefined)
     const movie = localMovie ?? dailywireMovie
     // A movie that is not in the library yet is previewed from The Daily Wire, the only Source with movies so far.
-    const sourceKey = localMovie?.sourceKey ?? DEFAULT_SOURCE_KEY
+    const sourceKey = localMovie?.sourceKey ?? DAILYWIRE_SOURCE_KEY
     const sources = useSourceLookup()
     const sourceName = sources.name(sourceKey)
     const showsExtras = sourceControls(localMovie).movieExtras

@@ -6,7 +6,6 @@ from pydantic import AliasPath, Field
 from backend.api.models.base import RequestBase, ResponseBase, response_model_config
 from backend.api.models.source import SourcedResponse
 from backend.api.models.pagination import CursorPageRead
-from sources import DAILYWIRE
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
 
@@ -88,7 +87,7 @@ class MediaDownloadAPIRead(_MediaDownloadAPIBaseOut):
 class MediaDownloadAPIReadView(SourcedResponse, MediaDownloadAPIRead):
     """Persistent artifact context plus the latest canonical TaskRun facts."""
 
-    source_key: str = Field(default=DAILYWIRE, validation_alias=AliasPath("media", "source_key"))
+    source_key: str = Field(validation_alias=AliasPath("media", "source_key"))
     media_slug: Optional[str] = Field(default=None, validation_alias=AliasPath("media", "slug"))
     media_title: Optional[str] = Field(default=None, validation_alias=AliasPath("media", "title"))
     episode_slug: Optional[str] = Field(default=None, validation_alias=AliasPath("episode", "slug"))

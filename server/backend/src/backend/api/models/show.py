@@ -11,7 +11,6 @@ from backend.api.models.source import SourcedResponse
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.show_types import ShowType, EpisodeIdentifier
 from backend.utils.helpers import generate_uuid
-from sources import DAILYWIRE, Feature
 
 
 # ---------- Strict input (create/update) ----------
@@ -35,7 +34,7 @@ class ShowAPICreate(_ShowAPIBaseIn):
     """Request body for creating a show."""
 
     slug: str
-    source_key: str = DAILYWIRE
+    source_key: str = Field(min_length=1)
     membership_level: WlDwMembershipLevel
     type: ShowType
     episode_identifier: EpisodeIdentifier
@@ -81,7 +80,6 @@ class _ShowAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     """Fields for responses: no validators, no constraints."""
 
     model_config = response_model_config(nested_source="show")
-    source_feature_fields = {"membership_level": Feature.MEMBERSHIP_LEVELS}
 
     custom_metadata: dict[str, str] = Field(
         default_factory=dict,

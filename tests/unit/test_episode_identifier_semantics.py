@@ -751,6 +751,7 @@ def test_episode_read_view_derives_identifier_fields_during_model_validation():
     view = EpisodeAPIReadView.model_validate(
         {
             "id": 1,
+            "source_key": "dailywire",
             "show_id": 2,
             "season_id": 3,
             "index": 4,

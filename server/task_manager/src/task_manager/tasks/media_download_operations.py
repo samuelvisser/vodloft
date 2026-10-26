@@ -184,6 +184,7 @@ def _operation_context(
         "media_download_id": download.id,
         "media_type": download.type,
         "media_item_id": download.media_item_id,
+        "source_key": media.source_key,
         "media_slug": getattr(media, "slug", None),
         "media_title": getattr(media, "title", None),
         "local_media_profile_id": download.local_media_profile_id,
