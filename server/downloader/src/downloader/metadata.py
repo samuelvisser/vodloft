@@ -13,8 +13,8 @@ class MediaServerMetadata:
     title: str
     description: str | None = None
     unique_id: str | None = None
-    # Which service ``unique_id`` belongs to, as media servers read it.
-    unique_id_type: str = "dailywire"
+    # Which service ``unique_id`` belongs to, as media servers read it. Set with ``unique_id``.
+    unique_id_type: str | None = None
     source_url: str | None = None
     show_title: str | None = None
     season_number: int | None = None
@@ -75,7 +75,7 @@ class MediaServerMetadata:
             tags["rating"] = self.content_rating
         if self.source_url:
             tags["purl"] = self.source_url
-        if self.unique_id:
+        if self.unique_id and self.unique_id_type:
             tags[f"{self.unique_id_type}_id"] = self.unique_id
         if self.media_type:
             tags["media_type"] = self.media_type
@@ -117,7 +117,7 @@ def _nfo_root(metadata: MediaServerMetadata) -> ET.Element:
     root = ET.Element("episodedetails" if metadata.kind == "episode" else "movie")
     _text(root, "title", metadata.title)
     _text(root, "plot", metadata.description)
-    if metadata.unique_id:
+    if metadata.unique_id and metadata.unique_id_type:
         unique = ET.SubElement(root, "uniqueid", {"type": metadata.unique_id_type, "default": "true"})
         unique.text = metadata.unique_id
     _text(root, "showtitle", metadata.show_title)

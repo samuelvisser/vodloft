@@ -135,6 +135,7 @@ def _db_with_episode():
     Base.metadata.create_all(engine)
     session = Session(engine)
     show = Show(
+        source_key="dailywire",
         uuid="show-uuid",
         slug="test-show",
         title="Test Show",
@@ -148,6 +149,7 @@ def _db_with_episode():
     )
     season = Season(show=show, index=1, slug="season-2026", name="2026")
     episode = Episode(
+        source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
         show=show,

@@ -128,7 +128,7 @@ def test_listed_episodes_can_be_identified_by_date_or_number(listed, session):
 
     def identifiers(show):
         episodes = session.query(Episode).filter_by(show_id=show.id).order_by(Episode.index)
-        return [(e.get_meta("source.slug"), e.episode_identifier, e.season.name) for e in episodes]
+        return [(e.source_slug, e.episode_identifier, e.season.name) for e in episodes]
 
     # Videos uploaded at the same moment: the second one is auxiliary.
     assert identifiers(by_date) == [

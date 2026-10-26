@@ -44,6 +44,7 @@ def _add_movie_download(
         preferred_format="format_1080p",
     )
     movie = Movie(
+        source_key="dailywire",
         uuid="movie-uuid",
         type=MediaType.MOVIE.value,
         slug="movie",

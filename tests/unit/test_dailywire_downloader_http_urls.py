@@ -54,6 +54,7 @@ def test_movie_extra_sync_preserves_encoded_thumbnail_url() -> None:
     session = Session(engine)
     try:
         movie = Movie(
+            source_key="dailywire",
             uuid="movie-url-preservation",
             type=MediaType.MOVIE.value,
             slug="movie-url-preservation",

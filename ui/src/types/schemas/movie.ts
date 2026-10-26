@@ -79,6 +79,7 @@ const MovieBaseSchema = z.object({
 
 export const MovieCreateSchema = MovieBaseSchema.extend({
     slug: z.string(),
+    sourceKey: z.string().min(1),
     movieExtras: z.array(MovieExtraCreateSchema).default([]),
     officialTrailerSlug: z.string().nullable().optional(),
 })

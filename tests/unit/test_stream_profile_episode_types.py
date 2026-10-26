@@ -115,6 +115,7 @@ def test_feed_items_respect_stream_profile_episode_types(db_session):
     from backend.types.show_types import EpisodeIdentifier, ShowType
 
     show = Show(
+        source_key="dailywire",
         uuid="show-uuid",
         slug="show",
         title="Show",
@@ -128,6 +129,7 @@ def test_feed_items_respect_stream_profile_episode_types(db_session):
     )
     season = Season(show=show, index=1, slug="season-1", name="Season 1")
     normal = Episode(
+        source_key="dailywire",
         uuid="normal-uuid",
         type="episode",
         show=show,
@@ -143,6 +145,7 @@ def test_feed_items_respect_stream_profile_episode_types(db_session):
         published_date=datetime(2026, 9, 1, tzinfo=timezone.utc),
     )
     auxiliary = Episode(
+        source_key="dailywire",
         uuid="aux-uuid",
         type="episode",
         show=show,

@@ -23,6 +23,7 @@ def _make_download(session: Session, *, slug: str):
     from backend.utils.helpers import generate_uuid
 
     show = Show(
+        source_key="dailywire",
         uuid=f"{slug}-show-uuid",
         slug=f"{slug}-show",
         title="Queue Show",
@@ -36,6 +37,7 @@ def _make_download(session: Session, *, slug: str):
     )
     season = Season(show=show, index=1, slug=f"{slug}-season", name="One")
     episode = Episode(
+        source_key="dailywire",
         uuid=generate_uuid(),
         type=MediaType.EPISODE.value,
         show=show,

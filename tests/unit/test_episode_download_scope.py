@@ -22,6 +22,7 @@ def _library(session: Session):
     from backend.types.show_types import EpisodeIdentifier, ShowType
 
     show = Show(
+        source_key="dailywire",
         uuid="show-uuid",
         slug="test-show",
         title="Test Show",
@@ -35,6 +36,7 @@ def _library(session: Session):
     )
     season = Season(show=show, index=1, slug="season-1", name="Season 1")
     episode = Episode(
+        source_key="dailywire",
         uuid="episode-uuid",
         type=MediaType.EPISODE.value,
         show=show,

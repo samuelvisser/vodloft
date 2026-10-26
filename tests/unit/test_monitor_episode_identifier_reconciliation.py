@@ -27,6 +27,7 @@ def test_monitor_reconciles_identifier_while_episode_stays_pending(monkeypatch):
     session = Session(engine)
 
     show = Show(
+        source_key="dailywire",
         uuid="show-uuid",
         slug="the-ben-shapiro-show",
         title="The Ben Shapiro Show",
@@ -44,6 +45,7 @@ def test_monitor_reconciles_identifier_while_episode_stays_pending(monkeypatch):
 
     old_identifier = "ep-extra.other.2500.1"
     episode = Episode(
+        source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
         show=show,

@@ -61,6 +61,7 @@ def upsert_episode(
             **{
                 "uuid": generate_uuid(),
                 "type": MediaType.EPISODE.value,
+                "source_key": show.source_key,
                 "show_id": show.id,
                 "season_id": season.id,
                 "index": index_value,

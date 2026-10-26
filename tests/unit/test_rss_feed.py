@@ -48,6 +48,7 @@ def _make_show(
     from backend.types.show_types import EpisodeIdentifier, ShowType
 
     show = Show(
+        source_key="dailywire",
         uuid=f"{slug}-uuid",
         slug=slug,
         title="Test Show",
@@ -103,6 +104,7 @@ def _make_episode(
 
     when = when or datetime.now(timezone.utc)
     episode = Episode(
+        source_key="dailywire",
         uuid=f"episode-{index}-uuid",
         type="episode",
         show=show,

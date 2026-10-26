@@ -39,6 +39,7 @@ class Episode(
     __table_args__ = (
         UniqueConstraint("show_id", "index", name="uq_episode_show_index"),
         UniqueConstraint("show_id", "episode_identifier", name="uq_unique_episode_identifier_per_show"),
+        UniqueConstraint("show_id", "source_slug", name="uq_episode_show_source_slug"),
         Index(
             "ix_media_items_episode_show_published_id",
             "show_id",
@@ -72,6 +73,10 @@ class Episode(
     episode_identifier: Mapped[str] = mapped_column(comment="Unique identifier that is used to identify the episode within the show")
     dw_episode_number: Mapped[Optional[str]] = mapped_column(comment="Episode number exactly as returned by The Daily Wire")
     slug: Mapped[str] = mapped_column(index=True, unique=True)
+    source_slug: Mapped[str] = mapped_column(
+        default=lambda context: context.get_current_parameters()["slug"],
+        comment="The episode's own slug at its Source. It is the slug, unless another show's episode already had that",
+    )
     publish_status: Mapped[str]
     metadata_is_final: Mapped[bool] = mapped_column(
         Boolean,

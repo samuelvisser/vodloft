@@ -30,6 +30,7 @@ def test_deleting_show_removes_metadata_operation_with_episode_targets(tmp_path)
     try:
         with Session(engine) as session:
             show = Show(
+                source_key="dailywire",
                 uuid="metadata-show-uuid",
                 slug="metadata-show",
                 title="Metadata Show",

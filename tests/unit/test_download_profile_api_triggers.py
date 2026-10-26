@@ -13,6 +13,7 @@ def _make_show(session: Session, *, slug: str, show_type: str):
     from backend.types.show_types import EpisodeIdentifier
 
     show = Show(
+        source_key="dailywire",
         uuid=f"{slug}-uuid",
         slug=slug,
         title="Test Show",

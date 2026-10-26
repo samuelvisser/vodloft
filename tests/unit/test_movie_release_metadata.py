@@ -245,6 +245,7 @@ def test_movie_release_date_condition_omits_unknown_metadata(tmp_path, monkeypat
 
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
     movie = Movie(
+        source_key="dailywire",
         uuid="movie-uuid",
         type=MediaType.MOVIE.value,
         slug="a-movie",

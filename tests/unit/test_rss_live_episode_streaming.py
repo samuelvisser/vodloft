@@ -27,6 +27,7 @@ def _show(session: Session):
     from backend.types.show_types import EpisodeIdentifier, ShowType
 
     item = Show(
+        source_key="dailywire",
         uuid="show-uuid",
         slug="show",
         title="Show",
@@ -64,6 +65,7 @@ def _episode(
 
     now = datetime.now(timezone.utc)
     item = Episode(
+        source_key="dailywire",
         uuid=f"episode-{index}-uuid",
         type="episode",
         show=show,

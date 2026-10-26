@@ -53,6 +53,7 @@ def test_movie_extra_output_uses_parent_movie_and_actual_media_fields(tmp_path: 
 
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
     movie = Movie(
+        source_key="dailywire",
         uuid="movie-uuid",
         type=MediaType.MOVIE.value,
         slug="run-hide-fight",
@@ -64,6 +65,7 @@ def test_movie_extra_output_uses_parent_movie_and_actual_media_fields(tmp_path: 
         duration=6720,
     )
     trailer = MovieExtra(
+        source_key="dailywire",
         uuid="trailer-uuid",
         type=MediaType.MOVIE_EXTRA.value,
         movie=movie,
@@ -98,6 +100,7 @@ def test_movie_extra_type_suffix_is_added_before_extension(tmp_path: Path, monke
 
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
     movie = Movie(
+        source_key="dailywire",
         uuid="movie-uuid",
         type=MediaType.MOVIE.value,
         slug="movie",
@@ -106,6 +109,7 @@ def test_movie_extra_type_suffix_is_added_before_extension(tmp_path: Path, monke
         duration=100,
     )
     interview = MovieExtra(
+        source_key="dailywire",
         uuid="interview-uuid",
         type=MediaType.MOVIE_EXTRA.value,
         movie=movie,
@@ -155,6 +159,7 @@ def test_download_view_uses_movie_extra_as_media_identity_and_movie_as_parent() 
             append_media_type_to_filename=True,
         )
         movie = Movie(
+            source_key="dailywire",
             uuid="movie-view-uuid",
             type=MediaType.MOVIE.value,
             slug="parent-movie",
@@ -163,6 +168,7 @@ def test_download_view_uses_movie_extra_as_media_identity_and_movie_as_parent() 
             duration=100,
         )
         trailer = MovieExtra(
+            source_key="dailywire",
             uuid="trailer-view-uuid",
             type=MediaType.MOVIE_EXTRA.value,
             movie=movie,
@@ -291,6 +297,7 @@ def test_movie_extra_download_repairs_legacy_official_trailer_classification(
             preferred_format="format_1080p",
         )
         movie = Movie(
+            source_key="dailywire",
             uuid="legacy-movie-uuid",
             type=MediaType.MOVIE.value,
             slug="am-i-racist",
@@ -300,6 +307,7 @@ def test_movie_extra_download_repairs_legacy_official_trailer_classification(
             release_date=date(2024, 9, 13),
         )
         stale_trailer = MovieExtra(
+            source_key="dailywire",
             uuid="legacy-trailer-uuid",
             type=MediaType.MOVIE_EXTRA.value,
             movie=movie,
@@ -310,6 +318,7 @@ def test_movie_extra_download_repairs_legacy_official_trailer_classification(
             duration=120,
         )
         interview = MovieExtra(
+            source_key="dailywire",
             uuid="legacy-interview-uuid",
             type=MediaType.MOVIE_EXTRA.value,
             movie=movie,

@@ -788,6 +788,7 @@ def test_compact_episode_view_includes_identifier_semantics():
     session = Session(engine)
 
     show = Show(
+        source_key="dailywire",
         uuid="show-view-semantics",
         slug="view-semantics",
         title="View Semantics",
@@ -808,6 +809,7 @@ def test_compact_episode_view_includes_identifier_semantics():
         season_number=3,
     )
     episode = Episode(
+        source_key="dailywire",
         uuid="episode-view-semantics",
         type="episode",
         show=show,

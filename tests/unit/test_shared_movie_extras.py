@@ -38,6 +38,7 @@ def test_same_dailywire_clip_uses_one_source_across_multiple_movies() -> None:
     session = Session(engine)
     try:
         original = Movie(
+            source_key="dailywire",
             uuid="original-movie-uuid",
             type=MediaType.MOVIE.value,
             slug="run-hide-fight",
@@ -46,6 +47,7 @@ def test_same_dailywire_clip_uses_one_source_across_multiple_movies() -> None:
             duration=6540,
         )
         sequel = Movie(
+            source_key="dailywire",
             uuid="sequel-movie-uuid",
             type=MediaType.MOVIE.value,
             slug="run-hide-fight-infidels",

@@ -49,6 +49,7 @@ def _make_show(session: Session, *, slug: str):
     from backend.types.show_types import EpisodeIdentifier, ShowType
 
     show = Show(
+        source_key="dailywire",
         uuid=f"{slug}-uuid",
         slug=slug,
         title=slug.replace("-", " ").title(),

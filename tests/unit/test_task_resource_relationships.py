@@ -29,6 +29,7 @@ def test_deleting_show_cascades_scheduler_work_and_exposes_relationships(tmp_pat
     try:
         with Session(engine) as session:
             show = Show(
+                source_key="dailywire",
                 uuid="show-uuid",
                 slug="show-slug",
                 title="Show title",

@@ -29,13 +29,6 @@ from sources import Source, VideoDetails
 from .episodes.events import queue_episode_status_events
 from .general import datetime_to_string
 
-SOURCE_SLUG_META_KEY = "source.slug"
-
-
-def _source_slug(episode: Episode) -> str:
-    return episode.get_meta(SOURCE_SLUG_META_KEY) or episode.slug
-
-
 def _season_number(details: VideoDetails, fallback: datetime) -> int:
     if details.season is not None:
         return details.season.number
@@ -105,8 +98,7 @@ def _episode_slug(s: Session, show: Show, source_slug: str) -> str:
 
 
 def known_episode_slugs(s: Session, show: Show) -> frozenset[str]:
-    episodes = s.scalars(select(Episode).where(Episode.show_id == show.id)).all()
-    return frozenset(_source_slug(episode) for episode in episodes)
+    return frozenset(s.scalars(select(Episode.source_slug).where(Episode.show_id == show.id)))
 
 
 def index_listed_show(s: Session, *, show_id: int, source: Source) -> int:
@@ -165,6 +157,7 @@ def index_listed_show(s: Session, *, show_id: int, source: Source) -> int:
             index=next_index,
             episode_identifier=identifier,
             slug=_episode_slug(s, show, details.slug),
+            source_slug=details.slug,
             publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
             metadata_is_final=True,
             sharing_url=details.url,
@@ -176,7 +169,6 @@ def index_listed_show(s: Session, *, show_id: int, source: Source) -> int:
             background_image_path=details.image_url,
             drm_protected=details.drm_protected,
         )
-        episode.set_meta(SOURCE_SLUG_META_KEY, details.slug)
         s.add(episode)
         s.flush()
         created.append(episode)

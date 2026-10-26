@@ -55,6 +55,7 @@ class MovieAPICreate(_MovieAPIBaseIn):
     """Request body for creating a movie."""
 
     slug: str
+    source_key: str = Field(min_length=1)
     movie_extras: list[MovieExtraAPICreate] = Field(default_factory=list)
     # The extra rows do not have database IDs until this request is persisted,
     # so create requests identify the official trailer by its stable DW slug.

@@ -16,6 +16,7 @@ def test_movie_extra_construction_reuses_source_without_call_site_awareness() ->
     with Session(engine) as session:
         movies = [
             Movie(
+                source_key="dailywire",
                 uuid=f"movie-{index}-uuid",
                 type=MediaType.MOVIE.value,
                 slug=f"movie-{index}",
@@ -29,6 +30,7 @@ def test_movie_extra_construction_reuses_source_without_call_site_awareness() ->
         session.flush()
 
         first = MovieExtra(
+            source_key="dailywire",
             movie=movies[0],
             uuid="extra-a-uuid",
             type=MediaType.MOVIE_EXTRA.value,
@@ -41,6 +43,7 @@ def test_movie_extra_construction_reuses_source_without_call_site_awareness() ->
             available_for=["ALL_ACCESS"],
         )
         second = MovieExtra(
+            source_key="dailywire",
             movie=movies[1],
             uuid="extra-b-uuid",
             type=MediaType.MOVIE_EXTRA.value,
@@ -87,6 +90,7 @@ def test_movie_extra_construction_reuses_already_persisted_source() -> None:
             duration=30,
         )
         movie = Movie(
+            source_key="dailywire",
             uuid="movie-uuid",
             type=MediaType.MOVIE.value,
             slug="movie",
@@ -98,6 +102,7 @@ def test_movie_extra_construction_reuses_already_persisted_source() -> None:
         session.commit()
 
         extra = MovieExtra(
+            source_key="dailywire",
             movie=movie,
             uuid="extra-uuid",
             type=MediaType.MOVIE_EXTRA.value,

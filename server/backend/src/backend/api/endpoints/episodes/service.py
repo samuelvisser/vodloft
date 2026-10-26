@@ -395,7 +395,12 @@ def request_episode_early_delete(
 
 
 def create_episode(s: Session, body: EpisodeAPICreate) -> EpisodeAPIRead:
+    show = s.get(Show, body.show_id)
+    if show is None:
+        raise HTTPException(status_code=404, detail="Show not found")
     episode = create_database_fields(Episode, body)
+    # An episode comes from its show's Source.
+    episode.source_key = show.source_key
     s.add(episode)
     s.flush()
 

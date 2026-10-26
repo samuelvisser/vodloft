@@ -25,6 +25,7 @@ def create_movie_extra(
     item = MovieExtra(
         movie=movie,
         type=MediaType.MOVIE_EXTRA.value,
+        source_key=movie.source_key,
         **body.model_dump(by_alias=True),
     )
     s.add(item)

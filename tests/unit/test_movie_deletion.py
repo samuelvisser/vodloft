@@ -33,6 +33,7 @@ def test_delete_movie_cascades_download_records_without_deleting_files(tmp_path)
             preferred_format="format_720p",
         )
         movie = Movie(
+            source_key="dailywire",
             uuid="movie-delete-uuid",
             type=MediaType.MOVIE.value,
             slug="movie-to-delete",
@@ -41,6 +42,7 @@ def test_delete_movie_cascades_download_records_without_deleting_files(tmp_path)
             duration=100,
         )
         trailer = MovieExtra(
+            source_key="dailywire",
             uuid="trailer-delete-uuid",
             type=MediaType.MOVIE_EXTRA.value,
             movie=movie,

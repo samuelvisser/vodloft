@@ -33,6 +33,7 @@ def final_download(tmp_path, monkeypatch):
     )
 
     show = Show(
+        source_key="dailywire",
         uuid="countdown-show-uuid",
         slug="countdown-show",
         title="Countdown Show",
@@ -46,6 +47,7 @@ def final_download(tmp_path, monkeypatch):
     )
     season = Season(show=show, index=1, slug="season-1", name="One")
     episode = Episode(
+        source_key="dailywire",
         uuid=generate_uuid(),
         type=MediaType.EPISODE.value,
         show=show,

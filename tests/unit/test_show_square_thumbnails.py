@@ -14,6 +14,7 @@ def _make_show(session: Session, *, slug: str = "test-show"):
     from backend.types.show_types import EpisodeIdentifier, ShowType
 
     show = Show(
+        source_key="dailywire",
         uuid=f"{slug}-uuid",
         slug=slug,
         title="Test Show",
@@ -303,6 +304,7 @@ def test_square_thumbnail_background_migration_leaves_missing_show_empty(
     with Session(engine) as session:
         for slug in ("matched-show", "missing-show"):
             session.add(Show(
+                source_key="dailywire",
                 uuid=f"{slug}-uuid",
                 slug=slug,
                 title=slug,
@@ -345,6 +347,7 @@ def test_square_thumbnail_background_migration_only_fills_missing_square(
 
     def add_show(session, slug, *, square):
         session.add(Show(
+            source_key="dailywire",
             uuid=f"{slug}-uuid",
             slug=slug,
             title=slug,

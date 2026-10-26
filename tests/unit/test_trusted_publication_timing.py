@@ -17,6 +17,7 @@ def _episode_fixture():
     Base.metadata.create_all(engine)
     session = Session(engine)
     show = Show(
+        source_key="dailywire",
         uuid="timing-show-uuid",
         slug="timing-show",
         title="Timing Show",
@@ -30,6 +31,7 @@ def _episode_fixture():
     )
     season = Season(show=show, index=1, slug="season-1", name="One")
     episode = Episode(
+        source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
         show=show,

@@ -31,6 +31,7 @@ def _make_show(session, *, slug="index-show"):
     from backend.types.show_types import EpisodeIdentifier, ShowType
 
     show = Show(
+        source_key="dailywire",
         uuid=f"{slug}-uuid",
         slug=slug,
         title="Index Show",
@@ -61,6 +62,7 @@ def _make_episode(session, show, season, *, index: int, slug: str, identifier: s
     from backend.utils.helpers import generate_uuid
 
     episode = Episode(
+        source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
         show=show,

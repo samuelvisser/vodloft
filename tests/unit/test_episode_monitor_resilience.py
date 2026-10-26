@@ -85,6 +85,7 @@ def _monitor_fixture():
     Base.metadata.create_all(engine)
     session = Session(engine)
     show = Show(
+        source_key="dailywire",
         uuid="show-uuid", slug="test-show", title="Test Show", description=None,
         sharing_url="https://example.test/show", membership_level="FREE",
         type=ShowType.PODCAST.value, episode_identifier=EpisodeIdentifier.NUMBERED.value,

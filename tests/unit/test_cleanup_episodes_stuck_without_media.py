@@ -14,6 +14,7 @@ def _make_show(session):
     from backend.db.models import Show
     from backend.types.show_types import EpisodeIdentifier, ShowType
     show = Show(
+        source_key="dailywire",
         uuid="show-uuid", slug="test-show", title="Test Show", description=None,
         sharing_url="https://example.test/show", membership_level="FREE",
         type=ShowType.PODCAST.value, episode_identifier=EpisodeIdentifier.NUMBERED.value,
@@ -32,6 +33,7 @@ def _make_episode(session, show, *, slug="episode", identifier="ep.2"):
     session.add(season)
     session.flush()
     episode = Episode(
+        source_key="dailywire",
         uuid=generate_uuid(), type="episode", show=show, season=season, index=2,
         episode_identifier=identifier, slug=slug, title="Unavailable episode", duration=100.0,
         publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
@@ -52,6 +54,7 @@ def _make_replacement_episode(session, original, *, slug="canonical-slug"):
     previous_identifier = original.get_meta(PREVIOUS_IDENTIFIER_META_KEY)
     assert previous_identifier
     replacement = Episode(
+        source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
         show=original.show,

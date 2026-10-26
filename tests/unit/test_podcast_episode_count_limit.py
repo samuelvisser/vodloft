@@ -13,6 +13,7 @@ def _make_show(session):
     from backend.types.show_types import EpisodeIdentifier, ShowType
 
     show = Show(
+        source_key="dailywire",
         uuid="episode-limit-show-uuid",
         slug="episode-limit-show",
         title="Episode Limit Show",
@@ -43,6 +44,7 @@ def _make_episode(session, show, season, *, index: int, published_at: datetime):
     from backend.utils.helpers import generate_uuid
 
     episode = Episode(
+        source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
         show=show,

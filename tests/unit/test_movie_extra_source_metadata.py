@@ -21,6 +21,7 @@ def test_shared_source_owns_all_intrinsic_movie_extra_metadata() -> None:
     session = Session(engine)
     try:
         movie_a = Movie(
+            source_key="dailywire",
             uuid="movie-a-uuid",
             type=MediaType.MOVIE.value,
             slug="movie-a",
@@ -29,6 +30,7 @@ def test_shared_source_owns_all_intrinsic_movie_extra_metadata() -> None:
             duration=6000,
         )
         movie_b = Movie(
+            source_key="dailywire",
             uuid="movie-b-uuid",
             type=MediaType.MOVIE.value,
             slug="movie-b",
@@ -152,6 +154,7 @@ def test_refreshing_one_parent_updates_global_metadata_for_every_placement() -> 
     try:
         movies = [
             Movie(
+                source_key="dailywire",
                 uuid=f"movie-{index}-uuid",
                 type=MediaType.MOVIE.value,
                 slug=f"movie-{index}",

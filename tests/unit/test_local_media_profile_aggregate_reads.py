@@ -74,6 +74,7 @@ def test_local_media_profile_view_reports_managed_download_statistics() -> None:
             preferred_format="format_1080p",
         )
         downloaded_movie = Movie(
+            source_key="dailywire",
             uuid="downloaded-movie",
             type=MediaType.MOVIE.value,
             slug="downloaded",
@@ -85,6 +86,7 @@ def test_local_media_profile_view_reports_managed_download_statistics() -> None:
             duration=60,
         )
         pending_movie = Movie(
+            source_key="dailywire",
             uuid="pending-movie",
             type=MediaType.MOVIE.value,
             slug="pending",
