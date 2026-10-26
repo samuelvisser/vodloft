@@ -13,7 +13,7 @@ from config import get_settings
 from config.security.admin_auth import AdminAuth
 from .crypto import encrypt_text, decrypt_text
 
-SESSION_COOKIE_NAME = "wl_session"
+SESSION_COOKIE_NAME = "vodloft_session"
 
 @dataclass
 class Session:

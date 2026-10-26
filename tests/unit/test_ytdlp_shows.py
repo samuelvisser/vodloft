@@ -330,7 +330,7 @@ def test_a_listed_show_bundle_is_seasonal_and_streams_only_downloads(listed, ses
 
     show = {
         "slug": "PL1", "sourceKey": "listed", "title": "A playlist", "sharingUrl": "https://listed.example/PL1",
-        "membershipLevel": "WL_ANY", "type": "series", "episodeIdentifier": "numbered",
+        "membershipLevel": "HIGHEST_ALLOWED", "type": "series", "episodeIdentifier": "numbered",
         "authorName": "A Channel", "authorSlug": "a-channel",
     }
     seasons = [{"slug": "s1", "name": "Season 1"}]

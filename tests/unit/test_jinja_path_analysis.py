@@ -176,11 +176,11 @@ def test_empty_symbol_does_not_prove_different_directory_depths(environment):
 
 
 def test_literal_marker_text_cannot_impersonate_a_symbol(environment):
-    assert _compare('/downloads/{{ title }}.ext', '/downloads/{{ "WLJINJASYMBOL0END" }}.ext', environment) == OutputOverlap.UNKNOWN
+    assert _compare('/downloads/{{ title }}.ext', '/downloads/{{ "VLJINJASYMBOL0END" }}.ext', environment) == OutputOverlap.UNKNOWN
 
 
 def test_analysis_input_names_cannot_be_shadowed_by_template_locals(environment):
-    left = "{% set __wireloft_input_title='wrong' %}{% set x=title %}/downloads/{{ 'a' if flag else 'b' }}/{{x}}.ext"
+    left = "{% set __vodloft_input_title='wrong' %}{% set x=title %}/downloads/{{ 'a' if flag else 'b' }}/{{x}}.ext"
     right = "/downloads/{{ 'a' if flag else 'b' }}/{{title}}.ext"
     assert _compare(left, right, environment) == OutputOverlap.OVERLAP
 
@@ -304,7 +304,7 @@ def test_inline_conditional_without_else_does_not_coerce_undefined_to_empty_for_
 
 def test_internal_undefined_filter_cannot_be_used_by_source_templates(environment):
     result = analyze_template(
-        "/downloads/{{ none | __wireloft_analysis_undefined }}.ext",
+        "/downloads/{{ none | __vodloft_analysis_undefined }}.ext",
         environment=environment,
     )
     assert not result.complete

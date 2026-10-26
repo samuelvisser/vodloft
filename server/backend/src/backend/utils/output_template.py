@@ -456,7 +456,7 @@ class PreparedOutputTemplate:
             for field in self.allowed_fields | self.dynamic_fields
         }
         if custom_index_resolver is not None:
-            context["__wireloft_custom_index_resolver"] = custom_index_resolver
+            context["__vodloft_custom_index_resolver"] = custom_index_resolver
         try:
             rendered = self.template.render(context)
         except TypeError as exc:

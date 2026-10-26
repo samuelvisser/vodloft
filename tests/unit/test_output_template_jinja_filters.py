@@ -11,7 +11,7 @@ def _render(template: str, title: str) -> str:
     )
 
 
-def test_strftime_formats_wireloft_date_and_datetime_values() -> None:
+def test_strftime_formats_vodloft_date_and_datetime_values() -> None:
     from backend.utils.output_template import SHOW_OUTPUT_TEMPLATE_FIELDS, render_output_template
 
     assert render_output_template(

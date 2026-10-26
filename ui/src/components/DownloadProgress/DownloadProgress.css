@@ -6,7 +6,7 @@
 .download-progress-action {display:inline-flex;gap:6px;align-items:center;margin-left:auto;font-size:.78rem;white-space:nowrap}
 .download-progress-action-label {position:relative;z-index:1}
 .action-menu-item:has(.download-progress-action) {justify-content:space-between;gap:12px}
-.progress-button .wl-progress-fill {opacity:.3}
+.progress-button .vl-progress-fill {opacity:.3}
 @media (prefers-reduced-motion:reduce) {.download-progress .fa-spin {animation:none}}
 .download-stage-timings {margin-top:8px;font-size:.82rem;overflow-x:auto}
 .download-stage-timings summary {cursor:pointer}

@@ -8,7 +8,7 @@ from pydantic import AliasChoices, AliasPath, computed_field, Field
 from backend.api.models.base import RequestBase, response_model_config
 from backend.api.models.custom_metadata import CustomMetadataResponseBase
 from backend.api.models.source import SourcedResponse
-from backend.types.dailywire_user_info import WlDwMembershipLevel
+from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.show_types import ShowType, EpisodeIdentifier
 from backend.utils.helpers import generate_uuid
 
@@ -35,7 +35,7 @@ class ShowAPICreate(_ShowAPIBaseIn):
 
     slug: str
     source_key: str = Field(min_length=1)
-    membership_level: WlDwMembershipLevel
+    membership_level: DwMembershipLevel
     type: ShowType
     episode_identifier: EpisodeIdentifier
     author_slug: str
@@ -92,7 +92,7 @@ class _ShowAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     id: int
     uuid: str
     slug: str
-    membership_level: Optional[Union[WlDwMembershipLevel, str]] = None
+    membership_level: Optional[Union[DwMembershipLevel, str]] = None
     type: Union[ShowType, str]
     episode_identifier: Union[EpisodeIdentifier, str]
     author_slug: str

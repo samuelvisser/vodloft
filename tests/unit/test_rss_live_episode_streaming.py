@@ -139,7 +139,7 @@ def _rss_profile(
         preferred_format="format_1080p",
         prefer_exact_match=False,
         ep_id_type_list=["ep"],
-        feed_url="https://wireloft.test/feed.xml",
+        feed_url="https://vodloft.test/feed.xml",
         video_output_mode=mode,
         stream_live_episodes=live,
         live_episode_handoff_ids=[],

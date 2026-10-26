@@ -21,15 +21,15 @@ def no_real_ytdlp(monkeypatch):
 @pytest.fixture(autouse=True)
 def clean_event_bus():
     from task_manager.events.registry import (
-        WireloftEventLinker,
+        VodloftEventLinker,
         shutdown_event_emitter,
         wait_for_events,
     )
 
-    WireloftEventLinker.remove_all()
+    VodloftEventLinker.remove_all()
     yield
     wait_for_events()
-    WireloftEventLinker.remove_all()
+    VodloftEventLinker.remove_all()
     shutdown_event_emitter()
 
 
@@ -49,7 +49,7 @@ def task_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         TaskSchedule,
     )
 
-    database_path = tmp_path / "wireloft-test.db"
+    database_path = tmp_path / "vodloft-test.db"
     engine = create_engine(
         f"sqlite:///{database_path.as_posix()}",
         connect_args={"check_same_thread": False},

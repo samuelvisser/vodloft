@@ -139,6 +139,12 @@ def scheduled_work_is_paused() -> bool:
         return bool(_scheduled_work_pauses)
 
 
+def scheduled_work_is_paused_by(owner_key: str) -> bool:
+    """Whether the durable work with this owner key still holds its pause."""
+    with _scheduled_work_pause_lock:
+        return owner_key in _scheduled_work_pause_owners
+
+
 def _reset_scheduled_work_pauses() -> None:
     global _resume_scheduled_work_when_clear
 
@@ -573,7 +579,7 @@ def _ensure_event_loop_running() -> asyncio.AbstractEventLoop:
         asyncio.set_event_loop(l)
         l.run_forever()
 
-    t = threading.Thread(target=_run_loop, args=(loop,), name="wireloft-asyncio-loop", daemon=True)
+    t = threading.Thread(target=_run_loop, args=(loop,), name="vodloft-asyncio-loop", daemon=True)
     _loop_thread = t
     t.start()
     return loop

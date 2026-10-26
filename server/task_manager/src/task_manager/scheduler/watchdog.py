@@ -20,7 +20,7 @@ from task_manager.scheduler.types import OperationStatus, TaskStatus
 
 
 logger = logging.getLogger(__name__)
-WATCHDOG_JOB_ID = "wireloft-stalled-task-watchdog"
+WATCHDOG_JOB_ID = "vodloft-stalled-task-watchdog"
 
 # A queued operation may legitimately wait behind a constrained resource queue,
 # while WAITING means a running worker is intentionally blocked on an external

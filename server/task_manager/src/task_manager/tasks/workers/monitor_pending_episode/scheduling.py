@@ -14,7 +14,7 @@ from config.settings.cron_validation import (
     WorkerCronIntervalError,
     validate_worker_cron_interval,
 )
-from task_manager.events.registry import WireloftEventLinker
+from task_manager.events.registry import VodloftEventLinker
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.executor import execute_task
 from task_manager.scheduler.scheduler import start_scheduler
@@ -120,5 +120,5 @@ def _handle_monitor_completed(**event_data: Any) -> None:
 
 
 def register_monitor_event_handlers() -> None:
-    WireloftEventLinker.subscribe(MONITOR_REQUESTED_EVENT, event_callback=_handle_monitor_requested)
-    WireloftEventLinker.subscribe(MONITOR_COMPLETED_EVENT, event_callback=_handle_monitor_completed)
+    VodloftEventLinker.subscribe(MONITOR_REQUESTED_EVENT, event_callback=_handle_monitor_requested)
+    VodloftEventLinker.subscribe(MONITOR_COMPLETED_EVENT, event_callback=_handle_monitor_completed)

@@ -39,6 +39,7 @@ assert 'refresh_movie_extras' in {definition.key for definition in all_definitio
 def test_download_filesystem_recovery_cleans_expired_rss_cache(monkeypatch, tmp_path):
     import backend.api.endpoints.feeds.cached_video as cached_video
     import backend.app as backend_app
+    import backend.services.download_recovery as download_recovery
     import downloader.storage as download_paths
 
     calls: list[str] = []
@@ -49,7 +50,7 @@ def test_download_filesystem_recovery_cleans_expired_rss_cache(monkeypatch, tmp_
         lambda _root: calls.append("reservations") or 1,
     )
     monkeypatch.setattr(
-        backend_app,
+        download_recovery,
         "cleanup_abandoned_temporary_downloads",
         lambda _temporary, _downloads: calls.append("temporary") or 2,
     )
@@ -136,7 +137,7 @@ def test_controller_uses_asgi_loop_and_resets_scheduler(task_database, monkeypat
     assert scheduler_module._critical_scheduler is None
     assert scheduler_module._loop is None
     assert scheduler_module._loop_thread is None
-    assert not any(thread.name.startswith("wireloft") for thread in threading.enumerate())
+    assert not any(thread.name.startswith("vodloft") for thread in threading.enumerate())
 
 
 def test_controller_cancels_task_runs_interrupted_by_restart(task_database, monkeypatch):
@@ -214,7 +215,7 @@ def test_controller_shutdown_does_not_wait_for_background_executors(monkeypatch)
 
     monkeypatch.setattr(controller_app, "_controller_started", True)
     monkeypatch.setattr(
-        event_registry.WireloftEventLinker,
+        event_registry.VodloftEventLinker,
         "remove_all",
         lambda: calls.append(("events.remove_all", None)),
     )

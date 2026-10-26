@@ -15,7 +15,7 @@ export default function DownloadProgressButton({download, starting = false, labe
 }) {
     const state = starting ? presentDownloadProgress(download, download?.operation, true) : download?.presentation
     const retry = !!download && state?.canRetry && onRetry
-    if (download && state?.outcome === 'success') return <span className="wl-progress-with-details">
+    if (download && state?.outcome === 'success') return <span className="vl-progress-with-details">
         {showCompletedStatus && <DownloadProgressStatus download={download} compact details={false} labelOverride={downloadedLabel}/>} 
         <button type="button" className="icon-btn" onClick={onRetry || onStart}
                 disabled={disabled || controlBusy} title="Re-download" aria-label={`Re-download ${ariaLabel || ''}`}>

@@ -19,7 +19,7 @@ from backend.db.models.download_profile import DownloadProfile
 from backend.db.models.stream_profile import RssStreamProfile
 from backend.utils.feed_urls import build_rss_feed_url
 from backend.utils.helpers import generate_stream_profile_token
-from backend.types.dailywire_user_info import WlDwMembershipLevel
+from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.season_types import SeasonType
 from sources import Feature, UnknownSourceError, get_source
 from backend.utils.season_ordering import order_initial_seasons, season_type_from_name
@@ -61,7 +61,7 @@ def create_show_bundle(s: Session, request: Request, payload: ShowAPICreateBundl
         # Indexing puts the episodes in the Source's own seasons, or in a season per
         # upload year. Seasons given here are the Source's, picked for a Download
         # Profile; indexing matches them by slug and numbers them.
-        show.membership_level = WlDwMembershipLevel.FREE.value
+        show.membership_level = DwMembershipLevel.FREE.value
     s.add(show)
 
     # The Add Show flow supplies seasons as part of the initial bundle, before the

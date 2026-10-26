@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Season, Show
 from backend.services.show_assets import update_show_artwork_metadata
-from backend.types.dailywire_user_info import WlDwMembershipLevel
+from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.show_types import EpisodeIdentifier
 from sources.dailywire.api.dw_api.client import ByShowSeason, MiddlewareClient
@@ -203,13 +203,13 @@ async def _fetch_show(
     show_id = show.id
     show_slug = show.slug
     membership_plan = show.membership_level
-    if membership_plan != WlDwMembershipLevel.FREE.value and access_token is None:
-        if membership_plan != WlDwMembershipLevel.WL_ANY.value:
+    if membership_plan != DwMembershipLevel.FREE.value and access_token is None:
+        if membership_plan != DwMembershipLevel.HIGHEST_ALLOWED.value:
             logger.warning("No valid access token for show %s", show_slug)
             return 0
-    if membership_plan == WlDwMembershipLevel.WL_ANY.value:
-        membership_plan = WlDwMembershipLevel.FREE.value
-    require_member_exclusive = membership_plan != WlDwMembershipLevel.FREE.value
+    if membership_plan == DwMembershipLevel.HIGHEST_ALLOWED.value:
+        membership_plan = DwMembershipLevel.FREE.value
+    require_member_exclusive = membership_plan != DwMembershipLevel.FREE.value
 
     latest_final_episode = s.execute(
         select(Episode)

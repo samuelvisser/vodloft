@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 
-def test_movie_page_images_map_to_wireloft_poster_fields() -> None:
+def test_movie_page_images_map_to_vodloft_poster_fields() -> None:
     from sources.dailywire.api.records import DwMovieRecord
 
     movie = DwMovieRecord.model_validate({

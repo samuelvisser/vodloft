@@ -112,11 +112,11 @@ def get_download_profile_episodes(
         stmt = stmt.where(or_(published_at.is_(None), published_at >= cutoff))
 
     if profile.download_starting_from is not None:
-        wireloft_timezone = ZoneInfo(get_settings().timezone)
+        vodloft_timezone = ZoneInfo(get_settings().timezone)
         local_start = datetime.combine(
             profile.download_starting_from,
             time.min,
-            tzinfo=wireloft_timezone,
+            tzinfo=vodloft_timezone,
         )
         utc_start = local_start.astimezone(timezone.utc)
         stmt = stmt.where(

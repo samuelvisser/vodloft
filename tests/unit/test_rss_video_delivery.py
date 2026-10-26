@@ -50,7 +50,7 @@ def _children(parent: Element, tag: str) -> list[Element]:
         ("mp4_hls", "video/mp4", "/video.mp4", "application/x-mpegURL", "/video.m3u8"),
     ],
 )
-def test_rss_video_output_modes_use_stable_wireloft_urls(
+def test_rss_video_output_modes_use_stable_vodloft_urls(
         mode,
         primary_type,
         primary_suffix,
@@ -62,7 +62,7 @@ def test_rss_video_output_modes_use_stable_wireloft_urls(
     channel = Element("channel")
     _append_item(
         channel,
-        media_base_url="https://wireloft.example/feeds/rss/token",
+        media_base_url="https://vodloft.example/feeds/rss/token",
         episode=_episode(),
         profile=_profile(mode),
     )
@@ -98,7 +98,7 @@ def test_audio_only_uses_stable_m4a_without_video_alternate():
     channel = Element("channel")
     _append_item(
         channel,
-        media_base_url="https://wireloft.example/feeds/rss/token",
+        media_base_url="https://vodloft.example/feeds/rss/token",
         episode=_episode(),
         profile=profile,
     )
@@ -106,7 +106,7 @@ def test_audio_only_uses_stable_m4a_without_video_alternate():
     enclosure = channel.find("item/enclosure")
     assert enclosure is not None
     assert enclosure.attrib == {
-        "url": "https://wireloft.example/feeds/rss/token/episodes/episode-1/audio.m4a",
+        "url": "https://vodloft.example/feeds/rss/token/episodes/episode-1/audio.m4a",
         "length": "0",
         "type": "audio/mp4",
     }
@@ -116,12 +116,12 @@ def test_audio_only_uses_stable_m4a_without_video_alternate():
 def test_feed_url_does_not_encode_video_delivery_mode():
     from backend.utils.feed_urls import build_rss_feed_url
 
-    request = SimpleNamespace(base_url="https://wireloft.example/")
+    request = SimpleNamespace(base_url="https://vodloft.example/")
     assert build_rss_feed_url(
         request,
         token="token",
         show_slug="show",
-    ) == "https://wireloft.example/feeds/rss/token/show.xml"
+    ) == "https://vodloft.example/feeds/rss/token/show.xml"
 
 
 def test_cached_mp4_path_uses_configured_rss_cache_root(monkeypatch, tmp_path):

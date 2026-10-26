@@ -17,13 +17,13 @@ def test_system_download_storage_defaults_to_local_temporary_mode():
     assert settings.download_settings.thumbnail_mode is ThumbnailMode.EMBED
     assert settings.download_settings.metadata_mode is MetadataMode.EMBED
     assert settings.download_settings.show_artwork_fallback_format is ShowArtworkFallbackFormat.JPG
-    assert settings.download_settings.temporary_download_root.name == "wireloft-downloads"
+    assert settings.download_settings.temporary_download_root.name == "vodloft-downloads"
     assert settings.download_settings.temporary_download_root != (
-        settings.download_settings.download_root / ".wireloft-temp"
+        settings.download_settings.download_root / ".vodloft-temp"
     )
     assert (
         settings.download_settings.rss_cache_root
-        == settings.download_settings.download_root / ".wireloft-rss-cache"
+        == settings.download_settings.download_root / ".vodloft-rss-cache"
     )
     assert settings.download_settings.rss_cache_retention_seconds == 7 * 24 * 60 * 60
 
@@ -39,7 +39,7 @@ def test_system_download_storage_defaults_to_local_temporary_mode():
         settings.download_settings.temporary_download_root
     )
     assert values["downloadSettings"]["rssCacheRoot"] == str(
-        settings.download_settings.download_root / ".wireloft-rss-cache"
+        settings.download_settings.download_root / ".vodloft-rss-cache"
     )
     assert values["downloadSettings"]["rssCacheRetentionSeconds"] == 7 * 24 * 60 * 60
 
@@ -49,9 +49,9 @@ def test_cache_default_follows_download_root_but_temporary_storage_does_not():
 
     settings = DownloadSettings(download_root="/media")
 
-    assert settings.temporary_download_root.name == "wireloft-downloads"
-    assert settings.temporary_download_root.as_posix() != "/media/.wireloft-temp"
-    assert settings.rss_cache_root.as_posix() == "/media/.wireloft-rss-cache"
+    assert settings.temporary_download_root.name == "vodloft-downloads"
+    assert settings.temporary_download_root.as_posix() != "/media/.vodloft-temp"
+    assert settings.rss_cache_root.as_posix() == "/media/.vodloft-rss-cache"
 
 
 def test_explicit_download_storage_paths_override_default_factories():
@@ -59,12 +59,12 @@ def test_explicit_download_storage_paths_override_default_factories():
 
     settings = DownloadSettings(
         download_root="/media",
-        temporary_download_root="/tmp/wireloft-downloads",
-        rss_cache_root="/tmp/wireloft-rss-cache",
+        temporary_download_root="/tmp/vodloft-downloads",
+        rss_cache_root="/tmp/vodloft-rss-cache",
     )
 
-    assert settings.temporary_download_root.as_posix() == "/tmp/wireloft-downloads"
-    assert settings.rss_cache_root.as_posix() == "/tmp/wireloft-rss-cache"
+    assert settings.temporary_download_root.as_posix() == "/tmp/vodloft-downloads"
+    assert settings.rss_cache_root.as_posix() == "/tmp/vodloft-rss-cache"
 
 
 def test_local_media_profile_defaults_to_system_storage_thumbnail_and_metadata_modes():

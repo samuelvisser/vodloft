@@ -22,7 +22,7 @@ from backend.db.models import (
 )
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.db.models.download_profile import download_profile_seasons
-from backend.types.dailywire_user_info import WlDwMembershipLevel
+from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.download_profile_types import EpIdType, MediaDownloadArtifactStatus
 from backend.types.episode_types import EpisodeExtraType, EpisodePublishStatus
 from backend.types.local_media_profile_types import PreferredFormat
@@ -758,8 +758,8 @@ def get_source_stream_url(
     """Ask the episode's Source for its current stream URL."""
     source = source or get_source(episode.source_key)
     members_only = profile.show.membership_level not in {
-        WlDwMembershipLevel.FREE.value,
-        WlDwMembershipLevel.WL_ANY.value,
+        DwMembershipLevel.FREE.value,
+        DwMembershipLevel.HIGHEST_ALLOWED.value,
     }
     try:
         media = source.episode_media(slug=episode.slug, members_only=members_only, interactive=True)

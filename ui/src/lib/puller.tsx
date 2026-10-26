@@ -14,14 +14,14 @@ import {
   type FrontendPullRead,
 } from '../types/schemas/puller'
 import {usePageActive} from './pageActivity'
-import {WIRELOFT_VERSION as FRONTEND_APP_VERSION} from 'virtual:wireloft-version'
+import {VODLOFT_VERSION as FRONTEND_APP_VERSION} from 'virtual:vodloft-version'
 
 
 export const FRONTEND_PULLER_QUERY_KEY = ['frontendPuller'] as const
 export const FRONTEND_PULLER_SLOW_MS = 5_000
 export const FRONTEND_PULLER_FAST_MS = 1_250
 
-const DEV_BACKEND_VERSION_KEY = 'wireloft.dev.backend-version'
+const DEV_BACKEND_VERSION_KEY = 'vodloft.dev.backend-version'
 let reloadRequested = false
 
 type FrontendPullerContextValue = {

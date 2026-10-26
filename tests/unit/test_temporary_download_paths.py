@@ -26,10 +26,10 @@ def test_temporary_download_is_not_visible_at_destination_until_publish(tmp_path
 
         assert published == destination
         assert destination.read_bytes() == b"complete media"
-        assert not list(destination.parent.glob(".wireloft-publish-*.part"))
+        assert not list(destination.parent.glob(".vodloft-publish-*.part"))
         # The primary workspace keeps only its crash-recovery publication record
         # until the database transaction commits.
-        assert (workspace.workspace / ".wireloft-publication").exists()
+        assert (workspace.workspace / ".vodloft-publication").exists()
     finally:
         workspace.cleanup()
 
@@ -137,7 +137,7 @@ def test_temporary_publish_copies_complete_file_when_staging_is_cross_filesystem
         target_path = Path(target)
         if (
             source_path == workspace.path
-            and target_path.name.startswith(".wireloft-publish-")
+            and target_path.name.startswith(".vodloft-publish-")
             and target_path.suffix == ".part"
         ):
             raise OSError(errno.EXDEV, "cross-device link")
@@ -152,7 +152,7 @@ def test_temporary_publish_copies_complete_file_when_staging_is_cross_filesystem
         # Cross-filesystem publication copies instead of moving the primary
         # staged artifact, so it remains until the worker cleans its workspace.
         assert workspace.path.read_bytes() == b"complete media"
-        assert not list(destination.parent.glob(".wireloft-publish-*.part"))
+        assert not list(destination.parent.glob(".vodloft-publish-*.part"))
     finally:
         workspace.cleanup()
 

@@ -9,7 +9,7 @@ from pyventus.core.processing.executor import ExecutorProcessingService
 from pyventus.events import EventEmitter, EventLinker
 
 
-class WireloftEventLinker(EventLinker):
+class VodloftEventLinker(EventLinker):
     """Private Pyventus namespace for VODLoft domain events."""
 
 
@@ -63,16 +63,16 @@ _emitter: EventEmitter | None = None
 
 def _create_emitter() -> EventEmitter:
     global _executor, _processor, _emitter
-    _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="wireloft-events")
+    _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="vodloft-events")
     _processor = TrackedExecutorProcessingService(_executor)
     _emitter = EventEmitter(
         event_processor=_processor,
-        event_linker=WireloftEventLinker,
+        event_linker=VodloftEventLinker,
     )
     return _emitter
 
 
-def get_wireloft_event_emitter() -> EventEmitter:
+def get_vodloft_event_emitter() -> EventEmitter:
     global _emitter
     with _state_lock:
         return _emitter if _emitter is not None else _create_emitter()

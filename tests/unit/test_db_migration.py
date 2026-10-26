@@ -9,7 +9,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "65b6125a39bb"
+HEAD_REVISION = "f4abb559e3ab"
+VODLOFT_SOURCE_IDENTITY_REVISION = "65b6125a39bb"
 VODLOFT_SCHEMA_NAMES_REVISION = "a23bae59a781"
 VODLOFT_UNIFIED_DOWNLOAD_PROFILES_REVISION = "72dc6dfbcb05"
 VODLOFT_SOURCE_DOMAINS_REVISION = "f7b2d4e6a913"
@@ -246,7 +247,8 @@ def test_migration_history_has_one_head(migration_database):
     )
 
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == VODLOFT_SCHEMA_NAMES_REVISION
+    assert script.get_revision(HEAD_REVISION).down_revision == VODLOFT_SOURCE_IDENTITY_REVISION
+    assert script.get_revision(VODLOFT_SOURCE_IDENTITY_REVISION).down_revision == VODLOFT_SCHEMA_NAMES_REVISION
     assert script.get_revision(VODLOFT_SCHEMA_NAMES_REVISION).down_revision == VODLOFT_UNIFIED_DOWNLOAD_PROFILES_REVISION
     assert script.get_revision(VODLOFT_UNIFIED_DOWNLOAD_PROFILES_REVISION).down_revision == VODLOFT_SOURCE_DOMAINS_REVISION
     assert script.get_revision(VODLOFT_SOURCE_DOMAINS_REVISION).down_revision == VODLOFT_DRM_REVISION
@@ -744,6 +746,48 @@ def test_source_identity_migration_moves_source_slugs_into_their_column(migratio
         )).all() == [(prefixed, "def")]
     inspector = inspect(engine)
     assert "source_slug" not in {column["name"] for column in inspector.get_columns("media_items_episode")}
+
+
+def test_stored_names_migration_renames_wireloft_values(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config(allow_version_storage_migration=True)
+    command.upgrade(config, VODLOFT_SOURCE_IDENTITY_REVISION)
+    with engine.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO shows (uuid, source_key, slug, title, sharing_url, membership_level, type, "
+            "episode_identifier, author_name, author_slug) VALUES "
+            "('show', 'dailywire', 'show', 'Show', 'https://example.test/show', 'WL_ANY', 'podcast', 'numbered', 'A', 'a')"
+        ))
+        connection.execute(text(
+            "INSERT INTO metadata (parent_table, parent_id, key, value) VALUES "
+            "('media_items_episode', 1, 'ep_status.last_known_pending', 'wireloft:last_known_pending:2026-01-01T00:00:00+00:00'), "
+            "('media_items_episode', 1, 'ep_status.recorded_published_final', "
+            "'wireloft:recorded_published_final:2026-01-02T00:00:00+00:00'), "
+            "('media_items_episode', 1, 'ep_status.trusted_live_ended', 'monitor:live_ended:2026-01-03T00:00:00+00:00')"
+        ))
+
+    def stored() -> tuple[str, list[str]]:
+        with engine.connect() as connection:
+            return (
+                connection.execute(text("SELECT membership_level FROM shows")).scalar_one(),
+                list(connection.execute(text("SELECT value FROM metadata ORDER BY id")).scalars()),
+            )
+
+    command.upgrade(config, HEAD_REVISION)
+    assert stored() == ("HIGHEST_ALLOWED", [
+        "vodloft:last_known_pending:2026-01-01T00:00:00+00:00",
+        "vodloft:recorded_published_final:2026-01-02T00:00:00+00:00",
+        "monitor:live_ended:2026-01-03T00:00:00+00:00",
+    ])
+
+    command.downgrade(config, VODLOFT_SOURCE_IDENTITY_REVISION)
+    assert stored() == ("WL_ANY", [
+        "wireloft:last_known_pending:2026-01-01T00:00:00+00:00",
+        "wireloft:recorded_published_final:2026-01-02T00:00:00+00:00",
+        "monitor:live_ended:2026-01-03T00:00:00+00:00",
+    ])
 
 
 def test_unified_download_profiles_migration_keeps_every_profile_setting(migration_database):

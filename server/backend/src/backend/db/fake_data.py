@@ -8,7 +8,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any
 
-from backend.types.dailywire_user_info import WlDwMembershipLevel
+from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
 from backend.types.show_types import EpisodeIdentifier, ShowType
@@ -30,7 +30,7 @@ def _show(slug: str, title: str, author: str) -> dict[str, Any]:
         "title": title,
         "description": None,
         "sharing_url": f"https://www.dailywire.com/show/{slug}",
-        "membership_level": WlDwMembershipLevel.FREE.value,
+        "membership_level": DwMembershipLevel.FREE.value,
         "type": ShowType.PODCAST.value,
         "episode_identifier": EpisodeIdentifier.DATE_BASED.value,
         "author_name": author,

@@ -28,6 +28,7 @@ DAILYWIRE_FEATURE_MODULES = {
     "backend/src/backend/api/endpoints/movies/service.py",
     "backend/src/backend/db/background_migrations/versions/3c8f6a1d2b47_square_show_thumbnails.py",
     "backend/src/backend/db/background_migrations/versions/f6a1c3d8b427_episode_indexing_semantics.py",
+    "backend/src/backend/db/background_migrations/versions/2965d0593097_vodloft_file_names.py",
     "backend/src/backend/services/movies.py",
     "backend/src/backend/services/show_assets.py",
     "task_manager/src/task_manager/tasks/helpers/episodes/identifier.py",

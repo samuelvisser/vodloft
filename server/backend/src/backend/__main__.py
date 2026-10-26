@@ -141,7 +141,7 @@ def _validate_db_health() -> None:
 
 def _reload_startup_marker(supervisor_pid: str) -> Path:
     """Marker file shared by all worker subprocesses of one reload session."""
-    return Path(tempfile.gettempdir()) / f"wireloft-reload-startup-{supervisor_pid}.lock"
+    return Path(tempfile.gettempdir()) / f"vodloft-reload-startup-{supervisor_pid}.lock"
 
 
 _STOP_SIGTERM_TIMEOUT_S = 5.0
@@ -342,7 +342,7 @@ def main(argv: Optional[list[str]] = None) -> None:
 
             if debug:
                 supervisor_pid = str(os.getpid())
-                os.environ["WIRELOFT_RELOAD_SUPERVISOR_PID"] = supervisor_pid
+                os.environ["VODLOFT_RELOAD_SUPERVISOR_PID"] = supervisor_pid
                 _reload_startup_marker(supervisor_pid).unlink(missing_ok=True)
 
             try:

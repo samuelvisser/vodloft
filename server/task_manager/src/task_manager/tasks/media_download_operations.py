@@ -79,7 +79,7 @@ _ACTIVE_RUN_STATUSES = (
 # transaction. Without this guard, two dispatcher sessions can both observe five
 # free slots and each reserve five before either transaction commits.
 _DOWNLOAD_DISPATCH_LOCK = threading.Lock()
-_DOWNLOAD_DISPATCH_TRANSACTION_KEY = "wireloft.media_download_dispatch_transaction"
+_DOWNLOAD_DISPATCH_TRANSACTION_KEY = "vodloft.media_download_dispatch_transaction"
 
 
 def is_media_download_publication_delay_wait(

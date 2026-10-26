@@ -54,7 +54,7 @@ const showUrl = z
 /* ------------------------------------------------------------------ */
 const ShowBaseFormSchema = z.object({
     url: showUrl,
-    membershipLevel: z.enum(DwMembershipLevelReg.Enum).default(DwMembershipLevelReg.Enum.WL_ANY),
+    membershipLevel: z.enum(DwMembershipLevelReg.Enum).default(DwMembershipLevelReg.Enum.HIGHEST_ALLOWED),
     type: z.union([z.enum(ShowTypeReg.values), z.literal('')]).default('').pipe(z.enum(ShowTypeReg.values)),
     episodeIdentifier: z.union([z.enum(EpisodeIdentifierReg.values), z.literal('')]).default('').pipe(z.enum(EpisodeIdentifierReg.values)),
 });

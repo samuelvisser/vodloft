@@ -169,7 +169,7 @@ def test_feed_items_respect_stream_profile_episode_types(db_session):
         preferred_format="format_audio_only",
         prefer_exact_match=False,
         ep_id_type_list=["ep"],
-        feed_url="https://wireloft.test/feed.xml",
+        feed_url="https://vodloft.test/feed.xml",
     )
 
     db_session.add_all([show, season, normal, auxiliary, profile])

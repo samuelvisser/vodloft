@@ -57,7 +57,7 @@ def asset_file_hash(path: Path) -> str | None:
 def asset_file_lock(download_root: Path, target: Path):
     """Serialize cooperating workers/processes without stale crash-time leases."""
     target = safe_asset_path(download_root, target)
-    directory = download_root.resolve() / ".wireloft-assets-locks"
+    directory = download_root.resolve() / ".vodloft-assets-locks"
     lock_path = safe_asset_path(download_root, directory / (hashlib.sha256(str(target).encode()).hexdigest() + ".lock"))
     directory.mkdir(parents=True, exist_ok=True)
     with lock_path.open("a+b") as lock:
@@ -192,7 +192,7 @@ def publish_show_asset(
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = None
     try:
-        with tempfile.NamedTemporaryFile(prefix=".wireloft-artwork-", suffix=".tmp", dir=target.parent, delete=False) as output:
+        with tempfile.NamedTemporaryFile(prefix=".vodloft-artwork-", suffix=".tmp", dir=target.parent, delete=False) as output:
             temporary = Path(output.name)
             with source.open("rb") as incoming:
                 shutil.copyfileobj(incoming, output)

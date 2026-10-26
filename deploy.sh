@@ -47,8 +47,8 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-IMAGE_VERSION="${WIRELOFT_VERSION:-development}"
-if [ "${#EXPLICIT_TAGS[@]}" -gt 0 ] && [ -z "${WIRELOFT_VERSION:-}" ]; then
+IMAGE_VERSION="${VODLOFT_VERSION:-development}"
+if [ "${#EXPLICIT_TAGS[@]}" -gt 0 ] && [ -z "${VODLOFT_VERSION:-}" ]; then
     IMAGE_VERSION="${EXPLICIT_TAGS[0]}"
 fi
 
@@ -215,9 +215,9 @@ resolve_token
 echo "Building $FULL_IMAGE with Font Awesome Pro icons for tags: ${TAGS[*]} ..."
 docker build \
     -f .docker/Dockerfile \
-    --build-arg WIRELOFT_PRO_ICONS=true \
-    --build-arg WIRELOFT_VERSION="$IMAGE_VERSION" \
-    --build-arg WIRELOFT_REVISION="$GIT_REVISION" \
+    --build-arg VODLOFT_PRO_ICONS=true \
+    --build-arg VODLOFT_VERSION="$IMAGE_VERSION" \
+    --build-arg VODLOFT_REVISION="$GIT_REVISION" \
     --secret id=npmrc,src="$NPMRC" \
     -t "$IMAGE_NAME" \
     .

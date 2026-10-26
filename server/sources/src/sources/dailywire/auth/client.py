@@ -15,7 +15,7 @@ class DeviceAuthClient:
     """
 
     def __init__(self, config: Optional[DeviceAuthConfig] = None, store: Optional[TokenStore] = None, session: Optional[requests.Session] = None):
-        # Prefer explicit config; otherwise derive from wireloft settings
+        # Prefer explicit config; otherwise derive from VODLoft settings
         self.config = config or get_default_config()
         self.store = store or TokenStore()
         self.session = session or requests.Session()

@@ -140,7 +140,7 @@ export default function LogsPage() {
             >
                 {logs.isPending ? (
                     <div className="logs-message">
-                        <FontAwesomeIcon className="wl-progress-icon" icon={faIcon('fass', 'spinner')}/>
+                        <FontAwesomeIcon className="vl-progress-icon" icon={faIcon('fass', 'spinner')}/>
                         Loading logs...
                     </div>
                 ) : logs.error ? (

@@ -19,7 +19,7 @@ class _FakeURL:
 
 
 class _FakeRequest:
-    def __init__(self, base_url: str = "https://wireloft.test/", method: str = "GET"):
+    def __init__(self, base_url: str = "https://vodloft.test/", method: str = "GET"):
         self.base_url = _FakeURL(base_url)
         self.method = method
 
@@ -193,7 +193,7 @@ def _make_rss_profile(
         preferred_format=preferred_format,
         prefer_exact_match=False,
         ep_id_type_list=["ep"],
-        feed_url="https://wireloft.test/feeds/rss/token/show.xml",
+        feed_url="https://vodloft.test/feeds/rss/token/show.xml",
         video_output_mode=mode,
         stream_live_episodes=False,
         live_episode_handoff_ids=[],
@@ -265,11 +265,11 @@ def test_dailywire_enabled_feed_keeps_undownloaded_episode_with_stable_url(
 
     xml = render_rss_feed(db_session, _FakeRequest(), profile).decode()
     assert (
-        "https://wireloft.test/feeds/rss/token/episodes/episode-1/audio.m4a"
+        "https://vodloft.test/feeds/rss/token/episodes/episode-1/audio.m4a"
         in xml
     )
     assert (
-        "https://wireloft.test/feeds/rss/token/episodes/episode-1/video.m3u8"
+        "https://vodloft.test/feeds/rss/token/episodes/episode-1/video.m3u8"
         in xml
     )
     assert "dailywire" not in xml.lower()
@@ -367,7 +367,7 @@ def test_rss_media_urls_do_not_change_when_download_appears(
 
     after = render_rss_feed(db_session, _FakeRequest(), profile).decode()
 
-    base = "https://wireloft.test/feeds/rss/token/episodes/episode-1/"
+    base = "https://vodloft.test/feeds/rss/token/episodes/episode-1/"
     for suffix in stable_suffixes:
         stable_url = f"{base}{suffix}"
         assert stable_url in before
@@ -695,7 +695,7 @@ def test_create_stream_profile_generates_plain_stable_feed_url(db_session):
     assert stored is not None
     assert stored.overwrite_show_title is None
     assert created.effective_title == show.title
-    assert created.feed_url.startswith("https://wireloft.test/feeds/rss/")
+    assert created.feed_url.startswith("https://vodloft.test/feeds/rss/")
     assert created.feed_url.endswith("/show.xml")
     assert "dwVideoMethod" not in created.feed_url
     assert "?" not in created.feed_url

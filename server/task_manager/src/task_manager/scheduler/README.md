@@ -6,7 +6,7 @@ A lightweight, APScheduler-powered task scheduler integrated into the VODLoft ba
 - Trigger ad-hoc runs immediately
 - Track task runs, progress, status, retries, and errors via the API
     
-This package is designed to feel native with the existing FastAPI + SQLAlchemy stack and is configured via wireloft_config.get_settings().
+This package is designed to feel native with the existing FastAPI + SQLAlchemy stack and is configured via config.get_settings().
 
 
 ## Contents
@@ -35,7 +35,7 @@ This package is designed to feel native with the existing FastAPI + SQLAlchemy s
 
 
 ## Configuration
-All settings are centralized in wireloft_config. Relevant fields (wireloft_config.settings.submodels.SchedulerSettings):
+All settings are centralized in config. Relevant fields (config.settings.submodels.SchedulerSettings):
 - enabled: bool (default: True) — Turn the scheduler on/off
 - timezone: str (default: "UTC") — Scheduler timezone
 - jobstore_url: Optional[str] — SQLAlchemy URL used by APScheduler; defaults to the main app DB if None
@@ -45,10 +45,10 @@ All settings are centralized in wireloft_config. Relevant fields (wireloft_confi
 
 ## How settings are loaded:
 - The backend calls get_settings().scheduler to read these values.
-- If jobstore_url is not set, the scheduler uses the main SQLite database path in WIRELOFT_DB_PATH, defaulting to data/wireloft.db when not set.
+- If jobstore_url is not set, the scheduler uses the main SQLite database at VL_DATABASE_PATH, which defaults to config/vodloft.db.
 
 Example (Python):
-from wireloft_config import get_settings
+from config import get_settings
 print(get_settings().scheduler.enabled)
 print(get_settings().scheduler.default_max_retries)
 
@@ -70,8 +70,8 @@ Important: Your task modules must be importable before sync_registry_to_db() run
 Define your task in any importable module. The function can be async or sync and must accept resource_id and progress arguments.
 
 Example:
-from wireloft_scheduler.registry import task
-from wireloft_scheduler.executor import ProgressUpdater
+from task_manager.scheduler.registry import task
+from task_manager.scheduler.executor import ProgressUpdater
 
 @task(
     key="refresh_episode_metadata",
@@ -209,11 +209,11 @@ Response: { "jobId": "..." }
 
 ## Appendix: Internal APIs (if you need them)
 - Programmatic trigger (internal):
-  from wireloft_scheduler.executor import trigger_now
+  from task_manager.scheduler.executor import trigger_now
   trigger_now(def_key="refresh_episode_metadata", resource_type="episode", resource_id=123, max_retries=4)
 
 - Manual APScheduler schedule (rarely needed; prefer REST + DB):
-  from wireloft_scheduler.scheduler import schedule_job
+  from task_manager.scheduler.scheduler import schedule_job
   schedule_job(schedule_id=1, def_key="refresh_episode_metadata", resource_type="episode", resource_id=123, trigger="interval", trigger_args={"minutes": 15})
 
 That’s it! Define your task, sync the registry, and use the /api/tasks endpoints to manage schedules and observe runs.

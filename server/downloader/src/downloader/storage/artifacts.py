@@ -54,7 +54,7 @@ def remove_download_artifacts(
                     (asset_root, hls_asset_marker(base_path)),
                     (
                         Path(f"{asset_root}.part"),
-                        Path(f"{asset_root}.part") / ".wireloft-hls-bundle",
+                        Path(f"{asset_root}.part") / ".vodloft-hls-bundle",
                     ),
                 )
                 for directory, marker in directories:

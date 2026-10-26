@@ -10,8 +10,8 @@ from task_manager.scheduler.types import ResourceType, TaskStatus
 
 
 logger = logging.getLogger(__name__)
-_PENDING_DELETED_RESOURCES_KEY = "wireloft.deleted_task_resources"
-_PENDING_RELEASED_TASK_CALLBACKS_KEY = "wireloft.released_task_callbacks"
+_PENDING_DELETED_RESOURCES_KEY = "vodloft.deleted_task_resources"
+_PENDING_RELEASED_TASK_CALLBACKS_KEY = "vodloft.released_task_callbacks"
 
 
 class HasTaskResourcesMixin:

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, EpisodeMediaDownload, Show
 from backend.services.custom_indexes import request_show_custom_index_reconciliation
-from backend.types.dailywire_user_info import WlDwMembershipLevel
+from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from config.network import NoInternetConnectionError, is_no_internet_error
 from sources.dailywire.api.dw_api.client import MiddlewareAPIError, MiddlewareClient
@@ -86,8 +86,8 @@ def _reason_for_unusable_detail(detail, observed_status: EpisodePublishStatus) -
 
 def _membership(show: Show) -> bool:
     return show.membership_level not in {
-        WlDwMembershipLevel.FREE.value,
-        WlDwMembershipLevel.WL_ANY.value,
+        DwMembershipLevel.FREE.value,
+        DwMembershipLevel.HIGHEST_ALLOWED.value,
     }
 
 

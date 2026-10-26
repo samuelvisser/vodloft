@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from backend.services.download_recovery import cleanup_abandoned_temporary_downloads
+from backend.services.download_recovery import STARTUP_RECOVERY_PAUSE_OWNER, recover_download_filesystem
 
 import logging
 import threading
@@ -43,26 +43,14 @@ def _recover_download_filesystem(download_settings, scheduled_work_pause) -> Non
     own lease at the same time; normal work resumes only after the final lease is
     released.
     """
-    from backend.api.endpoints.feeds.cached_video import cleanup_expired_rss_cache
-    from downloader.storage import (
-        cleanup_abandoned_download_path_reservations,
-        )
-
     try:
         logger.info("Starting background download filesystem recovery")
-        reservation_count = cleanup_abandoned_download_path_reservations(
-            download_settings.download_root
-        )
-        temporary_count = cleanup_abandoned_temporary_downloads(
-            download_settings.temporary_download_root,
-            download_settings.download_root,
-        )
-        rss_cache_count = cleanup_expired_rss_cache()
+        recovery = recover_download_filesystem(download_settings)
         logger.info(
             "Download filesystem recovery complete: cleaned %s stale path claim(s), %s temporary workspace(s), and %s expired RSS cache file(s)",
-            reservation_count,
-            temporary_count,
-            rss_cache_count,
+            recovery.reservations,
+            recovery.temporary_workspaces,
+            recovery.rss_cache_files,
         )
     except Exception:
         # Filesystem recovery is best-effort crash cleanup. A transient mount or
@@ -98,7 +86,7 @@ async def application_lifespan(app: FastAPI):
     start_scheduler()
     filesystem_pause = pause_scheduled_work(
         "download filesystem recovery",
-        owner_key="startup-download-filesystem-recovery",
+        owner_key=STARTUP_RECOVERY_PAUSE_OWNER,
     )
 
     started = False
@@ -110,7 +98,7 @@ async def application_lifespan(app: FastAPI):
         recovery_thread = threading.Thread(
             target=_recover_download_filesystem,
             args=(settings.download_settings, filesystem_pause),
-            name="wireloft-startup-download-recovery",
+            name="vodloft-startup-download-recovery",
             daemon=True,
         )
         recovery_thread.start()

@@ -8,6 +8,8 @@ from typing import BinaryIO
 
 
 _FINGERPRINT_SAMPLE_SIZE = 64 * 1024
+# Every stored fingerprint is a hash over this tag, so it keeps the name it had
+# in WireLoft. Changing it would mean fingerprinting every download again.
 _FINGERPRINT_VERSION = b"wireloft-artifact-v1\0"
 
 

@@ -17,8 +17,8 @@ from .copying import copy_file
 from .helpers import _path_is_within
 from .identity import ArtifactIdentity, inspect_artifact
 
-_JOURNAL = ".wireloft-auxiliary-publication"
-_MAGIC = "wireloft-auxiliary-publication-v1"
+_JOURNAL = ".vodloft-auxiliary-publication"
+_MAGIC = "vodloft-auxiliary-publication-v1"
 
 
 def _matches(path: Path, identity: dict) -> bool:
@@ -62,7 +62,7 @@ class PublicationJournal:
         destination = self.media_path.with_name(self.media_path.stem + suffix)
         if destination == self.media_path or "/" in suffix or "\\" in suffix or ".." in suffix:
             raise DownloadError("Invalid auxiliary publication destination")
-        portable = destination.parent / f".wireloft-publish-{uuid4().hex}.part"
+        portable = destination.parent / f".vodloft-publish-{uuid4().hex}.part"
         entry = {"path": str(destination.absolute()), "portable": str(portable.absolute()), "identity": None}
         self.record["files"].append(entry)
         self._write()
@@ -92,7 +92,7 @@ def _rollback_record(record: dict, root: Path, persist: Callable[[], None]) -> N
         portable = Path(entry["portable"])
         if not _path_is_within(path, root) or not _path_is_within(portable, root):
             raise ValueError("Unsafe auxiliary publication record")
-        if not (portable.name.startswith(".wireloft-publish-") and portable.name.endswith(".part")):
+        if not (portable.name.startswith(".vodloft-publish-") and portable.name.endswith(".part")):
             raise ValueError("Unsafe auxiliary staging path")
         # If the portable file still exists, our final rename never happened.
         # Never remove somebody else's colliding destination in that case.
@@ -130,7 +130,7 @@ def reconcile_publication_journal(
             # an inode or deleted the main file since the application committed.
             for entry in record["files"]:
                 portable = Path(entry["portable"])
-                if not _path_is_within(portable, download_root) or not portable.name.startswith(".wireloft-publish-"):
+                if not _path_is_within(portable, download_root) or not portable.name.startswith(".vodloft-publish-"):
                     return False
                 portable.unlink(missing_ok=True)
         else:

@@ -11,7 +11,7 @@ from urllib.request import Request, urlopen
 from .errors import DownloadCancelled, DownloadError, MediaUnavailableError
 from .transfer_context import TransferWait, cancel_check, wait_observer
 
-USER_AGENT = "wireloft-downloader/1.0"
+USER_AGENT = "vodloft-downloader/1.0"
 
 # Status codes that mean "this URL will not start working by itself":
 # the caller should obtain a fresh URL instead of retrying.

@@ -78,7 +78,7 @@ export default function ProgressExplanation({detail, buttonClassName = 'icon-btn
             <span
                 id={id}
                 ref={popoverRef}
-                className="wl-progress-explanation-text"
+                className="vl-progress-explanation-text"
                 role="note"
                 style={{top: position.top, left: position.left}}
             >
@@ -88,7 +88,7 @@ export default function ProgressExplanation({detail, buttonClassName = 'icon-btn
         )
         : null
 
-    return <span className="wl-progress-explanation">
+    return <span className="vl-progress-explanation">
         <button
             ref={triggerRef}
             type="button"

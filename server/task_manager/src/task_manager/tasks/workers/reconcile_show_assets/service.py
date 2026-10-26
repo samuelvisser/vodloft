@@ -299,7 +299,7 @@ def _refresh_asset(plan: AssetPlan, check_cancelled: Callable[[], None]) -> bool
         _cleanup_obsolete_variants(plan, fresh_target, check_cancelled)
         return True
 
-    with tempfile.TemporaryDirectory(prefix="wireloft-show-assets-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="vodloft-show-assets-") as temporary:
         settings = get_settings().download_settings
         prepared: PreparedShowAsset = download_show_asset(
             plan.url,

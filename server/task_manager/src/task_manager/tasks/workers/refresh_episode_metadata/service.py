@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode
 from backend.services.custom_indexes import request_show_custom_index_reconciliation
-from backend.types.dailywire_user_info import WlDwMembershipLevel
+from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode_publication_timing import (
     best_effort_published_date,
@@ -69,8 +69,8 @@ async def run_refresh_episode_metadata(
         did_refresh = True
         episode_slug = episode.slug
         require_member_exclusive = episode.show.membership_level not in {
-            WlDwMembershipLevel.FREE.value,
-            WlDwMembershipLevel.WL_ANY.value,
+            DwMembershipLevel.FREE.value,
+            DwMembershipLevel.HIGHEST_ALLOWED.value,
         }
 
         # Before calling The Daily Wire API, release the db transaction so others can use it

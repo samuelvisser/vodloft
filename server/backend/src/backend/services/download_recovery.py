@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from backend.db import get_session
 from downloader.storage.identity import ArtifactIdentity
+from downloader import storage
 from downloader.storage import temporary
+
+# The scheduled-work pause that startup holds while it recovers the download filesystem.
+STARTUP_RECOVERY_PAUSE_OWNER = "startup-download-filesystem-recovery"
 
 
 def _is_committed_download_artifact(path: Path, identity: ArtifactIdentity) -> bool:
@@ -52,4 +57,25 @@ def cleanup_abandoned_temporary_downloads(temporary_root: str | Path, download_r
     """Supply database ownership to the standalone filesystem reconciler."""
     return temporary.cleanup_abandoned_temporary_downloads(
         temporary_root, download_root, is_committed=_is_committed_download_artifact,
+    )
+
+
+@dataclass(frozen=True)
+class DownloadFilesystemRecovery:
+    reservations: int
+    temporary_workspaces: int
+    rss_cache_files: int
+
+
+def recover_download_filesystem(download_settings) -> DownloadFilesystemRecovery:
+    """Clean up what an unclean shutdown left in the download folders. Run it while no download runs."""
+    from backend.api.endpoints.feeds.cached_video import cleanup_expired_rss_cache
+
+    return DownloadFilesystemRecovery(
+        reservations=storage.cleanup_abandoned_download_path_reservations(download_settings.download_root),
+        temporary_workspaces=cleanup_abandoned_temporary_downloads(
+            download_settings.temporary_download_root,
+            download_settings.download_root,
+        ),
+        rss_cache_files=cleanup_expired_rss_cache(),
     )

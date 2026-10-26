@@ -20,14 +20,14 @@ try {
         jsx: 'automatic',
         loader: {'.css': 'empty'},
         plugins: [{
-            name: 'wireloft-version-test',
+            name: 'vodloft-version-test',
             setup(build) {
-                build.onResolve({filter: /^virtual:wireloft-version$/}, () => ({
-                    path: 'wireloft-version',
-                    namespace: 'wireloft-version-test',
+                build.onResolve({filter: /^virtual:vodloft-version$/}, () => ({
+                    path: 'vodloft-version',
+                    namespace: 'vodloft-version-test',
                 }))
-                build.onLoad({filter: /.*/, namespace: 'wireloft-version-test'}, () => ({
-                    contents: 'export const WIRELOFT_VERSION = "test"',
+                build.onLoad({filter: /.*/, namespace: 'vodloft-version-test'}, () => ({
+                    contents: 'export const VODLOFT_VERSION = "test"',
                     loader: 'js',
                 }))
             },

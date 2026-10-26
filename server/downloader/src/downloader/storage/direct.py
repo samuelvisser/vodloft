@@ -12,8 +12,8 @@ from .helpers import _numbered_candidate, _unlink_if_identity, _write_all
 
 logger = logging.getLogger(__name__)
 
-_RESERVATION_MARKER_PREFIX = ".wireloft-download-reservation-"
-_RESERVATION_MARKER_MAGIC = b"WIRELOFT_DOWNLOAD_PATH_RESERVATION_V1\0"
+_RESERVATION_MARKER_PREFIX = ".vodloft-download-reservation-"
+_RESERVATION_MARKER_MAGIC = b"VODLOFT_DOWNLOAD_PATH_RESERVATION_V1\0"
 _MAX_MARKER_BYTES = 8192
 
 

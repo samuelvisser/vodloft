@@ -223,8 +223,8 @@ def test_download_root_change_recomputes_unset_storage_defaults(tmp_path, monkey
 
     current = get_ui_settings()
     original_temporary_root = current.values.download_settings.temporary_download_root
-    assert original_temporary_root.name == "wireloft-downloads"
-    assert current.values.download_settings.rss_cache_root.as_posix() == "/media-one/.wireloft-rss-cache"
+    assert original_temporary_root.name == "vodloft-downloads"
+    assert current.values.download_settings.rss_cache_root.as_posix() == "/media-one/.vodloft-rss-cache"
 
     values = current.values.model_copy(deep=True)
     values.download_settings.download_root = Path("/media-two")
@@ -234,7 +234,7 @@ def test_download_root_change_recomputes_unset_storage_defaults(tmp_path, monkey
     ))
 
     assert result.values.download_settings.temporary_download_root == original_temporary_root
-    assert result.values.download_settings.rss_cache_root.as_posix() == "/media-two/.wireloft-rss-cache"
+    assert result.values.download_settings.rss_cache_root.as_posix() == "/media-two/.vodloft-rss-cache"
 
     document = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     assert document["downloadSettings"]["downloadRoot"] == "/media-two"

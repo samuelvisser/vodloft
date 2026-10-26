@@ -4,7 +4,7 @@ import {defineConfig, type Plugin} from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import {fontAwesomeCompiler} from './scripts/font-awesome-compiler.mjs'
 
-const VIRTUAL_VERSION_MODULE = 'virtual:wireloft-version'
+const VIRTUAL_VERSION_MODULE = 'virtual:vodloft-version'
 const RESOLVED_VIRTUAL_VERSION_MODULE = '\0' + VIRTUAL_VERSION_MODULE
 
 function findVODLoftManifest(): string {
@@ -43,7 +43,7 @@ function readVODLoftVersion(): string {
 
 function wireLoftVersionPlugin(): Plugin {
   return {
-    name: 'wireloft-version',
+    name: 'vodloft-version',
     resolveId(id) {
       if (id === VIRTUAL_VERSION_MODULE) {
         return RESOLVED_VIRTUAL_VERSION_MODULE
@@ -51,7 +51,7 @@ function wireLoftVersionPlugin(): Plugin {
     },
     load(id) {
       if (id !== RESOLVED_VIRTUAL_VERSION_MODULE) return
-      return `export const WIRELOFT_VERSION = ${JSON.stringify(readVODLoftVersion())}`
+      return `export const VODLOFT_VERSION = ${JSON.stringify(readVODLoftVersion())}`
     },
   }
 }

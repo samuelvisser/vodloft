@@ -21,7 +21,7 @@ def test_atomic_publication_and_replacement(tmp_path):
     source.write_bytes(b"second image")
     files.publish_show_asset(source, target, download_root=tmp_path, expected_hash=original, check_cancelled=_active)
     assert target.read_bytes() == b"second image"
-    assert not list(target.parent.glob(".wireloft-artwork-*"))
+    assert not list(target.parent.glob(".vodloft-artwork-*"))
 
 
 def test_custom_artwork_and_external_edits_are_preserved(tmp_path):
@@ -32,7 +32,7 @@ def test_custom_artwork_and_external_edits_are_preserved(tmp_path):
     with pytest.raises(files.ArtworkConflict):
         files.publish_show_asset(source, target, download_root=tmp_path, expected_hash=None, check_cancelled=_active)
     assert target.read_bytes() == b"custom image"
-    assert not list(tmp_path.glob(".wireloft-artwork-*"))
+    assert not list(tmp_path.glob(".vodloft-artwork-*"))
 
 
 def test_external_creation_during_atomic_claim_is_not_overwritten(tmp_path, monkeypatch):
@@ -65,7 +65,7 @@ def test_failed_replacement_keeps_existing_image_and_cleans_temporary(tmp_path, 
     with pytest.raises(OSError):
         files.publish_show_asset(source, target, download_root=tmp_path, expected_hash=expected, check_cancelled=_active)
     assert target.read_bytes() == b"old image"
-    assert not list(tmp_path.glob(".wireloft-artwork-*"))
+    assert not list(tmp_path.glob(".vodloft-artwork-*"))
 
 
 def test_outside_paths_symlinks_and_directories_are_rejected(tmp_path):
@@ -215,4 +215,4 @@ def test_cancellation_before_publication_leaves_no_target(tmp_path):
     with pytest.raises(RuntimeError, match="canceled"):
         files.publish_show_asset(source, target, download_root=tmp_path, expected_hash=None, check_cancelled=canceled)
     assert not target.exists()
-    assert not list(target.parent.glob(".wireloft-artwork-*"))
+    assert not list(target.parent.glob(".vodloft-artwork-*"))

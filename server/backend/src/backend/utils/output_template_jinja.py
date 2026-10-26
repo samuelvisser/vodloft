@@ -98,7 +98,7 @@ def create_output_template_environment(
         # and allocate indexes that the rendered path never reaches. Prepared
         # templates may provide a per-render resolver through the private
         # context key so one compiled Jinja template can be reused safely.
-        resolver = context.get("__wireloft_custom_index_resolver") or custom_index_resolver
+        resolver = context.get("__vodloft_custom_index_resolver") or custom_index_resolver
         if resolver is None:
             return ""
         return resolver(str(value))

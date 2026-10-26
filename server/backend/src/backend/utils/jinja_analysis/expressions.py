@@ -11,8 +11,8 @@ from jinja2.visitor import NodeTransformer
 
 # Context-dependent calls must stay symbolic, including literal custom-index keys.
 VOLATILE_FILTERS = frozenset({"random", "custom_index"})
-EMIT_FILTER = "__wireloft_analysis_emit"
-JINJA_UNDEFINED_FILTER = "__wireloft_analysis_undefined"
+EMIT_FILTER = "__vodloft_analysis_emit"
+JINJA_UNDEFINED_FILTER = "__vodloft_analysis_undefined"
 INTERNAL_FILTERS = frozenset({EMIT_FILTER, JINJA_UNDEFINED_FILTER})
 
 
@@ -80,7 +80,7 @@ def expression_dependencies(node: nodes.Node) -> frozenset[str]:
     """Original input dependencies survive alias substitution/constant folding."""
     dependencies = set(getattr(node, "_analysis_dependencies", ()))
     if isinstance(node, nodes.Name):
-        dependencies.add(node.name.removeprefix("__wireloft_input_"))
+        dependencies.add(node.name.removeprefix("__vodloft_input_"))
     if isinstance(node, nodes.Filter) and node.name in VOLATILE_FILTERS:
         dependencies.add("@" + node.name)
     if isinstance(node, nodes.Call):

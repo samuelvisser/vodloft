@@ -50,7 +50,7 @@ def _parse_kv_list(kvs: list[str]) -> Dict[str, Any]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="wireloft-controller",
+        prog="vodloft-controller",
         description="VODLoft Controller CLI — list and run controller workers",
     )
 
