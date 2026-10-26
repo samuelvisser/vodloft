@@ -1,0 +1,278 @@
+from __future__ import annotations
+
+import logging
+from collections.abc import Iterator
+from dataclasses import replace
+from datetime import datetime, timezone
+from urllib.parse import urlsplit
+
+from ..contract import (
+    Feature, LinkKind, MoviePlayback, PlaybackKind, ResolvedLink, SeasonRef, ShowDetails, Source, VideoDetails,
+)
+from ..ytdlp import runner
+from .client import ORIGIN, NpoClient, NpoError, NpoNotFoundError
+
+logger = logging.getLogger(__name__)
+
+_SEARCH_LIMIT = 20
+
+
+def series_url(slug: str) -> str:
+    return f"{ORIGIN}/start/serie/{slug}/afleveringen"
+
+
+def program_url(slug: str) -> str:
+    return f"{ORIGIN}/start/afspelen/{slug}"
+
+
+def parse_link(url: str) -> tuple[LinkKind, str] | None:
+    """What an npo.nl link points to: a series, or a programme to play.
+
+    Series pages are /start/serie/<series>, with /afleveringen and a season
+    after it. A programme plays at /start/afspelen/<programme>, or at
+    /start/serie/<series>/<season>/<programme>/afspelen.
+    """
+    parts = [part for part in urlsplit(url).path.split("/") if part]
+    if len(parts) < 3 or parts[0] != "start":
+        return None
+    if parts[1] == "afspelen":
+        return LinkKind.VIDEO, parts[2]
+    if parts[1] != "serie":
+        return None
+    if parts[-1] == "afspelen" and len(parts) >= 5:
+        return LinkKind.VIDEO, parts[-2]
+    return LinkKind.SHOW, parts[2]
+
+
+def _image(item: dict) -> str | None:
+    images = [image for image in item.get("images") or [] if isinstance(image, dict) and image.get("url")]
+    for image in images:
+        if image.get("role") == "default":
+            return image["url"]
+    return images[0]["url"] if images else None
+
+
+def _synopsis(item: dict) -> str | None:
+    synopsis = item.get("synopsis")
+    if isinstance(synopsis, dict):
+        synopsis = synopsis.get("long") or synopsis.get("short") or synopsis.get("brief")
+    return synopsis.strip() if isinstance(synopsis, str) and synopsis.strip() else None
+
+
+def _broadcasters(item: dict) -> str | None:
+    names = []
+    for broadcaster in item.get("broadcasters") or []:
+        name = broadcaster.get("name") if isinstance(broadcaster, dict) else broadcaster
+        if isinstance(name, str) and name:
+            names.append(name)
+    return ", ".join(names) or None
+
+
+def _timestamp(item: dict) -> datetime | None:
+    for key in ("firstBroadcastDate", "publishedDateTime"):
+        value = item.get(key)
+        if isinstance(value, (int, float)) and value > 0:
+            return datetime.fromtimestamp(value, tz=timezone.utc)
+    return None
+
+
+def _number(value) -> int | None:
+    text = str(value).strip() if value is not None else ""
+    return int(text) if text.isdigit() else None
+
+
+def stream_protected(stream_link: dict) -> bool:
+    """NPO serves a clear stream from /package/clear/ and says nothing about DRM.
+    A protected one names its DRM and comes from /package/drmcbcs/ or /package/drmcenc/."""
+    stream = stream_link.get("stream")
+    if not isinstance(stream, dict):
+        return False
+    url = str(stream.get("streamURL") or "")
+    return bool(stream.get("drm")) or "/package/drm" in urlsplit(url).path
+
+
+class NpoSource(Source):
+    """NPO Start, the Dutch public broadcaster's catalogue."""
+
+    id = "npo"
+    name = "NPO Start"
+    domains = ("npo.nl",)
+    features = frozenset({Feature.SHOWS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.SEARCH})
+
+    def __init__(self, client: NpoClient | None = None):
+        self._client = client or NpoClient()
+
+    def _protected(self, program: dict) -> bool | None:
+        """Whether the programme is protected by DRM, or None when NPO will not say right now,
+        such as for a programme that is not out yet or needs a subscription."""
+        product_id = program.get("productId")
+        if not product_id or not program.get("slug"):
+            return None
+        try:
+            return stream_protected(self._client.stream_link(product_id, program_url(program["slug"])))
+        except NpoError as exc:
+            logger.info("NPO Start gave no stream for %s: %s", program.get("slug"), exc)
+            return None
+
+    def _video(self, program: dict, *, season: SeasonRef | None = None, drm_protected: bool = False) -> VideoDetails:
+        series = program.get("series") if isinstance(program.get("series"), dict) else {}
+        duration = program.get("durationInSeconds")
+        return VideoDetails(
+            slug=program["slug"],
+            url=program_url(program["slug"]),
+            title=program.get("title") or series.get("title") or program["slug"],
+            description=_synopsis(program),
+            duration=float(duration) if isinstance(duration, (int, float)) else None,
+            image_url=_image(program),
+            author_name=series.get("title") or self.name,
+            author_url=series_url(series["slug"]) if series.get("slug") else None,
+            published_at=_timestamp(program),
+            drm_protected=drm_protected,
+            season=season,
+            episode_number=_number(program.get("programKey")),
+        )
+
+    def _show(self, series: dict) -> ShowDetails:
+        return ShowDetails(
+            slug=series["slug"],
+            url=series_url(series["slug"]),
+            title=series.get("title") or series["slug"],
+            description=_synopsis(series),
+            image_url=_image(series),
+            author_name=_broadcasters(series) or self.name,
+        )
+
+    def _series(self, slug: str) -> dict:
+        series = self._client.series_detail(slug)
+        if not series.get("slug"):
+            raise NpoNotFoundError("NPO Start does not know this series")
+        return series
+
+    def resolve(self, url: str) -> ResolvedLink | None:
+        parsed = parse_link(url)
+        if parsed is None:
+            return None
+        kind, slug = parsed
+        try:
+            if kind is LinkKind.SHOW:
+                show = self._show(self._series(slug))
+                return ResolvedLink(
+                    kind=LinkKind.SHOW, slug=show.slug, url=show.url, title=show.title,
+                    description=show.description, image_url=show.image_url, author_name=show.author_name,
+                )
+            program = self._client.program_detail(slug)
+        except NpoNotFoundError:
+            return None
+        if not program.get("slug"):
+            return None
+        return self._program_link(program, drm_protected=bool(self._protected(program)))
+
+    def _program_link(self, program: dict, *, drm_protected: bool = False) -> ResolvedLink:
+        video = self._video(program, drm_protected=drm_protected)
+        series = program.get("series") if isinstance(program.get("series"), dict) else {}
+        in_series = bool(series.get("slug"))
+        return ResolvedLink(
+            kind=LinkKind.EPISODE if in_series else LinkKind.VIDEO,
+            slug=video.slug, url=video.url, title=video.title, description=video.description,
+            image_url=video.image_url, author_name=video.author_name,
+            show_slug=series.get("slug") if in_series else None,
+            show_url=series_url(series["slug"]) if in_series else None,
+            drm_protected=drm_protected,
+        )
+
+    def search(self, query: str) -> list[ResolvedLink]:
+        query = query.strip()
+        if not query:
+            return []
+        results = [
+            ResolvedLink(
+                kind=LinkKind.SHOW, slug=item["slug"], url=series_url(item["slug"]),
+                title=item.get("title") or item["slug"], image_url=_image(item),
+            )
+            for item in self._client.search(query, "series")[:_SEARCH_LIMIT] if item.get("slug")
+        ]
+        results += [
+            self._program_link(item)
+            for item in self._client.search(query, "broadcasts")[:_SEARCH_LIMIT] if item.get("slug")
+        ]
+        return results
+
+    def show_details(self, url: str) -> ShowDetails:
+        parsed = parse_link(url)
+        if parsed is None or parsed[0] is not LinkKind.SHOW:
+            raise NpoError("This is not a link to a series on NPO Start")
+        series = self._series(parsed[1])
+        seasons = tuple(ref for _guid, ref in self._seasons(series))
+        return replace(self._show(series), seasons=seasons)
+
+    def _seasons(self, series: dict) -> list[tuple[str, SeasonRef]]:
+        """Each season's guid and how VODLoft names it, oldest first."""
+        seasons = []
+        for position, season in enumerate(self._client.series_seasons(series["slug"], series.get("type")), start=1):
+            if not season.get("guid"):
+                continue
+            seasons.append((season["guid"], SeasonRef(
+                slug=season.get("slug") or f"seizoen-{position}",
+                number=_number(season.get("seasonKey")) or position,
+                title=season.get("label") or None,
+            )))
+        return seasons
+
+    def video_details(self, url: str) -> VideoDetails:
+        parsed = parse_link(url)
+        if parsed is None or parsed[0] is not LinkKind.VIDEO:
+            raise NpoError("This is not a link to a programme on NPO Start")
+        program = self._client.program_detail(parsed[1])
+        return self._video(program, drm_protected=bool(self._protected(program)))
+
+    def _season_drm(self, programs: list[dict]) -> dict[str, bool]:
+        """DRM per programme of a season, from as few stream lookups as it takes.
+
+        NPO protects whole seasons, so when the first and last programme agree the
+        rest is taken to match. Otherwise each programme is looked up. A clear
+        programme that turns out to be protected is marked when it is downloaded.
+        """
+        if not programs:
+            return {}
+        ends = [programs[0], programs[-1]] if len(programs) > 1 else [programs[0]]
+        states = [self._protected(program) for program in ends]
+        if all(state is not None for state in states) and len(set(states)) == 1:
+            return {program["slug"]: bool(states[0]) for program in programs}
+        return {program["slug"]: bool(self._protected(program)) for program in programs}
+
+    def list_episodes(self, url: str, *, known: frozenset[str]) -> Iterator[VideoDetails]:
+        parsed = parse_link(url)
+        if parsed is None or parsed[0] is not LinkKind.SHOW:
+            raise NpoError("This is not a link to a series on NPO Start")
+        series = self._series(parsed[1])
+        for guid, ref in self._seasons(series):
+            try:
+                programs = self._client.programs_by_season(guid)
+            except NpoError as exc:
+                logger.info("Skipping season %s of %s for now: %s", ref.number, series["slug"], exc)
+                continue
+            new = [program for program in programs if program.get("slug") and program["slug"] not in known]
+            drm = self._season_drm(new)
+            for program in new:
+                yield self._video(program, season=ref, drm_protected=drm.get(program["slug"], False))
+
+    def video_playback(self, *, slug: str, url: str) -> MoviePlayback:
+        parsed = parse_link(url)
+        program = self._client.program_detail(parsed[1] if parsed else slug)
+        if not program.get("productId"):
+            raise NpoError("NPO Start has no stream for this programme")
+        stream_link = self._client.stream_link(program["productId"], program_url(program["slug"]))
+        stream = stream_link.get("stream") if isinstance(stream_link.get("stream"), dict) else {}
+        stream_url = stream.get("streamURL")
+        if not isinstance(stream_url, str) or not stream_url.startswith("https://"):
+            raise NpoError("NPO Start has no stream for this programme right now")
+        if stream_protected(stream_link):
+            return MoviePlayback(url=stream_url, drm_protected=True)
+        # The stream keeps its audio in a rendition of its own, which yt-dlp joins to the video.
+        return MoviePlayback(url=stream_url, kind=PlaybackKind.YTDLP, command=runner.command())
+
+    def episode_media(self, *, slug: str, members_only: bool, interactive: bool = False):
+        raise NotImplementedError("NPO Start episodes are downloaded with video_playback")
+
+    def movie_playback(self, **_kwargs) -> MoviePlayback:
+        raise NotImplementedError("NPO Start has no movies yet")

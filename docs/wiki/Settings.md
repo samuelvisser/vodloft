@@ -175,6 +175,10 @@ The yt-dlp card shows the installed yt-dlp version and when it was last updated.
 
 **Cookies file** is optional. Some videos only play for a signed-in viewer, such as age-restricted or members-only videos. Export a `cookies.txt` file (Netscape format) from a browser where you are signed in, with a browser extension made for that, and choose it here. yt-dlp then uses it for every lookup and download. Treat the file like a password: it signs VODLoft in as you.
 
+### Sites more than one Source handles
+
+Links to npo.nl can be looked up by NPO Start and by yt-dlp. The **Sites** card lists each such site and the Source VODLoft asks first; pick another to change it. On the Add media page, **Look up with** asks another Source for one link.
+
 ### API endpoints
 
 | Setting | Environment variable | Default |

@@ -2076,3 +2076,9 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .source-setting .btn { white-space: nowrap; }
 @media (max-width: 640px) { .source-setting { flex-direction: column; } .source-setting-actions { justify-content: flex-start; } }
 .source-feature-list { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 0; padding: 0; list-style: none; }
+.source-domain-table { width: 100%; border-collapse: collapse; }
+.source-domain-table th, .source-domain-table td { padding: 8px 0; text-align: left; border-top: 1px solid rgba(100,116,139,.25); }
+.source-domain-table th { color: var(--muted); font-weight: 600; font-size: 13px; }
+.source-domain-table select { min-width: 180px; max-width: 100%; padding: 6px 8px; border: 1px solid rgba(100,116,139,.4); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
+.add-media-sources { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.add-media-sources > span { color: var(--muted); font-size: 13px; }

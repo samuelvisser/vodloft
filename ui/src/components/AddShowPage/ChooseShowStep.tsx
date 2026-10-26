@@ -78,20 +78,22 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
         ? resolved.data.source
         : undefined;
     const listed = useListedShowDetails(listedSource?.id, listedSource ? resolved.data?.url : undefined);
+    const lastListedUrlRef = useRef<string | undefined>(
+        value.type && value.episodeIdentifier ? value.url : undefined,
+    );
     useEffect(() => {
         if (!listed.data) return;
-        // Episodes of a listed show are numbered per upload year.
-        setValue("episodeIdentifier", EpisodeIdentifierReg.Enum.seasonal, {shouldValidate: true});
         setValue("membershipLevel", DwMembershipLevelReg.Enum.FREE, {shouldValidate: true});
+        // Suggest a series, numbered by the Source's own seasons when it has them and by date otherwise.
+        if (lastListedUrlRef.current === listed.data.sharingUrl) return;
+        lastListedUrlRef.current = listed.data.sharingUrl;
+        setValue("type", ShowTypeReg.Enum.series, {shouldDirty: true});
+        setValue(
+            "episodeIdentifier",
+            listed.data.seasons.length ? EpisodeIdentifierReg.Enum.seasonal : EpisodeIdentifierReg.Enum.date_based,
+            {shouldDirty: true},
+        );
     }, [listed.data, setValue]);
-
-    // --- Watch the type and set the episodeIdentifier to seasonal when the type is series
-    const watchedType = watch("type");
-    useEffect(() => {
-        if (watchedType === ShowTypeReg.Enum.series) {
-            setValue("episodeIdentifier", EpisodeIdentifierReg.Enum.seasonal, {shouldValidate: true, shouldDirty: true});
-        }
-    }, [watchedType, setValue]);
 
     // --- Fetch DailyWire data using the slug
     const lastPrefilledUrlRef = useRef<string | undefined>(
@@ -154,11 +156,10 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
                 return;
             }
             const details = listed.data;
-            onSeasonsSubmit([]);
+            onSeasonsSubmit(details.seasons);
             onSubmitParent(ShowCreatePayloadSchema.parse({
                 ...formOnly,
                 membershipLevel: DwMembershipLevelReg.Enum.FREE,
-                episodeIdentifier: EpisodeIdentifierReg.Enum.seasonal,
                 sourceKey: details.sourceKey,
                 dwId: details.slug,
                 slug: details.slug,
@@ -211,6 +212,48 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
         onSubmitParent(payload);
         onContinue();
     }
+
+    const seasonsFromSource = !!listed.data?.seasons.length
+    const episodeIdentifierField = (
+        <div className="form-row">
+            <label htmlFor="episode-identification">Episode identification</label>
+            <Controller
+                control={control}
+                name="episodeIdentifier"
+                render={({field}) => (
+                    <Select
+                        inputId="episode-identification"
+                        options={EpisodeIdentifierReg.options}
+                        value={EpisodeIdentifierReg.options.find(o => o.value === field.value) ?? null}
+                        onChange={(opt) => field.onChange(opt?.value ?? "")}
+                        onBlur={field.onBlur}
+                        aria-invalid={!!errors.episodeIdentifier}
+                        aria-describedby={errors.episodeIdentifier ? 'episode-identification-errors' : 'episode-identification-help'}
+                        isClearable
+                    />
+                )}
+            />
+            {errors.episodeIdentifier && (
+                <div id="episode-identification-errors" className="error" role="alert" aria-live="polite">
+                    {errors.episodeIdentifier.message as string}
+                </div>
+            )}
+            <div className="help" id="episode-identification-help">
+                <ReadMore summary={<span>How are episodes in this show identified?</span>}>
+                    <p>Determines how show episodes are grouped in the UI, and how they are indexed.</p>
+                    <p><b>Numbered</b> episodes are identified by an episode number. VODLoft will know
+                        when an episode is part of another episode (e.g. a clip) and label it as such.</p>
+                    <p><b>Date-based</b> episodes are identified simply by their publish date.</p>
+                    <p><b>Seasonal</b> episodes are identified by a season number and an episode number, like "S01E01".
+                        Auxiliary content like trailers will be identified separately.</p>
+                    {listed.data && (seasonsFromSource
+                        ? <p>{resolved.data?.source.name} has its own seasons, which VODLoft keeps, and a Seasonal show keeps its episode numbers too.</p>
+                        : <p>{resolved.data?.source.name ?? 'This site'} has no seasons, so VODLoft puts the videos of each upload year in their own season.</p>)}
+                    {!listed.data && <p>VODLoft suggests one from the show itself. If you're unsure, select "Numbered".</p>}
+                </ReadMore>
+            </div>
+        </div>
+    )
 
     // --- Render
     return (
@@ -303,12 +346,11 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
                                         which suits most channels.</p>
                                     <p><b>Series</b> shows download and stream episodes from <i>oldest</i> to <i>newest</i>,
                                         which suits a playlist you watch in order.</p>
-                                    <p>Either way, VODLoft puts the videos of each upload year in their own season and numbers
-                                        them by upload date, like S2024E01.</p>
                                 </ReadMore>
                             </div>
                         </div>
                     )}
+                    {listed.data && episodeIdentifierField}
                 </>
             )}
 
@@ -397,49 +439,7 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
                                 </div>
                             </div>
 
-                            {/* Episode identification selector (only for Podcast) */}
-                            {watch("type") === ShowTypeReg.Enum.podcast && (
-                                <div className="form-row">
-                                    <label htmlFor="episode-identification">Episode identification</label>
-
-
-                                    <Controller
-                                        control={control}
-                                        name="episodeIdentifier"
-                                        render={({field}) => (
-                                            <Select
-                                                inputId="show-type"
-                                                options={EpisodeIdentifierReg.options}
-                                                value={EpisodeIdentifierReg.options.find(o => o.value === field.value) ?? null}
-                                                onChange={(opt) => field.onChange(opt?.value ?? "")}
-                                                onBlur={field.onBlur}
-                                                aria-invalid={!!errors.episodeIdentifier}
-                                                aria-describedby={errors.episodeIdentifier ? 'episode-identification-errors' : 'episode-identification-help'}
-                                                isClearable
-                                            />
-                                        )}
-                                    />
-                                    {errors.episodeIdentifier && (
-                                        <div id="episode-identification-errors" className="error" role="alert"
-                                             aria-live="polite">
-                                            {errors.episodeIdentifier.message as string}
-                                        </div>
-                                    )}
-                                    <div className="help" id="episode-identification-help">
-                                        <ReadMore summary={<span>How are episodes in this show identified?</span>}>
-                                            <p>Determines how show episodes are grouped in the UI, and how they are indexed.</p>
-                                            <p><b>Numbered</b> episodes are identified by an episode number. VODLoft will know
-                                                when an episode is part of another episode (e.g. a clip) and label it as such.</p>
-                                            <p><b>Date-based</b> episodes are identified simply by their publish date.</p>
-                                            <p><b>Seasonal</b> episodes are identified by a season number and an episode number. VODLoft will count
-                                                episodes by season and identify them like "S01E01". Auxiliary content like trailers will be identified
-                                                separately. Episodes in a show of type series are automatically assigned this seasonal identification.
-                                                Generally, we do not recommend it for Podcasts.</p>
-                                            <p>If you're unsure, select "Numbered".</p>
-                                        </ReadMore>
-                                    </div>
-                                </div>
-                            )}
+                            {episodeIdentifierField}
                         </>
                     )}
                 </>

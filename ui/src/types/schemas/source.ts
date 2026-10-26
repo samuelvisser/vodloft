@@ -12,6 +12,7 @@ export const SourceFeature = {
     RSS_STREAMING: 'rss_streaming',
     VIDEOS: 'videos',
     EPISODE_LISTS: 'episode_lists',
+    SEARCH: 'search',
     PROGRAM_UPDATES: 'program_updates',
     COOKIES: 'cookies',
 } as const
@@ -59,8 +60,31 @@ export const ResolvedLinkReadSchema = z.object({
         imageUrl: z.string().nullable().optional(),
         authorName: z.string().nullable().optional(),
     }),
+    /** Every Source that claims the link's site, preferred first. */
+    candidates: z.array(SourceReadSchema).optional().default([]),
 })
 export type ResolvedLinkRead = z.infer<typeof ResolvedLinkReadSchema>
+
+export const SearchResultReadSchema = z.object({
+    kind: z.enum(['show', 'movie', 'episode', 'video']),
+    slug: z.string(),
+    url: z.string(),
+    title: z.string(),
+    description: z.string().nullable().optional(),
+    imageUrl: z.string().nullable().optional(),
+    authorName: z.string().nullable().optional(),
+    showSlug: z.string().nullable().optional(),
+    showUrl: z.string().nullable().optional(),
+})
+export type SearchResultRead = z.infer<typeof SearchResultReadSchema>
+
+export const SourceDomainReadSchema = z.object({
+    domain: z.string(),
+    sourceKeys: z.array(z.string()),
+    defaultSourceKey: z.string(),
+    preferredSourceKey: z.string().nullable().optional(),
+})
+export type SourceDomainRead = z.infer<typeof SourceDomainReadSchema>
 
 export const ProgramStatusReadSchema = z.object({
     name: z.string(),
@@ -83,5 +107,7 @@ export const ShowDetailsReadSchema = z.object({
     authorName: z.string(),
     authorSlug: z.string(),
     thumbnailLandscapePath: z.string().nullable().optional(),
+    /** The show's own seasons, oldest first; empty when VODLoft makes a season per upload year. */
+    seasons: z.array(z.object({slug: z.string(), name: z.string()})).optional().default([]),
 })
 export type ShowDetailsRead = z.infer<typeof ShowDetailsReadSchema>

@@ -58,6 +58,7 @@ def stub_sources(monkeypatch):
 @pytest.fixture
 def session():
     from backend.db.core import Base
+    import backend.db.models  # noqa: F401  (registers every table)
 
     engine = create_engine(
         "sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool,
@@ -238,3 +239,53 @@ def test_api_routes_serialise_the_trimmed_show(stub_sources):
         body = test_client.get("/show").json()
     assert "membershipLevel" not in body
     assert body["sourceKey"] == "stub"
+
+
+def test_a_preferred_source_is_asked_first(client, stub_sources):
+    stub, catch_all = stub_sources
+    assert registry.sources_for("https://www.stub.example/watch/x", {"stub.example": "catch_all"}) == [catch_all, stub]
+    assert registry.sources_for("https://elsewhere.example/", {"stub.example": "catch_all"}) == [catch_all]
+
+    body = client.post("/api/resolve", json={"url": "https://stub.example/watch/clip-1"}).json()
+    assert body["source"]["id"] == "stub"
+    assert [candidate["id"] for candidate in body["candidates"]] == ["stub", "catch_all"]
+
+    picked = client.post("/api/resolve", json={"url": "https://stub.example/watch/clip-1", "sourceKey": "catch_all"}).json()
+    assert picked["source"]["id"] == "catch_all"
+    assert client.post("/api/resolve", json={"url": "https://stub.example/x", "sourceKey": "nope"}).status_code == 422
+
+
+def test_the_preferred_source_per_domain_is_saved(client):
+    domains = {row["domain"]: row for row in client.get("/api/sources/domains").json()}
+    assert domains["stub.example"] == {
+        "domain": "stub.example", "sourceKeys": ["stub", "catch_all"], "defaultSourceKey": "stub",
+        "preferredSourceKey": None,
+    }
+
+    saved = client.put("/api/sources/domains/stub.example", json={"preferredSourceKey": "catch_all"}).json()
+    assert saved["preferredSourceKey"] == "catch_all"
+    body = client.post("/api/resolve", json={"url": "https://stub.example/watch/clip-1"}).json()
+    assert body["source"]["id"] == "catch_all"
+
+    assert client.put("/api/sources/domains/stub.example", json={"preferredSourceKey": "nope"}).status_code == 422
+    assert client.put("/api/sources/domains/other.example", json={"preferredSourceKey": "stub"}).status_code == 422
+    reset = client.put("/api/sources/domains/stub.example", json={"preferredSourceKey": None}).json()
+    assert reset["preferredSourceKey"] is None
+    assert client.post("/api/resolve", json={"url": "https://stub.example/watch/clip-1"}).json()["source"]["id"] == "stub"
+
+
+def test_a_source_with_search_is_searched_by_name(client, monkeypatch):
+    from sources import Feature
+
+    stub = registry.get_source("stub")
+    assert client.get("/api/sources/stub/search", params={"q": "clip"}).status_code == 404
+
+    monkeypatch.setattr(type(stub), "features", frozenset({Feature.SEARCH}))
+    monkeypatch.setattr(stub, "search", lambda query, **_: [
+        ResolvedLink(kind=LinkKind.SHOW, slug="clips", url="https://stub.example/show/clips", title=f"{query} show"),
+    ], raising=False)
+    body = client.get("/api/sources/stub/search", params={"q": "clip"}).json()
+    assert body == [{
+        "kind": "show", "slug": "clips", "url": "https://stub.example/show/clips", "title": "clip show",
+        "description": None, "imageUrl": None, "authorName": None, "showSlug": None, "showUrl": None,
+    }]

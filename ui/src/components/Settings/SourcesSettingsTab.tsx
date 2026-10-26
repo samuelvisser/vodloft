@@ -1,6 +1,7 @@
 import {useSources} from '../../lib/queries'
 import {SourceFeature, SourceRead, sourceHas} from '../../types/schemas/source'
 import SourceCookiesCard from '../Source/SourceCookiesCard'
+import SourceDomainsCard from '../Source/SourceDomainsCard'
 import SourceProgramCard from '../Source/SourceProgramCard'
 import {sourceComponents} from '../Source/sourceComponents'
 import type {SettingsTabProps} from './SettingsTabTypes'
@@ -15,6 +16,8 @@ const FEATURE_LABELS: Record<string, string> = {
     [SourceFeature.MEMBERSHIP_LEVELS]: 'Membership levels',
     [SourceFeature.RSS_STREAMING]: 'RSS streaming',
     [SourceFeature.VIDEOS]: 'Single videos',
+    [SourceFeature.EPISODE_LISTS]: 'Episode lists',
+    [SourceFeature.SEARCH]: 'Search',
 }
 
 // Features that are settings rather than kinds of content.
@@ -58,6 +61,7 @@ export default function SourcesSettingsTab(tabProps: SettingsTabProps) {
             {(sources ?? []).map((source) => (
                 <SourceCard key={source.id} source={source} tabProps={tabProps}/>
             ))}
+            <SourceDomainsCard/>
         </div>
     )
 }

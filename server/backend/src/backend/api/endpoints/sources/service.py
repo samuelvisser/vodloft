@@ -4,10 +4,15 @@ import logging
 
 from sqlalchemy.orm import Session
 
-from backend.api.models.source import ProgramStatusAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SourceAPIRead
-from backend.db.models import Episode, Show
+from backend.api.models.source import (
+    ProgramStatusAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SourceAPIRead, SourceDomainAPIRead,
+)
+from backend.db.models import Episode, Show, SourceDomainPreference
 from config.network import is_no_internet_error
-from sources import Feature, LinkKind, ProgramStatus, ResolvedLink, Source, UnknownSourceError, all_sources, get_source, sources_for
+from sources import (
+    Feature, LinkKind, ProgramStatus, ResolvedLink, Source, UnknownSourceError, all_sources, get_source, named_domains,
+    sources_for,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -66,7 +71,7 @@ def _show_of_local_episode(s: Session, source: Source, episode_slug: str) -> Sho
     return episode.show if episode is not None else None
 
 
-def _to_read(s: Session, source: Source, link: ResolvedLink) -> ResolvedLinkAPIRead:
+def _to_read(s: Session, source: Source, link: ResolvedLink, candidates: list[Source]) -> ResolvedLinkAPIRead:
     show_slug, show_url = link.show_slug, link.show_url
     if link.kind is LinkKind.EPISODE and show_slug is None:
         local_show = _show_of_local_episode(s, source, link.slug)
@@ -87,15 +92,29 @@ def _to_read(s: Session, source: Source, link: ResolvedLink) -> ResolvedLinkAPIR
             image_url=link.image_url,
             author_name=link.author_name,
         ),
+        candidates=[to_source_read(candidate) for candidate in candidates],
     )
 
 
-def resolve_link(s: Session, url: str) -> ResolvedLinkAPIRead:
-    """Ask each Source that claims the link, in order, until one recognises it."""
+def preferred_sources(s: Session) -> dict[str, str]:
+    return {row.domain: row.source_key for row in s.query(SourceDomainPreference)}
+
+
+def resolve_link(s: Session, url: str, source_key: str | None = None) -> ResolvedLinkAPIRead:
+    """Ask each Source that claims the link, preferred first, until one recognises it.
+
+    With ``source_key`` only that Source is asked.
+    """
     url = url.strip()
     if "://" not in url:
         url = f"https://{url}"
-    for source in sources_for(url):
+    candidates = sources_for(url, preferred_sources(s))
+    asked = candidates
+    if source_key is not None:
+        asked = [source for source in candidates if source.id == source_key]
+        if not asked:
+            raise LinkNotRecognisedError(f"Source '{source_key}' does not handle links on this site")
+    for source in asked:
         try:
             link = source.resolve(url)
         except Exception as exc:
@@ -104,5 +123,44 @@ def resolve_link(s: Session, url: str) -> ResolvedLinkAPIRead:
             logger.warning("Source %s could not look up %s: %s", source.id, url, exc)
             raise SourceLookupError(source, f"{source.name} could not look up this link: {exc}") from exc
         if link is not None:
-            return _to_read(s, source, link)
+            return _to_read(s, source, link, candidates)
     raise LinkNotRecognisedError("No Source recognises this link")
+
+
+def _domain_read(domain: str, preferred: dict[str, str]) -> SourceDomainAPIRead:
+    candidates = sources_for(f"https://{domain}/")
+    return SourceDomainAPIRead(
+        domain=domain,
+        source_keys=[source.id for source in candidates],
+        default_source_key=candidates[0].id,
+        preferred_source_key=preferred.get(domain),
+    )
+
+
+def list_source_domains(s: Session) -> list[SourceDomainAPIRead]:
+    """Every domain a Source names, with the Sources that can handle it."""
+    preferred = preferred_sources(s)
+    return [_domain_read(domain, preferred) for domain in named_domains()]
+
+
+class UnknownDomainError(LookupError):
+    pass
+
+
+def set_domain_preference(s: Session, domain: str, source_key: str | None) -> SourceDomainAPIRead:
+    domain = domain.strip().lower()
+    if domain not in named_domains():
+        raise UnknownDomainError(f"No Source names the domain '{domain}'")
+    current = s.get(SourceDomainPreference, domain)
+    if source_key is None:
+        if current is not None:
+            s.delete(current)
+    else:
+        if source_key not in [source.id for source in sources_for(f"https://{domain}/")]:
+            raise UnknownDomainError(f"Source '{source_key}' does not handle links on {domain}")
+        if current is None:
+            s.add(SourceDomainPreference(domain=domain, source_key=source_key))
+        else:
+            current.source_key = source_key
+    s.flush()
+    return _domain_read(domain, preferred_sources(s))

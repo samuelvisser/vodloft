@@ -112,6 +112,36 @@ def test_listed_episodes_get_a_season_per_upload_year(listed, session):
     assert _pending_events(session).count("season.added") == 2
 
 
+def test_listed_episodes_can_be_identified_by_date_or_number(listed, session):
+    from backend.db.models import Episode
+    from task_manager.tasks.helpers.listed_shows import index_listed_show
+
+    by_date, numbered = _show(session, "UC1"), _show(session, "PL1")
+    by_date.episode_identifier, numbered.episode_identifier = "date_based", "numbered"
+    session.commit()
+    listed.videos = [_video("c", 2024, 3), _video("a", 2023, 5), _video("b", 2023, 5)]
+    index_listed_show(session, show_id=by_date.id, source=listed)
+    session.commit()
+    index_listed_show(session, show_id=numbered.id, source=listed)
+    session.commit()
+
+    def identifiers(show):
+        episodes = session.query(Episode).filter_by(show_id=show.id).order_by(Episode.index)
+        return [(e.get_meta("source.slug"), e.episode_identifier, e.season.name) for e in episodes]
+
+    # Videos uploaded at the same moment: the second one is auxiliary.
+    assert identifiers(by_date) == [
+        ("a", "ep.2023-05-01T00:00:00.000000", "2023"),
+        ("b", "aux.1", "2023"),
+        ("c", "ep.2024-03-01T00:00:00.000000", "2024"),
+    ]
+    assert identifiers(numbered) == [("a", "ep.1", "2023"), ("b", "ep.2", "2023"), ("c", "ep.3", "2024")]
+
+    listed.videos.append(_video("d", 2024, 6))
+    index_listed_show(session, show_id=numbered.id, source=listed)
+    assert identifiers(numbered)[-1] == ("d", "ep.4", "2024")
+
+
 def test_later_episodes_keep_existing_numbers_and_older_years_sort_first(listed, session):
     from backend.db.models import Episode
     from task_manager.tasks.helpers.listed_shows import index_listed_show
@@ -199,6 +229,29 @@ def test_listed_episodes_download_through_the_page(listed, session, monkeypatch)
     assert str(plan.requested_destination).endswith("/shows/A playlist/2024/Video a.mp4")
 
 
+def test_a_listed_episode_whose_playback_is_protected_is_not_downloaded(listed, session, monkeypatch):
+    from backend.db.models import ShowLocalMediaProfile
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from backend.services import download_plans
+    from downloader import EncryptedMediaError
+    from downloader.lifecycle import DownloadTracker
+    from task_manager.tasks.helpers.listed_shows import index_listed_show
+
+    show = _show(session)
+    listed.videos = [_video("a", 2024, 2, 3)]
+    index_listed_show(session, show_id=show.id, source=listed)
+    profile = ShowLocalMediaProfile(slug="shows", name="Shows", preferred_format="format_1080p", output_template="/downloads/{{ episode_title }}.ext")
+    session.add(profile)
+    session.flush()
+    download = EpisodeMediaDownload(media=show.episodes[0], local_media_profile=profile, type="episode", file_path="/downloads/x.ext")
+    session.add(download)
+    session.commit()
+    monkeypatch.setattr(listed, "video_playback", lambda **_: MoviePlayback(url="https://cdn.example/drm.m3u8", drm_protected=True))
+
+    with pytest.raises(EncryptedMediaError, match="Listed protects 'Video a' with DRM"):
+        download_plans.prepare_download_plan(session, download.id, DownloadTracker())
+
+
 def test_a_listed_show_bundle_is_seasonal_and_streams_only_downloads(listed, session):
     from fastapi import HTTPException
 
@@ -220,7 +273,8 @@ def test_a_listed_show_bundle_is_seasonal_and_streams_only_downloads(listed, ses
     session.rollback()
 
     created = create_show_bundle(session, None, ShowAPICreateBundle.model_validate({"show": show, "seasons": seasons}))
-    assert (created.source_key, created.episode_identifier, created.membership_level) == ("listed", "seasonal", "FREE")
+    # The episode identification is the one picked in the wizard.
+    assert (created.source_key, created.episode_identifier, created.membership_level) == ("listed", "numbered", "FREE")
     assert created.model_dump(by_alias=True).get("seasons") in (None, [])
 
     with pytest.raises(HTTPException, match="Unknown|No Source"):
