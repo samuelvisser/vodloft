@@ -8,8 +8,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from sources import Feature, LinkKind, MoviePlayback, PlaybackKind, ShowDetails, Source, VideoDetails, registry
-from sources.ytdlp import YtDlpSource, runner
+from sources import Feature, LinkKind, Playback, PlaybackKind, ShowDetails, Source, VideoDetails, registry
+from sources import ytdlp_runner as runner
+from sources.ytdlp import YtDlpSource
 from sources.ytdlp.source import show_url
 
 
@@ -48,7 +49,7 @@ class ListedSource(Source):
         return iter([video for video in self.videos if video.slug not in known])
 
     def video_playback(self, *, slug, url):
-        return MoviePlayback(url=url, kind=PlaybackKind.YTDLP, command=("yt-dlp",))
+        return Playback(url=url, kind=PlaybackKind.YTDLP, command=("yt-dlp",))
 
 
 @pytest.fixture
@@ -246,7 +247,7 @@ def test_a_listed_episode_whose_playback_is_protected_is_not_downloaded(listed, 
     download = EpisodeMediaDownload(media=show.episodes[0], local_media_profile=profile, type="episode", file_path="/downloads/x.ext")
     session.add(download)
     session.commit()
-    monkeypatch.setattr(listed, "video_playback", lambda **_: MoviePlayback(url="https://cdn.example/drm.m3u8", drm_protected=True))
+    monkeypatch.setattr(listed, "video_playback", lambda **_: Playback(url="https://cdn.example/drm.m3u8", drm_protected=True))
 
     with pytest.raises(EncryptedMediaError, match="Listed protects 'Video a' with DRM"):
         download_plans.prepare_download_plan(session, download.id, DownloadTracker())

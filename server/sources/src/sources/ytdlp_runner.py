@@ -1,11 +1,14 @@
 """Running yt-dlp, and keeping it up to date.
 
-VODLoft ships the yt-dlp Python package. Sites change faster than VODLoft
-releases, so "Update now" and the weekly update fetch yt-dlp's own release
-into the config directory, and that copy wins over the shipped one.
+More than one Source uses yt-dlp: the yt-dlp Source looks links up with it,
+and NPO Start has it download its streams. VODLoft ships the yt-dlp Python
+package. Sites change faster than VODLoft releases, so "Update now" and the
+weekly update fetch yt-dlp's own release into the config directory, and that
+copy wins over the shipped one.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -20,6 +23,7 @@ import requests
 from config import get_settings
 
 RELEASE_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"
+CHECKSUMS_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/SHA2-256SUMS"
 UPDATE_INTERVAL = timedelta(days=7)
 _LOOKUP_TIMEOUT_SECONDS = 120
 _update_lock = threading.Lock()
@@ -140,19 +144,39 @@ def update_due(now: datetime | None = None) -> bool:
     return last is None or (now or datetime.now(timezone.utc)) - last >= UPDATE_INTERVAL
 
 
+def _release_checksum() -> str:
+    """The SHA-256 that yt-dlp publishes for its release program."""
+    response = requests.get(CHECKSUMS_URL, timeout=60)
+    response.raise_for_status()
+    for line in response.text.splitlines():
+        checksum, _, name = line.strip().partition("  ")
+        if name == "yt-dlp":
+            return checksum.lower()
+    raise YtDlpError("The yt-dlp release lists no checksum for its program")
+
+
 def update() -> str:
-    """Fetch the latest yt-dlp release and use it from now on. Returns its version."""
+    """Fetch the latest yt-dlp release and use it from now on. Returns its version.
+
+    The release only replaces the current program when it matches the checksum
+    yt-dlp publishes with it.
+    """
     with _update_lock:
         target = updated_program_path()
         target.parent.mkdir(parents=True, exist_ok=True)
         download: Path | None = None
         try:
+            expected = _release_checksum()
+            digest = hashlib.sha256()
             with tempfile.NamedTemporaryFile(dir=target.parent, prefix=".yt-dlp-", delete=False) as handle:
                 download = Path(handle.name)
                 with requests.get(RELEASE_URL, stream=True, timeout=60) as response:
                     response.raise_for_status()
                     for chunk in response.iter_content(1024 * 1024):
                         handle.write(chunk)
+                        digest.update(chunk)
+            if digest.hexdigest() != expected:
+                raise YtDlpError("The downloaded yt-dlp release does not match its published checksum")
             new_version = version((sys.executable, str(download)))
             if new_version is None:
                 raise YtDlpError("The downloaded yt-dlp release does not run")

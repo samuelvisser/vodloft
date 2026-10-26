@@ -9,10 +9,10 @@ from datetime import datetime, timezone
 from urllib.parse import urlsplit, urlunsplit
 
 from ..contract import (
-    ANY_DOMAIN, Feature, LinkKind, MoviePlayback, PlaybackKind, ProgramStatus, ResolvedLink, ShowDetails, Source,
-    VideoDetails,
+    ANY_DOMAIN, Feature, LinkKind, Playback, PlaybackKind, ProgramStatus, ResolvedLink, ShowDetails, Source,
+    VideoDetails, link_host, on_domain,
 )
-from . import runner
+from .. import ytdlp_runner as runner
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +28,7 @@ _UNAVAILABLE_TITLES = {"[Private video]", "[Deleted video]"}
 def show_url(url: str) -> str:
     """A YouTube channel's link lists its tabs; the show is its Videos tab."""
     parts = urlsplit(url)
-    host = (parts.hostname or "").lower()
-    if (host == "youtube.com" or host.endswith(".youtube.com")) and _YOUTUBE_CHANNEL.match(parts.path):
+    if on_domain(link_host(url), "youtube.com") and _YOUTUBE_CHANNEL.match(parts.path):
         return urlunsplit(parts._replace(path=parts.path.rstrip("/") + "/videos"))
     return url
 
@@ -208,14 +207,10 @@ class YtDlpSource(Source):
                 time.sleep(_LISTING_PAUSE_SECONDS)
             yield self._video(info, entry_url)
 
-    def video_playback(self, *, slug: str, url: str) -> MoviePlayback:
-        return MoviePlayback(url=url, kind=PlaybackKind.YTDLP, command=runner.command())
+    def video_playback(self, *, slug: str, url: str) -> Playback:
+        return Playback(url=url, kind=PlaybackKind.YTDLP, command=runner.command())
 
-    def episode_media(self, *, slug: str, members_only: bool, interactive: bool = False):
-        raise NotImplementedError("yt-dlp episodes are downloaded with video_playback")
 
-    def movie_playback(self, **_kwargs) -> MoviePlayback:
-        raise NotImplementedError("yt-dlp has no movies")
 
     def program_status(self) -> ProgramStatus:
         last_update_at, last_update_error = runner.last_update()

@@ -89,7 +89,7 @@ def test_movie_playback_signs_in_and_resolves(monkeypatch):
     monkeypatch.setattr(dailywire_source, "resolve_movie_playback", fake_resolve)
 
     playback = DailyWireSource().movie_playback(movie_slug="m", title="M", duration=10.0, extra_slug="x", is_extra=True)
-    assert playback == sources.MoviePlayback(url="https://m3u8", metadata="record")
+    assert playback == sources.Playback(url="https://m3u8", metadata="record")
     assert seen["token"] == "token"
     assert seen["kwargs"] == {
         "movie_slug": "m", "title": "M", "duration": 10.0,

@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 @pytest.fixture(autouse=True)
 def no_real_ytdlp(monkeypatch):
     """Sockets are disabled in tests, but a yt-dlp subprocess would still reach the internet."""
-    from sources.ytdlp import runner
+    from sources import ytdlp_runner as runner
 
     def refuse(*_args, **_kwargs):
         raise runner.YtDlpError("yt-dlp does not run in tests")

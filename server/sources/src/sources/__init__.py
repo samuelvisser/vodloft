@@ -4,13 +4,13 @@ A Source is everything VODLoft knows about one service. Each lives in its own
 subpackage (``sources.dailywire``); the rest of VODLoft reaches it through the
 contract in ``sources.contract`` and the registry below.
 """
-from .contract import ANY_DOMAIN, EpisodeMedia, Feature, LinkKind, MoviePlayback, PlaybackKind, ProgramStatus, ResolvedLink, SeasonRef, ShowDetails, Source, VideoDetails
+from .contract import ANY_DOMAIN, EpisodeMedia, Feature, LinkKind, Playback, PlaybackKind, ProgramStatus, ResolvedLink, SeasonRef, ShowDetails, Source, VideoDetails
 from .registry import UnknownSourceError, all_sources, get_source, named_domains, register, sources_for
 from .dailywire import DailyWireSource
 from .npo import NpoSource
 from .ytdlp import YtDlpSource
 
-DAILYWIRE = "dailywire"
+DAILYWIRE = DailyWireSource.id
 
 register(DailyWireSource())
 register(NpoSource())
@@ -24,7 +24,7 @@ __all__ = [
     "EpisodeMedia",
     "Feature",
     "LinkKind",
-    "MoviePlayback",
+    "Playback",
     "NpoSource",
     "PlaybackKind",
     "ProgramStatus",

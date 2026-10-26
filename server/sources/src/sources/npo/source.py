@@ -7,9 +7,9 @@ from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 from ..contract import (
-    Feature, LinkKind, MoviePlayback, PlaybackKind, ResolvedLink, SeasonRef, ShowDetails, Source, VideoDetails,
+    Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, SeasonRef, ShowDetails, Source, VideoDetails,
 )
-from ..ytdlp import runner
+from .. import ytdlp_runner as runner
 from .client import ORIGIN, NpoClient, NpoError, NpoNotFoundError
 
 logger = logging.getLogger(__name__)
@@ -256,7 +256,7 @@ class NpoSource(Source):
             for program in new:
                 yield self._video(program, season=ref, drm_protected=drm.get(program["slug"], False))
 
-    def video_playback(self, *, slug: str, url: str) -> MoviePlayback:
+    def video_playback(self, *, slug: str, url: str) -> Playback:
         parsed = parse_link(url)
         program = self._client.program_detail(parsed[1] if parsed else slug)
         if not program.get("productId"):
@@ -267,12 +267,8 @@ class NpoSource(Source):
         if not isinstance(stream_url, str) or not stream_url.startswith("https://"):
             raise NpoError("NPO Start has no stream for this programme right now")
         if stream_protected(stream_link):
-            return MoviePlayback(url=stream_url, drm_protected=True)
+            return Playback(url=stream_url, drm_protected=True)
         # The stream keeps its audio in a rendition of its own, which yt-dlp joins to the video.
-        return MoviePlayback(url=stream_url, kind=PlaybackKind.YTDLP, command=runner.command())
+        return Playback(url=stream_url, kind=PlaybackKind.YTDLP, command=runner.command())
 
-    def episode_media(self, *, slug: str, members_only: bool, interactive: bool = False):
-        raise NotImplementedError("NPO Start episodes are downloaded with video_playback")
 
-    def movie_playback(self, **_kwargs) -> MoviePlayback:
-        raise NotImplementedError("NPO Start has no movies yet")

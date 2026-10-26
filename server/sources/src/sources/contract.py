@@ -7,10 +7,10 @@ caller today; methods are added together with the feature that needs them.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from collections.abc import Iterator
 from typing import Any, ClassVar
 from urllib.parse import urlsplit
 
@@ -52,15 +52,16 @@ class PlaybackKind(StrEnum):
     URL = "url"
     """The URL is the media itself: a file or an HLS playlist."""
     YTDLP = "ytdlp"
-    """The URL is a web page that yt-dlp downloads with ``MoviePlayback.command``."""
+    """The URL is a web page that yt-dlp downloads with ``Playback.command``."""
 
 
 @dataclass(frozen=True)
-class MoviePlayback:
-    """The playable URL of a movie, movie extra or single video.
+class Playback:
+    """The playable URL of a movie, movie extra, single video or listed episode.
 
-    ``metadata`` is the Source's own record when the playback lookup also
-    returned fresher metadata; the Source that produced it knows how to apply it.
+    ``metadata`` is the Source's own movie extra record when the playback lookup
+    also returned fresher metadata. Only Sources with ``Feature.MOVIE_EXTRAS``
+    return it, and the movie feature that applies it is The Daily Wire's.
     ``command`` is the yt-dlp program and options for ``PlaybackKind.YTDLP``.
     """
 
@@ -102,6 +103,19 @@ class ResolvedLink:
 
 
 @dataclass(frozen=True)
+class SeasonRef:
+    """A season as the Source names it."""
+
+    slug: str
+    number: int
+    title: str | None = None
+
+    @property
+    def name(self) -> str:
+        return self.title or f"Season {self.number}"
+
+
+@dataclass(frozen=True)
 class VideoDetails:
     """Everything VODLoft stores about a single video.
 
@@ -119,24 +133,11 @@ class VideoDetails:
     published_at: datetime | None = None
     drm_protected: bool = False
     """The video is protected by DRM, so it can be added but not downloaded."""
-    season: "SeasonRef | None" = None
+    season: SeasonRef | None = None
     """The show season a listed episode belongs to, for a Source with real seasons.
     Without one, VODLoft puts the episode in a season per upload year."""
     episode_number: int | None = None
     """The episode's number in its season, when the Source has one."""
-
-
-@dataclass(frozen=True)
-class SeasonRef:
-    """A season as the Source names it."""
-
-    slug: str
-    number: int
-    title: str | None = None
-
-    @property
-    def name(self) -> str:
-        return self.title or f"Season {self.number}"
 
 
 @dataclass(frozen=True)
@@ -168,6 +169,15 @@ class ProgramStatus:
 ANY_DOMAIN = "*"
 
 
+def link_host(url: str) -> str:
+    return (urlsplit(url).hostname or "").lower().rstrip(".")
+
+
+def on_domain(host: str, domain: str) -> bool:
+    """True when the host is the domain or a subdomain of it."""
+    return host == domain or host.endswith(f".{domain}")
+
+
 class Source(ABC):
     id: ClassVar[str]
     name: ClassVar[str]
@@ -181,31 +191,33 @@ class Source(ABC):
         """True when the link's host is one of this Source's domains or a subdomain of one."""
         if ANY_DOMAIN in self.domains:
             return True
-        host = (urlsplit(url).hostname or "").lower().rstrip(".")
-        return any(host == domain or host.endswith(f".{domain}") for domain in self.domains)
+        host = link_host(url)
+        return any(on_domain(host, domain) for domain in self.domains)
 
     @abstractmethod
     def resolve(self, url: str) -> ResolvedLink | None:
         """Say what a link points to, or None when this Source does not recognise it."""
 
-    @abstractmethod
     def episode_media(
         self, *, slug: str, members_only: bool, interactive: bool = False,
     ) -> EpisodeMedia:
-        """Look up the current media URLs of an episode."""
+        """Look up the current media URLs of an episode. Only Sources whose shows
+        do not have ``Feature.EPISODE_LISTS`` implement it; the others play each
+        episode with ``video_playback``."""
+        raise NotImplementedError(f"{self.name} plays its episodes with video_playback")
 
-    @abstractmethod
     def movie_playback(
         self, *, movie_slug: str, title: str, duration: float | None,
         extra_slug: str | None = None, is_extra: bool = False, is_official_trailer: bool = False,
-    ) -> MoviePlayback:
-        """Resolve the playable URL of a movie or one of its extras."""
+    ) -> Playback:
+        """Resolve the playable URL of a movie or one of its extras. Only Sources with ``Feature.MOVIES`` implement it."""
+        raise NotImplementedError(f"{self.name} has no movies")
 
     def video_details(self, url: str) -> VideoDetails:
         """Look up a single video. Only Sources with ``Feature.VIDEOS`` implement it."""
         raise NotImplementedError(f"{self.name} has no single videos")
 
-    def video_playback(self, *, slug: str, url: str) -> MoviePlayback:
+    def video_playback(self, *, slug: str, url: str) -> Playback:
         """Resolve the playable URL of a single video, or of an episode of a show
         from ``list_episodes``. Only Sources with ``Feature.VIDEOS`` or
         ``Feature.EPISODE_LISTS`` implement it."""

@@ -9,7 +9,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from sources import VideoDetails
-from sources.ytdlp import YtDlpSource, runner
+from sources import ytdlp_runner as runner
+from sources.ytdlp import YtDlpSource
 
 
 @pytest.fixture

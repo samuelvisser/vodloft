@@ -11,7 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from sources import Feature, LinkKind, MoviePlayback, ResolvedLink, Source, VideoDetails, registry
+from sources import Feature, LinkKind, Playback, ResolvedLink, Source, VideoDetails, registry
 
 
 VIDEO_TEMPLATE = (
@@ -51,7 +51,7 @@ class VideoSource(Source):
 
     def video_playback(self, *, slug, url):
         self.playback_requests.append((slug, url))
-        return MoviePlayback(url=f"https://cdn.clips.example/{slug}.mp4")
+        return Playback(url=f"https://cdn.clips.example/{slug}.mp4")
 
     def episode_media(self, *, slug, members_only, interactive=False):
         raise NotImplementedError
@@ -282,7 +282,7 @@ def test_a_ytdlp_playback_plans_a_ytdlp_download(video_sources, session, monkeyp
     from sources import PlaybackKind
 
     def ytdlp_playback(*, slug, url):
-        return MoviePlayback(url=url, kind=PlaybackKind.YTDLP, command=("yt-dlp", "--cookies", "c.txt"))
+        return Playback(url=url, kind=PlaybackKind.YTDLP, command=("yt-dlp", "--cookies", "c.txt"))
 
     monkeypatch.setattr(video_sources, "video_playback", ytdlp_playback)
     monkeypatch.setattr(download_plans, "resolve_download_source", lambda *_a, **_k: pytest.fail("yt-dlp pages are not probed"))
