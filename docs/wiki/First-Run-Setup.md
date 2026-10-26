@@ -39,7 +39,7 @@ When you add a show, the wizard can set up any combination of:
 
 - the show itself, with no automatic downloads;
 - a **Local Media Profile** describing the file format, download behavior, and output path;
-- a **Download Profile** for automatic podcast or series downloads;
+- a **Download Profile** for automatic downloads;
 - an **RSS Stream Profile** for a private podcast/video feed.
 
 You do not have to configure everything at once. A good first step is to add the show, confirm its seasons and episodes look correct, and then add the download/RSS behavior you want.

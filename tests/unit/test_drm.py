@@ -82,7 +82,7 @@ def test_a_protected_video_is_stored_but_cannot_be_downloaded(session):
 
 def test_automatic_downloads_skip_protected_episodes(session):
     from backend.db.models import Show, ShowLocalMediaProfile
-    from backend.db.models.download_profile import PodcastDownloadProfile
+    from backend.db.models.download_profile import DownloadProfile
     from sources import Feature, Source
     from task_manager.tasks.helpers.listed_shows import index_listed_show
     from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
@@ -105,15 +105,15 @@ def test_automatic_downloads_skip_protected_episodes(session):
 
     show = Show(
         uuid="u", slug="PL1", source_key="listed", title="A playlist", sharing_url="https://listed.example/PL1",
-        membership_level="FREE", type="podcast", episode_identifier="seasonal", author_name="A", author_slug="a",
+        membership_level="FREE", type="podcast", episode_identifier="numbered", author_name="A", author_slug="a",
     )
     session.add(show)
     session.commit()
     index_listed_show(session, show_id=show.id, source=Listed())
     local = ShowLocalMediaProfile(slug="shows", name="Shows", preferred_format="format_1080p",
                                   output_template="/downloads/{{ show_title }}/{{ episode_title }}.ext")
-    profile = PodcastDownloadProfile(
-        show=show, local_media_profile=local, type="podcast", enable_profile=True, ep_id_type_list=["ep"],
+    profile = DownloadProfile(
+        show=show, local_media_profile=local, enable_profile=True, ep_id_type_list=["ep"],
         download_with_countdown=False, redownload_final=False, download_days_in_past=0,
         download_episode_count=0, delete_older_episodes=False,
     )

@@ -1,21 +1,22 @@
 import {Controller, UseFormReturn} from 'react-hook-form'
 import Switch from 'react-switch'
 import ReadMore from '../../utils/ReadMore'
-import PodcastDownloadProfileForm from './PodcastDownloadProfileForm'
-import SeriesDownloadProfileForm, {SeasonItem} from './SeriesDownloadProfileForm'
+import DownloadProfileDateFilters from './DownloadProfileDateFilters'
+import DownloadProfileSeasonFilter, {SeasonItem} from './DownloadProfileSeasonFilter'
 import Select from "react-select";
 import {EpisodeTypeReg} from "../../types/episode";
 import {useEffect, useMemo} from "react";
-
-export type DownloadProfileMode = 'podcast' | 'series' | 'base'
+import {EpisodeIdentifierReg} from "../../types/show";
 
 type Props = {
     form: UseFormReturn<any>
-    mode: DownloadProfileMode
+    /** How the show identifies its episodes; the filters shown follow it. Unknown until a show is chosen. */
+    episodeIdentifier?: string
     seasons?: SeasonItem[]
-    profileMode?: 'create' | 'update'
     showRoot?: boolean
     disabledEpisodeTypes?: ReadonlySet<string>
+    /** The saved show the profile is for. */
+    showId?: number
     /** The Source of a show that is not saved yet. */
     sourceKey?: string
 }
@@ -25,7 +26,7 @@ type UIOption = { value: string; label: string }
 
 const NO_DISABLED_EPISODE_TYPES = new Set<string>()
 
-export default function DownloadProfileForm({form, mode, seasons, showRoot, disabledEpisodeTypes, sourceKey}: Props) {
+export default function DownloadProfileForm({form, episodeIdentifier, seasons, showRoot, disabledEpisodeTypes, showId, sourceKey}: Props) {
     const {control, watch, setValue, formState: {errors}} = form
     showRoot ??= true
 
@@ -145,12 +146,13 @@ export default function DownloadProfileForm({form, mode, seasons, showRoot, disa
                 </div>
             </div>
 
-            {/* Variant-specific fields */}
-            {mode === 'podcast' ? (
-                <PodcastDownloadProfileForm form={form} sourceKey={sourceKey}/>
-            ) : mode === 'series' ? (
-                <SeriesDownloadProfileForm form={form} seasons={seasons ?? []}/>
-            ) : undefined }
+            {/* A seasonal show filters on season first, and on date on top of that */}
+            {episodeIdentifier === EpisodeIdentifierReg.Enum.seasonal && (
+                <DownloadProfileSeasonFilter form={form} seasons={seasons ?? []}/>
+            )}
+            {episodeIdentifier !== undefined && (
+                <DownloadProfileDateFilters form={form} showId={showId} sourceKey={sourceKey}/>
+            )}
         </>
     )
 }

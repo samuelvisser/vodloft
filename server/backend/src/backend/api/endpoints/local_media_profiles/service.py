@@ -13,7 +13,7 @@ from backend.api.models.local_media_profile_view import (
     LocalMediaProfileViewAPIRead,
 )
 from backend.db.models import (
-    DownloadProfileBase,
+    DownloadProfile,
     LocalMediaProfileBase,
     MediaDownloadBase,
 )
@@ -72,8 +72,8 @@ def ensure_local_media_profile_can_be_deleted(
     local_media_profile: LocalMediaProfileBase,
 ) -> tuple[MediaDownloadBase, ...]:
     has_download_profiles = (
-        s.query(DownloadProfileBase.id)
-        .filter(DownloadProfileBase.local_media_profile_id == local_media_profile.id)
+        s.query(DownloadProfile.id)
+        .filter(DownloadProfile.local_media_profile_id == local_media_profile.id)
         .first()
         is not None
     )
@@ -196,11 +196,11 @@ def _get_local_media_profile_statistics(
         int(local_media_profile_id): int(download_profile_count)
         for local_media_profile_id, download_profile_count in (
             s.query(
-                DownloadProfileBase.local_media_profile_id,
-                func.count(DownloadProfileBase.id),
+                DownloadProfile.local_media_profile_id,
+                func.count(DownloadProfile.id),
             )
-            .filter(DownloadProfileBase.local_media_profile_id.in_(local_media_profile_ids))
-            .group_by(DownloadProfileBase.local_media_profile_id)
+            .filter(DownloadProfile.local_media_profile_id.in_(local_media_profile_ids))
+            .group_by(DownloadProfile.local_media_profile_id)
             .all()
         )
     }

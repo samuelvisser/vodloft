@@ -11,7 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 
-def _make_show(session, *, slug="test-show"):
+def _make_show(session, *, slug="test-show", episode_identifier=None):
     from backend.db.models import Show
     from backend.types.show_types import EpisodeIdentifier, ShowType
 
@@ -23,7 +23,7 @@ def _make_show(session, *, slug="test-show"):
         sharing_url=f"https://example.test/{slug}",
         membership_level="FREE",
         type=ShowType.PODCAST.value,
-        episode_identifier=EpisodeIdentifier.NUMBERED.value,
+        episode_identifier=episode_identifier or EpisodeIdentifier.NUMBERED.value,
         author_name="Host",
         author_slug="host",
     )
@@ -79,13 +79,12 @@ def _make_local_media_profile(session, *, slug="audio"):
 
 
 def _make_podcast_profile(session, show, lmp, **overrides):
-    from backend.db.models.download_profile import PodcastDownloadProfile
+    from backend.db.models.download_profile import DownloadProfile
     from backend.types.download_profile_types import EpIdType
 
     defaults = dict(
         show=show,
         local_media_profile=lmp,
-        type="podcast",
         enable_profile=True,
         ep_id_type_list=[EpIdType.EP.value],
         download_with_countdown=False,
@@ -95,26 +94,25 @@ def _make_podcast_profile(session, show, lmp, **overrides):
         delete_older_episodes=False,
     )
     defaults.update(overrides)
-    profile = PodcastDownloadProfile(**defaults)
+    profile = DownloadProfile(**defaults)
     session.add(profile)
     session.flush()
     return profile
 
 
 def _make_series_profile(session, show, lmp, seasons, **overrides):
-    from backend.db.models.download_profile import SeriesDownloadProfile
+    from backend.db.models.download_profile import DownloadProfile
     from backend.types.download_profile_types import EpIdType
 
     defaults = dict(
         show=show,
         local_media_profile=lmp,
-        type="series",
         enable_profile=True,
         ep_id_type_list=[EpIdType.EP.value],
         include_upcoming_seasons=False,
     )
     defaults.update(overrides)
-    profile = SeriesDownloadProfile(**defaults)
+    profile = DownloadProfile(**defaults)
     profile.seasons = seasons
     session.add(profile)
     session.flush()
@@ -725,9 +723,10 @@ def test_podcast_profile_respects_days_in_past_window(db_session):
 
 
 def test_series_profile_filters_by_seasons_and_upcoming(db_session):
+    from backend.types.show_types import EpisodeIdentifier
     from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
 
-    show = _make_show(db_session)
+    show = _make_show(db_session, episode_identifier=EpisodeIdentifier.SEASONAL.value)
     season1 = _make_season(db_session, show, index=1, slug="s1")
     season2 = _make_season(db_session, show, index=2, slug="s2")
     lmp = _make_local_media_profile(db_session)
@@ -739,6 +738,39 @@ def test_series_profile_filters_by_seasons_and_upcoming(db_session):
     assert {e.slug for e in get_download_profile_episodes(db_session, profile)} == {ep1.slug}
     profile.include_upcoming_seasons = True
     assert {e.slug for e in get_download_profile_episodes(db_session, profile)} == {ep1.slug, ep2.slug}
+
+
+def test_profile_ignores_seasons_unless_the_show_is_identified_by_season(db_session):
+    from backend.types.show_types import EpisodeIdentifier
+    from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
+
+    show = _make_show(db_session, episode_identifier=EpisodeIdentifier.DATE_BASED.value)
+    season1 = _make_season(db_session, show, index=1, slug="s1")
+    season2 = _make_season(db_session, show, index=2, slug="s2")
+    lmp = _make_local_media_profile(db_session)
+    now = _now()
+    ep1 = _make_episode(db_session, show, season1, slug="ep1", ep_id="ep.1", status="published_final", published_at=now, index=1)
+    ep2 = _make_episode(db_session, show, season2, slug="ep2", ep_id="ep.2", status="published_final", published_at=now, index=2)
+    profile = _make_series_profile(db_session, show, lmp, [season1])
+
+    assert {e.slug for e in get_download_profile_episodes(db_session, profile)} == {ep1.slug, ep2.slug}
+
+
+def test_seasonal_profile_also_applies_date_filters(db_session):
+    from backend.types.show_types import EpisodeIdentifier
+    from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
+
+    show = _make_show(db_session, episode_identifier=EpisodeIdentifier.SEASONAL.value)
+    season1 = _make_season(db_session, show, index=1, slug="s1")
+    season2 = _make_season(db_session, show, index=2, slug="s2")
+    lmp = _make_local_media_profile(db_session)
+    now = _now()
+    _make_episode(db_session, show, season1, slug="old", ep_id="ep.1", status="published_final", published_at=now - timedelta(days=30), index=1)
+    recent = _make_episode(db_session, show, season1, slug="recent", ep_id="ep.2", status="published_final", published_at=now, index=2)
+    _make_episode(db_session, show, season2, slug="other-season", ep_id="ep.3", status="published_final", published_at=now, index=3)
+    profile = _make_series_profile(db_session, show, lmp, [season1], download_days_in_past=7)
+
+    assert {e.slug for e in get_download_profile_episodes(db_session, profile)} == {recent.slug}
 
 
 # ---------- persistent artifact reconciliation ----------

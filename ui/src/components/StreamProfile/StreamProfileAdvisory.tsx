@@ -6,7 +6,6 @@ import './StreamProfileAdvisory.css'
 
 export type StreamDownloadProfileDefault = {
     id?: number
-    type?: 'podcast' | 'series'
     preferredFormat: string
     episodeTypes: string[]
     enabled?: boolean
@@ -226,8 +225,8 @@ function CoverageRequirement({
         createEpisodeTypes,
         bestProfile,
     } = coverage
-    const editHref = bestProfile?.id && bestProfile.type
-        ? `/edit-download-profile/${bestProfile.type}/${bestProfile.id}`
+    const editHref = bestProfile?.id
+        ? `/edit-download-profile/${bestProfile.id}`
         : undefined
     const createHref = createEpisodeTypes.length > 0
         ? createDownloadProfileHref(

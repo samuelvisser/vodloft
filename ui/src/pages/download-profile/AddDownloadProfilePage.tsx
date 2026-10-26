@@ -1,17 +1,13 @@
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
-import {Controller, useForm, UseFormReturn} from 'react-hook-form'
+import {useCallback, useEffect, useMemo, useRef} from 'react'
+import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate, useSearchParams} from 'react-router-dom'
 import {useDownloadProfilesByShowSlug, useLocalMediaProfiles, useShowSeasons, useShows} from '../../lib/queries'
-import DownloadProfileForm, {DownloadProfileMode} from '../../components/DownloadProfile/DownloadProfileForm'
+import DownloadProfileForm from '../../components/DownloadProfile/DownloadProfileForm'
 import {
-    PodcastDownloadProfileCreateIn, PodcastDownloadProfileCreateOut,
-    PodcastDownloadProfileCreateSchema
-} from '../../types/schemas/podcast_download_profile'
-import {
-    SeriesDownloadProfileCreateIn, SeriesDownloadProfileCreateOut,
-    SeriesDownloadProfileCreateSchema
-} from '../../types/schemas/series_download_profile'
+    DownloadProfileCreateIn, DownloadProfileCreateOut, DownloadProfileCreateSchema,
+    downloadProfileDefaultsFor, forEpisodeIdentifier,
+} from '../../types/schemas/download_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import Select from 'react-select'
 import {isShowLocalMediaProfileAvailableFor, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
@@ -20,19 +16,13 @@ import {buildShowSelectRegistry} from "../../types/show";
 import {useQueryClient} from "@tanstack/react-query";
 import {getZodDefaults} from "../../utils/defaultZod";
 import ReadMore from "../../utils/ReadMore";
-import {ShowRead} from "../../types/schemas/show";
-import {SeasonItem} from "../../components/DownloadProfile/SeriesDownloadProfileForm";
+import {SeasonItem} from "../../components/DownloadProfile/DownloadProfileSeasonFilter";
 import {SeasonRead} from "../../types/schemas/season";
 import {EpisodeTypeReg} from "../../types/episode";
-
-type AnyOut = PodcastDownloadProfileCreateOut | SeriesDownloadProfileCreateOut
-type AnyForm = UseFormReturn<PodcastDownloadProfileCreateIn> | UseFormReturn<SeriesDownloadProfileCreateIn>
 
 export default function AddDownloadProfilePage() {
     const navigate = useNavigate()
     const [searchParams] = useSearchParams()
-
-    const [mode, setMode] = useState<DownloadProfileMode>('base')
 
     const {data: shows} = useShows()
     const {data: mediaProfiles} = useLocalMediaProfiles()
@@ -40,27 +30,44 @@ export default function AddDownloadProfilePage() {
     const qc = useQueryClient()
 
     const showReg: SelectRegistry = useMemo(() => buildShowSelectRegistry(shows), [shows])
+
+    const form = useForm<DownloadProfileCreateIn>({
+        // Which filters apply follows the chosen show, so the schema does too.
+        resolver: (values, context, options) => zodResolver(forEpisodeIdentifier(
+            DownloadProfileCreateSchema,
+            shows?.find((show) => show.id === values.showId)?.episodeIdentifier,
+        ))(values, context, options),
+        mode: 'onBlur',
+        shouldFocusError: true,
+        defaultValues: getZodDefaults(DownloadProfileCreateSchema),
+    })
+    const {watch, setValue, getFieldState, formState: {errors, isSubmitting}} = form
+    const showId = watch('showId')
+    const localMediaProfileId = watch('localMediaProfileId')
+
+    const selectedShow = useMemo(
+        () => shows?.find((show) => show.id === showId),
+        [shows, showId],
+    )
+    const episodeIdentifier = selectedShow?.episodeIdentifier
     const mediaProfileReg: SelectRegistry = useLocalMediaProfileSelectRegistry(
         mediaProfiles,
         'show',
-        mode === 'podcast' || mode === 'series' ? mode : undefined,
+        selectedShow?.type === 'podcast' || selectedShow?.type === 'series' ? selectedShow.type : undefined,
     )
 
-    const formPodcast = useForm<PodcastDownloadProfileCreateIn>({
-        resolver: zodResolver(PodcastDownloadProfileCreateSchema),
-        mode: 'onBlur',
-        shouldFocusError: true,
-        defaultValues: getZodDefaults(PodcastDownloadProfileCreateSchema)
-    })
-
-    const formSeries = useForm<SeriesDownloadProfileCreateIn>({
-        resolver: zodResolver(SeriesDownloadProfileCreateSchema),
-        mode: 'onBlur',
-        shouldFocusError: true,
-        defaultValues: getZodDefaults(SeriesDownloadProfileCreateSchema),
-    })
-    const form: AnyForm = mode === 'series' ? formSeries : formPodcast
-    const {formState: {errors}} = form
+    const selectShow = useCallback((id: number) => {
+        setValue('showId', id, {shouldDirty: true, shouldValidate: true})
+        // Seasons belong to one show; the other filters start from what fits the show.
+        setValue('seasons', [], {shouldDirty: true})
+        const defaults = downloadProfileDefaultsFor(shows?.find((show) => show.id === id)?.episodeIdentifier)
+        if (!getFieldState('epIdTypeList').isDirty) {
+            setValue('epIdTypeList', defaults.epIdTypeList)
+        }
+        if (!getFieldState('downloadDaysInPast').isDirty && !getFieldState('downloadEpisodeCount').isDirty) {
+            setValue('downloadDaysInPast', defaults.downloadDaysInPast)
+        }
+    }, [getFieldState, setValue, shows])
     const prefillApplied = useRef(false)
     const limitPrefillApplied = useRef(false)
     const mediaProfilePrefillApplied = useRef(false)
@@ -84,50 +91,35 @@ export default function AddDownloadProfilePage() {
         const requestedShow = shows.find((show) => show.slug === requestedShowSlug)
         if (!requestedShow) return
 
-        formPodcast.setValue('showId', requestedShow.id, {shouldDirty: false, shouldValidate: true})
-        formSeries.setValue('showId', requestedShow.id, {shouldDirty: false, shouldValidate: true})
-        if (requestedShow.type === 'podcast') setMode('podcast')
-        else if (requestedShow.type === 'series') setMode('series')
-        else setMode('base')
+        selectShow(requestedShow.id)
         prefillApplied.current = true
-    }, [formPodcast, formSeries, requestedShowSlug, shows])
+    }, [requestedShowSlug, selectShow, shows])
 
     useEffect(() => {
         if (limitPrefillApplied.current || requestedDownloadEpisodeCount === undefined) return
 
-        formPodcast.setValue('downloadDaysInPast', 0, {shouldDirty: false, shouldValidate: true})
-        formPodcast.setValue('downloadEpisodeCount', requestedDownloadEpisodeCount, {
-            shouldDirty: false,
+        setValue('downloadDaysInPast', 0, {shouldDirty: true, shouldValidate: true})
+        setValue('downloadEpisodeCount', requestedDownloadEpisodeCount, {
+            shouldDirty: true,
             shouldValidate: true,
         })
         limitPrefillApplied.current = true
-    }, [formPodcast, requestedDownloadEpisodeCount])
+    }, [setValue, requestedDownloadEpisodeCount])
 
     useEffect(() => {
         if (episodeTypesPrefillApplied.current || requestedEpisodeTypes.length === 0) return
 
-        const episodeTypes = [...requestedEpisodeTypes]
-        formPodcast.setValue('epIdTypeList', episodeTypes, {
-            shouldDirty: false,
-            shouldValidate: true,
-        })
-        formSeries.setValue('epIdTypeList', episodeTypes, {
-            shouldDirty: false,
+        setValue('epIdTypeList', [...requestedEpisodeTypes], {
+            shouldDirty: true,
             shouldValidate: true,
         })
         episodeTypesPrefillApplied.current = true
-    }, [formPodcast, formSeries, requestedEpisodeTypes])
-
-
-
+    }, [setValue, requestedEpisodeTypes])
 
     const onCancel = useCallback(() => navigate('/download-profiles'), [navigate])
 
-    const submitFn = async (data: AnyOut) => {
-        let effectiveMode: DownloadProfileMode = mode
-        const endpoint = effectiveMode === 'podcast' ? 'podcast-download-profiles' : 'series-download-profiles'
-
-        return fetch(`${(window as any).appConfig.API_URL}/${endpoint}`, {
+    const submitFn = async (data: DownloadProfileCreateOut) => {
+        return fetch(`${(window as any).appConfig.API_URL}/download-profiles`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             credentials: 'include',
@@ -136,8 +128,8 @@ export default function AddDownloadProfilePage() {
     }
 
     const onSuccess = async () => {
-        await qc.invalidateQueries({queryKey: ['podcastDownloadProfiles']})
-        await qc.invalidateQueries({queryKey: ['seriesDownloadProfiles']})
+        await qc.invalidateQueries({queryKey: ['downloadProfilesView']})
+        await qc.invalidateQueries({queryKey: ['downloadProfilesByShowSlug']})
 
         navigate('/download-profiles')
     }
@@ -146,17 +138,6 @@ export default function AddDownloadProfilePage() {
         onSuccess: onSuccess,
         successStatuses: [201],
     })
-
-    const {watch, formState: {isSubmitting}} = form
-    const showId = watch("showId" as any)
-    const localMediaProfileId = watch("localMediaProfileId" as any)
-
-    // Resolve selected show and slug
-    const selectedShow = useMemo(() => {
-        if (!Array.isArray(shows)) return undefined
-        const sid = Number(showId)
-        return shows.find(s => s.id === sid)
-    }, [shows, showId])
 
     useEffect(() => {
         if (
@@ -173,18 +154,13 @@ export default function AddDownloadProfilePage() {
         ))
         if (!matchingProfile) return
 
-        formPodcast.setValue('localMediaProfileId', matchingProfile.id, {
-            shouldDirty: false,
-            shouldValidate: true,
-        })
-        formSeries.setValue('localMediaProfileId', matchingProfile.id, {
+        setValue('localMediaProfileId', matchingProfile.id, {
             shouldDirty: false,
             shouldValidate: true,
         })
         mediaProfilePrefillApplied.current = true
     }, [
-        formPodcast,
-        formSeries,
+        setValue,
         mediaProfiles,
         requestedPreferredFormat,
         selectedShow,
@@ -195,7 +171,7 @@ export default function AddDownloadProfilePage() {
     const {data: seasonsData} = useShowSeasons(selectedShowSlug)
     const {data: showProfiles} = useDownloadProfilesByShowSlug(selectedShowSlug)
 
-    // Prepare seasons for the SeriesDownloadProfile form (detached: name, slug)
+    // Prepare seasons for the season filter (detached: name, slug)
     const seasonsForForm: SeasonItem[] = useMemo((): SeasonItem[] => (seasonsData ?? []).map((s: SeasonRead): SeasonItem => ({
         name: s.name,
         slug: s.slug,
@@ -231,8 +207,8 @@ export default function AddDownloadProfilePage() {
                 <div className="form-row">
                     <label htmlFor="show-id">Show</label>
                     <Controller
-                        control={(form as any).control}
-                        name={"showId"}
+                        control={form.control}
+                        name="showId"
                         render={({field}) => (
                             <Select
                                 inputId="show-id"
@@ -240,24 +216,8 @@ export default function AddDownloadProfilePage() {
                                 options={showReg.options}
                                 value={showReg.options.find(o => Number(o.value) === field.value) ?? null}
                                 onChange={(opt) => {
-                                    const val = (opt as any) ? Number((opt as any).value) : undefined
-
-                                    // keep both forms in sync for showId
-                                    if (val) {
-                                        formPodcast.setValue('showId', val)
-                                        formSeries.setValue('showId', val)
-                                    }
-                                    field.onChange(val)
-
-                                    if (!val) {
-                                        setMode('base')
-                                        return
-                                    }
-
-                                    const selectedShow: ShowRead | undefined = Array.isArray(shows) ? shows.find(s => s.id === val) : undefined
-                                    if (selectedShow?.type === 'podcast') setMode('podcast')
-                                    else if (selectedShow?.type === 'series') setMode('series')
-                                    else setMode('base')
+                                    if (opt) selectShow(Number(opt.value))
+                                    else field.onChange(undefined)
                                 }}
                                 onBlur={field.onBlur}
                                 isDisabled={showReg.options.length === 0}
@@ -279,21 +239,15 @@ export default function AddDownloadProfilePage() {
                 <div className="form-row">
                     <label htmlFor="local-media-profile">Local Media Profile</label>
                     <Controller
-                        control={(form as any).control}
-                        name={"localMediaProfileId" as any}
+                        control={form.control}
+                        name="localMediaProfileId"
                         render={({field}) => (
                             <Select
                                 inputId="local-media-profile"
                                 classNamePrefix="select"
                                 options={mediaProfileReg.options}
                                 value={mediaProfileReg.options.find(o => Number(o.value) === field.value) ?? null}
-                                onChange={(opt) => {
-                                    const val = (opt as any) ? Number((opt as any).value) : null
-                                        // keep both forms in sync for localMediaProfileId
-                                    ;(formPodcast as any).setValue('localMediaProfileId', val)
-                                    ;(formSeries as any).setValue('localMediaProfileId', val)
-                                    field.onChange(val)
-                                }}
+                                onChange={(opt) => field.onChange(opt ? Number(opt.value) : null)}
                                 onBlur={field.onBlur}
                                 isDisabled={mediaProfileReg.options.length === 0}
                                 placeholder={!mediaProfiles ? 'Loading profiles...' : mediaProfileReg.options.length === 0 ? 'No profiles found' : undefined}
@@ -317,8 +271,9 @@ export default function AddDownloadProfilePage() {
                 </div>
 
                 <DownloadProfileForm
-                    form={form as any}
-                    mode={mode}
+                    form={form}
+                    episodeIdentifier={episodeIdentifier}
+                    showId={selectedShow?.id}
                     seasons={seasonsForForm}
                     showRoot={false}
                     disabledEpisodeTypes={disabledEpisodeTypes}

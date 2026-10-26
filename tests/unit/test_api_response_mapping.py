@@ -46,20 +46,18 @@ def test_show_view_maps_nested_orm_source_through_aliases():
     assert view.years == "2025-2026"
 
 
-def test_download_profile_view_uses_relationship_aliases_and_discriminated_impl():
+def test_download_profile_view_uses_relationship_aliases():
     from backend.api.models.download_profile_view import DownloadProfileAPIReadView
-    from backend.api.models.podcast_download_profile import PodcastDownloadProfileAPIRead
 
     profile = SimpleNamespace(
         id=4,
         show_id=1,
         local_media_profile_id=2,
-        type="podcast",
         enable_profile=True,
         ep_id_type_list=["ep", "aux"],
         created_at=NOW,
         updated_at=NOW,
-        show=SimpleNamespace(title="Show", slug="show"),
+        show=SimpleNamespace(title="Show", slug="show", type="series", episode_identifier="seasonal"),
         local_media_profile=SimpleNamespace(name="Audio", preferred_format="audio"),
         download_with_countdown=False,
         redownload_final=False,
@@ -67,6 +65,8 @@ def test_download_profile_view_uses_relationship_aliases_and_discriminated_impl(
         download_episode_count=25,
         download_starting_from=None,
         delete_older_episodes=True,
+        seasons=[],
+        include_upcoming_seasons=True,
     )
 
     view = DownloadProfileAPIReadView.model_validate(
@@ -75,8 +75,8 @@ def test_download_profile_view_uses_relationship_aliases_and_discriminated_impl(
 
     assert view.show_title == "Show"
     assert view.local_media_profile_name == "Audio"
-    assert isinstance(view.download_profile_impl, PodcastDownloadProfileAPIRead)
-    assert view.download_profile_impl.download_episode_count == 25
+    assert view.show_episode_identifier == "seasonal"
+    assert view.download_episode_count == 25
 
 
 def test_stream_profile_view_uses_relationship_aliases():

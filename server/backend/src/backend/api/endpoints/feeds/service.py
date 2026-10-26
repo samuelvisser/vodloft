@@ -14,17 +14,16 @@ from backend.api.models.rss_stream_profile import RssStreamProfileAPIRead
 from backend.db.datetime_types import utc_datetime
 from backend.utils.episode import episode_identifier_type_predicate
 from backend.db.models import (
-    DownloadProfileBase,
+    DownloadProfile,
     Episode,
     LocalMediaProfileBase,
     RssStreamProfile,
     Season,
-    SeriesDownloadProfile,
 )
 from backend.db.models.media_download import EpisodeMediaDownload
-from backend.db.models.download_profile.SeriesDownloadProfile import association_table as series_season_association
+from backend.db.models.download_profile import download_profile_seasons
 from backend.types.dailywire_user_info import WlDwMembershipLevel
-from backend.types.download_profile_types import DownloadProfileType, EpIdType, MediaDownloadArtifactStatus
+from backend.types.download_profile_types import EpIdType, MediaDownloadArtifactStatus
 from backend.types.episode_types import EpisodeExtraType, EpisodePublishStatus
 from backend.types.local_media_profile_types import PreferredFormat
 from backend.types.show_types import EpisodeIdentifier, ShowType
@@ -337,25 +336,24 @@ def _has_download_profile_for_episode(
         return False
 
     profile_episode_type = func.json_each(
-        DownloadProfileBase.ep_id_type_list
+        DownloadProfile.ep_id_type_list
     ).table_valued("key", "value").alias("profile_episode_type")
-    series_table = SeriesDownloadProfile.__table__
     selected_season = exists(
-        select(series_season_association.c.season_id).where(
-            series_season_association.c.download_profiles_series_id == DownloadProfileBase.id,
-            series_season_association.c.season_id == episode.season_id,
+        select(download_profile_seasons.c.season_id).where(
+            download_profile_seasons.c.download_profile_id == DownloadProfile.id,
+            download_profile_seasons.c.season_id == episode.season_id,
         )
     )
     max_selected_season_index = (
         select(func.max(Season.index))
         .select_from(
-            series_season_association.join(
+            download_profile_seasons.join(
                 Season,
-                Season.id == series_season_association.c.season_id,
+                Season.id == download_profile_seasons.c.season_id,
             )
         )
         .where(
-            series_season_association.c.download_profiles_series_id == DownloadProfileBase.id
+            download_profile_seasons.c.download_profile_id == DownloadProfile.id
         )
         .scalar_subquery()
     )
@@ -364,34 +362,34 @@ def _has_download_profile_for_episode(
         .where(Season.id == episode.season_id)
         .scalar_subquery()
     )
-    series_allows_episode = or_(
-        DownloadProfileBase.type != DownloadProfileType.SERIES.value,
-        selected_season,
-        and_(
-            series_table.c.include_upcoming_seasons.is_(True),
-            max_selected_season_index.is_not(None),
-            episode_season_index > max_selected_season_index,
-        ),
+    # Only a show identified by season filters its episodes by season.
+    season_allows_episode = (
+        true()
+        if episode.show.episode_identifier != EpisodeIdentifier.SEASONAL.value
+        else or_(
+            selected_season,
+            and_(
+                DownloadProfile.include_upcoming_seasons.is_(True),
+                max_selected_season_index.is_not(None),
+                episode_season_index > max_selected_season_index,
+            ),
+        )
     )
 
     return s.scalar(
-        select(DownloadProfileBase.id)
-        .select_from(DownloadProfileBase)
+        select(DownloadProfile.id)
+        .select_from(DownloadProfile)
         .join(
             LocalMediaProfileBase,
-            LocalMediaProfileBase.id == DownloadProfileBase.local_media_profile_id,
+            LocalMediaProfileBase.id == DownloadProfile.local_media_profile_id,
         )
         .join(profile_episode_type, true())
-        .outerjoin(
-            series_table,
-            series_table.c.id == DownloadProfileBase.id,
-        )
         .where(
-            DownloadProfileBase.show_id == episode.show_id,
-            DownloadProfileBase.enable_profile.is_(True),
+            DownloadProfile.show_id == episode.show_id,
+            DownloadProfile.enable_profile.is_(True),
             _download_profile_format_filter(kind),
             profile_episode_type.c.value == episode_type,
-            series_allows_episode,
+            season_allows_episode,
         )
         .limit(1)
     ) is not None

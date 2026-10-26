@@ -98,9 +98,9 @@ def _local_profile(session: Session, *, slug: str, preferred_format: str):
 
 
 def _download_profile(session: Session, show, local_profile, *, enabled: bool = True):
-    from backend.db.models import PodcastDownloadProfile
+    from backend.db.models import DownloadProfile
 
-    item = PodcastDownloadProfile(
+    item = DownloadProfile(
         show=show,
         local_media_profile=local_profile,
         enable_profile=enabled,

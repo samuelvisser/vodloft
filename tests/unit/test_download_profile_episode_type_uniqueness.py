@@ -55,12 +55,11 @@ def _make_local_media_profile(session: Session, slug: str):
 
 
 def _make_download_profile(session: Session, show, local_media_profile, episode_types: list[str]):
-    from backend.db.models.download_profile import PodcastDownloadProfile
+    from backend.db.models.download_profile import DownloadProfile
 
-    profile = PodcastDownloadProfile(
+    profile = DownloadProfile(
         show=show,
         local_media_profile=local_media_profile,
-        type="podcast",
         enable_profile=True,
         ep_id_type_list=episode_types,
         download_with_countdown=False,

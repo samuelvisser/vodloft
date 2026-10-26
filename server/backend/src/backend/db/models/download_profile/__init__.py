@@ -1,3 +1,1 @@
-from .DownloadProfileBase import DownloadProfileBase
-from .PodcastDownloadProfile import PodcastDownloadProfile
-from .SeriesDownloadProfile import SeriesDownloadProfile
+from .DownloadProfile import DownloadProfile, download_profile_seasons

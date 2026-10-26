@@ -288,13 +288,13 @@ def test_movie_output_template_uses_movie_metadata(tmp_path: Path, monkeypatch) 
 
 
 def test_manual_downloads_reject_the_wrong_local_media_profile_type() -> None:
-    from backend.api.endpoints.podcast_download_profiles.service import create_download_profile_podcast
+    from backend.api.endpoints.download_profiles.service import create_download_profile
     from backend.api.endpoints.media_downloads.service import (
         create_episode_download,
         create_movie_download,
     )
     from backend.api.models.media_download import EpisodeDownloadAPICreate, MovieDownloadAPICreate
-    from backend.api.models.podcast_download_profile import PodcastDownloadProfileAPICreate
+    from backend.api.models.download_profile import DownloadProfileAPICreate
     from backend.db.models import (
         Episode,
         MovieLocalMediaProfile,
@@ -368,9 +368,9 @@ def test_manual_downloads_reject_the_wrong_local_media_profile_type() -> None:
     assert movie_error.value.status_code == 422
 
     with pytest.raises(HTTPException, match="Show Local Media Profile") as profile_error:
-        create_download_profile_podcast(
+        create_download_profile(
             session,
-            PodcastDownloadProfileAPICreate(
+            DownloadProfileAPICreate(
                 show_id=show.id,
                 local_media_profile_id=movie_profile.id,
                 enable_profile=True,
@@ -379,6 +379,10 @@ def test_manual_downloads_reject_the_wrong_local_media_profile_type() -> None:
                 redownload_final=False,
                 download_days_in_past=0,
                 delete_older_episodes=False,
+                download_episode_count=0,
+                download_starting_from=None,
+                seasons=[],
+                include_upcoming_seasons=True,
             ),
         )
     assert profile_error.value.status_code == 422

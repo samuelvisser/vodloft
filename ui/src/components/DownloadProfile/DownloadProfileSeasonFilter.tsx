@@ -10,7 +10,6 @@ export type SeasonItem = SeasonDetachedOut
 type Props = {
     form: UseFormReturn<any>
     seasons: SeasonItem[]
-    mode?: 'create' | 'update'
 }
 
 // Special value to represent the boolean includeUpcomingSeasons inside the select UI
@@ -18,7 +17,8 @@ const INCLUDE_UPCOMING_VALUE = '__include_upcoming__'
 
 type UIOption = {value: string; label: string}
 
-export default function SeriesDownloadProfileForm({form, seasons}: Props) {
+/** Filters on season, for a show identified by season. */
+export default function DownloadProfileSeasonFilter({form, seasons}: Props) {
     const {control, setValue, watch, formState: {errors}} = form
 
     const seasonReg = useMemo(() => {

@@ -9,7 +9,8 @@ import {sourceControls} from '../../lib/sourceControls'
 
 type Props = {
     form: UseFormReturn<any>
-    mode?: 'create' | 'update'
+    /** The saved show the profile is for. */
+    showId?: number
     /** The Source of a show that is not saved yet. */
     sourceKey?: string
 }
@@ -21,7 +22,8 @@ const LimitModeReg = createSelectRegistry('DownloadLimitMode', {
 })
 type LimitMode = (typeof LimitModeReg)['values'][number]
 
-export default function PodcastDownloadProfileForm({form, sourceKey}: Props) {
+/** Filters on when episodes were published, for every show. */
+export default function DownloadProfileDateFilters({form, showId, sourceKey}: Props) {
     const {control, register, watch, setValue, clearErrors, formState: {errors}} = form
 
     // If countdown is disabled, redownload final becomes irrelevant and is hidden
@@ -29,8 +31,7 @@ export default function PodcastDownloadProfileForm({form, sourceKey}: Props) {
 
     // Countdowns only appear on the live episodes some Sources publish.
     const {data: shows} = useShows()
-    const showId = watch('showId')
-    const show = shows?.find((item) => item.id === Number(showId))
+    const show = shows?.find((item) => item.id === showId)
     const newShowSource = useSourceLookup().get(sourceKey)
     const controls = sourceControls(show ?? (newShowSource ? {sourceFeatures: newShowSource.features} : undefined))
     const offersCountdown = controls.countdownDownloads || !!withCountdown
