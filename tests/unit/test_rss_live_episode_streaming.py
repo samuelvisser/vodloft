@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import available_artifact
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -184,7 +185,7 @@ def _available_hls(session: Session, episode, local_profile, download_profile, p
         local_media_profile_id=local_profile.id,
         download_profile_id=download_profile.id,
         file_path=str(path),
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         downloaded_bytes=path.stat().st_size,
         downloaded_at=datetime.now(timezone.utc),
         downloaded_publish_status="published_final",
@@ -205,7 +206,7 @@ def _available_file(session: Session, episode, local_profile, download_profile, 
         local_media_profile_id=local_profile.id,
         download_profile_id=download_profile.id,
         file_path=str(path),
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         downloaded_bytes=path.stat().st_size,
         downloaded_at=datetime.now(timezone.utc),
         downloaded_publish_status="published_final",

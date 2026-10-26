@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import available_artifact
 import asyncio
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -1004,7 +1005,7 @@ def test_cleanup_older_episodes_deletes_download_record_and_file(db_session, tmp
             media_item_id=episode.id,
             local_media_profile_id=lmp.id,
             download_profile_id=profile.id,
-            artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+            **available_artifact(),
             file_path=str(path),
         )
         for episode, path in [(old_episode, old_file), (recent_episode, recent_file)]

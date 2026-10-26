@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import available_artifact
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -29,7 +30,7 @@ def _download(session: Session, *, path: str, media_item_id: int = 1):
         type=MediaType.BASE.value,
         media_item_id=media_item_id,
         local_media_profile_id=1,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         file_path=path,
     )
     session.add(download)

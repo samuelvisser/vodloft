@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import mark_artifact_available
 import asyncio
 from unittest.mock import Mock
 
@@ -231,7 +232,7 @@ def test_create_episode_download_enforces_one_per_profile(monkeypatch, tmp_path)
         "backend.api.endpoints.media_downloads.service._reconcile_existing_artifact",
         lambda s, existing: None,
     )
-    download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+    mark_artifact_available(download)
     session.commit()
     with pytest.raises(HTTPException) as exc_info:
         create_episode_download(session, episode.slug, body)

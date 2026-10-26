@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import available_artifact
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 
@@ -66,7 +67,7 @@ def _library(session: Session):
         type=MediaType.EPISODE.value,
         media_item_id=episode.id,
         local_media_profile_id=audio_profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         file_path="/downloads/audio.m4a",
     )
     video_download = EpisodeMediaDownload(

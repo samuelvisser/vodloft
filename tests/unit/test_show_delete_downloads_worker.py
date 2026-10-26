@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import available_artifact
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
@@ -113,7 +114,7 @@ def _library(session: Session, tmp_path: Path):
         media_item_id=episode.id,
         local_media_profile_id=audio_profile.id,
         download_profile_id=audio_download_profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         file_path=str(audio_path),
         downloaded_bytes=5,
         format_downloaded="audio",
@@ -125,7 +126,7 @@ def _library(session: Session, tmp_path: Path):
         media_item_id=episode.id,
         local_media_profile_id=video_profile.id,
         download_profile_id=video_download_profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         file_path=str(video_path),
         downloaded_bytes=5,
         format_downloaded="video",

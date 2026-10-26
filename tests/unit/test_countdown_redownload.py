@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import available_artifact
 import asyncio
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -72,7 +73,7 @@ def final_download(tmp_path, monkeypatch):
         type=MediaType.EPISODE.value,
         media_item_id=episode.id,
         local_media_profile_id=profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(path),
         downloaded_publish_status="published_with_countdown",
         redownload_when_final=True,
         file_path=str(path),
