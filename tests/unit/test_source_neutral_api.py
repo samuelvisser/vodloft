@@ -12,6 +12,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from backend.api.errors import source_request_error_handler
+from backend.services.source_requests import SourceRequestError
 from sources import ANY_DOMAIN, LinkKind, ResolvedLink, Source, registry
 
 
@@ -81,6 +83,7 @@ def client(stub_sources, session, monkeypatch):
     monkeypatch.setattr(source_router_module, "db_session", db_session)
     app = FastAPI()
     app.include_router(source_router_module.router, prefix="/api")
+    app.add_exception_handler(SourceRequestError, source_request_error_handler)
     with TestClient(app) as test_client:
         yield test_client
 

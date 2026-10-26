@@ -1,23 +1,18 @@
-import logging
-
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.models.source import (
     CookiesAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultAPIRead,
-    ShowDetailsAPIRead, ShowDetailsSeasonAPIRead, SourceAPIRead, SourceDomainAPIRead, SourceDomainAPIUpdate,
+    ShowDetailsAPIRead, SourceAPIRead, SourceDomainAPIRead, SourceDomainAPIUpdate,
 )
 from backend.app import db_session
-from backend.utils.helpers import slugify
-from config.network import is_no_internet_error
 from sources import Feature, Source
 
 from .service import (
-    LinkNotRecognisedError, SourceFeatureMissingError, SourceLookupError, UnknownDomainError, list_source_domains,
-    list_sources, resolve_link, set_domain_preference, source_with, to_program_read,
+    LinkNotRecognisedError, SourceFeatureMissingError, UnknownDomainError, get_program_status, list_source_domains,
+    list_sources, lookup_show_details, resolve_link, search_source, set_domain_preference, source_with,
+    update_source_program,
 )
 
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Sources"])
 
@@ -62,67 +57,30 @@ def resolve(body: ResolveAPIRequest):
             return resolve_link(s, body.url, body.source_key)
         except LinkNotRecognisedError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        except SourceLookupError as exc:
-            raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.get("/sources/{source_id}/show", response_model=ShowDetailsAPIRead)
 def show_details(source_id: str, url: str = Query(min_length=1, max_length=2048)):
     """Look up a show to add, at a Source that lists its episodes."""
-    source = _source(source_id, Feature.EPISODE_LISTS)
-    try:
-        details = source.show_details(url)
-    except Exception as exc:
-        if is_no_internet_error(exc):
-            raise
-        raise HTTPException(status_code=502, detail=f"{source.name} could not look up this show: {exc}") from exc
-    author = details.author_name or details.title
-    return ShowDetailsAPIRead(
-        source_key=source.id, slug=details.slug, title=details.title, description=details.description,
-        sharing_url=details.url, author_name=author, author_slug=slugify(author) or details.slug,
-        thumbnail_landscape_path=details.image_url,
-        seasons=[ShowDetailsSeasonAPIRead(slug=season.slug, name=season.name) for season in details.seasons],
-    )
+    return lookup_show_details(_source(source_id, Feature.EPISODE_LISTS), url)
 
 
 @router.get("/sources/{source_id}/search", response_model=list[SearchResultAPIRead])
 def search(source_id: str, q: str = Query(min_length=1, max_length=200)):
     """Find shows and videos at a Source by name."""
-    source = _source(source_id, Feature.SEARCH)
-    try:
-        results = source.search(q)
-    except Exception as exc:
-        if is_no_internet_error(exc):
-            raise
-        logger.warning("Could not search %s for %r: %s", source.name, q, exc)
-        raise HTTPException(status_code=502, detail=f"{source.name} could not be searched: {exc}") from exc
-    return [
-        SearchResultAPIRead(
-            kind=result.kind.value, slug=result.slug, url=result.url, title=result.title,
-            description=result.description, image_url=result.image_url, author_name=result.author_name,
-            show_slug=result.show_slug, show_url=result.show_url,
-        )
-        for result in results
-    ]
+    return search_source(_source(source_id, Feature.SEARCH), q)
 
 
 @router.get("/sources/{source_id}/program", response_model=ProgramStatusAPIRead)
 def program_status(source_id: str):
     """The program a Source runs, such as yt-dlp, and when it was last updated."""
-    return to_program_read(_source(source_id, Feature.PROGRAM_UPDATES).program_status())
+    return get_program_status(_source(source_id, Feature.PROGRAM_UPDATES))
 
 
 @router.post("/sources/{source_id}/program/update", response_model=ProgramStatusAPIRead)
 def update_program(source_id: str):
     """Fetch the latest version of a Source's program now."""
-    source = _source(source_id, Feature.PROGRAM_UPDATES)
-    try:
-        return to_program_read(source.update_program())
-    except Exception as exc:
-        if is_no_internet_error(exc):
-            raise
-        logger.warning("Could not update %s: %s", source.name, exc)
-        raise HTTPException(status_code=502, detail=f"Could not update {source.name}: {exc}") from exc
+    return update_source_program(_source(source_id, Feature.PROGRAM_UPDATES))
 
 
 @router.get("/sources/{source_id}/cookies", response_model=CookiesAPIRead)

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime
+from collections.abc import Iterable
 from typing import Literal, Optional
 
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, field_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
-from sources import UnknownSourceError, get_source
+from sources import Feature, UnknownSourceError, get_source
 
 
 def source_features(source_key: str) -> list[str]:
@@ -37,6 +38,11 @@ class SourceAPIRead(ResponseBase):
     name: str
     domains: list[str]
     features: list[str]
+
+    @field_validator("features", mode="before")
+    @classmethod
+    def _sorted_feature_names(cls, features: Iterable[Feature | str]) -> list[str]:
+        return sorted(str(feature) for feature in features)
 
 
 class ResolveAPIRequest(RequestBase):

@@ -11,6 +11,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from backend.api.errors import source_request_error_handler
+from backend.services.source_requests import SourceRequestError
 from downloader.errors import DownloadError, EncryptedMediaError, MediaUnavailableError
 from sources import Feature, LinkKind, PlaybackKind, ProgramStatus, Source, registry
 from sources import ytdlp_runner as runner
@@ -317,6 +319,7 @@ def client(tool_sources, monkeypatch):
     monkeypatch.setattr(source_router_module, "db_session", db_session)
     app = FastAPI()
     app.include_router(source_router_module.router, prefix="/api")
+    app.add_exception_handler(SourceRequestError, source_request_error_handler)
     with TestClient(app) as test_client:
         yield test_client
 

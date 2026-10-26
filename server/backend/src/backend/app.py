@@ -14,7 +14,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from sqlalchemy.exc import IntegrityError
 
-from backend.api.errors import integrity_error_handler
+from backend.api.errors import integrity_error_handler, source_request_error_handler
+from backend.services.source_requests import SourceRequestError
 from backend.utils.custom_index import CustomIndexNotReadyError
 from backend.db import get_session
 from backend.security.auth import is_authenticated
@@ -166,6 +167,7 @@ def create_app() -> FastAPI:
 
     # Exception handlers
     app.add_exception_handler(IntegrityError, integrity_error_handler)
+    app.add_exception_handler(SourceRequestError, source_request_error_handler)
     app.add_exception_handler(StarletteHTTPException, _network_aware_http_exception_handler)
 
     @app.exception_handler(CustomIndexNotReadyError)

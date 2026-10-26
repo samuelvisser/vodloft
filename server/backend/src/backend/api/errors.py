@@ -5,6 +5,8 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 
+from backend.services.source_requests import SourceRequestError
+
 def _columns_from_constraint_name(name: str) -> List[str]:
     # Expects patterns like "uq_<table>_<col>" or "uq_<table>_<col0>_<col1>"
     # Adjust if you encode multiple columns in the naming_convention.
@@ -86,3 +88,8 @@ async def integrity_error_handler(request: Request, exc: Exception) -> JSONRespo
             ]
         },
     )
+
+
+async def source_request_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    """A Source that could not answer is a bad gateway."""
+    return JSONResponse(status_code=502, content={"detail": str(cast(SourceRequestError, exc))})
