@@ -81,13 +81,13 @@ Single videos come from yt-dlp, which supports YouTube and well over a thousand 
 
 A YouTube channel or playlist, or a playlist on another site yt-dlp supports, can be added as a show: paste its link in **Add media** or in the Add Show wizard and pick Podcast or Series. A channel link adds the channel's Videos tab.
 
-These shows have no seasons of their own, so VODLoft makes one season per upload year and numbers the videos in each year by upload date, such as S2024E01 and S2024E02. A video found later is numbered after the ones VODLoft already has, so existing file names never change. Download Profiles work as for any other show. Their streams serve downloaded files only, and their metadata is not refreshed after a video is added.
+These shows have no seasons of their own, so VODLoft makes one season per upload year. They are added as a Series identified by date by default; pick another episode identification in the Add Show wizard if you prefer. Seasonal numbers the videos in each year by upload date, such as S2024E01 and S2024E02, and Numbered counts them across the show. A video found later is numbered after the ones VODLoft already has, so existing file names never change. Download Profiles work as for any other show. Their streams serve downloaded files only, and their metadata is not refreshed after a video is added.
 
 VODLoft checks the channel or playlist for new videos on the usual schedule. It looks up each new video once and pauses between lookups, so the first scan of a large channel takes a while. Private and deleted videos are skipped.
 
 ## NPO Start
 
-Series and programmes from NPO Start (npo.nl) can be added without an NPO account. **Search NPO Start** on the Add media page finds series and programmes by name, or paste a link to a series, season or episode. A series is added as a show with NPO's own seasons and episode numbers, such as S02E05. A programme outside a series is added as a single video.
+Series and programmes from NPO Start (npo.nl) can be added without an NPO account. **Search NPO Start** on the Add media page finds series and programmes by name, or paste a link to a series, season or episode. A series is added as a show with NPO's own seasons. By default it is a Series identified by season, with NPO's episode numbers, such as S02E05; the Add Show wizard lets you identify episodes by date or number instead. A programme outside a series is added as a single video.
 
 Many NPO programmes are protected by DRM, often whole seasons, and VODLoft marks them as described below. The rest download in the best quality NPO offers without an account. Programmes that need an NPO Plus subscription cannot be downloaded yet.
 
