@@ -193,11 +193,80 @@ def test_a_scan_of_a_listed_show_skips_the_daily_wire(listed, session, monkeypat
     async def no_daily_wire(*_args, **_kwargs):
         pytest.fail("A listed show must not be fetched from The Daily Wire")
 
+    def no_token(_self):
+        pytest.fail("A scan of listed shows must not sign in to The Daily Wire")
+
     monkeypatch.setattr(service, "_fetch_show", no_daily_wire)
-    monkeypatch.setattr(service.DeviceAuthClient, "get_token", lambda self: None)
+    monkeypatch.setattr(service.DeviceAuthClient, "get_token", no_token)
     result = asyncio.run(service.run_fetch_new_episodes(session, show_id=show.id))
     assert result.shows[0].episodes_found == 1
     assert session.query(Episode).count() == 1
+
+
+class _Progress:
+    def __init__(self):
+        self.messages: list[str] = []
+
+    def set(self, _percentage, message):
+        self.messages.append(message)
+
+
+def test_a_dry_run_lists_a_listed_show_without_saving(listed, session):
+    import asyncio
+
+    from backend.db.models import Episode
+    from task_manager.tasks.workers.fetch_new_episodes import service
+
+    show = _show(session)
+    listed.videos = [_video("a", 2024), _video("b", 2024, 2)]
+    progress = _Progress()
+    result = asyncio.run(service.run_fetch_new_episodes(session, show_id=show.id, dry_run=True, progress=progress))
+
+    assert result.dry_run and result.episodes_found == 0
+    assert session.query(Episode).count() == 0
+    assert progress.messages[-1] == "Dry run complete for 'PL1': 2 new episodes (nothing saved)"
+
+
+def test_listing_reports_each_new_episode(listed, session):
+    from task_manager.tasks.helpers.listed_shows import index_listed_show
+
+    show = _show(session)
+    listed.videos = [_video("a", 2024), _video("b", 2024, 2)]
+    progress = _Progress()
+    index_listed_show(session, show_id=show.id, source=listed, progress=progress)
+
+    assert progress.messages == [
+        "Listing the episodes of 'A playlist' at Listed",
+        "Found 1 new episode of 'A playlist' at Listed",
+        "Found 2 new episodes of 'A playlist' at Listed",
+        "Saving 2 new episodes of 'A playlist'",
+    ]
+
+
+def test_a_canceled_scan_stops_between_lookups_and_saves_nothing(lookups, session):
+    from backend.db.models import Episode
+    from sources import pacing
+    from task_manager.tasks.helpers.listed_shows import index_listed_show
+
+    answers, calls = lookups
+    show = _show(session, source_key="ytdlp")
+    answers[("--flat-playlist", show.sharing_url)] = {"_type": "playlist", "entries": [
+        {"id": slug, "ie_key": "Youtube", "url": f"https://www.youtube.com/watch?v={slug}"} for slug in ("v1", "v2")
+    ]}
+    for slug in ("v1", "v2"):
+        answers[("--no-playlist", f"https://www.youtube.com/watch?v={slug}")] = {
+            "id": slug, "extractor_key": "Youtube", "title": slug, "upload_date": "20240102",
+            "webpage_url": f"https://www.youtube.com/watch?v={slug}",
+        }
+
+    def looked_up() -> int:
+        return sum(1 for args in calls if args[0] == "--no-playlist")
+
+    with pacing.request_context(should_cancel=lambda: looked_up() > 0), pytest.raises(pacing.RequestCancelled):
+        index_listed_show(session, show_id=show.id, source=YtDlpSource())
+
+    assert looked_up() == 1
+    assert session.query(Episode).count() == 0
 
 
 def test_listed_episodes_download_through_the_page(listed, session, monkeypatch):

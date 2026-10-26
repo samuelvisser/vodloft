@@ -1,6 +1,8 @@
 """Process-wide request pacing and execution-scoped wait reporting.
 
-Bulk/background callers share fair pacing and cooldowns. Interactive callers
+Every Source reports its waits and stops for cancellation through
+``request_context``. The Daily Wire's requests also share one pacer:
+bulk/background callers share fair pacing and cooldowns. Interactive callers
 start immediately but still contribute to the global burst accounting used to
 defer subsequent paced work. Callbacks execute outside the condition lock so
 persistence never blocks request queuing.
@@ -25,7 +27,7 @@ _SLOW_COOLDOWN_UNPACED_GRACE_REQUESTS = 10
 
 
 class RequestCancelled(InterruptedError):
-    """A queued or retrying API request was canceled by its owning operation."""
+    """A waiting or retrying request was canceled by its owning operation."""
 
 
 @dataclass(frozen=True)
@@ -34,9 +36,9 @@ class RequestWait:
     until: float | None = None
 
 
-_observer: ContextVar[Callable[[RequestWait | None], None] | None] = ContextVar("dailywire_request_observer", default=None)
-_cancel: ContextVar[Callable[[], bool] | None] = ContextVar("dailywire_request_cancel", default=None)
-_priority: ContextVar[RequestPriority] = ContextVar("dailywire_request_priority", default="background")
+_observer: ContextVar[Callable[[RequestWait | None], None] | None] = ContextVar("request_observer", default=None)
+_cancel: ContextVar[Callable[[], bool] | None] = ContextVar("request_cancel", default=None)
+_priority: ContextVar[RequestPriority] = ContextVar("request_priority", default="background")
 
 
 @contextmanager
@@ -59,7 +61,7 @@ def request_context(
 def check_cancelled() -> None:
     check = _cancel.get()
     if check is not None and check():
-        raise RequestCancelled("Canceled while waiting for The Daily Wire")
+        raise RequestCancelled("Canceled while waiting to send a request")
 
 
 def notify_wait(event: RequestWait | None) -> None:
@@ -72,7 +74,7 @@ def notify_wait(event: RequestWait | None) -> None:
         except Exception:
             # Reporting is not permission to send a request. Cancellation is
             # checked independently, even when a reporting sink is unavailable.
-            logger.exception("Could not report The Daily Wire request wait")
+            logger.exception("Could not report a request wait")
 
 
 @dataclass(frozen=True)
@@ -324,8 +326,16 @@ def wait_for_retry(error: Exception, attempt: int, *, base_delay: float = 1.5) -
         if raw:
             reason = "upstream_retry"
             pacer.defer_upstream(delay)
-    deadline = monotonic() + delay
-    notify_wait(RequestWait(reason, time() + delay))
+    pause(delay, reason)
+
+
+def pause(seconds: float, reason: str = "request_spacing") -> None:
+    """Wait before the next request, reporting the wait and stopping when the work is canceled."""
+    if seconds <= 0:
+        check_cancelled()
+        return
+    deadline = monotonic() + seconds
+    notify_wait(RequestWait(reason, time() + seconds))
     try:
         while True:
             check_cancelled()

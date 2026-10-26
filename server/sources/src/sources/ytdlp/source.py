@@ -12,7 +12,7 @@ from ..contract import (
     ANY_DOMAIN, Feature, LinkKind, Playback, PlaybackKind, ProgramStatus, ResolvedLink, ShowDetails, Source,
     VideoDetails, link_host, on_domain,
 )
-from .. import ytdlp_runner as runner
+from .. import pacing, ytdlp_runner as runner
 
 logger = logging.getLogger(__name__)
 
@@ -204,7 +204,7 @@ class YtDlpSource(Source):
                 logger.info("Skipping %s for now: %s", entry_url, exc)
                 continue
             finally:
-                time.sleep(_LISTING_PAUSE_SECONDS)
+                pacing.pause(_LISTING_PAUSE_SECONDS)
             yield self._video(info, entry_url)
 
     def video_playback(self, *, slug: str, url: str) -> Playback:
