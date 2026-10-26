@@ -9,7 +9,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "72dc6dfbcb05"
+HEAD_REVISION = "a23bae59a781"
+VODLOFT_UNIFIED_DOWNLOAD_PROFILES_REVISION = "72dc6dfbcb05"
 VODLOFT_SOURCE_DOMAINS_REVISION = "f7b2d4e6a913"
 VODLOFT_DRM_REVISION = "e3c9a7b5d214"
 VODLOFT_VIDEOS_REVISION = "b5d2e8a4c716"
@@ -244,7 +245,8 @@ def test_migration_history_has_one_head(migration_database):
     )
 
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == VODLOFT_SOURCE_DOMAINS_REVISION
+    assert script.get_revision(HEAD_REVISION).down_revision == VODLOFT_UNIFIED_DOWNLOAD_PROFILES_REVISION
+    assert script.get_revision(VODLOFT_UNIFIED_DOWNLOAD_PROFILES_REVISION).down_revision == VODLOFT_SOURCE_DOMAINS_REVISION
     assert script.get_revision(VODLOFT_SOURCE_DOMAINS_REVISION).down_revision == VODLOFT_DRM_REVISION
     assert script.get_revision(VODLOFT_DRM_REVISION).down_revision == VODLOFT_VIDEOS_REVISION
     assert script.get_revision(VODLOFT_VIDEOS_REVISION).down_revision == VODLOFT_SOURCES_REVISION
@@ -259,6 +261,29 @@ def test_migration_history_has_one_head(migration_database):
     assert script.get_revision(WIRELOFT_1_0_REVISION).down_revision == BASE_REVISION
     assert script.get_revision(BASE_REVISION) is not None
 
+
+
+def test_fresh_database_matches_the_models(migration_database):
+    _database_path, _engine = migration_database
+    from backend.db.migrations import check_database, upgrade_database
+
+    upgrade_database()
+
+    check_database()
+
+
+def test_demo_seed_runs_on_a_fresh_database(migration_database):
+    _database_path, engine = migration_database
+    from backend.db import seed_db
+    from backend.db.migrations import upgrade_database
+
+    upgrade_database()
+    seed_db()
+    seed_db()
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT count(*) FROM shows")).scalar_one() == 3
+        assert connection.execute(text("SELECT count(*) FROM media_items_episode")).scalar_one() == 57
 
 
 def test_countdown_redownload_intent_migration_uses_current_episode_table(migration_database):
