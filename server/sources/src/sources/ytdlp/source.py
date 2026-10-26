@@ -8,6 +8,8 @@ from collections.abc import Iterator
 from datetime import datetime, timezone
 from urllib.parse import urlsplit, urlunsplit
 
+from downloader.ytdlp import is_drm_message, is_unsupported_url_message
+
 from ..contract import (
     ANY_DOMAIN, Feature, LinkKind, Playback, PlaybackKind, ProgramStatus, ResolvedLink, ShowDetails, Source,
     VideoDetails, link_host, on_domain,
@@ -62,10 +64,6 @@ def _published_at(info: dict) -> datetime | None:
     return None
 
 
-def _is_drm_error(exc: Exception) -> bool:
-    return "drm" in str(exc).lower()
-
-
 def _drm_protected(info: dict) -> bool:
     """yt-dlp marks a video, or each of its formats, that is protected by DRM."""
     if info.get("_has_drm"):
@@ -79,7 +77,7 @@ def _lookup(*args: str) -> dict:
     try:
         return runner.run_json(*args)
     except runner.YtDlpError as exc:
-        if not _is_drm_error(exc):
+        if not is_drm_message(str(exc)):
             raise
     info = runner.run_json("--allow-unplayable-formats", *args)
     return {**info, "_has_drm": True}
@@ -121,7 +119,7 @@ class YtDlpSource(Source):
         try:
             info = self._info(url)
         except runner.YtDlpError as exc:
-            if "Unsupported URL" in str(exc):
+            if is_unsupported_url_message(str(exc)):
                 return None
             raise
         site = _site(info)

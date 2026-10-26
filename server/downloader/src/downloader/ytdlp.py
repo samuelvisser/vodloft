@@ -65,13 +65,30 @@ def resolve_ytdlp_source(
     )
 
 
+def error_message(output: str | list[str]) -> str:
+    """yt-dlp's last ERROR line, without the prefix, or its last line."""
+    lines = [line.strip() for line in (output.splitlines() if isinstance(output, str) else output) if line.strip()]
+    errors = [line.removeprefix("ERROR:").strip() for line in lines if line.startswith("ERROR:")]
+    if errors:
+        return errors[-1]
+    return lines[-1] if lines else "yt-dlp failed without a message"
+
+
+def is_drm_message(message: str) -> bool:
+    """yt-dlp refused the media because it is protected by DRM."""
+    return "drm" in message.lower()
+
+
+def is_unsupported_url_message(message: str) -> bool:
+    """No yt-dlp extractor recognises the link."""
+    return "unsupported url" in message.lower()
+
+
 def _error(output: list[str]) -> DownloadError:
-    errors = [line.removeprefix("ERROR:").strip() for line in output if line.startswith("ERROR:")]
-    message = errors[-1] if errors else (output[-1] if output else "yt-dlp failed without a message")
-    lowered = message.lower()
-    if "drm" in lowered:
+    message = error_message(output)
+    if is_drm_message(message):
         return EncryptedMediaError(f"This video is protected by DRM and cannot be downloaded ({message})")
-    if any(marker in lowered for marker in _UNAVAILABLE_MARKERS):
+    if any(marker in message.lower() for marker in _UNAVAILABLE_MARKERS):
         return MediaUnavailableError(message)
     return DownloadError(f"yt-dlp: {message}")
 

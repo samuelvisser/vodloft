@@ -20,7 +20,8 @@ from pathlib import Path
 
 import requests
 
-from config import get_settings
+from config.settings.base import get_config_path
+from downloader.ytdlp import error_message
 
 RELEASE_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"
 CHECKSUMS_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/SHA2-256SUMS"
@@ -34,7 +35,8 @@ class YtDlpError(RuntimeError):
 
 
 def ytdlp_directory() -> Path:
-    return get_settings().database_path.parent / "yt-dlp"
+    """yt-dlp's updated release and cookies, in the config directory."""
+    return get_config_path().parent / "yt-dlp"
 
 
 def updated_program_path() -> Path:
@@ -69,15 +71,6 @@ def command() -> tuple[str, ...]:
     if cookies.is_file():
         options += ["--cookies", str(cookies)]
     return (*program(), *options)
-
-
-def error_message(output: str) -> str:
-    """yt-dlp's last ERROR line, without the prefix, or its last line."""
-    lines = [line.strip() for line in output.splitlines() if line.strip()]
-    errors = [line for line in lines if line.startswith("ERROR:")]
-    if errors:
-        return errors[-1].removeprefix("ERROR:").strip()
-    return lines[-1] if lines else "yt-dlp failed without a message"
 
 
 def run_json(*args: str) -> dict:
