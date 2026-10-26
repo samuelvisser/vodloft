@@ -1,6 +1,6 @@
 from fastapi import APIRouter, status
 
-from backend.api.models.media_download import MovieDownloadAPICreate
+from backend.api.models.media_download import MediaDownloadAPICreate
 from backend.api.models.operations import MediaDownloadOperationAccepted
 from backend.api.models.video import VideoAPICreate, VideoAPIRead
 from backend.app import db_session
@@ -77,7 +77,7 @@ def video_refresh(video_id: int):
     response_model=MediaDownloadOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
-def video_download_create(video_id: int, body: MovieDownloadAPICreate):
+def video_download_create(video_id: int, body: MediaDownloadAPICreate):
     """Persist a video artifact target and start it as a generic UI operation."""
     with db_session() as s:
         try:

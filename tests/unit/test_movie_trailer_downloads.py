@@ -276,7 +276,7 @@ def test_movie_extra_download_repairs_legacy_official_trailer_classification(
     import backend.db.models  # noqa: F401
     from backend.api.endpoints.media_downloads.service import create_movie_extra_download
     from backend.services.movies import index_dailywire_movie
-    from backend.api.models.media_download import MovieDownloadAPICreate
+    from backend.api.models.media_download import MediaDownloadAPICreate
     from backend.db import Base
     from backend.db.models import Movie, MovieExtra, MovieLocalMediaProfile
     from backend.db.models.media_download import MovieExtraMediaDownload
@@ -365,7 +365,7 @@ def test_movie_extra_download_repairs_legacy_official_trailer_classification(
             session,
             index_dailywire_movie(session, movie_data)[0],
             remote_interview.slug,
-            MovieDownloadAPICreate(local_media_profile_id=profile.id),
+            MediaDownloadAPICreate(local_media_profile_id=profile.id),
         )
         session.commit()
         session.refresh(stale_trailer)

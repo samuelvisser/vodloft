@@ -31,7 +31,7 @@ def test_deleting_one_movie_preserves_shared_source_other_placement_and_download
     from backend.api.endpoints.media_downloads.service import create_movie_extra_download
     from backend.services.movies import index_dailywire_movie
     from backend.api.endpoints.movies.service import delete_movie
-    from backend.api.models.media_download import MovieDownloadAPICreate
+    from backend.api.models.media_download import MediaDownloadAPICreate
     from backend.db import Base
     from backend.db.models import Movie, MovieExtra, MovieExtraSource, MovieLocalMediaProfile
     from backend.db.models.media_download import MovieExtraMediaDownload
@@ -62,7 +62,7 @@ def test_deleting_one_movie_preserves_shared_source_other_placement_and_download
         )
         movie_a = _movie_record("movie-a", "Movie A", shared)
         movie_b = _movie_record("movie-b", "Movie B", shared)
-        body = MovieDownloadAPICreate(local_media_profile_id=profile.id)
+        body = MediaDownloadAPICreate(local_media_profile_id=profile.id)
 
         download_a = create_movie_extra_download(session, index_dailywire_movie(session, movie_a)[0], shared.slug, body)
         download_b = create_movie_extra_download(session, index_dailywire_movie(session, movie_b)[0], shared.slug, body)

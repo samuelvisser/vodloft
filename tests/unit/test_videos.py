@@ -206,7 +206,7 @@ def test_a_video_download_needs_a_video_profile(video_sources, session):
     from fastapi import HTTPException
 
     from backend.api.endpoints.media_downloads.service import create_video_download
-    from backend.api.models.media_download import MovieDownloadAPICreate
+    from backend.api.models.media_download import MediaDownloadAPICreate
     from backend.db.models import MovieLocalMediaProfile
     from backend.services.videos import index_video
 
@@ -217,26 +217,26 @@ def test_a_video_download_needs_a_video_profile(video_sources, session):
     session.add(movie_profile)
     session.flush()
     with pytest.raises(HTTPException) as exc:
-        create_video_download(session, video, MovieDownloadAPICreate(local_media_profile_id=movie_profile.id))
+        create_video_download(session, video, MediaDownloadAPICreate(local_media_profile_id=movie_profile.id))
     assert exc.value.status_code == 422
     assert "Videos require a Video Local Media Profile" in exc.value.detail
 
     profile = _video_profile(session)
-    download = create_video_download(session, video, MovieDownloadAPICreate(local_media_profile_id=profile.id))
+    download = create_video_download(session, video, MediaDownloadAPICreate(local_media_profile_id=profile.id))
     assert download.type == "video"
     assert download.file_path.endswith("/videos/A Channel/2026-03-04 - Clip abc [abc].ext")
 
 
 def test_the_downloads_view_can_be_scoped_to_one_video(video_sources, session):
     from backend.api.endpoints.media_downloads.service import create_video_download, get_media_downloads_view
-    from backend.api.models.media_download import MovieDownloadAPICreate
+    from backend.api.models.media_download import MediaDownloadAPICreate
     from backend.services.videos import index_video
 
     profile = _video_profile(session)
     first, _ = index_video(session, "clips", video_sources.video_details("https://clips.example/v/one"))
     second, _ = index_video(session, "clips", video_sources.video_details("https://clips.example/v/two"))
-    create_video_download(session, first, MovieDownloadAPICreate(local_media_profile_id=profile.id))
-    create_video_download(session, second, MovieDownloadAPICreate(local_media_profile_id=profile.id))
+    create_video_download(session, first, MediaDownloadAPICreate(local_media_profile_id=profile.id))
+    create_video_download(session, second, MediaDownloadAPICreate(local_media_profile_id=profile.id))
 
     views = get_media_downloads_view(session, video_id=second.id)
     assert [(view.media_slug, view.source_key, view.type) for view in views] == [("two", "clips", "video")]
@@ -244,7 +244,7 @@ def test_the_downloads_view_can_be_scoped_to_one_video(video_sources, session):
 
 def test_the_download_plan_asks_the_source_for_the_video(video_sources, session, monkeypatch):
     from backend.api.endpoints.media_downloads.service import create_video_download
-    from backend.api.models.media_download import MovieDownloadAPICreate
+    from backend.api.models.media_download import MediaDownloadAPICreate
     from backend.services import download_plans
     from backend.services.videos import index_video
     from downloader.lifecycle import DownloadTracker
@@ -252,7 +252,7 @@ def test_the_download_plan_asks_the_source_for_the_video(video_sources, session,
 
     profile = _video_profile(session, preferred_format="format_audio_only")
     video, _ = index_video(session, "clips", video_sources.video_details("https://clips.example/v/abc"))
-    download = create_video_download(session, video, MovieDownloadAPICreate(local_media_profile_id=profile.id))
+    download = create_video_download(session, video, MediaDownloadAPICreate(local_media_profile_id=profile.id))
     session.commit()
 
     probed = {}
@@ -275,7 +275,7 @@ def test_the_download_plan_asks_the_source_for_the_video(video_sources, session,
 
 def test_a_ytdlp_playback_plans_a_ytdlp_download(video_sources, session, monkeypatch):
     from backend.api.endpoints.media_downloads.service import create_video_download
-    from backend.api.models.media_download import MovieDownloadAPICreate
+    from backend.api.models.media_download import MediaDownloadAPICreate
     from backend.services import download_plans
     from backend.services.videos import index_video
     from downloader.lifecycle import DownloadTracker
@@ -288,7 +288,7 @@ def test_a_ytdlp_playback_plans_a_ytdlp_download(video_sources, session, monkeyp
     monkeypatch.setattr(download_plans, "resolve_download_source", lambda *_a, **_k: pytest.fail("yt-dlp pages are not probed"))
     profile = _video_profile(session, preferred_format="format_720p")
     video, _ = index_video(session, "clips", video_sources.video_details("https://clips.example/v/abc"))
-    download = create_video_download(session, video, MovieDownloadAPICreate(local_media_profile_id=profile.id))
+    download = create_video_download(session, video, MediaDownloadAPICreate(local_media_profile_id=profile.id))
     session.commit()
 
     plan = download_plans.prepare_download_plan(session, download.id, DownloadTracker())

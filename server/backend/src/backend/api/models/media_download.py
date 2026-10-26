@@ -28,8 +28,8 @@ class MediaDownloadRetryAPIRequest(_EpisodeDownloadDelayRequest):
     """Optional controls for an explicit retry/re-download request."""
 
 
-class MovieDownloadAPICreate(RequestBase):
-    """Request body for starting a movie download for a Local Media Profile."""
+class MediaDownloadAPICreate(RequestBase):
+    """Request body for starting a download of a movie, movie extra or video for a Local Media Profile."""
 
     local_media_profile_id: int
 

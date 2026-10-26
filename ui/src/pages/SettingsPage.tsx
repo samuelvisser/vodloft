@@ -76,9 +76,7 @@ export default function SettingsPage() {
     const queryClient = useQueryClient()
     const [params, setParams] = useSearchParams()
     const [baseline, setBaseline] = useState<SettingsValues | null>(null)
-    // Old links to the Daily Wire tab open the Sources tab that replaced it.
-    const requestedTab = params.get('tab') === 'dailywire' ? 'sources' : params.get('tab')
-    const activeTab = SETTINGS_TABS.find((tab) => tab.id === requestedTab)?.id ?? 'general'
+    const activeTab = SETTINGS_TABS.find((tab) => tab.id === params.get('tab'))?.id ?? 'general'
 
     const chooseTab = (tab: SettingsTab) => {
         setParams({tab}, {replace: true})

@@ -194,7 +194,7 @@ def test_downloading_one_extra_survives_another_movies_shared_clip(
     from backend.api.endpoints.media_downloads.service import create_movie_extra_download
     from backend.services.movies import index_dailywire_movie
     from backend.api.endpoints.movies.service import index_dailywire_movie
-    from backend.api.models.media_download import MovieDownloadAPICreate
+    from backend.api.models.media_download import MediaDownloadAPICreate
     from backend.db import Base
     from backend.db.models import MovieExtra, MovieExtraSource, MovieLocalMediaProfile
     from backend.types.media_types import MediaType
@@ -251,7 +251,7 @@ def test_downloading_one_extra_survives_another_movies_shared_clip(
             session,
             index_dailywire_movie(session, infidels)[0],
             final_trailer.slug,
-            MovieDownloadAPICreate(local_media_profile_id=profile.id),
+            MediaDownloadAPICreate(local_media_profile_id=profile.id),
         )
         session.commit()
 
@@ -282,7 +282,7 @@ def test_shared_clip_downloads_remain_scoped_to_parent_movie_and_profile(
     import backend.db.models  # noqa: F401
     from backend.api.endpoints.media_downloads.service import create_movie_extra_download
     from backend.services.movies import index_dailywire_movie
-    from backend.api.models.media_download import MovieDownloadAPICreate
+    from backend.api.models.media_download import MediaDownloadAPICreate
     from backend.db import Base
     from backend.db.models import MovieExtra, MovieExtraSource, MovieLocalMediaProfile
     from backend.db.models.media_download import MovieExtraMediaDownload
@@ -324,7 +324,7 @@ def test_shared_clip_downloads_remain_scoped_to_parent_movie_and_profile(
             title="Movie B",
             extras=[shared],
         )
-        body = MovieDownloadAPICreate(local_media_profile_id=profile.id)
+        body = MediaDownloadAPICreate(local_media_profile_id=profile.id)
 
         download_a = create_movie_extra_download(session, index_dailywire_movie(session, movie_a)[0], shared.slug, body)
         download_b = create_movie_extra_download(session, index_dailywire_movie(session, movie_b)[0], shared.slug, body)

@@ -149,7 +149,7 @@ def test_movie_and_extra_downloads_share_one_persisted_release_lookup(tmp_path, 
     )
     from backend.services.movies import index_dailywire_movie
     from backend.services import movies as movie_service
-    from backend.api.models.media_download import MovieDownloadAPICreate
+    from backend.api.models.media_download import MediaDownloadAPICreate
     from backend.db.core import Base
     from backend.db.models import Movie, MovieLocalMediaProfile
     from backend.integrations.tmdb import MovieReleaseLookupResult
@@ -207,7 +207,7 @@ def test_movie_and_extra_downloads_share_one_persisted_release_lookup(tmp_path, 
         movie_extras=[official_trailer],
         trailer=official_trailer,
     )
-    body = MovieDownloadAPICreate(local_media_profile_id=profile.id)
+    body = MediaDownloadAPICreate(local_media_profile_id=profile.id)
 
     movie_download = create_movie_download(session, index_dailywire_movie(session, movie_data)[0], body)
     trailer_download = create_movie_extra_download(

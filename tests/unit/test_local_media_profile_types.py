@@ -294,7 +294,7 @@ def test_manual_downloads_reject_the_wrong_local_media_profile_type() -> None:
         create_episode_download,
         create_movie_download,
     )
-    from backend.api.models.media_download import EpisodeDownloadAPICreate, MovieDownloadAPICreate
+    from backend.api.models.media_download import EpisodeDownloadAPICreate, MediaDownloadAPICreate
     from backend.api.models.download_profile import DownloadProfileAPICreate
     from backend.db.models import (
         Episode,
@@ -366,7 +366,7 @@ def test_manual_downloads_reject_the_wrong_local_media_profile_type() -> None:
         create_movie_download(
             session,
             movie,
-            MovieDownloadAPICreate(local_media_profile_id=show_profile.id),
+            MediaDownloadAPICreate(local_media_profile_id=show_profile.id),
         )
     assert movie_error.value.status_code == 422
 

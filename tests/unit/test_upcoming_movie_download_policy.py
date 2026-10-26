@@ -14,7 +14,7 @@ def test_upcoming_movie_allows_extras_but_not_full_movie(tmp_path, monkeypatch):
         create_movie_extra_download,
     )
     from backend.services import movies as movie_service
-    from backend.api.models.media_download import MovieDownloadAPICreate
+    from backend.api.models.media_download import MediaDownloadAPICreate
     from backend.db.core import Base
     from backend.db.models import MovieLocalMediaProfile
     from backend.db.models.media_download import MovieExtraMediaDownload
@@ -58,7 +58,7 @@ def test_upcoming_movie_allows_extras_but_not_full_movie(tmp_path, monkeypatch):
         movie_extras=[trailer],
         trailer=trailer,
     )
-    body = MovieDownloadAPICreate(local_media_profile_id=profile.id)
+    body = MediaDownloadAPICreate(local_media_profile_id=profile.id)
 
     assert movie_data.is_upcoming is True
 
