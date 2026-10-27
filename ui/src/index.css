@@ -2034,8 +2034,10 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .add-media-view { max-width: 760px; }
 .add-media-view--onboarding { margin: 0 auto; }
 .add-media-view .view-header .btn { white-space: nowrap; }
-.add-media-form { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; }
-.add-media-form .add-media-input { flex: 1 1 320px; min-width: 0; }
+.add-media-form { display: flex; gap: 8px; align-items: stretch; }
+.add-media-form .add-media-input { flex: 1 1 auto; min-width: 0; }
+/* Same height as the link field, and wide enough for "Looking up…" so it never moves or wraps. */
+.add-media-form .btn { flex: none; min-width: 7.5em; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; }
 .add-media-error { margin: 20px 0 0; }
 .add-media-preview {
   display: flex;
