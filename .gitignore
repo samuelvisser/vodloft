@@ -3,6 +3,7 @@
 /package-lock.json
 
 .cadence/
+.claude/settings.local.json
 
 # Project- specific
 config/*
