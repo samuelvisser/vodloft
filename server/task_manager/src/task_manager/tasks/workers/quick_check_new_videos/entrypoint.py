@@ -5,6 +5,7 @@ from controller.db_utils import db_session
 from task_manager.scheduler.registry import on_cron, on_event, task
 from task_manager.scheduler.results import TaskResult
 from ..fetch_new_episodes.quick_check import run_quick_check
+from ..fetch_new_episodes.refresh import run_catalogue_refresh
 from ..fetch_new_episodes.service import run_fetch_new_episodes
 
 
@@ -50,7 +51,10 @@ async def quick_check_new_videos(*, resource_id: int | None = None, progress=Non
 @task(
     key="rescan_quick_checked_shows",
     title="Re-scan shows with quick checks",
-    description="Lists YouTube channels and other shows with quick checks in full, to catch anything a quick check missed.",
+    description=(
+        "Lists YouTube channels and other shows with quick checks in full, to catch anything a quick check "
+        "missed, and refreshes their episodes' titles and thumbnails and which ones the Source no longer has."
+    ),
     allowed_resource_types=("show",),
     default_max_retries=3,
     tracks_progress=False,
@@ -58,4 +62,8 @@ async def quick_check_new_videos(*, resource_id: int | None = None, progress=Non
 async def rescan_quick_checked_shows(*, resource_id: int | None = None, progress=None) -> TaskResult:
     with db_session() as s:
         result = await run_fetch_new_episodes(s, show_id=resource_id, quick_checked=True, progress=progress)
-    return TaskResult(summary=result.summary(), data=result.as_data())
+        refreshed = run_catalogue_refresh(s, show_id=resource_id)
+    return TaskResult(
+        summary=f"{result.summary()}. {refreshed.summary()}",
+        data={**result.as_data(), "refresh": refreshed.as_data()},
+    )

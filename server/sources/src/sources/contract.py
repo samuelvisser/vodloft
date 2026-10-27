@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from typing import Any, ClassVar
@@ -40,6 +40,9 @@ class Feature(StrEnum):
     QUICK_CHECK = "quick_check"
     """Cheaply finding a listed show's newest items, with ``latest_items`` and
     ``item_details``, between full scans of the show."""
+    CATALOGUE_REFRESH = "catalogue_refresh"
+    """Refreshing the titles, descriptions and thumbnails of a listed show's
+    episodes, and telling which ones the Source no longer has, with ``refresh_items``."""
 
 
 class RssEpisodeType(StrEnum):
@@ -181,6 +184,20 @@ class ItemRef:
 
     slug: str
     url: str
+
+
+@dataclass(frozen=True)
+class ItemRefresh:
+    """What a Source says now about items VODLoft already has.
+
+    ``details`` holds the items it could look up. Only the title, description
+    and picture are refreshed from them, and a field the Source left out is kept.
+    ``removed`` holds the items the Source says it no longer has. An item in
+    neither could not be checked this time and stays as it is.
+    """
+
+    details: dict[str, VideoDetails] = field(default_factory=dict)
+    removed: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -343,6 +360,11 @@ class Source(ABC):
         """Details per item slug. None means the item is gone, private or not
         finished yet, so a later check tries it again. ``Feature.QUICK_CHECK`` only."""
         raise NotImplementedError(f"{self.name} has no quick check")
+
+    def refresh_items(self, url: str, items: Sequence[ItemRef]) -> ItemRefresh:
+        """What the Source says now about these items of the show at ``url``.
+        Only Sources with ``Feature.CATALOGUE_REFRESH`` implement it."""
+        raise NotImplementedError(f"{self.name} cannot refresh a show's items")
 
     def quick_check_minutes(self, shows: Sequence[tuple[str, int]]) -> int:
         """How often each of these shows, given as link and episode count, can

@@ -12,6 +12,10 @@
     line-height: 1;
 }
 
+.removed-badge {
+    background: #4b5563;
+}
+
 .drm-badge-cover {
     position: absolute;
     top: 8px;
@@ -38,6 +42,11 @@
     .drm-badge {
         background: #fdba74;
         color: #431407;
+    }
+
+    .removed-badge {
+        background: #d1d5db;
+        color: #111827;
     }
 
     .drm-notice {

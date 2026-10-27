@@ -103,6 +103,8 @@ def get_download_profile_episodes(
         episode_identifier_type_predicate(Episode.episode_identifier, allowed_types),
         # Media protected by DRM cannot be downloaded.
         Episode.drm_protected.is_(False),
+        # Nor can media the Source no longer has.
+        Episode.removed_from_source.is_(False),
     )
 
     if profile.download_days_in_past > 0:

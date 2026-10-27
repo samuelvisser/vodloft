@@ -20,6 +20,7 @@ const FEATURE_LABELS: Record<string, string> = {
     [SourceFeature.EPISODE_LISTS]: 'Episode lists',
     [SourceFeature.SEARCH]: 'Search',
     [SourceFeature.QUICK_CHECK]: 'Quick checks',
+    [SourceFeature.CATALOGUE_REFRESH]: 'Daily refresh',
 }
 
 // Features that are settings rather than kinds of content.

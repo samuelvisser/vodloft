@@ -194,6 +194,7 @@ export default function YouTubeApiSettings({draft, updateDraft, environmentVaria
             <ApiKeyPanel/>
             <SettingsSection
                 className="youtube-api-split"
+                defaultOpen={false}
                 title="How to spend the YouTube API quota"
                 description="Google does not tell an API key its limit, so VODLoft counts its own units and keeps to this split."
             >
