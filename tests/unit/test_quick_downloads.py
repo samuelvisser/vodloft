@@ -11,7 +11,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from sources import EpisodeMedia, Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, Source, VideoDetails, registry
+from sources import (
+    EpisodeMedia, Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, Source, VideoDetails, VideoFormat, VideoFormats,
+    registry,
+)
 
 
 class ClipSource(Source):
@@ -45,6 +48,13 @@ class TubeSource(ClipSource):
 
     def video_playback(self, *, slug, url):
         return Playback(url=url, kind=PlaybackKind.YTDLP, command=("yt-dlp",))
+
+    def video_formats(self, url):
+        return VideoFormats(videos=(
+            VideoFormat(2160, "vp9", 900), VideoFormat(2160, "av1", 700),
+            VideoFormat(1080, "h264", 300), VideoFormat(1080, "vp9", 200), VideoFormat(1080, "av1", None),
+            VideoFormat(1088, "h264", 310), VideoFormat(360, "h264", 20),
+        ), audio_size_bytes=50, duration=100.0)
 
 
 class WireSource(ClipSource):
@@ -160,6 +170,84 @@ def test_ytdlp_best_leaves_the_choice_to_ytdlp(quick_sources, temporary_root, mo
         assert "-S" not in command and "-f" not in command
         assert command[:3] == ("yt-dlp", "--merge-output-format", container)
         assert plan.requested_destination.endswith(f".{container}")
+
+
+@pytest.mark.parametrize(("choice", "options", "extension"), [
+    ({"quality": 1080}, ("-S", "res:1080", "--merge-output-format", "mp4"), "mp4"),
+    ({"quality": 720, "codec": "av1", "container": "mkv"}, ("-S", "res:720,vcodec:av1", "--merge-output-format", "mkv"), "mkv"),
+    ({"codec": "h265"}, ("-S", "vcodec:h265", "--merge-output-format", "mp4"), "mp4"),
+    ({"kind": "audio", "audio_format": "mp3", "audio_bitrate": 192},
+     ("-f", "bestaudio/best", "-x", "--audio-format", "mp3", "--audio-quality", "192K"), "mp3"),
+    ({"kind": "audio", "audio_format": "mp3"},
+     ("-f", "bestaudio/best", "-x", "--audio-format", "mp3", "--audio-quality", "320K"), "mp3"),
+])
+def test_ytdlp_takes_the_chosen_quality_codec_and_audio_format(quick_sources, temporary_root, choice, options, extension):
+    from backend.services import quick_downloads
+    from downloader.lifecycle import DownloadTracker
+
+    request = _request("tube", **choice)
+    plan = quick_downloads.prepare_quick_download_plan(request, quick_downloads.quick_folder(request.id), DownloadTracker())
+    assert plan.source.ytdlp_command[1:1 + len(options)] == options
+    assert plan.requested_destination.endswith(f".{extension}")
+
+
+def test_sources_without_format_choices_take_only_best_mp4_and_m4a(quick_sources, temporary_root, monkeypatch):
+    from backend.services.quick_downloads import QuickChoice, QuickDownloadRefused, prepare_quick_download_plan, quick_folder
+    from downloader.lifecycle import DownloadTracker
+
+    _probe(monkeypatch)
+    assert QuickChoice().label == "Video · Best MP4"
+    assert QuickChoice(quality=1080, container="mkv", codec="vp9").label == "Video · 1080p MKV · VP9"
+    assert QuickChoice(kind="audio", audio_format="mp3").label == "Audio · MP3 320 kbps"
+    with pytest.raises(ValueError):
+        QuickChoice(quality=900)
+    for choice in ({"quality": 1080}, {"container": "mkv"}, {"kind": "audio", "audio_format": "mp3"}):
+        request = _request(**choice)
+        with pytest.raises(QuickDownloadRefused, match="only as Best MP4 video or M4A audio"):
+            prepare_quick_download_plan(request, quick_folder(request.id), DownloadTracker())
+
+
+def test_the_option_list_has_each_quality_codec_and_size(quick_sources):
+    from backend.services.quick_downloads import AudioOption, CodecOption, VideoOption, quick_options
+
+    options = quick_options(quick_sources.tube, "https://tube.example/v/abc")
+    assert options.format_choices and options.containers == ("mp4", "mkv")
+    best, uhd, full_hd, low = options.videos
+    # Best is what yt-dlp most likely takes: the highest, then the codec it prefers.
+    assert best == VideoOption(None, 750, (
+        CodecOption("h264", 360), CodecOption("vp9", 950), CodecOption("av1", 750),
+    ))
+    assert uhd == VideoOption(2160, 750, (CodecOption("vp9", 950), CodecOption("av1", 750)))
+    # 1088p counts as 1080p, and a codec with no size has none.
+    assert full_hd == VideoOption(1080, 360, (
+        CodecOption("h264", 360), CodecOption("vp9", 250), CodecOption("av1", None),
+    ))
+    assert low == VideoOption(480, 70, (CodecOption("h264", 70),))
+    assert options.audio == (
+        AudioOption("m4a", size_bytes=50), AudioOption("mp3", 320, 4_000_000),
+        AudioOption("mp3", 192, 2_400_000), AudioOption("mp3", 128, 1_600_000),
+    )
+
+    basic = quick_options(quick_sources.clips, "https://clips.example/v/abc")
+    assert not basic.format_choices and basic.containers == ("mp4",)
+    assert basic.videos == (VideoOption(None),) and basic.audio == (AudioOption("m4a"),)
+
+
+def test_ytdlp_info_becomes_video_formats():
+    from sources.ytdlp.source import video_formats
+
+    formats = video_formats({"duration": 10, "formats": [
+        {"format_id": "sb0", "format_note": "storyboard", "vcodec": "none", "acodec": "none"},
+        {"vcodec": "avc1.640028", "acodec": "none", "width": 1920, "height": 1080, "filesize": 1000},
+        {"vcodec": "vp09.00.40.08", "acodec": "none", "width": 1080, "height": 1920, "filesize_approx": 900},
+        {"vcodec": "av01.0.08M.08", "acodec": "none", "width": 1280, "height": 720, "tbr": 800},
+        {"vcodec": "hev1", "acodec": "none", "width": 3840, "height": 2160, "has_drm": True},
+        {"vcodec": "none", "acodec": "mp4a.40.2", "filesize": 100},
+        {"vcodec": "none", "acodec": "opus", "filesize": 120},
+    ]})
+    assert formats == VideoFormats(videos=(
+        VideoFormat(1080, "h264", 1000), VideoFormat(1080, "vp9", 900), VideoFormat(720, "av1", 1_000_000),
+    ), audio_size_bytes=120, duration=10.0)
 
 
 def test_a_members_only_episode_asks_with_the_account(quick_sources, temporary_root, monkeypatch):
@@ -339,6 +427,40 @@ def test_starting_a_quick_download_queues_one_operation(api):
 def test_links_that_cannot_be_quick_downloaded_are_refused(api, url, message):
     response = api.client.post("/api/quick-downloads", json={"url": url})
     assert response.status_code == 422 and message in response.json()["detail"]
+
+
+def test_options_list_formats_or_say_why_not(api):
+    response = api.client.post("/api/quick-downloads/options", json={"url": "https://tube.example/v/abc"})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["link"]["preview"]["title"] == "Clip: abc?" and body["refused"] is None
+    assert body["formatChoices"] is True and body["containers"] == ["mp4", "mkv"]
+    assert [video["quality"] for video in body["videos"]] == [None, 2160, 1080, 480]
+    assert body["videos"][2]["codecs"][0] == {"codec": "h264", "sizeBytes": 360}
+    assert body["audio"][1] == {"audioFormat": "mp3", "bitrate": 320, "sizeBytes": 4_000_000}
+
+    basic = api.client.post("/api/quick-downloads/options", json={"url": "https://clips.example/v/abc"}).json()
+    assert basic["formatChoices"] is False and [video["quality"] for video in basic["videos"]] == [None]
+
+    locked = api.client.post("/api/quick-downloads/options", json={"url": "https://clips.example/v/locked-1"}).json()
+    assert "DRM" in locked["refused"] and locked["videos"] == []
+
+
+def test_choices_a_source_does_not_offer_are_refused(api):
+    response = api.client.post("/api/quick-downloads", json={
+        "url": "https://clips.example/v/abc", "choice": {"quality": 1080},
+    })
+    assert response.status_code == 422 and "only as Best MP4" in response.json()["detail"]
+    response = api.client.post("/api/quick-downloads", json={
+        "url": "https://tube.example/v/abc", "choice": {"quality": 900},
+    })
+    assert response.status_code == 422
+    response = api.client.post("/api/quick-downloads", json={
+        "url": "https://tube.example/v/abc", "choice": {"kind": "audio", "audioFormat": "mp3", "audioBitrate": 192},
+    })
+    assert response.status_code == 202, response.text
+    [active] = api.client.get("/api/quick-downloads").json()["active"]
+    assert active["context"]["choice"] == "Audio · MP3 192 kbps"
 
 
 def _ready_file(temporary_root: Path, content: bytes = b"0123456789") -> str:

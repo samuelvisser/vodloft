@@ -187,6 +187,28 @@ class SeasonRef:
 
 
 @dataclass(frozen=True)
+class VideoFormat:
+    """One video stream a Source offers for a single video."""
+
+    height: int
+    """The smaller side in pixels, as yt-dlp's ``res`` counts it, so a portrait 1080p video is 1080."""
+    codec: str
+    """``h264``, ``h265``, ``vp9``, ``av1`` or another codec's name."""
+    size_bytes: int | None = None
+    """The stream's size, exact or estimated, when the Source says."""
+
+
+@dataclass(frozen=True)
+class VideoFormats:
+    """What a single video can be downloaded as, for quick download choices."""
+
+    videos: tuple[VideoFormat, ...] = ()
+    audio_size_bytes: int | None = None
+    """The size of the best audio stream, when the Source says."""
+    duration: float | None = None
+
+
+@dataclass(frozen=True)
 class VideoDetails:
     """Everything VODLoft stores about a single video.
 
@@ -386,6 +408,10 @@ class Source(ABC):
     def video_details(self, url: str) -> VideoDetails:
         """Look up a single video. Only Sources with ``Feature.VIDEOS`` implement it."""
         raise NotImplementedError(f"{self.name} has no single videos")
+
+    def video_formats(self, url: str) -> VideoFormats:
+        """The streams a single video is offered in. Only Sources with ``Feature.FORMAT_CHOICES`` implement it."""
+        raise NotImplementedError(f"{self.name} offers no format choices")
 
     def video_playback(self, *, slug: str, url: str) -> Playback:
         """Resolve the playable URL of a single video, or of an episode of a show

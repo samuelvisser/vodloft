@@ -65,38 +65,72 @@ def resolve_ytdlp_source(
     )
 
 
+QUICK_VIDEO_CODECS = ("h264", "h265", "vp9", "av1")
+QUICK_AUDIO_FORMATS = ("m4a", "mp3")
+
+
+def ytdlp_quick_options(
+    *,
+    audio_only: bool,
+    container: str = "mp4",
+    height: int | None = None,
+    codec: str | None = None,
+    audio_format: str = "m4a",
+    audio_bitrate: int | None = None,
+) -> tuple[str, ...]:
+    """yt-dlp options for a quick download.
+
+    With no height and no codec this is yt-dlp's own default selection, with
+    no preferences of VODLoft's. A height or codec only steers yt-dlp's sort,
+    so a video without that exact stream still downloads in the nearest one.
+    """
+    if audio_only:
+        if audio_format == "m4a":
+            return ("-f", "bestaudio[ext=m4a]/bestaudio/best", "-x", "--audio-format", "m4a")
+        if audio_format != "mp3":
+            raise DownloadError(f"Unsupported audio format '{audio_format}'")
+        options: tuple[str, ...] = ("-f", "bestaudio/best", "-x", "--audio-format", "mp3")
+        return (*options, "--audio-quality", f"{audio_bitrate}K") if audio_bitrate else options
+    if container not in ("mp4", "mkv"):
+        raise DownloadError(f"Unsupported video container '{container}'")
+    if codec is not None and codec not in QUICK_VIDEO_CODECS:
+        raise DownloadError(f"Unsupported video codec '{codec}'")
+    sort = [part for part in (f"res:{height}" if height else None, f"vcodec:{codec}" if codec else None) if part]
+    options = ("-S", ",".join(sort)) if sort else ()
+    return (*options, "--merge-output-format", container, "--remux-video", container)
+
+
 def resolve_ytdlp_quick_source(
     url: str,
     *,
     command: tuple[str, ...],
     audio_only: bool,
     container: str = "mp4",
+    height: int | None = None,
+    codec: str | None = None,
+    audio_format: str = "m4a",
+    audio_bitrate: int | None = None,
     ffmpeg_path: str = "ffmpeg",
 ) -> ResolvedDownloadSource:
-    """A quick download where yt-dlp chooses what is best.
-
-    Video takes yt-dlp's own default format selection, with no preferences of
-    VODLoft's, merged into the chosen container. Audio keeps the original
-    audio as M4A.
-    """
+    """A quick download in the format chosen for it; see ``ytdlp_quick_options``."""
     if not command:
         raise DownloadError("A yt-dlp download needs the yt-dlp command")
-    if audio_only:
-        options: tuple[str, ...] = ("-f", "bestaudio[ext=m4a]/bestaudio/best", "-x", "--audio-format", "m4a")
-        extension = "m4a"
-    else:
-        if container not in ("mp4", "mkv"):
-            raise DownloadError(f"Unsupported video container '{container}'")
-        options = ("--merge-output-format", container, "--remux-video", container)
-        extension = container
+    options = ytdlp_quick_options(
+        audio_only=audio_only, container=container, height=height, codec=codec,
+        audio_format=audio_format, audio_bitrate=audio_bitrate,
+    )
     if os.sep in ffmpeg_path:
         options += ("--ffmpeg-location", ffmpeg_path)
+    if audio_only:
+        downloaded = f"audio {audio_format}" + (f" {audio_bitrate} kbps" if audio_format == "mp3" and audio_bitrate else "")
+    else:
+        downloaded = f"up to {height}p" if height else "best"
     return ResolvedDownloadSource(
         url=url,
-        format_downloaded="audio" if audio_only else "best",
+        format_downloaded=downloaded,
         use_hls=False,
         remux_to_mp4=False,
-        extension=extension,
+        extension=audio_format if audio_only else container,
         audio_only=audio_only,
         ytdlp_command=(*command, *options),
     )

@@ -210,14 +210,22 @@ def embed_media(
     part_path = media_path + ".metadata.part"
     try:
         command = [ffmpeg_path, "-y", "-i", media_path]
-        if thumbnail_path is not None:
+        # Matroska keeps cover art as an attachment; as a stream it would be a second video track.
+        attach = thumbnail_path is not None and muxer == "matroska"
+        if thumbnail_path is not None and not attach:
             command += ["-i", thumbnail_path]
         # Data streams (such as RTP hint tracks) cannot be copied into MP4.
         command += ["-map", "0", "-map", "-0:d?"]
-        if thumbnail_path is not None:
+        if thumbnail_path is not None and not attach:
             command += ["-map", "1:v:0"]
         command += ["-c", "copy"]
-        if thumbnail_path is not None:
+        if attach:
+            extension = Path(thumbnail_path).suffix.lower().lstrip(".")
+            extension = "jpg" if extension == "jpeg" else extension
+            mimetype = {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp"}.get(extension, "image/jpeg")
+            command += ["-attach", thumbnail_path, "-metadata:s:t", f"mimetype={mimetype}",
+                        "-metadata:s:t", f"filename=cover.{extension or 'jpg'}"]
+        elif thumbnail_path is not None:
             artwork_stream_index = 0 if audio_only else 1
             command += [f"-c:v:{artwork_stream_index}", "mjpeg",
                         f"-disposition:v:{artwork_stream_index}", "attached_pic"]

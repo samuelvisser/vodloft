@@ -64,3 +64,31 @@ def test_embedding_tolerates_ffmpeg_output_cut_mid_character(tmp_path: Path):
 
     embed_media(str(media), metadata={"title": "Example"}, should_cancel=lambda: False)
     embed_media(str(media), metadata={"title": "Example 2"})
+
+
+@pytest.mark.parametrize("extension", ["mkv", "mp3"])
+def test_quick_download_formats_take_artwork_and_tags(tmp_path: Path, extension: str):
+    media = tmp_path / f"video.{extension}"
+    image = tmp_path / "artwork.jpg"
+    if extension == "mp3":
+        ffmpeg("-f", "lavfi", "-i", "sine=frequency=440", "-t", "0.2", "-c:a", "libmp3lame", str(media))
+    else:
+        ffmpeg("-f", "lavfi", "-i", "color=s=64x64:r=10", "-f", "lavfi", "-i", "sine=frequency=440",
+               "-t", "0.2", "-c:v", "mpeg4", "-c:a", "aac", "-threads", "1", str(media))
+    ffmpeg("-f", "lavfi", "-i", "color=s=32x32", "-frames:v", "1", "-threads", "1", str(image))
+
+    embed_media(str(media), thumbnail_path=str(image), audio_only=extension == "mp3",
+                metadata={"title": "Example", "artist": "A Channel"}, should_cancel=lambda: False)
+    result = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_format", "-show_streams", "-of", "json", str(media)],
+        stdin=subprocess.DEVNULL, capture_output=True, text=True, check=True, timeout=30,
+    )
+    details = json.loads(result.stdout)
+    artwork = [stream for stream in details["streams"] if stream["disposition"].get("attached_pic")]
+    assert len(artwork) == 1
+    if extension == "mkv":
+        # Cover art is an attachment, not a second video track.
+        assert artwork[0]["tags"]["filename"] == "cover.jpg"
+        assert artwork[0]["tags"]["mimetype"] == "image/jpeg"
+    tags = {key.lower(): value for key, value in details["format"]["tags"].items()}
+    assert tags["title"] == "Example" and tags["artist"] == "A Channel"

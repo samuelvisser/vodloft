@@ -13,7 +13,8 @@ from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
     ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, Feature, LinkKind, Playback, PlaybackKind, ProgramStatus,
-    ResolvedLink, SearchResults, ShowDetails, Source, SourceProblem, VideoDetails, link_host, on_domain,
+    ResolvedLink, SearchResults, ShowDetails, Source, SourceProblem, VideoDetails, VideoFormat, VideoFormats,
+    link_host, on_domain,
 )
 from .. import pacing, ytdlp_runner as runner
 from . import youtube_rss, youtube_search
@@ -124,6 +125,52 @@ def _drm_protected(info: dict) -> bool:
         return True
     formats = [f for f in info.get("formats") or [] if isinstance(f, dict)]
     return bool(formats) and all(f.get("has_drm") for f in formats)
+
+
+_CODECS = (("avc", "h264"), ("h264", "h264"), ("hev", "h265"), ("hvc", "h265"), ("h265", "h265"),
+           ("vp09", "vp9"), ("vp9", "vp9"), ("av01", "av1"), ("av1", "av1"))
+
+
+def _codec(vcodec: str) -> str:
+    name = vcodec.lower()
+    for prefix, codec in _CODECS:
+        if name.startswith(prefix):
+            return codec
+    return name.split(".")[0]
+
+
+def _format_size(entry: dict, duration) -> int | None:
+    size = entry.get("filesize") or entry.get("filesize_approx")
+    if isinstance(size, (int, float)) and size > 0:
+        return int(size)
+    rate = entry.get("tbr")
+    if isinstance(rate, (int, float)) and rate > 0 and isinstance(duration, (int, float)) and duration > 0:
+        return int(rate * 1000 / 8 * duration)
+    return None
+
+
+def video_formats(info: dict) -> VideoFormats:
+    """The downloadable streams in yt-dlp's info for a video, without storyboards or DRM."""
+    duration = info.get("duration")
+    videos: list[VideoFormat] = []
+    audio: list[int | None] = []
+    for entry in info.get("formats") or []:
+        if not isinstance(entry, dict) or entry.get("has_drm") or entry.get("format_note") == "storyboard":
+            continue
+        vcodec, acodec = entry.get("vcodec") or "none", entry.get("acodec") or "none"
+        if vcodec != "none":
+            sides = [side for side in (entry.get("width"), entry.get("height")) if isinstance(side, int) and side > 0]
+            if not sides:
+                continue
+            videos.append(VideoFormat(height=min(sides), codec=_codec(vcodec), size_bytes=_format_size(entry, duration)))
+        elif acodec != "none":
+            audio.append(_format_size(entry, duration))
+    sizes = [size for size in audio if size]
+    return VideoFormats(
+        videos=tuple(videos),
+        audio_size_bytes=max(sizes) if sizes else None,
+        duration=float(duration) if isinstance(duration, (int, float)) else None,
+    )
 
 
 def _lookup(*args: str) -> dict:
@@ -269,6 +316,12 @@ class YtDlpSource(Source):
         if info.get("_type") == "playlist":
             raise runner.YtDlpError("This link is a playlist or channel, not a single video")
         return self._video(info, url)
+
+    def video_formats(self, url: str) -> VideoFormats:
+        info = self._info(url)
+        if info.get("_type") == "playlist":
+            raise runner.YtDlpError("This link is a playlist or channel, not a single video")
+        return video_formats(info)
 
     @staticmethod
     def _video(info: dict, url: str) -> VideoDetails:

@@ -33,7 +33,7 @@ from downloader.storage.quick import (
     write_manifest,
 )
 from downloader.ytdlp import resolve_ytdlp_quick_source, resolve_ytdlp_source
-from sources import Feature, LinkKind, PlaybackKind, Source, get_source
+from sources import Feature, LinkKind, PlaybackKind, Source, VideoFormat, VideoFormats, get_source
 
 logger = logging.getLogger(__name__)
 
@@ -43,21 +43,58 @@ _BEST_VIDEO = "format_4k"
 _MAX_FILE_STEM = 150
 
 
+QUALITY_STEPS = (2160, 1440, 1080, 720, 480)
+"""The heights offered besides Best, highest first."""
+MP3_BITRATES = (320, 192, 128)
+CODEC_NAMES = {"h264": "H.264", "h265": "H.265", "vp9": "VP9", "av1": "AV1"}
+_CODEC_PREFERENCE = ("av1", "vp9", "h265", "h264")
+"""The order yt-dlp prefers codecs in by default, best first, for Best's size estimate."""
+
+
 @dataclass(frozen=True)
 class QuickChoice:
-    """What the file should be: video in a container, or audio in a format."""
+    """What the file should be: video in a quality, container and codec, or audio in a format.
+
+    ``quality`` None is Best and ``codec`` None is Auto: yt-dlp's own choice
+    for a Source with Feature.FORMAT_CHOICES, the highest resolution otherwise.
+    """
 
     kind: Literal["video", "audio"] = "video"
+    quality: int | None = None
     container: Literal["mp4", "mkv"] = "mp4"
-    audio_format: Literal["m4a"] = "m4a"
+    codec: Literal["h264", "h265", "vp9", "av1"] | None = None
+    audio_format: Literal["m4a", "mp3"] = "m4a"
+    audio_bitrate: int | None = None
+    """MP3 only, in kbps. None is 320."""
     embed_metadata: bool = True
     embed_artwork: bool = True
+
+    def __post_init__(self) -> None:
+        if self.quality is not None and self.quality not in QUALITY_STEPS:
+            raise ValueError(f"Quality must be Best or one of {', '.join(f'{h}p' for h in QUALITY_STEPS)}")
+        if self.audio_bitrate is not None and self.audio_bitrate not in MP3_BITRATES:
+            raise ValueError(f"MP3 bitrate must be one of {', '.join(f'{b} kbps' for b in MP3_BITRATES)}")
+
+    @property
+    def mp3_bitrate(self) -> int:
+        return self.audio_bitrate or MP3_BITRATES[0]
+
+    @property
+    def is_basic(self) -> bool:
+        """Best MP4 video or M4A audio: the choices every Source offers."""
+        if self.kind == "audio":
+            return self.audio_format == "m4a"
+        return self.quality is None and self.container == "mp4" and self.codec is None
 
     @property
     def label(self) -> str:
         if self.kind == "audio":
+            if self.audio_format == "mp3":
+                return f"Audio · MP3 {self.mp3_bitrate} kbps"
             return f"Audio · {self.audio_format.upper()}"
-        return f"Video · Best {self.container.upper()}"
+        quality = f"{self.quality}p" if self.quality else "Best"
+        codec = f" · {CODEC_NAMES[self.codec]}" if self.codec else ""
+        return f"Video · {quality} {self.container.upper()}{codec}"
 
 
 @dataclass(frozen=True)
@@ -99,6 +136,12 @@ def check_quick_downloadable(source: Source, kind: LinkKind, *, drm_protected: b
         raise QuickDownloadRefused("Quick download takes one video, episode or movie, not a whole show or channel")
 
 
+def check_quick_choice(source: Source, choice: QuickChoice) -> None:
+    """Refuse a format the Source does not offer."""
+    if not choice.is_basic and not source.has(Feature.FORMAT_CHOICES):
+        raise QuickDownloadRefused(f"{source.name} downloads only as Best MP4 video or M4A audio")
+
+
 def quick_file_name(title: str, extension: str) -> str:
     """The title as a file name, made safe by the same rules as library files."""
     mode = FilenameRestrictionMode(get_settings().download_settings.filename_restriction_mode)
@@ -137,6 +180,7 @@ def _metadata(source: Source, request: QuickDownloadRequest, details) -> MediaSe
 def _resolve_source(source: Source, request: QuickDownloadRequest, tracker: DownloadTracker) -> ResolvedDownloadSource:
     settings = get_settings().download_settings
     choice = request.choice
+    check_quick_choice(source, choice)
     audio_only = choice.kind == "audio"
     if request.kind is LinkKind.SHOW:
         raise DownloadError("Quick download takes one video, episode or movie, not a whole show")
@@ -163,7 +207,10 @@ def _resolve_source(source: Source, request: QuickDownloadRequest, tracker: Down
             if source.has(Feature.FORMAT_CHOICES):
                 return resolve_ytdlp_quick_source(
                     playback.url, command=playback.command, audio_only=audio_only,
-                    container=choice.container, ffmpeg_path=settings.ffmpeg_path,
+                    container=choice.container, height=choice.quality, codec=choice.codec,
+                    audio_format=choice.audio_format,
+                    audio_bitrate=choice.mp3_bitrate if choice.audio_format == "mp3" else None,
+                    ffmpeg_path=settings.ffmpeg_path,
                 )
             return resolve_ytdlp_source(
                 playback.url, command=playback.command, preferred_format=_BEST_VIDEO,
@@ -224,6 +271,96 @@ def prepare_quick_download_plan(request: QuickDownloadRequest, folder: Path, tra
         ffmpeg_path=download_settings.ffmpeg_path, assets=assets, metadata_tags=tags,
         artwork_asset_id=artwork_id, attempt_id=tracker.attempt_id,
         media_lane=(f"source:{source.id}", streams) if (streams := source.download_streams) else None,
+    )
+
+
+@dataclass(frozen=True)
+class CodecOption:
+    codec: str
+    size_bytes: int | None = None
+
+
+@dataclass(frozen=True)
+class VideoOption:
+    """One row of the option list: Best, or one quality step the video has."""
+
+    quality: int | None
+    size_bytes: int | None = None
+    """For Auto: the stream yt-dlp would most likely pick, plus audio."""
+    codecs: tuple[CodecOption, ...] = ()
+
+
+@dataclass(frozen=True)
+class AudioOption:
+    audio_format: Literal["m4a", "mp3"]
+    bitrate: int | None = None
+    size_bytes: int | None = None
+
+
+@dataclass(frozen=True)
+class QuickOptions:
+    """What a link can be quick downloaded as, with sizes where the Source reports them."""
+
+    format_choices: bool
+    containers: tuple[str, ...]
+    videos: tuple[VideoOption, ...]
+    audio: tuple[AudioOption, ...]
+    duration: float | None = None
+
+
+def _step(height: int) -> int:
+    """The quality step a stream counts as: the lowest step it fits, give or take a few lines, 4K and up as 2160p.
+
+    Some encodes are a few lines taller than their step, such as 1088 for 1080p.
+    """
+    for step in reversed(QUALITY_STEPS):
+        if height <= step * 1.05:
+            return step
+    return QUALITY_STEPS[0]
+
+
+def _likely(formats: list[VideoFormat]) -> VideoFormat:
+    """The stream yt-dlp's default sort most likely takes: highest, then by codec, then largest."""
+    def rank(entry: VideoFormat):
+        codec = _CODEC_PREFERENCE.index(entry.codec) if entry.codec in _CODEC_PREFERENCE else len(_CODEC_PREFERENCE)
+        return (-entry.height, codec, -(entry.size_bytes or 0))
+    return min(formats, key=rank)
+
+
+def _plus(size: int | None, audio: int | None) -> int | None:
+    return size + (audio or 0) if size else None
+
+
+def quick_options(source: Source, url: str) -> QuickOptions:
+    """The choices for a link: every quality and codec for a Source with Feature.FORMAT_CHOICES, Best and M4A otherwise."""
+    if not source.has(Feature.FORMAT_CHOICES):
+        return QuickOptions(
+            format_choices=False, containers=("mp4",),
+            videos=(VideoOption(quality=None),), audio=(AudioOption("m4a"),),
+        )
+    formats: VideoFormats = source.video_formats(url)
+    audio_size = formats.audio_size_bytes
+    by_step: dict[int, list[VideoFormat]] = {}
+    for entry in formats.videos:
+        by_step.setdefault(_step(entry.height), []).append(entry)
+
+    def option(quality: int | None, entries: list[VideoFormat]) -> VideoOption:
+        codecs = []
+        for codec in CODEC_NAMES:
+            matching = [entry for entry in entries if entry.codec == codec]
+            if matching:
+                codecs.append(CodecOption(codec, _plus(_likely(matching).size_bytes, audio_size)))
+        return VideoOption(quality, _plus(_likely(entries).size_bytes, audio_size) if entries else None, tuple(codecs))
+
+    videos = [option(None, list(formats.videos))]
+    videos += [option(step, by_step[step]) for step in QUALITY_STEPS if step in by_step]
+    mp3 = tuple(
+        AudioOption("mp3", bitrate, int(formats.duration * bitrate * 1000 / 8) if formats.duration else None)
+        for bitrate in MP3_BITRATES
+    )
+    return QuickOptions(
+        format_choices=True, containers=("mp4", "mkv"), videos=tuple(videos),
+        audio=(AudioOption("m4a", size_bytes=audio_size), *mp3), duration=formats.duration,
     )
 
 

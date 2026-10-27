@@ -4,6 +4,8 @@ from fastapi.responses import StreamingResponse
 from backend.api.models.quick_download import (
     QuickDownloadAPICreate,
     QuickDownloadOperationAccepted,
+    QuickDownloadOptionsAPIRead,
+    QuickDownloadOptionsAPIRequest,
     QuickDownloadsAPIRead,
 )
 from backend.app import db_session
@@ -13,6 +15,7 @@ from .service import (
     RangeNotSatisfiable,
     file_delivery,
     list_quick_downloads,
+    quick_download_options,
     remove_quick_download,
     start_quick_download,
 )
@@ -37,6 +40,18 @@ def quick_download_create(body: QuickDownloadAPICreate):
         except Exception:
             s.rollback()
             raise
+
+
+@router.post("/options", response_model=QuickDownloadOptionsAPIRead)
+def quick_download_option_list(body: QuickDownloadOptionsAPIRequest):
+    """What a link can be quick downloaded as, with sizes where its Source reports them."""
+    from backend.api.endpoints.sources.service import LinkNotRecognisedError
+
+    with db_session() as s:
+        try:
+            return quick_download_options(s, body)
+        except LinkNotRecognisedError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("", response_model=QuickDownloadsAPIRead)

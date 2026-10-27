@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from backend.services.quick_downloads import (
+    QuickDownloadRefused,
     QuickDownloadRequest,
     prepare_quick_download_plan,
     quick_folder,
@@ -97,6 +98,8 @@ def run_quick_download(request_input: dict[str, Any], *, progress=None) -> TaskR
             return TaskResult(summary=f"{request.title} is protected by DRM and cannot be downloaded", outcome="failed")
         if isinstance(exc, SubscriptionRequiredError):
             return TaskResult(summary=f"{request.title} needs a subscription and cannot be downloaded", outcome="failed")
+        if isinstance(exc, QuickDownloadRefused):
+            return TaskResult(summary=str(exc), outcome="failed")
         raise
     finally:
         if execution is not None:

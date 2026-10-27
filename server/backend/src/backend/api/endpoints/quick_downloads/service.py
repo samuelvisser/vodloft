@@ -10,16 +10,28 @@ from sqlalchemy.orm import Session
 
 from backend.api.endpoints.sources.service import resolve_link
 from backend.api.models.operations import TaskOperationRead
-from backend.api.models.quick_download import QuickDownloadAPICreate, QuickDownloadAPIRead, QuickDownloadsAPIRead
+from backend.api.models.source import ResolvedLinkAPIRead
+from backend.api.models.quick_download import (
+    QuickDownloadAPICreate,
+    QuickDownloadAPIRead,
+    QuickDownloadOptionsAPIRead,
+    QuickDownloadOptionsAPIRequest,
+    QuickDownloadsAPIRead,
+)
 from backend.services.quick_downloads import (
     QuickChoice,
+    QuickDownloadRefused,
     QuickDownloadRequest,
+    check_quick_choice,
     check_quick_downloadable,
     deliveries,
     discard_quick_download,
     mark_delivered,
+    QuickOptions,
+    quick_options,
     ready_quick_download,
 )
+from backend.services.source_requests import asking_source
 from config import get_settings
 from downloader.storage.quick import QuickFolder, list_quick_folders, new_quick_download_id
 from sources import LinkKind, get_source
@@ -43,6 +55,11 @@ def start_quick_download(s: Session, body: QuickDownloadAPICreate) -> dict:
     check_quick_downloadable(
         source, kind, drm_protected=link.drm_protected, needs_subscription=link.needs_subscription,
     )
+    try:
+        choice = QuickChoice(**body.choice.model_dump())
+    except ValueError as exc:
+        raise QuickDownloadRefused(str(exc)) from exc
+    check_quick_choice(source, choice)
     request = QuickDownloadRequest(
         id=new_quick_download_id(),
         source_key=source.id,
@@ -53,11 +70,33 @@ def start_quick_download(s: Session, body: QuickDownloadAPICreate) -> dict:
         description=link.preview.description,
         image_url=link.preview.image_url,
         author_name=link.preview.author_name,
-        choice=QuickChoice(**body.choice.model_dump()),
+        choice=choice,
     )
     operation = create_quick_download_operation(s, request)
     dispatch_queued_media_download_operations(s)
     return {"queued": True, "operation_id": operation.id, "quick_download_id": request.id}
+
+
+@dataclass(frozen=True)
+class _OptionsSource:
+    link: ResolvedLinkAPIRead
+    refused: str | None = None
+    options: QuickOptions | None = None
+
+
+def quick_download_options(s: Session, body: QuickDownloadOptionsAPIRequest) -> QuickDownloadOptionsAPIRead:
+    """Look up the link and what it can be downloaded as, or why it cannot be."""
+    link = resolve_link(s, body.url, body.source_key)
+    source = get_source(link.source.id)
+    try:
+        check_quick_downloadable(
+            source, LinkKind(link.kind), drm_protected=link.drm_protected, needs_subscription=link.needs_subscription,
+        )
+    except QuickDownloadRefused as exc:
+        return QuickDownloadOptionsAPIRead.model_validate(_OptionsSource(link, refused=str(exc)))
+    with asking_source(f"{source.name} could not list the formats of this video"):
+        options = quick_options(source, link.url)
+    return QuickDownloadOptionsAPIRead.model_validate(_OptionsSource(link, options=options))
 
 
 def _ready() -> list[QuickFolder]:
