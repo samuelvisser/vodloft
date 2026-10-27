@@ -1,19 +1,22 @@
 # VODLoft Wiki
 
-VODLoft is a self-hosted media manager for Daily Wire shows, podcasts, series, and movies. It can keep a local library of Daily Wire content, download media to your own storage, and expose shows through private RSS feeds.
+VODLoft is a self-hosted media manager for shows, podcasts, movies and videos from The Daily Wire, YouTube, NPO Start and many other sites. It keeps a local library of the media you choose, downloads it to your own storage, and exposes shows through private RSS feeds.
 
-This wiki documents **VODLoft**. Most pages still describe the WireLoft feature set it was forked from. It focuses on what features do, how to configure them, and how to solve common problems.
+VODLoft is a fork of WireLoft, which does the same for The Daily Wire alone. Each site is handled by a **Source**; see [[Sources]].
 
 ## What you can do with VODLoft
 
-- Browse The Daily Wire shows and movies and add them to your own Library.
+- Add media by pasting a link, search NPO Start, or browse The Daily Wire's catalogue.
+- Add YouTube channels and playlists as shows, and single videos from YouTube and many other sites.
 - Keep show seasons and episodes synchronized automatically.
 - Download episodes in audio, 720p, 1080p, or 4K where available.
 - Download movies and movie extras using separate movie storage rules.
 - Keep only the latest episodes, a date window, selected seasons, or everything.
 - Organize files with customizable Local Media Profiles and Jinja output templates.
-- Subscribe to private RSS feeds that use downloaded files, Daily Wire streaming, or both.
+- Subscribe to private RSS feeds that use downloaded files, or for The Daily Wire also its streams.
 - Track active, queued, failed, missing, and corrupted downloads from one place.
+
+VODLoft never downloads media protected by DRM. It lists such media with a DRM badge instead. See [[Sources#media-protected-by-drm]].
 
 ## Main areas of the interface
 
@@ -21,15 +24,15 @@ This wiki documents **VODLoft**. Most pages still describe the WireLoft feature 
 
 The Home page is VODLoft's status dashboard. It shows active and queued downloads, recent completions, and items that need attention such as failed downloads or movie metadata problems.
 
-### Browse
+### Add media and Browse
 
-Browse is the Daily Wire catalog. Use it to find shows and movies that are not yet in your Library.
+**Add media** takes a link to a show, episode, movie or video from any Source, and shows a preview before anything is added. It also searches NPO Start. **Browse** is The Daily Wire's catalogue, for finding its shows and movies that are not yet in your Library.
 
 ### Library
 
-The Library contains the shows and movies VODLoft manages for you. Adding something to the Library does **not** automatically mean it must be downloaded.
+The Library contains the shows, movies and videos VODLoft manages for you. Adding something to the Library does **not** automatically mean it must be downloaded.
 
-For shows, VODLoft can manage seasons, episodes, automatic downloads, and RSS feeds. Movies are downloaded manually and can include extras such as trailers or featurettes when The Daily Wire provides them.
+For shows, VODLoft can manage seasons, episodes, automatic downloads, and RSS feeds. Movies and single videos are downloaded manually. Movies can include extras such as trailers or featurettes when The Daily Wire provides them.
 
 ### Downloads
 
@@ -41,19 +44,20 @@ VODLoft separates three decisions so they can be changed independently:
 
 1. A **Local Media Profile** defines the format, download behavior, and output path for a local file.
 2. A **Download Profile** decides which show episodes should be downloaded automatically with a Local Media Profile.
-3. An **RSS Stream Profile** decides which episodes appear in a private feed and whether media should come from local downloads, Daily Wire, or both.
+3. An **RSS Stream Profile** decides which episodes appear in a private feed and whether media should come from local downloads, The Daily Wire's streams, or both.
 
 This makes it possible, for example, to keep every episode as audio, retain only the latest five episodes as 1080p video, and expose both through one RSS feed.
 
 ### Settings
 
-The Settings page covers normal application, download, automation, Daily Wire, and advanced settings. Most users can configure VODLoft entirely from this page; environment variables are mainly useful when a deployment needs to enforce a value.
+The Settings page covers normal application, download, automation, Sources, and advanced settings. Most users can configure VODLoft entirely from this page; environment variables are mainly useful when a deployment needs to enforce a value.
 
 ## Start here
 
 - [[Installation]] — install VODLoft with Docker and persist the correct directories.
-- [[First-Run-Setup]] — connect Daily Wire, secure VODLoft, and add your first media.
-- [[Shows-and-Library]] — understand Home, Browse, Library, shows, movies, seasons, and episodes.
+- [[First-Run-Setup]] — sign in to Sources, secure VODLoft, and add your first media.
+- [[Sources]] — which sites VODLoft supports, how links are matched, and what DRM means for downloads.
+- [[Shows-and-Library]] — understand Home, Add media, Browse, Library, shows, movies, videos, seasons, and episodes.
 - [[Local-Media-Profiles]] — choose formats, download behavior, and output paths.
 - [[Download-Profiles]] — configure automatic show downloads and retention.
 - [[Downloads-and-File-Integrity]] — use the download queue and understand missing/corrupted file handling.
@@ -64,9 +68,9 @@ The Settings page covers normal application, download, automation, Daily Wire, a
 - [[Backups-and-Upgrades]] — back up and update your installation safely.
 - [[Troubleshooting]] — symptom-based help for common problems.
 
-## The Daily Wire access
+## Accounts and access
 
-VODLoft does not bypass The Daily Wire membership checks. Public content can be used without connecting an account. Member-exclusive content requires a Daily Wire account that already has access to it.
+VODLoft does not bypass any site's access checks, memberships or DRM. Public Daily Wire content can be used without connecting an account. Member-exclusive content requires a Daily Wire account that already has access to it.
 
 VODLoft uses Daily Wire's device authorization flow, so you authorize VODLoft through The Daily Wire rather than giving VODLoft your Daily Wire password. See [[Daily-Wire-Integration]].
 

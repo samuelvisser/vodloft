@@ -2,7 +2,7 @@
 #
 # Usage:
 #   mkdir vodloft && cd vodloft
-#   curl -O https://raw.githubusercontent.com/samuelvisser/vodloft/develop/.docker/docker-compose.yml
+#   curl -O https://raw.githubusercontent.com/samuelvisser/vodloft/main/.docker/docker-compose.yml
 #   docker compose up -d
 # Then open http://localhost:5274.
 
