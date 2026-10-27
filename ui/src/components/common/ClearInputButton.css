@@ -1,0 +1,30 @@
+.clear-input-button {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+}
+
+.clear-input-button:hover {
+    background: rgba(148, 163, 184, 0.16);
+    color: var(--text);
+}
+
+.clear-input-button:focus-visible {
+    outline: 2px solid #60a5fa;
+    outline-offset: -2px;
+}
+
+/* A field with its own clear button hides the browser's. */
+.has-clear-button input[type="search"]::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    appearance: none;
+}

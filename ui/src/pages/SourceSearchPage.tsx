@@ -2,6 +2,7 @@ import {useEffect, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link, useNavigate, useParams, useSearchParams} from 'react-router-dom'
 import {faIcon} from '../icons/faIcon'
+import {ClearInputButton} from '../components/common/ClearInputButton'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import {useShows, useSourceLookup, useSourceSearch} from '../lib/queries'
@@ -84,11 +85,15 @@ export default function SourceSearchPage() {
                 event.preventDefault()
                 submit(search.trim())
             }}>
-                <label className="browse-search">
+                <label className="browse-search has-clear-button">
                     <span className="sr-only">Search {sourceName}</span>
                     <FontAwesomeIcon icon={faIcon('fass', 'magnifying-glass')} aria-hidden="true"/>
                     <input type="search" enterKeyHint="search" autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by name"/>
                     {onEnter && <span className="browse-search__hint">Press Enter to search</span>}
+                    {search && <ClearInputButton label="Clear the search" onClear={() => {
+                        setSearch('')
+                        submit('')
+                    }}/>}
                 </label>
             </form>
 

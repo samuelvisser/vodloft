@@ -2035,7 +2035,9 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .add-media-view--onboarding { margin: 0 auto; }
 .add-media-view .view-header .btn { white-space: nowrap; }
 .add-media-form { display: flex; gap: 8px; align-items: stretch; }
-.add-media-form .add-media-input { flex: 1 1 auto; min-width: 0; }
+.add-media-field { position: relative; flex: 1 1 auto; min-width: 0; display: flex; }
+.add-media-form .add-media-input { flex: 1 1 auto; min-width: 0; width: 100%; padding-right: 40px; }
+.add-media-field .clear-input-button { position: absolute; top: 50%; right: 4px; transform: translateY(-50%); }
 /* Same height as the link field, and wide enough for "Looking up…" so it never moves or wraps. */
 .add-media-form .btn { flex: none; min-width: 7.5em; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; }
 .add-media-error { margin: 20px 0 0; }

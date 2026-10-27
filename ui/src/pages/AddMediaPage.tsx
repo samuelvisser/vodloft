@@ -10,6 +10,7 @@ import {addVideo, resolveLink, useMovies, useShows, useSources, useVideos} from 
 import {linkTarget, type MediaLinkTarget} from '../lib/sourceControls'
 import {ResolvedLinkRead, SourceFeature, SourceRead, searchName, sourceHas} from '../types/schemas/source'
 import {DrmNotice} from '../components/common/DrmProtected'
+import {ClearInputButton} from '../components/common/ClearInputButton'
 
 type AddMediaPageProps = {
     onboarding?: boolean
@@ -43,6 +44,7 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
     const [candidates, setCandidates] = useState<SourceRead[]>([])
     const [askedSource, setAskedSource] = useState<string | null>(null)
     const requestRef = useRef<AbortController | null>(null)
+    const inputRef = useRef<HTMLInputElement>(null)
 
     const lookUp = async (value: string, sourceKey?: string) => {
         const trimmed = value.trim()
@@ -75,6 +77,17 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
         // Only look up the link the page was opened with.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
+
+    const clear = () => {
+        requestRef.current?.abort()
+        setUrl('')
+        setLink(null)
+        setError(null)
+        setCandidates([])
+        setAskedSource(null)
+        setResolving(false)
+        inputRef.current?.focus()
+    }
 
     const submit = (event: FormEvent) => {
         event.preventDefault()
@@ -166,16 +179,20 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
 
             <form className="add-media-form" onSubmit={submit}>
                 <label className="sr-only" htmlFor="add-media-url">Link</label>
-                <input
-                    id="add-media-url"
-                    className="input add-media-input"
-                    type="text"
-                    inputMode="url"
-                    autoComplete="off"
-                    placeholder="https://…"
-                    value={url}
-                    onChange={(event) => setUrl(event.target.value)}
-                />
+                <span className="add-media-field">
+                    <input
+                        ref={inputRef}
+                        id="add-media-url"
+                        className="input add-media-input"
+                        type="text"
+                        inputMode="url"
+                        autoComplete="off"
+                        placeholder="https://…"
+                        value={url}
+                        onChange={(event) => setUrl(event.target.value)}
+                    />
+                    {url && <ClearInputButton onClear={clear} label="Clear the link"/>}
+                </span>
                 <button className="btn btn-primary" type="submit" disabled={resolving || !url.trim()}>
                     {resolving ? 'Looking up…' : 'Look up'}
                 </button>

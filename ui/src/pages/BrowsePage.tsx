@@ -2,6 +2,7 @@ import {useEffect, useMemo, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useNavigate, useSearchParams} from 'react-router-dom'
 import {faIcon} from '../icons/faIcon'
+import {ClearInputButton} from '../components/common/ClearInputButton'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import MediaTypeTabs, {MediaType} from '../components/MediaTypeTabs/MediaTypeTabs'
@@ -147,6 +148,7 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
                     <span className="sr-only">Search {activeType}</span>
                     <FontAwesomeIcon icon={faIcon('fass', 'magnifying-glass')} aria-hidden="true"/>
                     <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${activeType}`}/>
+                    {search && <ClearInputButton label="Clear the search" onClear={() => setSearch('')}/>}
                 </label>
                 {activeType === 'shows' && (
                     <div className="compact-switch" role="group" aria-label="Group shows">
