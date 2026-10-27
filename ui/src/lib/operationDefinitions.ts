@@ -342,6 +342,24 @@ function invalidateFindEpisodesCron(
   invalidateTaskLedgerDefinition(queryClient, 'fetch_new_episodes', invalidations)
 }
 
+function invalidateQuickCheckCron(
+  queryClient: QueryClient,
+  operation: TaskOperationRead,
+  invalidations: InvalidationCollector,
+) {
+  invalidateEpisodeCronJob(queryClient, operation, invalidations)
+  invalidateTaskLedgerDefinition(queryClient, 'quick_check_new_videos', invalidations)
+}
+
+function invalidateFullRescanCron(
+  queryClient: QueryClient,
+  operation: TaskOperationRead,
+  invalidations: InvalidationCollector,
+) {
+  invalidateEpisodeCronJob(queryClient, operation, invalidations)
+  invalidateTaskLedgerDefinition(queryClient, 'rescan_quick_checked_shows', invalidations)
+}
+
 function invalidatePendingEpisodeCron(
   queryClient: QueryClient,
   operation: TaskOperationRead,
@@ -384,6 +402,18 @@ export const frontendOperationDefinitions = {
     resourceType: 'system',
     label: 'Find new episodes',
     invalidate: invalidateFindEpisodesCron,
+  },
+  'system.cron.quick_check': {
+    kind: 'system.cron.quick_check',
+    resourceType: 'system',
+    label: 'Quick check for new videos',
+    invalidate: invalidateQuickCheckCron,
+  },
+  'system.cron.full_rescan': {
+    kind: 'system.cron.full_rescan',
+    resourceType: 'system',
+    label: 'Re-scan shows with quick checks',
+    invalidate: invalidateFullRescanCron,
   },
   'system.cron.monitor_pending_episodes': {
     kind: 'system.cron.monitor_pending_episodes',

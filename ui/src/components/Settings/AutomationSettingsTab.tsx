@@ -115,6 +115,63 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     }
                 />
                 <CronEditor
+                    id="settings-quick-check-cron"
+                    label="Quick check for new videos"
+                    runNow={{
+                        definition: frontendOperationDefinitions['system.cron.quick_check'],
+                        job: 'quick-check',
+                        ledger: {definitionKey: 'quick_check_new_videos', resourceType: 'system', resourceId: 0},
+                    }}
+                    value={draft.newEpisodeSchedule.quickCheckCron}
+                    enabled={draft.newEpisodeSchedule.quickCheckCronEnabled}
+                    error={errorFor('newEpisodeSchedule.quickCheckCron')}
+                    environmentVariable={environmentVariableFor('newEpisodeSchedule.quickCheckCron')}
+                    enabledEnvironmentVariable={environmentVariableFor('newEpisodeSchedule.quickCheckCronEnabled')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.newEpisodeSchedule.quickCheckCron = value
+                    })}
+                    onEnabledChange={(enabled) => updateDraft((next) => {
+                        next.newEpisodeSchedule.quickCheckCronEnabled = enabled
+                    })}
+                    help={
+                        <ReadMore summary={<span>Looks for new videos in YouTube channels and other yt-dlp shows.</span>}>
+                            <p>
+                                Each run looks only at the newest videos of the shows that are due, and adds what is new.
+                                How often a show is due depends on the YouTube API quota, and is never more often than the
+                                shortest check interval under Sources. These shows are not part of <code>Find new episodes</code>.
+                            </p>
+                        </ReadMore>
+                    }
+                />
+                <CronEditor
+                    id="settings-full-rescan-cron"
+                    label="Re-scan shows with quick checks"
+                    runNow={{
+                        definition: frontendOperationDefinitions['system.cron.full_rescan'],
+                        job: 'full-rescan',
+                        ledger: {definitionKey: 'rescan_quick_checked_shows', resourceType: 'show', resourceId: 0},
+                    }}
+                    value={draft.newEpisodeSchedule.fullRescanCron}
+                    enabled={draft.newEpisodeSchedule.fullRescanCronEnabled}
+                    error={errorFor('newEpisodeSchedule.fullRescanCron')}
+                    environmentVariable={environmentVariableFor('newEpisodeSchedule.fullRescanCron')}
+                    enabledEnvironmentVariable={environmentVariableFor('newEpisodeSchedule.fullRescanCronEnabled')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.newEpisodeSchedule.fullRescanCron = value
+                    })}
+                    onEnabledChange={(enabled) => updateDraft((next) => {
+                        next.newEpisodeSchedule.fullRescanCronEnabled = enabled
+                    })}
+                    help={
+                        <ReadMore summary={<span>Lists the shows with quick checks in full, once a day by default.</span>}>
+                            <p>
+                                Catches anything a quick check missed, such as an older video made public later. With a
+                                YouTube API key this costs about 1 unit per 50 videos of each show.
+                            </p>
+                        </ReadMore>
+                    }
+                />
+                <CronEditor
                     id="settings-monitor-pending-episode-cron"
                     label="Monitor pending episodes"
                     runNow={{

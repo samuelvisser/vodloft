@@ -30,6 +30,8 @@ _WORKER_EXPORTS = {
     "file_watcher": ".workers.file_watcher",
     "trigger_task_worker": ".workers.trigger_task_worker",
     "update_source_programs": ".workers.update_source_programs",
+    "quick_check_new_videos": ".workers.quick_check_new_videos",
+    "rescan_quick_checked_shows": ".workers.quick_check_new_videos",
 }
 
 

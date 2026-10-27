@@ -28,7 +28,7 @@ from .service import run_fetch_new_episodes
 @task(
     key="fetch_new_episodes",
     title="Find new episodes in all shows",
-    description="Finds new episodes in all shows.",
+    description="Finds new episodes in all shows. Shows with quick checks, such as YouTube channels, get a full re-scan once a day instead.",
     allowed_resource_types=("show",),
     default_max_retries=5,
     tracks_progress=False,
@@ -49,6 +49,8 @@ async def fetch_new_episodes(
             show_slug=slug,
             dry_run=dry_run,
             initial_index=initial_index,
+            # Shows with quick checks get their full re-scan once a day instead.
+            quick_checked=False,
             progress=progress,
         )
 

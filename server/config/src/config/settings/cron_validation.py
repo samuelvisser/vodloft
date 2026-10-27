@@ -150,6 +150,14 @@ WORKER_CRON_DEFINITIONS: tuple[WorkerCronDefinition, ...] = (
         field_path=("new_episode_schedule", "find_episodes_cron"),
     ),
     WorkerCronDefinition(
+        setting_name="Quick check for new videos",
+        field_path=("new_episode_schedule", "quick_check_cron"),
+    ),
+    WorkerCronDefinition(
+        setting_name="Full re-scan",
+        field_path=("new_episode_schedule", "full_rescan_cron"),
+    ),
+    WorkerCronDefinition(
         setting_name="Monitor pending episodes",
         field_path=("new_episode_schedule", "monitor_pending_episode_cron"),
     ),

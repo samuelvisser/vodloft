@@ -57,6 +57,10 @@ SettingFieldPath = Literal[
     "scheduler.retryBackoffSeconds",
     "newEpisodeSchedule.findEpisodesCronEnabled",
     "newEpisodeSchedule.findEpisodesCron",
+    "newEpisodeSchedule.quickCheckCronEnabled",
+    "newEpisodeSchedule.quickCheckCron",
+    "newEpisodeSchedule.fullRescanCronEnabled",
+    "newEpisodeSchedule.fullRescanCron",
     "newEpisodeSchedule.monitorPendingEpisodeCronEnabled",
     "newEpisodeSchedule.monitorPendingEpisodeCron",
     "newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled",
@@ -121,6 +125,10 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "scheduler.retryBackoffSeconds",
     "newEpisodeSchedule.findEpisodesCronEnabled",
     "newEpisodeSchedule.findEpisodesCron",
+    "newEpisodeSchedule.quickCheckCronEnabled",
+    "newEpisodeSchedule.quickCheckCron",
+    "newEpisodeSchedule.fullRescanCronEnabled",
+    "newEpisodeSchedule.fullRescanCron",
     "newEpisodeSchedule.monitorPendingEpisodeCronEnabled",
     "newEpisodeSchedule.monitorPendingEpisodeCron",
     "newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled",
@@ -256,6 +264,10 @@ class SchedulerSettingsValue(_SettingsValueModel):
 class TrackNewEpisodeScheduleValue(_SettingsValueModel):
     find_episodes_cron_enabled: bool
     find_episodes_cron: str = Field(min_length=1)
+    quick_check_cron_enabled: bool
+    quick_check_cron: str = Field(min_length=1)
+    full_rescan_cron_enabled: bool
+    full_rescan_cron: str = Field(min_length=1)
     monitor_pending_episode_cron_enabled: bool
     monitor_pending_episode_cron: str = Field(min_length=1)
     monitor_no_usable_media_episode_cron_enabled: bool

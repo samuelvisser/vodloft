@@ -153,9 +153,13 @@ def index_listed_show(s: Session, *, show_id: int, source: Source, progress=None
         for details in found:
             logger.info("Dry run: would add %s (%s)", details.slug, details.title)
         return len(found)
+    return add_listed_episodes(s, show_id=show_id, found=found, progress=progress)
+
+
+def add_listed_episodes(s: Session, *, show_id: int, found: list[VideoDetails], progress=None) -> int:
+    """Save episodes a Source found, numbered after the ones the show has. Returns how many were added."""
     if not found:
         return 0
-
     show = s.get(Show, show_id)
     if show is None:
         return 0
