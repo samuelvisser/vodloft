@@ -1,7 +1,8 @@
 import {ReactNode} from 'react'
 import {Link} from 'react-router-dom'
 import ReadMore from '../../utils/ReadMore'
-import {EpisodeTypeReg} from '../../types/episode'
+import {useShowEpisodeTags} from '../../lib/queries'
+import {EpisodeTagRead, episodeTagLabel} from '../../types/schemas/source'
 import './StreamProfileAdvisory.css'
 
 export type StreamDownloadProfileDefault = {
@@ -99,8 +100,8 @@ function profileButtonLabel(kind: DownloadMediaKind) {
     return 'MP4 video'
 }
 
-function episodeTypeLabels(values: string[]) {
-    return values.map((value) => EpisodeTypeReg.getLabelLoose(value)).join(', ')
+function episodeTypeLabels(values: string[], tags: EpisodeTagRead[] | undefined) {
+    return values.map((value) => episodeTagLabel(tags, value)).join(', ')
 }
 
 function requiredDownloadKinds(
@@ -216,6 +217,7 @@ function CoverageRequirement({
     onEnableDownloads,
     latestFive = false,
 }: CoverageRequirementProps) {
+    const {data: tags} = useShowEpisodeTags({showSlug})
     const {
         kind,
         profiles,
@@ -252,12 +254,12 @@ function CoverageRequirement({
                 <span>
                     {hasDisabledCoverage
                         ? disabledCoverageEpisodeTypes.length === uncoveredEpisodeTypes.length
-                            ? `Matching Download Profile coverage for ${episodeTypeLabels(uncoveredEpisodeTypes)} exists, but it is disabled.`
-                            : `Enabled Download Profile coverage is missing ${episodeTypeLabels(uncoveredEpisodeTypes)}. Disabled coverage already exists for ${episodeTypeLabels(disabledCoverageEpisodeTypes)}.`
+                            ? `Matching Download Profile coverage for ${episodeTypeLabels(uncoveredEpisodeTypes, tags)} exists, but it is disabled.`
+                            : `Enabled Download Profile coverage is missing ${episodeTypeLabels(uncoveredEpisodeTypes, tags)}. Disabled coverage already exists for ${episodeTypeLabels(disabledCoverageEpisodeTypes, tags)}.`
                         : enabledProfiles.length > 0
-                            ? `Existing enabled Download Profile coverage does not include ${episodeTypeLabels(uncoveredEpisodeTypes)}.`
+                            ? `Existing enabled Download Profile coverage does not include ${episodeTypeLabels(uncoveredEpisodeTypes, tags)}.`
                             : hasExistingProfile
-                                ? `Existing Download Profiles do not cover ${episodeTypeLabels(uncoveredEpisodeTypes)}.`
+                                ? `Existing Download Profiles do not cover ${episodeTypeLabels(uncoveredEpisodeTypes, tags)}.`
                                 : `No enabled ${kindLabel(kind)} Download Profile exists.`}
                 </span>
             </div>

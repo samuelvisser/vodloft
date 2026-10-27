@@ -89,6 +89,15 @@ class CookiesAPIRead(ResponseBase):
     has_cookies: bool
 
 
+class EpisodeTagAPIRead(ResponseBase):
+    key: str
+    label: str
+    help: str
+    selected_by_default: bool
+    rss_episode_type: Literal["full", "trailer", "bonus"]
+    main: bool
+
+
 class ApiQuotaShareAPIRead(ResponseBase):
     name: str
     used: int

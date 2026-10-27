@@ -96,6 +96,22 @@ export const ProgramStatusReadSchema = z.object({
 })
 export type ProgramStatusRead = z.infer<typeof ProgramStatusReadSchema>
 
+/** A kind of episode a Source tells apart, such as a YouTube Short; profiles select tags by key. */
+export const EpisodeTagReadSchema = z.object({
+    key: z.string(),
+    label: z.string(),
+    help: z.string(),
+    selectedByDefault: z.boolean(),
+    rssEpisodeType: z.enum(['full', 'trailer', 'bonus']),
+    /** Episodes with the main tag follow the show's numbering. */
+    main: z.boolean(),
+})
+export type EpisodeTagRead = z.infer<typeof EpisodeTagReadSchema>
+
+export function episodeTagLabel(tags: readonly EpisodeTagRead[] | undefined, key: string): string {
+    return tags?.find((tag) => tag.key === key)?.label ?? key
+}
+
 export const ApiStatusReadSchema = z.object({
     /** The last characters of the key, or null when no key is set. */
     keyHint: z.string().nullable(),

@@ -61,7 +61,7 @@ If no acceptable local file exists and Daily Wire streaming is enabled, the feed
 
 ## Episode types
 
-Choose which Daily Wire episode types should appear in the feed. A normal podcast setup commonly includes **Episode** and **Auxiliary**.
+Choose which episode types should appear in the feed. Each Source has its own: The Daily Wire has **Episode**, **Ep. Extra**, **Trailer** and **Auxiliary**, and a normal podcast setup commonly includes Episode and Auxiliary. YouTube has **Video**, **Short** and **Livestream**.
 
 Items outside the selected types are left out of the feed.
 

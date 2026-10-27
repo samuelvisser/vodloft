@@ -6,7 +6,7 @@ from typing import Literal, Optional
 from pydantic import AliasPath, Field, computed_field, field_validator, model_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
-from backend.types.download_profile_types import EpIdType
+from backend.types.download_profile_types import EpIdType, EpisodeTagKey
 from backend.types.local_media_profile_types import PreferredFormat
 from backend.types.stream_profile_types import (
     RSS_HLS_OUTPUT_MODES,
@@ -15,8 +15,8 @@ from backend.types.stream_profile_types import (
 )
 
 
-def _default_episode_types() -> list[EpIdType]:
-    return [EpIdType.EP, EpIdType.AUX]
+def _default_episode_types() -> list[str]:
+    return [EpIdType.EP.value, EpIdType.AUX.value]
 
 
 # ---------- Strict input (create/update) ----------
@@ -29,7 +29,7 @@ class _RssStreamProfileAPIBaseIn(RequestBase):
     use_dw_stream: bool
     preferred_format: str = Field(min_length=1)
     prefer_exact_match: bool
-    ep_id_type_list: list[EpIdType] = Field(default_factory=_default_episode_types)
+    ep_id_type_list: list[EpisodeTagKey] = Field(default_factory=_default_episode_types)
     video_output_mode: Optional[RssVideoOutputMode] = Field(
         default_factory=lambda data: (
             None

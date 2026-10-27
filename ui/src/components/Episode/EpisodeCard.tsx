@@ -4,6 +4,8 @@ import {useNavigate} from 'react-router-dom'
 import {EpisodeReadView} from '../../types/schemas/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {DrmBadge} from '../common/DrmProtected'
+import {useEpisodeTags} from '../../lib/queries'
+import {episodeTagLabel} from '../../types/schemas/source'
 
 // Beyond this many downloads for one episode, collapse the rest into a "+N" pill
 // instead of letting icons overflow the thumbnail.
@@ -63,11 +65,6 @@ export function groupDownloadsByEpisodeSlug(
     return map
 }
 
-const TYPE_BADGE_LABEL: Record<string, string> = {
-    trailer: 'Trailer',
-    aux: 'Auxiliary',
-}
-
 function DownloadStatusIcons({downloads}: { downloads: MediaDownloadViewRead[] }) {
     const visibleDownloads = downloads.filter(download => download.presentation.status !== 'not_downloaded')
     if (visibleDownloads.length === 0) return null
@@ -108,10 +105,13 @@ export default function EpisodeCard({ep, showSlug, downloads}: Props) {
     const isLive = String(ep.publishStatus).toLowerCase() === 'live'
 
     const type = ep.episodeType
+    const {data: tags} = useEpisodeTags(ep.sourceKey)
     // Identifier semantics are parsed once by the backend. The card only decides
     // how those semantics should be presented.
     const showNumberBadge = (type === 'ep' || type === 'ep-extra') && !!ep.episodeLabel
-    const typeBadgeLabel = type ? TYPE_BADGE_LABEL[type] : undefined
+    // Every tag other than the main one is badged with its Source's label, such as Short or Livestream.
+    const mainTag = tags?.find((tag) => tag.main)?.key ?? 'ep'
+    const typeBadgeLabel = type && type !== mainTag && type !== 'ep-extra' ? episodeTagLabel(tags, type) : undefined
     const cornerBadgeText = showNumberBadge ? `#${ep.episodeLabel}` : typeBadgeLabel
 
     const navigate = useNavigate()

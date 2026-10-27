@@ -14,20 +14,15 @@ _SEASONAL_EPISODE_EXTRA = re.compile(
     r"^S(?P<season>\d+)E(?P<number>\d+)\.(?P<sub_number>\d+)$"
 )
 _NUMBER = re.compile(r"^\d+$")
+_TAG = re.compile(r"^[a-z][a-z-]*$")
 
 
 def episode_identifier_type_predicate(identifier_column, allowed_types: set[str]):
     """SQL predicate matching VODLoft's canonical episode identifier type."""
-    patterns = {
-        str(EpIdType.EP): "ep.%",
-        str(EpIdType.EP_EXTRA): "ep-extra.%",
-        str(EpIdType.TRAILER): "trailer.%",
-        str(EpIdType.AUX): "aux.%",
-    }
     predicates = [
-        identifier_column.like(patterns[episode_type])
+        identifier_column.like(f"{episode_type}.%")
         for episode_type in allowed_types
-        if episode_type in patterns
+        if _TAG.fullmatch(episode_type)
     ]
     return or_(*predicates) if predicates else false()
 
@@ -71,11 +66,8 @@ class EpisodeIdentifierInfo:
                 label=payload,
             )
 
-        if episode_type in {
-            EpIdType.AUX,
-            EpIdType.TRAILER,
-            "not-usable",
-        }:
+        # Every other tag, such as aux, trailer or a YouTube short, counts on its own across the show.
+        if _TAG.fullmatch(episode_type):
             if not _NUMBER.fullmatch(payload):
                 raise ValueError(f"Invalid VODLoft episode identifier: {identifier!r}")
             number = str(int(payload))

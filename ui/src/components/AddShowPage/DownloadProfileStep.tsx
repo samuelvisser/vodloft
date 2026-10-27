@@ -83,6 +83,7 @@ export default function DownloadProfileStep({value, onChange, onSubmit: onSubmit
                         episodeIdentifier={episodeIdentifier}
                         seasons={seasons}
                         sourceKey={show?.sourceKey}
+                        showUrl={show?.sharingUrl}
                     />
 
                     <div className="actions">

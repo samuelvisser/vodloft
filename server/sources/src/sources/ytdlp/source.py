@@ -11,7 +11,7 @@ from urllib.parse import urlsplit, urlunsplit
 from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
-    ANY_DOMAIN, ApiKeyRejected, ApiQuotaShare, ApiStatus, Feature, LinkKind, Playback, PlaybackKind, ProgramStatus,
+    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodeTag, RssEpisodeType, ApiQuotaShare, ApiStatus, Feature, LinkKind, Playback, PlaybackKind, ProgramStatus,
     ResolvedLink, ShowDetails, Source, SourceProblem, VideoDetails, link_host, on_domain,
 )
 from .. import pacing, ytdlp_runner as runner
@@ -26,6 +26,17 @@ _CACHE_SECONDS = 300
 _LISTING_PAUSE_SECONDS = 1.0
 _YOUTUBE_CHANNEL = re.compile(r"^/(@[^/]+|channel/[^/]+|c/[^/]+|user/[^/]+)/?$")
 _UNAVAILABLE_TITLES = {"[Private video]", "[Deleted video]"}
+_VIDEO_TAG = EpisodeTag(MAIN_TAG, "Video", "A normal video", main=True)
+_YOUTUBE_TAGS = (
+    _VIDEO_TAG,
+    EpisodeTag("short", "Short", "A YouTube Short", selected_by_default=False, rss_episode_type=RssEpisodeType.BONUS),
+    EpisodeTag(
+        "livestream", "Livestream",
+        "A livestream or premiere: upcoming, live now or finished. Finishing does not change the tag.",
+    ),
+)
+# yt-dlp reports a livestream that is still live, upcoming or long finished alike.
+_LIVE_STATUSES = {"is_live", "is_upcoming", "was_live", "post_live"}
 
 
 def show_url(url: str) -> str:
@@ -65,6 +76,25 @@ def _published_at(info: dict) -> datetime | None:
     return None
 
 
+def _is_youtube(url: str) -> bool:
+    host = link_host(url)
+    return on_domain(host, "youtube.com") or host == "youtu.be"
+
+
+def _tag(info: dict, url: str) -> str:
+    """Short and Livestream, as yt-dlp's full extraction of a YouTube video says."""
+    if not str(info.get("extractor_key") or "").startswith("Youtube"):
+        return MAIN_TAG
+    media_type = info.get("media_type")
+    if media_type in {"short", "livestream"}:
+        return media_type
+    if info.get("live_status") in _LIVE_STATUSES:
+        return "livestream"
+    if "/shorts/" in (info.get("webpage_url") or url):
+        return "short"
+    return MAIN_TAG
+
+
 def _drm_protected(info: dict) -> bool:
     """yt-dlp marks a video, or each of its formats, that is protected by DRM."""
     if info.get("_has_drm"):
@@ -100,10 +130,15 @@ class YtDlpSource(Source):
     features = frozenset({
         Feature.SHOWS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.API_KEY,
     })
+    episode_tags = _YOUTUBE_TAGS
 
     def __init__(self):
         self._cache: dict[str, tuple[float, dict]] = {}
         self._cache_lock = threading.Lock()
+
+    def episode_tags_for(self, url: str | None) -> tuple[EpisodeTag, ...]:
+        """Shorts and livestreams are YouTube's; other sites only have videos."""
+        return _YOUTUBE_TAGS if url is None or _is_youtube(url) else (_VIDEO_TAG,)
 
     def _info(self, url: str) -> dict:
         """The video info for a link. Adding a video right after looking up its link reuses the lookup."""
@@ -165,6 +200,7 @@ class YtDlpSource(Source):
             author_url=info.get("uploader_url") or info.get("channel_url"),
             published_at=_published_at(info),
             drm_protected=_drm_protected(info),
+            tag=_tag(info, url),
         )
 
     @staticmethod
