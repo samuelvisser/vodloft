@@ -40,6 +40,8 @@ class SourceAPIRead(ResponseBase):
     features: list[str]
     search_label: Optional[str] = None
     subscription_name: Optional[str] = None
+    cookies_help: Optional[str] = None
+    subscription_active: bool = False
 
     @field_validator("features", mode="before")
     @classmethod
@@ -87,8 +89,15 @@ class ShowDetailsAPIRead(ResponseBase):
     seasons: list[ShowDetailsSeasonAPIRead] = Field(default_factory=list)
 
 
+class CookiesStatusAPIRead(ResponseBase):
+    label: str
+    ok: bool
+    detail: Optional[str] = None
+
+
 class CookiesAPIRead(ResponseBase):
     has_cookies: bool
+    status: Optional[CookiesStatusAPIRead] = None
 
 
 class EpisodeTagAPIRead(ResponseBase):

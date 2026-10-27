@@ -577,8 +577,10 @@ def _ensure_downloadable(media) -> None:
     if media.drm_protected:
         raise HTTPException(status_code=422, detail=DRM_PROTECTED_MESSAGE)
     if media.needs_subscription:
-        name = get_source(media.source_key).subscription_name or "a subscription"
-        raise HTTPException(status_code=422, detail=f"Needs {name}, cannot be downloaded")
+        source = get_source(media.source_key)
+        if not source.subscription_active:
+            name = source.subscription_name or "a subscription"
+            raise HTTPException(status_code=422, detail=f"Needs {name}, cannot be downloaded")
 
 
 def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownloadAPICreate) -> EpisodeMediaDownload:

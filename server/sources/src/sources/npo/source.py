@@ -3,18 +3,21 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterator
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 
 from ..contract import (
-    Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, SearchResults, SeasonRef, ShowDetails, Source, VideoDetails,
+    Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, SearchResults, SeasonRef, ShowDetails, Source,
+    CookiesStatus, SourceProblem, VideoDetails,
 )
 from .. import ytdlp_runner as runner
+from . import account
 from .client import ORIGIN, NpoClient, NpoError, NpoNotFoundError
 
 logger = logging.getLogger(__name__)
 
 _SEARCH_LIMIT = 20
+_EXPIRY_WARNING = timedelta(days=3)
 
 
 def series_url(slug: str) -> str:
@@ -122,8 +125,13 @@ class NpoSource(Source):
     id = "npo"
     name = "NPO Start"
     domains = ("npo.nl",)
-    features = frozenset({Feature.SHOWS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.SEARCH})
+    features = frozenset({Feature.SHOWS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.SEARCH, Feature.COOKIES})
     subscription_name = "NPO Plus"
+    cookies_help = (
+        "Optional. Sign in with your NPO account to download programmes that need NPO Plus. Sign in on "
+        "npo.nl in your browser, export a cookies.txt file for npo.nl, and choose it here. VODLoft never "
+        "sees your password. Programmes protected by DRM still can't be downloaded."
+    )
 
     def __init__(self, client: NpoClient | None = None):
         self._client = client or NpoClient()
@@ -131,7 +139,7 @@ class NpoSource(Source):
     def _protected(self, program: dict) -> bool | None:
         """Whether the programme is protected by DRM, or None when NPO will not say right now,
         such as for a programme that is not out yet or needs a subscription."""
-        if needs_subscription(program):
+        if needs_subscription(program) and not self.subscription_active:
             # NPO gives no stream to an anonymous player for it, so asking would only fail.
             return None
         product_id = program.get("productId")
@@ -263,7 +271,8 @@ class NpoSource(Source):
         rest is taken to match. Otherwise each programme is looked up. A clear
         programme that turns out to be protected is marked when it is downloaded.
         """
-        programs = [program for program in programs if not needs_subscription(program)]
+        if not self.subscription_active:
+            programs = [program for program in programs if not needs_subscription(program)]
         if not programs:
             return {}
         ends = [programs[0], programs[-1]] if len(programs) > 1 else [programs[0]]
@@ -291,11 +300,18 @@ class NpoSource(Source):
     def video_playback(self, *, slug: str, url: str) -> Playback:
         parsed = parse_link(url)
         program = self._client.program_detail(parsed[1] if parsed else slug)
-        if needs_subscription(program):
+        premium = needs_subscription(program)
+        if premium and not self.subscription_active:
             return Playback(url=program_url(program.get("slug") or slug), needs_subscription=True)
         if not program.get("productId"):
             raise NpoError("NPO Start has no stream for this programme")
-        stream_link = self._client.stream_link(program["productId"], program_url(program["slug"]))
+        try:
+            stream_link = self._client.stream_link(program["productId"], program_url(program["slug"]))
+        except NpoError:
+            if premium:
+                # The sign-in no longer gives this account NPO Plus.
+                return Playback(url=program_url(program["slug"]), needs_subscription=True)
+            raise
         stream = stream_link.get("stream") if isinstance(stream_link.get("stream"), dict) else {}
         stream_url = stream.get("streamURL")
         if not isinstance(stream_url, str) or not stream_url.startswith("https://"):
@@ -305,4 +321,61 @@ class NpoSource(Source):
         # The stream keeps its audio in a rendition of its own, which yt-dlp joins to the video.
         return Playback(url=stream_url, kind=PlaybackKind.YTDLP, command=runner.command())
 
+    @property
+    def download_streams(self) -> int | None:
+        # NPO Plus plays two streams at once; one is left for watching.
+        return 1 if self.subscription_active else None
 
+    @property
+    def subscription_active(self) -> bool:
+        status = account.status(self._client)
+        return status is not None and status.subscription
+
+    def problems(self) -> list[SourceProblem]:
+        status = account.status(self._client)
+        if status is None:
+            return []
+        if not status.signed_in:
+            return [SourceProblem(
+                "NPO sign-in expired",
+                "The NPO cookies file no longer signs in, so programmes that need NPO Plus wait. Sign in on npo.nl "
+                "and choose a new cookies file under Settings › Sources › NPO Start. Free programmes keep downloading.",
+                fix_url=f"{ORIGIN}/start",
+            )]
+        if not status.subscription:
+            return [SourceProblem(
+                "No NPO Plus on this NPO account",
+                "You are signed in to NPO, but the account has no NPO Plus, so programmes that need it wait. "
+                "Free programmes keep downloading.",
+                fix_url=f"{ORIGIN}/start",
+            )]
+        if status.expires_at is not None and status.expires_at - datetime.now(timezone.utc) < _EXPIRY_WARNING:
+            return [SourceProblem(
+                "NPO sign-in expires soon",
+                f"The NPO cookies file stops working on {status.expires_at:%d %B}. Sign in on npo.nl and choose a "
+                "new cookies file under Settings › Sources › NPO Start.",
+                fix_url=f"{ORIGIN}/start",
+            )]
+        return []
+
+    def has_cookies(self) -> bool:
+        return account.has_cookies()
+
+    def cookies_status(self) -> CookiesStatus | None:
+        status = account.status(self._client)
+        if status is None:
+            return None
+        if not status.verified:
+            return CookiesStatus("Not checked yet", ok=False, detail="npo.nl could not be reached to check the sign-in.")
+        if not status.signed_in:
+            return CookiesStatus("Signed out", ok=False, detail="This cookies file no longer signs in to NPO.")
+        until = f" The sign-in lasts until {status.expires_at:%d %B %Y}." if status.expires_at else ""
+        if not status.subscription:
+            return CookiesStatus("No NPO Plus", ok=False, detail=f"Signed in, but this NPO account has no NPO Plus.{until}")
+        return CookiesStatus("NPO Plus", ok=True, detail=f"Signed in with NPO Plus.{until}")
+
+    def save_cookies(self, content: bytes) -> None:
+        account.save_cookies(content)
+
+    def remove_cookies(self) -> None:
+        account.remove_cookies()

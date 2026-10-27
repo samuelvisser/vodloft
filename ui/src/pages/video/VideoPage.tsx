@@ -17,7 +17,7 @@ import {getErrorMessageFromResponse} from '../../utils/helpers'
 import '../episode/EpisodePage.css'
 import {siteName} from '../../lib/siteName'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
-import {SubscriptionBadge, SubscriptionNotice} from '../../components/common/NeedsSubscription'
+import {SubscriptionBadge, SubscriptionNotice, useSubscriptionLocked} from '../../components/common/NeedsSubscription'
 
 function formatDuration(seconds: number) {
     if (!seconds) return null
@@ -36,6 +36,7 @@ export default function VideoPage() {
     const {data: profiles, error: profilesError} = useLocalMediaProfiles()
     const {data: downloads, error: downloadsError, hasDomainData: hasDownloadState} = useVideoDownloads(videoId)
     const sourceName = useSourceLookup().name(video?.sourceKey)
+    const subscriptionLocked = useSubscriptionLocked(video?.sourceKey, video?.needsSubscription)
     const [refreshing, setRefreshing] = useState(false)
     const [confirmDelete, setConfirmDelete] = useState(false)
     const [deleting, setDeleting] = useState(false)
@@ -58,7 +59,7 @@ export default function VideoPage() {
         (downloads ?? []).map((download) => [download.localMediaProfileId, download]),
     )
     // Media protected by DRM or only given to subscribers cannot be downloaded.
-    const locked = video.drmProtected || video.needsSubscription
+    const locked = video.drmProtected || subscriptionLocked
     const downloadStateError = (profiles === undefined ? profilesError : null)
         ?? (!hasDownloadState ? downloadsError : null)
     const cover = toImageUrl(video.thumbnailLandscapePath || video.backgroundImagePath)
@@ -202,7 +203,7 @@ export default function VideoPage() {
                 <div className="episode-downloads" aria-labelledby="video-downloads-title">
                     <h2 id="video-downloads-title">Downloads</h2>
                     {video.drmProtected && <DrmNotice/>}
-                    {!video.drmProtected && video.needsSubscription && <SubscriptionNotice sourceKey={video.sourceKey}/>}
+                    {!video.drmProtected && subscriptionLocked && <SubscriptionNotice sourceKey={video.sourceKey}/>}
                     {!locked && downloadStateError && (
                         <div className="form-error-card" role="alert">
                             Could not load download status: {downloadStateError.message}

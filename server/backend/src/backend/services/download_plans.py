@@ -201,4 +201,5 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         source=source, requested_destination=destination, download_mode=download_mode,
         temporary_root=temporary_root, ffmpeg_path=ffmpeg_path, assets=tuple(assets),
         metadata_tags=tags, artwork_asset_id=artwork_id, attempt_id=tracker.attempt_id,
+        media_lane=(f"source:{media_source.id}", streams) if (streams := media_source.download_streams) else None,
     )

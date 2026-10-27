@@ -46,6 +46,10 @@ export const SourceReadSchema = z.object({
     searchLabel: z.string().nullable().optional(),
     /** What the Source calls the subscription some of its videos need, such as NPO Plus. */
     subscriptionName: z.string().nullable().optional(),
+    /** What a cookies file does for the Source, when it says so itself. */
+    cookiesHelp: z.string().nullable().optional(),
+    /** VODLoft is signed in with that subscription, so media that needs it can be downloaded. */
+    subscriptionActive: z.boolean().optional(),
 })
 export type SourceRead = z.infer<typeof SourceReadSchema>
 
@@ -167,7 +171,11 @@ export const SourceProblemReadSchema = z.object({
 })
 export type SourceProblemRead = z.infer<typeof SourceProblemReadSchema>
 
-export const CookiesReadSchema = z.object({hasCookies: z.boolean()})
+export const CookiesReadSchema = z.object({
+    hasCookies: z.boolean(),
+    /** What the cookies file signs in as, for a Source that can tell. */
+    status: z.object({label: z.string(), ok: z.boolean(), detail: z.string().nullable()}).nullable().optional(),
+})
 export type CookiesRead = z.infer<typeof CookiesReadSchema>
 
 /** A show at a Source with listed episodes, shaped like the fields of a new show. */

@@ -121,7 +121,7 @@ def test_resolve_stops_at_the_first_source_that_recognises_the_link(client):
     response = client.post("/api/resolve", json={"url": "stub.example/watch/clip-1"})
     assert response.status_code == 200
     body = response.json()
-    assert body["source"] == {"id": "stub", "name": "Stub Video", "domains": ["stub.example"], "features": [], "searchLabel": None, "subscriptionName": None}
+    assert body["source"] == {"id": "stub", "name": "Stub Video", "domains": ["stub.example"], "features": [], "searchLabel": None, "subscriptionName": None, "cookiesHelp": None, "subscriptionActive": False}
     assert body["kind"] == "movie"
     assert body["slug"] == "clip-1"
     assert body["preview"]["title"] == "Stub clip-1"

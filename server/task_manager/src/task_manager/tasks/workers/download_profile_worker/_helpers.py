@@ -19,6 +19,7 @@ from backend.services.media_download_history import record_media_download_histor
 from backend.utils.episode import episode_identifier_type_predicate
 from backend.utils.output_template import resolve_episode_output_path
 from config import get_settings
+from sources import UnknownSourceError, get_source
 from task_manager.tasks.media_download_operations import (
     dispatch_queued_media_download_operations,
     get_active_media_download_operation,
@@ -73,6 +74,13 @@ def _enabled_profiles_for_show(s: Session, show_id: int) -> Sequence[DownloadPro
     ))
 
 
+def _subscription_active(source_key: str) -> bool:
+    try:
+        return get_source(source_key).subscription_active
+    except UnknownSourceError:
+        return False
+
+
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -103,11 +111,12 @@ def get_download_profile_episodes(
         episode_identifier_type_predicate(Episode.episode_identifier, allowed_types),
         # Media protected by DRM cannot be downloaded.
         Episode.drm_protected.is_(False),
-        # Nor can media that needs a subscription VODLoft has no account for.
-        Episode.needs_subscription.is_(False),
         # Nor can media the Source no longer has.
         Episode.removed_from_source.is_(False),
     )
+    if not _subscription_active(profile.show.source_key):
+        # Nor can media that needs a subscription VODLoft is not signed in with.
+        stmt = stmt.where(Episode.needs_subscription.is_(False))
 
     if profile.download_days_in_past > 0:
         cutoff = _utc_now() - timedelta(days=profile.download_days_in_past)
