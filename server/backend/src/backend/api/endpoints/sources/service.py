@@ -148,6 +148,8 @@ def resolve_link(s: Session, url: str, source_key: str | None = None) -> Resolve
             link = source.resolve(url)
         if link is not None:
             return _to_read(s, source, link, candidates)
+    if source_key is not None:
+        raise LinkNotRecognisedError(f"{asked[0].name} does not recognise this link")
     raise LinkNotRecognisedError("No Source recognises this link")
 
 
