@@ -795,7 +795,7 @@ wheels = [
 
 [[package]]
 name = "sources"
-version = "0.3.0"
+version = "0.3.1"
 source = { editable = "server/sources" }
 dependencies = [
     { name = "config" },
@@ -941,7 +941,7 @@ wheels = [
 
 [[package]]
 name = "vodloft"
-version = "0.3.0"
+version = "0.3.1"
 source = { virtual = "." }
 dependencies = [
     { name = "backend" },
