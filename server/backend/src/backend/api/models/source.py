@@ -89,6 +89,38 @@ class CookiesAPIRead(ResponseBase):
     has_cookies: bool
 
 
+class ApiQuotaShareAPIRead(ResponseBase):
+    name: str
+    used: int
+    limit: int
+
+
+class ApiStatusAPIRead(ResponseBase):
+    key_hint: Optional[str] = None
+    shares: list[ApiQuotaShareAPIRead]
+    daily_quota: int
+    exhausted: bool
+    resets_at: datetime
+    problem: Optional[str] = None
+    problem_fix_url: Optional[str] = None
+    # The shows the key speeds up, and the units one full re-scan of them costs,
+    # so the settings can say how often each show gets checked.
+    show_count: int
+    rescan_units: int
+
+
+class ApiKeyAPIUpdate(RequestBase):
+    key: str = Field(min_length=1, max_length=200)
+
+
+class SourceProblemAPIRead(ResponseBase):
+    source_key: str
+    source_name: str
+    title: str
+    detail: str
+    fix_url: Optional[str] = None
+
+
 class CookiesAPIUpdate(RequestBase):
     content: str = Field(min_length=1, max_length=4 * 1024 * 1024)
 

@@ -58,7 +58,8 @@ import {TaskOperationRead} from "../types/schemas/operation";
 import {MovieRead, MovieReadSchema} from "../types/schemas/movie";
 import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
-    CookiesRead, CookiesReadSchema, ProgramStatusRead, ProgramStatusReadSchema, ResolvedLinkRead,
+    ApiStatusRead, ApiStatusReadSchema, CookiesRead, CookiesReadSchema, ProgramStatusRead, SourceProblemRead,
+    SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
     ResolvedLinkReadSchema, SearchResultRead, SearchResultReadSchema, ShowDetailsRead, ShowDetailsReadSchema, SourceDomainRead, SourceDomainReadSchema, SourceRead,
     SourceReadSchema,
 } from "../types/schemas/source";
@@ -311,6 +312,59 @@ export async function saveSourceCookies(sourceId: string, content: string | null
     })
     if (!response.ok) throw await responseError(response)
     return CookiesReadSchema.parse(await response.json())
+}
+
+export function useSourceApi(sourceId: string, enabled = true) {
+    return useQuery<ApiStatusRead, Error, ApiStatusRead, readonly ['sourceApi', string]>({
+        queryKey: ['sourceApi', sourceId] as const,
+        enabled,
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceId)}/api`,
+            ApiStatusReadSchema,
+            signal,
+        ),
+        refetchInterval: 60_000,
+    })
+}
+
+/** The service did not accept an API key; ``fixUrl`` is where the user can fix it. */
+export class ApiKeyRejectedError extends Error {
+    constructor(message: string, readonly fixUrl: string | null) {
+        super(message)
+    }
+}
+
+/** Save and test a new key ('save'), test the stored one ('test') or remove it ('remove'). */
+export async function changeSourceApiKey(
+    sourceId: string, action: 'save' | 'test' | 'remove', key?: string,
+): Promise<ApiStatusRead> {
+    const base = `${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceId)}/api/key`
+    const response = await fetch(action === 'test' ? `${base}/test` : base, {
+        method: {save: 'PUT', test: 'POST', remove: 'DELETE'}[action],
+        credentials: 'include',
+        headers: action === 'save' ? {'Content-Type': 'application/json'} : undefined,
+        body: action === 'save' ? JSON.stringify({key}) : undefined,
+    })
+    if (response.status === 422) {
+        const body = await response.json().catch(() => null)
+        const detail = body?.detail
+        if (typeof detail?.message === 'string') throw new ApiKeyRejectedError(detail.message, detail.fixUrl ?? null)
+    }
+    if (!response.ok) throw await responseError(response)
+    return ApiStatusReadSchema.parse(await response.json())
+}
+
+/** What the user should fix about any Source, for Needs attention on Home. */
+export function useSourceProblems() {
+    return useQuery<SourceProblemRead[], Error, SourceProblemRead[], readonly ['sourceProblems']>({
+        queryKey: ['sourceProblems'] as const,
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/sources/problems`,
+            SourceProblemReadSchema.array(),
+            signal,
+        ),
+        refetchInterval: 60_000,
+    })
 }
 
 /** Every site a Source names, and the Source VODLoft asks first for its links. */

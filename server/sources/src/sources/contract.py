@@ -7,7 +7,7 @@ caller today; methods are added together with the feature that needs them.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -35,6 +35,8 @@ class Feature(StrEnum):
     """Finding shows and videos at the Source by name, with ``search``."""
     PROGRAM_UPDATES = "program_updates"
     COOKIES = "cookies"
+    API_KEY = "api_key"
+    """An optional key for the service's own API, which makes catalogue lookups faster."""
 
 
 @dataclass(frozen=True)
@@ -166,6 +168,52 @@ class ProgramStatus:
     last_update_error: str | None = None
 
 
+@dataclass(frozen=True)
+class SourceProblem:
+    """Something about a Source the user should fix, shown under Needs attention on Home."""
+
+    title: str
+    detail: str
+    fix_url: str | None = None
+    """A page outside VODLoft where the user can fix it."""
+
+
+@dataclass(frozen=True)
+class ApiQuotaShare:
+    """A part of the daily quota, set aside for one kind of call."""
+
+    name: str
+    used: int
+    limit: int
+
+
+@dataclass(frozen=True)
+class ApiStatus:
+    """The API key of a Source with ``Feature.API_KEY``, and how much of today's quota it spent."""
+
+    key_hint: str | None
+    """The last characters of the key, or None when no key is set."""
+    shares: tuple[ApiQuotaShare, ...]
+    daily_quota: int
+    exhausted: bool
+    """The service said today's quota is used up."""
+    resets_at: datetime
+    problem: str | None = None
+    problem_fix_url: str | None = None
+    show_count: int = 0
+    """The shows the key speeds up."""
+    rescan_units: int = 0
+    """What one full re-scan of those shows costs, so the settings can say how often each gets checked."""
+
+
+class ApiKeyRejected(ValueError):
+    """The service does not accept the key; the message says what to do about it."""
+
+    def __init__(self, message: str, fix_url: str | None = None):
+        super().__init__(message)
+        self.fix_url = fix_url
+
+
 ANY_DOMAIN = "*"
 
 
@@ -261,3 +309,23 @@ class Source(ABC):
 
     def remove_cookies(self) -> None:
         raise NotImplementedError(f"{self.name} takes no cookies file")
+
+    def problems(self) -> list[SourceProblem]:
+        """What the user should fix about this Source right now."""
+        return []
+
+    def api_status(self, shows: Sequence[tuple[str, int]] = ()) -> ApiStatus:
+        """The API key and today's quota. ``shows`` are the link and episode count of
+        each of this Source's shows. Only Sources with ``Feature.API_KEY`` implement it."""
+        raise NotImplementedError(f"{self.name} takes no API key")
+
+    def save_api_key(self, key: str) -> None:
+        """Test the key with one call and store it. Raises ApiKeyRejected when the service does not accept it."""
+        raise NotImplementedError(f"{self.name} takes no API key")
+
+    def test_api_key(self) -> None:
+        """Test the stored key with one call. Raises ApiKeyRejected when the service does not accept it."""
+        raise NotImplementedError(f"{self.name} takes no API key")
+
+    def remove_api_key(self) -> None:
+        raise NotImplementedError(f"{self.name} takes no API key")

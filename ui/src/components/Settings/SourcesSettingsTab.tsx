@@ -21,7 +21,7 @@ const FEATURE_LABELS: Record<string, string> = {
 }
 
 // Features that are settings rather than kinds of content.
-const SETTING_FEATURES: readonly string[] = [SourceFeature.PROGRAM_UPDATES, SourceFeature.COOKIES]
+const SETTING_FEATURES: readonly string[] = [SourceFeature.PROGRAM_UPDATES, SourceFeature.COOKIES, SourceFeature.API_KEY]
 
 function SourceCard({source, tabProps}: {source: SourceRead; tabProps: SettingsTabProps}) {
     const {SignIn, Settings} = sourceComponents(source.id)

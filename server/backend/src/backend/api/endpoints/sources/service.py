@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import logging
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.api.models.source import (
-    ProgramStatusAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SearchResultAPIRead, ShowDetailsAPIRead,
+    ApiStatusAPIRead, ProgramStatusAPIRead, SourceProblemAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SearchResultAPIRead, ShowDetailsAPIRead,
     SourceAPIRead, SourceDomainAPIRead,
 )
 from backend.db.models import Episode, Show, SourceDomainPreference
@@ -73,6 +74,26 @@ def update_source_program(source: Source) -> ProgramStatusAPIRead:
     with asking_source(f"Could not update {source.name}"):
         status = source.update_program()
     return ProgramStatusAPIRead.model_validate(status)
+
+
+def list_source_problems() -> list[SourceProblemAPIRead]:
+    return [
+        SourceProblemAPIRead(source_key=source.id, source_name=source.name, **vars(problem))
+        for source in all_sources()
+        for problem in source.problems()
+    ]
+
+
+def get_api_status(s: Session, source: Source) -> ApiStatusAPIRead:
+    """The Source's API status, given its shows so it can say what checking them costs."""
+    shows = (
+        s.query(Show.sharing_url, func.count(Episode.id))
+        .outerjoin(Episode, Episode.show_id == Show.id)
+        .filter(Show.source_key == source.id)
+        .group_by(Show.id)
+        .all()
+    )
+    return ApiStatusAPIRead.model_validate(source.api_status([(url, count) for url, count in shows]))
 
 
 def _show_of_local_episode(s: Session, source: Source, episode_slug: str) -> Show | None:

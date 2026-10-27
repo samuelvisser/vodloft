@@ -175,6 +175,30 @@ The yt-dlp card shows the installed yt-dlp version and when it was last updated.
 
 **Cookies file** is optional. Some videos only play for a signed-in viewer, such as age-restricted or members-only videos. Export a `cookies.txt` file (Netscape format) from a browser where you are signed in, with a browser extension made for that, and choose it here. yt-dlp then uses it for every lookup and download. Treat the file like a password: it signs VODLoft in as you.
 
+#### YouTube Data API key
+
+Optional. A free key from Google lets VODLoft list YouTube channels and find new videos much faster than yt-dlp alone. yt-dlp still downloads every file, and VODLoft keeps working without a key, or when the key's daily quota runs out; it is only slower then.
+
+To get a key, which takes about three minutes:
+
+1. [Create a Google Cloud project](https://console.cloud.google.com/projectcreate). Any name works.
+2. [Enable the YouTube Data API v3](https://console.cloud.google.com/apis/library/youtube.googleapis.com) in that project.
+3. Under [Credentials](https://console.cloud.google.com/apis/credentials), choose **Create credentials → API key**. Edit the key and, under **API restrictions**, restrict it to the YouTube Data API v3. Leave the website, IP address and app restrictions off.
+4. Paste the key into the YouTube Data API panel on the yt-dlp card and choose **Save and test**.
+
+**Test key** checks a saved key again, and explains what to fix in Google Cloud when Google refuses it. A key that stops working, or a quota that runs out, also shows under **Needs attention** on Home. The key is stored next to the cookies file and is never shown again or written to the log.
+
+Google gives each project 10,000 units a day, reset at midnight Pacific time. Most calls cost 1 unit; a search costs about 100. VODLoft counts the units it spends and splits the day like this:
+
+| Setting | Environment variable | Default | What it is for |
+| --- | --- | --- | --- |
+| `youtubeApi.dailyQuota` | `VL_YOUTUBE_API__DAILY_QUOTA` | `10000` | What Google gives the project. Only raise it if Google gave you more. |
+| `youtubeApi.checksQuota` | `VL_YOUTUBE_API__CHECKS_QUOTA` | `7000` | Checks for new videos and full re-scans of your YouTube shows. |
+| `youtubeApi.searchQuota` | `VL_YOUTUBE_API__SEARCH_QUOTA` | `2000` | YouTube searches, about 19 a day. `0` makes every search use yt-dlp. |
+| `youtubeApi.minCheckIntervalMinutes` | `VL_YOUTUBE_API__MIN_CHECK_INTERVAL_MINUTES` | `10` | The shortest time between two checks of the same show. |
+
+What the checks and search shares leave of the daily total is kept free for adding shows, testing the key and manual refreshes. The panel shows what each share means in practice, such as how often each show gets checked.
+
 ### Sites more than one Source handles
 
 Links to npo.nl can be looked up by NPO Start and by yt-dlp. The **Sites** card lists each such site and the Source VODLoft asks first; pick another to change it. On the Add media page, **Look up with** asks another Source for one link.

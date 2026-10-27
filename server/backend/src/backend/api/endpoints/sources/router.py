@@ -1,14 +1,15 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.models.source import (
-    CookiesAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultAPIRead,
+    ApiKeyAPIUpdate, ApiStatusAPIRead, CookiesAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultAPIRead,
     ShowDetailsAPIRead, SourceAPIRead, SourceDomainAPIRead, SourceDomainAPIUpdate,
 )
 from backend.app import db_session
-from sources import Feature, Source
+from sources import ApiKeyRejected, Feature, Source
 
 from .service import (
-    LinkNotRecognisedError, SourceFeatureMissingError, UnknownDomainError, get_program_status, list_source_domains,
+    LinkNotRecognisedError, SourceFeatureMissingError, UnknownDomainError, get_api_status, get_program_status,
+    list_source_problems, list_source_domains,
     list_sources, lookup_show_details, resolve_link, search_source, set_domain_preference, source_with,
     update_source_program,
 )
@@ -28,6 +29,12 @@ def _source(source_id: str, feature: Feature) -> Source:
 def source_list():
     """List every Source with the Features it supports."""
     return list_sources()
+
+
+@router.get("/sources/problems", response_model=list[SourceProblemAPIRead])
+def source_problems():
+    """What the user should fix about any Source, such as an API key that stopped working."""
+    return list_source_problems()
 
 
 @router.get("/sources/domains", response_model=list[SourceDomainAPIRead])
@@ -103,3 +110,46 @@ def save_cookies(source_id: str, body: CookiesAPIUpdate):
 def remove_cookies(source_id: str):
     _source(source_id, Feature.COOKIES).remove_cookies()
     return CookiesAPIRead(has_cookies=False)
+
+
+def _api_key_rejected(exc: ApiKeyRejected) -> HTTPException:
+    return HTTPException(status_code=422, detail={"message": str(exc), "fixUrl": exc.fix_url})
+
+
+@router.get("/sources/{source_id}/api", response_model=ApiStatusAPIRead)
+def api_status(source_id: str):
+    """The Source's API key and how much of today's quota it spent."""
+    source = _source(source_id, Feature.API_KEY)
+    with db_session() as s:
+        return get_api_status(s, source)
+
+
+@router.put("/sources/{source_id}/api/key", response_model=ApiStatusAPIRead)
+def save_api_key(source_id: str, body: ApiKeyAPIUpdate):
+    """Test an API key with one call, and store it when the service accepts it."""
+    source = _source(source_id, Feature.API_KEY)
+    try:
+        source.save_api_key(body.key)
+    except ApiKeyRejected as exc:
+        raise _api_key_rejected(exc) from exc
+    with db_session() as s:
+        return get_api_status(s, source)
+
+
+@router.post("/sources/{source_id}/api/key/test", response_model=ApiStatusAPIRead)
+def test_api_key(source_id: str):
+    source = _source(source_id, Feature.API_KEY)
+    try:
+        source.test_api_key()
+    except ApiKeyRejected as exc:
+        raise _api_key_rejected(exc) from exc
+    with db_session() as s:
+        return get_api_status(s, source)
+
+
+@router.delete("/sources/{source_id}/api/key", response_model=ApiStatusAPIRead)
+def remove_api_key(source_id: str):
+    source = _source(source_id, Feature.API_KEY)
+    source.remove_api_key()
+    with db_session() as s:
+        return get_api_status(s, source)
