@@ -129,8 +129,9 @@ class NpoSource(Source):
     subscription_name = "NPO Plus"
     cookies_help = (
         "Optional. Sign in with your NPO account to download programmes that need NPO Plus. Sign in on "
-        "npo.nl in your browser, export a cookies.txt file for npo.nl, and choose it here. VODLoft never "
-        "sees your password. Programmes protected by DRM still can't be downloaded."
+        "npo.nl in a private browser window, export a cookies.txt file for npo.nl, choose it here, and then "
+        "close that window without signing out. VODLoft keeps the sign-in fresh by itself and never sees your "
+        "password. Programmes protected by DRM still can't be downloaded."
     )
 
     def __init__(self, client: NpoClient | None = None):

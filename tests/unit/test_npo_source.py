@@ -536,3 +536,49 @@ def test_the_cookies_endpoint_reports_the_npo_account(npo, signed_in, monkeypatc
     answer = router.cookies("npo")
     assert answer.has_cookies is True and answer.status.label == "NPO Plus"
     assert router.remove_cookies("npo").status is None
+
+
+def test_a_session_whose_npo_id_token_ran_out_no_longer_signs_in(npo, signed_in):
+    from sources.npo import account
+
+    source, client = npo
+    source.save_cookies(COOKIES.encode())
+    client.account = {
+        "user": {"name": "samuvisser"}, "hasSubscription": False,
+        "expires": "2099-11-26T19:10:18.324Z", "tokenExpiresAt": 1793117707,
+    }
+    account.status(client, refresh=True)
+    assert source.cookies_status().label == "Signed out"
+    assert [p.title for p in source.problems()] == ["NPO sign-in expired"]
+
+    client.account = {**client.account, "hasSubscription": True, "tokenExpiresAt": 4102444800}
+    account.status(client, refresh=True)
+    assert source.cookies_status().label == "NPO Plus"
+
+
+def test_npo_renewing_the_sign_in_updates_the_cookies_file(signed_in, monkeypatch):
+    import requests
+    from sources.npo import client as npo_client
+
+    signed_in.save_cookies(COOKIES.encode())
+    http = npo_client.NpoClient()
+    sent = []
+
+    def answer(method, url, cookies=None, **kwargs):
+        sent.append({cookie.name: cookie.value for cookie in cookies})
+        response = requests.Response()
+        response.status_code = 200
+        response._content = b'{"user": {"name": "samuvisser"}, "hasSubscription": true}'
+        response.cookies.set("session", f"renewed-{len(sent)}", domain=".npo.nl", path="/")
+        http._http.cookies.set("session", "leaked", domain=".npo.nl", path="/")
+        return response
+
+    monkeypatch.setattr(http._http, "request", answer)
+    monkeypatch.setattr(npo_client.pacing, "pause", lambda seconds: None)
+    assert http.session()["hasSubscription"] is True
+    assert http.session()["hasSubscription"] is True
+    assert sent == [{"session": "abc"}, {"session": "renewed-1"}]
+    assert "renewed-2" in signed_in.cookies_path().read_text()
+    assert oct(signed_in.cookies_path().stat().st_mode & 0o777) == "0o600"
+    # The anonymous catalogue requests never carry the sign-in.
+    assert not http._http.cookies

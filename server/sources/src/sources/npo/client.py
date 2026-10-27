@@ -44,12 +44,19 @@ class NpoClient:
             pacing.pause(self._last_request + _PAUSE_SECONDS - time.monotonic())
             self._last_request = time.monotonic()
 
-    def _send(self, method: str, url: str, **kwargs) -> Any:
+    def _send(self, method: str, url: str, *, cookies=None, **kwargs) -> Any:
         self._pace()
         try:
-            response = self._http.request(method, url, timeout=_TIMEOUT_SECONDS, **kwargs)
+            response = self._http.request(method, url, timeout=_TIMEOUT_SECONDS, cookies=cookies, **kwargs)
         except requests.RequestException as exc:
             raise NpoError(f"NPO Start could not be reached: {exc}") from exc
+        if cookies is not None:
+            # npo.nl renews the sign-in on every signed-in answer and stops honouring
+            # the old one, so the renewed cookies go back into the cookies file. The
+            # catalogue stays anonymous, so the shared session keeps none of them.
+            self._http.cookies.clear()
+            if response.cookies:
+                account.keep_cookies(cookies, response.cookies)
         if response.status_code == 404:
             raise NpoNotFoundError("NPO Start does not know this programme")
         if response.status_code == 402:

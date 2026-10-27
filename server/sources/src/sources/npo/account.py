@@ -7,6 +7,7 @@ visitor.
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from dataclasses import dataclass
@@ -21,6 +22,7 @@ from .. import cookies as cookie_files
 logger = logging.getLogger(__name__)
 
 _DOMAIN = "npo.nl"
+_file_lock = threading.Lock()
 
 
 def cookies_path() -> Path:
@@ -47,6 +49,20 @@ def remove_cookies() -> None:
 
 def load_cookies() -> MozillaCookieJar | None:
     return cookie_files.load(cookies_path())
+
+
+def keep_cookies(jar: MozillaCookieJar, renewed) -> None:
+    """Write cookies npo.nl renewed back into the cookies file, so the next request signs in with them."""
+    for cookie in renewed:
+        jar.set_cookie(cookie)
+    with _file_lock:
+        if not has_cookies():
+            return
+        path = cookies_path()
+        temporary = path.with_name(f"{path.name}.tmp")
+        jar.save(str(temporary), ignore_discard=True, ignore_expires=True)
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, path)
 
 
 def _npo_cookie(line: str) -> bool:
@@ -95,7 +111,11 @@ def status(client, *, refresh: bool = False) -> AccountStatus | None:
     # An anonymous visitor gets an empty session; NPO names the subscription at the
     # top of a signed-in one, and some versions inside its user.
     user = session.get("user") if isinstance(session.get("user"), dict) else {}
-    signed_in = bool(session.get("user") or session.get("expires"))
+    # A session whose NPO ID token has run out could not be renewed: npo.nl still
+    # names the user but no longer knows the subscription, so it no longer signs in.
+    token_expires = session.get("tokenExpiresAt")
+    renewed = not isinstance(token_expires, (int, float)) or token_expires > time.time()
+    signed_in = bool(session.get("user") or session.get("expires")) and renewed
     with _lock:
         _status = AccountStatus(
             signed_in=signed_in,
