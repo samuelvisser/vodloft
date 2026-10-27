@@ -33,6 +33,9 @@ class Feature(StrEnum):
     keeps the Source's own seasons, or makes one season per upload year."""
     SEARCH = "search"
     """Finding shows and videos at the Source by name, with ``search``."""
+    COSTLY_SEARCH = "costly_search"
+    """Each search costs the Source something, such as API quota, so the search
+    page searches when asked instead of while the user types."""
     PROGRAM_UPDATES = "program_updates"
     COOKIES = "cookies"
     API_KEY = "api_key"
@@ -136,6 +139,29 @@ class ResolvedLink:
     """The site the link is on, for a Source that serves many sites."""
     drm_protected: bool = False
     """The video is protected by DRM, so it can be added but not downloaded."""
+    kind_label: str | None = None
+    """What the Source calls this kind of result, such as Channel or Playlist for a show."""
+    facts: tuple[str, ...] = ()
+    """Short facts for a search result, such as "412 videos" or "19:05"."""
+
+
+@dataclass(frozen=True)
+class SearchNotice:
+    """How a search was answered, shown above its results."""
+
+    badge: str
+    text: str
+    tone: str = "neutral"
+    """neutral, or warning when the search was answered a slower or poorer way."""
+    link_label: str | None = None
+    link_path: str | None = None
+    """A VODLoft page where the user can do something about it, such as add a key."""
+
+
+@dataclass(frozen=True)
+class SearchResults:
+    results: list[ResolvedLink]
+    notice: SearchNotice | None = None
 
 
 @dataclass(frozen=True)
@@ -293,6 +319,8 @@ class Source(ABC):
         EpisodeTag(MAIN_TAG, "Episode", "An episode of the show", main=True),
     )
     """Every tag the Source gives episodes, the main one first."""
+    search_label: ClassVar[str | None] = None
+    """What the search button names, when that is not the Source's name, such as YouTube for yt-dlp."""
 
     def has(self, feature: Feature) -> bool:
         return feature in self.features
@@ -371,7 +399,7 @@ class Source(ABC):
         get a quick check. ``Feature.QUICK_CHECK`` only."""
         raise NotImplementedError(f"{self.name} has no quick check")
 
-    def search(self, query: str) -> list[ResolvedLink]:
+    def search(self, query: str) -> SearchResults:
         """Shows and videos whose name matches the query. Only Sources with ``Feature.SEARCH`` implement it."""
         raise NotImplementedError(f"{self.name} cannot be searched")
 

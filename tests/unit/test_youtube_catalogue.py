@@ -69,6 +69,8 @@ class FakeYouTube:
         self.playlists: dict[str, list[str]] = {}
         self.videos: dict[str, dict] = {}
         self.channels: dict[str, dict] = {}
+        self.playlist_details: dict[str, dict] = {}
+        self.search_results: list[dict] = []
         self.failing: set[str] = set()
         self.calls: list[tuple[str, dict]] = []
 
@@ -81,7 +83,14 @@ class FakeYouTube:
             items = [c for c in self.channels.values() if params.get("forHandle") in (None, c["handle"])]
             if "id" in params:
                 items = [c for c in items if c["id"] in params["id"].split(",")]
-            return FakeResponse(200, {"items": [{"id": c["id"], "snippet": c["snippet"]} for c in items]})
+            return FakeResponse(200, {"items": [
+                {"id": c["id"], "snippet": c["snippet"], **({"statistics": c["statistics"]} if "statistics" in c else {})}
+                for c in items
+            ]})
+        if endpoint == "playlists":
+            return FakeResponse(200, {"items": [self.playlist_details[i] for i in params["id"].split(",") if i in self.playlist_details]})
+        if endpoint == "search":
+            return FakeResponse(200, {"items": self.search_results})
         if endpoint == "playlistItems":
             if params["playlistId"] not in self.playlists:
                 return FakeResponse(404, {"error": {"errors": [{"reason": "playlistNotFound"}]}})

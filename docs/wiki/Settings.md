@@ -200,7 +200,7 @@ Google gives each project 10,000 units a day, reset at midnight Pacific time. Mo
 | --- | --- | --- | --- |
 | `youtubeApi.dailyQuota` | `VL_YOUTUBE_API__DAILY_QUOTA` | `10000` | What Google gives the project. Only raise it if Google gave you more. |
 | `youtubeApi.checksQuota` | `VL_YOUTUBE_API__CHECKS_QUOTA` | `7000` | Checks for new videos and full re-scans of your YouTube shows. |
-| `youtubeApi.searchQuota` | `VL_YOUTUBE_API__SEARCH_QUOTA` | `2000` | YouTube searches, about 19 a day. `0` makes every search use yt-dlp. |
+| `youtubeApi.searchQuota` | `VL_YOUTUBE_API__SEARCH_QUOTA` | `2000` | YouTube searches on the Add media page, about 19 a day. When it is used up, or set to `0`, searches use yt-dlp. |
 | `youtubeApi.minCheckIntervalMinutes` | `VL_YOUTUBE_API__MIN_CHECK_INTERVAL_MINUTES` | `10` | The shortest time between two checks of the same show. |
 
 What the checks and search shares leave of the daily total is kept free for adding shows, testing the key and manual refreshes. Adding a show uses the units kept free first and then the checks share; listing a channel costs about 2 units per 50 videos. The panel shows what each share means in practice, such as how often each show gets checked.

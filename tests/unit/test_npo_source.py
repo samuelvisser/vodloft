@@ -160,12 +160,12 @@ def test_a_clear_stream_downloads_with_yt_dlp_and_a_protected_one_is_marked(npo)
 
 def test_search_finds_series_and_programmes(npo):
     source, _ = npo
-    results = source.search("huis")
+    results = source.search("huis").results
     assert [(r.kind, r.title, r.url) for r in results] == [
         (LinkKind.SHOW, "Een huis vol", "https://npo.nl/start/serie/een-huis-vol/afleveringen"),
         (LinkKind.VIDEO, "De film", "https://npo.nl/start/afspelen/de-film_1"),
     ]
-    assert source.search("  ") == []
+    assert source.search("  ").results == []
 
 
 @pytest.fixture

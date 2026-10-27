@@ -8,7 +8,7 @@ import SourceBadge from '../components/Source/SourceBadge'
 import {useQueryClient} from '@tanstack/react-query'
 import {addVideo, resolveLink, useMovies, useShows, useSources, useVideos} from '../lib/queries'
 import {linkTarget, type MediaLinkTarget} from '../lib/sourceControls'
-import {ResolvedLinkRead, SourceFeature, SourceRead, sourceHas} from '../types/schemas/source'
+import {ResolvedLinkRead, SourceFeature, SourceRead, searchName, sourceHas} from '../types/schemas/source'
 import {DrmNotice} from '../components/common/DrmProtected'
 
 type AddMediaPageProps = {
@@ -246,7 +246,7 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
                         {browseSources.map((source) => (
                             <button key={source.id} className="btn" type="button" onClick={() => browse(source)}>
                                 <FontAwesomeIcon icon={faIcon('fass', sourceHas(source, SourceFeature.BROWSE) ? 'compass' : 'magnifying-glass')}/>
-                                {sourceHas(source, SourceFeature.BROWSE) ? 'Browse' : 'Search'} {source.name}
+                                {sourceHas(source, SourceFeature.BROWSE) ? `Browse ${source.name}` : `Search ${searchName(source)}`}
                             </button>
                         ))}
                     </div>

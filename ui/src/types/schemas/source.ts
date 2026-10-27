@@ -13,6 +13,7 @@ export const SourceFeature = {
     VIDEOS: 'videos',
     EPISODE_LISTS: 'episode_lists',
     SEARCH: 'search',
+    COSTLY_SEARCH: 'costly_search',
     PROGRAM_UPDATES: 'program_updates',
     COOKIES: 'cookies',
     API_KEY: 'api_key',
@@ -42,6 +43,7 @@ export const SourceReadSchema = z.object({
     name: z.string(),
     domains: z.array(z.string()),
     features: z.array(z.string()),
+    searchLabel: z.string().nullable().optional(),
 })
 export type SourceRead = z.infer<typeof SourceReadSchema>
 
@@ -79,8 +81,30 @@ export const SearchResultReadSchema = z.object({
     authorName: z.string().nullable(),
     showSlug: z.string().nullable(),
     showUrl: z.string().nullable(),
+    kindLabel: z.string().nullable().optional(),
+    facts: z.array(z.string()).optional(),
 })
 export type SearchResultRead = z.infer<typeof SearchResultReadSchema>
+
+export const SearchNoticeReadSchema = z.object({
+    badge: z.string(),
+    text: z.string(),
+    tone: z.enum(['neutral', 'warning']),
+    linkLabel: z.string().nullable(),
+    linkPath: z.string().nullable(),
+})
+export type SearchNoticeRead = z.infer<typeof SearchNoticeReadSchema>
+
+export const SearchResultsReadSchema = z.object({
+    results: z.array(SearchResultReadSchema),
+    notice: SearchNoticeReadSchema.nullable(),
+})
+export type SearchResultsRead = z.infer<typeof SearchResultsReadSchema>
+
+/** What a search button names: the Source's own label, such as YouTube for yt-dlp, or its name. */
+export function searchName(source: SourceRead | null | undefined): string | undefined {
+    return source?.searchLabel ?? source?.name
+}
 
 export const SourceDomainReadSchema = z.object({
     domain: z.string(),

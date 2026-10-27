@@ -79,9 +79,9 @@ Single videos come from yt-dlp, which supports YouTube and well over a thousand 
 
 ## YouTube channels and playlists
 
-A YouTube channel or playlist, or a playlist on another site yt-dlp supports, can be added as a show: paste its link in **Add media** or in the Add Show wizard and pick Podcast or Series. A channel link adds all of the channel's uploads: its videos, Shorts and livestreams. A link to the channel's Shorts or Live tab adds only those.
+A YouTube channel or playlist, or a playlist on another site yt-dlp supports, can be added as a show: paste its link in **Add media** or in the Add Show wizard and pick Podcast or Series, or find it with **Search YouTube** (below). A channel link adds all of the channel's uploads: its videos, Shorts and livestreams. A link to the channel's Shorts or Live tab adds only those.
 
-These shows have no seasons of their own, so VODLoft makes one season per upload year. They are added as a Series identified by date by default; pick another episode identification in the Add Show wizard if you prefer. Seasonal numbers the videos in each year by upload date, such as S2024E01 and S2024E02, and Numbered counts them across the show. A video found later is numbered after the ones VODLoft already has, so existing file names never change. Download Profiles work as for any other show. Their streams serve downloaded files only, and their metadata is not refreshed after a video is added.
+These shows have no seasons of their own, so VODLoft makes one season per upload year. They are added as a Series identified by date by default; pick another episode identification in the Add Show wizard if you prefer. Seasonal numbers the videos in each year by upload date, such as S2024E01 and S2024E02, and Numbered counts them across the show. A video found later is numbered after the ones VODLoft already has, so existing file names never change. Download Profiles work as for any other show. Their streams serve downloaded files only.
 
 YouTube videos are tagged **Video**, **Short** or **Livestream**. A livestream keeps its tag after the broadcast ends. Shorts and livestreams are numbered on their own across the show, such as short.12 and livestream.3, so they never shift the numbers of normal videos, and episode cards show a Short or Livestream badge. Download and RSS profiles choose which tags they want; new YouTube profiles start with Video and Livestream and leave Shorts out. Videos from other sites are all tagged Video.
 
@@ -94,6 +94,13 @@ The daily re-scan also refreshes the episodes VODLoft already has. A video that 
 A video that was deleted or made private gets a **Removed** badge. Its downloaded files are kept, and Download Profiles stop trying to download it. If the video comes back, the badge goes away.
 
 With a YouTube Data API key this costs 1 unit per 50 episodes a day. Without a key, or once the quota is used up, titles are refreshed from yt-dlp's listing of the show instead. yt-dlp cannot tell a removed video from one it did not list, so only the API marks videos as removed.
+
+
+### Search YouTube
+
+**Search YouTube** on the Add media page finds channels, playlists and videos by name. Type a search and press Enter; each search costs YouTube API quota, so VODLoft does not search while you type. Picking a channel or playlist continues to the Add Show wizard, or opens the show when it is already in your Library; picking a video adds it under **Videos**, as if you had pasted its link.
+
+With a YouTube Data API key, a search goes through the API and shows subscriber and video counts, durations and upload dates. It costs about 102 units from the search share, and the line above the results says how many API searches are left today. Without a key, when the search share is used up or set to 0, or when the API fails, VODLoft searches with yt-dlp instead. That takes a few seconds longer and shows fewer details, and the line above the results says why yt-dlp answered. The same search within an hour is answered again without asking YouTube.
 
 ## NPO Start
 
