@@ -19,7 +19,8 @@
 <h2 align="center">Self-hosted media downloader and RSS generator for Web Content (YouTube and much more)</h2>
 
 > [!IMPORTANT]
-> VODLoft is in beta. Expect rough edges, and back up `/config` before upgrading.
+> VODLoft is in beta, and much of it not fully tested yet. Expect rough edges. It is based on [WireLoft]([WireLoft](https://github.com/samuelvisser/wireloft)),
+> an earlier project of mine which does the same for The Daily Wire only. Unlike VODLoft, it is very polished and well tested.
 
 ## What it does
 
