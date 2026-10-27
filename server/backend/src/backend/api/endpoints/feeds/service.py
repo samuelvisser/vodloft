@@ -33,7 +33,7 @@ from backend.types.stream_profile_types import (
     RssVideoOutputMode,
 )
 from config.network import is_no_internet_error
-from sources import Source, get_source
+from sources import EpisodeTag, Source, UnknownSourceError, get_source
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 
@@ -838,6 +838,14 @@ def _append_identifier_episode_number(item: Element, episode: Episode) -> None:
     )
 
 
+def _episode_tag(episode: Episode, key: str | None) -> EpisodeTag | None:
+    """The tag the episode's Source declares for it, such as a YouTube Short."""
+    try:
+        return get_source(episode.source_key).episode_tag(key)
+    except UnknownSourceError:
+        return None
+
+
 def _append_podcast_item_metadata(
         item: Element,
         episode: Episode,
@@ -856,6 +864,8 @@ def _append_podcast_item_metadata(
         episode_type = "trailer"
     elif info.type in {EpIdType.AUX, EpIdType.EP_EXTRA}:
         episode_type = "bonus"
+    elif info.type != EpIdType.EP and (tag := _episode_tag(episode, info.type)) is not None:
+        episode_type = tag.rss_episode_type.value
     else:
         episode_type = "full"
     _sub_text(item, "itunes:episodeType", episode_type)

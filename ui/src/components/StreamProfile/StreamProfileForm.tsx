@@ -3,14 +3,14 @@ import {Controller, UseFormReturn} from 'react-hook-form'
 import Switch from 'react-switch'
 import Select from 'react-select'
 import ReadMore from '../../utils/ReadMore'
-import {EpisodeTypeReg} from '../../types/episode'
+import {episodeTagLabel} from '../../types/schemas/source'
 import {PreferredFormatReg} from '../../types/local_media_profile'
 import RssStreamProfileForm from './RssStreamProfileForm'
 import StreamProfileAdvisory, {type StreamDownloadProfileDefault} from './StreamProfileAdvisory'
 import SegmentedOptions from '../SegmentedOptions/SegmentedOptions'
 import {MediaTypeReg} from "../../types/stream_profile";
 import {createSelectRegistry} from '../../utils/selectRegistry'
-import {useShows, useSourceLookup} from '../../lib/queries'
+import {useShowEpisodeTags, useShows, useSourceLookup} from '../../lib/queries'
 import {sourceControls} from '../../lib/sourceControls'
 
 export type StreamProfileMode = 'rss' | 'base'
@@ -19,7 +19,6 @@ export type {StreamDownloadProfileDefault} from './StreamProfileAdvisory'
 
 type UIOption = { value: string; label: string }
 
-const DEFAULT_STREAM_EPISODE_TYPES = ['ep', 'aux']
 const STANDARD_VIDEO_FORMATS = new Set(['format_4k', 'format_1080p', 'format_720p'])
 const StreamPreferredFormatReg = createSelectRegistry('StreamPreferredFormat', {
     format_4k: {label: PreferredFormatReg.getLabel('format_4k')},
@@ -83,6 +82,8 @@ export default function StreamProfileForm({
     const videoOutputMode = watch('videoOutputMode')
     const streamLiveEpisodes = watch('streamLiveEpisodes')
     const selectedEpisodeTypes: string[] = watch('epIdTypeList') || []
+    const {data: tags} = useShowEpisodeTags({showSlug, sourceKey})
+    const tagOptions: UIOption[] = useMemo(() => (tags ?? []).map((tag) => ({value: tag.key, label: tag.label})), [tags])
     const internalEpisodeTypesManuallyChanged = useRef(false)
     const episodeTypeDefaultsInitialized = useRef(false)
     const lastSuggestedTitle = useRef<string | undefined>(undefined)
@@ -109,9 +110,9 @@ export default function StreamProfileForm({
     const episodeTypeSelectValue: UIOption[] = useMemo(() => (
         selectedEpisodeTypes.map((value) => ({
             value,
-            label: EpisodeTypeReg.getLabelLoose(value),
+            label: episodeTagLabel(tags, value),
         }))
-    ), [selectedEpisodeTypes])
+    ), [selectedEpisodeTypes, tags])
 
     const automaticEpisodeTypes = useMemo(() => {
         if (useDownloads && downloadProfileDefaults) {
@@ -127,10 +128,10 @@ export default function StreamProfileForm({
 
             if (matchingProfile) return [...matchingProfile.episodeTypes]
         }
-        return [...DEFAULT_STREAM_EPISODE_TYPES]
-    }, [downloadProfileDefaults, preferredFormat, useDownloads, videoOutputMode])
+        return (tags ?? []).filter((tag) => tag.selectedByDefault).map((tag) => tag.key)
+    }, [downloadProfileDefaults, preferredFormat, tags, useDownloads, videoOutputMode])
 
-    const episodeTypeDefaultsReady = !useDownloads || downloadProfileDefaults !== undefined
+    const episodeTypeDefaultsReady = tags !== undefined && (!useDownloads || downloadProfileDefaults !== undefined)
 
     useEffect(() => {
         if (!episodeTypeDefaultsReady || !preferredFormat) return
@@ -183,7 +184,7 @@ export default function StreamProfileForm({
     }
 
     const handleSelectAllEpisodeTypes = () => {
-        const values = [...EpisodeTypeReg.values]
+        const values = tagOptions.map((option) => option.value)
         if (!sameEpisodeTypes(values, selectedEpisodeTypes)) {
             markEpisodeTypesManuallyChanged()
         }
@@ -398,7 +399,7 @@ export default function StreamProfileForm({
                         <Select
                             inputId="sp-episode-types"
                             isMulti
-                            options={EpisodeTypeReg.options}
+                            options={tagOptions}
                             value={episodeTypeSelectValue}
                             onChange={handleEpisodeTypeChange as any}
                             closeMenuOnSelect={false}
@@ -417,11 +418,8 @@ export default function StreamProfileForm({
                 <div className="help" id="sp-episode-types-help">
                     <ReadMore summary={<span>What episode types to stream</span>}>
                         <p>Select all episode types you want this profile to stream.</p>
-                        <p><b>Episode</b> is a normal episode in the show.</p>
-                        <p><b>Ep. Extra</b> is auxiliary content for a specific episode.</p>
-                        <p><b>Trailer</b> is a trailer for the show or auxiliary content.</p>
-                        <p><b>Auxiliary</b> is auxiliary content for the show.</p>
-                        <p>Until you change this selection manually, VODLoft uses Episode and Auxiliary by default. When Use Downloads is enabled and a Download Profile for the same show has the selected Preferred format, its episode types are used as the default instead.</p>
+                        {(tags ?? []).map((tag) => <p key={tag.key}><b>{tag.label}</b>: {tag.help}.</p>)}
+                        <p>Until you change this selection manually, VODLoft uses {(tags ?? []).filter((tag) => tag.selectedByDefault).map((tag) => tag.label).join(' and ') || 'the usual types'} by default. When Use Downloads is enabled and a Download Profile for the same show has the selected Preferred format, its episode types are used as the default instead.</p>
                     </ReadMore>
                 </div>
             </div>

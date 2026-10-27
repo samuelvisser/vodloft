@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ..contract import EpisodeMedia, Feature, Playback, ResolvedLink, Source
+from ..contract import MAIN_TAG, EpisodeMedia, EpisodeTag, Feature, Playback, ResolvedLink, RssEpisodeType, Source
 from .api.dw_api.client import MiddlewareClient
 from .api.dw_api.movie import MovieMiddlewareClient
 from .auth import DeviceAuthClient
@@ -22,6 +22,18 @@ class DailyWireSource(Source):
         Feature.MEMBERSHIP_LEVELS,
         Feature.RSS_STREAMING,
     })
+    episode_tags = (
+        EpisodeTag(MAIN_TAG, "Episode", "A normal episode of the show", main=True),
+        EpisodeTag(
+            "ep-extra", "Ep. Extra", "Extra content for a specific episode", selected_by_default=False,
+            rss_episode_type=RssEpisodeType.BONUS,
+        ),
+        EpisodeTag(
+            "trailer", "Trailer", "A trailer for the show or its extra content", selected_by_default=False,
+            rss_episode_type=RssEpisodeType.TRAILER,
+        ),
+        EpisodeTag("aux", "Auxiliary", "Extra content for the show", rss_episode_type=RssEpisodeType.BONUS),
+    )
 
     def resolve(self, url: str) -> ResolvedLink | None:
         return resolve_link(url)

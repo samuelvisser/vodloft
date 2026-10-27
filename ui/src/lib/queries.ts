@@ -58,7 +58,7 @@ import {TaskOperationRead} from "../types/schemas/operation";
 import {MovieRead, MovieReadSchema} from "../types/schemas/movie";
 import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
-    ApiStatusRead, ApiStatusReadSchema, CookiesRead, CookiesReadSchema, ProgramStatusRead, SourceProblemRead,
+    ApiStatusRead, ApiStatusReadSchema, CookiesRead, EpisodeTagRead, EpisodeTagReadSchema, CookiesReadSchema, ProgramStatusRead, SourceProblemRead,
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
     ResolvedLinkReadSchema, SearchResultRead, SearchResultReadSchema, ShowDetailsRead, ShowDetailsReadSchema, SourceDomainRead, SourceDomainReadSchema, SourceRead,
     SourceReadSchema,
@@ -312,6 +312,32 @@ export async function saveSourceCookies(sourceId: string, content: string | null
     })
     if (!response.ok) throw await responseError(response)
     return CookiesReadSchema.parse(await response.json())
+}
+
+/** The tags a Source gives episodes of the show at ``url``, or of any of its shows without one. */
+export function useEpisodeTags(sourceKey?: string | null, url?: string | null) {
+    return useQuery<EpisodeTagRead[], Error, EpisodeTagRead[], readonly ['episodeTags', string, string | null]>({
+        queryKey: ['episodeTags', sourceKey ?? '', url ?? null] as const,
+        enabled: !!sourceKey,
+        staleTime: Infinity,
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceKey ?? '')}/episode-tags`
+            + (url ? `?url=${encodeURIComponent(url)}` : ''),
+            EpisodeTagReadSchema.array(),
+            signal,
+        ),
+    })
+}
+
+/** The episode tags of a saved show, or of a show about to be added from ``sourceKey`` at ``url``. */
+export function useShowEpisodeTags({showId, showSlug, sourceKey, url}: {
+    showId?: number, showSlug?: string, sourceKey?: string, url?: string,
+}) {
+    const {data: shows} = useShows()
+    const show = showId !== undefined
+        ? shows?.find((item) => item.id === showId)
+        : showSlug ? shows?.find((item) => item.slug === showSlug) : undefined
+    return useEpisodeTags(show?.sourceKey ?? sourceKey, show?.sharingUrl ?? url)
 }
 
 export function useSourceApi(sourceId: string, enabled = true) {

@@ -1,4 +1,7 @@
 from enum import Enum, StrEnum
+from typing import Annotated
+
+from pydantic import Field
 
 
 class MediaDownloadArtifactStatus(StrEnum):
@@ -31,6 +34,10 @@ class MediaDownloadStatus(Enum):
     ERROR = "error"
     MISSING = "missing"
     CORRUPTED = "corrupted"
+
+
+# The key of an episode tag a Source declares (sources.EpisodeTag), as profiles select it.
+EpisodeTagKey = Annotated[str, Field(pattern=r"^[a-z][a-z-]*$", max_length=32)]
 
 
 # Types for the episode identification field

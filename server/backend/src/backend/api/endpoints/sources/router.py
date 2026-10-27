@@ -1,11 +1,11 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.models.source import (
-    ApiKeyAPIUpdate, ApiStatusAPIRead, CookiesAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultAPIRead,
+    ApiKeyAPIUpdate, ApiStatusAPIRead, CookiesAPIRead, EpisodeTagAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultAPIRead,
     ShowDetailsAPIRead, SourceAPIRead, SourceDomainAPIRead, SourceDomainAPIUpdate,
 )
 from backend.app import db_session
-from sources import ApiKeyRejected, Feature, Source
+from sources import ApiKeyRejected, Feature, Source, UnknownSourceError, get_source
 
 from .service import (
     LinkNotRecognisedError, SourceFeatureMissingError, UnknownDomainError, get_api_status, get_program_status,
@@ -64,6 +64,16 @@ def resolve(body: ResolveAPIRequest):
             return resolve_link(s, body.url, body.source_key)
         except LinkNotRecognisedError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/sources/{source_id}/episode-tags", response_model=list[EpisodeTagAPIRead])
+def episode_tags(source_id: str, url: str | None = Query(default=None, max_length=2048)):
+    """The tags a Source gives episodes, such as Video, Short and Livestream, for the show at ``url`` or for any show."""
+    try:
+        source = get_source(source_id)
+    except UnknownSourceError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return [EpisodeTagAPIRead.model_validate(tag) for tag in source.episode_tags_for(url)]
 
 
 @router.get("/sources/{source_id}/show", response_model=ShowDetailsAPIRead)

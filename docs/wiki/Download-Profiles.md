@@ -11,7 +11,7 @@ Movies do not use Download Profiles; movie downloads are started manually from t
 Every Download Profile lets you choose:
 
 - whether the profile is enabled;
-- which episode types it applies to;
+- which episode types it applies to. The types come from the show's Source: The Daily Wire has Episode, Ep. Extra, Trailer and Auxiliary, and YouTube has Video, Short and Livestream;
 - which Local Media Profile should be used for the resulting files.
 
 Disabling a profile keeps its configuration but stops it from automatically selecting new downloads.

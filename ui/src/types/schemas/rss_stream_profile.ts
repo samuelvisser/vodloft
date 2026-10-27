@@ -1,5 +1,4 @@
 import {z} from 'zod'
-import {EpisodeTypeReg} from "../episode";
 import {PreferredFormatReg} from "../local_media_profile";
 import {RssVideoOutputModeReg} from "../stream_profile";
 import {ApiDateTimeSchema} from "./datetime";
@@ -15,7 +14,7 @@ const RssStreamProfileBaseSchema = z.object({
         {message: 'HLS is a Local Media Profile download format, not a Stream Profile preferred format'},
     ),
     preferExactMatch: z.boolean().default(false),
-    epIdTypeList: z.array(z.enum(EpisodeTypeReg.values)).default(['ep', 'aux']),
+    epIdTypeList: z.array(z.string()).default(['ep', 'aux']),
     videoOutputMode: z.enum(RssVideoOutputModeReg.values).nullable().default(null),
     streamLiveEpisodes: z.boolean().default(false),
     maxItems: z.int().nonnegative().default(100),
@@ -81,7 +80,7 @@ export const RssStreamProfileReadSchema = z.looseObject({
     useDwStream: z.boolean(),
     preferredFormat: z.union([z.enum(PreferredFormatReg.values), z.string()]),
     preferExactMatch: z.boolean(),
-    epIdTypeList: z.array(z.union([z.enum(EpisodeTypeReg.values), z.string()])),
+    epIdTypeList: z.array(z.string()),
     videoOutputMode: z.union([z.enum(RssVideoOutputModeReg.values), z.string()]).nullable(),
     streamLiveEpisodes: z.boolean(),
     maxItems: z.number(),

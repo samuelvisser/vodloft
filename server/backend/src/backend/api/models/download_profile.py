@@ -6,7 +6,7 @@ from pydantic import Field, model_validator
 
 from backend.api.models.base import ResponseBase, RequestBase, response_model_config
 from backend.api.models.season import SeasonAPIRequestDetached, SeasonAPIRead
-from backend.types.download_profile_types import EpIdType
+from backend.types.download_profile_types import EpisodeTagKey
 
 
 # ---------- Strict input (create/update) ----------
@@ -18,7 +18,7 @@ class DownloadProfileAPIBaseIn(RequestBase):
     """
 
     enable_profile: bool
-    ep_id_type_list: list[EpIdType]
+    ep_id_type_list: list[EpisodeTagKey]
 
     download_with_countdown: bool
     redownload_final: bool
@@ -67,7 +67,7 @@ class DownloadProfileAPIBaseOut(ResponseBase):
     show_id: int
     local_media_profile_id: int
     enable_profile: bool
-    ep_id_type_list: list[EpIdType]
+    ep_id_type_list: list[EpisodeTagKey]
 
     download_with_countdown: bool
     redownload_final: bool

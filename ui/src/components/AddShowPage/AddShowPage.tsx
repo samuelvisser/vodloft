@@ -20,8 +20,8 @@ import {
 import {downloadProfileDefaultsFor} from "../../types/schemas/download_profile";
 import {useQueryClient} from "@tanstack/react-query";
 import {SeasonDetachedOut} from "../../types/schemas/season";
-import {useSourceLookup} from "../../lib/queries";
-import {SourceFeature, sourceHas} from "../../types/schemas/source";
+import {useEpisodeTags, useSourceLookup} from "../../lib/queries";
+import {EpisodeTagRead, SourceFeature, sourceHas} from "../../types/schemas/source";
 
 export type Props = {
     onCancel: () => void
@@ -98,10 +98,12 @@ function clearWizardState() {
     }
 }
 
-const defaultDownloadProfile = (episodeIdentifier?: string): Partial<DownloadProfileBundleIn> => ({
+const defaultDownloadProfile = (episodeIdentifier?: string, tags?: EpisodeTagRead[]): Partial<DownloadProfileBundleIn> => ({
     ...getZodDefaults(DownloadProfileBundleSchema),
-    ...downloadProfileDefaultsFor(episodeIdentifier),
+    ...downloadProfileDefaultsFor(episodeIdentifier, tags),
 })
+
+const showTagsKey = (show?: ShowCreatePayloadOut) => (show ? `${show.sourceKey} ${show.sharingUrl}` : undefined)
 
 const defaultStreamProfile = (action?: ShowAction): Partial<RssStreamProfileBundleIn> => ({
     enableProfile: true,
@@ -150,6 +152,17 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
     )
 
     const [seasonsSubmit, setSeasonsSubmit] = useState<SeasonDetachedOut[] | undefined>(() => persisted?.seasons ?? [])
+
+    // The episode tags to download by default come from the show's Source once the show is chosen.
+    const {data: showEpisodeTags} = useEpisodeTags(showSubmit?.sourceKey, showSubmit?.sharingUrl)
+    const tagDefaultsAppliedFor = useRef(persisted?.downloadProfile.input ? showTagsKey(persisted?.show.submit) : undefined)
+    useEffect(() => {
+        const key = showTagsKey(showSubmit)
+        if (!showSubmit || !showEpisodeTags || downloadProfileSubmit || tagDefaultsAppliedFor.current === key) return
+        tagDefaultsAppliedFor.current = key
+        const {epIdTypeList} = downloadProfileDefaultsFor(showSubmit.episodeIdentifier, showEpisodeTags)
+        setDownloadProfileInput((current) => ({...current, epIdTypeList}))
+    }, [downloadProfileSubmit, showEpisodeTags, showSubmit])
 
     const downloadProfileSubmitRef = useRef(downloadProfileSubmit)
     const streamProfileSubmitRef = useRef(streamProfileSubmit)
@@ -324,9 +337,11 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
                             setLocalMediaProfileInput(getZodDefaults(LocalMediaProfileCreateUnionSchema))
                             setLocalMediaProfileSubmit(undefined)
                         }
-                        // The download options follow how the show identifies its episodes.
-                        if (showSubmit?.episodeIdentifier !== value.episodeIdentifier) {
-                            setDownloadProfileInput(defaultDownloadProfile(value.episodeIdentifier))
+                        // The download options follow how the show identifies its episodes, and its Source's episode tags.
+                        if (showSubmit?.episodeIdentifier !== value.episodeIdentifier || showTagsKey(showSubmit) !== showTagsKey(value)) {
+                            const tags = qc.getQueryData<EpisodeTagRead[]>(['episodeTags', value.sourceKey, value.sharingUrl])
+                            setDownloadProfileInput(defaultDownloadProfile(value.episodeIdentifier, tags))
+                            if (!tags) tagDefaultsAppliedFor.current = undefined
                             setDownloadProfileSubmit(undefined)
                             downloadProfileSubmitRef.current = undefined
                         }

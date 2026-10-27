@@ -2,7 +2,7 @@ import {useCallback, useEffect, useMemo, useRef} from 'react'
 import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate, useSearchParams} from 'react-router-dom'
-import {useDownloadProfilesByShowSlug, useLocalMediaProfiles, useShowSeasons, useShows} from '../../lib/queries'
+import {useDownloadProfilesByShowSlug, useLocalMediaProfiles, useShowEpisodeTags, useShowSeasons, useShows} from '../../lib/queries'
 import DownloadProfileForm from '../../components/DownloadProfile/DownloadProfileForm'
 import {
     DownloadProfileCreateIn, DownloadProfileCreateOut, DownloadProfileCreateSchema,
@@ -18,7 +18,6 @@ import {getZodDefaults} from "../../utils/defaultZod";
 import ReadMore from "../../utils/ReadMore";
 import {SeasonItem} from "../../components/DownloadProfile/DownloadProfileSeasonFilter";
 import {SeasonRead} from "../../types/schemas/season";
-import {EpisodeTypeReg} from "../../types/episode";
 
 export default function AddDownloadProfilePage() {
     const navigate = useNavigate()
@@ -60,14 +59,17 @@ export default function AddDownloadProfilePage() {
         setValue('showId', id, {shouldDirty: true, shouldValidate: true})
         // Seasons belong to one show; the other filters start from what fits the show.
         setValue('seasons', [], {shouldDirty: true})
-        const defaults = downloadProfileDefaultsFor(shows?.find((show) => show.id === id)?.episodeIdentifier)
-        if (!getFieldState('epIdTypeList').isDirty) {
-            setValue('epIdTypeList', defaults.epIdTypeList)
-        }
+        const defaults = downloadProfileDefaultsFor(shows?.find((show) => show.id === id)?.episodeIdentifier, undefined)
         if (!getFieldState('downloadDaysInPast').isDirty && !getFieldState('downloadEpisodeCount').isDirty) {
             setValue('downloadDaysInPast', defaults.downloadDaysInPast)
         }
     }, [getFieldState, setValue, shows])
+    // The episode tags to start with depend on the show's Source, which answers after the show is picked.
+    const {data: episodeTags} = useShowEpisodeTags({showId: selectedShow?.id})
+    useEffect(() => {
+        if (!episodeTags || getFieldState('epIdTypeList').isDirty) return
+        setValue('epIdTypeList', downloadProfileDefaultsFor(episodeIdentifier, episodeTags).epIdTypeList)
+    }, [episodeIdentifier, episodeTags, getFieldState, setValue])
     const prefillApplied = useRef(false)
     const limitPrefillApplied = useRef(false)
     const mediaProfilePrefillApplied = useRef(false)
@@ -75,9 +77,7 @@ export default function AddDownloadProfilePage() {
     const requestedShowSlug = searchParams.get('show')
     const requestedPreferredFormat = searchParams.get('preferredFormat')
     const requestedEpisodeTypeValues = searchParams.getAll('episodeType')
-    const requestedEpisodeTypes = EpisodeTypeReg.values.filter(
-        (value) => requestedEpisodeTypeValues.includes(value)
-    )
+    const requestedEpisodeTypes = requestedEpisodeTypeValues.filter((value) => /^[a-z][a-z-]*$/.test(value))
     const requestedDownloadEpisodeCountRaw = searchParams.get('downloadEpisodeCount')
     const parsedDownloadEpisodeCount = Number(requestedDownloadEpisodeCountRaw)
     const requestedDownloadEpisodeCount = requestedDownloadEpisodeCountRaw !== null

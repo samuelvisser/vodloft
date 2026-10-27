@@ -39,6 +39,34 @@ class Feature(StrEnum):
     """An optional key for the service's own API, which makes catalogue lookups faster."""
 
 
+class RssEpisodeType(StrEnum):
+    """The podcast episode type an RSS feed gives an episode."""
+
+    FULL = "full"
+    TRAILER = "trailer"
+    BONUS = "bonus"
+
+
+MAIN_TAG = "ep"
+
+
+@dataclass(frozen=True)
+class EpisodeTag:
+    """A kind of episode a Source tells apart, such as a YouTube Short.
+
+    The key is the first part of an episode's identifier (``short.12``) and what
+    Download and RSS profiles select. Episodes with the ``main`` tag follow the
+    show's numbering scheme; every other tag counts on its own across the show.
+    """
+
+    key: str
+    label: str
+    help: str
+    selected_by_default: bool = True
+    rss_episode_type: RssEpisodeType = RssEpisodeType.FULL
+    main: bool = False
+
+
 @dataclass(frozen=True)
 class EpisodeMedia:
     """Where the current media of an episode can be fetched from."""
@@ -140,6 +168,8 @@ class VideoDetails:
     Without one, VODLoft puts the episode in a season per upload year."""
     episode_number: int | None = None
     """The episode's number in its season, when the Source has one."""
+    tag: str = MAIN_TAG
+    """The key of one of the Source's episode tags."""
 
 
 @dataclass(frozen=True)
@@ -231,6 +261,10 @@ class Source(ABC):
     name: ClassVar[str]
     domains: ClassVar[tuple[str, ...]]
     features: ClassVar[frozenset[Feature]]
+    episode_tags: ClassVar[tuple[EpisodeTag, ...]] = (
+        EpisodeTag(MAIN_TAG, "Episode", "An episode of the show", main=True),
+    )
+    """Every tag the Source gives episodes, the main one first."""
 
     def has(self, feature: Feature) -> bool:
         return feature in self.features
@@ -241,6 +275,13 @@ class Source(ABC):
             return True
         host = link_host(url)
         return any(on_domain(host, domain) for domain in self.domains)
+
+    def episode_tags_for(self, url: str | None) -> tuple[EpisodeTag, ...]:
+        """The tags episodes of the show at this link can get, or all of them without a link."""
+        return self.episode_tags
+
+    def episode_tag(self, key: str | None) -> EpisodeTag | None:
+        return next((tag for tag in self.episode_tags if tag.key == key), None)
 
     @abstractmethod
     def resolve(self, url: str) -> ResolvedLink | None:

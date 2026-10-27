@@ -9,6 +9,9 @@ how its episodes are identified:
 - Date-based: the upload date and time.
 - Numbered: the upload order across the show, 1, 2, 3.
 
+Only episodes with the Source's main tag follow that scheme. Every other tag,
+such as a YouTube Short, counts on its own across the show: short.1, short.2.
+
 A new episode is numbered after the episodes VODLoft already has, so existing
 file names never change. Numbering follows upload order, so the episodes are
 saved together once the Source has listed them all.
@@ -27,7 +30,7 @@ from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
 from backend.types.show_types import EpisodeIdentifier
 from backend.utils.helpers import generate_uuid
-from sources import Source, VideoDetails
+from sources import MAIN_TAG, Source, VideoDetails
 from .episodes.events import queue_episode_status_events
 from .general import datetime_to_string
 from .progress import update_progress
@@ -87,6 +90,8 @@ def _identifier(
     show: Show, season: Season, details: VideoDetails, identifiers: set[str], numbers: _SeasonNumbers,
     fallback: datetime,
 ) -> str:
+    if details.tag != MAIN_TAG:
+        return _next(identifiers, details.tag)
     match EpisodeIdentifier(show.episode_identifier):
         case EpisodeIdentifier.DATE_BASED:
             identifier = f"ep.{datetime_to_string(details.published_at or fallback)}"

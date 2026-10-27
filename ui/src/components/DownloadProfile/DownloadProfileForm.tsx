@@ -4,7 +4,8 @@ import ReadMore from '../../utils/ReadMore'
 import DownloadProfileDateFilters from './DownloadProfileDateFilters'
 import DownloadProfileSeasonFilter, {SeasonItem} from './DownloadProfileSeasonFilter'
 import Select from "react-select";
-import {EpisodeTypeReg} from "../../types/episode";
+import {useShowEpisodeTags} from "../../lib/queries";
+import {episodeTagLabel} from "../../types/schemas/source";
 import {useEffect, useMemo} from "react";
 import {EpisodeIdentifierReg} from "../../types/show";
 
@@ -19,6 +20,8 @@ type Props = {
     showId?: number
     /** The Source of a show that is not saved yet. */
     sourceKey?: string
+    /** The link of a show that is not saved yet, which decides the tags its episodes can get. */
+    showUrl?: string
 }
 
 // Simple option model for react-select
@@ -26,17 +29,19 @@ type UIOption = { value: string; label: string }
 
 const NO_DISABLED_EPISODE_TYPES = new Set<string>()
 
-export default function DownloadProfileForm({form, episodeIdentifier, seasons, showRoot, disabledEpisodeTypes, showId, sourceKey}: Props) {
+export default function DownloadProfileForm({form, episodeIdentifier, seasons, showRoot, disabledEpisodeTypes, showId, sourceKey, showUrl}: Props) {
     const {control, watch, setValue, formState: {errors}} = form
     showRoot ??= true
 
     const unavailableEpisodeTypes = disabledEpisodeTypes ?? NO_DISABLED_EPISODE_TYPES
+    const {data: tags} = useShowEpisodeTags({showId, sourceKey, url: showUrl})
+    const tagOptions: UIOption[] = useMemo(() => (tags ?? []).map((tag) => ({value: tag.key, label: tag.label})), [tags])
 
     // Episode types multiselect wiring
     const selectedTypes: string[] = watch('epIdTypeList') || []
     const selectValue: UIOption[] = useMemo(() => (
-        (selectedTypes || []).map((v) => ({ value: v, label: EpisodeTypeReg.getLabelLoose(v) }))
-    ), [selectedTypes])
+        (selectedTypes || []).map((v) => ({ value: v, label: episodeTagLabel(tags, v) }))
+    ), [selectedTypes, tags])
 
     useEffect(() => {
         const availableTypes = selectedTypes.filter((type) => !unavailableEpisodeTypes.has(type))
@@ -52,7 +57,7 @@ export default function DownloadProfileForm({form, episodeIdentifier, seasons, s
     }
 
     const handleSelectAll = () => {
-        const availableTypes = EpisodeTypeReg.values.filter((type) => !unavailableEpisodeTypes.has(type))
+        const availableTypes = tagOptions.map((option) => option.value).filter((type) => !unavailableEpisodeTypes.has(type))
         setValue('epIdTypeList', availableTypes, {shouldDirty: true, shouldValidate: true})
     }
 
@@ -114,7 +119,7 @@ export default function DownloadProfileForm({form, episodeIdentifier, seasons, s
                         <Select
                             inputId="ep-id-type-select"
                             isMulti
-                            options={EpisodeTypeReg.options}
+                            options={tagOptions}
                             value={selectValue}
                             onChange={handleSelectChange as any}
                             closeMenuOnSelect={false}
@@ -135,10 +140,7 @@ export default function DownloadProfileForm({form, episodeIdentifier, seasons, s
                 <div className="help" id="ep-id-type-help">
                     <ReadMore summary={<span>What episode types to download</span>}>
                         <p>Select all episode types you want to download.</p>
-                        <p><b>Episode</b> is normal episode in the show.</p>
-                        <p><b>Ep. Extra</b> is auxiliary content for a specific episode.</p>
-                        <p><b>Trailer</b> is trailer for show or auxiliary content.</p>
-                        <p><b>Auxiliary</b> is auxiliary content for the show.</p>
+                        {(tags ?? []).map((tag) => <p key={tag.key}><b>{tag.label}</b>: {tag.help}.</p>)}
                         {unavailableEpisodeTypes.size > 0 && (
                             <p>Episode types already used by another Download Profile with this Local Media Profile cannot be selected.</p>
                         )}
