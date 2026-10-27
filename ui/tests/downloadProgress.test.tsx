@@ -63,7 +63,7 @@ test('frontend wait messages take precedence over backend operation messages',()
         message:'Backend operation message',
         progressMeta:{wait_state:{reason:'daily_wire_request_cooldown',message:'Backend wait message'}},
     }))!
-    assert.equal(view.detail,'Waiting for The Daily Wire request cooldown. The operation will resume automatically.')
+    assert.equal(view.detail,"Waiting for the source's request cooldown. The operation will resume automatically.")
 })
 test('unknown waits still fall back to backend messages',()=>{
     const view=presentOperationProgress(operation({
