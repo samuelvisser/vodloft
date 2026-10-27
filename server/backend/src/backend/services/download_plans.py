@@ -18,7 +18,9 @@ from backend.utils.output_template import resolve_episode_output_path, resolve_m
 from config import get_settings
 from config.network import is_no_internet_error
 from config.settings.submodels import MetadataMode, ThumbnailMode
-from downloader import DownloadCancelled, DownloadError, EncryptedMediaError, MediaUnavailableError
+from downloader import (
+    DownloadCancelled, DownloadError, EncryptedMediaError, MediaUnavailableError, SubscriptionRequiredError,
+)
 from downloader.lifecycle import DownloadTracker
 from downloader.metadata import render_nfo
 from downloader.plan import DownloadPlan, SidecarSpec, build_download_plan
@@ -73,6 +75,10 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         tracker.ensure_active()
         if playback.drm_protected:
             raise EncryptedMediaError(f"{media_source.name} protects '{title}' with DRM")
+        if playback.needs_subscription:
+            raise SubscriptionRequiredError(
+                f"{media_source.name} only gives '{title}' to {media_source.subscription_name or 'paying'} subscribers"
+            )
         if playback.kind is PlaybackKind.YTDLP:
             source = resolve_ytdlp_source(playback.url, command=playback.command, preferred_format=preferred, audio_only=audio_only, ffmpeg_path=ffmpeg_path)
         else:

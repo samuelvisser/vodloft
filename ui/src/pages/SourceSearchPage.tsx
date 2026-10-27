@@ -7,6 +7,7 @@ import {ClearInputButton} from '../components/common/ClearInputButton'
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import {useShows, useSourceLookup, useSourceSearch} from '../lib/queries'
 import {SearchNoticeRead, SearchResultRead, SourceFeature, searchName, sourceHas} from '../types/schemas/source'
+import {SubscriptionBadge} from '../components/common/NeedsSubscription'
 
 const KIND_LABEL: Record<SearchResultRead['kind'], string> = {
     show: 'Show',
@@ -125,6 +126,7 @@ export default function SourceSearchPage() {
                                     <strong className="show-summary-title">{result.title}</strong>
                                     <span className="show-summary-author">{[result.kindLabel ?? KIND_LABEL[result.kind], result.authorName, ...(result.facts ?? [])].filter(Boolean).join(' · ')}</span>
                                     {result.description && <span className="show-summary-description">{result.description}</span>}
+                                    {result.needsSubscription && <span><SubscriptionBadge sourceKey={sourceId}/></span>}
                                 </span>
                                 {added && <span className="catalog-added"><FontAwesomeIcon icon={faIcon('fass', 'check')}/> In library</span>}
                             </button>

@@ -39,6 +39,7 @@ class SourceAPIRead(ResponseBase):
     domains: list[str]
     features: list[str]
     search_label: Optional[str] = None
+    subscription_name: Optional[str] = None
 
     @field_validator("features", mode="before")
     @classmethod
@@ -144,6 +145,7 @@ class ResolvedLinkAPIRead(ResponseBase):
     show_url: Optional[str] = None
     site: Optional[str] = None
     drm_protected: bool = False
+    needs_subscription: bool = False
     preview: ResolvedLinkPreviewAPIRead
     # Every Source that claims the link's domain, preferred first, to look the link up with another one.
     candidates: list[SourceAPIRead] = Field(default_factory=list)
@@ -161,6 +163,7 @@ class SearchResultAPIRead(ResponseBase):
     show_url: Optional[str] = None
     kind_label: Optional[str] = None
     facts: list[str] = []
+    needs_subscription: bool = False
 
 
 class SearchNoticeAPIRead(ResponseBase):

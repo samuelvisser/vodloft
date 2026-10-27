@@ -120,6 +120,7 @@ def _to_read(s: Session, source: Source, link: ResolvedLink, candidates: list[So
         show_url=show_url,
         site=link.site,
         drm_protected=link.drm_protected,
+        needs_subscription=link.needs_subscription,
         preview=ResolvedLinkPreviewAPIRead.model_validate(link),
         candidates=[SourceAPIRead.model_validate(candidate) for candidate in candidates],
     )

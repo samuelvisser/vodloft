@@ -573,9 +573,12 @@ def _reconcile_existing_artifact(s: Session, download: MediaDownloadBase) -> Non
 DRM_PROTECTED_MESSAGE = "Protected by DRM, cannot be downloaded"
 
 
-def _ensure_not_drm_protected(media) -> None:
+def _ensure_downloadable(media) -> None:
     if media.drm_protected:
         raise HTTPException(status_code=422, detail=DRM_PROTECTED_MESSAGE)
+    if media.needs_subscription:
+        name = get_source(media.source_key).subscription_name or "a subscription"
+        raise HTTPException(status_code=422, detail=f"Needs {name}, cannot be downloaded")
 
 
 def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownloadAPICreate) -> EpisodeMediaDownload:
@@ -586,7 +589,7 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
         raise HTTPException(status_code=422, detail="Episode has no usable media")
     if episode.publish_status == EpisodePublishStatus.DW_PROCESSING.value:
         raise HTTPException(status_code=422, detail="Episode media is still processing on Daily Wire")
-    _ensure_not_drm_protected(episode)
+    _ensure_downloadable(episode)
 
     profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.SHOW)
     redownload_when_final = (
@@ -650,7 +653,7 @@ def create_movie_download(
     body: MediaDownloadAPICreate,
 ) -> MovieMediaDownload:
     """Persist a download target for an indexed movie."""
-    _ensure_not_drm_protected(movie)
+    _ensure_downloadable(movie)
     profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.MOVIE)
     if not movie.is_downloadable:
         source_name = get_source(movie.source_key).name
@@ -756,7 +759,7 @@ def create_video_download(
     body: MediaDownloadAPICreate,
 ) -> VideoMediaDownload:
     """Persist a download target for a single video."""
-    _ensure_not_drm_protected(video)
+    _ensure_downloadable(video)
     profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.VIDEO)
     existing: Optional[VideoMediaDownload] = (
         s.query(VideoMediaDownload)

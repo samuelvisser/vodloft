@@ -27,6 +27,7 @@ class VideoAPIRead(SourcedResponse):
     description: Optional[str]
     duration: float
     drm_protected: bool = False
+    needs_subscription: bool = False
     sharing_url: str
     author_name: Optional[str]
     author_url: Optional[str]

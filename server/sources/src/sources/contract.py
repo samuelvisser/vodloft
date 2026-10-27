@@ -107,6 +107,8 @@ class Playback:
     url: str
     metadata: Any = None
     drm_protected: bool = False
+    needs_subscription: bool = False
+    """The Source only plays this to a paying account, which VODLoft does not have."""
     kind: PlaybackKind = PlaybackKind.URL
     command: tuple[str, ...] = ()
 
@@ -139,6 +141,8 @@ class ResolvedLink:
     """The site the link is on, for a Source that serves many sites."""
     drm_protected: bool = False
     """The video is protected by DRM, so it can be added but not downloaded."""
+    needs_subscription: bool = False
+    """The Source only gives the video to a paying account, so it can be added but not downloaded."""
     kind_label: str | None = None
     """What the Source calls this kind of result, such as Channel or Playlist for a show."""
     facts: tuple[str, ...] = ()
@@ -195,6 +199,9 @@ class VideoDetails:
     published_at: datetime | None = None
     drm_protected: bool = False
     """The video is protected by DRM, so it can be added but not downloaded."""
+    needs_subscription: bool = False
+    """The Source only gives the video to a paying account, such as NPO Plus. VODLoft
+    indexes it, but does not download it."""
     season: SeasonRef | None = None
     """The show season a listed episode belongs to, for a Source with real seasons.
     Without one, VODLoft puts the episode in a season per upload year."""
@@ -319,6 +326,8 @@ class Source(ABC):
         EpisodeTag(MAIN_TAG, "Episode", "An episode of the show", main=True),
     )
     """Every tag the Source gives episodes, the main one first."""
+    subscription_name: ClassVar[str | None] = None
+    """What the Source calls the paid subscription some of its videos need, such as NPO Plus."""
     search_label: ClassVar[str | None] = None
     """What the search button names, when that is not the Source's name, such as YouTube for yt-dlp."""
 

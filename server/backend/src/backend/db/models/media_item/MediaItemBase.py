@@ -28,6 +28,10 @@ class MediaItemBase(Base):
     drm_protected: Mapped[bool] = mapped_column(
         default=False, server_default=false(), comment="The media is protected by DRM and cannot be downloaded",
     )
+    needs_subscription: Mapped[bool] = mapped_column(
+        default=False, server_default=false(),
+        comment="The Source only gives the media to a paying account, such as NPO Plus",
+    )
     removed_from_source: Mapped[bool] = mapped_column(
         default=False, server_default=false(), comment="The Source no longer has the media; downloaded files are kept",
     )

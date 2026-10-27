@@ -10,6 +10,7 @@ from .errors import (
     DownloadCancelled,
     DownloadError,
     EncryptedMediaError,
+    SubscriptionRequiredError,
     FfmpegNotFoundError,
     MediaUnavailableError,
 )
@@ -51,6 +52,7 @@ __all__ = [
     "DownloadError",
     "MediaUnavailableError",
     "EncryptedMediaError",
+    "SubscriptionRequiredError",
     "DownloadCancelled",
     "FfmpegNotFoundError",
     "__version__",

@@ -247,3 +247,126 @@ def test_seasons_picked_when_the_show_was_added_get_its_episodes(npo, session):
         ("seizoen-2", 2, 1, 3), ("seizoen-2_2", 3, 2, 2),
     ]
     assert session.query(Episode).filter_by(slug="een-huis-vol_11").one().episode_identifier == "ep.S03E01"
+
+
+def _premium(program, *, free_until=None):
+    """The programme as NPO lists one that needs NPO Plus, possibly after a free window."""
+    restrictions = [{"available": {"from": 0, "till": None}, "isStreamReady": True, "subscriptionType": "premium"}]
+    if free_until is not None:
+        restrictions.append({"available": {"from": 0, "till": free_until}, "isStreamReady": True, "subscriptionType": "free"})
+    return {**program, "restrictions": restrictions}
+
+
+def test_needs_subscription_follows_the_restriction_open_right_now():
+    from sources.npo.source import needs_subscription
+
+    program = _program("een-huis-vol_1", 1, 2, "s2")
+    now = datetime(2026, 10, 27, tzinfo=timezone.utc)
+    assert needs_subscription(program, now) is False
+    assert needs_subscription(_premium(program), now) is True
+    # Free for a while after it was broadcast, then only with NPO Plus. NPO sometimes counts in milliseconds.
+    assert needs_subscription(_premium(program, free_until=int(now.timestamp()) + 60), now) is False
+    assert needs_subscription(_premium(program, free_until=(int(now.timestamp()) + 60) * 1000), now) is False
+    assert needs_subscription(_premium(program, free_until=int(now.timestamp()) - 60), now) is True
+    assert needs_subscription({**program, "restrictions": []}, now) is False
+
+
+def test_programmes_that_need_npo_plus_are_listed_and_not_looked_up(npo):
+    source, client = npo
+    client.programs["s2"] = [_premium(program) for program in client.programs["s2"]]
+    episodes = list(source.list_episodes("https://npo.nl/start/serie/een-huis-vol", known=frozenset()))
+    assert {e.slug: (e.needs_subscription, e.drm_protected) for e in episodes} == {
+        "een-huis-vol_3": (True, False), "een-huis-vol_2": (True, False), "een-huis-vol_1": (True, False),
+        "een-huis-vol_12": (False, True), "een-huis-vol_11": (False, True),
+    }
+    # Only the free season's two ends asked for a stream.
+    assert client.stream_requests == ["NCRV_een-huis-vol_12", "NCRV_een-huis-vol_11"]
+    assert source.subscription_name == "NPO Plus"
+
+
+def test_a_programme_that_needs_npo_plus_resolves_and_plays_as_such(npo):
+    source, client = npo
+    client.programs["s2"] = [_premium(program) for program in client.programs["s2"]]
+    link = source.resolve("https://npo.nl/start/afspelen/een-huis-vol_2")
+    assert (link.needs_subscription, link.drm_protected) == (True, False)
+    assert source.video_details("https://npo.nl/start/afspelen/een-huis-vol_2").needs_subscription is True
+    playback = source.video_playback(slug="een-huis-vol_2", url="https://npo.nl/start/afspelen/een-huis-vol_2")
+    assert playback.needs_subscription is True
+    assert client.stream_requests == []
+
+
+def test_episodes_that_need_npo_plus_are_stored_but_not_planned(npo, session):
+    from backend.db.models import DownloadProfile, Episode, Show, ShowLocalMediaProfile
+    from task_manager.tasks.helpers.listed_shows import index_listed_show
+    from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
+
+    source, client = npo
+    client.programs["s2"] = [_premium(program) for program in client.programs["s2"]]
+    client.protected = set()
+    show = Show(
+        uuid="uuid-huis", slug="een-huis-vol", source_key="npo", title="Een huis vol",
+        sharing_url="https://npo.nl/start/serie/een-huis-vol/afleveringen", membership_level="FREE",
+        type="series", episode_identifier="seasonal", author_name="NCRV", author_slug="ncrv",
+    )
+    session.add(show)
+    session.commit()
+    index_listed_show(session, show_id=show.id, source=source)
+    assert {e.slug: e.needs_subscription for e in session.query(Episode)} == {
+        "een-huis-vol_1": True, "een-huis-vol_2": True, "een-huis-vol_3": True,
+        "een-huis-vol_11": False, "een-huis-vol_12": False,
+    }
+    local = ShowLocalMediaProfile(slug="shows", name="Shows", preferred_format="format_1080p",
+                                  output_template="/downloads/{{ show_title }}/{{ episode_title }}.ext")
+    profile = DownloadProfile(
+        show=show, local_media_profile=local, enable_profile=True, ep_id_type_list=["ep"],
+        download_with_countdown=False, redownload_final=False, download_days_in_past=0,
+        download_episode_count=0, delete_older_episodes=False,
+    )
+    session.add_all([local, profile])
+    session.flush()
+    profile.seasons = list(show.seasons)
+    assert sorted(e.slug for e in get_download_profile_episodes(session, profile)) == ["een-huis-vol_11", "een-huis-vol_12"]
+
+
+def test_the_background_migration_marks_stored_programmes_that_need_npo_plus(npo, session, monkeypatch):
+    import asyncio
+    import importlib
+
+    from backend.db.models import Episode, Show, Video
+    from task_manager.tasks.helpers.listed_shows import index_listed_show
+
+    migration = importlib.import_module("backend.db.background_migrations.versions.5e2b8c71d0a4_npo_plus_labels")
+    source, client = npo
+    show = Show(
+        uuid="uuid-huis", slug="een-huis-vol", source_key="npo", title="Een huis vol",
+        sharing_url="https://npo.nl/start/serie/een-huis-vol/afleveringen", membership_level="FREE",
+        type="series", episode_identifier="seasonal", author_name="NCRV", author_slug="ncrv",
+    )
+    session.add(show)
+    session.add(Video(
+        uuid="uuid-video", type="video", source_key="npo", slug="een-huis-vol_2", title="Een huis vol",
+        sharing_url="https://npo.nl/start/afspelen/een-huis-vol_2", duration=0.0,
+    ))
+    session.commit()
+    # Indexed by an older VODLoft, before NPO started asking for NPO Plus.
+    index_listed_show(session, show_id=show.id, source=source)
+    client.programs["s2"] = [_premium(program) for program in client.programs["s2"]]
+
+    bind = session.get_bind()
+    monkeypatch.setattr(migration, "get_session", lambda: sessionmaker(bind=bind)())
+    monkeypatch.setattr(migration, "NpoClient", lambda: client)
+
+    class Context:
+        def raise_if_cancelled(self):
+            pass
+
+        def update_progress(self, *args):
+            pass
+
+    session.commit()
+    asyncio.run(migration.migrate(Context()))
+    session.expire_all()
+    assert {e.slug for e in session.query(Episode).filter_by(needs_subscription=True)} == {
+        "een-huis-vol_1", "een-huis-vol_2", "een-huis-vol_3",
+    }
+    assert session.query(Video).one().needs_subscription is True

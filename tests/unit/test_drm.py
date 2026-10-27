@@ -81,6 +81,30 @@ def test_a_protected_video_is_stored_but_cannot_be_downloaded(session):
     assert (exc.value.status_code, exc.value.detail) == (422, "Protected by DRM, cannot be downloaded")
 
 
+def test_a_video_that_needs_a_subscription_cannot_be_downloaded(session):
+    from dataclasses import replace
+
+    from fastapi import HTTPException
+
+    from backend.api.endpoints.media_downloads.service import create_video_download
+    from backend.api.models.media_download import MediaDownloadAPICreate
+    from backend.api.models.video import VideoAPIRead
+    from backend.db.models import VideoLocalMediaProfile
+    from backend.services.videos import index_video
+
+    video, _ = index_video(session, "npo", replace(_details(), needs_subscription=True))
+    assert VideoAPIRead.model_validate(video).needs_subscription is True
+    profile = VideoLocalMediaProfile(
+        slug="videos", name="Videos", preferred_format="format_1080p",
+        output_template="/downloads/videos/{{ title }} [{{ slug }}].ext",
+    )
+    session.add(profile)
+    session.flush()
+    with pytest.raises(HTTPException) as exc:
+        create_video_download(session, video, MediaDownloadAPICreate(local_media_profile_id=profile.id))
+    assert (exc.value.status_code, exc.value.detail) == (422, "Needs NPO Plus, cannot be downloaded")
+
+
 def test_automatic_downloads_skip_protected_episodes(session):
     from backend.db.models import Show, ShowLocalMediaProfile
     from backend.db.models.download_profile import DownloadProfile

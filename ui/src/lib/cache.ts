@@ -134,6 +134,7 @@ function compactEpisodes(data: EpisodeReadView[]): EpisodeReadView[] {
     title: episode.title,
     publishStatus: episode.publishStatus,
     drmProtected: episode.drmProtected,
+    needsSubscription: episode.needsSubscription,
     removedFromSource: episode.removedFromSource,
     thumbnailLandscapePath: episode.thumbnailLandscapePath ?? null,
     thumbnailPortraitPath: episode.thumbnailPortraitPath ?? null,

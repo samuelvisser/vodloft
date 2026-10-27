@@ -17,6 +17,7 @@ import {getErrorMessageFromResponse} from '../../utils/helpers'
 import '../episode/EpisodePage.css'
 import {siteName} from '../../lib/siteName'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
+import {SubscriptionBadge, SubscriptionNotice} from '../../components/common/NeedsSubscription'
 
 function formatDuration(seconds: number) {
     if (!seconds) return null
@@ -56,6 +57,8 @@ export default function VideoPage() {
     const downloadByProfileId = new Map<number, MediaDownloadViewRead>(
         (downloads ?? []).map((download) => [download.localMediaProfileId, download]),
     )
+    // Media protected by DRM or only given to subscribers cannot be downloaded.
+    const locked = video.drmProtected || video.needsSubscription
     const downloadStateError = (profiles === undefined ? profilesError : null)
         ?? (!hasDownloadState ? downloadsError : null)
     const cover = toImageUrl(video.thumbnailLandscapePath || video.backgroundImagePath)
@@ -151,6 +154,7 @@ export default function VideoPage() {
                     <div className="episode-summary" aria-label="Video metadata">
                         <SourceBadge sourceKey={video.sourceKey}/>
                         {video.drmProtected && <DrmBadge/>}
+                        {video.needsSubscription && <SubscriptionBadge sourceKey={video.sourceKey}/>}
                         {video.authorName && (
                             <>
                                 <span className="episode-summary-separator" aria-hidden="true"/>
@@ -198,23 +202,24 @@ export default function VideoPage() {
                 <div className="episode-downloads" aria-labelledby="video-downloads-title">
                     <h2 id="video-downloads-title">Downloads</h2>
                     {video.drmProtected && <DrmNotice/>}
-                    {!video.drmProtected && downloadStateError && (
+                    {!video.drmProtected && video.needsSubscription && <SubscriptionNotice sourceKey={video.sourceKey}/>}
+                    {!locked && downloadStateError && (
                         <div className="form-error-card" role="alert">
                             Could not load download status: {downloadStateError.message}
                         </div>
                     )}
-                    {!video.drmProtected && !downloadStateError && profiles === undefined && (
+                    {!locked && !downloadStateError && profiles === undefined && (
                         <div role="status" aria-busy="true" className="episode-downloads-loading">
                             Loading download options…
                         </div>
                     )}
-                    {!video.drmProtected && !downloadStateError && profiles !== undefined && !videoProfiles?.length && (
+                    {!locked && !downloadStateError && profiles !== undefined && !videoProfiles?.length && (
                         <p>
                             No Video Local Media Profiles yet.{' '}
                             <Link to="/add-local-media-profile?type=video">Add one</Link> to download this video.
                         </p>
                     )}
-                    {!video.drmProtected && !downloadStateError && !!videoProfiles?.length && (
+                    {!locked && !downloadStateError && !!videoProfiles?.length && (
                         <div role="list" aria-label="Available downloads per Local Media Profile">
                             {videoProfiles.map((profile) => {
                                 const download = downloadByProfileId.get(profile.id)

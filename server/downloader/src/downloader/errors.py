@@ -17,6 +17,10 @@ class EncryptedMediaError(DownloadError):
     """The HLS stream is encrypted; this downloader does not support DRM."""
 
 
+class SubscriptionRequiredError(DownloadError):
+    """The Source only gives the media to a paying account, which VODLoft does not have."""
+
+
 class DownloadCancelled(DownloadError):
     """The download was cancelled through the should_cancel callback."""
 

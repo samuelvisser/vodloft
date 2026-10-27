@@ -44,6 +44,8 @@ export const SourceReadSchema = z.object({
     domains: z.array(z.string()),
     features: z.array(z.string()),
     searchLabel: z.string().nullable().optional(),
+    /** What the Source calls the subscription some of its videos need, such as NPO Plus. */
+    subscriptionName: z.string().nullable().optional(),
 })
 export type SourceRead = z.infer<typeof SourceReadSchema>
 
@@ -60,6 +62,7 @@ export const ResolvedLinkReadSchema = z.object({
     showUrl: z.string().nullable(),
     site: z.string().nullable(),
     drmProtected: z.boolean(),
+    needsSubscription: z.boolean().optional().default(false),
     preview: z.object({
         title: z.string(),
         description: z.string().nullable(),
@@ -83,6 +86,7 @@ export const SearchResultReadSchema = z.object({
     showUrl: z.string().nullable(),
     kindLabel: z.string().nullable().optional(),
     facts: z.array(z.string()).optional(),
+    needsSubscription: z.boolean().optional(),
 })
 export type SearchResultRead = z.infer<typeof SearchResultReadSchema>
 

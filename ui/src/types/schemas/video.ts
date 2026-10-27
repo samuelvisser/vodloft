@@ -12,6 +12,7 @@ export const VideoReadSchema = z.looseObject({
     description: z.string().nullable(),
     duration: z.number(),
     drmProtected: z.boolean(),
+    needsSubscription: z.boolean().optional().default(false),
     sharingUrl: z.string(),
     authorName: z.string().nullable(),
     authorUrl: z.string().nullable(),
