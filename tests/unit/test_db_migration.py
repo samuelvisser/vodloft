@@ -9,7 +9,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "a7e4c2d91b35"
+HEAD_REVISION = "c41e7a9d3f58"
+VODLOFT_REMOVED_FROM_SOURCE_REVISION = "a7e4c2d91b35"
 VODLOFT_STORED_NAMES_REVISION = "f4abb559e3ab"
 VODLOFT_SOURCE_IDENTITY_REVISION = "65b6125a39bb"
 VODLOFT_SCHEMA_NAMES_REVISION = "a23bae59a781"
@@ -248,7 +249,8 @@ def test_migration_history_has_one_head(migration_database):
     )
 
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == VODLOFT_STORED_NAMES_REVISION
+    assert script.get_revision(HEAD_REVISION).down_revision == VODLOFT_REMOVED_FROM_SOURCE_REVISION
+    assert script.get_revision(VODLOFT_REMOVED_FROM_SOURCE_REVISION).down_revision == VODLOFT_STORED_NAMES_REVISION
     assert script.get_revision(VODLOFT_STORED_NAMES_REVISION).down_revision == VODLOFT_SOURCE_IDENTITY_REVISION
     assert script.get_revision(VODLOFT_SOURCE_IDENTITY_REVISION).down_revision == VODLOFT_SCHEMA_NAMES_REVISION
     assert script.get_revision(VODLOFT_SCHEMA_NAMES_REVISION).down_revision == VODLOFT_UNIFIED_DOWNLOAD_PROFILES_REVISION

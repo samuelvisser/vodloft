@@ -121,7 +121,7 @@ def test_resolve_stops_at_the_first_source_that_recognises_the_link(client):
     response = client.post("/api/resolve", json={"url": "stub.example/watch/clip-1"})
     assert response.status_code == 200
     body = response.json()
-    assert body["source"] == {"id": "stub", "name": "Stub Video", "domains": ["stub.example"], "features": [], "searchLabel": None}
+    assert body["source"] == {"id": "stub", "name": "Stub Video", "domains": ["stub.example"], "features": [], "searchLabel": None, "subscriptionName": None}
     assert body["kind"] == "movie"
     assert body["slug"] == "clip-1"
     assert body["preview"]["title"] == "Stub clip-1"
@@ -299,7 +299,7 @@ def test_a_source_with_search_is_searched_by_name(client, monkeypatch):
         "results": [{
             "kind": "show", "slug": "clips", "url": "https://stub.example/show/clips", "title": "clip show",
             "description": None, "imageUrl": None, "authorName": None, "showSlug": None, "showUrl": None,
-            "kindLabel": "Channel", "facts": ["3 videos"],
+            "kindLabel": "Channel", "facts": ["3 videos"], "needsSubscription": False,
         }],
         "notice": {
             "badge": "Search via stub", "text": "Answered by the stub", "tone": "neutral",

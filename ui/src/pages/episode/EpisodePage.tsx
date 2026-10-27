@@ -19,6 +19,7 @@ import './EpisodePage.css'
 import {faIcon} from '../../icons/faIcon'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
 import {RemovedBadge} from '../../components/common/RemovedFromSource'
+import {SubscriptionBadge, SubscriptionNotice} from '../../components/common/NeedsSubscription'
 
 
 const OPERATION_STARTING_MESSAGE = 'This task is starting...'
@@ -141,6 +142,8 @@ export default function EpisodePage() {
         || publishStatus === 'published_final'
         || publishStatus === EpisodePublishStatus.publishedFinal
     )
+    // Media protected by DRM or only given to subscribers cannot be downloaded.
+    const locked = episode.drmProtected || episode.needsSubscription
     const downloadStateError = (profiles === undefined ? profilesError : null)
         ?? (!hasDownloadState ? downloadsError : null)
 
@@ -263,6 +266,7 @@ export default function EpisodePage() {
                             {statusLabel}
                         </span>
                         {episode.drmProtected && <DrmBadge/>}
+                        {episode.needsSubscription && <SubscriptionBadge sourceKey={episode.sourceKey}/>}
                         {episode.removedFromSource && <RemovedBadge/>}
                         <span className="episode-summary-separator" aria-hidden="true"/>
                         <span className="episode-summary-item">
@@ -292,23 +296,24 @@ export default function EpisodePage() {
                     <div className="episode-downloads" aria-labelledby="episode-downloads-title">
                         <h2 id="episode-downloads-title">Downloads</h2>
                         {episode.drmProtected && <DrmNotice/>}
-                        {!episode.drmProtected && downloadStateError && (
+                        {!episode.drmProtected && episode.needsSubscription && <SubscriptionNotice sourceKey={episode.sourceKey}/>}
+                        {!locked && downloadStateError && (
                             <div className="form-error-card" role="alert">
                                 Could not load download status: {downloadStateError.message}
                             </div>
                         )}
-                        {!episode.drmProtected && !downloadStateError && profiles === undefined && (
+                        {!locked && !downloadStateError && profiles === undefined && (
                             <div role="status" aria-busy="true" className="episode-downloads-loading">
                                 Loading download options…
                             </div>
                         )}
-                        {!episode.drmProtected && !downloadStateError && profiles !== undefined && !showProfiles?.length && (
+                        {!locked && !downloadStateError && profiles !== undefined && !showProfiles?.length && (
                             <p>
                                 No Local Media Profiles configured yet.{' '}
                                 <Link to="/add-local-media-profile">Add one</Link> to download this episode.
                             </p>
                         )}
-                        {!episode.drmProtected && !downloadStateError && !!showProfiles?.length && (
+                        {!locked && !downloadStateError && !!showProfiles?.length && (
                             <div role="list" aria-label="Available downloads per Local Media Profile">
                                 {showProfiles.map((profile) => {
                                     const download = downloadByProfileId.get(profile.id)

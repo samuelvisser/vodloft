@@ -90,6 +90,7 @@ class _EpisodeAPIBaseOut(SourcedResponse, _EpisodeIdentifierAPIOut):
     index: int
     publish_status: Union[EpisodePublishStatus, str]
     drm_protected: bool = False
+    needs_subscription: bool = False
     removed_from_source: bool = False
     went_live_date: Optional[datetime] = None
     published_date: Optional[datetime]
@@ -128,6 +129,7 @@ class EpisodeAPIReadView(SourcedResponse, _EpisodeIdentifierAPIOut):
     index: int
     publish_status: Union[EpisodePublishStatus, str]
     drm_protected: bool = False
+    needs_subscription: bool = False
     removed_from_source: bool = False
     title: str
     slug: str

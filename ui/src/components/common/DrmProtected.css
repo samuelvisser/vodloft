@@ -16,12 +16,21 @@
     background: #4b5563;
 }
 
+.subscription-badge {
+    background: #5b21b6;
+}
+
 .drm-badge-cover {
     position: absolute;
     top: 8px;
     left: 8px;
     z-index: 2;
     box-shadow: 0 1px 4px rgb(0 0 0 / 30%);
+}
+
+.subscription-notice {
+    border-color: rgba(91, 33, 182, 0.3);
+    background: rgba(124, 58, 237, 0.08);
 }
 
 .drm-notice {
@@ -47,6 +56,11 @@
     .removed-badge {
         background: #d1d5db;
         color: #111827;
+    }
+
+    .subscription-badge {
+        background: #c4b5fd;
+        color: #2e1065;
     }
 
     .drm-notice {

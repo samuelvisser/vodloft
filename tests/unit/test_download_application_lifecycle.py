@@ -146,3 +146,23 @@ def test_drm_marks_the_media_and_stops_retrying(library, monkeypatch):
         download = session.get(MediaDownloadBase, download_id)
         assert download.media.drm_protected is True
         assert download.automatic_retry_suppressed is True
+
+
+def test_a_subscription_failure_marks_the_media_and_stops_retrying(library, monkeypatch):
+    from backend.db.models.media_download import MediaDownloadBase
+    from downloader import SubscriptionRequiredError
+    from task_manager.tasks import download_adapter
+    factory, (download_id, _) = library
+
+    def prepare(session, _id, tracker):
+        raise SubscriptionRequiredError('NPO Start only gives this to NPO Plus subscribers')
+    monkeypatch.setattr(download_adapter, 'prepare_download_plan', prepare)
+    with factory() as session:
+        result = download_adapter.run_download(session, media_download_id=download_id)
+    assert result.outcome == 'failed'
+    assert 'needs a subscription' in result.summary
+    with factory() as session:
+        download = session.get(MediaDownloadBase, download_id)
+        assert download.media.needs_subscription is True
+        assert download.media.drm_protected is False
+        assert download.automatic_retry_suppressed is True

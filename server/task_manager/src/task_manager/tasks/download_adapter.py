@@ -22,7 +22,7 @@ from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from config import get_settings
 from sources.pacing import RequestCancelled, request_context
-from downloader import DownloadCancelled, EncryptedMediaError
+from downloader import DownloadCancelled, EncryptedMediaError, SubscriptionRequiredError
 from downloader.capacity import resources
 from downloader.coordinator import execute_download_plan
 from downloader.lifecycle import (
@@ -87,6 +87,16 @@ def _mark_drm_protected(session: Session, media_download_id: int) -> bool:
     if download is None:
         return False
     download.media.drm_protected = True
+    download.automatic_retry_suppressed = True
+    session.commit()
+    return True
+
+
+def _mark_needs_subscription(session: Session, media_download_id: int) -> bool:
+    download = session.get(MediaDownloadBase, media_download_id)
+    if download is None:
+        return False
+    download.media.needs_subscription = True
     download.automatic_retry_suppressed = True
     session.commit()
     return True
@@ -226,6 +236,8 @@ def run_download(
         if isinstance(exc, EncryptedMediaError) and _mark_drm_protected(session, media_download_id):
             # Retrying cannot help; the item now shows it cannot be downloaded.
             return TaskResult(summary=f"{title} is protected by DRM and cannot be downloaded", outcome="failed")
+        if isinstance(exc, SubscriptionRequiredError) and _mark_needs_subscription(session, media_download_id):
+            return TaskResult(summary=f"{title} needs a subscription and cannot be downloaded", outcome="failed")
         raise
     finally:
         if execution is not None:

@@ -12,6 +12,7 @@ import ShowTypeFilter, {
 } from '../components/common/ShowTypeFilter'
 import SourceBadge from '../components/Source/SourceBadge'
 import {DrmBadge} from '../components/common/DrmProtected'
+import {SubscriptionBadge} from '../components/common/NeedsSubscription'
 import SourceFilter, {matchesSourceFilter} from '../components/Source/SourceFilter'
 import {useMediaDownloadsView, useMovies, useShowsView, useVideos} from '../lib/queries'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
@@ -274,7 +275,7 @@ export default function LibraryPage() {
                                         }
                                         {duration && <span className="video-card-duration">{duration}</span>}
                                         <DownloadStateBadge download={latestVideoDownload(downloads, video.id)}/>
-                                        {video.drmProtected && <DrmBadge onCover/>}
+                                        {video.drmProtected ? <DrmBadge onCover/> : video.needsSubscription && <SubscriptionBadge sourceKey={video.sourceKey} onCover/>}
                                     </span>
                                     <span className="movie-poster-title">{video.title}</span>
                                     {video.authorName && <span className="movie-poster-meta">{video.authorName}</span>}

@@ -10,6 +10,7 @@ import {addVideo, resolveLink, useMovies, useShows, useSources, useVideos} from 
 import {linkTarget, type MediaLinkTarget} from '../lib/sourceControls'
 import {ResolvedLinkRead, SourceFeature, SourceRead, searchName, sourceHas} from '../types/schemas/source'
 import {DrmNotice} from '../components/common/DrmProtected'
+import {SubscriptionNotice} from '../components/common/NeedsSubscription'
 import {ClearInputButton} from '../components/common/ClearInputButton'
 
 type AddMediaPageProps = {
@@ -236,6 +237,7 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
                             <p className="add-media-preview-description">{link.preview.description}</p>
                         )}
                         {link.drmProtected && <DrmNotice/>}
+                        {!link.drmProtected && link.needsSubscription && <SubscriptionNotice sourceKey={link.source.id}/>}
                         {target ? (
                             <div className="add-media-preview-actions">
                                 <button className="btn btn-primary" type="button" onClick={proceed} disabled={addingVideo}>

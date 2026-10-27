@@ -91,6 +91,31 @@ def stream_protected(stream_link: dict) -> bool:
     return bool(stream.get("drm")) or "/package/drm" in urlsplit(url).path
 
 
+def _instant(value) -> float | None:
+    """NPO gives availability windows in seconds, and sometimes in milliseconds."""
+    if not isinstance(value, (int, float)):
+        return None
+    return value / 1000 if value > 100_000_000_000 else float(value)
+
+
+def needs_subscription(program: dict, now: datetime | None = None) -> bool:
+    """Whether NPO only gives the programme to NPO Plus subscribers right now.
+
+    Each restriction says for which window the programme is available to whom,
+    ``free`` or ``premium``. A programme with a free window open right now is free.
+    """
+    moment = (now or datetime.now(timezone.utc)).timestamp()
+    current = []
+    for restriction in program.get("restrictions") or []:
+        if not isinstance(restriction, dict):
+            continue
+        available = restriction.get("available") if isinstance(restriction.get("available"), dict) else {}
+        start, end = _instant(available.get("from")), _instant(available.get("till"))
+        if (start is None or start <= moment) and (end is None or moment < end):
+            current.append(restriction.get("subscriptionType"))
+    return "premium" in current and "free" not in current
+
+
 class NpoSource(Source):
     """NPO Start, the Dutch public broadcaster's catalogue."""
 
@@ -98,6 +123,7 @@ class NpoSource(Source):
     name = "NPO Start"
     domains = ("npo.nl",)
     features = frozenset({Feature.SHOWS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.SEARCH})
+    subscription_name = "NPO Plus"
 
     def __init__(self, client: NpoClient | None = None):
         self._client = client or NpoClient()
@@ -105,6 +131,9 @@ class NpoSource(Source):
     def _protected(self, program: dict) -> bool | None:
         """Whether the programme is protected by DRM, or None when NPO will not say right now,
         such as for a programme that is not out yet or needs a subscription."""
+        if needs_subscription(program):
+            # NPO gives no stream to an anonymous player for it, so asking would only fail.
+            return None
         product_id = program.get("productId")
         if not product_id or not program.get("slug"):
             return None
@@ -128,6 +157,7 @@ class NpoSource(Source):
             author_url=series_url(series["slug"]) if series.get("slug") else None,
             published_at=_timestamp(program),
             drm_protected=drm_protected,
+            needs_subscription=needs_subscription(program),
             season=season,
             episode_number=_number(program.get("programKey")),
         )
@@ -178,6 +208,7 @@ class NpoSource(Source):
             show_slug=series.get("slug") if in_series else None,
             show_url=series_url(series["slug"]) if in_series else None,
             drm_protected=drm_protected,
+            needs_subscription=video.needs_subscription,
         )
 
     def search(self, query: str) -> SearchResults:
@@ -232,6 +263,7 @@ class NpoSource(Source):
         rest is taken to match. Otherwise each programme is looked up. A clear
         programme that turns out to be protected is marked when it is downloaded.
         """
+        programs = [program for program in programs if not needs_subscription(program)]
         if not programs:
             return {}
         ends = [programs[0], programs[-1]] if len(programs) > 1 else [programs[0]]
@@ -259,6 +291,8 @@ class NpoSource(Source):
     def video_playback(self, *, slug: str, url: str) -> Playback:
         parsed = parse_link(url)
         program = self._client.program_detail(parsed[1] if parsed else slug)
+        if needs_subscription(program):
+            return Playback(url=program_url(program.get("slug") or slug), needs_subscription=True)
         if not program.get("productId"):
             raise NpoError("NPO Start has no stream for this programme")
         stream_link = self._client.stream_link(program["productId"], program_url(program["slug"]))
