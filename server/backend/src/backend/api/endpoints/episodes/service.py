@@ -87,6 +87,7 @@ def _episode_view_stmt(show_slug: str, season_id: int | None = None):
             Episode.dw_episode_number.label("dw_episode_number"),
             Episode.publish_status.label("publish_status"),
             Episode.drm_protected.label("drm_protected"),
+            Episode.removed_from_source.label("removed_from_source"),
             Episode.title.label("title"),
             Episode.slug.label("slug"),
             Episode.thumbnail_landscape_path.label("thumbnail_landscape_path"),

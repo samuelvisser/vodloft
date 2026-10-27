@@ -15,10 +15,16 @@ such as a YouTube Short, counts on its own across the show: short.1, short.2.
 A new episode is numbered after the episodes VODLoft already has, so existing
 file names never change. Numbering follows upload order, so the episodes are
 saved together once the Source has listed them all.
+
+A Source with ``Feature.CATALOGUE_REFRESH`` also keeps the episodes VODLoft
+has up to date: their titles, descriptions and pictures, and whether the
+Source still has them. An episode the Source no longer has keeps its
+downloaded files and is not downloaded again until it is back.
 """
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
@@ -30,7 +36,7 @@ from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
 from backend.types.show_types import EpisodeIdentifier
 from backend.utils.helpers import generate_uuid
-from sources import MAIN_TAG, Source, VideoDetails
+from sources import MAIN_TAG, ItemRef, Source, VideoDetails
 from .episodes.events import queue_episode_status_events
 from .general import datetime_to_string
 from .progress import update_progress
@@ -230,3 +236,59 @@ def add_listed_episodes(s: Session, *, show_id: int, found: list[VideoDetails], 
             new_status=EpisodePublishStatus.PUBLISHED_FINAL, was_created=True,
         )
     return len(created)
+
+
+@dataclass(frozen=True)
+class RefreshCounts:
+    updated: int = 0
+    removed: int = 0
+    returned: int = 0
+
+
+def refresh_listed_show(s: Session, *, show_id: int, source: Source) -> RefreshCounts:
+    """Bring the show's episodes up to date with what the Source says about them now.
+
+    File names never change, so a new title only shows in VODLoft and in files
+    downloaded from now on.
+    """
+    show = s.get(Show, show_id)
+    if show is None:
+        return RefreshCounts()
+    url = show.sharing_url
+    items = [
+        ItemRef(slug, item_url or "")
+        for slug, item_url in s.execute(
+            select(Episode.source_slug, Episode.sharing_url).where(Episode.show_id == show_id, Episode.source_slug.is_not(None))
+        )
+    ]
+    if not items:
+        return RefreshCounts()
+    # No transaction stays open while the Source looks videos up.
+    s.rollback()
+    refresh = source.refresh_items(url, items)
+    updated = removed = returned = 0
+    for episode in s.scalars(select(Episode).where(Episode.show_id == show_id)):
+        if episode.source_slug in refresh.removed:
+            if not episode.removed_from_source:
+                episode.removed_from_source = True
+                removed += 1
+            continue
+        details = refresh.details.get(episode.source_slug)
+        if details is None:
+            continue
+        if episode.removed_from_source:
+            episode.removed_from_source = False
+            returned += 1
+        changes = {"title": details.title, "description": details.description}
+        if details.image_url:
+            changes |= {"thumbnail_landscape_path": details.image_url, "background_image_path": details.image_url}
+        changed = False
+        for name, value in changes.items():
+            if value is not None and getattr(episode, name) != value:
+                setattr(episode, name, value)
+                changed = True
+        updated += changed
+    s.commit()
+    if removed or returned:
+        logger.info("'%s': %d episodes no longer at the Source, %d back", show.title, removed, returned)
+    return RefreshCounts(updated=updated, removed=removed, returned=returned)

@@ -18,6 +18,7 @@ import {formatDate, formatDurationMinutes} from "../../utils/formatting";
 import './EpisodePage.css'
 import {faIcon} from '../../icons/faIcon'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
+import {RemovedBadge} from '../../components/common/RemovedFromSource'
 
 
 const OPERATION_STARTING_MESSAGE = 'This task is starting...'
@@ -262,6 +263,7 @@ export default function EpisodePage() {
                             {statusLabel}
                         </span>
                         {episode.drmProtected && <DrmBadge/>}
+                        {episode.removedFromSource && <RemovedBadge/>}
                         <span className="episode-summary-separator" aria-hidden="true"/>
                         <span className="episode-summary-item">
                             <FontAwesomeIcon icon={faIcon('fass', 'calendar')} aria-hidden="true"/>

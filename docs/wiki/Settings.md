@@ -148,7 +148,7 @@ These settings are available under **Settings → Automation**.
 | `newEpisodeSchedule.quickCheckCronEnabled` | `VL_NEW_EPISODE_SCHEDULE__QUICK_CHECK_CRON_ENABLED` | `true` | Enables quick checks for new videos in yt-dlp shows. |
 | `newEpisodeSchedule.quickCheckCron` | `VL_NEW_EPISODE_SCHEDULE__QUICK_CHECK_CRON` | `*/5 * * * *` | Wakes the quick check. Each show is checked as often as the YouTube API quota allows, and never more often than `youtubeApi.minCheckIntervalMinutes`. |
 | `newEpisodeSchedule.fullRescanCronEnabled` | `VL_NEW_EPISODE_SCHEDULE__FULL_RESCAN_CRON_ENABLED` | `true` | Enables the full re-scan of shows with quick checks. |
-| `newEpisodeSchedule.fullRescanCron` | `VL_NEW_EPISODE_SCHEDULE__FULL_RESCAN_CRON` | `0 4 * * *` | Lists shows with quick checks in full once a day, to catch anything a quick check missed. |
+| `newEpisodeSchedule.fullRescanCron` | `VL_NEW_EPISODE_SCHEDULE__FULL_RESCAN_CRON` | `0 4 * * *` | Lists shows with quick checks in full once a day, to catch anything a quick check missed, and refreshes their episodes (see [[Shows-and-Library#renamed-and-removed-videos]]). |
 | `newEpisodeSchedule.monitorPendingEpisodeCronEnabled` | `VL_NEW_EPISODE_SCHEDULE__MONITOR_PENDING_EPISODE_CRON_ENABLED` | `true` | Enables recurring monitoring for episodes that are not final yet. |
 | `newEpisodeSchedule.monitorPendingEpisodeCron` | `VL_NEW_EPISODE_SCHEDULE__MONITOR_PENDING_EPISODE_CRON` | `*/2 * * * *` | Rechecks known episodes that are scheduled, live, processing, or otherwise not final. |
 | `newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled` | `VL_NEW_EPISODE_SCHEDULE__MONITOR_NO_USABLE_MEDIA_EPISODE_CRON_ENABLED` | `true` | Enables recurring checks for episodes without usable media. |

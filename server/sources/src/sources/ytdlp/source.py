@@ -12,7 +12,7 @@ from config import get_settings
 from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
-    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodeTag, ItemRef, RssEpisodeType, ApiQuotaShare, ApiStatus, Feature, LinkKind, Playback, PlaybackKind, ProgramStatus,
+    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, Feature, LinkKind, Playback, PlaybackKind, ProgramStatus,
     ResolvedLink, ShowDetails, Source, SourceProblem, VideoDetails, link_host, on_domain,
 )
 from .. import pacing, ytdlp_runner as runner
@@ -150,7 +150,7 @@ class YtDlpSource(Source):
     domains = (ANY_DOMAIN,)
     features = frozenset({
         Feature.SHOWS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.API_KEY,
-        Feature.QUICK_CHECK,
+        Feature.QUICK_CHECK, Feature.CATALOGUE_REFRESH,
     })
     episode_tags = _YOUTUBE_TAGS
 
@@ -431,6 +431,59 @@ class YtDlpSource(Source):
                 details[video.slug] = video
         for item in others:
             details[item.slug] = self._look_up(item.url)
+        return details
+
+    def refresh_items(self, url: str, items: Sequence[ItemRef]) -> ItemRefresh:
+        """YouTube videos through the API, 50 a unit; the rest, or a batch the API could not answer, from yt-dlp's listing.
+
+        Only the API can say a video is gone: it leaves deleted and private
+        videos out of its answer. A video missing from yt-dlp's listing may
+        just be on a tab or page it did not list, so it stays as it is.
+        """
+        details: dict[str, VideoDetails] = {}
+        removed: set[str] = set()
+        youtube = [item.slug for item in items if _is_youtube(item.url)]
+        catalogue = self._catalogue(adding=False) if youtube else None
+        listed = [item.slug for item in items] if catalogue is None else [item.slug for item in items if not _is_youtube(item.url)]
+        if catalogue is not None:
+            for start in range(0, len(youtube), MAX_RESULTS):
+                batch = youtube[start:start + MAX_RESULTS]
+                try:
+                    found = {item["id"]: item for item in catalogue.videos(batch)}
+                except YouTubeApiError as exc:
+                    logger.info("Refreshing %d videos with yt-dlp, because the YouTube API could not: %s", len(batch), exc)
+                    listed += batch
+                    continue
+                for video_id in batch:
+                    if video_id in found:
+                        details[video_id] = mapping.video(found[video_id], short=False)
+                    else:
+                        removed.add(video_id)
+        if listed:
+            details.update(self._refresh_from_listing(url, frozenset(listed)))
+        return ItemRefresh(details=details, removed=frozenset(removed))
+
+    def _refresh_from_listing(self, url: str, wanted: frozenset[str]) -> dict[str, VideoDetails]:
+        """Titles from the show's flat listing, which takes one request a page instead of one a video.
+
+        The listing has no reliable description or picture, so those are kept.
+        """
+        details: dict[str, VideoDetails] = {}
+        for listing_url in _listing_urls(url):
+            try:
+                listing = runner.run_json("--flat-playlist", listing_url)
+            except runner.YtDlpError as exc:
+                logger.info("Not refreshing from %s: %s", listing_url, exc)
+                continue
+            for entry in listing.get("entries") or []:
+                if not isinstance(entry, dict) or not entry.get("id") or not entry.get("title"):
+                    continue
+                slug = video_slug(entry)
+                entry_url = entry.get("url") or entry.get("webpage_url")
+                if slug in wanted and entry_url and entry["title"] not in _UNAVAILABLE_TITLES:
+                    details.setdefault(slug, VideoDetails(
+                        slug=slug, url=entry_url, title=entry["title"], description=entry.get("description") or None,
+                    ))
         return details
 
     def quick_check_minutes(self, shows: Sequence[tuple[str, int]]) -> int:
