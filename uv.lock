@@ -71,7 +71,7 @@ wheels = [
 
 [[package]]
 name = "backend"
-version = "0.5.0"
+version = "0.1.0"
 source = { editable = "server/backend" }
 dependencies = [
     { name = "alembic" },
@@ -226,7 +226,7 @@ wheels = [
 
 [[package]]
 name = "config"
-version = "0.1.5"
+version = "0.1.0"
 source = { editable = "server/config" }
 dependencies = [
     { name = "pydantic" },
@@ -243,7 +243,7 @@ requires-dist = [
 
 [[package]]
 name = "controller"
-version = "0.2.4"
+version = "0.1.0"
 source = { editable = "server/controller" }
 dependencies = [
     { name = "apscheduler" },
@@ -316,7 +316,7 @@ wheels = [
 
 [[package]]
 name = "downloader"
-version = "2.0.1"
+version = "0.1.0"
 source = { editable = "server/downloader" }
 
 [[package]]
@@ -850,7 +850,7 @@ wheels = [
 
 [[package]]
 name = "task-manager"
-version = "1.4.1"
+version = "0.1.0"
 source = { editable = "server/task_manager" }
 dependencies = [
     { name = "apscheduler" },
