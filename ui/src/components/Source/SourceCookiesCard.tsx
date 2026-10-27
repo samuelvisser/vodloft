@@ -35,7 +35,12 @@ export default function SourceCookiesCard({source}: {source: SourceRead}) {
     return (
         <div className="source-setting">
             <div className="source-setting-copy">
-                <h4>Cookies file</h4>
+                <h4>
+                    Cookies file{' '}
+                    {cookies?.status && (
+                        <span className={`youtube-api-state ${cookies.status.ok ? 'is-ok' : 'is-problem'}`}>{cookies.status.label}</span>
+                    )}
+                </h4>
                 <p>
                     {source.cookiesHelp ?? (
                         <>
@@ -46,6 +51,9 @@ export default function SourceCookiesCard({source}: {source: SourceRead}) {
                     )}
                     {' '}{cookies?.hasCookies ? 'A cookies file is in use.' : 'No cookies file is in use.'}
                 </p>
+                {cookies?.status?.detail && (
+                    <p className={cookies.status.ok ? 'youtube-api-ok' : 'source-setting-error'}>{cookies.status.detail}</p>
+                )}
                 {error && <p className="source-setting-error" role="alert">{error}</p>}
             </div>
             <div className="source-setting-actions">

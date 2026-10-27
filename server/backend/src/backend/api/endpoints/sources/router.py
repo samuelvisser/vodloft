@@ -102,7 +102,7 @@ def update_program(source_id: str):
 
 @router.get("/sources/{source_id}/cookies", response_model=CookiesAPIRead)
 def cookies(source_id: str):
-    return CookiesAPIRead(has_cookies=_source(source_id, Feature.COOKIES).has_cookies())
+    return _cookies(_source(source_id, Feature.COOKIES))
 
 
 @router.put("/sources/{source_id}/cookies", response_model=CookiesAPIRead)
@@ -113,13 +113,19 @@ def save_cookies(source_id: str, body: CookiesAPIUpdate):
         source.save_cookies(body.content.encode())
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return CookiesAPIRead(has_cookies=True)
+    return _cookies(source)
 
 
 @router.delete("/sources/{source_id}/cookies", response_model=CookiesAPIRead)
 def remove_cookies(source_id: str):
-    _source(source_id, Feature.COOKIES).remove_cookies()
-    return CookiesAPIRead(has_cookies=False)
+    source = _source(source_id, Feature.COOKIES)
+    source.remove_cookies()
+    return _cookies(source)
+
+
+def _cookies(source: Source) -> CookiesAPIRead:
+    has_cookies = source.has_cookies()
+    return CookiesAPIRead(has_cookies=has_cookies, status=source.cookies_status() if has_cookies else None)
 
 
 def _api_key_rejected(exc: ApiKeyRejected) -> HTTPException:

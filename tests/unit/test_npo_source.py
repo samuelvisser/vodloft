@@ -508,3 +508,31 @@ def test_the_npo_account_decides_whether_npo_plus_downloads(npo, signed_in):
         raise NpoError("NPO Start could not be reached")
     client.session = unreachable
     assert account.status(client, refresh=True).subscription is True
+
+
+def test_the_cookies_file_says_what_it_signs_in_as(npo, signed_in):
+    from sources.npo import account
+
+    source, client = npo
+    source.save_cookies(COOKIES.encode())
+    status = source.cookies_status()
+    assert (status.label, status.ok) == ("NPO Plus", True)
+    assert status.detail == "Signed in with NPO Plus. The sign-in lasts until 26 November 2099."
+
+    client.account = {"user": {"name": "Samuël"}, "hasSubscription": False}
+    account.status(client, refresh=True)
+    assert (source.cookies_status().label, source.cookies_status().ok) == ("No NPO Plus", False)
+    client.account = {}
+    account.status(client, refresh=True)
+    assert source.cookies_status().label == "Signed out"
+
+
+def test_the_cookies_endpoint_reports_the_npo_account(npo, signed_in, monkeypatch):
+    from backend.api.endpoints.sources import router
+
+    source, _ = npo
+    monkeypatch.setattr(router, "_source", lambda source_id, feature: source)
+    source.save_cookies(COOKIES.encode())
+    answer = router.cookies("npo")
+    assert answer.has_cookies is True and answer.status.label == "NPO Plus"
+    assert router.remove_cookies("npo").status is None

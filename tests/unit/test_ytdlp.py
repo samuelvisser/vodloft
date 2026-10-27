@@ -333,10 +333,10 @@ def test_the_program_and_cookies_endpoints(client, tool_sources):
     assert failed.status_code == 502
     assert "release server said no" in failed.json()["detail"]
 
-    assert client.get("/api/sources/tool/cookies").json() == {"hasCookies": False}
-    assert client.put("/api/sources/tool/cookies", json={"content": "a\tb"}).json() == {"hasCookies": True}
+    assert client.get("/api/sources/tool/cookies").json() == {"hasCookies": False, "status": None}
+    assert client.put("/api/sources/tool/cookies", json={"content": "a\tb"}).json() == {"hasCookies": True, "status": None}
     assert client.put("/api/sources/tool/cookies", json={"content": "nope"}).status_code == 422
-    assert client.delete("/api/sources/tool/cookies").json() == {"hasCookies": False}
+    assert client.delete("/api/sources/tool/cookies").json() == {"hasCookies": False, "status": None}
 
     assert client.get("/api/sources/plain/program").status_code == 404
     assert client.put("/api/sources/plain/cookies", json={"content": "a\tb"}).status_code == 404

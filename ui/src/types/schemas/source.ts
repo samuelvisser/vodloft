@@ -171,7 +171,11 @@ export const SourceProblemReadSchema = z.object({
 })
 export type SourceProblemRead = z.infer<typeof SourceProblemReadSchema>
 
-export const CookiesReadSchema = z.object({hasCookies: z.boolean()})
+export const CookiesReadSchema = z.object({
+    hasCookies: z.boolean(),
+    /** What the cookies file signs in as, for a Source that can tell. */
+    status: z.object({label: z.string(), ok: z.boolean(), detail: z.string().nullable()}).nullable().optional(),
+})
 export type CookiesRead = z.infer<typeof CookiesReadSchema>
 
 /** A show at a Source with listed episodes, shaped like the fields of a new show. */

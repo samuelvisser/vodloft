@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 
 from ..contract import (
     Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, SearchResults, SeasonRef, ShowDetails, Source,
-    SourceProblem, VideoDetails,
+    CookiesStatus, SourceProblem, VideoDetails,
 )
 from .. import ytdlp_runner as runner
 from . import account
@@ -360,6 +360,19 @@ class NpoSource(Source):
 
     def has_cookies(self) -> bool:
         return account.has_cookies()
+
+    def cookies_status(self) -> CookiesStatus | None:
+        status = account.status(self._client)
+        if status is None:
+            return None
+        if not status.verified:
+            return CookiesStatus("Not checked yet", ok=False, detail="npo.nl could not be reached to check the sign-in.")
+        if not status.signed_in:
+            return CookiesStatus("Signed out", ok=False, detail="This cookies file no longer signs in to NPO.")
+        until = f" The sign-in lasts until {status.expires_at:%d %B %Y}." if status.expires_at else ""
+        if not status.subscription:
+            return CookiesStatus("No NPO Plus", ok=False, detail=f"Signed in, but this NPO account has no NPO Plus.{until}")
+        return CookiesStatus("NPO Plus", ok=True, detail=f"Signed in with NPO Plus.{until}")
 
     def save_cookies(self, content: bytes) -> None:
         account.save_cookies(content)

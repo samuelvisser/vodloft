@@ -260,6 +260,15 @@ class ProgramStatus:
 
 
 @dataclass(frozen=True)
+class CookiesStatus:
+    """What the Source's cookies file signs in as, shown next to it in the settings."""
+
+    label: str
+    ok: bool
+    detail: str | None = None
+
+
+@dataclass(frozen=True)
 class SourceProblem:
     """Something about a Source the user should fix, shown under Needs attention on Home."""
 
@@ -436,6 +445,10 @@ class Source(ABC):
 
     def remove_cookies(self) -> None:
         raise NotImplementedError(f"{self.name} takes no cookies file")
+
+    def cookies_status(self) -> CookiesStatus | None:
+        """What the stored cookies file signs in as, for a Source that can tell."""
+        return None
 
     @property
     def download_streams(self) -> int | None:

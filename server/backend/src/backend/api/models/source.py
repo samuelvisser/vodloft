@@ -89,8 +89,15 @@ class ShowDetailsAPIRead(ResponseBase):
     seasons: list[ShowDetailsSeasonAPIRead] = Field(default_factory=list)
 
 
+class CookiesStatusAPIRead(ResponseBase):
+    label: str
+    ok: bool
+    detail: Optional[str] = None
+
+
 class CookiesAPIRead(ResponseBase):
     has_cookies: bool
+    status: Optional[CookiesStatusAPIRead] = None
 
 
 class EpisodeTagAPIRead(ResponseBase):

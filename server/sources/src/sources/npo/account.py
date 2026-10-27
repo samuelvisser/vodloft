@@ -65,6 +65,8 @@ class AccountStatus:
     subscription: bool
     expires_at: datetime | None = None
     checked_at: float = 0.0
+    verified: bool = True
+    """False while npo.nl has not answered yet, and the cookies are only trusted."""
 
 
 _CHECK_SECONDS = 30 * 60
@@ -89,7 +91,7 @@ def status(client, *, refresh: bool = False) -> AccountStatus | None:
         session = client.session()
     except Exception as exc:  # noqa: BLE001 - an unreachable npo.nl must not hide the sign-in
         logger.info("Could not check the NPO sign-in: %s", exc)
-        return _status or AccountStatus(signed_in=True, subscription=True)
+        return _status or AccountStatus(signed_in=True, subscription=True, verified=False)
     # An anonymous visitor gets an empty session; NPO names the subscription at the
     # top of a signed-in one, and some versions inside its user.
     user = session.get("user") if isinstance(session.get("user"), dict) else {}
