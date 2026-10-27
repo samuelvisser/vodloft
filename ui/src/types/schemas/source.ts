@@ -16,6 +16,7 @@ export const SourceFeature = {
     PROGRAM_UPDATES: 'program_updates',
     COOKIES: 'cookies',
     API_KEY: 'api_key',
+    QUICK_CHECK: 'quick_check',
 } as const
 export type SourceFeatureValue = typeof SourceFeature[keyof typeof SourceFeature]
 

@@ -47,6 +47,8 @@ from task_manager.scheduler.operations import complete_operation, queue_operatio
 from task_manager.tasks.helpers.episodes.same_episode import PENDING_EPISODE_PUBLISH_STATUSES
 from .operations import (
     FileWatcherCronOperation,
+    FullRescanCronOperation,
+    QuickCheckCronOperation,
     FindEpisodesCronOperation,
     MonitorNoUsableMediaCronOperation,
     MonitorPendingEpisodesCronOperation,
@@ -645,6 +647,8 @@ def save_ui_settings(body: SettingsAPIUpdate) -> SettingsAPIRead:
 
 _CRON_OPERATION_FACTORIES = {
     "find-episodes": FindEpisodesCronOperation,
+    "quick-check": QuickCheckCronOperation,
+    "full-rescan": FullRescanCronOperation,
     "monitor-no-usable-media": MonitorNoUsableMediaCronOperation,
     "verify-downloads": VerifyDownloadsCronOperation,
     "file-watcher": FileWatcherCronOperation,

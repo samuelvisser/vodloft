@@ -50,6 +50,10 @@ const SchedulerSettingsSchema = z.object({
 const TrackNewEpisodeScheduleSchema = z.object({
     findEpisodesCronEnabled: z.boolean(),
     findEpisodesCron: z.string(),
+    quickCheckCronEnabled: z.boolean(),
+    quickCheckCron: z.string(),
+    fullRescanCronEnabled: z.boolean(),
+    fullRescanCron: z.string(),
     monitorPendingEpisodeCronEnabled: z.boolean(),
     monitorPendingEpisodeCron: z.string(),
     monitorNoUsableMediaEpisodeCronEnabled: z.boolean(),
@@ -191,6 +195,8 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
     }),
     newEpisodeSchedule: TrackNewEpisodeScheduleSchema.extend({
         findEpisodesCron: cronExpression,
+        quickCheckCron: cronExpression,
+        fullRescanCron: cronExpression,
         monitorPendingEpisodeCron: cronExpression,
         monitorNoUsableMediaEpisodeCron: cronExpression,
         metadataRefreshIntervals,
@@ -235,6 +241,8 @@ const CRON_SERVER_ERRORS = {
 
 export const SettingsServerErrors = createServerErrorMapper({
     'values.newEpisodeSchedule.findEpisodesCron': CRON_SERVER_ERRORS,
+    'values.newEpisodeSchedule.quickCheckCron': CRON_SERVER_ERRORS,
+    'values.newEpisodeSchedule.fullRescanCron': CRON_SERVER_ERRORS,
     'values.newEpisodeSchedule.monitorPendingEpisodeCron': CRON_SERVER_ERRORS,
     'values.newEpisodeSchedule.monitorNoUsableMediaEpisodeCron': CRON_SERVER_ERRORS,
     'values.downloadSettings.verifyDownloadsCron': CRON_SERVER_ERRORS,
@@ -268,6 +276,10 @@ export const SETTINGS_FIELD_PATHS = [
     'scheduler.retryBackoffSeconds',
     'newEpisodeSchedule.findEpisodesCronEnabled',
     'newEpisodeSchedule.findEpisodesCron',
+    'newEpisodeSchedule.quickCheckCronEnabled',
+    'newEpisodeSchedule.quickCheckCron',
+    'newEpisodeSchedule.fullRescanCronEnabled',
+    'newEpisodeSchedule.fullRescanCron',
     'newEpisodeSchedule.monitorPendingEpisodeCronEnabled',
     'newEpisodeSchedule.monitorPendingEpisodeCron',
     'newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled',

@@ -8,13 +8,15 @@ from collections.abc import Iterator, Sequence
 from datetime import datetime, timezone
 from urllib.parse import urlsplit, urlunsplit
 
+from config import get_settings
 from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
-    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodeTag, RssEpisodeType, ApiQuotaShare, ApiStatus, Feature, LinkKind, Playback, PlaybackKind, ProgramStatus,
+    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodeTag, ItemRef, RssEpisodeType, ApiQuotaShare, ApiStatus, Feature, LinkKind, Playback, PlaybackKind, ProgramStatus,
     ResolvedLink, ShowDetails, Source, SourceProblem, VideoDetails, link_host, on_domain,
 )
 from .. import pacing, ytdlp_runner as runner
+from . import youtube_rss
 from .youtube_api import ApiKeyError, Share, YouTubeApiClient, YouTubeApiError, key as api_key, mapping, quota
 from .youtube_api.catalogue import Catalogue
 from .youtube_api.client import MAX_RESULTS
@@ -43,6 +45,8 @@ _LIVE_STATUSES = {"is_live", "is_upcoming", "was_live", "post_live"}
 _PENDING_STATUSES = {"is_live", "is_upcoming"}
 # Without a key, a channel's uploads are listed tab by tab. A channel may have no Shorts or Live tab.
 _CHANNEL_EXTRA_TABS = ("shorts", "streams")
+# How many of a show's newest videos a quick check through yt-dlp looks at, per tab.
+_LATEST_COUNT = 15
 
 
 def show_url(url: str) -> str:
@@ -146,12 +150,15 @@ class YtDlpSource(Source):
     domains = (ANY_DOMAIN,)
     features = frozenset({
         Feature.SHOWS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.API_KEY,
+        Feature.QUICK_CHECK,
     })
     episode_tags = _YOUTUBE_TAGS
 
     def __init__(self):
         self._cache: dict[str, tuple[float, dict]] = {}
         self._cache_lock = threading.Lock()
+        # A channel's handle never changes its ID, so it is looked up once.
+        self._channel_ids: dict[str, str] = {}
 
     def episode_tags_for(self, url: str | None) -> tuple[EpisodeTag, ...]:
         """Shorts and livestreams are YouTube's; other sites only have videos."""
@@ -184,6 +191,26 @@ class YtDlpSource(Source):
             channel_id = self._info(url).get("channel_id")
             ref = mapping.YouTubeRef("channel", str(channel_id), ref.tab) if channel_id else None
         return ref
+
+    def _channel_ref(self, url: str, catalogue: Catalogue | None) -> mapping.YouTubeRef | None:
+        """The channel or playlist a show link points at, with a channel always by its ID.
+
+        A handle or user name is looked up through the API when there is one, and
+        through yt-dlp otherwise, once.
+        """
+        ref = mapping.youtube_ref(url)
+        if ref is None or ref.kind in {"playlist", "channel"}:
+            return ref
+        name = f"{ref.kind}:{ref.value}"
+        if name not in self._channel_ids:
+            if catalogue is not None and ref.kind != "custom":
+                channel_id = catalogue.channel(ref)["id"]
+            else:
+                channel_id = self._info(url).get("channel_id")
+            if not channel_id:
+                return None
+            self._channel_ids[name] = str(channel_id)
+        return mapping.YouTubeRef("channel", self._channel_ids[name], ref.tab)
 
     def _api_show(self, url: str) -> ShowDetails | None:
         """The show through the YouTube Data API, or None to ask yt-dlp."""
@@ -287,7 +314,7 @@ class YtDlpSource(Source):
         catalogue = self._catalogue(adding=not known) if mapping.youtube_ref(show_url(url)) else None
         if catalogue is not None:
             try:
-                ref = self._youtube_ref(show_url(url))
+                ref = self._channel_ref(show_url(url), catalogue)
                 ids = catalogue.video_ids(catalogue.playlist_id(ref)) if ref is not None else None
             except (YouTubeApiError, runner.YtDlpError) as exc:
                 logger.info("Listing %s with yt-dlp, because the YouTube API could not: %s", url, exc)
@@ -350,6 +377,72 @@ class YtDlpSource(Source):
                 seen.add(video_slug(entry))
                 if details := self._look_up(entry_url):
                     yield details
+
+    def latest_items(self, url: str) -> list[ItemRef]:
+        """A YouTube show's 50 newest videos through the API, else its RSS feed's 15, else yt-dlp's listing."""
+        url = show_url(url)
+        if mapping.youtube_ref(url) is None:
+            return self._latest_with_ytdlp(url)
+        catalogue = self._catalogue(adding=False)
+        if catalogue is not None:
+            try:
+                ref = self._channel_ref(url, catalogue)
+                if ref is not None:
+                    return [ItemRef(video_id, mapping.video_url(video_id))
+                            for video_id in catalogue.latest_ids(catalogue.playlist_id(ref))]
+            except (YouTubeApiError, runner.YtDlpError) as exc:
+                logger.info("Checking %s without the YouTube API, because it could not: %s", url, exc)
+        try:
+            ref = self._channel_ref(url, None)
+            if ref is not None:
+                if ref.kind == "channel" and ref.tab == "videos":
+                    ids = youtube_rss.latest_video_ids(channel_id=ref.value)
+                else:
+                    playlist = ref.value if ref.kind == "playlist" else ref.uploads_playlist(ref.value)
+                    ids = youtube_rss.latest_video_ids(playlist_id=playlist)
+                return [ItemRef(video_id, mapping.video_url(video_id)) for video_id in ids]
+        except (youtube_rss.FeedError, runner.YtDlpError) as exc:
+            logger.info("Checking %s with yt-dlp, because its RSS feed could not be read: %s", url, exc)
+        return self._latest_with_ytdlp(url)
+
+    def _latest_with_ytdlp(self, url: str) -> list[ItemRef]:
+        items: dict[str, ItemRef] = {}
+        for index, listing_url in enumerate(_listing_urls(url)):
+            try:
+                listing = runner.run_json("--flat-playlist", "--playlist-items", f"1:{_LATEST_COUNT}", listing_url)
+            except runner.YtDlpError as exc:
+                if index == 0:
+                    raise
+                logger.info("Not checking %s: %s", listing_url, exc)
+                continue
+            for entry in listing.get("entries") or []:
+                entry_url = isinstance(entry, dict) and (entry.get("url") or entry.get("webpage_url"))
+                if entry_url and entry.get("id") and entry.get("title") not in _UNAVAILABLE_TITLES:
+                    items.setdefault(video_slug(entry), ItemRef(video_slug(entry), entry_url))
+        return list(items.values())
+
+    def item_details(self, items: Sequence[ItemRef]) -> dict[str, VideoDetails | None]:
+        details: dict[str, VideoDetails | None] = {item.slug: None for item in items}
+        youtube = [item for item in items if _is_youtube(item.url)]
+        catalogue = self._catalogue(adding=False) if youtube else None
+        others = [item for item in items if item not in youtube] if catalogue is not None else list(items)
+        if catalogue is not None:
+            for video in self._details_from_api(catalogue, [item.slug for item in youtube]):
+                details[video.slug] = video
+        for item in others:
+            details[item.slug] = self._look_up(item.url)
+        return details
+
+    def quick_check_minutes(self, shows: Sequence[tuple[str, int]]) -> int:
+        """With a key, as often as the checks share allows after the daily re-scan; RSS needs no quota."""
+        settings = get_settings().youtube_api
+        counts = [count for url, count in shows if _is_youtube(url)]
+        if api_key.load() is None:
+            return settings.min_check_interval_minutes
+        interval = quota.check_interval_minutes(
+            len(counts), quota.rescan_units(counts), settings.checks_quota, settings.min_check_interval_minutes,
+        )
+        return interval or settings.min_check_interval_minutes
 
     def video_playback(self, *, slug: str, url: str) -> Playback:
         return Playback(url=url, kind=PlaybackKind.YTDLP, command=runner.command())

@@ -37,6 +37,9 @@ class Feature(StrEnum):
     COOKIES = "cookies"
     API_KEY = "api_key"
     """An optional key for the service's own API, which makes catalogue lookups faster."""
+    QUICK_CHECK = "quick_check"
+    """Cheaply finding a listed show's newest items, with ``latest_items`` and
+    ``item_details``, between full scans of the show."""
 
 
 class RssEpisodeType(StrEnum):
@@ -170,6 +173,14 @@ class VideoDetails:
     """The episode's number in its season, when the Source has one."""
     tag: str = MAIN_TAG
     """The key of one of the Source's episode tags."""
+
+
+@dataclass(frozen=True)
+class ItemRef:
+    """One of a show's items, as a quick check finds it: its slug and its link."""
+
+    slug: str
+    url: str
 
 
 @dataclass(frozen=True)
@@ -323,6 +334,20 @@ class Source(ABC):
         scan tries it again.
         """
         raise NotImplementedError(f"{self.name} does not list episodes")
+
+    def latest_items(self, url: str) -> list[ItemRef]:
+        """The show's newest items, newest first. Only Sources with ``Feature.QUICK_CHECK`` implement it."""
+        raise NotImplementedError(f"{self.name} has no quick check")
+
+    def item_details(self, items: Sequence[ItemRef]) -> dict[str, VideoDetails | None]:
+        """Details per item slug. None means the item is gone, private or not
+        finished yet, so a later check tries it again. ``Feature.QUICK_CHECK`` only."""
+        raise NotImplementedError(f"{self.name} has no quick check")
+
+    def quick_check_minutes(self, shows: Sequence[tuple[str, int]]) -> int:
+        """How often each of these shows, given as link and episode count, can
+        get a quick check. ``Feature.QUICK_CHECK`` only."""
+        raise NotImplementedError(f"{self.name} has no quick check")
 
     def search(self, query: str) -> list[ResolvedLink]:
         """Shows and videos whose name matches the query. Only Sources with ``Feature.SEARCH`` implement it."""

@@ -5,12 +5,16 @@ def test_settings_cron_operations_target_the_scheduled_workers():
     from backend.api.endpoints.settings.operations import (
         FileWatcherCronOperation,
         FindEpisodesCronOperation,
+        FullRescanCronOperation,
         MonitorNoUsableMediaCronOperation,
+        QuickCheckCronOperation,
         VerifyDownloadsCronOperation,
     )
 
     cases = (
         (FindEpisodesCronOperation(), "fetch_new_episodes", "show"),
+        (QuickCheckCronOperation(), "quick_check_new_videos", "system"),
+        (FullRescanCronOperation(), "rescan_quick_checked_shows", "show"),
         (MonitorNoUsableMediaCronOperation(), "monitor_no_usable_media_episode", "show"),
         (VerifyDownloadsCronOperation(), "download_profile_worker", "download_profile"),
         (FileWatcherCronOperation(), "file_watcher", "show"),
@@ -46,13 +50,17 @@ def test_settings_cron_operations_have_distinct_system_kinds():
     from backend.api.endpoints.settings.operations import (
         FileWatcherCronOperation,
         FindEpisodesCronOperation,
+        FullRescanCronOperation,
         MonitorNoUsableMediaCronOperation,
         MonitorPendingEpisodesCronOperation,
+        QuickCheckCronOperation,
         VerifyDownloadsCronOperation,
     )
 
     operations = (
         FindEpisodesCronOperation(),
+        QuickCheckCronOperation(),
+        FullRescanCronOperation(),
         MonitorPendingEpisodesCronOperation(()),
         MonitorNoUsableMediaCronOperation(),
         VerifyDownloadsCronOperation(),
@@ -61,6 +69,8 @@ def test_settings_cron_operations_have_distinct_system_kinds():
 
     assert {operation.kind for operation in operations} == {
         "system.cron.find_episodes",
+        "system.cron.quick_check",
+        "system.cron.full_rescan",
         "system.cron.monitor_pending_episodes",
         "system.cron.monitor_no_usable_media",
         "system.cron.verify_downloads",

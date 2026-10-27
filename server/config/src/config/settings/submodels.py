@@ -295,6 +295,24 @@ class TrackNewEpisodeSchedule(SubmodelBase):
         description="Enable the cron schedule for finding new episodes",
     )
     find_episodes_cron: str = Field(..., min_length=1, description="Cron schedule string for finding new episodes")
+    quick_check_cron_enabled: bool = Field(
+        default=True,
+        description="Enable the quick check for new videos in shows whose Source has quick checks",
+    )
+    quick_check_cron: str = Field(
+        default="*/5 * * * *",
+        min_length=1,
+        description="Cron schedule that wakes the quick check; the Source decides how often each show is checked",
+    )
+    full_rescan_cron_enabled: bool = Field(
+        default=True,
+        description="Enable the full re-scan of shows whose Source has quick checks",
+    )
+    full_rescan_cron: str = Field(
+        default="0 4 * * *",
+        min_length=1,
+        description="Cron schedule for the full re-scan of shows whose Source has quick checks",
+    )
     monitor_pending_episode_cron_enabled: bool = Field(
         default=True,
         description="Enable the cron schedule for monitoring pending episodes",

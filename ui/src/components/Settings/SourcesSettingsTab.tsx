@@ -19,6 +19,7 @@ const FEATURE_LABELS: Record<string, string> = {
     [SourceFeature.VIDEOS]: 'Single videos',
     [SourceFeature.EPISODE_LISTS]: 'Episode lists',
     [SourceFeature.SEARCH]: 'Search',
+    [SourceFeature.QUICK_CHECK]: 'Quick checks',
 }
 
 // Features that are settings rather than kinds of content.

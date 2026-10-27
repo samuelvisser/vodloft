@@ -43,6 +43,20 @@ class FindEpisodesCronOperation(_SingleTaskSettingsCronOperation):
     target_resource_type = "show"
 
 
+class QuickCheckCronOperation(_SingleTaskSettingsCronOperation):
+    kind = "system.cron.quick_check"
+    title_text = "Quick check for new videos"
+    task = "quick_check_new_videos"
+    target_resource_type = "system"
+
+
+class FullRescanCronOperation(_SingleTaskSettingsCronOperation):
+    kind = "system.cron.full_rescan"
+    title_text = "Re-scan shows with quick checks"
+    task = "rescan_quick_checked_shows"
+    target_resource_type = "show"
+
+
 class MonitorPendingEpisodesCronOperation(_SettingsCronOperation):
     kind = "system.cron.monitor_pending_episodes"
     title_text = "Monitor pending episodes"

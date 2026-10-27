@@ -143,9 +143,15 @@ async def run_fetch_new_episodes(
     show_slug: Optional[str] = None,
     dry_run: bool = False,
     initial_index: bool = False,
+    quick_checked: bool | None = None,
     progress=None,
 ) -> FetchNewEpisodesResult:
+    """Scan one show, or all shows. ``quick_checked`` limits a scan of all shows to the
+    shows whose Source has quick checks (True), which get a full re-scan once a day,
+    or to the other shows (False)."""
     shows: Sequence[Show] = get_shows(s, show_id=show_id, show_slug=show_slug)
+    if quick_checked is not None and show_id in (None, 0) and not show_slug:
+        shows = [show for show in shows if get_source(show.source_key).has(Feature.QUICK_CHECK) == quick_checked]
     show_ids = [show.id for show in shows]
     lists_episodes = {show.id: get_source(show.source_key).has(Feature.EPISODE_LISTS) for show in shows}
 

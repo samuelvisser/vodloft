@@ -66,7 +66,7 @@ def test_worker_cron_registry_resolves_settings_and_enable_fields():
         "find_episodes_cron_enabled",
     )
 
-    assert len(specs) == 5
+    assert len(specs) == 7
 
 
 def test_runtime_settings_no_longer_repeat_worker_policy_validation():

@@ -78,6 +78,14 @@ class Catalogue:
             if not token:
                 return list(dict.fromkeys(ids))
 
+    def latest_ids(self, playlist_id: str) -> list[str]:
+        """The first page of the playlist: the 50 newest video IDs of an uploads playlist."""
+        page = self._call(lambda share: self._client.playlist_items(playlist_id, share=share))
+        return [
+            item["contentDetails"]["videoId"] for item in page.get("items") or []
+            if (item.get("contentDetails") or {}).get("videoId")
+        ]
+
     def videos(self, ids: list[str]) -> list[dict]:
         """Details of up to 50 videos. A private or deleted one is missing from the answer."""
         assert len(ids) <= MAX_RESULTS
