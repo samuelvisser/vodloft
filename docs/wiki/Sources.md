@@ -9,7 +9,7 @@ VODLoft calls the services it adds media from **Sources**. Each Source knows how
 | Source | Sites | Adds | Account |
 |---|---|---|---|
 | The Daily Wire | dailywire.com | Shows, podcasts, movies and movie extras | Optional, needed for member content |
-| yt-dlp | YouTube and [well over a thousand other sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md), plus any other page with a video | Channels and playlists as shows, single videos | Optional cookies file |
+| yt-dlp | YouTube and [well over a thousand other sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md), plus any other page with a video | Channels and playlists as shows, single videos | Optional cookies file and YouTube API key |
 | NPO Start | npo.nl | Series as shows, programmes outside a series as single videos | Not needed; NPO Plus is not supported yet |
 
 ### The Daily Wire
@@ -22,7 +22,7 @@ The Daily Wire has the most complete support: browse its catalogue, add shows an
 
 yt-dlp also tries any site no other Source claims. Such a link is labelled "Other sites · best effort": it often works for a plain page with one video, but not always.
 
-Sites change often, and yt-dlp has to keep up. VODLoft updates yt-dlp once a week, and **Update now** on its card does it straight away. A cookies file lets yt-dlp reach videos that need a signed-in viewer. See [[Settings#yt-dlp]].
+Sites change often, and yt-dlp has to keep up. VODLoft updates yt-dlp once a week, and **Update now** on its card does it straight away. A cookies file lets yt-dlp reach videos that need a signed-in viewer, and an optional free YouTube Data API key makes YouTube channels much faster to list and check. See [[Settings#yt-dlp]].
 
 ### NPO Start
 

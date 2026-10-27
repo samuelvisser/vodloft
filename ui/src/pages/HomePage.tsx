@@ -10,6 +10,7 @@ import {
     useMovies,
     useRecentlyIndexedEpisodes,
     useShows,
+    useSourceProblems,
 } from '../lib/queries'
 import {
     DEFAULT_DOWNLOAD_STATUS_FILTER,
@@ -56,6 +57,7 @@ export default function HomePage() {
         initialCount: HOME_SECTION_LIMIT,
         batchSize: 50,
     })
+    const sourceProblemsQuery = useSourceProblems()
     const problemsQuery = useMediaDownloadsCollection({
         statuses: PROBLEMS,
         order: 'workflow',
@@ -77,7 +79,8 @@ export default function HomePage() {
         .slice(0, HOME_SECTION_LIMIT)
     const problems = problemsQuery.data
     const metadataProblems = movies?.filter((movie) => movie.releaseDateLookupStatus === 'error') || []
-    const hasAttention = problemsQuery.total > 0 || metadataProblems.length > 0 || profiles?.length === 0
+    const sourceProblems = sourceProblemsQuery.data ?? []
+    const hasAttention = problemsQuery.total > 0 || metadataProblems.length > 0 || profiles?.length === 0 || sourceProblems.length > 0
     const downloadError = (
         downloadsQuery.error
         ?? problemsQuery.error
@@ -92,6 +95,7 @@ export default function HomePage() {
         problemsQuery.total ? `${problemsQuery.total} download problem${problemsQuery.total === 1 ? '' : 's'}` : null,
         metadataProblems.length ? `${metadataProblems.length} movie metadata problem${metadataProblems.length === 1 ? '' : 's'}` : null,
         profiles?.length === 0 ? 'No Local Media Profiles' : null,
+        ...sourceProblems.map((problem) => problem.title),
     ].filter(Boolean).join(' • ')
     const recentActivity = useMemo(() => {
         const activity: RecentActivityItem[] = []
@@ -137,7 +141,7 @@ export default function HomePage() {
                 <FontAwesomeIcon icon={faIcon('fass', hasAttention ? 'triangle-exclamation' : 'circle-check')}/>
                 <div>
                     <strong>{hasAttention ? 'VODLoft needs attention' : 'VODLoft is running normally'}</strong>
-                    <small>{hasAttention ? attentionSummary : 'No download, metadata or profile problems detected'}</small>
+                    <small>{hasAttention ? attentionSummary : 'No download, metadata, profile or Source problems detected'}</small>
                 </div>
             </div>
 
@@ -174,6 +178,11 @@ export default function HomePage() {
                             <FontAwesomeIcon icon={faIcon('fass', 'folder-plus')}/><span><strong>No Local Media Profile</strong><small>Create one before downloading episodes or movies.</small></span><span>Fix</span>
                         </button>
                     )}
+                    {sourceProblems.map((problem) => (
+                        <button className="operation-alert" type="button" key={`source-${problem.sourceKey}-${problem.title}`} onClick={() => navigate('/settings?tab=sources')}>
+                            <FontAwesomeIcon icon={faIcon('fass', 'triangle-exclamation')}/><span><strong>{problem.title}</strong><small>{problem.detail}</small></span><span>Fix</span>
+                        </button>
+                    ))}
                     {metadataProblems.slice(0, HOME_SECTION_LIMIT).map((movie) => (
                         <button className="operation-alert" type="button" key={`movie-metadata-${movie.id}`} onClick={() => navigate(`/movie/${movie.slug}`)}>
                             <FontAwesomeIcon icon={faIcon('fass', 'triangle-exclamation')}/><span><strong>{movie.title} metadata</strong><small>{movie.releaseDateLookupError || 'TMDB release-date lookup failed. Open the movie to retry.'}</small></span><span>View</span>

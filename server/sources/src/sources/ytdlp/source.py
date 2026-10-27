@@ -4,17 +4,18 @@ import logging
 import re
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from datetime import datetime, timezone
 from urllib.parse import urlsplit, urlunsplit
 
 from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
-    ANY_DOMAIN, Feature, LinkKind, Playback, PlaybackKind, ProgramStatus, ResolvedLink, ShowDetails, Source,
-    VideoDetails, link_host, on_domain,
+    ANY_DOMAIN, ApiKeyRejected, ApiQuotaShare, ApiStatus, Feature, LinkKind, Playback, PlaybackKind, ProgramStatus,
+    ResolvedLink, ShowDetails, Source, SourceProblem, VideoDetails, link_host, on_domain,
 )
 from .. import pacing, ytdlp_runner as runner
+from .youtube_api import ApiKeyError, YouTubeApiClient, YouTubeApiError, key as api_key, quota
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +97,9 @@ class YtDlpSource(Source):
     id = "ytdlp"
     name = "yt-dlp"
     domains = (ANY_DOMAIN,)
-    features = frozenset({Feature.SHOWS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES})
+    features = frozenset({
+        Feature.SHOWS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.API_KEY,
+    })
 
     def __init__(self):
         self._cache: dict[str, tuple[float, dict]] = {}
@@ -208,8 +211,6 @@ class YtDlpSource(Source):
     def video_playback(self, *, slug: str, url: str) -> Playback:
         return Playback(url=url, kind=PlaybackKind.YTDLP, command=runner.command())
 
-
-
     def program_status(self) -> ProgramStatus:
         last_update_at, last_update_error = runner.last_update()
         return ProgramStatus(
@@ -232,3 +233,61 @@ class YtDlpSource(Source):
 
     def remove_cookies(self) -> None:
         runner.remove_cookies()
+
+    def problems(self) -> list[SourceProblem]:
+        if api_key.load() is None:
+            return []
+        problems = []
+        if problem := api_key.problem():
+            problems.append(SourceProblem("YouTube API key does not work", problem.message, problem.fix_url))
+        status = quota.status()
+        if status.exhausted:
+            problems.append(SourceProblem(
+                "YouTube API quota used up",
+                "Google says today's quota is used up. VODLoft uses RSS and yt-dlp until it resets at midnight "
+                "Pacific time. Nothing is lost; checks are slower.",
+            ))
+        return problems
+
+    def api_status(self, shows: Sequence[tuple[str, int]] = ()) -> ApiStatus:
+        key = api_key.load()
+        counts = [count for url, count in shows if on_domain(link_host(url), "youtube.com")]
+        status = quota.status()
+        problem = api_key.problem() if key else None
+        return ApiStatus(
+            key_hint=api_key.hint(key) if key else None,
+            shares=tuple(ApiQuotaShare(usage.share.value, usage.used, usage.limit) for usage in status.shares),
+            daily_quota=status.daily_quota,
+            exhausted=status.exhausted,
+            resets_at=status.resets_at,
+            problem=problem.message if problem else None,
+            problem_fix_url=problem.fix_url if problem else None,
+            show_count=len(counts),
+            rescan_units=quota.rescan_units(counts),
+        )
+
+    @staticmethod
+    def _test_key(key: str, *, stored: bool) -> None:
+        try:
+            YouTubeApiClient(key, stored=stored).test()
+        except ApiKeyError as exc:
+            raise ApiKeyRejected(str(exc), exc.fix_url) from exc
+        except YouTubeApiError as exc:
+            # The key may be fine; Google could not say right now.
+            logger.info("Could not test the YouTube API key: %s", exc)
+
+    def save_api_key(self, key: str) -> None:
+        key = key.strip()
+        if not key:
+            raise ApiKeyRejected("Paste an API key")
+        self._test_key(key, stored=False)
+        api_key.save(key)
+
+    def test_api_key(self) -> None:
+        key = api_key.load()
+        if key is None:
+            raise ApiKeyRejected("No API key is set")
+        self._test_key(key, stored=True)
+
+    def remove_api_key(self) -> None:
+        api_key.remove()

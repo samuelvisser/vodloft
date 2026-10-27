@@ -15,6 +15,7 @@ export const SourceFeature = {
     SEARCH: 'search',
     PROGRAM_UPDATES: 'program_updates',
     COOKIES: 'cookies',
+    API_KEY: 'api_key',
 } as const
 export type SourceFeatureValue = typeof SourceFeature[keyof typeof SourceFeature]
 
@@ -94,6 +95,31 @@ export const ProgramStatusReadSchema = z.object({
     lastUpdateError: z.string().nullable(),
 })
 export type ProgramStatusRead = z.infer<typeof ProgramStatusReadSchema>
+
+export const ApiStatusReadSchema = z.object({
+    /** The last characters of the key, or null when no key is set. */
+    keyHint: z.string().nullable(),
+    shares: z.array(z.object({name: z.string(), used: z.number(), limit: z.number()})),
+    dailyQuota: z.number(),
+    /** The service said today's quota is used up. */
+    exhausted: z.boolean(),
+    resetsAt: z.string(),
+    problem: z.string().nullable(),
+    problemFixUrl: z.string().nullable(),
+    /** The shows the key speeds up, and what one full re-scan of them costs. */
+    showCount: z.number(),
+    rescanUnits: z.number(),
+})
+export type ApiStatusRead = z.infer<typeof ApiStatusReadSchema>
+
+export const SourceProblemReadSchema = z.object({
+    sourceKey: z.string(),
+    sourceName: z.string(),
+    title: z.string(),
+    detail: z.string(),
+    fixUrl: z.string().nullable(),
+})
+export type SourceProblemRead = z.infer<typeof SourceProblemReadSchema>
 
 export const CookiesReadSchema = z.object({hasCookies: z.boolean()})
 export type CookiesRead = z.infer<typeof CookiesReadSchema>

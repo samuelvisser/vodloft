@@ -112,6 +112,13 @@ const DownloadStorageInspectionSchema = z.object({
     sameFilesystem: z.boolean().nullable(),
 })
 
+const YouTubeApiSettingsSchema = z.object({
+    dailyQuota: z.number(),
+    checksQuota: z.number(),
+    searchQuota: z.number(),
+    minCheckIntervalMinutes: z.number(),
+})
+
 const FileWatcherSettingsSchema = z.object({
     enabled: z.boolean(),
     scanCronEnabled: z.boolean(),
@@ -132,6 +139,7 @@ export const SettingsValuesSchema = z.object({
     newEpisodeSchedule: TrackNewEpisodeScheduleSchema,
     episodeStatusTiming: EpisodeStatusTimingSchema,
     downloadSettings: DownloadSettingsSchema,
+    youtubeApi: YouTubeApiSettingsSchema,
     fileWatcher: FileWatcherSettingsSchema,
 })
 export type SettingsValues = z.infer<typeof SettingsValuesSchema>
@@ -203,6 +211,15 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
         rssCacheRoot: z.string().trim().min(1, 'An RSS cache folder is required.'),
         rssCacheRetentionSeconds: requiredNumber().int().min(1, 'Must be at least 1 second.'),
     }),
+    youtubeApi: YouTubeApiSettingsSchema.extend({
+        dailyQuota: requiredNumber().int().min(1, 'Must be at least 1.'),
+        checksQuota: requiredNumber().int().min(0, 'Must be 0 or greater.'),
+        searchQuota: requiredNumber().int().min(0, 'Must be 0 or greater.'),
+        minCheckIntervalMinutes: requiredNumber().int().min(10, 'Must be at least 10 minutes.'),
+    }).refine(
+        (value) => value.checksQuota + value.searchQuota <= value.dailyQuota,
+        {message: 'Checks and search together cannot be more than the daily quota.', path: ['searchQuota']},
+    ),
     fileWatcher: FileWatcherSettingsSchema.extend({
         scanCron: cronExpression,
     }),
@@ -278,6 +295,10 @@ export const SETTINGS_FIELD_PATHS = [
     'downloadSettings.filenameRestrictionMode',
     'downloadSettings.remuxVideoToMp4',
     'downloadSettings.ffmpegPath',
+    'youtubeApi.dailyQuota',
+    'youtubeApi.checksQuota',
+    'youtubeApi.searchQuota',
+    'youtubeApi.minCheckIntervalMinutes',
     'fileWatcher.enabled',
     'fileWatcher.scanCronEnabled',
     'fileWatcher.scanCron',

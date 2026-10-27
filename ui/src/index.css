@@ -2075,6 +2075,27 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .source-setting-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .source-setting .btn { white-space: nowrap; }
 @media (max-width: 640px) { .source-setting { flex-direction: column; } .source-setting-actions { justify-content: flex-start; } }
+.youtube-api .source-setting-copy { flex: 1; display: grid; gap: 10px; }
+.youtube-api .source-setting-copy h4 { display: flex; align-items: center; gap: 8px; }
+.youtube-api-state { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 4px; }
+.youtube-api-state.is-ok { background: rgba(34, 197, 94, 0.15); color: var(--success, #16a34a); }
+.youtube-api-state.is-problem { background: rgba(245, 158, 11, 0.18); color: var(--warning, #b45309); }
+.youtube-api-key { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.youtube-api-key .input { flex: 1 1 260px; min-width: 0; }
+.youtube-api .source-setting-error a { color: inherit; font-weight: 600; }
+.youtube-api-ok { color: var(--success, #16a34a) !important; }
+.youtube-api-quota { display: grid; gap: 6px; font-size: 13px; }
+.youtube-api-quota__line { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.youtube-api-quota__line > span:first-child { color: var(--muted); }
+.youtube-api-meter { height: 8px; border-radius: 4px; background: rgba(100, 116, 139, 0.25); overflow: hidden; }
+.youtube-api-meter > span { display: block; height: 100%; background: var(--accent, #3b82f6); }
+.youtube-api-guide summary { cursor: pointer; font-weight: 600; }
+.youtube-api-guide ol { display: grid; gap: 10px; margin: 10px 0; padding-left: 1.4em; }
+.youtube-api-guide li { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.youtube-api-guide li span { flex: 1 1 260px; }
+.youtube-api-guide p { color: var(--muted); }
+.youtube-api-split__label { font-weight: 600; }
+.youtube-api-split__value { padding: 8px 0; }
 .source-feature-list { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 0; padding: 0; list-style: none; }
 .source-domain-table { width: 100%; border-collapse: collapse; }
 .source-domain-table th, .source-domain-table td { padding: 8px 0; text-align: left; border-top: 1px solid rgba(100,116,139,.25); }

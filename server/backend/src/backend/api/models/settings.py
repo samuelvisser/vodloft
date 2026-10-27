@@ -6,7 +6,7 @@ from typing import Any, Literal
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, ValidationInfo, field_validator, model_validator
 from pydantic.alias_generators import to_camel
 from pydantic_core import PydanticCustomError
 
@@ -84,6 +84,10 @@ SettingFieldPath = Literal[
     "downloadSettings.filenameRestrictionMode",
     "downloadSettings.remuxVideoToMp4",
     "downloadSettings.ffmpegPath",
+    "youtubeApi.dailyQuota",
+    "youtubeApi.checksQuota",
+    "youtubeApi.searchQuota",
+    "youtubeApi.minCheckIntervalMinutes",
     "fileWatcher.enabled",
     "fileWatcher.scanCronEnabled",
     "fileWatcher.scanCron",
@@ -143,6 +147,10 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "downloadSettings.filenameRestrictionMode",
     "downloadSettings.remuxVideoToMp4",
     "downloadSettings.ffmpegPath",
+    "youtubeApi.dailyQuota",
+    "youtubeApi.checksQuota",
+    "youtubeApi.searchQuota",
+    "youtubeApi.minCheckIntervalMinutes",
     "fileWatcher.enabled",
     "fileWatcher.scanCronEnabled",
     "fileWatcher.scanCron",
@@ -297,6 +305,21 @@ class DownloadSettingsValue(_SettingsValueModel):
     )(_validate_non_empty_path)
 
 
+class YouTubeApiSettingsValue(_SettingsValueModel):
+    daily_quota: int = Field(ge=1)
+    checks_quota: int = Field(ge=0)
+    search_quota: int = Field(ge=0)
+    min_check_interval_minutes: int = Field(ge=10)
+
+    @field_validator("search_quota")
+    @classmethod
+    def _shares_fit_in_the_daily_quota(cls, value: int, info: ValidationInfo):
+        daily, checks = info.data.get("daily_quota"), info.data.get("checks_quota")
+        if daily is not None and checks is not None and checks + value > daily:
+            raise ValueError("Checks and search together cannot be more than the daily quota")
+        return value
+
+
 class FileWatcherSettingsValue(_SettingsValueModel):
     enabled: bool
     scan_cron_enabled: bool
@@ -325,6 +348,7 @@ class SettingsValues(_SettingsValueModel):
     new_episode_schedule: TrackNewEpisodeScheduleValue
     episode_status_timing: EpisodeStatusTimingValue
     download_settings: DownloadSettingsValue
+    youtube_api: YouTubeApiSettingsValue
     file_watcher: FileWatcherSettingsValue
 
     @field_validator("log_level", mode="before")
@@ -366,6 +390,7 @@ class SettingsValues(_SettingsValueModel):
             new_episode_schedule=TrackNewEpisodeScheduleValue.model_validate(settings.new_episode_schedule),
             episode_status_timing=EpisodeStatusTimingValue.model_validate(settings.episode_status_timing),
             download_settings=DownloadSettingsValue.model_validate(settings.download_settings),
+            youtube_api=YouTubeApiSettingsValue.model_validate(settings.youtube_api),
             file_watcher=FileWatcherSettingsValue.model_validate(settings.file_watcher),
         )
 

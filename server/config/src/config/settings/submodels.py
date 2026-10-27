@@ -224,6 +224,43 @@ class AdminAuthSettings(SubmodelBase):
         return self
 
 
+class YouTubeApiSettings(SubmodelBase):
+    """How VODLoft spends the daily quota of an optional YouTube Data API key.
+
+    The key itself is stored by the yt-dlp Source, next to its cookies file.
+    Google gives a project 10,000 units a day; the split is VODLoft's own.
+    What the checks and search shares leave of the daily total is kept free
+    for adding shows, testing the key and manual refreshes.
+    """
+
+    daily_quota: int = Field(
+        default=10_000,
+        ge=1,
+        description="Units a day Google gives the key's project",
+    )
+    checks_quota: int = Field(
+        default=7_000,
+        ge=0,
+        description="Units a day for quick checks and full re-scans",
+    )
+    search_quota: int = Field(
+        default=2_000,
+        ge=0,
+        description="Units a day for YouTube searches; 0 makes every search use yt-dlp",
+    )
+    min_check_interval_minutes: int = Field(
+        default=10,
+        ge=10,
+        description="Shortest time between two quick checks of the same show",
+    )
+
+    @model_validator(mode="after")
+    def _shares_fit_in_the_daily_quota(self):
+        if self.checks_quota + self.search_quota > self.daily_quota:
+            raise ValueError("The checks and search shares together cannot be more than the daily quota")
+        return self
+
+
 class SchedulerSettings(SubmodelBase):
     enabled: bool = Field(..., description="Enable the internal APScheduler-based scheduler")
     max_workers: int = Field(
