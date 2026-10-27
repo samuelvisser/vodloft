@@ -5,6 +5,7 @@ import {saveSourceDomain, useSourceDomains, useSourceLookup} from '../../lib/que
 import type {SourceDomainRead} from '../../types/schemas/source'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import SimpleSelect from '../common/SimpleSelect'
+import SourceSection from './SourceSection'
 
 function DomainSourceSelect({row, disabled, onChange}: {
     row: SourceDomainRead
@@ -57,18 +58,12 @@ export default function SourceDomainsCard() {
     const rows = (domains ?? []).filter((row) => row.sourceKeys.length > 1)
     if (!loadError && !rows.length) return null
     return (
-        <section className="card source-card" aria-labelledby="source-domains-title">
-            <div className="card-body">
-                <div className="source-card-header">
-                    <h3 id="source-domains-title">Sites</h3>
-                </div>
-                <p className="view-description">
-                    Some sites can be handled by more than one Source. VODLoft asks the chosen Source first, and you
-                    can still pick another one on the Add media page.
-                </p>
-                {loadError && <p className="source-setting-error" role="alert">Could not load sites: {loadError.message}</p>}
-                {error && <p className="source-setting-error" role="alert">{error}</p>}
-            </div>
+        <SourceSection
+            title="Sites"
+            description="Some sites can be handled by more than one Source. VODLoft asks the chosen Source first, and you can still pick another one on the Add media page."
+        >
+            {loadError && <p className="source-setting-error" role="alert">Could not load sites: {loadError.message}</p>}
+            {error && <p className="source-setting-error" role="alert">{error}</p>}
             {rows.length > 0 && (
                 <table className="source-domain-table">
                     <thead>
@@ -90,6 +85,6 @@ export default function SourceDomainsCard() {
                     </tbody>
                 </table>
             )}
-        </section>
+        </SourceSection>
     )
 }

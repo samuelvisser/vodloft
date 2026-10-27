@@ -9,23 +9,31 @@ import type {SelectRegistry} from '../../utils/selectRegistry'
 export function SettingsSection({
     title,
     description,
+    summaryExtra,
     children,
     className,
+    bodyClassName = 'settings-grid',
+    defaultOpen = true,
 }: {
     title: string
     description?: string
+    /** Shown under the description, and still visible when the section is closed. */
+    summaryExtra?: ReactNode
     children: ReactNode
     className?: string
+    bodyClassName?: string
+    defaultOpen?: boolean
 }) {
     return (
-        <details className={`settings-disclosure${className ? ` ${className}` : ''}`} open>
+        <details className={`settings-disclosure${className ? ` ${className}` : ''}`} open={defaultOpen}>
             <summary>
                 <span>
                     <strong>{title}</strong>
                     {description ? <small>{description}</small> : null}
+                    {summaryExtra}
                 </span>
             </summary>
-            <div className="settings-grid settings-disclosure__body">{children}</div>
+            <div className={`${bodyClassName} settings-disclosure__body`}>{children}</div>
         </details>
     )
 }
@@ -39,17 +47,7 @@ export function SettingsDisclosure({
     description: string
     children: ReactNode
 }) {
-    return (
-        <details className="settings-disclosure">
-            <summary>
-                <span>
-                    <strong>{title}</strong>
-                    <small>{description}</small>
-                </span>
-            </summary>
-            <div className="settings-grid settings-disclosure__body">{children}</div>
-        </details>
-    )
+    return <SettingsSection title={title} description={description} defaultOpen={false}>{children}</SettingsSection>
 }
 
 function EnvironmentManagedNote({variable}: {variable: string}) {
