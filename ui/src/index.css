@@ -2034,8 +2034,13 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .add-media-view { max-width: 760px; }
 .add-media-view--onboarding { margin: 0 auto; }
 .add-media-view .view-header .btn { white-space: nowrap; }
-.add-media-form { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; }
-.add-media-form .add-media-input { flex: 1 1 320px; min-width: 0; }
+.add-media-form { display: flex; gap: 8px; align-items: stretch; }
+.add-media-field { position: relative; flex: 1 1 auto; min-width: 0; display: flex; }
+.add-media-form .add-media-input { flex: 1 1 auto; min-width: 0; width: 100%; padding-right: 40px; }
+.add-media-field .clear-input-button { position: absolute; top: 50%; right: 4px; transform: translateY(-50%); }
+/* Same height as the link field, and wide enough for "Looking up…" so it never moves or wraps. */
+.add-media-form .btn { flex: none; min-width: 7.5em; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; }
+.add-media-error { margin: 20px 0 0; }
 .add-media-preview {
   display: flex;
   gap: 16px;
@@ -2104,14 +2109,15 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .source-domain-table th { color: var(--muted); font-weight: 600; font-size: 13px; }
 .source-domain-table thead th { border-top: 0; padding-top: 0; }
 .source-domain-table select { min-width: 180px; max-width: 100%; padding: 6px 8px; border: 1px solid rgba(100,116,139,.4); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
-.add-media-sources { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.add-media-sources { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 14px 0 12px; }
 .add-media-sources > span { color: var(--muted); font-size: 13px; }
 
-.browse-search__hint { flex: none; font-size: 12px; color: var(--muted); }
+/* A Source whose searches cost something searches with a button, like Look up on Add media. */
+.browse-toolbar.browse-toolbar--submit { flex-direction: row; justify-content: flex-start; align-items: stretch; gap: 8px; }
+.browse-search__submit { flex: none; min-width: 7.5em; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; }
 .search-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: -12px 0 18px; font-size: 13px; color: var(--muted); }
 .search-notice__badge { padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; background: rgba(100,116,139,.16); color: var(--text); }
 .search-notice--warning .search-notice__badge { background: rgba(234,88,12,.14); color: #9a3412; }
 @media (prefers-color-scheme: dark) {
   .search-notice--warning .search-notice__badge { background: rgba(253,186,116,.16); color: #fdba74; }
 }
-@media (max-width: 640px) { .browse-search__hint { display: none; } }

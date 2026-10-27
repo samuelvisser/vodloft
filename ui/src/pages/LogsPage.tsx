@@ -3,6 +3,7 @@ import {useEffect, useMemo, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import Switch from 'react-switch'
 import {faIcon} from '../icons/faIcon'
+import {ClearInputButton} from '../components/common/ClearInputButton'
 
 import PageSubtitle from '../components/common/PageSubtitle'
 import SimpleSelect from '../components/common/SimpleSelect'
@@ -89,7 +90,7 @@ export default function LogsPage() {
             </div>
 
             <div className="logs-toolbar">
-                <label className="logs-search">
+                <label className="logs-search has-clear-button">
                     <span className="sr-only">Search logs</span>
                     <FontAwesomeIcon icon={faIcon('fass', 'magnifying-glass')} aria-hidden="true"/>
                     <input
@@ -98,6 +99,7 @@ export default function LogsPage() {
                         onChange={(event) => setSearch(event.target.value)}
                         placeholder="Search logs..."
                     />
+                    {search && <ClearInputButton label="Clear the search" onClear={() => setSearch('')}/>}
                 </label>
                 <div className="logs-level">
                     <label htmlFor="logs-level-select">Level</label>

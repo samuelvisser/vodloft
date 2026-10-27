@@ -138,6 +138,13 @@ def test_resolve_explains_an_unrecognised_link(client, monkeypatch):
     assert "No Source recognises" in response.json()["detail"]
 
 
+def test_a_link_looked_up_with_one_source_names_that_source(client, monkeypatch):
+    monkeypatch.setattr(registry, "_sources", {"stub": StubSource()})
+    response = client.post("/api/resolve", json={"url": "https://stub.example/about", "sourceKey": "stub"})
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Stub Video does not recognise this link"
+
+
 def test_resolve_reports_a_failing_source_as_bad_gateway(client, monkeypatch):
     def broken(url):
         raise RuntimeError("upstream down")
