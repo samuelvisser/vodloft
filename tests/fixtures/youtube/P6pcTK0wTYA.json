@@ -1,0 +1,116 @@
+{
+ "playlist": "UULF",
+ "ytdlp": {
+  "id": "P6pcTK0wTYA",
+  "title": "How to Switch to Linux",
+  "duration": 955,
+  "timestamp": 1793037455,
+  "release_timestamp": null,
+  "upload_date": "20261026",
+  "live_status": "not_live",
+  "media_type": "video",
+  "was_live": false,
+  "availability": "public",
+  "age_limit": 0,
+  "channel_id": "UCXuqSBlHAE6Xw-yeJA0Tunw",
+  "channel": "Linus Tech Tips",
+  "uploader": "Linus Tech Tips",
+  "webpage_url": "https://www.youtube.com/watch?v=P6pcTK0wTYA",
+  "thumbnail": "https://i.ytimg.com/vi/P6pcTK0wTYA/maxresdefault.jpg",
+  "extractor_key": "Youtube",
+  "_type": "video",
+  "description": "Meter is funding the next generation of network engineers with grants of up to $2,000 for courses, certifications, and tools. Apply today: https://meter.com/grants\n\nIf you've ever thought about switching to Linux but have been afraid of learning a new operating system, it's time to stop being afraid"
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "Ap1HEVGbC3s48RjXFOoQuqAjag0",
+  "id": "P6pcTK0wTYA",
+  "snippet": {
+   "publishedAt": "2026-10-26T17:57:35Z",
+   "channelId": "UCXuqSBlHAE6Xw-yeJA0Tunw",
+   "title": "How to Switch to Linux",
+   "description": "Meter is funding the next generation of network engineers with grants of up to $2,000 for courses, certifications, and tools. Apply today: https://meter.com/grants\n\nIf you've ever thought about switching to Linux but have been afraid of learning a new operating system, it's time to stop being afraid! We're here to tell you how to switch from the clutches of Windows into the vast, open, free sea that is Linux. Don't be tepid young one, you got this.\n\nDiscuss on the forum: https://linustechtips.com/topic/1643960-how-to-switch-to-linux/\n\nCheck out the LABS article: https://www.lttlabs.com/articles/2026/08/31/a-guide-to-switching-to-linux-and-grieving-windows\n\nCheck out our Channel Partners:\n\nSecretlab \n- Grab a TITAN Evo ergonomic gaming chair:  https://lmg.gg/secretlabltt\n- Grab an ATLAS ergonomic office chair:  https://lmg.gg/secretlablttatlas\n\nPIA \n- Get the VPN of our choice: https://www.piavpn.com/ltt\n\ndbrand \n- Buy a \"Circuit\" series skin for your device: https://dbrand.com/pcb\n\n► SHOP LTT PRODUCTS: https://lttstore.com\n► GET EXCLUSIVE CONTENT ON FLOATPLANE: https://lmg.gg/lttfloatplane\n► DIVE DEEPER ON THE LTT LABS WEBSITE: https://lmg.gg/labs\n► SPONSORS, AFFILIATES, AND PARTNERS: https://lmg.gg/partners\n\nPurchases made through some store links may provide some compensation to Linus Media Group. Affiliate links powered in part by https://affilimate.com/?aid=ghz1izbpb\n\nLinus Sebastian is an investor in Framework Computer, Inc and HexOS by Eshtek.\n\nCHAPTERS\n---------------------------------------------------\n0:00 Intro\n1:56 Choosing a distro\n3:24 Tools to install Linux\n4:02 Backing up data\n4:38 Installing Linux\n6:02 Where is everything?\n6:36 The file manager\n8:42 Getting apps\n12:20 Drivers\n13:47 YOU DID IT!!\n15:40 Outro",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/P6pcTK0wTYA/default.jpg",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/P6pcTK0wTYA/mqdefault.jpg",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/P6pcTK0wTYA/hqdefault.jpg",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/P6pcTK0wTYA/sddefault.jpg",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/P6pcTK0wTYA/maxresdefault.jpg",
+     "width": 1280,
+     "height": 720
+    },
+    "uhd": {
+     "url": "https://i.ytimg.com/vi/P6pcTK0wTYA/uhddefault.jpg",
+     "width": 3840,
+     "height": 2160
+    }
+   },
+   "channelTitle": "Linus Tech Tips",
+   "tags": [
+    "LTT",
+    "Windows 11",
+    "Windows 10",
+    "Linux",
+    "Gaming",
+    "Computer",
+    "Personal Computer",
+    "PC",
+    "Switch to Linux",
+    "Windows Sucks",
+    "Gadget",
+    "Gaming Computer",
+    "CachyOS",
+    "Bazzite",
+    "Distro",
+    "Ubuntu",
+    "Debian",
+    "Linus",
+    "Linus Torvalds",
+    "Penguin",
+    "Tux"
+   ],
+   "categoryId": "28",
+   "liveBroadcastContent": "none",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "How to Switch to Linux",
+    "description": "Meter is funding the next generation of network engineers with grants of up to $2,000 for courses, certifications, and tools. Apply today: https://meter.com/grants\n\nIf you've ever thought about switching to Linux but have been afraid of learning a new operating system, it's time to stop being afraid! We're here to tell you how to switch from the clutches of Windows into the vast, open, free sea that is Linux. Don't be tepid young one, you got this.\n\nDiscuss on the forum: https://linustechtips.com/topic/1643960-how-to-switch-to-linux/\n\nCheck out the LABS article: https://www.lttlabs.com/articles/2026/08/31/a-guide-to-switching-to-linux-and-grieving-windows\n\nCheck out our Channel Partners:\n\nSecretlab \n- Grab a TITAN Evo ergonomic gaming chair:  https://lmg.gg/secretlabltt\n- Grab an ATLAS ergonomic office chair:  https://lmg.gg/secretlablttatlas\n\nPIA \n- Get the VPN of our choice: https://www.piavpn.com/ltt\n\ndbrand \n- Buy a \"Circuit\" series skin for your device: https://dbrand.com/pcb\n\n► SHOP LTT PRODUCTS: https://lttstore.com\n► GET EXCLUSIVE CONTENT ON FLOATPLANE: https://lmg.gg/lttfloatplane\n► DIVE DEEPER ON THE LTT LABS WEBSITE: https://lmg.gg/labs\n► SPONSORS, AFFILIATES, AND PARTNERS: https://lmg.gg/partners\n\nPurchases made through some store links may provide some compensation to Linus Media Group. Affiliate links powered in part by https://affilimate.com/?aid=ghz1izbpb\n\nLinus Sebastian is an investor in Framework Computer, Inc and HexOS by Eshtek.\n\nCHAPTERS\n---------------------------------------------------\n0:00 Intro\n1:56 Choosing a distro\n3:24 Tools to install Linux\n4:02 Backing up data\n4:38 Installing Linux\n6:02 Where is everything?\n6:36 The file manager\n8:42 Getting apps\n12:20 Drivers\n13:47 YOU DID IT!!\n15:40 Outro"
+   },
+   "defaultAudioLanguage": "en"
+  },
+  "contentDetails": {
+   "duration": "PT15M55S",
+   "dimension": "2d",
+   "definition": "hd",
+   "caption": "false",
+   "licensedContent": true,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "processed",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  }
+ }
+}

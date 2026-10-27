@@ -1,0 +1,92 @@
+{
+ "playlist": "UULV",
+ "ytdlp": {
+  "id": "TxNSSlk__x4",
+  "title": "LG 77\" Wallpaper TV Unboxing [LIVE]",
+  "duration": 1783,
+  "timestamp": 1506369964,
+  "release_timestamp": 1506366145,
+  "upload_date": "20170925",
+  "release_date": "20170925",
+  "live_status": "was_live",
+  "media_type": "livestream",
+  "was_live": true,
+  "availability": "public",
+  "age_limit": 0,
+  "channel_id": "UCBJycsmduvYEL83R_U4JriQ",
+  "channel": "Marques Brownlee",
+  "uploader": "Marques Brownlee",
+  "webpage_url": "https://www.youtube.com/watch?v=TxNSSlk__x4",
+  "thumbnail": "https://i.ytimg.com/vi/TxNSSlk__x4/maxresdefault.jpg",
+  "extractor_key": "Youtube",
+  "_type": "video",
+  "description": "Spoiler: It's huge.\nLG SIGNATURE OLED TV W Product Page : http://geni.us/Mkbhd77W7US\nLG SIGNATURE OLED TV W Retailer Page : http://geni.us/Mkbhd77W7USa"
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "K8sYdzzjuv9GyaZKSauFYxdDm6U",
+  "id": "TxNSSlk__x4",
+  "snippet": {
+   "publishedAt": "2017-09-25T20:06:04Z",
+   "channelId": "UCBJycsmduvYEL83R_U4JriQ",
+   "title": "LG 77\" Wallpaper TV Unboxing [LIVE]",
+   "description": "Spoiler: It's huge.\nLG SIGNATURE OLED TV W Product Page : http://geni.us/Mkbhd77W7US\nLG SIGNATURE OLED TV W Retailer Page : http://geni.us/Mkbhd77W7USa",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/TxNSSlk__x4/default.jpg",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/TxNSSlk__x4/mqdefault.jpg",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/TxNSSlk__x4/hqdefault.jpg",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/TxNSSlk__x4/sddefault.jpg",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/TxNSSlk__x4/maxresdefault.jpg",
+     "width": 1280,
+     "height": 720
+    }
+   },
+   "channelTitle": "Marques Brownlee",
+   "categoryId": "28",
+   "liveBroadcastContent": "none",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "LG 77\" Wallpaper TV Unboxing [LIVE]",
+    "description": "Spoiler: It's huge.\nLG SIGNATURE OLED TV W Product Page : http://geni.us/Mkbhd77W7US\nLG SIGNATURE OLED TV W Retailer Page : http://geni.us/Mkbhd77W7USa"
+   }
+  },
+  "contentDetails": {
+   "duration": "PT29M43S",
+   "dimension": "2d",
+   "definition": "hd",
+   "caption": "false",
+   "licensedContent": false,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "processed",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  },
+  "liveStreamingDetails": {
+   "actualStartTime": "2017-09-25T19:02:25Z",
+   "actualEndTime": "2017-09-25T19:33:25Z"
+  }
+ }
+}

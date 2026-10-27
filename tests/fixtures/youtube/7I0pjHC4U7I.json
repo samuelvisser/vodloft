@@ -1,0 +1,123 @@
+{
+ "playlist": "UULF",
+ "ytdlp": {
+  "id": "7I0pjHC4U7I",
+  "title": "I'm starting a homelab festival (you're invited)",
+  "duration": 133,
+  "timestamp": 1790348438,
+  "release_timestamp": null,
+  "upload_date": "20260925",
+  "live_status": "not_live",
+  "media_type": "video",
+  "was_live": false,
+  "availability": "public",
+  "age_limit": 0,
+  "channel_id": "UCR-DXc1voovS8nhAvccRZhg",
+  "channel": "Jeff Geerling",
+  "uploader": "Jeff Geerling",
+  "webpage_url": "https://www.youtube.com/watch?v=7I0pjHC4U7I",
+  "thumbnail": "https://i.ytimg.com/vi_webp/7I0pjHC4U7I/maxresdefault.webp",
+  "extractor_key": "Youtube",
+  "_type": "video",
+  "description": "REGISTER NOW! https://www.homelabfest.org\n\nHuge thanks to all the sponsors, content creators, and all of *you* who make this possible.\n\nSupport me on Patreon: https://www.patreon.com/geerlingguy\nSponsor me on GitHub: https://github.com/sponsors/geerlingguy\nMerch: https://www.redshirtjeff.com\n2nd Cha"
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "1_9Fw7rumQg3RRbvQY827VotFv0",
+  "id": "7I0pjHC4U7I",
+  "snippet": {
+   "publishedAt": "2026-09-25T15:00:38Z",
+   "channelId": "UCR-DXc1voovS8nhAvccRZhg",
+   "title": "I'm starting a homelab festival (you're invited)",
+   "description": "REGISTER NOW! https://www.homelabfest.org\n\nHuge thanks to all the sponsors, content creators, and all of *you* who make this possible.\n\nSupport me on Patreon: https://www.patreon.com/geerlingguy\nSponsor me on GitHub: https://github.com/sponsors/geerlingguy\nMerch: https://www.redshirtjeff.com\n2nd Channel: https://www.youtube.com/@GeerlingEngineering\n3rd Channel: https://www.youtube.com/@Level2Jeff",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/7I0pjHC4U7I/default.jpg",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/7I0pjHC4U7I/mqdefault.jpg",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/7I0pjHC4U7I/hqdefault.jpg",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/7I0pjHC4U7I/sddefault.jpg",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/7I0pjHC4U7I/maxresdefault.jpg",
+     "width": 1280,
+     "height": 720
+    },
+    "uhd": {
+     "url": "https://i.ytimg.com/vi/7I0pjHC4U7I/uhddefault.jpg",
+     "width": 3840,
+     "height": 2160
+    }
+   },
+   "channelTitle": "Jeff Geerling",
+   "tags": [
+    "homelab",
+    "homelabfest",
+    "festival",
+    "con",
+    "event",
+    "creator",
+    "youtuber",
+    "youtube",
+    "lab",
+    "computers",
+    "networking",
+    "venue",
+    "stl",
+    "saint louis",
+    "st louis",
+    "tech",
+    "network",
+    "sponsor",
+    "participate",
+    "register",
+    "registration",
+    "arch",
+    "st charles",
+    "convention",
+    "community",
+    "table",
+    "booth",
+    "talks"
+   ],
+   "categoryId": "28",
+   "liveBroadcastContent": "none",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "I'm starting a homelab festival (you're invited)",
+    "description": "REGISTER NOW! https://www.homelabfest.org\n\nHuge thanks to all the sponsors, content creators, and all of *you* who make this possible.\n\nSupport me on Patreon: https://www.patreon.com/geerlingguy\nSponsor me on GitHub: https://github.com/sponsors/geerlingguy\nMerch: https://www.redshirtjeff.com\n2nd Channel: https://www.youtube.com/@GeerlingEngineering\n3rd Channel: https://www.youtube.com/@Level2Jeff"
+   },
+   "defaultAudioLanguage": "en-US"
+  },
+  "contentDetails": {
+   "duration": "PT2M14S",
+   "dimension": "2d",
+   "definition": "hd",
+   "caption": "true",
+   "licensedContent": true,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "processed",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  }
+ }
+}

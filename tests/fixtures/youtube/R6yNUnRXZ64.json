@@ -1,0 +1,88 @@
+{
+ "playlist": "UUSH",
+ "ytdlp": {
+  "id": "R6yNUnRXZ64",
+  "title": "iPhone Duo is here",
+  "duration": 70,
+  "timestamp": 1789023742,
+  "release_timestamp": null,
+  "upload_date": "20260910",
+  "live_status": "not_live",
+  "media_type": "short",
+  "was_live": false,
+  "availability": "public",
+  "age_limit": 0,
+  "channel_id": "UCBJycsmduvYEL83R_U4JriQ",
+  "channel": "Marques Brownlee",
+  "uploader": "Marques Brownlee",
+  "webpage_url": "https://www.youtube.com/watch?v=R6yNUnRXZ64",
+  "thumbnail": "https://i.ytimg.com/vi/R6yNUnRXZ64/maxresdefault.jpg",
+  "extractor_key": "Youtube",
+  "_type": "video",
+  "description": "What to know about iPhone Duo"
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "mzRP3QT-zRVRAWBCj0l2j6O5vuY",
+  "id": "R6yNUnRXZ64",
+  "snippet": {
+   "publishedAt": "2026-09-10T07:02:22Z",
+   "channelId": "UCBJycsmduvYEL83R_U4JriQ",
+   "title": "iPhone Duo is here",
+   "description": "What to know about iPhone Duo",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/R6yNUnRXZ64/default.jpg",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/R6yNUnRXZ64/mqdefault.jpg",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/R6yNUnRXZ64/hqdefault.jpg",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/R6yNUnRXZ64/sddefault.jpg",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/R6yNUnRXZ64/maxresdefault.jpg",
+     "width": 1280,
+     "height": 720
+    }
+   },
+   "channelTitle": "Marques Brownlee",
+   "categoryId": "28",
+   "liveBroadcastContent": "none",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "iPhone Duo is here",
+    "description": "What to know about iPhone Duo"
+   },
+   "defaultAudioLanguage": "en"
+  },
+  "contentDetails": {
+   "duration": "PT1M10S",
+   "dimension": "2d",
+   "definition": "hd",
+   "caption": "false",
+   "licensedContent": true,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "processed",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  }
+ }
+}

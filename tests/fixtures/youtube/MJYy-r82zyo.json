@@ -1,0 +1,139 @@
+{
+ "playlist": "UUSH",
+ "ytdlp": {
+  "id": "MJYy-r82zyo",
+  "title": "The AI keyboard: TypeOrTalk",
+  "duration": 79,
+  "timestamp": 1748005246,
+  "release_timestamp": null,
+  "upload_date": "20250523",
+  "live_status": "not_live",
+  "media_type": "short",
+  "was_live": false,
+  "availability": "public",
+  "age_limit": 0,
+  "channel_id": "UCR-DXc1voovS8nhAvccRZhg",
+  "channel": "Jeff Geerling",
+  "uploader": "Jeff Geerling",
+  "webpage_url": "https://www.youtube.com/watch?v=MJYy-r82zyo",
+  "thumbnail": "https://i.ytimg.com/vi/MJYy-r82zyo/maxresdefault.jpg",
+  "extractor_key": "Youtube",
+  "_type": "video",
+  "description": "The TypeOrTalk is a local, private, offline AI-powered keyboard that translates your speech into text. And it's a fine custom mechanical keyboard, too!\n\nIf you want to get notified of any updates, check out: https://typeortalk.com\nAnd Sam's auctioning off a prototype on eBay! Check it out here: http"
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "GMx53we__hePTpWI4rc658e1enw",
+  "id": "MJYy-r82zyo",
+  "snippet": {
+   "publishedAt": "2025-05-23T13:00:46Z",
+   "channelId": "UCR-DXc1voovS8nhAvccRZhg",
+   "title": "The AI keyboard: TypeOrTalk",
+   "description": "The TypeOrTalk is a local, private, offline AI-powered keyboard that translates your speech into text. And it's a fine custom mechanical keyboard, too!\n\nIf you want to get notified of any updates, check out: https://typeortalk.com\nAnd Sam's auctioning off a prototype on eBay! Check it out here: https://www.ebay.com/itm/267259133332\n\nSam paid me nothing for this video, and I'm shipping him back the keyboard now that I'm finished testing it. He and I have been talking (and typing, lol) about this project for a while, and I wanted to show off his project since I thought it was a neat idea and an inspirational project for anyone thinking a project like this is out of reach of an individual!\n\nWhat do you think? Also check out the long form video going over this and a bunch of other CM5 hardware projects!\n\nSupport me on Patreon: https://www.patreon.com/geerlingguy\nSponsor me on GitHub: https://github.com/sponsors/geerlingguy\nMerch: https://www.redshirtjeff.com\n2nd Channel: https://www.youtube.com/@GeerlingEngineering\n3rd Channel: https://www.youtube.com/@Level2Jeff",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/MJYy-r82zyo/default.jpg",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/MJYy-r82zyo/mqdefault.jpg",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/MJYy-r82zyo/hqdefault.jpg",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/MJYy-r82zyo/sddefault.jpg",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/MJYy-r82zyo/maxresdefault.jpg",
+     "width": 1280,
+     "height": 720
+    }
+   },
+   "channelTitle": "Jeff Geerling",
+   "tags": [
+    "typeortalk",
+    "talkortype",
+    "short",
+    "keyboard",
+    "mechanical",
+    "keychron",
+    "switches",
+    "raspberry pi",
+    "pico",
+    "rp2040",
+    "compute module",
+    "cm5",
+    "pi 5",
+    "ai",
+    "whisper",
+    "openai",
+    "llm",
+    "speech",
+    "text",
+    "stt",
+    "translate",
+    "transcribe",
+    "assistant",
+    "key",
+    "easy",
+    "usb",
+    "power mac",
+    "g4",
+    "apple",
+    "mac",
+    "mini",
+    "sbc",
+    "linux",
+    "open source",
+    "design",
+    "prototype",
+    "maker",
+    "hack",
+    "hacky",
+    "useful",
+    "assistance",
+    "disability",
+    "choice",
+    "dictation",
+    "privacy",
+    "private",
+    "local",
+    "cloud",
+    "offline"
+   ],
+   "categoryId": "28",
+   "liveBroadcastContent": "none",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "The AI keyboard: TypeOrTalk",
+    "description": "The TypeOrTalk is a local, private, offline AI-powered keyboard that translates your speech into text. And it's a fine custom mechanical keyboard, too!\n\nIf you want to get notified of any updates, check out: https://typeortalk.com\nAnd Sam's auctioning off a prototype on eBay! Check it out here: https://www.ebay.com/itm/267259133332\n\nSam paid me nothing for this video, and I'm shipping him back the keyboard now that I'm finished testing it. He and I have been talking (and typing, lol) about this project for a while, and I wanted to show off his project since I thought it was a neat idea and an inspirational project for anyone thinking a project like this is out of reach of an individual!\n\nWhat do you think? Also check out the long form video going over this and a bunch of other CM5 hardware projects!\n\nSupport me on Patreon: https://www.patreon.com/geerlingguy\nSponsor me on GitHub: https://github.com/sponsors/geerlingguy\nMerch: https://www.redshirtjeff.com\n2nd Channel: https://www.youtube.com/@GeerlingEngineering\n3rd Channel: https://www.youtube.com/@Level2Jeff"
+   },
+   "defaultAudioLanguage": "en-US"
+  },
+  "contentDetails": {
+   "duration": "PT1M19S",
+   "dimension": "2d",
+   "definition": "hd",
+   "caption": "true",
+   "licensedContent": true,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "processed",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  }
+ }
+}

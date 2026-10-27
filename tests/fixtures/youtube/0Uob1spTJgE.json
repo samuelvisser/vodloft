@@ -1,0 +1,132 @@
+{
+ "playlist": "UUSH",
+ "ytdlp": {
+  "id": "0Uob1spTJgE",
+  "title": "A private AI mini rack with four Framework Desktops",
+  "duration": 83,
+  "timestamp": 1754712301,
+  "release_timestamp": null,
+  "upload_date": "20250809",
+  "live_status": "not_live",
+  "media_type": "short",
+  "was_live": false,
+  "availability": "public",
+  "age_limit": 0,
+  "channel_id": "UCR-DXc1voovS8nhAvccRZhg",
+  "channel": "Jeff Geerling",
+  "uploader": "Jeff Geerling",
+  "webpage_url": "https://www.youtube.com/watch?v=0Uob1spTJgE",
+  "thumbnail": "https://i.ytimg.com/vi/0Uob1spTJgE/maxresdefault.jpg",
+  "extractor_key": "Youtube",
+  "_type": "video",
+  "description": "This mini AI cluster has 512 GB of RAM and four Framework Desktop Mainboards!\n\nVideo with more details: https://www.youtube.com/watch?v=N5xhOqlvRh4\n\nBlog post with build details and test results: https://www.jeffgeerling.com/blog/2025/i-clustered-four-framework-mainboards-test-huge-llms\n\nThanks to F"
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "ydN1sonW7c6y_40VVUP_JPATDRM",
+  "id": "0Uob1spTJgE",
+  "snippet": {
+   "publishedAt": "2025-08-09T04:05:01Z",
+   "channelId": "UCR-DXc1voovS8nhAvccRZhg",
+   "title": "A private AI mini rack with four Framework Desktops",
+   "description": "This mini AI cluster has 512 GB of RAM and four Framework Desktop Mainboards!\n\nVideo with more details: https://www.youtube.com/watch?v=N5xhOqlvRh4\n\nBlog post with build details and test results: https://www.jeffgeerling.com/blog/2025/i-clustered-four-framework-mainboards-test-huge-llms\n\nThanks to Framework for sending over the nodes for testing, and DeskPi for sending the prototype mini rack trays!\n\nSupport me on Patreon: https://www.patreon.com/geerlingguy\nSponsor me on GitHub: https://github.com/sponsors/geerlingguy\nMerch: https://www.redshirtjeff.com\n2nd Channel: https://www.youtube.com/@GeerlingEngineering\n3rd Channel: https://www.youtube.com/@Level2Jeff",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/0Uob1spTJgE/default.jpg",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/0Uob1spTJgE/mqdefault.jpg",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/0Uob1spTJgE/hqdefault.jpg",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/0Uob1spTJgE/sddefault.jpg",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/0Uob1spTJgE/maxresdefault.jpg",
+     "width": 1280,
+     "height": 720
+    }
+   },
+   "channelTitle": "Jeff Geerling",
+   "tags": [
+    "framework",
+    "mainboard",
+    "mini rack",
+    "desktop",
+    "amd",
+    "strix",
+    "halo",
+    "ryzen",
+    "ai",
+    "max",
+    "plus",
+    "395",
+    "artificial",
+    "intelligence",
+    "llm",
+    "large",
+    "language",
+    "model",
+    "inference",
+    "tensor",
+    "layers",
+    "llama",
+    "cpp",
+    "deepseek",
+    "qwen",
+    "code",
+    "cluster",
+    "beowulf",
+    "rpc",
+    "home assistant",
+    "rackmount",
+    "tray",
+    "itx",
+    "mini",
+    "system",
+    "computer",
+    "monitor",
+    "monitoring",
+    "homelab",
+    "server",
+    "enterprise",
+    "exo"
+   ],
+   "categoryId": "28",
+   "liveBroadcastContent": "none",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "A private AI mini rack with four Framework Desktops",
+    "description": "This mini AI cluster has 512 GB of RAM and four Framework Desktop Mainboards!\n\nVideo with more details: https://www.youtube.com/watch?v=N5xhOqlvRh4\n\nBlog post with build details and test results: https://www.jeffgeerling.com/blog/2025/i-clustered-four-framework-mainboards-test-huge-llms\n\nThanks to Framework for sending over the nodes for testing, and DeskPi for sending the prototype mini rack trays!\n\nSupport me on Patreon: https://www.patreon.com/geerlingguy\nSponsor me on GitHub: https://github.com/sponsors/geerlingguy\nMerch: https://www.redshirtjeff.com\n2nd Channel: https://www.youtube.com/@GeerlingEngineering\n3rd Channel: https://www.youtube.com/@Level2Jeff"
+   },
+   "defaultAudioLanguage": "en-US"
+  },
+  "contentDetails": {
+   "duration": "PT1M23S",
+   "dimension": "2d",
+   "definition": "hd",
+   "caption": "true",
+   "licensedContent": true,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "processed",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  }
+ }
+}

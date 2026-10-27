@@ -1,0 +1,88 @@
+{
+ "playlist": "UUSH",
+ "ytdlp": {
+  "id": "uJdjKOBikTE",
+  "title": "This iPhone Duo Animation 👀",
+  "duration": 20,
+  "timestamp": 1788992077,
+  "release_timestamp": null,
+  "upload_date": "20260909",
+  "live_status": "not_live",
+  "media_type": "short",
+  "was_live": false,
+  "availability": "public",
+  "age_limit": 0,
+  "channel_id": "UCBJycsmduvYEL83R_U4JriQ",
+  "channel": "Marques Brownlee",
+  "uploader": "Marques Brownlee",
+  "webpage_url": "https://www.youtube.com/watch?v=uJdjKOBikTE",
+  "thumbnail": "https://i.ytimg.com/vi/uJdjKOBikTE/maxresdefault.jpg",
+  "extractor_key": "Youtube",
+  "_type": "video",
+  "description": ""
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "h7klBFLMsILoOc6tuiu69-RWg_0",
+  "id": "uJdjKOBikTE",
+  "snippet": {
+   "publishedAt": "2026-09-09T22:14:37Z",
+   "channelId": "UCBJycsmduvYEL83R_U4JriQ",
+   "title": "This iPhone Duo Animation 👀",
+   "description": "",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/uJdjKOBikTE/default.jpg",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/uJdjKOBikTE/mqdefault.jpg",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/uJdjKOBikTE/hqdefault.jpg",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/uJdjKOBikTE/sddefault.jpg",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/uJdjKOBikTE/maxresdefault.jpg",
+     "width": 1280,
+     "height": 720
+    }
+   },
+   "channelTitle": "Marques Brownlee",
+   "categoryId": "28",
+   "liveBroadcastContent": "none",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "This iPhone Duo Animation 👀",
+    "description": ""
+   },
+   "defaultAudioLanguage": "en"
+  },
+  "contentDetails": {
+   "duration": "PT20S",
+   "dimension": "2d",
+   "definition": "hd",
+   "caption": "false",
+   "licensedContent": true,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "processed",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  }
+ }
+}

@@ -1,0 +1,128 @@
+{
+ "playlist": "UULF",
+ "ytdlp": {
+  "id": "4l9xU3_36Xs",
+  "title": "Formlabs finally made a cheaper printer",
+  "duration": 1417,
+  "timestamp": 1791982803,
+  "release_timestamp": null,
+  "upload_date": "20261014",
+  "live_status": "not_live",
+  "media_type": "video",
+  "was_live": false,
+  "availability": "public",
+  "age_limit": 0,
+  "channel_id": "UCR-DXc1voovS8nhAvccRZhg",
+  "channel": "Jeff Geerling",
+  "uploader": "Jeff Geerling",
+  "webpage_url": "https://www.youtube.com/watch?v=4l9xU3_36Xs",
+  "thumbnail": "https://i.ytimg.com/vi_webp/4l9xU3_36Xs/maxresdefault.webp",
+  "extractor_key": "Youtube",
+  "_type": "video",
+  "description": "Thanks to Formlabs for providing the Form Studio 1 for this project.\n\nMore info: https://formlabs.com/3d-printers/form-studio-1/?utm_source=youtube&utm_medium=referral&utm_campaign=jeffgeerling-fs1-2026-07-26-global\n\n(Note: The above link is a campaign tracking link, NOT an affiliate link. I do not "
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "vXZZ1NBt05kmcwOXLFjk3spKlKQ",
+  "id": "4l9xU3_36Xs",
+  "snippet": {
+   "publishedAt": "2026-10-14T13:00:03Z",
+   "channelId": "UCR-DXc1voovS8nhAvccRZhg",
+   "title": "Formlabs finally made a cheaper printer",
+   "description": "Thanks to Formlabs for providing the Form Studio 1 for this project.\n\nMore info: https://formlabs.com/3d-printers/form-studio-1/?utm_source=youtube&utm_medium=referral&utm_campaign=jeffgeerling-fs1-2026-07-26-global\n\n(Note: The above link is a campaign tracking link, NOT an affiliate link. I do not participate in any manufacturer affiliate programs, only Amazon Affiliates, as part of my YouTube sponsorship policy.)\n\nOther things I mentioned in this video:\n\n  - GutBomb's MacPicoModem: https://jcm-1.com/product/macpicomodem/\n  - T-Rex model: https://www.printables.com/model/428782-t-rex-skull\n  - Apple ADB Mouse Shell: https://www.thingiverse.com/thing:4545460/comments\n  - Formtest model: https://formlabs.com/blog/measuring-3d-printer-reliability-formtest/\n\nSupport me on Patreon: https://www.patreon.com/geerlingguy\nSponsor me on GitHub: https://github.com/sponsors/geerlingguy\nMerch: https://www.redshirtjeff.com\n2nd Channel: https://www.youtube.com/@GeerlingEngineering\n3rd Channel: https://www.youtube.com/@Level2Jeff\n\nContents:\n\n00:00 - Formlabs Form Studio 1\n01:43 - Accessories and Tanks\n02:54 - No cloud account required\n03:49 - First resin print\n05:36 - Power usage\n05:59 - Dripping, drying, washing, curing\n08:07 - POING!\n08:56 - Changing resins\n10:36 - A Pi case in Alpha Black\n11:23 - Alpha Black to Alpha Clear\n12:13 - A clear case for GutBomb's MacPicoModem\n14:49 - T-Rex is clearly better\n15:31 - Clear ADB Mouse\n16:26 - The oozable Flexible 80A\n17:35 - A rubber bumper emerges\n13:34 - Total resin noob experience\n20:24 - Value engineering, to cut the cost\n22:31 - Finally in the hobbyist realm",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/4l9xU3_36Xs/default.jpg",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/4l9xU3_36Xs/mqdefault.jpg",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/4l9xU3_36Xs/hqdefault.jpg",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/4l9xU3_36Xs/sddefault.jpg",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/4l9xU3_36Xs/maxresdefault.jpg",
+     "width": 1280,
+     "height": 720
+    },
+    "uhd": {
+     "url": "https://i.ytimg.com/vi/4l9xU3_36Xs/uhddefault.jpg",
+     "width": 3840,
+     "height": 2160
+    }
+   },
+   "channelTitle": "Jeff Geerling",
+   "tags": [
+    "form",
+    "studio 1",
+    "studio",
+    "formlabs",
+    "resin",
+    "clear",
+    "pla",
+    "sla",
+    "3d",
+    "cad",
+    "printing",
+    "printer",
+    "cure",
+    "wash",
+    "curing",
+    "uv",
+    "light",
+    "lcd",
+    "resolution",
+    "speed",
+    "build",
+    "builder",
+    "maker",
+    "make",
+    "mac",
+    "modem",
+    "global village",
+    "picomacmodem",
+    "raspberry pi",
+    "pico",
+    "dialup",
+    "internet",
+    "isp"
+   ],
+   "categoryId": "28",
+   "liveBroadcastContent": "none",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "Formlabs finally made a cheaper printer",
+    "description": "Thanks to Formlabs for providing the Form Studio 1 for this project.\n\nMore info: https://formlabs.com/3d-printers/form-studio-1/?utm_source=youtube&utm_medium=referral&utm_campaign=jeffgeerling-fs1-2026-07-26-global\n\n(Note: The above link is a campaign tracking link, NOT an affiliate link. I do not participate in any manufacturer affiliate programs, only Amazon Affiliates, as part of my YouTube sponsorship policy.)\n\nOther things I mentioned in this video:\n\n  - GutBomb's MacPicoModem: https://jcm-1.com/product/macpicomodem/\n  - T-Rex model: https://www.printables.com/model/428782-t-rex-skull\n  - Apple ADB Mouse Shell: https://www.thingiverse.com/thing:4545460/comments\n  - Formtest model: https://formlabs.com/blog/measuring-3d-printer-reliability-formtest/\n\nSupport me on Patreon: https://www.patreon.com/geerlingguy\nSponsor me on GitHub: https://github.com/sponsors/geerlingguy\nMerch: https://www.redshirtjeff.com\n2nd Channel: https://www.youtube.com/@GeerlingEngineering\n3rd Channel: https://www.youtube.com/@Level2Jeff\n\nContents:\n\n00:00 - Formlabs Form Studio 1\n01:43 - Accessories and Tanks\n02:54 - No cloud account required\n03:49 - First resin print\n05:36 - Power usage\n05:59 - Dripping, drying, washing, curing\n08:07 - POING!\n08:56 - Changing resins\n10:36 - A Pi case in Alpha Black\n11:23 - Alpha Black to Alpha Clear\n12:13 - A clear case for GutBomb's MacPicoModem\n14:49 - T-Rex is clearly better\n15:31 - Clear ADB Mouse\n16:26 - The oozable Flexible 80A\n17:35 - A rubber bumper emerges\n13:34 - Total resin noob experience\n20:24 - Value engineering, to cut the cost\n22:31 - Finally in the hobbyist realm"
+   },
+   "defaultAudioLanguage": "en-US"
+  },
+  "contentDetails": {
+   "duration": "PT23M38S",
+   "dimension": "2d",
+   "definition": "hd",
+   "caption": "true",
+   "licensedContent": true,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "processed",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  }
+ }
+}
