@@ -79,13 +79,13 @@ Single videos come from yt-dlp, which supports YouTube and well over a thousand 
 
 ## YouTube channels and playlists
 
-A YouTube channel or playlist, or a playlist on another site yt-dlp supports, can be added as a show: paste its link in **Add media** or in the Add Show wizard and pick Podcast or Series. A channel link adds the channel's Videos tab.
+A YouTube channel or playlist, or a playlist on another site yt-dlp supports, can be added as a show: paste its link in **Add media** or in the Add Show wizard and pick Podcast or Series. A channel link adds all of the channel's uploads: its videos, Shorts and livestreams. A link to the channel's Shorts or Live tab adds only those.
 
 These shows have no seasons of their own, so VODLoft makes one season per upload year. They are added as a Series identified by date by default; pick another episode identification in the Add Show wizard if you prefer. Seasonal numbers the videos in each year by upload date, such as S2024E01 and S2024E02, and Numbered counts them across the show. A video found later is numbered after the ones VODLoft already has, so existing file names never change. Download Profiles work as for any other show. Their streams serve downloaded files only, and their metadata is not refreshed after a video is added.
 
 YouTube videos are tagged **Video**, **Short** or **Livestream**. A livestream keeps its tag after the broadcast ends. Shorts and livestreams are numbered on their own across the show, such as short.12 and livestream.3, so they never shift the numbers of normal videos, and episode cards show a Short or Livestream badge. Download and RSS profiles choose which tags they want; new YouTube profiles start with Video and Livestream and leave Shorts out. Videos from other sites are all tagged Video.
 
-VODLoft checks the channel or playlist for new videos on the usual schedule. It looks up each new video once and pauses between lookups, so the first scan of a large channel takes a while. Private and deleted videos are skipped.
+VODLoft checks the channel or playlist for new videos on the usual schedule. With a YouTube Data API key (see [[Settings#youtube-data-api-key]]), a YouTube channel of a few thousand videos is fully listed in under a minute. Without a key, VODLoft looks up each new video with yt-dlp and pauses between lookups, so the first scan of a large channel takes hours; the result is the same, only slower. Private and deleted videos are skipped, and an upcoming or ongoing livestream is added once it has finished.
 
 ## NPO Start
 

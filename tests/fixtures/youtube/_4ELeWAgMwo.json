@@ -1,0 +1,88 @@
+{
+ "playlist": "UUSH",
+ "ytdlp": {
+  "id": "_4ELeWAgMwo",
+  "title": "ASMR iPhone Duo Unboxing",
+  "duration": 46,
+  "timestamp": 1792591233,
+  "release_timestamp": null,
+  "upload_date": "20261021",
+  "live_status": "not_live",
+  "media_type": "short",
+  "was_live": false,
+  "availability": "public",
+  "age_limit": 0,
+  "channel_id": "UCBJycsmduvYEL83R_U4JriQ",
+  "channel": "Marques Brownlee",
+  "uploader": "Marques Brownlee",
+  "webpage_url": "https://www.youtube.com/watch?v=_4ELeWAgMwo",
+  "thumbnail": "https://i.ytimg.com/vi/_4ELeWAgMwo/maxresdefault.jpg",
+  "extractor_key": "Youtube",
+  "_type": "video",
+  "description": "iPhone duo only comes with 2 things in the box"
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "JnRjHPAgQwhVdUrnzKdDQmz3i50",
+  "id": "_4ELeWAgMwo",
+  "snippet": {
+   "publishedAt": "2026-10-21T14:00:33Z",
+   "channelId": "UCBJycsmduvYEL83R_U4JriQ",
+   "title": "ASMR iPhone Duo Unboxing",
+   "description": "iPhone duo only comes with 2 things in the box",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/_4ELeWAgMwo/default.jpg",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/_4ELeWAgMwo/mqdefault.jpg",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/_4ELeWAgMwo/hqdefault.jpg",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/_4ELeWAgMwo/sddefault.jpg",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/_4ELeWAgMwo/maxresdefault.jpg",
+     "width": 1280,
+     "height": 720
+    }
+   },
+   "channelTitle": "Marques Brownlee",
+   "categoryId": "28",
+   "liveBroadcastContent": "none",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "ASMR iPhone Duo Unboxing",
+    "description": "iPhone duo only comes with 2 things in the box"
+   },
+   "defaultAudioLanguage": "en"
+  },
+  "contentDetails": {
+   "duration": "PT47S",
+   "dimension": "2d",
+   "definition": "hd",
+   "caption": "false",
+   "licensedContent": true,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "processed",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  }
+ }
+}

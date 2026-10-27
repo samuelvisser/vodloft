@@ -1,0 +1,97 @@
+{
+ "playlist": "UULF",
+ "ytdlp": {
+  "id": "ESABTN4VtrA",
+  "title": "iPhone Duo Review: First Generation Fun!",
+  "duration": 1744,
+  "timestamp": 1792584052,
+  "release_timestamp": null,
+  "upload_date": "20261021",
+  "live_status": "not_live",
+  "media_type": "video",
+  "was_live": false,
+  "availability": "public",
+  "age_limit": 0,
+  "channel_id": "UCBJycsmduvYEL83R_U4JriQ",
+  "channel": "Marques Brownlee",
+  "uploader": "Marques Brownlee",
+  "webpage_url": "https://www.youtube.com/watch?v=ESABTN4VtrA",
+  "thumbnail": "https://i.ytimg.com/vi/ESABTN4VtrA/maxresdefault.jpg",
+  "extractor_key": "Youtube",
+  "_type": "video",
+  "description": "What it's actually like to use the first folding iPhone - Duo\n\nDon’t miss Ridge’s friends and family sale at https://ridge.com/MKBHD\nProtect your iPhone Duo at https://dbrand.com/duo \n\nMKBHD Merch: http://shop.MKBHD.com\n\nPlaylist of MKBHD Intro music: https://goo.gl/B3AWV5\nPhone provided by Apple fo"
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "CCYzok_pnX7yYfg99AlFV72sTuw",
+  "id": "ESABTN4VtrA",
+  "snippet": {
+   "publishedAt": "2026-10-21T12:00:52Z",
+   "channelId": "UCBJycsmduvYEL83R_U4JriQ",
+   "title": "iPhone Duo Review: First Generation Fun!",
+   "description": "What it's actually like to use the first folding iPhone - Duo\n\nDon’t miss Ridge’s friends and family sale at https://ridge.com/MKBHD\nProtect your iPhone Duo at https://dbrand.com/duo \n\nMKBHD Merch: http://shop.MKBHD.com\n\nPlaylist of MKBHD Intro music: https://goo.gl/B3AWV5\nPhone provided by Apple for review.\n\n~\nhttp://twitter.com/MKBHD\nhttp://instagram.com/MKBHD\nhttp://facebook.com/MKBHD\n\n0:00 Intro\n1:13 First Generation\n3:21 The Hardware\n14:18 The Apps Situation\n20:02 What It's Good At\n25:11 Conclusion",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/ESABTN4VtrA/default.jpg",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/ESABTN4VtrA/mqdefault.jpg",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/ESABTN4VtrA/hqdefault.jpg",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/ESABTN4VtrA/sddefault.jpg",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/ESABTN4VtrA/maxresdefault.jpg",
+     "width": 1280,
+     "height": 720
+    },
+    "uhd": {
+     "url": "https://i.ytimg.com/vi/ESABTN4VtrA/uhddefault.jpg",
+     "width": 3840,
+     "height": 2160
+    }
+   },
+   "channelTitle": "Marques Brownlee",
+   "tags": [
+    "iPhone Duo",
+    "iPhone duo review"
+   ],
+   "categoryId": "28",
+   "liveBroadcastContent": "none",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "iPhone Duo Review: First Generation Fun!",
+    "description": "What it's actually like to use the first folding iPhone - Duo\n\nDon’t miss Ridge’s friends and family sale at https://ridge.com/MKBHD\nProtect your iPhone Duo at https://dbrand.com/duo \n\nMKBHD Merch: http://shop.MKBHD.com\n\nPlaylist of MKBHD Intro music: https://goo.gl/B3AWV5\nPhone provided by Apple for review.\n\n~\nhttp://twitter.com/MKBHD\nhttp://instagram.com/MKBHD\nhttp://facebook.com/MKBHD\n\n0:00 Intro\n1:13 First Generation\n3:21 The Hardware\n14:18 The Apps Situation\n20:02 What It's Good At\n25:11 Conclusion"
+   },
+   "defaultAudioLanguage": "en"
+  },
+  "contentDetails": {
+   "duration": "PT29M5S",
+   "dimension": "2d",
+   "definition": "hd",
+   "caption": "true",
+   "licensedContent": true,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "processed",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  }
+ }
+}

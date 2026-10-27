@@ -1,0 +1,99 @@
+{
+ "playlist": "UULF",
+ "ytdlp": {
+  "id": "scwlR0QHGOk",
+  "title": "The NEW Tesla Roadster: My Honest Reaction",
+  "duration": 1365,
+  "timestamp": 1792202963,
+  "release_timestamp": null,
+  "upload_date": "20261017",
+  "live_status": "not_live",
+  "media_type": "video",
+  "was_live": false,
+  "availability": "public",
+  "age_limit": 0,
+  "channel_id": "UCBJycsmduvYEL83R_U4JriQ",
+  "channel": "Marques Brownlee",
+  "uploader": "Marques Brownlee",
+  "webpage_url": "https://www.youtube.com/watch?v=scwlR0QHGOk",
+  "thumbnail": "https://i.ytimg.com/vi/scwlR0QHGOk/maxresdefault.jpg",
+  "extractor_key": "Youtube",
+  "_type": "video",
+  "description": "Tesla doesn't do marketing. Until they do.\n\nHagerty video: https://youtu.be/22rvpUecLts?si=z7reGi_rtH9mG3R3\n\nAuto Focus: http://youtube.com/AutoFocus\n\nMKBHD Merch: http://shop.MKBHD.com\n\nPlaylist of MKBHD Intro music: https://goo.gl/B3AWV5\n\n~\nhttp://twitter.com/MKBHD\nhttp://instagram.com/MKBHD\nhttp:"
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "nVgxjTSOnns-zh_w7wBMKXNbcUg",
+  "id": "scwlR0QHGOk",
+  "snippet": {
+   "publishedAt": "2026-10-17T02:09:23Z",
+   "channelId": "UCBJycsmduvYEL83R_U4JriQ",
+   "title": "The NEW Tesla Roadster: My Honest Reaction",
+   "description": "Tesla doesn't do marketing. Until they do.\n\nHagerty video: https://youtu.be/22rvpUecLts?si=z7reGi_rtH9mG3R3\n\nAuto Focus: http://youtube.com/AutoFocus\n\nMKBHD Merch: http://shop.MKBHD.com\n\nPlaylist of MKBHD Intro music: https://goo.gl/B3AWV5\n\n~\nhttp://twitter.com/MKBHD\nhttp://instagram.com/MKBHD\nhttp://facebook.com/MKBHD",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/scwlR0QHGOk/default.jpg",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/scwlR0QHGOk/mqdefault.jpg",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/scwlR0QHGOk/hqdefault.jpg",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/scwlR0QHGOk/sddefault.jpg",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/scwlR0QHGOk/maxresdefault.jpg",
+     "width": 1280,
+     "height": 720
+    },
+    "uhd": {
+     "url": "https://i.ytimg.com/vi/scwlR0QHGOk/uhddefault.jpg",
+     "width": 3840,
+     "height": 2160
+    }
+   },
+   "channelTitle": "Marques Brownlee",
+   "tags": [
+    "Tesla roadster",
+    "flying",
+    "thrust",
+    "rocket"
+   ],
+   "categoryId": "28",
+   "liveBroadcastContent": "none",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "The NEW Tesla Roadster: My Honest Reaction",
+    "description": "Tesla doesn't do marketing. Until they do.\n\nHagerty video: https://youtu.be/22rvpUecLts?si=z7reGi_rtH9mG3R3\n\nAuto Focus: http://youtube.com/AutoFocus\n\nMKBHD Merch: http://shop.MKBHD.com\n\nPlaylist of MKBHD Intro music: https://goo.gl/B3AWV5\n\n~\nhttp://twitter.com/MKBHD\nhttp://instagram.com/MKBHD\nhttp://facebook.com/MKBHD"
+   },
+   "defaultAudioLanguage": "en"
+  },
+  "contentDetails": {
+   "duration": "PT22M45S",
+   "dimension": "2d",
+   "definition": "hd",
+   "caption": "true",
+   "licensedContent": true,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "processed",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  }
+ }
+}

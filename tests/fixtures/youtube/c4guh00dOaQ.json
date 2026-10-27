@@ -1,0 +1,92 @@
+{
+ "playlist": "UULV",
+ "ytdlp": {
+  "id": "c4guh00dOaQ",
+  "title": "Spooky LIVE Q&A",
+  "duration": 2877,
+  "timestamp": 1509044181,
+  "release_timestamp": 1509039243,
+  "upload_date": "20171026",
+  "release_date": "20171026",
+  "live_status": "was_live",
+  "media_type": "livestream",
+  "was_live": true,
+  "availability": "public",
+  "age_limit": 0,
+  "channel_id": "UCBJycsmduvYEL83R_U4JriQ",
+  "channel": "Marques Brownlee",
+  "uploader": "Marques Brownlee",
+  "webpage_url": "https://www.youtube.com/watch?v=c4guh00dOaQ",
+  "thumbnail": "https://i.ytimg.com/vi/c4guh00dOaQ/maxresdefault.jpg",
+  "extractor_key": "Youtube",
+  "_type": "video",
+  "description": "Spooky tech, questions and answers, and pumpkin carvings.\n\nBackground: https://youtu.be/AtGTot98UAo"
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "LZ7Ykx4qUj1PewG0G4SNyq403o4",
+  "id": "c4guh00dOaQ",
+  "snippet": {
+   "publishedAt": "2017-10-26T18:56:21Z",
+   "channelId": "UCBJycsmduvYEL83R_U4JriQ",
+   "title": "Spooky LIVE Q&A",
+   "description": "Spooky tech, questions and answers, and pumpkin carvings.\n\nBackground: https://youtu.be/AtGTot98UAo",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/c4guh00dOaQ/default.jpg",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/c4guh00dOaQ/mqdefault.jpg",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/c4guh00dOaQ/hqdefault.jpg",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/c4guh00dOaQ/sddefault.jpg",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/c4guh00dOaQ/maxresdefault.jpg",
+     "width": 1280,
+     "height": 720
+    }
+   },
+   "channelTitle": "Marques Brownlee",
+   "categoryId": "28",
+   "liveBroadcastContent": "none",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "Spooky LIVE Q&A",
+    "description": "Spooky tech, questions and answers, and pumpkin carvings.\n\nBackground: https://youtu.be/AtGTot98UAo"
+   }
+  },
+  "contentDetails": {
+   "duration": "PT47M57S",
+   "dimension": "2d",
+   "definition": "hd",
+   "caption": "false",
+   "licensedContent": false,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "processed",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  },
+  "liveStreamingDetails": {
+   "actualStartTime": "2017-10-26T17:34:03Z",
+   "actualEndTime": "2017-10-26T18:23:22Z"
+  }
+ }
+}

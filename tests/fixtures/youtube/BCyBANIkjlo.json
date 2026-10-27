@@ -1,0 +1,115 @@
+{
+ "playlist": "UULV",
+ "ytdlp": {
+  "id": "BCyBANIkjlo",
+  "title": "The Xbox News Looks Really Bad - WAN Show June 19, 2026",
+  "duration": 13276,
+  "timestamp": 1781934072,
+  "release_timestamp": 1781920189,
+  "upload_date": "20260620",
+  "release_date": "20260620",
+  "live_status": "was_live",
+  "media_type": "livestream",
+  "was_live": true,
+  "availability": "public",
+  "age_limit": 0,
+  "channel_id": "UCXuqSBlHAE6Xw-yeJA0Tunw",
+  "channel": "Linus Tech Tips",
+  "uploader": "Linus Tech Tips",
+  "webpage_url": "https://www.youtube.com/watch?v=BCyBANIkjlo",
+  "thumbnail": "https://i.ytimg.com/vi/BCyBANIkjlo/maxresdefault.jpg",
+  "extractor_key": "Youtube",
+  "_type": "video",
+  "description": "The WAN Show will be slowly moving to the https://www.youtube.com/@LMGClipsYT channel!\nCheck out this episode here: https://www.youtube.com/watch?v=nS_zfV14l4o\n\nSign up with the following links and enjoy the first 6 months of OpManager Nexus free.\nOn-Site: https://lmg.gg/site24x7\nCloud: https://lmg."
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "BbFm7302-Cgx3beNit0DQOFCL7w",
+  "id": "BCyBANIkjlo",
+  "snippet": {
+   "publishedAt": "2026-06-20T05:41:12Z",
+   "channelId": "UCXuqSBlHAE6Xw-yeJA0Tunw",
+   "title": "The Xbox News Looks Really Bad - WAN Show June 19, 2026",
+   "description": "The WAN Show will be slowly moving to the https://www.youtube.com/@LMGClipsYT channel!\nCheck out this episode here: https://www.youtube.com/watch?v=nS_zfV14l4o\n\nSign up with the following links and enjoy the first 6 months of OpManager Nexus free.\nOn-Site: https://lmg.gg/site24x7\nCloud: https://lmg.gg/manageengine\n\nTraditional carriers track your data. Cape protects it with built-in privacy features like IMSI rotation and last-mile encrypted texting.\nUse code WAN and get 33% off your first 6 months: https://cape.co/wan\nApp Download Links:\nApple: https://lmg.gg/CapeIOS\nGoogle: https://lmg.gg/CapeAndroid\nAccrescent App Store: https://accrescent.app/\n\nCheck out Redtiger during their Mega Sale from June 23rd to June 26th and save up to 50% off site-wide!\nGrab the F7NA with Code: RTF7NA4K for a final price of $118.99.\nAmazon: https://lmg.gg/GwVQ6\nOfficial Site: https://lmg.gg/mK6bG\n\nGet an affordable sit-to-stand desk and elevate your work space! Check out the MotionGrey Ergo2 Pro at https://motiongrey.com/r?id=no5sc5\n\nGet a Circuit Board skin for your device so dbrand can keep messing with Linus at https://dbrand.com/pcb\n\nCheck out the Razer Blade series of laptops; perfect for work or pleasure: https://lmg.gg/wanrazerblade\n\nGame or work in comfort on a Razer Iskur V2: https://lmg.gg/wanrazeriskur\n\nGet a special deal on Private Internet Access VPN today at https://www.piavpn.com/LinusWan\n\nPurchases made through some store links may provide some compensation to Linus Media Group.\n\n\nPodcast Download: https://pdst.fm/e/mgln.ai/e/94/claritaspod.com/measure/verifi.podscribe.com/rss/p/pfx.vpixl.com/j0JIg/traffic.megaphone.fm/ROOSTER9584551215.mp3\n\nTimestamps (courtesy of NoKi1119):\n0:00 Chapters\n0:57 Intro\n1:35 Topic #1: Microsoft rules out spinning off Xbox\n4:02 Why spend on studios just to stop later? Embracer Group's IPs\n11:42 How much of this was the new CEO's idea? Kiln & Psychonauts\n20:16 Game pass releases, \"the highly anticipated GTA VI box art\"\n31:25 Floatplane announcement ft. Linus's punishment\n40:09 Topic #2: Dopamine site let users shop without buying anything\n51:21 Dan on dopamine detox, Linus likes this\n1:00:46 LTTStore Lime Day coming on June 24th\n1:02:22 Open Sauce attendees to get an exclusive screwdriver early!\n1:03:55 LTT is hiring! Whale LAN on the 29th & 30th August\n1:04:43 Any more stubby colorways?\n1:07:10 What bench Luke ordered? ft. dumbbells, ducklings\n1:21:08 Topic #3: Tesla's safeguard defeated with doll heads\n1:24:56 Topic #4: New 3D printing laser tech can do alloys on demand\n1:29:50 Topic #5: Nvidia's ENPIRE, robot arms that can do a lot\n1:35:48 Linus's experience with Nvidia, Linux, & janky RTX 5090's\n1:58:27 Linus mentions the Plasma Channel, SLI & AI\n2:16:08 OpManager Nexus\n2:17:10 Cape\n2:18:33 REDTIGER\n2:19:32 MotionGrey\n2:20:28 Topic #6: Smudging Spongebob BoBB disc skips time\n2:23:12 Topic #7: Microsoft allows Nvidia GPUs to run Local AI features\n2:27:15 Topic #8: Sony DualSense haptics now works on PC\n2:29:15 ARM, repurposing hardware & homelab\n2:41:26 Topic #9: Intel rumored to prepare Raptor Lake Next for 2027\n2:45:27 Topic #10: Snap Specs LIVE, $2,200 AR smart glasses\n2:49:28 Topic #11: UK to ban sub 16 from accessing social media\n2:58:12 Dating in Threads? Wingding encryption & MSN, (Y)/(L)\n3:08:19 UK & overnight curfews for sub 18, AI romantic chatbots\n3:10:05 Topic #12: AMD brings Advanced Shader Delivery to RDNA\n3:19:01 Topic #13: Phones recycled into computing platform clusters\n3:21:42 Topic #14: Illinois to ban drivers from wearing smart glasses\n3:26:50 Topic #15: ChatGPT reaches less than half of the AI market\n3:27:18 Has Luke heard of Lantern of the Laughless Saint?\n3:31:56 Discoveries you found that didn't make it into videos?\n3:38:24 Would you consider Linux tips or NICs tips?\n3:40:56 Figured out the WAN Show clips?\n3:41:20 Outro",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/BCyBANIkjlo/default.jpg",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/BCyBANIkjlo/mqdefault.jpg",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/BCyBANIkjlo/hqdefault.jpg",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/BCyBANIkjlo/sddefault.jpg",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/BCyBANIkjlo/maxresdefault.jpg",
+     "width": 1280,
+     "height": 720
+    },
+    "fhd": {
+     "url": "https://i.ytimg.com/vi/BCyBANIkjlo/fhddefault.jpg",
+     "width": 1920,
+     "height": 1080
+    }
+   },
+   "channelTitle": "Linus Tech Tips",
+   "tags": [
+    "pcmr",
+    "building",
+    "competition",
+    "gamers",
+    "how to",
+    "review",
+    "intel",
+    "amd",
+    "cpu",
+    "gpu",
+    "gaming",
+    "unity",
+    "game development",
+    "unity game engine"
+   ],
+   "categoryId": "28",
+   "liveBroadcastContent": "none",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "The Xbox News Looks Really Bad - WAN Show June 19, 2026",
+    "description": "The WAN Show will be slowly moving to the https://www.youtube.com/@LMGClipsYT channel!\nCheck out this episode here: https://www.youtube.com/watch?v=nS_zfV14l4o\n\nSign up with the following links and enjoy the first 6 months of OpManager Nexus free.\nOn-Site: https://lmg.gg/site24x7\nCloud: https://lmg.gg/manageengine\n\nTraditional carriers track your data. Cape protects it with built-in privacy features like IMSI rotation and last-mile encrypted texting.\nUse code WAN and get 33% off your first 6 months: https://cape.co/wan\nApp Download Links:\nApple: https://lmg.gg/CapeIOS\nGoogle: https://lmg.gg/CapeAndroid\nAccrescent App Store: https://accrescent.app/\n\nCheck out Redtiger during their Mega Sale from June 23rd to June 26th and save up to 50% off site-wide!\nGrab the F7NA with Code: RTF7NA4K for a final price of $118.99.\nAmazon: https://lmg.gg/GwVQ6\nOfficial Site: https://lmg.gg/mK6bG\n\nGet an affordable sit-to-stand desk and elevate your work space! Check out the MotionGrey Ergo2 Pro at https://motiongrey.com/r?id=no5sc5\n\nGet a Circuit Board skin for your device so dbrand can keep messing with Linus at https://dbrand.com/pcb\n\nCheck out the Razer Blade series of laptops; perfect for work or pleasure: https://lmg.gg/wanrazerblade\n\nGame or work in comfort on a Razer Iskur V2: https://lmg.gg/wanrazeriskur\n\nGet a special deal on Private Internet Access VPN today at https://www.piavpn.com/LinusWan\n\nPurchases made through some store links may provide some compensation to Linus Media Group.\n\n\nPodcast Download: https://pdst.fm/e/mgln.ai/e/94/claritaspod.com/measure/verifi.podscribe.com/rss/p/pfx.vpixl.com/j0JIg/traffic.megaphone.fm/ROOSTER9584551215.mp3\n\nTimestamps (courtesy of NoKi1119):\n0:00 Chapters\n0:57 Intro\n1:35 Topic #1: Microsoft rules out spinning off Xbox\n4:02 Why spend on studios just to stop later? Embracer Group's IPs\n11:42 How much of this was the new CEO's idea? Kiln & Psychonauts\n20:16 Game pass releases, \"the highly anticipated GTA VI box art\"\n31:25 Floatplane announcement ft. Linus's punishment\n40:09 Topic #2: Dopamine site let users shop without buying anything\n51:21 Dan on dopamine detox, Linus likes this\n1:00:46 LTTStore Lime Day coming on June 24th\n1:02:22 Open Sauce attendees to get an exclusive screwdriver early!\n1:03:55 LTT is hiring! Whale LAN on the 29th & 30th August\n1:04:43 Any more stubby colorways?\n1:07:10 What bench Luke ordered? ft. dumbbells, ducklings\n1:21:08 Topic #3: Tesla's safeguard defeated with doll heads\n1:24:56 Topic #4: New 3D printing laser tech can do alloys on demand\n1:29:50 Topic #5: Nvidia's ENPIRE, robot arms that can do a lot\n1:35:48 Linus's experience with Nvidia, Linux, & janky RTX 5090's\n1:58:27 Linus mentions the Plasma Channel, SLI & AI\n2:16:08 OpManager Nexus\n2:17:10 Cape\n2:18:33 REDTIGER\n2:19:32 MotionGrey\n2:20:28 Topic #6: Smudging Spongebob BoBB disc skips time\n2:23:12 Topic #7: Microsoft allows Nvidia GPUs to run Local AI features\n2:27:15 Topic #8: Sony DualSense haptics now works on PC\n2:29:15 ARM, repurposing hardware & homelab\n2:41:26 Topic #9: Intel rumored to prepare Raptor Lake Next for 2027\n2:45:27 Topic #10: Snap Specs LIVE, $2,200 AR smart glasses\n2:49:28 Topic #11: UK to ban sub 16 from accessing social media\n2:58:12 Dating in Threads? Wingding encryption & MSN, (Y)/(L)\n3:08:19 UK & overnight curfews for sub 18, AI romantic chatbots\n3:10:05 Topic #12: AMD brings Advanced Shader Delivery to RDNA\n3:19:01 Topic #13: Phones recycled into computing platform clusters\n3:21:42 Topic #14: Illinois to ban drivers from wearing smart glasses\n3:26:50 Topic #15: ChatGPT reaches less than half of the AI market\n3:27:18 Has Luke heard of Lantern of the Laughless Saint?\n3:31:56 Discoveries you found that didn't make it into videos?\n3:38:24 Would you consider Linux tips or NICs tips?\n3:40:56 Figured out the WAN Show clips?\n3:41:20 Outro"
+   },
+   "defaultAudioLanguage": "en"
+  },
+  "contentDetails": {
+   "duration": "PT3H41M16S",
+   "dimension": "2d",
+   "definition": "hd",
+   "caption": "false",
+   "licensedContent": true,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "processed",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  },
+  "liveStreamingDetails": {
+   "actualStartTime": "2026-06-20T01:49:49Z",
+   "actualEndTime": "2026-06-20T05:31:55Z",
+   "scheduledStartTime": "2026-06-20T02:00:00Z"
+  }
+ }
+}

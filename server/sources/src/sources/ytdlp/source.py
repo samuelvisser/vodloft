@@ -15,7 +15,9 @@ from ..contract import (
     ResolvedLink, ShowDetails, Source, SourceProblem, VideoDetails, link_host, on_domain,
 )
 from .. import pacing, ytdlp_runner as runner
-from .youtube_api import ApiKeyError, YouTubeApiClient, YouTubeApiError, key as api_key, quota
+from .youtube_api import ApiKeyError, Share, YouTubeApiClient, YouTubeApiError, key as api_key, mapping, quota
+from .youtube_api.catalogue import Catalogue
+from .youtube_api.client import MAX_RESULTS
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +39,10 @@ _YOUTUBE_TAGS = (
 )
 # yt-dlp reports a livestream that is still live, upcoming or long finished alike.
 _LIVE_STATUSES = {"is_live", "is_upcoming", "was_live", "post_live"}
+# Upcoming and live videos have nothing to download yet; a later scan adds them once they have finished.
+_PENDING_STATUSES = {"is_live", "is_upcoming"}
+# Without a key, a channel's uploads are listed tab by tab. A channel may have no Shorts or Live tab.
+_CHANNEL_EXTRA_TABS = ("shorts", "streams")
 
 
 def show_url(url: str) -> str:
@@ -45,6 +51,17 @@ def show_url(url: str) -> str:
     if on_domain(link_host(url), "youtube.com") and _YOUTUBE_CHANNEL.match(parts.path):
         return urlunsplit(parts._replace(path=parts.path.rstrip("/") + "/videos"))
     return url
+
+
+def _listing_urls(url: str) -> list[str]:
+    """The pages that list a show's videos: for a channel's Videos tab, its Shorts and Live tabs too."""
+    url = show_url(url)
+    ref = mapping.youtube_ref(url)
+    if ref is None or ref.kind == "playlist" or ref.tab != "videos":
+        return [url]
+    parts = urlsplit(url)
+    base = parts.path.rstrip("/").removesuffix("/videos")
+    return [url] + [urlunsplit(parts._replace(path=f"{base}/{tab}")) for tab in _CHANNEL_EXTRA_TABS]
 
 
 def _site(info: dict) -> str:
@@ -152,8 +169,42 @@ class YtDlpSource(Source):
             self._cache[url] = (now, info)
         return info
 
+    @staticmethod
+    def _catalogue(*, adding: bool) -> Catalogue | None:
+        """The YouTube Data API, when a key is set. Adding a show is paid from the units kept free first."""
+        key = api_key.load()
+        if key is None:
+            return None
+        return Catalogue(YouTubeApiClient(key), (Share.RESERVE, Share.CHECKS) if adding else (Share.CHECKS,))
+
+    def _youtube_ref(self, url: str) -> mapping.YouTubeRef | None:
+        """The channel or playlist a link points at, with an old /c/ link's channel ID looked up by yt-dlp."""
+        ref = mapping.youtube_ref(url)
+        if ref is not None and ref.kind == "custom":
+            channel_id = self._info(url).get("channel_id")
+            ref = mapping.YouTubeRef("channel", str(channel_id), ref.tab) if channel_id else None
+        return ref
+
+    def _api_show(self, url: str) -> ShowDetails | None:
+        """The show through the YouTube Data API, or None to ask yt-dlp."""
+        catalogue = self._catalogue(adding=True)
+        if catalogue is None or mapping.youtube_ref(url) is None:
+            return None
+        try:
+            ref = self._youtube_ref(url)
+            return catalogue.show(ref, url) if ref is not None else None
+        except (YouTubeApiError, runner.YtDlpError) as exc:
+            logger.info("Looking %s up with yt-dlp, because the YouTube API could not: %s", url, exc)
+            return None
+
     def resolve(self, url: str) -> ResolvedLink | None:
         url = show_url(url)
+        if show := self._api_show(url):
+            return ResolvedLink(
+                kind=LinkKind.SHOW, slug=show.slug, url=show.url, title=show.title,
+                description=show.description, image_url=show.image_url, author_name=show.author_name,
+                site="YouTube",
+            )
         try:
             info = self._info(url)
         except runner.YtDlpError as exc:
@@ -220,29 +271,85 @@ class YtDlpSource(Source):
 
     def show_details(self, url: str) -> ShowDetails:
         url = show_url(url)
+        if show := self._api_show(url):
+            return show
         info = self._info(url)
         if info.get("_type") != "playlist":
             raise runner.YtDlpError("This link is a single video, not a channel or playlist")
         return self._show(info, url)
 
     def list_episodes(self, url: str, *, known: frozenset[str]) -> Iterator[VideoDetails]:
-        listing = runner.run_json("--flat-playlist", show_url(url))
-        for entry in listing.get("entries") or []:
-            if not isinstance(entry, dict) or not entry.get("id") or entry.get("title") in _UNAVAILABLE_TITLES:
-                continue
-            if video_slug(entry) in known:
-                continue
-            entry_url = entry.get("url") or entry.get("webpage_url")
-            if not entry_url:
-                continue
+        """A YouTube show's videos come through the API when a key is set, and through yt-dlp otherwise.
+
+        The API lists all of a channel's uploads in seconds. yt-dlp lists the
+        Videos, Shorts and Live tabs and looks every new video up on its own.
+        """
+        catalogue = self._catalogue(adding=not known) if mapping.youtube_ref(show_url(url)) else None
+        if catalogue is not None:
             try:
-                info = _lookup("--no-playlist", entry_url)
-            except runner.YtDlpError as exc:
-                logger.info("Skipping %s for now: %s", entry_url, exc)
+                ref = self._youtube_ref(show_url(url))
+                ids = catalogue.video_ids(catalogue.playlist_id(ref)) if ref is not None else None
+            except (YouTubeApiError, runner.YtDlpError) as exc:
+                logger.info("Listing %s with yt-dlp, because the YouTube API could not: %s", url, exc)
+                ids = None
+            if ids is not None:
+                logger.info("Listing %s through the YouTube API", url)
+                yield from self._details_from_api(catalogue, [video_id for video_id in ids if video_id not in known])
+                return
+        yield from self._list_with_ytdlp(url, known)
+
+    def _details_from_api(self, catalogue: Catalogue, ids: list[str]) -> Iterator[VideoDetails]:
+        for start in range(0, len(ids), MAX_RESULTS):
+            batch = ids[start:start + MAX_RESULTS]
+            try:
+                items = catalogue.videos(batch)
+                shorts = catalogue.shorts_among(items)
+            except YouTubeApiError as exc:
+                # Only this batch falls back to yt-dlp; the next one tries the API again.
+                logger.info("Looking %d videos up with yt-dlp, because the YouTube API could not: %s", len(batch), exc)
+                for video_id in batch:
+                    if details := self._look_up(mapping.video_url(video_id)):
+                        yield details
                 continue
-            finally:
-                pacing.pause(_LISTING_PAUSE_SECONDS)
-            yield self._video(info, entry_url)
+            for item in items:
+                if not mapping.is_pending(item):
+                    yield mapping.video(item, short=item["id"] in shorts)
+
+    def _look_up(self, url: str) -> VideoDetails | None:
+        """One video through yt-dlp, or None when it cannot be looked up or has nothing to download yet."""
+        try:
+            info = _lookup("--no-playlist", url)
+        except runner.YtDlpError as exc:
+            logger.info("Skipping %s for now: %s", url, exc)
+            return None
+        finally:
+            pacing.pause(_LISTING_PAUSE_SECONDS)
+        if info.get("live_status") in _PENDING_STATUSES:
+            logger.info("Skipping %s until it has finished", url)
+            return None
+        return self._video(info, url)
+
+    def _list_with_ytdlp(self, url: str, known: frozenset[str]) -> Iterator[VideoDetails]:
+        seen = set(known)
+        for index, listing_url in enumerate(_listing_urls(url)):
+            try:
+                listing = runner.run_json("--flat-playlist", listing_url)
+            except runner.YtDlpError as exc:
+                if index == 0:
+                    raise
+                logger.info("Not listing %s: %s", listing_url, exc)
+                continue
+            for entry in listing.get("entries") or []:
+                if not isinstance(entry, dict) or not entry.get("id") or entry.get("title") in _UNAVAILABLE_TITLES:
+                    continue
+                if video_slug(entry) in seen:
+                    continue
+                entry_url = entry.get("url") or entry.get("webpage_url")
+                if not entry_url:
+                    continue
+                seen.add(video_slug(entry))
+                if details := self._look_up(entry_url):
+                    yield details
 
     def video_playback(self, *, slug: str, url: str) -> Playback:
         return Playback(url=url, kind=PlaybackKind.YTDLP, command=runner.command())

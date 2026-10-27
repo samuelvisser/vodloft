@@ -1,0 +1,88 @@
+{
+ "playlist": "UUSH",
+ "ytdlp": {
+  "id": "qqhIp0OaZWI",
+  "title": "NVIDIA RTX Spark 7 Good and Bad Things",
+  "duration": 71,
+  "timestamp": 1792077862,
+  "release_timestamp": null,
+  "upload_date": "20261015",
+  "live_status": "not_live",
+  "media_type": "short",
+  "was_live": false,
+  "availability": "public",
+  "age_limit": 0,
+  "channel_id": "UCXuqSBlHAE6Xw-yeJA0Tunw",
+  "channel": "Linus Tech Tips",
+  "uploader": "Linus Tech Tips",
+  "webpage_url": "https://www.youtube.com/watch?v=qqhIp0OaZWI",
+  "thumbnail": "https://i.ytimg.com/vi/qqhIp0OaZWI/maxresdefault.jpg",
+  "extractor_key": "Youtube",
+  "_type": "video",
+  "description": "Linus goes hands on with the new NVIDIA RTX Spark and the MSI Prestige N16 Flip AI+ to share his first impressions!\n\nThanks MSI for sponsoring this short!"
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "CHzffJknuOTeX15yREI85AJo48k",
+  "id": "qqhIp0OaZWI",
+  "snippet": {
+   "publishedAt": "2026-10-15T15:24:22Z",
+   "channelId": "UCXuqSBlHAE6Xw-yeJA0Tunw",
+   "title": "NVIDIA RTX Spark 7 Good and Bad Things",
+   "description": "Linus goes hands on with the new NVIDIA RTX Spark and the MSI Prestige N16 Flip AI+ to share his first impressions!\n\nThanks MSI for sponsoring this short!",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/qqhIp0OaZWI/default.jpg",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/qqhIp0OaZWI/mqdefault.jpg",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/qqhIp0OaZWI/hqdefault.jpg",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/qqhIp0OaZWI/sddefault.jpg",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/qqhIp0OaZWI/maxresdefault.jpg",
+     "width": 1280,
+     "height": 720
+    }
+   },
+   "channelTitle": "Linus Tech Tips",
+   "categoryId": "28",
+   "liveBroadcastContent": "none",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "NVIDIA RTX Spark 7 Good and Bad Things",
+    "description": "Linus goes hands on with the new NVIDIA RTX Spark and the MSI Prestige N16 Flip AI+ to share his first impressions!\n\nThanks MSI for sponsoring this short!"
+   },
+   "defaultAudioLanguage": "en"
+  },
+  "contentDetails": {
+   "duration": "PT1M12S",
+   "dimension": "2d",
+   "definition": "hd",
+   "caption": "false",
+   "licensedContent": true,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "processed",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  }
+ }
+}

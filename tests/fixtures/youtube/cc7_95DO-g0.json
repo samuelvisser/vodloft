@@ -1,0 +1,148 @@
+{
+ "playlist": "UUSH",
+ "ytdlp": {
+  "id": "cc7_95DO-g0",
+  "title": "LAMP Stack in a Lamp Rack!",
+  "duration": 97,
+  "timestamp": 1743515960,
+  "release_timestamp": null,
+  "upload_date": "20250401",
+  "live_status": "not_live",
+  "media_type": "short",
+  "was_live": false,
+  "availability": "public",
+  "age_limit": 0,
+  "channel_id": "UCR-DXc1voovS8nhAvccRZhg",
+  "channel": "Jeff Geerling",
+  "uploader": "Jeff Geerling",
+  "webpage_url": "https://www.youtube.com/watch?v=cc7_95DO-g0",
+  "thumbnail": "https://i.ytimg.com/vi/cc7_95DO-g0/maxresdefault.jpg",
+  "extractor_key": "Youtube",
+  "_type": "video",
+  "description": "You've heard of a LAMP Stack, but have you seen it run in a Lamp Rack?\n\nMentioned in this video (some links are affiliate links, I earn for qualifying purchases):\n\n  - Project Mini Rack: https://mini-rack.jeffgeerling.com\n  - LabStack Mini rack system: https://github.com/JaredC01/LabStack\n  - Pi Kub"
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "0WdFI32y_W3QwqYXWdxMNzm5bc8",
+  "id": "cc7_95DO-g0",
+  "snippet": {
+   "publishedAt": "2025-04-01T13:59:20Z",
+   "channelId": "UCR-DXc1voovS8nhAvccRZhg",
+   "title": "LAMP Stack in a Lamp Rack!",
+   "description": "You've heard of a LAMP Stack, but have you seen it run in a Lamp Rack?\n\nMentioned in this video (some links are affiliate links, I earn for qualifying purchases):\n\n  - Project Mini Rack: https://mini-rack.jeffgeerling.com\n  - LabStack Mini rack system: https://github.com/JaredC01/LabStack\n  - Pi Kubernetes Cluster Ansible playbook: https://github.com/geerlingguy/pi-cluster\n  - Netgear GS305P PoE Switch: https://amzn.to/4iS8Ig4 \n  - JetKVM: https://jetkvm.com\n  - Netgear GS305P Switch mount: https://www.printables.com/model/1236177-netgear-gs305ep-10inch-rack-mount/files\n\nSupport me on Patreon: https://www.patreon.com/geerlingguy\nSponsor me on GitHub: https://github.com/sponsors/geerlingguy\nMerch: https://www.redshirtjeff.com",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/cc7_95DO-g0/default.jpg",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/cc7_95DO-g0/mqdefault.jpg",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/cc7_95DO-g0/hqdefault.jpg",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/cc7_95DO-g0/sddefault.jpg",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/cc7_95DO-g0/maxresdefault.jpg",
+     "width": 1280,
+     "height": 720
+    }
+   },
+   "channelTitle": "Jeff Geerling",
+   "tags": [
+    "april",
+    "fools",
+    "day",
+    "funny",
+    "meme",
+    "silly",
+    "cluster",
+    "raspberry pi",
+    "mini rack",
+    "homelab",
+    "home",
+    "lab",
+    "sysadmin",
+    "cosplaying",
+    "lamp",
+    "floor",
+    "sunmory",
+    "computer",
+    "computers",
+    "linux",
+    "apache",
+    "mysql",
+    "mariadb",
+    "php",
+    "python",
+    "perl",
+    "web",
+    "webserver",
+    "kubernetes",
+    "k3s",
+    "k9s",
+    "k8s",
+    "clustering",
+    "network",
+    "networking",
+    "rails",
+    "diy",
+    "do it yourself",
+    "budget",
+    "option",
+    "test",
+    "stability",
+    "unstable",
+    "instability",
+    "pdu",
+    "ups",
+    "mini",
+    "tiny",
+    "small",
+    "pc",
+    "learning",
+    "testing",
+    "drupal",
+    "assembly",
+    "guide",
+    "tutorial",
+    "put",
+    "together"
+   ],
+   "categoryId": "28",
+   "liveBroadcastContent": "none",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "LAMP Stack in a Lamp Rack!",
+    "description": "You've heard of a LAMP Stack, but have you seen it run in a Lamp Rack?\n\nMentioned in this video (some links are affiliate links, I earn for qualifying purchases):\n\n  - Project Mini Rack: https://mini-rack.jeffgeerling.com\n  - LabStack Mini rack system: https://github.com/JaredC01/LabStack\n  - Pi Kubernetes Cluster Ansible playbook: https://github.com/geerlingguy/pi-cluster\n  - Netgear GS305P PoE Switch: https://amzn.to/4iS8Ig4 \n  - JetKVM: https://jetkvm.com\n  - Netgear GS305P Switch mount: https://www.printables.com/model/1236177-netgear-gs305ep-10inch-rack-mount/files\n\nSupport me on Patreon: https://www.patreon.com/geerlingguy\nSponsor me on GitHub: https://github.com/sponsors/geerlingguy\nMerch: https://www.redshirtjeff.com"
+   },
+   "defaultAudioLanguage": "en-US"
+  },
+  "contentDetails": {
+   "duration": "PT1M38S",
+   "dimension": "2d",
+   "definition": "hd",
+   "caption": "true",
+   "licensedContent": true,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "processed",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  }
+ }
+}

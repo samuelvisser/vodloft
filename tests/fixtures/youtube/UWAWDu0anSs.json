@@ -1,0 +1,88 @@
+{
+ "playlist": "UUSH",
+ "ytdlp": {
+  "id": "UWAWDu0anSs",
+  "title": "Zip Tie Tuning vs Linus Tech Tips",
+  "duration": 54,
+  "timestamp": 1791825925,
+  "release_timestamp": null,
+  "upload_date": "20261012",
+  "live_status": "not_live",
+  "media_type": "short",
+  "was_live": false,
+  "availability": "public",
+  "age_limit": 0,
+  "channel_id": "UCXuqSBlHAE6Xw-yeJA0Tunw",
+  "channel": "Linus Tech Tips",
+  "uploader": "Linus Tech Tips",
+  "webpage_url": "https://www.youtube.com/watch?v=UWAWDu0anSs",
+  "thumbnail": "https://i.ytimg.com/vi/UWAWDu0anSs/maxresdefault.jpg",
+  "extractor_key": "Youtube",
+  "_type": "video",
+  "description": "We put Zip Tie Tuning and Linus Tech Tips head to head. Who knows more tech acronyms?"
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "hZAMLXwbH-j9SQzRqoRx4oUC4vk",
+  "id": "UWAWDu0anSs",
+  "snippet": {
+   "publishedAt": "2026-10-12T17:25:25Z",
+   "channelId": "UCXuqSBlHAE6Xw-yeJA0Tunw",
+   "title": "Zip Tie Tuning vs Linus Tech Tips",
+   "description": "We put Zip Tie Tuning and Linus Tech Tips head to head. Who knows more tech acronyms?",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/UWAWDu0anSs/default.jpg",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/UWAWDu0anSs/mqdefault.jpg",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/UWAWDu0anSs/hqdefault.jpg",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/UWAWDu0anSs/sddefault.jpg",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/UWAWDu0anSs/maxresdefault.jpg",
+     "width": 1280,
+     "height": 720
+    }
+   },
+   "channelTitle": "Linus Tech Tips",
+   "categoryId": "28",
+   "liveBroadcastContent": "none",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "Zip Tie Tuning vs Linus Tech Tips",
+    "description": "We put Zip Tie Tuning and Linus Tech Tips head to head. Who knows more tech acronyms?"
+   },
+   "defaultAudioLanguage": "en"
+  },
+  "contentDetails": {
+   "duration": "PT54S",
+   "dimension": "2d",
+   "definition": "hd",
+   "caption": "false",
+   "licensedContent": true,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "processed",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  }
+ }
+}

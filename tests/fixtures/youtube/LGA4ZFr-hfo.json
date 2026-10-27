@@ -1,0 +1,111 @@
+{
+ "playlist": "UULF",
+ "ytdlp": {
+  "id": "LGA4ZFr-hfo",
+  "title": "Hard Drives are Expensive...What if I Compress my Windows folder instead?",
+  "duration": 721,
+  "timestamp": 1792515411,
+  "release_timestamp": null,
+  "upload_date": "20261020",
+  "live_status": "not_live",
+  "media_type": "video",
+  "was_live": false,
+  "availability": "public",
+  "age_limit": 0,
+  "channel_id": "UCXuqSBlHAE6Xw-yeJA0Tunw",
+  "channel": "Linus Tech Tips",
+  "uploader": "Linus Tech Tips",
+  "webpage_url": "https://www.youtube.com/watch?v=LGA4ZFr-hfo",
+  "thumbnail": "https://i.ytimg.com/vi/LGA4ZFr-hfo/maxresdefault.jpg",
+  "extractor_key": "Youtube",
+  "_type": "video",
+  "description": "Click this link https://boot.dev/?promo=LTT and use my code LTT to get 25% off your first payment for boot.dev.\n\nWhen a redditor ran out of storage space, they decided to hit \"Add to Archive\" on their Windows folder. But does WinRAR actually let you compress your operating system? Will it completely"
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "R2hMa4X-IAA4fsE8KNx9UY-ISHw",
+  "id": "LGA4ZFr-hfo",
+  "snippet": {
+   "publishedAt": "2026-10-20T16:56:51Z",
+   "channelId": "UCXuqSBlHAE6Xw-yeJA0Tunw",
+   "title": "Hard Drives are Expensive...What if I Compress my Windows folder instead?",
+   "description": "Click this link https://boot.dev/?promo=LTT and use my code LTT to get 25% off your first payment for boot.dev.\n\nWhen a redditor ran out of storage space, they decided to hit \"Add to Archive\" on their Windows folder. But does WinRAR actually let you compress your operating system? Will it completely wreck your PC?\n\nDiscuss on the forum: https://linustechtips.com/topic/1643808-i-gotta-stop-following-advice-from-reddit-drive-compression/\n\nCheck out our Channel Partners:\n\nSecretlab \n- Grab a TITAN Evo ergonomic gaming chair:  https://lmg.gg/secretlabltt\n- Grab an ATLAS ergonomic office chair:  https://lmg.gg/secretlablttatlas\n\nPIA \n- Get the VPN of our choice: https://www.piavpn.com/ltt\n\ndbrand \n- Buy a \"Circuit\" series skin for your device: https://dbrand.com/pcb\n\n► SHOP LTT PRODUCTS: https://lttstore.com\n► GET EXCLUSIVE CONTENT ON FLOATPLANE: https://lmg.gg/lttfloatplane\n► DIVE DEEPER ON THE LTT LABS WEBSITE: https://lmg.gg/labs\n► SPONSORS, AFFILIATES, AND PARTNERS: https://lmg.gg/partners\n\nPurchases made through some store links may provide some compensation to Linus Media Group. Affiliate links powered in part by https://affilimate.com/?aid=ghz1izbpb\n\nLinus Sebastian is an investor in Framework Computer, Inc and HexOS by Eshtek.\n\nCHAPTERS\n---------------------------------------------------\n0:00 Intro\n2:19 How does compression work?\n5:02 It's pronounced 'gif'\n6:45 Where did it go?\n11:48 Credits",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/LGA4ZFr-hfo/default.jpg",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/LGA4ZFr-hfo/mqdefault.jpg",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/LGA4ZFr-hfo/hqdefault.jpg",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/LGA4ZFr-hfo/sddefault.jpg",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/LGA4ZFr-hfo/maxresdefault.jpg",
+     "width": 1280,
+     "height": 720
+    },
+    "uhd": {
+     "url": "https://i.ytimg.com/vi/LGA4ZFr-hfo/uhddefault.jpg",
+     "width": 3840,
+     "height": 2160
+    }
+   },
+   "channelTitle": "Linus Tech Tips",
+   "tags": [
+    "DOS",
+    "DriveSpace",
+    "DoubleSpace",
+    "Whole Disk Compression",
+    "compression",
+    "winzip",
+    "winrar",
+    "lzw",
+    "zip",
+    "rar",
+    "arj",
+    "drive compression",
+    "data compression",
+    "disk space",
+    "drive space",
+    "windows"
+   ],
+   "categoryId": "28",
+   "liveBroadcastContent": "none",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "Hard Drives are Expensive...What if I Compress my Windows folder instead?",
+    "description": "Click this link https://boot.dev/?promo=LTT and use my code LTT to get 25% off your first payment for boot.dev.\n\nWhen a redditor ran out of storage space, they decided to hit \"Add to Archive\" on their Windows folder. But does WinRAR actually let you compress your operating system? Will it completely wreck your PC?\n\nDiscuss on the forum: https://linustechtips.com/topic/1643808-i-gotta-stop-following-advice-from-reddit-drive-compression/\n\nCheck out our Channel Partners:\n\nSecretlab \n- Grab a TITAN Evo ergonomic gaming chair:  https://lmg.gg/secretlabltt\n- Grab an ATLAS ergonomic office chair:  https://lmg.gg/secretlablttatlas\n\nPIA \n- Get the VPN of our choice: https://www.piavpn.com/ltt\n\ndbrand \n- Buy a \"Circuit\" series skin for your device: https://dbrand.com/pcb\n\n► SHOP LTT PRODUCTS: https://lttstore.com\n► GET EXCLUSIVE CONTENT ON FLOATPLANE: https://lmg.gg/lttfloatplane\n► DIVE DEEPER ON THE LTT LABS WEBSITE: https://lmg.gg/labs\n► SPONSORS, AFFILIATES, AND PARTNERS: https://lmg.gg/partners\n\nPurchases made through some store links may provide some compensation to Linus Media Group. Affiliate links powered in part by https://affilimate.com/?aid=ghz1izbpb\n\nLinus Sebastian is an investor in Framework Computer, Inc and HexOS by Eshtek.\n\nCHAPTERS\n---------------------------------------------------\n0:00 Intro\n2:19 How does compression work?\n5:02 It's pronounced 'gif'\n6:45 Where did it go?\n11:48 Credits"
+   },
+   "defaultAudioLanguage": "en"
+  },
+  "contentDetails": {
+   "duration": "PT12M1S",
+   "dimension": "2d",
+   "definition": "hd",
+   "caption": "false",
+   "licensedContent": true,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "processed",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  }
+ }
+}

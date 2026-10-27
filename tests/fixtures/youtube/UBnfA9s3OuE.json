@@ -1,0 +1,112 @@
+{
+ "playlist": "UUSH",
+ "ytdlp": {
+  "id": "UBnfA9s3OuE",
+  "title": "I can't even with these company names...",
+  "duration": 82,
+  "timestamp": 1755897951,
+  "release_timestamp": null,
+  "upload_date": "20250822",
+  "live_status": "not_live",
+  "media_type": "short",
+  "was_live": false,
+  "availability": "public",
+  "age_limit": 0,
+  "channel_id": "UCR-DXc1voovS8nhAvccRZhg",
+  "channel": "Jeff Geerling",
+  "uploader": "Jeff Geerling",
+  "webpage_url": "https://www.youtube.com/watch?v=UBnfA9s3OuE",
+  "thumbnail": "https://i.ytimg.com/vi/UBnfA9s3OuE/maxresdefault.jpg",
+  "extractor_key": "Youtube",
+  "_type": "video",
+  "description": "Seriously... They're good products, just unfortunately named.\n\nAnd yes I know that's a switch and not a router, lol. This is why I use scripts for my long form videos :D\n\nHere are affiliate links to the two products I bought and mentioned:\n\n  - CUKTECH 10Ah 100W portable charger: https://amzn.to/4mu"
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "yyx_rKW9YDJWGAbZrB0FRbItUKE",
+  "id": "UBnfA9s3OuE",
+  "snippet": {
+   "publishedAt": "2025-08-22T21:25:51Z",
+   "channelId": "UCR-DXc1voovS8nhAvccRZhg",
+   "title": "I can't even with these company names...",
+   "description": "Seriously... They're good products, just unfortunately named.\n\nAnd yes I know that's a switch and not a router, lol. This is why I use scripts for my long form videos :D\n\nHere are affiliate links to the two products I bought and mentioned:\n\n  - CUKTECH 10Ah 100W portable charger: https://amzn.to/4murMTe\n  - NICGIGA 5Gbps Network Switch: https://amzn.to/3HNJstX\n\nSupport me on Patreon: https://www.patreon.com/geerlingguy\nSponsor me on GitHub: https://github.com/sponsors/geerlingguy\nMerch: https://www.redshirtjeff.com\n2nd Channel: https://www.youtube.com/@GeerlingEngineering\n3rd Channel: https://www.youtube.com/@Level2Jeff",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/UBnfA9s3OuE/default.jpg",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/UBnfA9s3OuE/mqdefault.jpg",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/UBnfA9s3OuE/hqdefault.jpg",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/UBnfA9s3OuE/sddefault.jpg",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/UBnfA9s3OuE/maxresdefault.jpg",
+     "width": 1280,
+     "height": 720
+    }
+   },
+   "channelTitle": "Jeff Geerling",
+   "tags": [
+    "cuktech",
+    "nicgiga",
+    "china",
+    "chinese",
+    "company",
+    "naming",
+    "names",
+    "funny",
+    "silly",
+    "weird",
+    "strange",
+    "english",
+    "speaking",
+    "spoken",
+    "language",
+    "translation",
+    "lost",
+    "cant even",
+    "why",
+    "pronunciation",
+    "phrasing",
+    "linguistics"
+   ],
+   "categoryId": "28",
+   "liveBroadcastContent": "none",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "I can't even with these company names...",
+    "description": "Seriously... They're good products, just unfortunately named.\n\nAnd yes I know that's a switch and not a router, lol. This is why I use scripts for my long form videos :D\n\nHere are affiliate links to the two products I bought and mentioned:\n\n  - CUKTECH 10Ah 100W portable charger: https://amzn.to/4murMTe\n  - NICGIGA 5Gbps Network Switch: https://amzn.to/3HNJstX\n\nSupport me on Patreon: https://www.patreon.com/geerlingguy\nSponsor me on GitHub: https://github.com/sponsors/geerlingguy\nMerch: https://www.redshirtjeff.com\n2nd Channel: https://www.youtube.com/@GeerlingEngineering\n3rd Channel: https://www.youtube.com/@Level2Jeff"
+   },
+   "defaultAudioLanguage": "en-US"
+  },
+  "contentDetails": {
+   "duration": "PT1M23S",
+   "dimension": "2d",
+   "definition": "hd",
+   "caption": "true",
+   "licensedContent": true,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "processed",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  }
+ }
+}
