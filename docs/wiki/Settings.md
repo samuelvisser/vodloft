@@ -165,9 +165,9 @@ These are safeguards for unusual Daily Wire publication states. Most users shoul
 
 ---
 
-## Daily Wire integration
+## Sources
 
-The Sources tab lists every Source VODLoft can add media from, with what it supports. The Daily Wire's card contains its sign-in plus advanced integration settings. Ordinary installations should leave the endpoint, OAuth, and pacing values unchanged.
+The Sources tab lists every Source VODLoft can add media from, with what it supports. See [[Sources]] for what each one does. The Daily Wire's card contains its sign-in plus advanced integration settings. Ordinary installations should leave the endpoint, OAuth, and pacing values unchanged.
 
 ### yt-dlp
 

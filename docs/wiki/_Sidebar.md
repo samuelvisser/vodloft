@@ -7,6 +7,7 @@
 - [[First-Run-Setup]]
 
 **Using VODLoft**
+- [[Sources]]
 - [[Shows-and-Library]]
 - [[Local-Media-Profiles]]
 - [[Download-Profiles]]

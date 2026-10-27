@@ -64,8 +64,8 @@ const SHOW_VARIABLES: readonly OutputTemplateVariable[] = [
             paragraphs: [
                 'VODLoft\'s internal episode index, in ascending order.',
                 'Unlike <code>episode_number</code>, it does not restart for a season or episode type. It is the stored Episode index, ' +
-                'not a database ID or a newly calculated counter. Gaps caused by episodes that disappear from The Daily ' +
-                'Wire are preserved.',
+                'not a database ID or a newly calculated counter. Gaps caused by episodes that disappear from their Source ' +
+                'are preserved.',
                 'In most cases, it is better practice to use this index value instead of a custom index if your goal is ' +
                 'to number every episode in a show in order. However, custom indexes do automatically reconcile in the ' +
                 'case of an episode getting deleted in the middle of the show, which makes them slightly different.',

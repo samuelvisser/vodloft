@@ -1,6 +1,6 @@
 # Podcast RSS Feeds
 
-VODLoft can expose a managed show as a private podcast or video RSS feed. The feed can use downloaded files, stream from Daily Wire, or combine both approaches.
+VODLoft can expose a managed show as a private podcast or video RSS feed. The feed can use downloaded files, stream from Daily Wire, or combine both approaches. Feeds for YouTube, NPO Start and other yt-dlp shows use downloaded files only, because those sites' stream links expire.
 
 > [!CAUTION]
 > **Treat the complete RSS feed URL like a password or API key.** It contains a secret token that gives access to the feed without requiring the VODLoft administrator login. Anyone who obtains the URL can use the feed access you configured.
@@ -32,7 +32,7 @@ This is the best option when you want predictable local playback and do not want
 
 VODLoft obtains the episode media from Daily Wire when the podcast client requests it.
 
-This makes it possible to expose episodes you have not kept locally, including a much larger back catalog.
+This makes it possible to expose episodes you have not kept locally, including a much larger back catalog. This option is only offered for Daily Wire shows.
 
 ### Use both
 

@@ -42,7 +42,7 @@ VODLoft keeps the application itself inside the container and stores persistent 
 
 ### `/config` — required
 
-Persist the entire `/config` directory. It contains VODLoft's database, configuration, secret-key material, and Daily Wire authentication state.
+Persist the entire `/config` directory. It contains VODLoft's database, configuration, secret-key material, Daily Wire authentication state, and yt-dlp's updates and cookies file.
 
 If `/config` is lost, VODLoft should be treated as a new installation.
 

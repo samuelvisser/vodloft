@@ -4,9 +4,9 @@ On first launch, VODLoft shows the services it can add media from, helps you rev
 
 ## 1. Sources
 
-VODLoft calls the services it adds media from **Sources**. The first-run setup lists each Source, and offers its sign-in as an optional step. Today that is The Daily Wire.
+VODLoft calls the services it adds media from **Sources**: The Daily Wire, yt-dlp for YouTube and many other sites, and NPO Start. The first-run setup lists each Source, and offers its sign-in as an optional step. Only The Daily Wire has a sign-in today; yt-dlp and NPO Start work without one. See [[Sources]].
 
-VODLoft uses The Daily Wire's device authorization flow. Follow the instructions shown by VODLoft and authorize the connection on The Daily Wire's own site.
+For The Daily Wire, VODLoft uses The Daily Wire's device authorization flow. Follow the instructions shown by VODLoft and authorize the connection on The Daily Wire's own site.
 
 VODLoft does **not** ask for your The Daily Wire password.
 
@@ -29,9 +29,9 @@ Restart the container after changing it.
 
 Private RSS feeds do not use this administrator login. Each feed has its own secret URL. See [[Security-and-Remote-Access]].
 
-## 3. Add your first show or movie
+## 3. Add your first show, movie or video
 
-Paste a link to a show, an episode or a movie. VODLoft finds the Source that recognises the link, shows a preview, and continues to the normal Add Show wizard or movie page. A link to an episode opens its show. You can also browse The Daily Wire's catalogue instead.
+Paste a link to a show, an episode, a movie or a video, such as a Daily Wire show, a YouTube channel or playlist, or an NPO Start series. VODLoft finds the Source that recognises the link, shows a preview, and continues to the normal Add Show wizard or movie page. A link to an episode opens its show, and a single video is added under **Videos**. You can also search NPO Start or browse The Daily Wire's catalogue instead.
 
 ### Shows
 

@@ -80,6 +80,16 @@ Open its **Download log** first. Common causes include:
 
 Use **Retry** once the underlying problem is resolved.
 
+## A YouTube or other yt-dlp download or lookup stopped working
+
+Sites change often, and an outdated yt-dlp is the most common cause. Open **Settings → Sources** and use **Update now** on the yt-dlp card, then retry. The card also shows when yt-dlp was last updated and whether the last update failed.
+
+If the video needs a signed-in viewer, such as an age-restricted or members-only video, add a cookies file on the same card. For a site yt-dlp has no dedicated support for, labelled "Other sites · best effort", VODLoft may not find a video on the page at all.
+
+## An item shows a DRM badge
+
+The Source reported the media as protected by DRM, or a download failed because of it. VODLoft cannot download such media and will not retry it. On NPO Start this often applies to whole seasons. See [[Sources#media-protected-by-drm]].
+
 ## Video was not produced as MP4
 
 Check **Settings → Downloads**:
