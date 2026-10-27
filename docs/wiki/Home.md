@@ -2,7 +2,7 @@
 
 VODLoft is a self-hosted media manager for shows, podcasts, movies and videos from The Daily Wire, YouTube, NPO Start and many other sites. It keeps a local library of the media you choose, downloads it to your own storage, and exposes shows through private RSS feeds.
 
-VODLoft is a fork of WireLoft, which does the same for The Daily Wire alone. Each site is handled by a **Source**; see [[Sources]].
+Each site VODLoft works with is handled by a **Source**; see [[Sources]].
 
 ## What you can do with VODLoft
 

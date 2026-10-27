@@ -14,7 +14,7 @@ VODLoft calls the services it adds media from **Sources**. Each Source knows how
 
 ### The Daily Wire
 
-The Daily Wire works exactly as in WireLoft: browse its catalogue, add shows and movies, sign in for member content, and stream episodes through RSS without downloading them. Only The Daily Wire has live episodes, movie extras, membership levels and RSS streaming, so those controls appear only on its items. See [[Daily-Wire-Integration]].
+The Daily Wire has the most complete support: browse its catalogue, add shows and movies, sign in for member content, and stream episodes through RSS without downloading them. Only The Daily Wire has live episodes, movie extras, membership levels and RSS streaming, so those controls appear only on its items. See [[Daily-Wire-Integration]].
 
 ### yt-dlp
 

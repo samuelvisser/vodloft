@@ -19,15 +19,16 @@
 <h2 align="center">Self-hosted media downloader and RSS generator for Daily Wire, YouTube, NPO and more</h2>
 
 > [!IMPORTANT]
-> VODLoft is in beta. It is a fork of [WireLoft](https://github.com/samuelvisser/wireloft), a mature download
-> manager for The Daily Wire, extended to YouTube, NPO Start and many other sites. Expect rough edges, and back up
-> `/config` before upgrading. If you only need The Daily Wire, WireLoft is the more mature choice.
+> VODLoft is in beta. Expect rough edges, and back up `/config` before upgrading.
 
 ## What it does
 
-VODLoft takes everything [WireLoft](https://github.com/samuelvisser/wireloft) does for The Daily Wire and extends it
-to more websites. Each website is handled by a **Source**, and whatever the Source, you get the same profiles, file
-naming, metadata, artwork, NFO files and RSS feeds.
+VODLoft is a self-hosted media manager for online video and podcasts. You tell it which shows, channels, playlists,
+movies or single videos you want, and it keeps them in a tidy library on your own server: it finds new episodes as
+they come out, downloads them in the format you choose, names and files them the way you like, adds metadata and
+artwork for your media server, and can publish private RSS feeds for your podcast app.
+
+VODLoft works with many websites. Each one is handled by a **Source**:
 
 | Source | Sites | What you can add |
 |---|---|---|
@@ -35,14 +36,25 @@ naming, metadata, artwork, NFO files and RSS feeds.
 | **yt-dlp** | YouTube and [well over a thousand other sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md), plus a best-effort mode for any other page with a video | Channels and playlists as shows, and single videos. |
 | **NPO Start** | npo.nl | Series and programmes, found by search or by link. No account needed. |
 
-Add media by pasting a link: VODLoft finds the Source that recognises it and shows a preview before anything is
-added. When more than one Source can handle a site, such as npo.nl, you choose which one VODLoft asks first.
+Whatever the Source, everything after that works the same way. To add something, paste a link: VODLoft finds the
+Source that recognises it and shows a preview before anything is added. When more than one Source can handle a
+site, such as npo.nl, you choose which one VODLoft asks first.
 
-VODLoft is highly customizable to fit your exact needs. You can automatically download audio for every item in a show while downloading video only for full episodes, do it the other way around, or configure something entirely different.
+How media is downloaded and stored is set with three kinds of profiles:
+
+- A **Local Media Profile** describes a file: audio or video, which quality, and where it goes, using a Jinja
+  template for folders and file names.
+- A **Download Profile** decides which episodes of a show are downloaded automatically, such as every episode,
+  the latest ten, the last month, or certain seasons.
+- An **RSS Stream Profile** publishes a show as a private podcast or video feed.
+
+A show can have several of each. For example, you can keep every episode of a show as audio while keeping only
+the latest five as 1080p video, and listen to both through one feed.
+
+VODLoft does not play media itself. For downloaded files, use a self-hosted media server such as Plex or Jellyfin
+for video, or Audiobookshelf for podcasts and audio. For RSS, add the VODLoft feed to your favorite podcast app.
 
 This project was inspired by [Pinchflat](https://github.com/kieraneglin/pinchflat), an awesome project that allows you to automatically download videos from YouTube channels and playlists.
-
-VODLoft is not meant to be used for consuming the content itself; it downloads, organizes, or streams it for you. For downloaded content, use a self-hosted media server such as Plex or Jellyfin for video, or Audiobookshelf for podcasts and audio. For RSS, use the VODLoft-generated RSS stream in your favorite podcast app and consume the content there.
 
 ## Features
 
@@ -128,7 +140,7 @@ See the [Settings documentation](https://github.com/samuelvisser/vodloft/wiki/Se
 
 ## Special thanks
 
-VODLoft is based on [WireLoft](https://github.com/samuelvisser/wireloft). The open-source [DailyWirePodcastProxy](https://github.com/fpnewton/DailyWirePodcastProxy) project has helped tremendously in figuring out how The Daily Wire API works. 
+VODLoft grew out of [WireLoft](https://github.com/samuelvisser/wireloft), an earlier project of mine that does the same for The Daily Wire only. The open-source [DailyWirePodcastProxy](https://github.com/fpnewton/DailyWirePodcastProxy) project has helped tremendously in figuring out how The Daily Wire API works. 
 DailyWirePodcastProxy allows you to access premium versions of Daily Wire shows directly from your podcast app. Definitely check it out if you're interested!
 Everything VODLoft downloads from YouTube and most other sites goes through [yt-dlp](https://github.com/yt-dlp/yt-dlp), which does the hard work of keeping up with those sites.
 
