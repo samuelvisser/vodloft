@@ -6,7 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.api.models.source import (
-    ApiStatusAPIRead, ProgramStatusAPIRead, SourceProblemAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SearchResultAPIRead, ShowDetailsAPIRead,
+    ApiStatusAPIRead, ProgramStatusAPIRead, SourceProblemAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SearchResultsAPIRead, ShowDetailsAPIRead,
     SourceAPIRead, SourceDomainAPIRead,
 )
 from backend.db.models import Episode, Show, SourceDomainPreference
@@ -60,10 +60,10 @@ def lookup_show_details(source: Source, url: str) -> ShowDetailsAPIRead:
     )
 
 
-def search_source(source: Source, query: str) -> list[SearchResultAPIRead]:
+def search_source(source: Source, query: str) -> SearchResultsAPIRead:
     with asking_source(f"{source.name} could not be searched"):
-        results = source.search(query)
-    return [SearchResultAPIRead.model_validate(result) for result in results]
+        answer = source.search(query)
+    return SearchResultsAPIRead.model_validate(answer)
 
 
 def get_program_status(source: Source) -> ProgramStatusAPIRead:

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.models.source import (
-    ApiKeyAPIUpdate, ApiStatusAPIRead, CookiesAPIRead, EpisodeTagAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultAPIRead,
+    ApiKeyAPIUpdate, ApiStatusAPIRead, CookiesAPIRead, EpisodeTagAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultsAPIRead,
     ShowDetailsAPIRead, SourceAPIRead, SourceDomainAPIRead, SourceDomainAPIUpdate,
 )
 from backend.app import db_session
@@ -82,7 +82,7 @@ def show_details(source_id: str, url: str = Query(min_length=1, max_length=2048)
     return lookup_show_details(_source(source_id, Feature.EPISODE_LISTS), url)
 
 
-@router.get("/sources/{source_id}/search", response_model=list[SearchResultAPIRead])
+@router.get("/sources/{source_id}/search", response_model=SearchResultsAPIRead)
 def search(source_id: str, q: str = Query(min_length=1, max_length=200)):
     """Find shows and videos at a Source by name."""
     return search_source(_source(source_id, Feature.SEARCH), q)

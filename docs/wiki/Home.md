@@ -6,7 +6,7 @@ Each site VODLoft works with is handled by a **Source**; see [[Sources]].
 
 ## What you can do with VODLoft
 
-- Add media by pasting a link, search NPO Start, or browse The Daily Wire's catalogue.
+- Add media by pasting a link, search YouTube or NPO Start, or browse The Daily Wire's catalogue.
 - Add YouTube channels and playlists as shows, and single videos from YouTube and many other sites.
 - Keep show seasons and episodes synchronized automatically.
 - Download episodes in audio, 720p, 1080p, or 4K where available.
@@ -26,7 +26,7 @@ The Home page is VODLoft's status dashboard. It shows active and queued download
 
 ### Add media and Browse
 
-**Add media** takes a link to a show, episode, movie or video from any Source, and shows a preview before anything is added. It also searches NPO Start. **Browse** is The Daily Wire's catalogue, for finding its shows and movies that are not yet in your Library.
+**Add media** takes a link to a show, episode, movie or video from any Source, and shows a preview before anything is added. It also searches YouTube and NPO Start. **Browse** is The Daily Wire's catalogue, for finding its shows and movies that are not yet in your Library.
 
 ### Library
 

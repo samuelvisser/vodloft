@@ -31,7 +31,7 @@ Private RSS feeds do not use this administrator login. Each feed has its own sec
 
 ## 3. Add your first show, movie or video
 
-Paste a link to a show, an episode, a movie or a video, such as a Daily Wire show, a YouTube channel or playlist, or an NPO Start series. VODLoft finds the Source that recognises the link, shows a preview, and continues to the normal Add Show wizard or movie page. A link to an episode opens its show, and a single video is added under **Videos**. You can also search NPO Start or browse The Daily Wire's catalogue instead.
+Paste a link to a show, an episode, a movie or a video, such as a Daily Wire show, a YouTube channel or playlist, or an NPO Start series. VODLoft finds the Source that recognises the link, shows a preview, and continues to the normal Add Show wizard or movie page. A link to an episode opens its show, and a single video is added under **Videos**. You can also search YouTube or NPO Start, or browse The Daily Wire's catalogue, instead.
 
 ### Shows
 

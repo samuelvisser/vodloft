@@ -38,6 +38,7 @@ class SourceAPIRead(ResponseBase):
     name: str
     domains: list[str]
     features: list[str]
+    search_label: Optional[str] = None
 
     @field_validator("features", mode="before")
     @classmethod
@@ -158,6 +159,21 @@ class SearchResultAPIRead(ResponseBase):
     author_name: Optional[str] = None
     show_slug: Optional[str] = None
     show_url: Optional[str] = None
+    kind_label: Optional[str] = None
+    facts: list[str] = []
+
+
+class SearchNoticeAPIRead(ResponseBase):
+    badge: str
+    text: str
+    tone: Literal["neutral", "warning"] = "neutral"
+    link_label: Optional[str] = None
+    link_path: Optional[str] = None
+
+
+class SearchResultsAPIRead(ResponseBase):
+    results: list[SearchResultAPIRead]
+    notice: Optional[SearchNoticeAPIRead] = None
 
 
 class SourceDomainAPIRead(ResponseBase):

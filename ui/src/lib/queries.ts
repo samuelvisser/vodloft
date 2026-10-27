@@ -60,7 +60,7 @@ import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
     ApiStatusRead, ApiStatusReadSchema, CookiesRead, EpisodeTagRead, EpisodeTagReadSchema, CookiesReadSchema, ProgramStatusRead, SourceProblemRead,
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
-    ResolvedLinkReadSchema, SearchResultRead, SearchResultReadSchema, ShowDetailsRead, ShowDetailsReadSchema, SourceDomainRead, SourceDomainReadSchema, SourceRead,
+    ResolvedLinkReadSchema, SearchResultsRead, SearchResultsReadSchema, ShowDetailsRead, ShowDetailsReadSchema, SourceDomainRead, SourceDomainReadSchema, SourceRead,
     SourceReadSchema,
 } from "../types/schemas/source";
 import {
@@ -418,7 +418,7 @@ export async function saveSourceDomain(domain: string, preferredSourceKey: strin
 
 /** Shows and videos at a Source whose name matches the query. */
 export function useSourceSearch(sourceId: string | undefined, query: string) {
-    return useQuery<SearchResultRead[], Error, SearchResultRead[], readonly ['sourceSearch', string | undefined, string]>({
+    return useQuery<SearchResultsRead, Error, SearchResultsRead, readonly ['sourceSearch', string | undefined, string]>({
         queryKey: ['sourceSearch', sourceId, query] as const,
         enabled: !!sourceId && !!query,
         queryFn: async ({signal}) => {
@@ -428,7 +428,7 @@ export function useSourceSearch(sourceId: string | undefined, query: string) {
                 {signal, credentials: 'include'},
             )
             if (!response.ok) throw await responseError(response)
-            return SearchResultReadSchema.array().parse(await response.json())
+            return SearchResultsReadSchema.parse(await response.json())
         },
         staleTime: 5 * 60 * 1000,
         retry: false,

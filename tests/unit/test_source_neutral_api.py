@@ -14,7 +14,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend.api.errors import source_request_error_handler
 from backend.services.source_requests import SourceRequestError
-from sources import ANY_DOMAIN, LinkKind, ResolvedLink, Source, registry
+from sources import ANY_DOMAIN, LinkKind, ResolvedLink, SearchNotice, SearchResults, Source, registry
 
 
 class StubSource(Source):
@@ -121,7 +121,7 @@ def test_resolve_stops_at_the_first_source_that_recognises_the_link(client):
     response = client.post("/api/resolve", json={"url": "stub.example/watch/clip-1"})
     assert response.status_code == 200
     body = response.json()
-    assert body["source"] == {"id": "stub", "name": "Stub Video", "domains": ["stub.example"], "features": []}
+    assert body["source"] == {"id": "stub", "name": "Stub Video", "domains": ["stub.example"], "features": [], "searchLabel": None}
     assert body["kind"] == "movie"
     assert body["slug"] == "clip-1"
     assert body["preview"]["title"] == "Stub clip-1"
@@ -283,11 +283,19 @@ def test_a_source_with_search_is_searched_by_name(client, monkeypatch):
     assert client.get("/api/sources/stub/search", params={"q": "clip"}).status_code == 404
 
     monkeypatch.setattr(type(stub), "features", frozenset({Feature.SEARCH}))
-    monkeypatch.setattr(stub, "search", lambda query, **_: [
-        ResolvedLink(kind=LinkKind.SHOW, slug="clips", url="https://stub.example/show/clips", title=f"{query} show"),
-    ], raising=False)
+    monkeypatch.setattr(stub, "search", lambda query, **_: SearchResults([
+        ResolvedLink(kind=LinkKind.SHOW, slug="clips", url="https://stub.example/show/clips", title=f"{query} show",
+                     kind_label="Channel", facts=("3 videos",)),
+    ], SearchNotice(badge="Search via stub", text="Answered by the stub")), raising=False)
     body = client.get("/api/sources/stub/search", params={"q": "clip"}).json()
-    assert body == [{
-        "kind": "show", "slug": "clips", "url": "https://stub.example/show/clips", "title": "clip show",
-        "description": None, "imageUrl": None, "authorName": None, "showSlug": None, "showUrl": None,
-    }]
+    assert body == {
+        "results": [{
+            "kind": "show", "slug": "clips", "url": "https://stub.example/show/clips", "title": "clip show",
+            "description": None, "imageUrl": None, "authorName": None, "showSlug": None, "showUrl": None,
+            "kindLabel": "Channel", "facts": ["3 videos"],
+        }],
+        "notice": {
+            "badge": "Search via stub", "text": "Answered by the stub", "tone": "neutral",
+            "linkLabel": None, "linkPath": None,
+        },
+    }

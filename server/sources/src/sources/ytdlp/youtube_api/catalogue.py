@@ -91,6 +91,18 @@ class Catalogue:
         assert len(ids) <= MAX_RESULTS
         return self._call(lambda share: self._client.videos(ids, share=share))
 
+    def search(self, query: str) -> list[dict]:
+        """Up to 50 channels, playlists and videos matching the query, for 100 units."""
+        return self._call(lambda share: self._client.search(query, share=share))
+
+    def channels(self, ids: list[str]) -> list[dict]:
+        """Up to 50 channels with their subscriber and video counts."""
+        return self._call(lambda share: self._client.channels(share=share, ids=ids, part="snippet,statistics"))
+
+    def playlists(self, ids: list[str]) -> list[dict]:
+        """Up to 50 playlists with their video counts."""
+        return self._call(lambda share: self._client.playlists(ids, share=share))
+
     def short_ids(self, channel_id: str) -> frozenset[str]:
         """The channel's Shorts, from the Shorts playlist YouTube keeps for it."""
         if channel_id not in self._shorts:

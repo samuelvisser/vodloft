@@ -13,11 +13,11 @@ from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
     ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, Feature, LinkKind, Playback, PlaybackKind, ProgramStatus,
-    ResolvedLink, ShowDetails, Source, SourceProblem, VideoDetails, link_host, on_domain,
+    ResolvedLink, SearchResults, ShowDetails, Source, SourceProblem, VideoDetails, link_host, on_domain,
 )
 from .. import pacing, ytdlp_runner as runner
-from . import youtube_rss
-from .youtube_api import ApiKeyError, Share, YouTubeApiClient, YouTubeApiError, key as api_key, mapping, quota
+from . import youtube_rss, youtube_search
+from .youtube_api import ApiKeyError, QuotaExceededError, Share, YouTubeApiClient, YouTubeApiError, key as api_key, mapping, quota
 from .youtube_api.catalogue import Catalogue
 from .youtube_api.client import MAX_RESULTS
 
@@ -45,6 +45,8 @@ _LIVE_STATUSES = {"is_live", "is_upcoming", "was_live", "post_live"}
 _PENDING_STATUSES = {"is_live", "is_upcoming"}
 # Without a key, a channel's uploads are listed tab by tab. A channel may have no Shorts or Live tab.
 _CHANNEL_EXTRA_TABS = ("shorts", "streams")
+# The same search within an hour is answered from memory, so going back to the results costs nothing.
+_SEARCH_CACHE_SECONDS = 3600
 # How many of a show's newest videos a quick check through yt-dlp looks at, per tab.
 _LATEST_COUNT = 15
 
@@ -150,12 +152,15 @@ class YtDlpSource(Source):
     domains = (ANY_DOMAIN,)
     features = frozenset({
         Feature.SHOWS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.API_KEY,
-        Feature.QUICK_CHECK, Feature.CATALOGUE_REFRESH,
+        Feature.QUICK_CHECK, Feature.CATALOGUE_REFRESH, Feature.SEARCH, Feature.COSTLY_SEARCH,
     })
     episode_tags = _YOUTUBE_TAGS
+    # Search covers YouTube only; other sites are added by link.
+    search_label = "YouTube"
 
     def __init__(self):
         self._cache: dict[str, tuple[float, dict]] = {}
+        self._searches: dict[str, tuple[float, SearchResults]] = {}
         self._cache_lock = threading.Lock()
         # A channel's handle never changes its ID, so it is looked up once.
         self._channel_ids: dict[str, str] = {}
@@ -485,6 +490,41 @@ class YtDlpSource(Source):
                         slug=slug, url=entry_url, title=entry["title"], description=entry.get("description") or None,
                     ))
         return details
+
+    def search(self, query: str) -> SearchResults:
+        """YouTube through the API while the search share has room, else through yt-dlp."""
+        query = " ".join(query.split())
+        if not query:
+            return SearchResults([])
+        key = query.casefold()
+        now = time.monotonic()
+        with self._cache_lock:
+            cached = self._searches.get(key)
+        if cached is not None and now - cached[0] < _SEARCH_CACHE_SECONDS:
+            return cached[1]
+        answer = self._search(query)
+        with self._cache_lock:
+            self._searches = {k: v for k, v in self._searches.items() if now - v[0] < _SEARCH_CACHE_SECONDS}
+            self._searches[key] = (now, answer)
+        return answer
+
+    def _search(self, query: str) -> SearchResults:
+        key = api_key.load()
+        if key is None:
+            reason = "no_key"
+        elif quota.status().usage(Share.SEARCH).limit == 0:
+            reason = "off"
+        else:
+            try:
+                catalogue = Catalogue(YouTubeApiClient(key), (Share.SEARCH,))
+                return SearchResults(youtube_search.search_api(catalogue, query), youtube_search.api_notice())
+            except QuotaExceededError as exc:
+                logger.info("Searching YouTube with yt-dlp, because the API quota is used up: %s", exc)
+                reason = "quota"
+            except YouTubeApiError as exc:
+                logger.info("Searching YouTube with yt-dlp, because the API could not: %s", exc)
+                reason = "error"
+        return SearchResults(youtube_search.search_ytdlp(query), youtube_search.ytdlp_notice(reason))
 
     def quick_check_minutes(self, shows: Sequence[tuple[str, int]]) -> int:
         """With a key, as often as the checks share allows after the daily re-scan; RSS needs no quota."""

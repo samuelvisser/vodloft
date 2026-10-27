@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 from ..contract import (
-    Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, SeasonRef, ShowDetails, Source, VideoDetails,
+    Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, SearchResults, SeasonRef, ShowDetails, Source, VideoDetails,
 )
 from .. import ytdlp_runner as runner
 from .client import ORIGIN, NpoClient, NpoError, NpoNotFoundError
@@ -180,10 +180,10 @@ class NpoSource(Source):
             drm_protected=drm_protected,
         )
 
-    def search(self, query: str) -> list[ResolvedLink]:
+    def search(self, query: str) -> SearchResults:
         query = query.strip()
         if not query:
-            return []
+            return SearchResults([])
         results = [
             ResolvedLink(
                 kind=LinkKind.SHOW, slug=item["slug"], url=series_url(item["slug"]),
@@ -195,7 +195,7 @@ class NpoSource(Source):
             self._program_link(item)
             for item in self._client.search(query, "broadcasts")[:_SEARCH_LIMIT] if item.get("slug")
         ]
-        return results
+        return SearchResults(results)
 
     def show_details(self, url: str) -> ShowDetails:
         parsed = parse_link(url)

@@ -1,17 +1,30 @@
 import {useEffect, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {useNavigate, useParams, useSearchParams} from 'react-router-dom'
+import {Link, useNavigate, useParams, useSearchParams} from 'react-router-dom'
 import {faIcon} from '../icons/faIcon'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import {useShows, useSourceLookup, useSourceSearch} from '../lib/queries'
-import {SearchResultRead, SourceFeature, sourceHas} from '../types/schemas/source'
+import {SearchNoticeRead, SearchResultRead, SourceFeature, searchName, sourceHas} from '../types/schemas/source'
 
 const KIND_LABEL: Record<SearchResultRead['kind'], string> = {
     show: 'Show',
     movie: 'Movie',
     episode: 'Episode',
     video: 'Video',
+}
+
+/** How the search was answered, such as through an API or a slower fallback. */
+function SearchNotice({notice}: {notice: SearchNoticeRead}) {
+    return (
+        <p className={`search-notice search-notice--${notice.tone}`} role="status">
+            <span className="search-notice__badge">{notice.badge}</span>
+            <span>
+                {notice.text}
+                {notice.linkLabel && notice.linkPath && <> <Link to={notice.linkPath}>{notice.linkLabel}</Link></>}
+            </span>
+        </p>
+    )
 }
 
 /** Browse a Source that has no catalogue by searching it. */
@@ -21,21 +34,24 @@ export default function SourceSearchPage() {
     const [params, setParams] = useSearchParams()
     const source = useSourceLookup().get(sourceId ?? '')
     const canSearch = sourceHas(source, SourceFeature.SEARCH)
+    // Each search costs something at such a Source, so it searches on Enter instead of while typing.
+    const onEnter = sourceHas(source, SourceFeature.COSTLY_SEARCH)
     const [search, setSearch] = useState(params.get('q') ?? '')
     const [query, setQuery] = useState(search.trim())
+    const submit = (value: string) => {
+        setQuery(value)
+        // Keep the search in the link, so going back returns to the same results.
+        if ((params.get('q') ?? '') !== value) setParams(value ? {q: value} : {}, {replace: true})
+    }
     useEffect(() => {
-        const timer = window.setTimeout(() => {
-            const value = search.trim()
-            setQuery(value)
-            // Keep the search in the link, so going back returns to the same results.
-            if ((params.get('q') ?? '') !== value) setParams(value ? {q: value} : {}, {replace: true})
-        }, 400)
+        if (onEnter) return
+        const timer = window.setTimeout(() => submit(search.trim()), 400)
         return () => window.clearTimeout(timer)
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [search])
+    }, [search, onEnter])
     const results = useSourceSearch(canSearch ? sourceId : undefined, query)
     const {data: localShows} = useShows()
-    const sourceName = source?.name ?? sourceId ?? 'this service'
+    const sourceName = searchName(source) ?? sourceId ?? 'this service'
 
     const choose = (result: SearchResultRead) => {
         if (result.kind === 'show') {
@@ -61,27 +77,33 @@ export default function SourceSearchPage() {
             <div className="view-header">
                 <div>
                     <h1 id="browse-title">Search {sourceName}</h1>
-                    <p className="view-description">Find a series or programme to add, view, or download.</p>
+                    <p className="view-description">Find a show or video to add, view, or download.</p>
                 </div>
             </div>
-            <div className="browse-toolbar">
+            <form className="browse-toolbar" role="search" onSubmit={(event) => {
+                event.preventDefault()
+                submit(search.trim())
+            }}>
                 <label className="browse-search">
                     <span className="sr-only">Search {sourceName}</span>
                     <FontAwesomeIcon icon={faIcon('fass', 'magnifying-glass')} aria-hidden="true"/>
-                    <input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by name"/>
+                    <input type="search" enterKeyHint="search" autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by name"/>
+                    {onEnter && <span className="browse-search__hint">Press Enter to search</span>}
                 </label>
-            </div>
+            </form>
+
+            {query && results.data?.notice && <SearchNotice notice={results.data.notice}/>}
 
             {!query ? null : results.isPending ? <p>Searching {sourceName}…</p> : results.error ? (
                 <div className="form-error-card" role="alert">{results.error.message}</div>
-            ) : !results.data.length ? (
+            ) : !results.data.results.length ? (
                 <div className="catalog-empty">
                     <FontAwesomeIcon icon={faIcon('fass', 'magnifying-glass')}/>
                     <p>Nothing at {sourceName} matches your search.</p>
                 </div>
             ) : (
                 <div className="catalog-show-grid" role="list" aria-label={`${sourceName} results`}>
-                    {results.data.map((result) => {
+                    {results.data.results.map((result) => {
                         const image = toImageUrl(result.imageUrl)
                         const added = result.kind === 'show' && localShows?.some((show) => show.sourceKey === sourceId && show.slug === result.slug)
                         return (
@@ -91,7 +113,7 @@ export default function SourceSearchPage() {
                                 </span>
                                 <span className="show-summary-copy">
                                     <strong className="show-summary-title">{result.title}</strong>
-                                    <span className="show-summary-author">{[KIND_LABEL[result.kind], result.authorName].filter(Boolean).join(' · ')}</span>
+                                    <span className="show-summary-author">{[result.kindLabel ?? KIND_LABEL[result.kind], result.authorName, ...(result.facts ?? [])].filter(Boolean).join(' · ')}</span>
                                     {result.description && <span className="show-summary-description">{result.description}</span>}
                                 </span>
                                 {added && <span className="catalog-added"><FontAwesomeIcon icon={faIcon('fass', 'check')}/> In library</span>}
