@@ -153,6 +153,7 @@ class YtDlpSource(Source):
     features = frozenset({
         Feature.SHOWS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.API_KEY,
         Feature.QUICK_CHECK, Feature.CATALOGUE_REFRESH, Feature.SEARCH, Feature.COSTLY_SEARCH,
+        Feature.FORMAT_CHOICES,
     })
     episode_tags = _YOUTUBE_TAGS
     # Search covers YouTube only; other sites are added by link.

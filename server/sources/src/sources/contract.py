@@ -43,6 +43,11 @@ class Feature(StrEnum):
     QUICK_CHECK = "quick_check"
     """Cheaply finding a listed show's newest items, with ``latest_items`` and
     ``item_details``, between full scans of the show."""
+    FORMAT_CHOICES = "format_choices"
+    """Quick downloads of this Source's videos can choose their quality,
+    container and codec, and "Best" is whatever the Source's program picks on
+    its own. Without it, "Best" is MP4 video at the highest resolution and the
+    other choices are not offered."""
     CATALOGUE_REFRESH = "catalogue_refresh"
     """Refreshing the titles, descriptions and thumbnails of a listed show's
     episodes, and telling which ones the Source no longer has, with ``refresh_items``."""

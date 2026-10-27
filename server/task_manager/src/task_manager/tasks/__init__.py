@@ -31,6 +31,7 @@ _WORKER_EXPORTS = {
     "trigger_task_worker": ".workers.trigger_task_worker",
     "update_source_programs": ".workers.update_source_programs",
     "quick_check_new_videos": ".workers.quick_check_new_videos",
+    "quick_download": ".workers.quick_download",
     "rescan_quick_checked_shows": ".workers.quick_check_new_videos",
 }
 

@@ -62,6 +62,8 @@ MEDIA_DOWNLOAD_PUBLICATION_DELAY_REASON = "publication_delay"
 MEDIA_DOWNLOAD_PUBLICATION_DELAY_MESSAGE = "Waiting for the post-publication download delay"
 _PUBLICATION_DELAY_BYPASSED_CONTEXT_KEY = "publication_delay_bypassed"
 _DOWNLOAD_TASK_KEYS = ("download_episode", "download_movie")
+# Quick downloads share the transfer slots without being media downloads.
+_TRANSFER_TASK_KEYS = (*_DOWNLOAD_TASK_KEYS, "quick_download")
 _DELAY_DISPATCH_JOB_PREFIX = "media-download-delay"
 _ACTIVE_OPERATION_STATUSES = (
     OperationStatus.QUEUED.value,
@@ -763,7 +765,7 @@ def record_interrupted_media_download_run_history(
 
 
 def remaining_media_download_budget(session: Session) -> int:
-    """Return free slots in the single download execution lane.
+    """Return free slots in the single download execution lane, shared with quick downloads.
 
     SCHEDULED TaskRuns count as reservations. The dispatcher creates those rows
     transactionally before APScheduler receives the jobs, so committed dispatches
@@ -777,7 +779,7 @@ def remaining_media_download_budget(session: Session) -> int:
         select(func.count(TaskRun.id))
         .join(TaskDefinition, TaskDefinition.id == TaskRun.definition_id)
         .where(
-            TaskDefinition.key.in_(_DOWNLOAD_TASK_KEYS),
+            TaskDefinition.key.in_(_TRANSFER_TASK_KEYS),
             TaskRun.status.in_(_ACTIVE_RUN_STATUSES),
             func.coalesce(primary_transfer_complete, False).is_(False),
         )
@@ -1086,6 +1088,14 @@ def dispatch_queued_media_download_operations(
     if effective_budget <= 0:
         return 0
 
+    # Someone is waiting for a quick download, so it claims a free slot first.
+    from task_manager.tasks.quick_download_operations import dispatch_queued_quick_downloads
+
+    quick = dispatch_queued_quick_downloads(session, budget=effective_budget)
+    effective_budget -= quick
+    if effective_budget <= 0:
+        return quick
+
     # Reservation/link filters are part of the SQL candidate query, so the
     # dispatcher only materializes operations that can actually claim a slot.
     operations = _ordered_queued_media_download_operations(
@@ -1099,7 +1109,7 @@ def dispatch_queued_media_download_operations(
             dispatched += 1
             if dispatched >= effective_budget:
                 break
-    return dispatched
+    return quick + dispatched
 
 
 def on_media_download_task_terminal(

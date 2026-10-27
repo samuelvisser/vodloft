@@ -65,6 +65,43 @@ def resolve_ytdlp_source(
     )
 
 
+def resolve_ytdlp_quick_source(
+    url: str,
+    *,
+    command: tuple[str, ...],
+    audio_only: bool,
+    container: str = "mp4",
+    ffmpeg_path: str = "ffmpeg",
+) -> ResolvedDownloadSource:
+    """A quick download where yt-dlp chooses what is best.
+
+    Video takes yt-dlp's own default format selection, with no preferences of
+    VODLoft's, merged into the chosen container. Audio keeps the original
+    audio as M4A.
+    """
+    if not command:
+        raise DownloadError("A yt-dlp download needs the yt-dlp command")
+    if audio_only:
+        options: tuple[str, ...] = ("-f", "bestaudio[ext=m4a]/bestaudio/best", "-x", "--audio-format", "m4a")
+        extension = "m4a"
+    else:
+        if container not in ("mp4", "mkv"):
+            raise DownloadError(f"Unsupported video container '{container}'")
+        options = ("--merge-output-format", container, "--remux-video", container)
+        extension = container
+    if os.sep in ffmpeg_path:
+        options += ("--ffmpeg-location", ffmpeg_path)
+    return ResolvedDownloadSource(
+        url=url,
+        format_downloaded="audio" if audio_only else "best",
+        use_hls=False,
+        remux_to_mp4=False,
+        extension=extension,
+        audio_only=audio_only,
+        ytdlp_command=(*command, *options),
+    )
+
+
 def error_message(output: str | list[str]) -> str:
     """yt-dlp's last ERROR line, without the prefix, or its last line."""
     lines = [line.strip() for line in (output.splitlines() if isinstance(output, str) else output) if line.strip()]

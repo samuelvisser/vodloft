@@ -37,6 +37,7 @@ class ResourceType(StrEnum):
     MEDIA_DOWNLOAD = "media_download"
     DOWNLOAD_PROFILE = "download_profile"
     LOCAL_MEDIA_PROFILE = "local_media_profile"
+    QUICK_DOWNLOAD = "quick_download"
 
 
 class OperationDependencyCancelPolicy(StrEnum):

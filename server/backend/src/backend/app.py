@@ -212,6 +212,7 @@ def create_app() -> FastAPI:
         operation_router,
         source_router,
         puller_router,
+        quick_download_router,
         episode_router,
         season_router,
         setting_router,
@@ -249,6 +250,7 @@ def create_app() -> FastAPI:
     app.include_router(source_router, prefix="/api")
     app.include_router(operation_router, prefix="/api")
     app.include_router(puller_router, prefix="/api")
+    app.include_router(quick_download_router, prefix="/api")
     app.include_router(setting_router, prefix="/api")
     app.include_router(local_media_profile_router, prefix="/api")
     app.include_router(show_local_media_profile_router, prefix="/api")
