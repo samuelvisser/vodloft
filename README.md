@@ -16,7 +16,7 @@
   </picture>
 </p>
 
-<h2 align="center">Self-hosted media downloader and RSS generator for Daily Wire, YouTube, NPO and more</h2>
+<h2 align="center">Self-hosted media downloader and RSS generator for Web Content (YouTube and much more)</h2>
 
 > [!IMPORTANT]
 > VODLoft is in beta. Expect rough edges, and back up `/config` before upgrading.
