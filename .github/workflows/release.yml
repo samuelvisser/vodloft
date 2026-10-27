@@ -71,9 +71,15 @@ jobs:
             echo "GitHub Release $RELEASE_TAG already exists."
             exit 0
           fi
+          # 0.x versions are betas, so they are marked as pre-releases.
+          if [[ "$RELEASE_TAG" == v0.* ]]; then
+            channel=--prerelease
+          else
+            channel=--latest
+          fi
           gh release create "$RELEASE_TAG" \
             --verify-tag \
             --draft \
             --generate-notes \
-            --latest \
+            "$channel" \
             --title "VODLoft ${RELEASE_TAG#v}"
