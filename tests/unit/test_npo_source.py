@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 from sources import Feature, LinkKind, PlaybackKind, get_source, sources_for
 from sources.npo import NpoSource
-from sources.npo.client import NpoNotFoundError
+from sources.npo.client import NpoError, NpoNotFoundError
 from sources.npo.source import parse_link
 
 CLEAR = "https://vod.ak.md.npox.nl/legacy/package/clear/abc/index.m3u8?hdnts=x"
@@ -48,6 +48,7 @@ class FakeClient:
         }
         self.protected: set[str] = {"NCRV_een-huis-vol_12", "NCRV_een-huis-vol_11"}
         self.stream_requests: list[str] = []
+        self.account = {"user": {"name": "Samuël"}, "hasSubscription": True, "expires": "2099-11-26T13:45:38.000Z"}
 
     def series_detail(self, slug):
         if slug != "een-huis-vol":
@@ -73,6 +74,9 @@ class FakeClient:
         if product_id in self.protected:
             return {"stream": {"streamURL": PROTECTED, "streamProfile": "hls", "drm": {"licenseUrl": "https://license"}}}
         return {"stream": {"streamURL": CLEAR, "streamProfile": "hls", "drm": None}}
+
+    def session(self):
+        return self.account
 
     def search(self, query, search_type):
         if search_type == "series":
@@ -380,7 +384,9 @@ def signed_in(tmp_path, monkeypatch):
     from sources.npo import account
 
     monkeypatch.setattr(account, "cookies_path", lambda: tmp_path / "npo" / "cookies.txt")
-    return account
+    account.forget_status()
+    yield account
+    account.forget_status()
 
 
 def test_a_cookies_file_signs_npo_start_in(npo, signed_in):
@@ -453,6 +459,8 @@ def test_signed_in_episodes_that_need_npo_plus_are_planned(npo, session, signed_
     profile.seasons = list(show.seasons)
     assert len(get_download_profile_episodes(session, profile)) == 2
     source.save_cookies(COOKIES.encode())
+    # Checked once with npo.nl; every NPO Start instance shares the answer.
+    assert source.subscription_active is True
     assert len(get_download_profile_episodes(session, profile)) == 5
 
 
@@ -470,3 +478,33 @@ def test_signed_in_npo_downloads_run_one_at_a_time(npo, signed_in):
         with pytest.raises(Exception, match="Canceled"):
             with lane.acquire(should_cancel=lambda: True, waiting=lambda _: None):
                 pass
+
+
+def test_the_npo_account_decides_whether_npo_plus_downloads(npo, signed_in):
+    from sources.npo import account
+
+    source, client = npo
+    assert source.problems() == []
+    source.save_cookies(COOKIES.encode())
+    assert source.subscription_active is True and source.problems() == []
+
+    client.account = {"user": {"name": "Samuël"}, "hasSubscription": False, "expires": "2099-11-26T13:45:38.000Z"}
+    account.status(client, refresh=True)
+    assert source.subscription_active is False
+    assert [p.title for p in source.problems()] == ["No NPO Plus on this NPO account"]
+
+    client.account = {}
+    account.status(client, refresh=True)
+    assert source.subscription_active is False
+    assert [p.title for p in source.problems()] == ["NPO sign-in expired"]
+
+    client.account = {"user": {"name": "Samuël"}, "hasSubscription": True, "expires": datetime.now(timezone.utc).isoformat()}
+    account.status(client, refresh=True)
+    assert source.subscription_active is True
+    assert [p.title for p in source.problems()] == ["NPO sign-in expires soon"]
+
+    # An unreachable npo.nl keeps the last answer.
+    def unreachable():
+        raise NpoError("NPO Start could not be reached")
+    client.session = unreachable
+    assert account.status(client, refresh=True).subscription is True

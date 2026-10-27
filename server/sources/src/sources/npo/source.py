@@ -3,11 +3,12 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterator
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 
 from ..contract import (
-    Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, SearchResults, SeasonRef, ShowDetails, Source, VideoDetails,
+    Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, SearchResults, SeasonRef, ShowDetails, Source,
+    SourceProblem, VideoDetails,
 )
 from .. import ytdlp_runner as runner
 from . import account
@@ -16,6 +17,7 @@ from .client import ORIGIN, NpoClient, NpoError, NpoNotFoundError
 logger = logging.getLogger(__name__)
 
 _SEARCH_LIMIT = 20
+_EXPIRY_WARNING = timedelta(days=3)
 
 
 def series_url(slug: str) -> str:
@@ -326,7 +328,35 @@ class NpoSource(Source):
 
     @property
     def subscription_active(self) -> bool:
-        return account.has_cookies()
+        status = account.status(self._client)
+        return status is not None and status.subscription
+
+    def problems(self) -> list[SourceProblem]:
+        status = account.status(self._client)
+        if status is None:
+            return []
+        if not status.signed_in:
+            return [SourceProblem(
+                "NPO sign-in expired",
+                "The NPO cookies file no longer signs in, so programmes that need NPO Plus wait. Sign in on npo.nl "
+                "and choose a new cookies file under Settings › Sources › NPO Start. Free programmes keep downloading.",
+                fix_url=f"{ORIGIN}/start",
+            )]
+        if not status.subscription:
+            return [SourceProblem(
+                "No NPO Plus on this NPO account",
+                "You are signed in to NPO, but the account has no NPO Plus, so programmes that need it wait. "
+                "Free programmes keep downloading.",
+                fix_url=f"{ORIGIN}/start",
+            )]
+        if status.expires_at is not None and status.expires_at - datetime.now(timezone.utc) < _EXPIRY_WARNING:
+            return [SourceProblem(
+                "NPO sign-in expires soon",
+                f"The NPO cookies file stops working on {status.expires_at:%d %B}. Sign in on npo.nl and choose a "
+                "new cookies file under Settings › Sources › NPO Start.",
+                fix_url=f"{ORIGIN}/start",
+            )]
+        return []
 
     def has_cookies(self) -> bool:
         return account.has_cookies()

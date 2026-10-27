@@ -13,6 +13,7 @@ from . import account
 ORIGIN = "https://npo.nl"
 API = f"{ORIGIN}/start/api/domain"
 STREAM_LINK = "https://prod.npoplayer.nl/stream-link"
+SESSION = f"{ORIGIN}/start/api/auth/session"
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36"
 _TIMEOUT_SECONDS = 25
 # A short pause between requests, so indexing a long series does not look like a scraper.
@@ -24,6 +25,10 @@ class NpoError(RuntimeError):
 
 
 class NpoNotFoundError(NpoError):
+    pass
+
+
+class NpoSubscriptionError(NpoError):
     pass
 
 
@@ -47,6 +52,8 @@ class NpoClient:
             raise NpoError(f"NPO Start could not be reached: {exc}") from exc
         if response.status_code == 404:
             raise NpoNotFoundError("NPO Start does not know this programme")
+        if response.status_code == 402:
+            raise NpoSubscriptionError("Only NPO Plus subscribers can watch this programme")
         if response.status_code == 429:
             raise NpoError("NPO Start asked VODLoft to slow down; try again later")
         if response.status_code >= 400:
@@ -79,6 +86,14 @@ class NpoClient:
 
     def program_detail(self, slug: str) -> dict:
         return _object(self.get("program-detail", slug=slug, ageRestriction="undefined", includePremiumContent=True))
+
+    def session(self) -> dict:
+        """The npo.nl sign-in the cookies file holds: empty when it no longer signs anyone in."""
+        cookies = account.load_cookies()
+        if cookies is None:
+            return {}
+        data = self._send("GET", SESSION, cookies=cookies)
+        return data if isinstance(data, dict) else {}
 
     def stream_link(self, product_id: str, referrer_url: str) -> dict:
         """The HLS stream NPO's player would play. A clear stream needs no headers to download.
