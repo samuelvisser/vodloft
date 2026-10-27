@@ -51,6 +51,7 @@ export default function SourceSearchPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [search, onEnter])
     const results = useSourceSearch(canSearch ? sourceId : undefined, query)
+    const searching = !!query && results.isFetching
     const {data: localShows} = useShows()
     const sourceName = searchName(source) ?? sourceId ?? 'this service'
 
@@ -81,7 +82,7 @@ export default function SourceSearchPage() {
                     <p className="view-description">Find a show or video to add, view, or download.</p>
                 </div>
             </div>
-            <form className="browse-toolbar" role="search" onSubmit={(event) => {
+            <form className={`browse-toolbar${onEnter ? ' browse-toolbar--submit' : ''}`} role="search" onSubmit={(event) => {
                 event.preventDefault()
                 submit(search.trim())
             }}>
@@ -89,12 +90,16 @@ export default function SourceSearchPage() {
                     <span className="sr-only">Search {sourceName}</span>
                     <FontAwesomeIcon icon={faIcon('fass', 'magnifying-glass')} aria-hidden="true"/>
                     <input type="search" enterKeyHint="search" autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by name"/>
-                    {onEnter && <span className="browse-search__hint">Press Enter to search</span>}
                     {search && <ClearInputButton label="Clear the search" onClear={() => {
                         setSearch('')
                         submit('')
                     }}/>}
                 </label>
+                {onEnter && (
+                    <button className="btn btn-primary browse-search__submit" type="submit" disabled={searching || !search.trim()}>
+                        {searching ? 'Searching…' : 'Search'}
+                    </button>
+                )}
             </form>
 
             {query && results.data?.notice && <SearchNotice notice={results.data.notice}/>}

@@ -98,7 +98,7 @@ With a YouTube Data API key this costs 1 unit per 50 episodes a day. Without a k
 
 ### Search YouTube
 
-**Search YouTube** on the Add media page finds channels, playlists and videos by name. Type a search and press Enter; each search costs YouTube API quota, so VODLoft does not search while you type. Picking a channel or playlist continues to the Add Show wizard, or opens the show when it is already in your Library; picking a video adds it under **Videos**, as if you had pasted its link.
+**Search YouTube** on the Add media page finds channels, playlists and videos by name. Type a search and choose **Search** or press Enter; each search costs YouTube API quota, so VODLoft does not search while you type. Picking a channel or playlist continues to the Add Show wizard, or opens the show when it is already in your Library; picking a video adds it under **Videos**, as if you had pasted its link.
 
 With a YouTube Data API key, a search goes through the API and shows subscriber and video counts, durations and upload dates. It costs about 102 units from the search share, and the line above the results says how many API searches are left today. Without a key, when the search share is used up or set to 0, or when the API fails, VODLoft searches with yt-dlp instead. That takes a few seconds longer and shows fewer details, and the line above the results says why yt-dlp answered. The same search within an hour is answered again without asking YouTube.
 
