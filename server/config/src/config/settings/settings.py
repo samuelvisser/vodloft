@@ -136,6 +136,7 @@ class AppSettings(SettingsBase):
         no_usable_media_delete_after_minutes=4 * 60,
     ))
     download_settings: DownloadSettings = Field(default_factory=DownloadSettings)
+    quick_download: QuickDownloadSettings = Field(default_factory=QuickDownloadSettings)
     youtube_api: YouTubeApiSettings = Field(default_factory=YouTubeApiSettings)
     file_watcher: FileWatcherSettings = Field(default=FileWatcherSettings(
         enabled=True,

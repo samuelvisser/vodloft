@@ -20,6 +20,7 @@ from .identity import ArtifactIdentity, inspect_artifact
 from downloader import hls_asset_marker, hls_asset_root
 
 from .copying import copy_file
+from .quick import is_within_quick_root
 from ..models import DownloadProgress
 from ..errors import DownloadCancelled
 
@@ -41,6 +42,7 @@ _PORTABLE_PUBLICATION_SUFFIX = ".part"
 _MAX_MARKER_BYTES = 8192
 _STAGING_DIRECTORY_NAME = ".vodloft-staging"
 _STAGING_WORKSPACE_PREFIX = "attempt-"
+_QUICK_WORKSPACE_PREFIX = "quick-"
 _STAGING_PUBLICATION_MARKER = ".vodloft-publication"
 _STAGING_PUBLICATION_MAGIC_V1 = b"VODLOFT_STAGED_DOWNLOAD_PUBLICATION_V1\0"
 _STAGING_PUBLICATION_MAGIC_V2 = b"VODLOFT_STAGED_DOWNLOAD_PUBLICATION_V2\0"
@@ -116,11 +118,16 @@ def create_temporary_download_workspace(
     The configured temporary folder may be on any filesystem, including local
     storage while the final library is on a network mount. Cross-filesystem work
     is handled only after the download is complete.
+
+    A quick download's workspace gets a prefix of its own: its output lives in
+    the quick download folder, whose recovery owns it, so a leftover workspace
+    holds nothing the library could miss.
     """
     requested = Path(requested_destination)
     staging_root = Path(temporary_root) / _STAGING_DIRECTORY_NAME
     staging_root.mkdir(parents=True, exist_ok=True)
-    workspace = Path(tempfile.mkdtemp(prefix=_STAGING_WORKSPACE_PREFIX, dir=staging_root))
+    prefix = _QUICK_WORKSPACE_PREFIX if is_within_quick_root(requested, temporary_root) else _STAGING_WORKSPACE_PREFIX
+    workspace = Path(tempfile.mkdtemp(prefix=prefix, dir=staging_root))
     return TemporaryDownloadWorkspace(
         path=workspace / f"download{requested.suffix}",
         workspace=workspace,
@@ -578,6 +585,12 @@ def cleanup_abandoned_temporary_downloads(
 
     removed = 0
     for workspace in entries:
+        if workspace.name.startswith(_QUICK_WORKSPACE_PREFIX):
+            # Its file, if it got that far, is in a quick download folder that
+            # never became ready, which quick download recovery removes.
+            if _remove_workspace(workspace):
+                removed += 1
+            continue
         if not workspace.name.startswith(_STAGING_WORKSPACE_PREFIX):
             continue
         if workspace.is_symlink() or not workspace.is_dir():
