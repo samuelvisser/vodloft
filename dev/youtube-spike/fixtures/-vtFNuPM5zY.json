@@ -1,0 +1,148 @@
+{
+ "playlist": "UULV",
+ "ytdlp": {
+  "id": "-vtFNuPM5zY",
+  "title": "I can't afford RAM, so I'm upgrading my 1989 Mac instead",
+  "duration": 7134,
+  "timestamp": 1791043722,
+  "release_timestamp": 1791036048,
+  "upload_date": "20261003",
+  "release_date": "20261003",
+  "live_status": "was_live",
+  "media_type": "livestream",
+  "was_live": true,
+  "availability": "public",
+  "age_limit": 0,
+  "channel_id": "UCR-DXc1voovS8nhAvccRZhg",
+  "channel": "Jeff Geerling",
+  "uploader": "Jeff Geerling",
+  "webpage_url": "https://www.youtube.com/watch?v=-vtFNuPM5zY",
+  "thumbnail": "https://i.ytimg.com/vi/-vtFNuPM5zY/maxresdefault.jpg",
+  "extractor_key": "Youtube",
+  "_type": "video",
+  "description": "From your Mac Mini media server to that Raspberry Pi running who-knows-what, Twingate lets you securely reach every corner of your homelab from anywhere. Get started - it's free for up to five users: https://twingate.com/jeffgeerling\n\nHere are links to all the upgrades / classic Mac things I'm talki"
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "3opn5hgEM6mjFIxmyPpiAQFtfNU",
+  "id": "-vtFNuPM5zY",
+  "snippet": {
+   "publishedAt": "2026-10-03T16:08:42Z",
+   "channelId": "UCR-DXc1voovS8nhAvccRZhg",
+   "title": "I can't afford RAM, so I'm upgrading my 1989 Mac instead",
+   "description": "From your Mac Mini media server to that Raspberry Pi running who-knows-what, Twingate lets you securely reach every corner of your homelab from anywhere. Get started - it's free for up to five users: https://twingate.com/jeffgeerling\n\nHere are links to all the upgrades / classic Mac things I'm talking about today:\n\n  - Bolle's 50 MHz 030 upgrade + Ethernet Combo Cards: https://68kmla.org/bb/threads/fs-se-30-ethernet-accelerator-adapter-combo-cards.42856/\n  - CRT Tweaker stick model: https://www.printables.com/model/276900-tv-set-crt-alignment-tool-tweaker\n  - THETechKnight's CRT Swap video: https://www.youtube.com/watch?v=zVIlZZAEpXM\n  - MacMesh: https://macmesh.xyzzy.computer\n  - TashTalk: https://github.com/lampmerchant/tashtalk\n  - BlueSCSI: https://bluescsi.com\n  - VCF Midwest 2026 wrap-up video: https://www.youtube.com/watch?v=oW-Hp8-DAB0\n\nSupport me on Patreon: https://www.patreon.com/geerlingguy\nSponsor me on GitHub: https://github.com/sponsors/geerlingguy\nMerch: https://www.redshirtjeff.com\n2nd Channel: https://www.youtube.com/@GeerlingEngineering\n3rd Channel: https://www.youtube.com/@Level2Jeff\n\nContents:\n\n00:00:00 - Kicking off this livestream\n00:01:28 - Twingate is matching donations to the UOAA\n00:03:17 - Quietly returning to real-time\n00:05:55 - Mic fixed, pre-upgrade benchmarks\n00:09:00 - Teardown time\n00:25:45 - Looking at the SE/30 motherboard\n00:30:20 - Tripling the CPU speed\n00:39:00 - Will it boot?\n00:50:00 - CRT swap donor\n00:59:00 - High voltage anode fun\n01:06:44 - Mac Classic II Motherboard and Analog board\n01:08:56 - Ever seen a bare CRT?\n01:14:59 - Prepping the recipient\n01:23:39 - Yoke swap\n01:29:00 - Rebuilding the SE/30\n01:42:55 - Will it boot? Part 2\n01:47:03 - Yoke adjustment, high danger\n01:52:53 - Final rebuild",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/-vtFNuPM5zY/default.jpg",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/-vtFNuPM5zY/mqdefault.jpg",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/-vtFNuPM5zY/hqdefault.jpg",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/-vtFNuPM5zY/sddefault.jpg",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/-vtFNuPM5zY/maxresdefault.jpg",
+     "width": 1280,
+     "height": 720
+    },
+    "uhd": {
+     "url": "https://i.ytimg.com/vi/-vtFNuPM5zY/uhddefault.jpg",
+     "width": 3840,
+     "height": 2160
+    }
+   },
+   "channelTitle": "Jeff Geerling",
+   "tags": [
+    "mac",
+    "se30",
+    "classic",
+    "compact",
+    "macintosh",
+    "retro",
+    "vintage",
+    "computer",
+    "upgrade",
+    "computers",
+    "bolle",
+    "accelerator",
+    "network",
+    "asante",
+    "teardown",
+    "rebuild",
+    "ram",
+    "memory",
+    "crisis",
+    "pc",
+    "shortage",
+    "ntp",
+    "time",
+    "gps",
+    "timing",
+    "demo",
+    "vcf",
+    "midwest",
+    "vcfmw",
+    "east",
+    "crt",
+    "burn in",
+    "yoke",
+    "danger",
+    "voltage",
+    "high",
+    "cathode ray tube",
+    "tools",
+    "solder",
+    "desolder",
+    "card",
+    "nubus",
+    "pds",
+    "processor direct slot",
+    "macos",
+    "mac os",
+    "system 7"
+   ],
+   "categoryId": "28",
+   "liveBroadcastContent": "none",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "I can't afford RAM, so I'm upgrading my 1989 Mac instead",
+    "description": "From your Mac Mini media server to that Raspberry Pi running who-knows-what, Twingate lets you securely reach every corner of your homelab from anywhere. Get started - it's free for up to five users: https://twingate.com/jeffgeerling\n\nHere are links to all the upgrades / classic Mac things I'm talking about today:\n\n  - Bolle's 50 MHz 030 upgrade + Ethernet Combo Cards: https://68kmla.org/bb/threads/fs-se-30-ethernet-accelerator-adapter-combo-cards.42856/\n  - CRT Tweaker stick model: https://www.printables.com/model/276900-tv-set-crt-alignment-tool-tweaker\n  - THETechKnight's CRT Swap video: https://www.youtube.com/watch?v=zVIlZZAEpXM\n  - MacMesh: https://macmesh.xyzzy.computer\n  - TashTalk: https://github.com/lampmerchant/tashtalk\n  - BlueSCSI: https://bluescsi.com\n  - VCF Midwest 2026 wrap-up video: https://www.youtube.com/watch?v=oW-Hp8-DAB0\n\nSupport me on Patreon: https://www.patreon.com/geerlingguy\nSponsor me on GitHub: https://github.com/sponsors/geerlingguy\nMerch: https://www.redshirtjeff.com\n2nd Channel: https://www.youtube.com/@GeerlingEngineering\n3rd Channel: https://www.youtube.com/@Level2Jeff\n\nContents:\n\n00:00:00 - Kicking off this livestream\n00:01:28 - Twingate is matching donations to the UOAA\n00:03:17 - Quietly returning to real-time\n00:05:55 - Mic fixed, pre-upgrade benchmarks\n00:09:00 - Teardown time\n00:25:45 - Looking at the SE/30 motherboard\n00:30:20 - Tripling the CPU speed\n00:39:00 - Will it boot?\n00:50:00 - CRT swap donor\n00:59:00 - High voltage anode fun\n01:06:44 - Mac Classic II Motherboard and Analog board\n01:08:56 - Ever seen a bare CRT?\n01:14:59 - Prepping the recipient\n01:23:39 - Yoke swap\n01:29:00 - Rebuilding the SE/30\n01:42:55 - Will it boot? Part 2\n01:47:03 - Yoke adjustment, high danger\n01:52:53 - Final rebuild"
+   },
+   "defaultAudioLanguage": "en-US"
+  },
+  "contentDetails": {
+   "duration": "PT1H58M55S",
+   "dimension": "2d",
+   "definition": "hd",
+   "caption": "false",
+   "licensedContent": true,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "processed",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  },
+  "liveStreamingDetails": {
+   "actualStartTime": "2026-10-03T14:00:48Z",
+   "actualEndTime": "2026-10-03T15:59:33Z",
+   "scheduledStartTime": "2026-10-03T14:00:00Z"
+  }
+ }
+}

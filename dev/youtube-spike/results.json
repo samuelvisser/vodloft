@@ -1,0 +1,1043 @@
+{
+ "started_at": "2026-10-27T13:01:56+0100",
+ "ytdlp_version": "2026.10.21",
+ "big_channel": {
+  "handle": "@mkbhd",
+  "video_count": "1861",
+  "api": {
+   "listed": 1858,
+   "pages": 38,
+   "detailed": 1858,
+   "missing_from_videos_list": [],
+   "seconds": 15.8,
+   "units": 76
+  },
+  "ytdlp_videos_tab": {
+   "listing_error": null,
+   "listed": 1728,
+   "listing_seconds": 30.2,
+   "sampled": 15,
+   "seconds_per_full_lookup": 5.66,
+   "estimated_full_index_seconds": 11531.0,
+   "lookup_errors": []
+  },
+  "only_in_api_uploads": 130,
+  "only_in_ytdlp_videos_tab": []
+ },
+ "playlist": {
+  "id": "PLBsP89CPrMeM2MmF4suOeT0vsic9nEC2Y",
+  "title": "First Impressions!",
+  "item_count": 159,
+  "api": {
+   "listed": 159,
+   "pages": 4,
+   "detailed": 156,
+   "missing_from_videos_list": [],
+   "seconds": 1.7,
+   "units": 8
+  },
+  "ytdlp": {
+   "listing_error": null,
+   "listed": 159,
+   "listing_seconds": 3.5,
+   "sampled": 10,
+   "seconds_per_full_lookup": 6.0,
+   "estimated_full_index_seconds": 1117.0,
+   "lookup_errors": []
+  }
+ },
+ "quick_check": {
+  "channels": [
+   {
+    "handle": "@mkbhd",
+    "api_seconds": 0.3,
+    "ytdlp_flat_seconds": 2.4,
+    "rss": [
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.03
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     }
+    ]
+   },
+   {
+    "handle": "@veritasium",
+    "api_seconds": 0.23,
+    "ytdlp_flat_seconds": 2.4,
+    "rss": [
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.05
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.05
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     }
+    ]
+   },
+   {
+    "handle": "@LinusTechTips",
+    "api_seconds": 0.36,
+    "ytdlp_flat_seconds": 2.5,
+    "rss": [
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.03
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     }
+    ]
+   },
+   {
+    "handle": "@kurzgesagt",
+    "api_seconds": 0.25,
+    "ytdlp_flat_seconds": 2.1,
+    "rss": [
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.05
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     }
+    ]
+   },
+   {
+    "handle": "@MrBeast",
+    "api_seconds": 0.39,
+    "ytdlp_flat_seconds": 2.4,
+    "rss": [
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     }
+    ]
+   },
+   {
+    "handle": "@3blue1brown",
+    "api_seconds": 0.31,
+    "ytdlp_flat_seconds": 2.7,
+    "rss": [
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.05
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.13
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.06
+     }
+    ]
+   },
+   {
+    "handle": "@TomScottGo",
+    "api_seconds": 0.24,
+    "ytdlp_flat_seconds": 2.4,
+    "rss": [
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.06
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.08
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     }
+    ]
+   },
+   {
+    "handle": "@smartereveryday",
+    "api_seconds": 0.33,
+    "ytdlp_flat_seconds": 2.4,
+    "rss": [
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.03
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     }
+    ]
+   },
+   {
+    "handle": "@markrober",
+    "api_seconds": 0.34,
+    "ytdlp_flat_seconds": 2.5,
+    "rss": [
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.05
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     }
+    ]
+   },
+   {
+    "handle": "@CGPGrey",
+    "api_seconds": 0.28,
+    "ytdlp_flat_seconds": 2.6,
+    "rss": [
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.06
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.05
+     }
+    ]
+   },
+   {
+    "handle": "@Vsauce",
+    "api_seconds": 0.35,
+    "ytdlp_flat_seconds": 2.6,
+    "rss": [
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.05
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.05
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     }
+    ]
+   },
+   {
+    "handle": "@numberphile",
+    "api_seconds": 0.36,
+    "ytdlp_flat_seconds": 2.3,
+    "rss": [
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.06
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.06
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.16
+     }
+    ]
+   },
+   {
+    "handle": "@NileRed",
+    "api_seconds": 0.24,
+    "ytdlp_flat_seconds": 2.6,
+    "rss": [
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.05
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.03
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     }
+    ]
+   },
+   {
+    "handle": "@StuffMadeHere",
+    "api_seconds": 0.28,
+    "ytdlp_flat_seconds": 2.6,
+    "rss": [
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.05
+     }
+    ]
+   },
+   {
+    "handle": "@TechnologyConnections",
+    "api_seconds": 0.29,
+    "ytdlp_flat_seconds": 2.8,
+    "rss": [
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.05
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.05
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.06
+     }
+    ]
+   },
+   {
+    "handle": "@WendoverProductions",
+    "api_seconds": 0.29,
+    "ytdlp_flat_seconds": 2.6,
+    "rss": [
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.15
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.05
+     }
+    ]
+   },
+   {
+    "handle": "@RealEngineering",
+    "api_seconds": 0.29,
+    "ytdlp_flat_seconds": 2.9,
+    "rss": [
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     }
+    ]
+   },
+   {
+    "handle": "@minutephysics",
+    "api_seconds": 0.29,
+    "ytdlp_flat_seconds": 2.1,
+    "rss": [
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.03
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.04
+     }
+    ]
+   },
+   {
+    "handle": "@LegalEagle",
+    "api_seconds": 0.34,
+    "ytdlp_flat_seconds": 2.2,
+    "rss": [
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.05
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.05
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.05
+     }
+    ]
+   },
+   {
+    "handle": "@JeffGeerling",
+    "api_seconds": 0.26,
+    "ytdlp_flat_seconds": 2.6,
+    "rss": [
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.05
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.05
+     },
+     {
+      "status": 200,
+      "entries": 15,
+      "seconds": 0.05
+     }
+    ]
+   }
+  ],
+  "total_api_seconds": 6.0,
+  "total_ytdlp_flat_seconds": 49.7,
+  "rss_ok": 60,
+  "rss_tries": 60
+ },
+ "tag_playlists": {
+  "@LinusTechTips UULF": {
+   "items": 50,
+   "total": 6583
+  },
+  "@LinusTechTips UUSH": {
+   "items": 50,
+   "total": 289
+  },
+  "@LinusTechTips UULV": {
+   "items": 50,
+   "total": 469
+  },
+  "@JeffGeerling UULF": {
+   "items": 50,
+   "total": 477
+  },
+  "@JeffGeerling UUSH": {
+   "items": 48,
+   "total": 48
+  },
+  "@JeffGeerling UULV": {
+   "items": 50,
+   "total": 59
+  },
+  "@mkbhd UULF": {
+   "items": 50,
+   "total": 1728
+  },
+  "@mkbhd UUSH": {
+   "items": 50,
+   "total": 124
+  },
+  "@mkbhd UULV": {
+   "items": 6,
+   "total": 6
+  }
+ },
+ "fixtures": [
+  {
+   "id": "P6pcTK0wTYA",
+   "playlist": "UULF",
+   "ytdlp_media_type": "video",
+   "ytdlp_live_status": "not_live",
+   "ytdlp_timestamp": 1793037455,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2026-10-26T17:57:35Z",
+   "api_live": false,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 955,
+   "api_duration": "PT15M55S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "DN953UW8iJ8",
+   "playlist": "UULF",
+   "ytdlp_media_type": "video",
+   "ytdlp_live_status": "not_live",
+   "ytdlp_timestamp": 1792861208,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2026-10-24T17:00:08Z",
+   "api_live": false,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 951,
+   "api_duration": "PT15M51S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "FH5SoaRx2TA",
+   "playlist": "UULF",
+   "ytdlp_media_type": "video",
+   "ytdlp_live_status": "not_live",
+   "ytdlp_timestamp": 1792688406,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2026-10-22T17:00:06Z",
+   "api_live": false,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 1079,
+   "api_duration": "PT17M59S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "LGA4ZFr-hfo",
+   "playlist": "UULF",
+   "ytdlp_media_type": "video",
+   "ytdlp_live_status": "not_live",
+   "ytdlp_timestamp": 1792515411,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2026-10-20T16:56:51Z",
+   "api_live": false,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 721,
+   "api_duration": "PT12M1S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "FtjH_HHTpeg",
+   "playlist": "UUSH",
+   "ytdlp_media_type": "short",
+   "ytdlp_live_status": "not_live",
+   "ytdlp_timestamp": 1792778652,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2026-10-23T18:04:12Z",
+   "api_live": false,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 49,
+   "api_duration": "PT50S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "qqhIp0OaZWI",
+   "playlist": "UUSH",
+   "ytdlp_media_type": "short",
+   "ytdlp_live_status": "not_live",
+   "ytdlp_timestamp": 1792077862,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2026-10-15T15:24:22Z",
+   "api_live": false,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 71,
+   "api_duration": "PT1M12S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "UWAWDu0anSs",
+   "playlist": "UUSH",
+   "ytdlp_media_type": "short",
+   "ytdlp_live_status": "not_live",
+   "ytdlp_timestamp": 1791825925,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2026-10-12T17:25:25Z",
+   "api_live": false,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 54,
+   "api_duration": "PT54S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "zH9bqwNShiM",
+   "playlist": "UUSH",
+   "ytdlp_media_type": "short",
+   "ytdlp_live_status": "not_live",
+   "ytdlp_timestamp": 1790529165,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2026-09-27T17:12:45Z",
+   "api_live": false,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 39,
+   "api_duration": "PT39S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "Z1sqWFs86uU",
+   "playlist": "UULV",
+   "ytdlp_media_type": "livestream",
+   "ytdlp_live_status": "was_live",
+   "ytdlp_timestamp": 1789777656,
+   "ytdlp_release_timestamp": 1789764022,
+   "api_published_at": "2026-09-19T00:27:36Z",
+   "api_live": true,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 13090,
+   "api_duration": "PT3H38M11S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "o4ub_WOWFoo",
+   "playlist": "UULV",
+   "ytdlp_media_type": "livestream",
+   "ytdlp_live_status": "was_live",
+   "ytdlp_timestamp": 1782532194,
+   "ytdlp_release_timestamp": 1782517652,
+   "api_published_at": "2026-06-27T03:49:54Z",
+   "api_live": true,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 14024,
+   "api_duration": "PT3H53M45S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "BCyBANIkjlo",
+   "playlist": "UULV",
+   "ytdlp_media_type": "livestream",
+   "ytdlp_live_status": "was_live",
+   "ytdlp_timestamp": 1781934072,
+   "ytdlp_release_timestamp": 1781920189,
+   "api_published_at": "2026-06-20T05:41:12Z",
+   "api_live": true,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 13276,
+   "api_duration": "PT3H41M16S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "cOOJEKS4sJs",
+   "playlist": "UULV",
+   "ytdlp_media_type": "livestream",
+   "ytdlp_live_status": "was_live",
+   "ytdlp_timestamp": 1781326409,
+   "ytdlp_release_timestamp": 1781311654,
+   "api_published_at": "2026-06-13T04:53:29Z",
+   "api_live": true,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 14138,
+   "api_duration": "PT3H55M38S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "4l9xU3_36Xs",
+   "playlist": "UULF",
+   "ytdlp_media_type": "video",
+   "ytdlp_live_status": "not_live",
+   "ytdlp_timestamp": 1791982803,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2026-10-14T13:00:03Z",
+   "api_live": false,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 1417,
+   "api_duration": "PT23M38S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "KUUuxkICOLw",
+   "playlist": "UULF",
+   "ytdlp_media_type": "video",
+   "ytdlp_live_status": "not_live",
+   "ytdlp_timestamp": 1791576036,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2026-10-09T20:00:36Z",
+   "api_live": false,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 548,
+   "api_duration": "PT9M8S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "7I0pjHC4U7I",
+   "playlist": "UULF",
+   "ytdlp_media_type": "video",
+   "ytdlp_live_status": "not_live",
+   "ytdlp_timestamp": 1790348438,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2026-09-25T15:00:38Z",
+   "api_live": false,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 133,
+   "api_duration": "PT2M14S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "ltofM26akZQ",
+   "playlist": "UULF",
+   "ytdlp_media_type": "video",
+   "ytdlp_live_status": "not_live",
+   "ytdlp_timestamp": 1790008633,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2026-09-21T16:37:13Z",
+   "api_live": false,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 205,
+   "api_duration": "PT3M26S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "UBnfA9s3OuE",
+   "playlist": "UUSH",
+   "ytdlp_media_type": "short",
+   "ytdlp_live_status": "not_live",
+   "ytdlp_timestamp": 1755897951,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2025-08-22T21:25:51Z",
+   "api_live": false,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 82,
+   "api_duration": "PT1M23S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "0Uob1spTJgE",
+   "playlist": "UUSH",
+   "ytdlp_media_type": "short",
+   "ytdlp_live_status": "not_live",
+   "ytdlp_timestamp": 1754712301,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2025-08-09T04:05:01Z",
+   "api_live": false,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 83,
+   "api_duration": "PT1M23S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "MJYy-r82zyo",
+   "playlist": "UUSH",
+   "ytdlp_media_type": "short",
+   "ytdlp_live_status": "not_live",
+   "ytdlp_timestamp": 1748005246,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2025-05-23T13:00:46Z",
+   "api_live": false,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 79,
+   "api_duration": "PT1M19S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "cc7_95DO-g0",
+   "playlist": "UUSH",
+   "ytdlp_media_type": "short",
+   "ytdlp_live_status": "not_live",
+   "ytdlp_timestamp": 1743515960,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2025-04-01T13:59:20Z",
+   "api_live": false,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 97,
+   "api_duration": "PT1M38S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "-vtFNuPM5zY",
+   "playlist": "UULV",
+   "ytdlp_media_type": "livestream",
+   "ytdlp_live_status": "was_live",
+   "ytdlp_timestamp": 1791043722,
+   "ytdlp_release_timestamp": 1791036048,
+   "api_published_at": "2026-10-03T16:08:42Z",
+   "api_live": true,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 7134,
+   "api_duration": "PT1H58M55S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "27J-wwgZydE",
+   "playlist": "UULV",
+   "ytdlp_media_type": "livestream",
+   "ytdlp_live_status": "was_live",
+   "ytdlp_timestamp": 1761771340,
+   "ytdlp_release_timestamp": 1761768005,
+   "api_published_at": "2025-10-29T20:55:40Z",
+   "api_live": true,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 3052,
+   "api_duration": "PT50M53S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "Q3bY0qHl8gw",
+   "playlist": "UULV",
+   "ytdlp_media_type": "livestream",
+   "ytdlp_live_status": "was_live",
+   "ytdlp_timestamp": 1759611459,
+   "ytdlp_release_timestamp": 1759604478,
+   "api_published_at": "2025-10-04T20:57:39Z",
+   "api_live": true,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 6276,
+   "api_duration": "PT1H44M37S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "EAlrCFJZlnI",
+   "playlist": "UULV",
+   "ytdlp_media_type": "livestream",
+   "ytdlp_live_status": "was_live",
+   "ytdlp_timestamp": 1728155708,
+   "ytdlp_release_timestamp": 1728147736,
+   "api_published_at": "2024-10-05T19:15:08Z",
+   "api_live": true,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 7120,
+   "api_duration": "PT1H58M41S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "ESABTN4VtrA",
+   "playlist": "UULF",
+   "ytdlp_media_type": "video",
+   "ytdlp_live_status": "not_live",
+   "ytdlp_timestamp": 1792584052,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2026-10-21T12:00:52Z",
+   "api_live": false,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 1744,
+   "api_duration": "PT29M5S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "scwlR0QHGOk",
+   "playlist": "UULF",
+   "ytdlp_media_type": "video",
+   "ytdlp_live_status": "not_live",
+   "ytdlp_timestamp": 1792202963,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2026-10-17T02:09:23Z",
+   "api_live": false,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 1365,
+   "api_duration": "PT22M45S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "QVv3mQzlrN0",
+   "playlist": "UULF",
+   "ytdlp_media_type": "video",
+   "ytdlp_live_status": "not_live",
+   "ytdlp_timestamp": 1791931358,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2026-10-13T22:42:38Z",
+   "api_live": false,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 707,
+   "api_duration": "PT11M47S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "_0G4OG39XjI",
+   "playlist": "UULF",
+   "ytdlp_media_type": "video",
+   "ytdlp_live_status": "not_live",
+   "ytdlp_timestamp": 1791493240,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2026-10-08T21:00:40Z",
+   "api_live": false,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 852,
+   "api_duration": "PT14M13S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "_4ELeWAgMwo",
+   "playlist": "UUSH",
+   "ytdlp_media_type": "short",
+   "ytdlp_live_status": "not_live",
+   "ytdlp_timestamp": 1792591233,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2026-10-21T14:00:33Z",
+   "api_live": false,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 46,
+   "api_duration": "PT47S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "R6yNUnRXZ64",
+   "playlist": "UUSH",
+   "ytdlp_media_type": "short",
+   "ytdlp_live_status": "not_live",
+   "ytdlp_timestamp": 1789023742,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2026-09-10T07:02:22Z",
+   "api_live": false,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 70,
+   "api_duration": "PT1M10S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "uJdjKOBikTE",
+   "playlist": "UUSH",
+   "ytdlp_media_type": "short",
+   "ytdlp_live_status": "not_live",
+   "ytdlp_timestamp": 1788992077,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2026-09-09T22:14:37Z",
+   "api_live": false,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 20,
+   "api_duration": "PT20S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "v-_d2e7x4KA",
+   "playlist": "UUSH",
+   "ytdlp_media_type": "short",
+   "ytdlp_live_status": "not_live",
+   "ytdlp_timestamp": 1787700235,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2026-08-25T23:23:55Z",
+   "api_live": false,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 82,
+   "api_duration": "PT1M23S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "hYIqILk4lbs",
+   "playlist": "UULV",
+   "ytdlp_media_type": null,
+   "ytdlp_live_status": null,
+   "ytdlp_timestamp": null,
+   "ytdlp_release_timestamp": null,
+   "api_published_at": "2019-02-21T17:56:04Z",
+   "api_live": true,
+   "api_live_broadcast_content": "upcoming",
+   "ytdlp_duration": null,
+   "api_duration": "P0D",
+   "ytdlp_error": "ERROR: [youtube] hYIqILk4lbs: Offline."
+  },
+  {
+   "id": "49-rK7SAfQk",
+   "playlist": "UULV",
+   "ytdlp_media_type": "livestream",
+   "ytdlp_live_status": "was_live",
+   "ytdlp_timestamp": 1511975712,
+   "ytdlp_release_timestamp": 1511971183,
+   "api_published_at": "2017-11-29T17:15:12Z",
+   "api_live": true,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 2501,
+   "api_duration": "PT41M41S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "c4guh00dOaQ",
+   "playlist": "UULV",
+   "ytdlp_media_type": "livestream",
+   "ytdlp_live_status": "was_live",
+   "ytdlp_timestamp": 1509044181,
+   "ytdlp_release_timestamp": 1509039243,
+   "api_published_at": "2017-10-26T18:56:21Z",
+   "api_live": true,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 2877,
+   "api_duration": "PT47M57S",
+   "ytdlp_error": null
+  },
+  {
+   "id": "TxNSSlk__x4",
+   "playlist": "UULV",
+   "ytdlp_media_type": "livestream",
+   "ytdlp_live_status": "was_live",
+   "ytdlp_timestamp": 1506369964,
+   "ytdlp_release_timestamp": 1506366145,
+   "api_published_at": "2017-09-25T20:06:04Z",
+   "api_live": true,
+   "api_live_broadcast_content": "none",
+   "ytdlp_duration": 1783,
+   "api_duration": "PT29M43S",
+   "ytdlp_error": null
+  }
+ ],
+ "api_units": 139,
+ "finished_at": "2026-10-27T13:10:52+0100"
+}

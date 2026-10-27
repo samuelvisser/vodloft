@@ -1,0 +1,88 @@
+{
+ "playlist": "UUSH",
+ "ytdlp": {
+  "id": "zH9bqwNShiM",
+  "title": "What's the Worst Tech Linus Still Uses?",
+  "duration": 39,
+  "timestamp": 1790529165,
+  "release_timestamp": null,
+  "upload_date": "20260927",
+  "live_status": "not_live",
+  "media_type": "short",
+  "was_live": false,
+  "availability": "public",
+  "age_limit": 0,
+  "channel_id": "UCXuqSBlHAE6Xw-yeJA0Tunw",
+  "channel": "Linus Tech Tips",
+  "uploader": "Linus Tech Tips",
+  "webpage_url": "https://www.youtube.com/watch?v=zH9bqwNShiM",
+  "thumbnail": "https://i.ytimg.com/vi/zH9bqwNShiM/maxresdefault.jpg",
+  "extractor_key": "Youtube",
+  "_type": "video",
+  "description": "We always talk about the best tech we use, but what about the worst tech?"
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "y_f2wEpuS2myG3MhLlL5gJBd7qI",
+  "id": "zH9bqwNShiM",
+  "snippet": {
+   "publishedAt": "2026-09-27T17:12:45Z",
+   "channelId": "UCXuqSBlHAE6Xw-yeJA0Tunw",
+   "title": "What's the Worst Tech Linus Still Uses?",
+   "description": "We always talk about the best tech we use, but what about the worst tech?",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/zH9bqwNShiM/default.jpg",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/zH9bqwNShiM/mqdefault.jpg",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/zH9bqwNShiM/hqdefault.jpg",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/zH9bqwNShiM/sddefault.jpg",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/zH9bqwNShiM/maxresdefault.jpg",
+     "width": 1280,
+     "height": 720
+    }
+   },
+   "channelTitle": "Linus Tech Tips",
+   "categoryId": "28",
+   "liveBroadcastContent": "none",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "What's the Worst Tech Linus Still Uses?",
+    "description": "We always talk about the best tech we use, but what about the worst tech?"
+   },
+   "defaultAudioLanguage": "en"
+  },
+  "contentDetails": {
+   "duration": "PT39S",
+   "dimension": "2d",
+   "definition": "hd",
+   "caption": "false",
+   "licensedContent": true,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "processed",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  }
+ }
+}

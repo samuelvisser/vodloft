@@ -1,0 +1,113 @@
+{
+ "playlist": "UULV",
+ "ytdlp": {
+  "id": "27J-wwgZydE",
+  "title": "The 1 Million Subscriber 'It was DNS' Livestream",
+  "duration": 3052,
+  "timestamp": 1761771340,
+  "release_timestamp": 1761768005,
+  "upload_date": "20251029",
+  "release_date": "20251029",
+  "live_status": "was_live",
+  "media_type": "livestream",
+  "was_live": true,
+  "availability": "public",
+  "age_limit": 0,
+  "channel_id": "UCR-DXc1voovS8nhAvccRZhg",
+  "channel": "Jeff Geerling",
+  "uploader": "Jeff Geerling",
+  "webpage_url": "https://www.youtube.com/watch?v=27J-wwgZydE",
+  "thumbnail": "https://i.ytimg.com/vi/27J-wwgZydE/maxresdefault.jpg",
+  "extractor_key": "Youtube",
+  "_type": "video",
+  "description": "Let's celebrate the Internet going down again by *maybe* reaching 1,000,000 subscribers.\n\nAnd thanking a few folks along the way!\n\nCreators who inpsired me:\n\nengineerguy: https://www.youtube.com/@engineerguyvideo\nStuff Made Here: https://www.youtube.com/@StuffMadeHere\nSampson Boat Company: https://w"
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "MRiVIAVZ-6xH9Hmwd5mJZySxSpc",
+  "id": "27J-wwgZydE",
+  "snippet": {
+   "publishedAt": "2025-10-29T20:55:40Z",
+   "channelId": "UCR-DXc1voovS8nhAvccRZhg",
+   "title": "The 1 Million Subscriber 'It was DNS' Livestream",
+   "description": "Let's celebrate the Internet going down again by *maybe* reaching 1,000,000 subscribers.\n\nAnd thanking a few folks along the way!\n\nCreators who inpsired me:\n\nengineerguy: https://www.youtube.com/@engineerguyvideo\nStuff Made Here: https://www.youtube.com/@StuffMadeHere\nSampson Boat Company: https://www.youtube.com/@SampsonBoatCo\nLOOK MUM NO COMPUTER: https://www.youtube.com/@LOOKMUMNOCOMPUTER\nAction Retro: https://www.youtube.com/@ActionRetro\nBamaBass: https://www.youtube.com/@BamaBass\nGreatScott!: https://www.youtube.com/@greatscottlab\nNovaspirit Tech: https://www.youtube.com/@NovaspiritTech\nPecos Hank: https://www.youtube.com/@PecosHank\nFactory Monster: https://www.youtube.com/@Factory_Monster\n\nCreators who've helped me:\n\nServeTheHome: https://www.youtube.com/@ServeTheHomeVideo\nLevel1Techs: https://www.youtube.com/@Level1Techs\nExplainingComputers: https://www.youtube.com/@ExplainingComputers\nSmarter Every Day: https://www.youtube.com/@smartereveryday\nHomelab community, from RaidOwl to Hardware Haven!\nVintage Mac community, from Veronica Explains to Mac84!\n(And so many more...)\n\nSupport me on Patreon: https://www.patreon.com/geerlingguy\nSponsor me on GitHub: https://github.com/sponsors/geerlingguy\nMerch: https://www.redshirtjeff.com\n2nd Channel: https://www.youtube.com/@GeerlingEngineering\n3rd Channel: https://www.youtube.com/@Level2Jeff\n\nContents:\n\n00:00 - We're live\n01:32 - Arduino Uno Q is on the desk\n01:48 - Noctua livestream camera fix\n02:24 - It was DNS\n04:30 - YouTube retrospective\n08:35 - Argon ONE UP Laptop appearance\n10:24 - Community projects and channels that inspire me\n25:53 - YouTube creators who've helped\n32:04 - Confetti popper prepper\n36:10 - NDIcam time for stream timing quirks\n39:05 - Everyone watch a Kevin McAleer video!\n41:10 - The final 20 subscribers\n42:33 - A million!\n44:32 - Happily distracted by chat's questions\n49:56 - Technical difficulties (are learning opportunities)",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/27J-wwgZydE/default.jpg",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/27J-wwgZydE/mqdefault.jpg",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/27J-wwgZydE/hqdefault.jpg",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/27J-wwgZydE/sddefault.jpg",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/27J-wwgZydE/maxresdefault.jpg",
+     "width": 1280,
+     "height": 720
+    }
+   },
+   "channelTitle": "Jeff Geerling",
+   "tags": [
+    "live",
+    "million",
+    "one",
+    "1000000",
+    "subscribers",
+    "livestream",
+    "geerling",
+    "raspberry pi",
+    "geerlingguy",
+    "jeff",
+    "homelab",
+    "community",
+    "thanks",
+    "comments",
+    "help",
+    "dns",
+    "it was dns"
+   ],
+   "categoryId": "28",
+   "liveBroadcastContent": "none",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "The 1 Million Subscriber 'It was DNS' Livestream",
+    "description": "Let's celebrate the Internet going down again by *maybe* reaching 1,000,000 subscribers.\n\nAnd thanking a few folks along the way!\n\nCreators who inpsired me:\n\nengineerguy: https://www.youtube.com/@engineerguyvideo\nStuff Made Here: https://www.youtube.com/@StuffMadeHere\nSampson Boat Company: https://www.youtube.com/@SampsonBoatCo\nLOOK MUM NO COMPUTER: https://www.youtube.com/@LOOKMUMNOCOMPUTER\nAction Retro: https://www.youtube.com/@ActionRetro\nBamaBass: https://www.youtube.com/@BamaBass\nGreatScott!: https://www.youtube.com/@greatscottlab\nNovaspirit Tech: https://www.youtube.com/@NovaspiritTech\nPecos Hank: https://www.youtube.com/@PecosHank\nFactory Monster: https://www.youtube.com/@Factory_Monster\n\nCreators who've helped me:\n\nServeTheHome: https://www.youtube.com/@ServeTheHomeVideo\nLevel1Techs: https://www.youtube.com/@Level1Techs\nExplainingComputers: https://www.youtube.com/@ExplainingComputers\nSmarter Every Day: https://www.youtube.com/@smartereveryday\nHomelab community, from RaidOwl to Hardware Haven!\nVintage Mac community, from Veronica Explains to Mac84!\n(And so many more...)\n\nSupport me on Patreon: https://www.patreon.com/geerlingguy\nSponsor me on GitHub: https://github.com/sponsors/geerlingguy\nMerch: https://www.redshirtjeff.com\n2nd Channel: https://www.youtube.com/@GeerlingEngineering\n3rd Channel: https://www.youtube.com/@Level2Jeff\n\nContents:\n\n00:00 - We're live\n01:32 - Arduino Uno Q is on the desk\n01:48 - Noctua livestream camera fix\n02:24 - It was DNS\n04:30 - YouTube retrospective\n08:35 - Argon ONE UP Laptop appearance\n10:24 - Community projects and channels that inspire me\n25:53 - YouTube creators who've helped\n32:04 - Confetti popper prepper\n36:10 - NDIcam time for stream timing quirks\n39:05 - Everyone watch a Kevin McAleer video!\n41:10 - The final 20 subscribers\n42:33 - A million!\n44:32 - Happily distracted by chat's questions\n49:56 - Technical difficulties (are learning opportunities)"
+   },
+   "defaultAudioLanguage": "en-US"
+  },
+  "contentDetails": {
+   "duration": "PT50M53S",
+   "dimension": "2d",
+   "definition": "hd",
+   "caption": "true",
+   "licensedContent": true,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "processed",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  },
+  "liveStreamingDetails": {
+   "actualStartTime": "2025-10-29T20:00:05Z",
+   "actualEndTime": "2025-10-29T20:50:51Z",
+   "scheduledStartTime": "2025-10-29T20:00:00Z"
+  }
+ }
+}

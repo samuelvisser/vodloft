@@ -1,0 +1,114 @@
+{
+ "playlist": "UULF",
+ "ytdlp": {
+  "id": "FH5SoaRx2TA",
+  "title": "There’s a Secret (Better) Netflix for Millionaires",
+  "duration": 1079,
+  "timestamp": 1792688406,
+  "release_timestamp": null,
+  "upload_date": "20261022",
+  "live_status": "not_live",
+  "media_type": "video",
+  "was_live": false,
+  "availability": "public",
+  "age_limit": 0,
+  "channel_id": "UCXuqSBlHAE6Xw-yeJA0Tunw",
+  "channel": "Linus Tech Tips",
+  "uploader": "Linus Tech Tips",
+  "webpage_url": "https://www.youtube.com/watch?v=FH5SoaRx2TA",
+  "thumbnail": "https://i.ytimg.com/vi/FH5SoaRx2TA/maxresdefault.jpg",
+  "extractor_key": "Youtube",
+  "_type": "video",
+  "description": "Thanks to UGREEN for sponsoring this video! Check out their DXP6800 Ultra and more below:\n\nUGREEN NAS on Official Store https://ai.us.ugreen.com/9SFtV6\nUGREEN NAS DXP6800 Ultra https://amzn.to/4znqFuF\nUGREEN NAS Series https://amzn.to/4hVYmMY\n\nKaleidescape isn't your average media viewing service. T"
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "YnbJDXGwi5Js4oOOtpipvLMRlbc",
+  "id": "FH5SoaRx2TA",
+  "snippet": {
+   "publishedAt": "2026-10-22T17:00:06Z",
+   "channelId": "UCXuqSBlHAE6Xw-yeJA0Tunw",
+   "title": "There’s a Secret (Better) Netflix for Millionaires",
+   "description": "Thanks to UGREEN for sponsoring this video! Check out their DXP6800 Ultra and more below:\n\nUGREEN NAS on Official Store https://ai.us.ugreen.com/9SFtV6\nUGREEN NAS DXP6800 Ultra https://amzn.to/4znqFuF\nUGREEN NAS Series https://amzn.to/4hVYmMY\n\nKaleidescape isn't your average media viewing service. They offer a home theater experience with bitrates that completely destroy standard streaming and even 4K Blu-ray. But with proprietary players, massive file sizes, and individual titles costing up to $45 each, we have to ask: who is this for?\n\nCheck out the Kaleidescape Strato K Movie Player at: https://www.kaleidescape.com/strato-k-movie-player/\n\nDiscuss on the forum: https://linustechtips.com/topic/1643861-there%E2%80%99s-a-secret-better-netflix-for-millionaires/\n\nCheck out our Channel Partners:\n\nSecretlab \n- Grab a TITAN Evo ergonomic gaming chair:  https://lmg.gg/secretlabltt\n- Grab an ATLAS ergonomic office chair:  https://lmg.gg/secretlablttatlas\n\nPIA \n- Get the VPN of our choice: https://www.piavpn.com/ltt\n\ndbrand \n- Buy a \"Circuit\" series skin for your device: https://dbrand.com/pcb\n\n► SHOP LTT PRODUCTS: https://lttstore.com\n► GET EXCLUSIVE CONTENT ON FLOATPLANE: https://lmg.gg/lttfloatplane\n► DIVE DEEPER ON THE LTT LABS WEBSITE: https://lmg.gg/labs\n► SPONSORS, AFFILIATES, AND PARTNERS: https://lmg.gg/partners\n\nPurchases made through some store links may provide some compensation to Linus Media Group. Affiliate links powered in part by https://affilimate.com/?aid=ghz1izbpb\n\nLinus Sebastian is an investor in Framework Computer, Inc and HexOS by Eshtek.\n\nCHAPTERS\n---------------------------------------------------\n0:00 Intro\n2:57 First impressions\n4:46 There's no included remote\n5:29 The interface\n7:57 Movie library\n8:30 It's NOT a streaming service\n9:18 4K Cinematic is awesome\n12:12 Writing team's thoughts\n14:08 Closing thoughts\n17:42 Outro",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/FH5SoaRx2TA/default.jpg",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/FH5SoaRx2TA/mqdefault.jpg",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/FH5SoaRx2TA/hqdefault.jpg",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/FH5SoaRx2TA/sddefault.jpg",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/FH5SoaRx2TA/maxresdefault.jpg",
+     "width": 1280,
+     "height": 720
+    },
+    "uhd": {
+     "url": "https://i.ytimg.com/vi/FH5SoaRx2TA/uhddefault.jpg",
+     "width": 3840,
+     "height": 2160
+    }
+   },
+   "channelTitle": "Linus Tech Tips",
+   "tags": [
+    "Kaleidescape",
+    "home theater",
+    "4k streaming",
+    "8k movies",
+    "netflix for millionaires",
+    "4k blu-ray",
+    "movie downloads",
+    "lossless audio",
+    "home cinema setup",
+    "tech review",
+    "Strato 4K",
+    "4K Cinematic",
+    "Sinners",
+    "Movie",
+    "LTT",
+    "Linus Tech Tips",
+    "Theater",
+    "Expensive",
+    "Yacht"
+   ],
+   "categoryId": "28",
+   "liveBroadcastContent": "none",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "There’s a Secret (Better) Netflix for Millionaires",
+    "description": "Thanks to UGREEN for sponsoring this video! Check out their DXP6800 Ultra and more below:\n\nUGREEN NAS on Official Store https://ai.us.ugreen.com/9SFtV6\nUGREEN NAS DXP6800 Ultra https://amzn.to/4znqFuF\nUGREEN NAS Series https://amzn.to/4hVYmMY\n\nKaleidescape isn't your average media viewing service. They offer a home theater experience with bitrates that completely destroy standard streaming and even 4K Blu-ray. But with proprietary players, massive file sizes, and individual titles costing up to $45 each, we have to ask: who is this for?\n\nCheck out the Kaleidescape Strato K Movie Player at: https://www.kaleidescape.com/strato-k-movie-player/\n\nDiscuss on the forum: https://linustechtips.com/topic/1643861-there%E2%80%99s-a-secret-better-netflix-for-millionaires/\n\nCheck out our Channel Partners:\n\nSecretlab \n- Grab a TITAN Evo ergonomic gaming chair:  https://lmg.gg/secretlabltt\n- Grab an ATLAS ergonomic office chair:  https://lmg.gg/secretlablttatlas\n\nPIA \n- Get the VPN of our choice: https://www.piavpn.com/ltt\n\ndbrand \n- Buy a \"Circuit\" series skin for your device: https://dbrand.com/pcb\n\n► SHOP LTT PRODUCTS: https://lttstore.com\n► GET EXCLUSIVE CONTENT ON FLOATPLANE: https://lmg.gg/lttfloatplane\n► DIVE DEEPER ON THE LTT LABS WEBSITE: https://lmg.gg/labs\n► SPONSORS, AFFILIATES, AND PARTNERS: https://lmg.gg/partners\n\nPurchases made through some store links may provide some compensation to Linus Media Group. Affiliate links powered in part by https://affilimate.com/?aid=ghz1izbpb\n\nLinus Sebastian is an investor in Framework Computer, Inc and HexOS by Eshtek.\n\nCHAPTERS\n---------------------------------------------------\n0:00 Intro\n2:57 First impressions\n4:46 There's no included remote\n5:29 The interface\n7:57 Movie library\n8:30 It's NOT a streaming service\n9:18 4K Cinematic is awesome\n12:12 Writing team's thoughts\n14:08 Closing thoughts\n17:42 Outro"
+   },
+   "defaultAudioLanguage": "en"
+  },
+  "contentDetails": {
+   "duration": "PT17M59S",
+   "dimension": "2d",
+   "definition": "hd",
+   "caption": "false",
+   "licensedContent": true,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "processed",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  }
+ }
+}

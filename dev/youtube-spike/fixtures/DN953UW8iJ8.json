@@ -1,0 +1,119 @@
+{
+ "playlist": "UULF",
+ "ytdlp": {
+  "id": "DN953UW8iJ8",
+  "title": "dbrand Forced me to Review the iPhone 18 Pro",
+  "duration": 951,
+  "timestamp": 1792861208,
+  "release_timestamp": null,
+  "upload_date": "20261024",
+  "live_status": "not_live",
+  "media_type": "video",
+  "was_live": false,
+  "availability": "public",
+  "age_limit": 0,
+  "channel_id": "UCXuqSBlHAE6Xw-yeJA0Tunw",
+  "channel": "Linus Tech Tips",
+  "uploader": "Linus Tech Tips",
+  "webpage_url": "https://www.youtube.com/watch?v=DN953UW8iJ8",
+  "thumbnail": "https://i.ytimg.com/vi/DN953UW8iJ8/maxresdefault.jpg",
+  "extractor_key": "Youtube",
+  "_type": "video",
+  "description": "Get your overpriced cases, screen protectors, and stickers at https://shortlinus.com\n\nInitially we weren't going to review the Apple iPhone 18 Pro & Pro Max. But then dbrand came in with some \"words of encouragement\" so we had no choice. It also helps that LTT LABS tested this phone and found some V"
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "apEAh_zFWu4f4ry2hWMkjfxUytI",
+  "id": "DN953UW8iJ8",
+  "snippet": {
+   "publishedAt": "2026-10-24T17:00:08Z",
+   "channelId": "UCXuqSBlHAE6Xw-yeJA0Tunw",
+   "title": "dbrand Forced me to Review the iPhone 18 Pro",
+   "description": "Get your overpriced cases, screen protectors, and stickers at https://shortlinus.com\n\nInitially we weren't going to review the Apple iPhone 18 Pro & Pro Max. But then dbrand came in with some \"words of encouragement\" so we had no choice. It also helps that LTT LABS tested this phone and found some VERY interesting discoveries. These new phones show great improvement thanks to the new Apple A20 Pro, and many more things that we'll tell you all about.\n\nDiscuss on the forum: https://linustechtips.com/topic/1643904-dbrand-forced-me-to-do-this-review/\n\nCheck out the LABS article: https://www.lttlabs.com/articles/2026/09/24/iphone-18-pro-series-test-results\n\nCheck out the sample photos: https://drive.google.com/drive/folders/1UkaqWIyF8sv81GsEOz-LMon0XlKxMMJO?usp=sharing \n\nApple iPhone 18 Pro (256GB): https://geni.us/tZz9S\nApple iPhone 18 Pro Max (256GB): https://geni.us/W5OW9\n\nCheck out our Channel Partners:\n\nSecretlab \n- Grab a TITAN Evo ergonomic gaming chair:  https://lmg.gg/secretlabltt\n- Grab an ATLAS ergonomic office chair:  https://lmg.gg/secretlablttatlas\n\nPIA \n- Get the VPN of our choice: https://www.piavpn.com/ltt\n\ndbrand \n- Buy a \"Circuit\" series skin for your device: https://dbrand.com/pcb\n\n► SHOP LTT PRODUCTS: https://lttstore.com\n► GET EXCLUSIVE CONTENT ON FLOATPLANE: https://lmg.gg/lttfloatplane\n► DIVE DEEPER ON THE LTT LABS WEBSITE: https://lmg.gg/labs\n► SPONSORS, AFFILIATES, AND PARTNERS: https://lmg.gg/partners\n\nPurchases made through some store links may provide some compensation to Linus Media Group. Affiliate links powered in part by https://affilimate.com/?aid=ghz1izbpb\n\nLinus Sebastian is an investor in Framework Computer, Inc and HexOS by Eshtek.\n\nCHAPTERS\n---------------------------------------------------\n0:00 Intro\n1:58 Initial Impressions\n2:50 New CPU Cores\n3:49 Storage weirdness\n4:40 Gaming\n5:56 iOS27\n6:30 Battery life\n7:30 Screen\n7:59 Camera\n12:30 Siri AI & Shortcuts\n15:44 Outro",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/DN953UW8iJ8/default.jpg",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/DN953UW8iJ8/mqdefault.jpg",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/DN953UW8iJ8/hqdefault.jpg",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/DN953UW8iJ8/sddefault.jpg",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/DN953UW8iJ8/maxresdefault.jpg",
+     "width": 1280,
+     "height": 720
+    },
+    "uhd": {
+     "url": "https://i.ytimg.com/vi/DN953UW8iJ8/uhddefault.jpg",
+     "width": 3840,
+     "height": 2160
+    }
+   },
+   "channelTitle": "Linus Tech Tips",
+   "tags": [
+    "Apple",
+    "iPhone 18",
+    "iPhone 18 Pro",
+    "iPhone 18 Pro Max",
+    "Siri",
+    "AI",
+    "iOS27",
+    "iPhone Duo",
+    "Gaming",
+    "Phone",
+    "Mobile",
+    "Mobile Device",
+    "Steel Nomad",
+    "Pixel",
+    "Samsung",
+    "HTC",
+    "Motorola",
+    "Google",
+    "Foldable",
+    "Camera",
+    "Professional",
+    "Tech",
+    "Gadget",
+    "Fun"
+   ],
+   "categoryId": "28",
+   "liveBroadcastContent": "none",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "dbrand Forced me to Review the iPhone 18 Pro",
+    "description": "Get your overpriced cases, screen protectors, and stickers at https://shortlinus.com\n\nInitially we weren't going to review the Apple iPhone 18 Pro & Pro Max. But then dbrand came in with some \"words of encouragement\" so we had no choice. It also helps that LTT LABS tested this phone and found some VERY interesting discoveries. These new phones show great improvement thanks to the new Apple A20 Pro, and many more things that we'll tell you all about.\n\nDiscuss on the forum: https://linustechtips.com/topic/1643904-dbrand-forced-me-to-do-this-review/\n\nCheck out the LABS article: https://www.lttlabs.com/articles/2026/09/24/iphone-18-pro-series-test-results\n\nCheck out the sample photos: https://drive.google.com/drive/folders/1UkaqWIyF8sv81GsEOz-LMon0XlKxMMJO?usp=sharing \n\nApple iPhone 18 Pro (256GB): https://geni.us/tZz9S\nApple iPhone 18 Pro Max (256GB): https://geni.us/W5OW9\n\nCheck out our Channel Partners:\n\nSecretlab \n- Grab a TITAN Evo ergonomic gaming chair:  https://lmg.gg/secretlabltt\n- Grab an ATLAS ergonomic office chair:  https://lmg.gg/secretlablttatlas\n\nPIA \n- Get the VPN of our choice: https://www.piavpn.com/ltt\n\ndbrand \n- Buy a \"Circuit\" series skin for your device: https://dbrand.com/pcb\n\n► SHOP LTT PRODUCTS: https://lttstore.com\n► GET EXCLUSIVE CONTENT ON FLOATPLANE: https://lmg.gg/lttfloatplane\n► DIVE DEEPER ON THE LTT LABS WEBSITE: https://lmg.gg/labs\n► SPONSORS, AFFILIATES, AND PARTNERS: https://lmg.gg/partners\n\nPurchases made through some store links may provide some compensation to Linus Media Group. Affiliate links powered in part by https://affilimate.com/?aid=ghz1izbpb\n\nLinus Sebastian is an investor in Framework Computer, Inc and HexOS by Eshtek.\n\nCHAPTERS\n---------------------------------------------------\n0:00 Intro\n1:58 Initial Impressions\n2:50 New CPU Cores\n3:49 Storage weirdness\n4:40 Gaming\n5:56 iOS27\n6:30 Battery life\n7:30 Screen\n7:59 Camera\n12:30 Siri AI & Shortcuts\n15:44 Outro"
+   },
+   "defaultAudioLanguage": "en"
+  },
+  "contentDetails": {
+   "duration": "PT15M51S",
+   "dimension": "2d",
+   "definition": "hd",
+   "caption": "false",
+   "licensedContent": true,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "processed",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  }
+ }
+}

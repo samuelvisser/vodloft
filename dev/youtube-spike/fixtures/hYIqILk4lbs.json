@@ -1,0 +1,72 @@
+{
+ "playlist": "UULV",
+ "ytdlp": {
+  "_error": "ERROR: [youtube] hYIqILk4lbs: Offline."
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "OdPThhuJQ48ptMzgu8seBrz2U-k",
+  "id": "hYIqILk4lbs",
+  "snippet": {
+   "publishedAt": "2019-02-21T17:56:04Z",
+   "channelId": "UCBJycsmduvYEL83R_U4JriQ",
+   "title": "Countdown to 8 Million!",
+   "description": "Counting down to 8M with live Q&A\n\nThe shirt: http://shop.MKBHD.com",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/hYIqILk4lbs/default.jpg?v=5c6ee636",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/hYIqILk4lbs/mqdefault.jpg?v=5c6ee636",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/hYIqILk4lbs/hqdefault.jpg?v=5c6ee636",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/hYIqILk4lbs/sddefault.jpg?v=5c6ee636",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/hYIqILk4lbs/maxresdefault.jpg?v=5c6ee636",
+     "width": 1280,
+     "height": 720
+    }
+   },
+   "channelTitle": "Marques Brownlee",
+   "categoryId": "28",
+   "liveBroadcastContent": "upcoming",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "Countdown to 8 Million!",
+    "description": "Counting down to 8M with live Q&A\n\nThe shirt: http://shop.MKBHD.com"
+   }
+  },
+  "contentDetails": {
+   "duration": "P0D",
+   "dimension": "2d",
+   "definition": "sd",
+   "caption": "false",
+   "licensedContent": false,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "uploaded",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  },
+  "liveStreamingDetails": {
+   "activeLiveChatId": "Cg0KC2hZSXFJTGs0bGJzKicKGFVDQkp5Y3NtZHV2WUVMODNSX1U0SnJpURILaFlJcUlMazRsYnM"
+  }
+ }
+}

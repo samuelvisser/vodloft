@@ -1,0 +1,150 @@
+{
+ "playlist": "UULV",
+ "ytdlp": {
+  "id": "Q3bY0qHl8gw",
+  "title": "Can we get Intel Arc GPUs working on a Pi before Nvidia kills them?",
+  "duration": 6276,
+  "timestamp": 1759611459,
+  "release_timestamp": 1759604478,
+  "upload_date": "20251004",
+  "release_date": "20251004",
+  "live_status": "was_live",
+  "media_type": "livestream",
+  "was_live": true,
+  "availability": "public",
+  "age_limit": 0,
+  "channel_id": "UCR-DXc1voovS8nhAvccRZhg",
+  "channel": "Jeff Geerling",
+  "uploader": "Jeff Geerling",
+  "webpage_url": "https://www.youtube.com/watch?v=Q3bY0qHl8gw",
+  "thumbnail": "https://i.ytimg.com/vi/Q3bY0qHl8gw/maxresdefault.jpg",
+  "extractor_key": "Youtube",
+  "_type": "video",
+  "description": "It's been five years since I started working towards full eGPU support on the Raspberry Pi.\n\nAnd we're finally here. Check out all the graphics cards I'm testing on: https://pipci.jeffgeerling.com\n\nAnd PLEASE consider donating to the UOAA, who has helped me and millions of ostomates over the years, "
+ },
+ "api": {
+  "kind": "youtube#video",
+  "etag": "-YGSU2-iV3Tc-Gi5TrL2IPIS7UQ",
+  "id": "Q3bY0qHl8gw",
+  "snippet": {
+   "publishedAt": "2025-10-04T20:57:39Z",
+   "channelId": "UCR-DXc1voovS8nhAvccRZhg",
+   "title": "Can we get Intel Arc GPUs working on a Pi before Nvidia kills them?",
+   "description": "It's been five years since I started working towards full eGPU support on the Raspberry Pi.\n\nAnd we're finally here. Check out all the graphics cards I'm testing on: https://pipci.jeffgeerling.com\n\nAnd PLEASE consider donating to the UOAA, who has helped me and millions of ostomates over the years, to live a better life after surgery. You can use the donation option on YouTube, or support the UOAA directly: https://www.ostomy.org/donate/\n\nYou can also donate on my 5K Run for Resilience fundraising page—any option supports the UOAA directly! https://runsignup.com/jeff-geerling\n\nOther things I mentioned in the video:\n\n  - Run LLMs with llama.cpp on GPU on Pi: https://www.jeffgeerling.com/blog/2024/llms-accelerated-egpu-on-raspberry-pi-5\n  - Full Pi eGPU acceleration with tiny patch: https://www.jeffgeerling.com/blog/2025/full-egpu-acceleration-on-pi-500-15-line-patch\n  - JMT eGPU Dock + M.2 adapter: https://amzn.to/4mLcnNF\n  - OCuLink cable: https://amzn.to/4gRWBiO\n  - ThirdReality Smart Zigbee Outlets (for power monitoring): https://amzn.to/3IItDW6\n\nSupport me on Patreon: https://www.patreon.com/geerlingguy\nSponsor me on GitHub: https://github.com/sponsors/geerlingguy\nMerch: https://www.redshirtjeff.com\n2nd Channel: https://www.youtube.com/@GeerlingEngineering\n3rd Channel: https://www.youtube.com/@Level2Jeff\n\nContents:\n\n00:00:00 - Intro and UOAA fundraiser info\n00:03:12 - The setup - Pi 500+ and an eGPU Dock\n00:04:55 - The 23-line Linux kernel patch and setup\n00:07:49 - Doom 3 on 7900 XT\n00:08:57 - Can it run Crysis? (And Steam?)\n00:12:31 - You can actually *see* it run Crysis\n00:13:46 - Doom Eternal on 7900 XT (RTX ON)\n00:19:00 - Portal 2 (almost works)\n00:19:28 - Ultimate Epic Battle Simulator II (CPU-crusher)\n00:21:47 - Power consumption measurements\n00:22:54 - SSH from Windows 11 to check on UEBS II\n00:24:38 - Minecraft, but faster\n00:27:12 - Practicality and AI/LLMs\n00:28:10 - Open WebUI and llama.cpp for AI models (llama and gpt-oss)\n00:31:00 - Special guests!\n00:32:58 - gpt-oss 20B on the 7900 XT (and AI lies!)\n00:35:34 - Keeping your Sony cams cool (featuring audio insanity)\n00:35:50 - Chat questions - AI TOPS and Bookworm vs Trixie\n00:37:08 - Pi-apps and Steam install (and more chat questions)\n00:40:45 - GPU swap, AMD Radeon RX 9070 XT edition\n00:44:47 - What happens when Mesa's too old (a little more kernel talk)\n00:48:27 - RX 9070 XT works (with newer Mesa), plus gaming\n00:52:25 - But Steam doesn't (with newer Mesa)\n00:53:35 - llama.cpp AI on the 9070 XT (and power consumption)\n00:58:18 - Let's get to INTEL (B580, A750)\n01:00:45 - What happens on Intel?\n01:01:05 - Minisforum DEG1 eGPU dock doesn't work as well\n01:02:03 - Intel, seriously? Copy protection??\n01:02:52 - The curse of the blinking cursor\n01:04:42 - Wayland a no-go, but what about X\n01:07:08 - Intel B580 is blue\n01:09:27 - Switching to Trixie, recompiled Mesa\n01:12:17 - Jeff is so yellow\n01:12:55 - B580 experience and new Trixie features\n01:17:55 - Debugging - dmesg, lspci, firmware, PCIe, Resizeable BAR\n01:20:30 - Disabling iGPU, enabling PCIe Gen 3\n01:24:38 - A brief field trip!\n01:26:42 - Chat corrects Jeff on PCIe link speed reporting (ft nvtop)\n01:29:00 - B580 power draw, current status, and CO2 levels\n01:33:24 - Old school value with the RX 460\n01:38:20 - Chat questions - early bootloader not displayed\n01:38:54 - AI on an old GPU? Is it useful?\n01:41:58 - Even an old GPU is way faster than Pi's CPU\n01:43:06 - RX 460 AI power draw",
+   "thumbnails": {
+    "default": {
+     "url": "https://i.ytimg.com/vi/Q3bY0qHl8gw/default.jpg",
+     "width": 120,
+     "height": 90
+    },
+    "medium": {
+     "url": "https://i.ytimg.com/vi/Q3bY0qHl8gw/mqdefault.jpg",
+     "width": 320,
+     "height": 180
+    },
+    "high": {
+     "url": "https://i.ytimg.com/vi/Q3bY0qHl8gw/hqdefault.jpg",
+     "width": 480,
+     "height": 360
+    },
+    "standard": {
+     "url": "https://i.ytimg.com/vi/Q3bY0qHl8gw/sddefault.jpg",
+     "width": 640,
+     "height": 480
+    },
+    "maxres": {
+     "url": "https://i.ytimg.com/vi/Q3bY0qHl8gw/maxresdefault.jpg",
+     "width": 1280,
+     "height": 720
+    }
+   },
+   "channelTitle": "Jeff Geerling",
+   "tags": [
+    "gpu",
+    "intel",
+    "amd",
+    "arc",
+    "a750",
+    "b580",
+    "radeon",
+    "nvidia",
+    "graphics",
+    "card",
+    "egpu",
+    "oculink",
+    "raspberry pi",
+    "pi 5",
+    "pi 500",
+    "plus",
+    "pcie",
+    "pci express",
+    "linux",
+    "kernel",
+    "recompile",
+    "rebuild",
+    "drm",
+    "iris",
+    "mesa",
+    "build",
+    "software",
+    "patch",
+    "patches",
+    "patchset",
+    "mainline",
+    "amdgpu",
+    "nouveau",
+    "arm",
+    "arm64",
+    "x86",
+    "bar",
+    "space",
+    "memory",
+    "cache",
+    "coherency",
+    "dock",
+    "docking",
+    "station",
+    "power",
+    "stream",
+    "live",
+    "uoaa",
+    "ostomy",
+    "awareness",
+    "crohns",
+    "ibd",
+    "surgery",
+    "fundraiser"
+   ],
+   "categoryId": "28",
+   "liveBroadcastContent": "none",
+   "defaultLanguage": "en",
+   "localized": {
+    "title": "Can we get Intel Arc GPUs working on a Pi before Nvidia kills them?",
+    "description": "It's been five years since I started working towards full eGPU support on the Raspberry Pi.\n\nAnd we're finally here. Check out all the graphics cards I'm testing on: https://pipci.jeffgeerling.com\n\nAnd PLEASE consider donating to the UOAA, who has helped me and millions of ostomates over the years, to live a better life after surgery. You can use the donation option on YouTube, or support the UOAA directly: https://www.ostomy.org/donate/\n\nYou can also donate on my 5K Run for Resilience fundraising page—any option supports the UOAA directly! https://runsignup.com/jeff-geerling\n\nOther things I mentioned in the video:\n\n  - Run LLMs with llama.cpp on GPU on Pi: https://www.jeffgeerling.com/blog/2024/llms-accelerated-egpu-on-raspberry-pi-5\n  - Full Pi eGPU acceleration with tiny patch: https://www.jeffgeerling.com/blog/2025/full-egpu-acceleration-on-pi-500-15-line-patch\n  - JMT eGPU Dock + M.2 adapter: https://amzn.to/4mLcnNF\n  - OCuLink cable: https://amzn.to/4gRWBiO\n  - ThirdReality Smart Zigbee Outlets (for power monitoring): https://amzn.to/3IItDW6\n\nSupport me on Patreon: https://www.patreon.com/geerlingguy\nSponsor me on GitHub: https://github.com/sponsors/geerlingguy\nMerch: https://www.redshirtjeff.com\n2nd Channel: https://www.youtube.com/@GeerlingEngineering\n3rd Channel: https://www.youtube.com/@Level2Jeff\n\nContents:\n\n00:00:00 - Intro and UOAA fundraiser info\n00:03:12 - The setup - Pi 500+ and an eGPU Dock\n00:04:55 - The 23-line Linux kernel patch and setup\n00:07:49 - Doom 3 on 7900 XT\n00:08:57 - Can it run Crysis? (And Steam?)\n00:12:31 - You can actually *see* it run Crysis\n00:13:46 - Doom Eternal on 7900 XT (RTX ON)\n00:19:00 - Portal 2 (almost works)\n00:19:28 - Ultimate Epic Battle Simulator II (CPU-crusher)\n00:21:47 - Power consumption measurements\n00:22:54 - SSH from Windows 11 to check on UEBS II\n00:24:38 - Minecraft, but faster\n00:27:12 - Practicality and AI/LLMs\n00:28:10 - Open WebUI and llama.cpp for AI models (llama and gpt-oss)\n00:31:00 - Special guests!\n00:32:58 - gpt-oss 20B on the 7900 XT (and AI lies!)\n00:35:34 - Keeping your Sony cams cool (featuring audio insanity)\n00:35:50 - Chat questions - AI TOPS and Bookworm vs Trixie\n00:37:08 - Pi-apps and Steam install (and more chat questions)\n00:40:45 - GPU swap, AMD Radeon RX 9070 XT edition\n00:44:47 - What happens when Mesa's too old (a little more kernel talk)\n00:48:27 - RX 9070 XT works (with newer Mesa), plus gaming\n00:52:25 - But Steam doesn't (with newer Mesa)\n00:53:35 - llama.cpp AI on the 9070 XT (and power consumption)\n00:58:18 - Let's get to INTEL (B580, A750)\n01:00:45 - What happens on Intel?\n01:01:05 - Minisforum DEG1 eGPU dock doesn't work as well\n01:02:03 - Intel, seriously? Copy protection??\n01:02:52 - The curse of the blinking cursor\n01:04:42 - Wayland a no-go, but what about X\n01:07:08 - Intel B580 is blue\n01:09:27 - Switching to Trixie, recompiled Mesa\n01:12:17 - Jeff is so yellow\n01:12:55 - B580 experience and new Trixie features\n01:17:55 - Debugging - dmesg, lspci, firmware, PCIe, Resizeable BAR\n01:20:30 - Disabling iGPU, enabling PCIe Gen 3\n01:24:38 - A brief field trip!\n01:26:42 - Chat corrects Jeff on PCIe link speed reporting (ft nvtop)\n01:29:00 - B580 power draw, current status, and CO2 levels\n01:33:24 - Old school value with the RX 460\n01:38:20 - Chat questions - early bootloader not displayed\n01:38:54 - AI on an old GPU? Is it useful?\n01:41:58 - Even an old GPU is way faster than Pi's CPU\n01:43:06 - RX 460 AI power draw"
+   },
+   "defaultAudioLanguage": "en-US"
+  },
+  "contentDetails": {
+   "duration": "PT1H44M37S",
+   "dimension": "2d",
+   "definition": "hd",
+   "caption": "true",
+   "licensedContent": true,
+   "contentRating": {},
+   "projection": "rectangular"
+  },
+  "status": {
+   "uploadStatus": "processed",
+   "privacyStatus": "public",
+   "license": "youtube",
+   "embeddable": true,
+   "publicStatsViewable": true,
+   "madeForKids": false
+  },
+  "liveStreamingDetails": {
+   "actualStartTime": "2025-10-04T19:01:18Z",
+   "actualEndTime": "2025-10-04T20:45:49Z",
+   "scheduledStartTime": "2025-10-04T19:00:00Z"
+  }
+ }
+}
