@@ -68,4 +68,10 @@ For non-interactive publishing after you have reviewed the planned tags:
 
 ## VODLoft 0.1.0
 
-VODLoft starts at `0.1.0`, forked from WireLoft `1.2.4`. The package tags inherited from WireLoft (`backend-v…`, `dailywire-api-v…` and so on) are not present in this repository, so the first `publish` establishes new package baselines without changing their independent package versions.
+VODLoft starts at `0.1.0`, forked from WireLoft `1.2.4`. The package tags inherited from WireLoft (`backend-v…`, `downloader-v…` and so on) are not present in this repository, so VODLoft 0.1.0 resets every workspace package to `0.1.0` as well:
+
+```bash
+./release.py prepare --app-version 0.1.0 --package-version 0.1.0
+```
+
+`--package-version` sets every package under `server/` to one exact version instead of prompting per package. It refuses a version that is not newer than a package's latest tag, so it is only useful for a fresh baseline like this one. The first `publish` then creates `vX.Y.Z` plus a `<package>-v0.1.0` baseline tag for each package.

@@ -297,6 +297,17 @@ def validate_new_app_version(version: str) -> None:
         )
 
 
+def validate_new_package_version(component: Component, version: str, previous_tag: str | None) -> None:
+    parse_semver(version)
+    if previous_tag is None:
+        return
+    previous = previous_tag.removeprefix(f"{component.tag_prefix}-v")
+    if parse_semver(version) <= parse_semver(previous):
+        raise ReleaseError(
+            f"{component.name} {version} must be newer than its latest release tag {previous_tag}."
+        )
+
+
 def prepare_release(args: argparse.Namespace) -> None:
     ensure_clean_worktree()
     refresh_tags()
@@ -317,6 +328,10 @@ def prepare_release(args: argparse.Namespace) -> None:
     for component in discover_components():
         prefix = f"{component.tag_prefix}-v"
         tag = latest_tag(prefix)
+        if args.package_version:
+            validate_new_package_version(component, args.package_version, tag)
+            package_versions[component.name] = args.package_version
+            continue
         if tag is None:
             print(
                 f"{component.name}: no baseline tag yet; keeping {component.version} "
@@ -488,6 +503,10 @@ def build_parser() -> argparse.ArgumentParser:
     prepare = subparsers.add_parser("prepare", help="Prompt for release versions and update manifests.")
     prepare.add_argument("--app-version", help="Set an exact VODLoft MAJOR.MINOR.PATCH version.")
     prepare.add_argument("--app-bump", choices=("major", "minor", "patch"))
+    prepare.add_argument(
+        "--package-version",
+        help="Set every workspace package to this exact MAJOR.MINOR.PATCH version instead of prompting per package.",
+    )
     prepare.add_argument("--dry-run", action="store_true", help="Show the release plan without writing files.")
 
     publish = subparsers.add_parser(
