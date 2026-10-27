@@ -13,7 +13,7 @@ from task_manager.events.emitters import emit_event
 
 
 logger = logging.getLogger(__name__)
-_PENDING_EVENTS_KEY = "wireloft.pending_events"
+_PENDING_EVENTS_KEY = "vodloft.pending_events"
 _COMMITTED_EVENT_BATCH_ADAPTERS: dict[str, "CommittedEventBatchAdapter"] = {}
 
 

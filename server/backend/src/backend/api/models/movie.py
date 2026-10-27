@@ -10,7 +10,6 @@ from backend.api.models.custom_metadata import CustomMetadataResponseBase
 from backend.api.models.source import SourcedResponse
 from backend.api.models.movie_extra import MovieExtraAPICreate, MovieExtraAPIRead
 from backend.utils.helpers import generate_uuid
-from sources import Feature
 
 
 # ---------- Strict input (create/update) ----------
@@ -56,6 +55,7 @@ class MovieAPICreate(_MovieAPIBaseIn):
     """Request body for creating a movie."""
 
     slug: str
+    source_key: str = Field(min_length=1)
     movie_extras: list[MovieExtraAPICreate] = Field(default_factory=list)
     # The extra rows do not have database IDs until this request is persisted,
     # so create requests identify the official trailer by its stable DW slug.
@@ -75,13 +75,6 @@ class MovieAPIUpdate(_MovieAPIBaseIn):
 # ---------- Lenient output (read) ----------
 class _MovieAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     """Fields for responses: no validators, no constraints."""
-
-    source_feature_fields = {
-        "available_for": Feature.MEMBERSHIP_LEVELS,
-        "official_trailer_id": Feature.MOVIE_EXTRAS,
-        "official_trailer": Feature.MOVIE_EXTRAS,
-        "movie_extras": Feature.MOVIE_EXTRAS,
-    }
 
     id: int
     uuid: str

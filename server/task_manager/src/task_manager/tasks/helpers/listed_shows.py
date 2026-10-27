@@ -10,10 +10,12 @@ how its episodes are identified:
 - Numbered: the upload order across the show, 1, 2, 3.
 
 A new episode is numbered after the episodes VODLoft already has, so existing
-file names never change.
+file names never change. Numbering follows upload order, so the episodes are
+saved together once the Source has listed them all.
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
@@ -28,13 +30,12 @@ from backend.utils.helpers import generate_uuid
 from sources import Source, VideoDetails
 from .episodes.events import queue_episode_status_events
 from .general import datetime_to_string
+from .progress import update_progress
 
-SOURCE_SLUG_META_KEY = "source.slug"
+logger = logging.getLogger(__name__)
 
-
-def _source_slug(episode: Episode) -> str:
-    return episode.get_meta(SOURCE_SLUG_META_KEY) or episode.slug
-
+_LISTING_PROGRESS = 10
+_SAVING_PROGRESS = 90
 
 def _season_number(details: VideoDetails, fallback: datetime) -> int:
     if details.season is not None:
@@ -47,16 +48,29 @@ def _order_key(details: VideoDetails, fallback: datetime):
     return _season_number(details, fallback), number, details.published_at or fallback, details.slug
 
 
-def _episode_number(s: Session, season: Season, wanted: int | None) -> int:
-    """The Source's own episode number, unless the season already has an episode with it."""
-    taken = set()
-    for identifier in s.scalars(select(Episode.episode_identifier).where(Episode.season_id == season.id)):
-        number = (identifier or "").rpartition("E")[2]
-        if number.isdigit():
-            taken.add(int(number))
-    if wanted is not None and wanted not in taken:
-        return wanted
-    return max(taken, default=0) + 1
+class _SeasonNumbers:
+    """The episode numbers each season of the show already uses."""
+
+    def __init__(self, s: Session):
+        self._s = s
+        self._taken: dict[int, set[int]] = {}
+
+    def _of(self, season: Season) -> set[int]:
+        if season.id not in self._taken:
+            taken = set()
+            for identifier in self._s.scalars(select(Episode.episode_identifier).where(Episode.season_id == season.id)):
+                number = (identifier or "").rpartition("E")[2]
+                if number.isdigit():
+                    taken.add(int(number))
+            self._taken[season.id] = taken
+        return self._taken[season.id]
+
+    def take(self, season: Season, wanted: int | None) -> int:
+        """The Source's own episode number, unless the season already has an episode with it."""
+        taken = self._of(season)
+        number = wanted if wanted is not None and wanted not in taken else max(taken, default=0) + 1
+        taken.add(number)
+        return number
 
 
 def _next(identifiers: set[str], prefix: str) -> str:
@@ -70,7 +84,8 @@ def _next(identifiers: set[str], prefix: str) -> str:
 
 
 def _identifier(
-    s: Session, show: Show, season: Season, details: VideoDetails, identifiers: set[str], fallback: datetime,
+    show: Show, season: Season, details: VideoDetails, identifiers: set[str], numbers: _SeasonNumbers,
+    fallback: datetime,
 ) -> str:
     match EpisodeIdentifier(show.episode_identifier):
         case EpisodeIdentifier.DATE_BASED:
@@ -80,7 +95,7 @@ def _identifier(
         case EpisodeIdentifier.NUMBERED:
             return _next(identifiers, "ep")
         case EpisodeIdentifier.SEASONAL:
-            number = _episode_number(s, season, details.episode_number if details.season else None)
+            number = numbers.take(season, details.episode_number if details.season else None)
             return f"ep.S{season.season_number:02d}E{number:02d}"
 
 
@@ -105,19 +120,34 @@ def _episode_slug(s: Session, show: Show, source_slug: str) -> str:
 
 
 def known_episode_slugs(s: Session, show: Show) -> frozenset[str]:
-    episodes = s.scalars(select(Episode).where(Episode.show_id == show.id)).all()
-    return frozenset(_source_slug(episode) for episode in episodes)
+    return frozenset(s.scalars(select(Episode.source_slug).where(Episode.show_id == show.id)))
 
 
-def index_listed_show(s: Session, *, show_id: int, source: Source) -> int:
-    """Add the show's new episodes. Returns how many were added."""
+def _list_new_episodes(s: Session, show: Show, source: Source, progress) -> list[VideoDetails]:
+    url, title, known = show.sharing_url, show.title, known_episode_slugs(s, show)
+    # No transaction stays open while the Source looks videos up.
+    s.rollback()
+    update_progress(progress, _LISTING_PROGRESS, f"Listing the episodes of '{title}' at {source.name}")
+    found: list[VideoDetails] = []
+    for details in source.list_episodes(url, known=known):
+        found.append(details)
+        update_progress(
+            progress, _LISTING_PROGRESS,
+            f"Found {len(found)} new {'episode' if len(found) == 1 else 'episodes'} of '{title}' at {source.name}",
+        )
+    return found
+
+
+def index_listed_show(s: Session, *, show_id: int, source: Source, progress=None, dry_run: bool = False) -> int:
+    """Add the show's new episodes. Returns how many were added, or would be added in a dry run."""
     show = s.get(Show, show_id)
     if show is None:
         return 0
-    url, known = show.sharing_url, known_episode_slugs(s, show)
-    # No transaction stays open while the Source looks videos up.
-    s.rollback()
-    found = list(source.list_episodes(url, known=known))
+    found = _list_new_episodes(s, show, source, progress)
+    if dry_run:
+        for details in found:
+            logger.info("Dry run: would add %s (%s)", details.slug, details.title)
+        return len(found)
     if not found:
         return 0
 
@@ -131,11 +161,13 @@ def index_listed_show(s: Session, *, show_id: int, source: Source) -> int:
         if details.slug not in known:
             new.setdefault(details.slug, details)
     ordered = sorted(new.values(), key=lambda details: _order_key(details, now))
+    update_progress(progress, _SAVING_PROGRESS, f"Saving {len(ordered)} new episodes of '{show.title}'")
 
     # A Source's own season is found by its slug, a season per year by its year.
     by_slug = {season.slug: season for season in show.seasons}
     by_year = {season.season_number: season for season in show.seasons}
     identifiers = set(s.scalars(select(Episode.episode_identifier).where(Episode.show_id == show.id)))
+    numbers = _SeasonNumbers(s)
     next_index = (s.scalar(select(func.max(Episode.index)).where(Episode.show_id == show.id)) or 0) + 1
     created: list[Episode] = []
     for details in ordered:
@@ -154,7 +186,7 @@ def index_listed_show(s: Session, *, show_id: int, source: Source) -> int:
             )
             by_slug[season.slug] = by_year[number] = season
             s.refresh(show)
-        identifier = _identifier(s, show, season, details, identifiers, now)
+        identifier = _identifier(show, season, details, identifiers, numbers, now)
         identifiers.add(identifier)
         episode = Episode(
             uuid=generate_uuid(),
@@ -165,6 +197,7 @@ def index_listed_show(s: Session, *, show_id: int, source: Source) -> int:
             index=next_index,
             episode_identifier=identifier,
             slug=_episode_slug(s, show, details.slug),
+            source_slug=details.slug,
             publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
             metadata_is_final=True,
             sharing_url=details.url,
@@ -176,7 +209,6 @@ def index_listed_show(s: Session, *, show_id: int, source: Source) -> int:
             background_image_path=details.image_url,
             drm_protected=details.drm_protected,
         )
-        episode.set_meta(SOURCE_SLUG_META_KEY, details.slug)
         s.add(episode)
         s.flush()
         created.append(episode)

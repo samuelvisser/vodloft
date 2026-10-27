@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import available_artifact
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -26,6 +27,7 @@ def _show(session: Session):
     from backend.types.show_types import EpisodeIdentifier, ShowType
 
     item = Show(
+        source_key="dailywire",
         uuid="show-uuid",
         slug="show",
         title="Show",
@@ -63,6 +65,7 @@ def _episode(
 
     now = datetime.now(timezone.utc)
     item = Episode(
+        source_key="dailywire",
         uuid=f"episode-{index}-uuid",
         type="episode",
         show=show,
@@ -136,7 +139,7 @@ def _rss_profile(
         preferred_format="format_1080p",
         prefer_exact_match=False,
         ep_id_type_list=["ep"],
-        feed_url="https://wireloft.test/feed.xml",
+        feed_url="https://vodloft.test/feed.xml",
         video_output_mode=mode,
         stream_live_episodes=live,
         live_episode_handoff_ids=[],
@@ -184,7 +187,7 @@ def _available_hls(session: Session, episode, local_profile, download_profile, p
         local_media_profile_id=local_profile.id,
         download_profile_id=download_profile.id,
         file_path=str(path),
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         downloaded_bytes=path.stat().st_size,
         downloaded_at=datetime.now(timezone.utc),
         downloaded_publish_status="published_final",
@@ -205,7 +208,7 @@ def _available_file(session: Session, episode, local_profile, download_profile, 
         local_media_profile_id=local_profile.id,
         download_profile_id=download_profile.id,
         file_path=str(path),
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         downloaded_bytes=path.stat().st_size,
         downloaded_at=datetime.now(timezone.utc),
         downloaded_publish_status="published_final",

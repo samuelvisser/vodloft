@@ -5,13 +5,14 @@ import logging
 from sqlalchemy.orm import Session
 
 from backend.api.models.source import (
-    ProgramStatusAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SourceAPIRead, SourceDomainAPIRead,
+    ProgramStatusAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SearchResultAPIRead, ShowDetailsAPIRead,
+    SourceAPIRead, SourceDomainAPIRead,
 )
 from backend.db.models import Episode, Show, SourceDomainPreference
-from config.network import is_no_internet_error
+from backend.services.source_requests import asking_source
+from backend.utils.helpers import slugify
 from sources import (
-    Feature, LinkKind, ProgramStatus, ResolvedLink, Source, UnknownSourceError, all_sources, get_source, named_domains,
-    sources_for,
+    Feature, LinkKind, ResolvedLink, Source, UnknownSourceError, all_sources, get_source, named_domains, sources_for,
 )
 
 
@@ -22,23 +23,8 @@ class LinkNotRecognisedError(LookupError):
     pass
 
 
-class SourceLookupError(RuntimeError):
-    def __init__(self, source: Source, message: str):
-        super().__init__(message)
-        self.source = source
-
-
-def to_source_read(source: Source) -> SourceAPIRead:
-    return SourceAPIRead(
-        id=source.id,
-        name=source.name,
-        domains=list(source.domains),
-        features=sorted(feature.value for feature in source.features),
-    )
-
-
 def list_sources() -> list[SourceAPIRead]:
-    return [to_source_read(source) for source in all_sources()]
+    return [SourceAPIRead.model_validate(source) for source in all_sources()]
 
 
 class SourceFeatureMissingError(LookupError):
@@ -55,11 +41,38 @@ def source_with(source_id: str, feature: Feature) -> Source:
     return source
 
 
-def to_program_read(status: ProgramStatus) -> ProgramStatusAPIRead:
-    return ProgramStatusAPIRead(
-        name=status.name, version=status.version,
-        last_update_at=status.last_update_at, last_update_error=status.last_update_error,
+def lookup_show_details(source: Source, url: str) -> ShowDetailsAPIRead:
+    """Look up a show to add, shaped like the fields of a new show."""
+    with asking_source(f"{source.name} could not look up this show"):
+        details = source.show_details(url)
+    author = details.author_name or details.title
+    return ShowDetailsAPIRead(
+        source_key=source.id,
+        slug=details.slug,
+        title=details.title,
+        description=details.description,
+        sharing_url=details.url,
+        author_name=author,
+        author_slug=slugify(author) or details.slug,
+        thumbnail_landscape_path=details.image_url,
+        seasons=details.seasons,
     )
+
+
+def search_source(source: Source, query: str) -> list[SearchResultAPIRead]:
+    with asking_source(f"{source.name} could not be searched"):
+        results = source.search(query)
+    return [SearchResultAPIRead.model_validate(result) for result in results]
+
+
+def get_program_status(source: Source) -> ProgramStatusAPIRead:
+    return ProgramStatusAPIRead.model_validate(source.program_status())
+
+
+def update_source_program(source: Source) -> ProgramStatusAPIRead:
+    with asking_source(f"Could not update {source.name}"):
+        status = source.update_program()
+    return ProgramStatusAPIRead.model_validate(status)
 
 
 def _show_of_local_episode(s: Session, source: Source, episode_slug: str) -> Show | None:
@@ -78,21 +91,16 @@ def _to_read(s: Session, source: Source, link: ResolvedLink, candidates: list[So
         if local_show is not None:
             show_slug, show_url = local_show.slug, local_show.sharing_url
     return ResolvedLinkAPIRead(
-        source=to_source_read(source),
-        kind=link.kind.value,
+        source=SourceAPIRead.model_validate(source),
+        kind=link.kind,
         slug=link.slug,
         url=link.url,
         show_slug=show_slug,
         show_url=show_url,
         site=link.site,
         drm_protected=link.drm_protected,
-        preview=ResolvedLinkPreviewAPIRead(
-            title=link.title,
-            description=link.description,
-            image_url=link.image_url,
-            author_name=link.author_name,
-        ),
-        candidates=[to_source_read(candidate) for candidate in candidates],
+        preview=ResolvedLinkPreviewAPIRead.model_validate(link),
+        candidates=[SourceAPIRead.model_validate(candidate) for candidate in candidates],
     )
 
 
@@ -115,13 +123,8 @@ def resolve_link(s: Session, url: str, source_key: str | None = None) -> Resolve
         if not asked:
             raise LinkNotRecognisedError(f"Source '{source_key}' does not handle links on this site")
     for source in asked:
-        try:
+        with asking_source(f"{source.name} could not look up this link"):
             link = source.resolve(url)
-        except Exception as exc:
-            if is_no_internet_error(exc):
-                raise
-            logger.warning("Source %s could not look up %s: %s", source.id, url, exc)
-            raise SourceLookupError(source, f"{source.name} could not look up this link: {exc}") from exc
         if link is not None:
             return _to_read(s, source, link, candidates)
     raise LinkNotRecognisedError("No Source recognises this link")

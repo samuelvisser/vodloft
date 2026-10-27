@@ -24,6 +24,7 @@ def _db_with_download(tmp_path, *, file_name="episode.m4a", write_bytes: bytes |
     session = Session(engine)
 
     show = Show(
+        source_key="dailywire",
         uuid="show-uuid",
         slug="test-show",
         title="Test Show",
@@ -37,6 +38,7 @@ def _db_with_download(tmp_path, *, file_name="episode.m4a", write_bytes: bytes |
     )
     season = Season(show=show, index=1, slug="season-2026", name="2026")
     episode = Episode(
+        source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
         show=show,
@@ -381,6 +383,7 @@ def test_scan_can_be_scoped_to_one_show(tmp_path):
     session, engine, show, _episode, download = _db_with_download(tmp_path)
 
     other_show = Show(
+        source_key="dailywire",
         uuid="show-uuid-2",
         slug="other-show",
         title="Other Show",
@@ -394,6 +397,7 @@ def test_scan_can_be_scoped_to_one_show(tmp_path):
     )
     other_season = Season(show=other_show, index=1, slug="other-season-2026", name="2026")
     other_episode = Episode(
+        source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
         show=other_show,

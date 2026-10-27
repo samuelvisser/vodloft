@@ -52,7 +52,7 @@ def test_factory_creates_operation_target_and_context():
         assert operation.targets[0].task_key == "test_worker"
         assert operation.targets[0].resource_type == "show"
         assert operation.targets[0].resource_id == 42
-        assert session.info.get("wireloft.pending_events", []) == []
+        assert session.info.get("vodloft.pending_events", []) == []
     finally:
         session.close()
         engine.dispose()
@@ -108,7 +108,7 @@ def test_factory_coalesces_with_compatible_running_work_without_dispatching():
 
         assert operation.status == OperationStatus.RUNNING.value
         assert operation.progress == 35
-        assert session.info.get("wireloft.pending_events", []) == []
+        assert session.info.get("vodloft.pending_events", []) == []
     finally:
         session.close()
         engine.dispose()

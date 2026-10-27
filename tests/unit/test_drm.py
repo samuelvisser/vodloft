@@ -9,7 +9,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from sources import VideoDetails
-from sources.ytdlp import YtDlpSource, runner
+from sources import ytdlp_runner as runner
+from sources.ytdlp import YtDlpSource
 
 
 @pytest.fixture
@@ -62,7 +63,7 @@ def test_a_protected_video_is_stored_but_cannot_be_downloaded(session):
     from fastapi import HTTPException
 
     from backend.api.endpoints.media_downloads.service import create_video_download
-    from backend.api.models.media_download import MovieDownloadAPICreate
+    from backend.api.models.media_download import MediaDownloadAPICreate
     from backend.api.models.video import VideoAPIRead
     from backend.db.models import VideoLocalMediaProfile
     from backend.services.videos import index_video
@@ -76,7 +77,7 @@ def test_a_protected_video_is_stored_but_cannot_be_downloaded(session):
     session.add(profile)
     session.flush()
     with pytest.raises(HTTPException) as exc:
-        create_video_download(session, video, MovieDownloadAPICreate(local_media_profile_id=profile.id))
+        create_video_download(session, video, MediaDownloadAPICreate(local_media_profile_id=profile.id))
     assert (exc.value.status_code, exc.value.detail) == (422, "Protected by DRM, cannot be downloaded")
 
 

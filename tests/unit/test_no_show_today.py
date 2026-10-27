@@ -28,6 +28,7 @@ def _make_show(session, *, slug="test-show"):
     from backend.types.show_types import EpisodeIdentifier, ShowType
 
     show = Show(
+        source_key="dailywire",
         uuid=f"{slug}-uuid",
         slug=slug,
         title="Test Show",
@@ -70,6 +71,7 @@ def _make_episode(
 
     published_at = published_at or datetime.now(timezone.utc)
     episode = Episode(
+        source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
         show=show,

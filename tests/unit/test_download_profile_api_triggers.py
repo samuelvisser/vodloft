@@ -13,6 +13,7 @@ def _make_show(session: Session, *, slug: str, show_type: str):
     from backend.types.show_types import EpisodeIdentifier
 
     show = Show(
+        source_key="dailywire",
         uuid=f"{slug}-uuid",
         slug=slug,
         title="Test Show",
@@ -58,10 +59,10 @@ def db_session():
 
 
 def _capture_event(event_name: str) -> list[dict]:
-    from task_manager.events.registry import WireloftEventLinker
+    from task_manager.events.registry import VodloftEventLinker
 
     observed: list[dict] = []
-    WireloftEventLinker.subscribe(
+    VodloftEventLinker.subscribe(
         event_name,
         event_callback=lambda **event_data: observed.append(event_data),
     )
@@ -79,7 +80,7 @@ def test_podcast_profile_create_and_update_fire_transactional_events(db_session)
     )
     from backend.types.download_profile_types import EpIdType
     from backend.types.show_types import ShowType
-    from task_manager.events.registry import WireloftEventLinker, wait_for_events
+    from task_manager.events.registry import VodloftEventLinker, wait_for_events
     from task_manager.tasks.workers.download_profile_worker.event_adapter import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
 
     show = _make_show(db_session, slug="podcast", show_type=ShowType.PODCAST.value)
@@ -118,7 +119,7 @@ def test_podcast_profile_create_and_update_fire_transactional_events(db_session)
         "resource_id": created.id,
     }]
 
-    WireloftEventLinker.remove_all()
+    VodloftEventLinker.remove_all()
     updated = _capture_event("download_profile.updated")
     requested = _capture_event(DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT)
     result = update_download_profile(
@@ -167,7 +168,7 @@ def test_series_profile_create_and_update_fire_transactional_events(db_session):
     from backend.db.models import Season
     from backend.types.download_profile_types import EpIdType
     from backend.types.show_types import ShowType
-    from task_manager.events.registry import WireloftEventLinker, wait_for_events
+    from task_manager.events.registry import VodloftEventLinker, wait_for_events
     from task_manager.tasks.workers.download_profile_worker.event_adapter import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
 
     show = _make_show(db_session, slug="series", show_type=ShowType.SERIES.value)
@@ -210,7 +211,7 @@ def test_series_profile_create_and_update_fire_transactional_events(db_session):
         "resource_id": created.id,
     }]
 
-    WireloftEventLinker.remove_all()
+    VodloftEventLinker.remove_all()
     updated = _capture_event("download_profile.updated")
     requested = _capture_event(DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT)
     result = update_download_profile(

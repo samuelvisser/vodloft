@@ -105,7 +105,7 @@ class MiddlewareClient:
         headers = {
             # These are generally not required for Middleware, but harmless if present
             'Accept': 'application/json',
-            'User-Agent': 'wireloft/0.2 (+https://www.dailywire.com)'
+            'User-Agent': 'vodloft/0.2 (+https://www.dailywire.com)'
         }
         if access_token:
             headers['Authorization'] = f'Bearer {access_token}'

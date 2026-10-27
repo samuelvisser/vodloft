@@ -13,7 +13,7 @@ def test_pending_movie_gets_one_lookup_after_tmdb_is_configured(tmp_path, monkey
     )
     from backend.services.movies import index_dailywire_movie
     from backend.services import movies as movie_service
-    from backend.api.models.media_download import MovieDownloadAPICreate
+    from backend.api.models.media_download import MediaDownloadAPICreate
     from backend.db.core import Base
     from backend.db.models import Movie, MovieLocalMediaProfile
     from backend.integrations.tmdb import MovieReleaseLookupResult
@@ -77,7 +77,7 @@ def test_pending_movie_gets_one_lookup_after_tmdb_is_configured(tmp_path, monkey
     create_movie_download(
         session,
         index_dailywire_movie(session, movie_data)[0],
-        MovieDownloadAPICreate(local_media_profile_id=profiles[0].id),
+        MediaDownloadAPICreate(local_media_profile_id=profiles[0].id),
     )
     session.commit()
     movie = session.query(Movie).one()
@@ -89,7 +89,7 @@ def test_pending_movie_gets_one_lookup_after_tmdb_is_configured(tmp_path, monkey
         session,
         index_dailywire_movie(session, movie_data)[0],
         "run-hide-fight-trailer",
-        MovieDownloadAPICreate(local_media_profile_id=profiles[1].id),
+        MediaDownloadAPICreate(local_media_profile_id=profiles[1].id),
     )
     session.commit()
     assert actual_lookups == ["Run Hide Fight"]
@@ -98,7 +98,7 @@ def test_pending_movie_gets_one_lookup_after_tmdb_is_configured(tmp_path, monkey
     create_movie_download(
         session,
         index_dailywire_movie(session, movie_data)[0],
-        MovieDownloadAPICreate(local_media_profile_id=profiles[2].id),
+        MediaDownloadAPICreate(local_media_profile_id=profiles[2].id),
     )
     session.commit()
     assert actual_lookups == ["Run Hide Fight"]

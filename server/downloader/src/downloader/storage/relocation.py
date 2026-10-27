@@ -30,7 +30,7 @@ class _Staged:
 
 
 def _private_path(path: Path) -> Path:
-    return path.with_name(f'.{path.name}.wireloft-rename-{uuid4().hex}.tmp')
+    return path.with_name(f'.{path.name}.vodloft-rename-{uuid4().hex}.tmp')
 
 
 def _move(source: Path, destination: Path, should_cancel: Callable[[], bool]) -> None:

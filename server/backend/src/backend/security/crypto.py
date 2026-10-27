@@ -46,7 +46,7 @@ def _read_key_file(path: Path) -> Optional[bytes]:
             if content:
                 return _normalize_to_fernet_key(content)
     except (OSError, UnicodeDecodeError) as e:
-        logging.getLogger(__name__).warning("Failed to read WL secret key file at %s", path, e)
+        logging.getLogger(__name__).warning("Failed to read the secret key file at %s", path, e)
     return None
 
 
@@ -60,7 +60,7 @@ def _write_key_file(path: Path, key: bytes) -> None:
             # Not fatal, especially on Windows or restricted FS
             pass
     except (OSError, UnicodeError) as e:
-        logging.getLogger(__name__).warning("Could not persist WL secret key to %s: %s", path, e)
+        logging.getLogger(__name__).warning("Could not persist the secret key to %s: %s", path, e)
 
 
 def _derive_key_from_env() -> bytes:

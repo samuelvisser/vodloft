@@ -7,6 +7,8 @@ from typing import Any
 
 import requests
 
+from .. import pacing
+
 ORIGIN = "https://npo.nl"
 API = f"{ORIGIN}/start/api/domain"
 STREAM_LINK = "https://prod.npoplayer.nl/stream-link"
@@ -33,9 +35,7 @@ class NpoClient:
 
     def _pace(self) -> None:
         with self._lock:
-            wait = self._last_request + _PAUSE_SECONDS - time.monotonic()
-            if wait > 0:
-                time.sleep(wait)
+            pacing.pause(self._last_request + _PAUSE_SECONDS - time.monotonic())
             self._last_request = time.monotonic()
 
     def _send(self, method: str, url: str, **kwargs) -> Any:

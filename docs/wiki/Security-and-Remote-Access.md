@@ -44,7 +44,7 @@ Anyone with full control of your VODLoft instance may be able to use media acces
 A VODLoft feed URL contains a secret token, for example:
 
 ```text
-https://wireloft.example.com/feeds/rss/<secret-token>/<show>.xml
+https://vodloft.example.com/feeds/rss/<secret-token>/<show>.xml
 ```
 
 The token allows podcast clients to use the feed without the VODLoft administrator login.

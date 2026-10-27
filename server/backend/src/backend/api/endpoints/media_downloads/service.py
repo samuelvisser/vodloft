@@ -29,7 +29,7 @@ from backend.api.models.media_download import (
     MediaDownloadAPIReadView,
     MediaDownloadAPIUpdate,
     MediaDownloadPageRead,
-    MovieDownloadAPICreate,
+    MediaDownloadAPICreate,
 )
 from backend.db.model_mapping import update_database_fields
 from backend.db.models import (
@@ -647,7 +647,7 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
 def create_movie_download(
     s: Session,
     movie: Movie,
-    body: MovieDownloadAPICreate,
+    body: MediaDownloadAPICreate,
 ) -> MovieMediaDownload:
     """Persist a download target for an indexed movie."""
     _ensure_not_drm_protected(movie)
@@ -699,7 +699,7 @@ def create_movie_extra_download(
     s: Session,
     movie: Movie,
     movie_extra_slug: str,
-    body: MovieDownloadAPICreate,
+    body: MediaDownloadAPICreate,
 ) -> MovieExtraMediaDownload:
     """Persist a download target for an extra of an indexed movie."""
     profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.MOVIE)
@@ -753,7 +753,7 @@ def create_movie_extra_download(
 def create_video_download(
     s: Session,
     video: Video,
-    body: MovieDownloadAPICreate,
+    body: MediaDownloadAPICreate,
 ) -> VideoMediaDownload:
     """Persist a download target for a single video."""
     _ensure_not_drm_protected(video)

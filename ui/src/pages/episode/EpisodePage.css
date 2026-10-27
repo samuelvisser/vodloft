@@ -211,7 +211,7 @@
 }
 
 .episode-view .download-row-actions > .icon-btn,
-.episode-view .download-row-actions .wl-progress-explanation > .icon-btn {
+.episode-view .download-row-actions .vl-progress-explanation > .icon-btn {
     width: 30px;
     height: 30px;
 }

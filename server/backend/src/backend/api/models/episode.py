@@ -13,7 +13,6 @@ from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode import EpisodeIdentifierInfo
 
 from backend.utils.helpers import generate_uuid
-from sources import Feature
 
 
 # ---------- Strict input (create/update) ----------
@@ -84,7 +83,6 @@ class _EpisodeIdentifierAPIOut(ResponseBase):
 class _EpisodeAPIBaseOut(SourcedResponse, _EpisodeIdentifierAPIOut):
     """Complete episode response fields shared by full read models."""
 
-    source_feature_fields = {"went_live_date": Feature.LIVE_EPISODES}
 
     id: int
     show_id: int

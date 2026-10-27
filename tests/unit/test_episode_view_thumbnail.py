@@ -19,6 +19,7 @@ def test_episode_grid_view_uses_landscape_thumbnail():
 
     with Session(engine) as session:
         show = Show(
+            source_key="dailywire",
             uuid="show-uuid",
             slug="show-slug",
             title="Show",
@@ -43,6 +44,7 @@ def test_episode_grid_view_uses_landscape_thumbnail():
         session.flush()
 
         session.add(Episode(
+            source_key="dailywire",
             uuid="episode-uuid",
             type=MediaType.EPISODE.value,
             show_id=show.id,

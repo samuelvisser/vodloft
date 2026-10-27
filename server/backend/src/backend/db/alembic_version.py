@@ -8,7 +8,7 @@ from sqlalchemy import Column, MetaData, String, Table, inspect
 
 SETTINGS_VERSION_TABLE = "settings"
 SETTINGS_VERSION_COLUMN = "alembic_version_num"
-VERSION_STORAGE_MIGRATION_ATTRIBUTE = "wireloft_version_storage_migration"
+VERSION_STORAGE_MIGRATION_ATTRIBUTE = "vodloft_version_storage_migration"
 
 
 def _has_settings_version_table(context: MigrationContext) -> bool:

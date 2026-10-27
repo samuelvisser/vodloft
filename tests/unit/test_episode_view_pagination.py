@@ -12,6 +12,7 @@ def _episode(*, show, season, index: int, slug: str, published: datetime, number
     from backend.types.media_types import MediaType
 
     return Episode(
+        source_key="dailywire",
         uuid=f"uuid-{slug}",
         type=MediaType.EPISODE.value,
         show_id=show.id,
@@ -50,6 +51,7 @@ def test_episode_view_page_is_bounded_and_season_filtered():
 
     with Session(engine) as session:
         show = Show(
+            source_key="dailywire",
             uuid="show-pagination",
             slug="pagination-show",
             title="Pagination Show",
@@ -150,6 +152,7 @@ def test_recently_indexed_episode_views_use_index_time_and_limit():
 
     with Session(engine) as session:
         show = Show(
+            source_key="dailywire",
             uuid="show-recent-indexing",
             slug="recent-indexing-show",
             title="Recent Indexing Show",
@@ -224,6 +227,7 @@ def test_episode_cursor_survives_insert_and_delete_before_boundary():
 
     with Session(engine) as session:
         show = Show(
+            source_key="dailywire",
             uuid="show-cursor-mutation",
             slug="cursor-mutation-show",
             title="Cursor Mutation Show",
@@ -294,6 +298,7 @@ def test_episode_cursor_restarts_when_existing_sort_key_changes():
 
     with Session(engine) as session:
         show = Show(
+            source_key="dailywire",
             uuid="show-cursor-revision",
             slug="cursor-revision-show",
             title="Cursor Revision Show",

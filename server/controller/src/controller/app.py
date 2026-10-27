@@ -116,7 +116,7 @@ def _task_event_kwargs(task_key: str, event_data: dict[str, Any]) -> dict[str, A
 def setup_triggers_from_registry() -> None:
     """Install code-defined cron jobs and event-to-task subscriptions."""
     from apscheduler.triggers.cron import CronTrigger
-    from task_manager.events.registry import WireloftEventLinker
+    from task_manager.events.registry import VodloftEventLinker
     from task_manager.scheduler.executor import execute_task, trigger_now as scheduler_trigger_now
     from task_manager.scheduler.registry import all_triggers
     from task_manager.scheduler.scheduler import start_scheduler
@@ -134,7 +134,7 @@ def setup_triggers_from_registry() -> None:
     scheduler = start_scheduler()
 
     # Rebuilding subscriptions must be safe in reloads and repeated test lifecycles.
-    WireloftEventLinker.remove_all()
+    VodloftEventLinker.remove_all()
 
     for task_key, triggers in all_triggers().items():
         for index, trigger in enumerate(triggers):
@@ -212,7 +212,7 @@ def setup_triggers_from_registry() -> None:
 
                 return handler
 
-            WireloftEventLinker.subscribe(
+            VodloftEventLinker.subscribe(
                 trigger.event_name,
                 event_callback=create_event_handler(task_key, trigger.resource_type),
             )
@@ -230,18 +230,18 @@ def _should_emit_startup_event() -> bool:
     """Whether this worker should fire ``app.startup`` (and its subscribed tasks).
 
     Normal runs always emit. Under ``--debug`` the reloader supervisor exports
-    ``WIRELOFT_RELOAD_SUPERVISOR_PID`` to every worker subprocess it spawns; on
+    ``VODLOFT_RELOAD_SUPERVISOR_PID`` to every worker subprocess it spawns; on
     each file change it kills the worker and spawns a fresh one, which would
     re-emit startup and re-trigger tasks. We guard with a marker file keyed to
     the supervisor pid: the first worker atomically creates it and emits; reload
     workers find it already present and skip. The supervisor removes the marker
     on exit (see ``backend.__main__``).
     """
-    supervisor_pid = os.environ.get("WIRELOFT_RELOAD_SUPERVISOR_PID")
+    supervisor_pid = os.environ.get("VODLOFT_RELOAD_SUPERVISOR_PID")
     if not supervisor_pid:
         return True
 
-    marker = Path(tempfile.gettempdir()) / f"wireloft-reload-startup-{supervisor_pid}.lock"
+    marker = Path(tempfile.gettempdir()) / f"vodloft-reload-startup-{supervisor_pid}.lock"
     try:
         # O_CREAT | O_EXCL is atomic, so this is race-free across workers.
         os.close(os.open(marker, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
@@ -358,10 +358,10 @@ def start_controller() -> None:
         except Exception:
             # Startup is atomic from the application's perspective. Clean up any
             # scheduler/event state created before the failure, then fail fast.
-            from task_manager.events.registry import WireloftEventLinker, shutdown_event_emitter
+            from task_manager.events.registry import VodloftEventLinker, shutdown_event_emitter
             from task_manager.scheduler.scheduler import shutdown_scheduler
 
-            WireloftEventLinker.remove_all()
+            VodloftEventLinker.remove_all()
             shutdown_scheduler(wait=False)
             shutdown_event_emitter()
             _controller_started = False
@@ -377,7 +377,7 @@ def stop_controller() -> None:
             return
 
         from task_manager.events.registry import (
-            WireloftEventLinker,
+            VodloftEventLinker,
             shutdown_event_emitter,
         )
         from task_manager.scheduler.scheduler import shutdown_scheduler
@@ -385,7 +385,7 @@ def stop_controller() -> None:
         # Stop new event callbacks first, then tear down both background executors
         # without waiting for arbitrary worker code. TaskRuns are durable and the
         # next startup reconciles anything that did not finish before process exit.
-        WireloftEventLinker.remove_all()
+        VodloftEventLinker.remove_all()
         shutdown_event_emitter(wait=False)
         shutdown_scheduler(wait=False)
         _controller_started = False

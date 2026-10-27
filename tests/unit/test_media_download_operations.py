@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import mark_artifact_available
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import create_engine, select
@@ -17,6 +18,7 @@ def _make_download(session: Session, *, slug: str = "episode-1"):
     from backend.utils.helpers import generate_uuid
 
     show = Show(
+        source_key="dailywire",
         uuid=f"{slug}-show-uuid",
         slug=f"{slug}-show",
         title="Operation Show",
@@ -30,6 +32,7 @@ def _make_download(session: Session, *, slug: str = "episode-1"):
     )
     season = Season(show=show, index=1, slug=f"{slug}-season", name="One")
     episode = Episode(
+        source_key="dailywire",
         uuid=generate_uuid(),
         type=MediaType.EPISODE.value,
         show=show,
@@ -1211,9 +1214,9 @@ def test_redownload_dependencies_freeze_weights_and_preserve_child_ownership(mon
         first = _make_download(session, slug="dependency-existing")
         second = _make_download(session, slug="dependency-new-known")
         third = _make_download(session, slug="dependency-new-unknown")
-        first.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
-        second.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
-        third.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        mark_artifact_available(first)
+        mark_artifact_available(second)
+        mark_artifact_available(third)
         first.downloaded_bytes = 100
         second.downloaded_bytes = 300
         third.downloaded_bytes = None
@@ -1366,7 +1369,7 @@ def test_delete_unavailable_media_download_rejects_available_record():
     session, engine = _session()
     try:
         download = _make_download(session, slug="delete-available")
-        download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        mark_artifact_available(download)
         download_id = download.id
         session.commit()
 

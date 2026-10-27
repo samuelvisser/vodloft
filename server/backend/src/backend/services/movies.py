@@ -10,6 +10,7 @@ from backend.db.models import Movie, MovieExtra, MovieExtraSource
 from backend.integrations.tmdb import MovieReleaseLookupResult, lookup_movie_release_metadata
 from backend.types.media_types import MediaType, MovieExtraType
 from backend.utils.helpers import generate_uuid
+from sources import DAILYWIRE
 from sources.dailywire.api.records import DwMovieExtraRecord, DwMovieRecord
 
 
@@ -139,6 +140,7 @@ def sync_movie_extras(
                 movie=movie,
                 uuid=generate_uuid(),
                 type=MediaType.MOVIE_EXTRA.value,
+                source_key=movie.source_key,
                 movie_extra_type=movie_extra_type,
                 **values,
             )
@@ -237,6 +239,7 @@ def index_dailywire_movie(
         )
         item.uuid = generate_uuid()
         item.type = MediaType.MOVIE.value
+        item.source_key = DAILYWIRE
         s.add(item)
         s.flush()
 

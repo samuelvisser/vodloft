@@ -11,6 +11,7 @@ def test_jinja_conditionals_omit_missing_year_and_suffix_movie_extras(tmp_path, 
 
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
     movie = Movie(
+        source_key="dailywire",
         uuid="movie-uuid",
         type=MediaType.MOVIE.value,
         slug="example-movie",
@@ -20,6 +21,7 @@ def test_jinja_conditionals_omit_missing_year_and_suffix_movie_extras(tmp_path, 
         release_date=date(2020, 5, 4),
     )
     trailer = MovieExtra(
+        source_key="dailywire",
         uuid="trailer-uuid",
         type=MediaType.MOVIE_EXTRA.value,
         movie=movie,
@@ -54,6 +56,7 @@ def test_movie_variables_separate_parent_movie_from_current_media() -> None:
     )
 
     movie = Movie(
+        source_key="dailywire",
         uuid="movie-context",
         type=MediaType.MOVIE.value,
         slug="parent-movie",
@@ -66,6 +69,7 @@ def test_movie_variables_separate_parent_movie_from_current_media() -> None:
         release_date=date(2020, 5, 4),
     )
     extra = MovieExtra(
+        source_key="dailywire",
         uuid="extra-context",
         type=MediaType.MOVIE_EXTRA.value,
         movie=movie,

@@ -9,7 +9,6 @@ from backend.api.models.base import RequestBase
 from backend.api.models.source import SourcedResponse
 from backend.types.media_types import MovieExtraType
 from backend.utils.helpers import generate_uuid
-from sources import Feature
 
 
 class _MovieExtraAPIBaseIn(RequestBase):
@@ -41,8 +40,6 @@ class MovieExtraAPIUpdate(_MovieExtraAPIBaseIn):
 
 
 class MovieExtraAPIRead(SourcedResponse):
-    source_feature_fields = {"available_for": Feature.MEMBERSHIP_LEVELS}
-
     id: int
     movie_id: int
     uuid: str

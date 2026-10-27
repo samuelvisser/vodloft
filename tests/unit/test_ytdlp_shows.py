@@ -8,8 +8,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from sources import Feature, LinkKind, MoviePlayback, PlaybackKind, ShowDetails, Source, VideoDetails, registry
-from sources.ytdlp import YtDlpSource, runner
+from sources import Feature, LinkKind, Playback, PlaybackKind, ShowDetails, Source, VideoDetails, registry
+from sources import ytdlp_runner as runner
+from sources.ytdlp import YtDlpSource
 from sources.ytdlp.source import show_url
 
 
@@ -48,7 +49,7 @@ class ListedSource(Source):
         return iter([video for video in self.videos if video.slug not in known])
 
     def video_playback(self, *, slug, url):
-        return MoviePlayback(url=url, kind=PlaybackKind.YTDLP, command=("yt-dlp",))
+        return Playback(url=url, kind=PlaybackKind.YTDLP, command=("yt-dlp",))
 
 
 @pytest.fixture
@@ -127,7 +128,7 @@ def test_listed_episodes_can_be_identified_by_date_or_number(listed, session):
 
     def identifiers(show):
         episodes = session.query(Episode).filter_by(show_id=show.id).order_by(Episode.index)
-        return [(e.get_meta("source.slug"), e.episode_identifier, e.season.name) for e in episodes]
+        return [(e.source_slug, e.episode_identifier, e.season.name) for e in episodes]
 
     # Videos uploaded at the same moment: the second one is auxiliary.
     assert identifiers(by_date) == [
@@ -192,11 +193,80 @@ def test_a_scan_of_a_listed_show_skips_the_daily_wire(listed, session, monkeypat
     async def no_daily_wire(*_args, **_kwargs):
         pytest.fail("A listed show must not be fetched from The Daily Wire")
 
+    def no_token(_self):
+        pytest.fail("A scan of listed shows must not sign in to The Daily Wire")
+
     monkeypatch.setattr(service, "_fetch_show", no_daily_wire)
-    monkeypatch.setattr(service.DeviceAuthClient, "get_token", lambda self: None)
+    monkeypatch.setattr(service.DeviceAuthClient, "get_token", no_token)
     result = asyncio.run(service.run_fetch_new_episodes(session, show_id=show.id))
     assert result.shows[0].episodes_found == 1
     assert session.query(Episode).count() == 1
+
+
+class _Progress:
+    def __init__(self):
+        self.messages: list[str] = []
+
+    def set(self, _percentage, message):
+        self.messages.append(message)
+
+
+def test_a_dry_run_lists_a_listed_show_without_saving(listed, session):
+    import asyncio
+
+    from backend.db.models import Episode
+    from task_manager.tasks.workers.fetch_new_episodes import service
+
+    show = _show(session)
+    listed.videos = [_video("a", 2024), _video("b", 2024, 2)]
+    progress = _Progress()
+    result = asyncio.run(service.run_fetch_new_episodes(session, show_id=show.id, dry_run=True, progress=progress))
+
+    assert result.dry_run and result.episodes_found == 0
+    assert session.query(Episode).count() == 0
+    assert progress.messages[-1] == "Dry run complete for 'PL1': 2 new episodes (nothing saved)"
+
+
+def test_listing_reports_each_new_episode(listed, session):
+    from task_manager.tasks.helpers.listed_shows import index_listed_show
+
+    show = _show(session)
+    listed.videos = [_video("a", 2024), _video("b", 2024, 2)]
+    progress = _Progress()
+    index_listed_show(session, show_id=show.id, source=listed, progress=progress)
+
+    assert progress.messages == [
+        "Listing the episodes of 'A playlist' at Listed",
+        "Found 1 new episode of 'A playlist' at Listed",
+        "Found 2 new episodes of 'A playlist' at Listed",
+        "Saving 2 new episodes of 'A playlist'",
+    ]
+
+
+def test_a_canceled_scan_stops_between_lookups_and_saves_nothing(lookups, session):
+    from backend.db.models import Episode
+    from sources import pacing
+    from task_manager.tasks.helpers.listed_shows import index_listed_show
+
+    answers, calls = lookups
+    show = _show(session, source_key="ytdlp")
+    answers[("--flat-playlist", show.sharing_url)] = {"_type": "playlist", "entries": [
+        {"id": slug, "ie_key": "Youtube", "url": f"https://www.youtube.com/watch?v={slug}"} for slug in ("v1", "v2")
+    ]}
+    for slug in ("v1", "v2"):
+        answers[("--no-playlist", f"https://www.youtube.com/watch?v={slug}")] = {
+            "id": slug, "extractor_key": "Youtube", "title": slug, "upload_date": "20240102",
+            "webpage_url": f"https://www.youtube.com/watch?v={slug}",
+        }
+
+    def looked_up() -> int:
+        return sum(1 for args in calls if args[0] == "--no-playlist")
+
+    with pacing.request_context(should_cancel=lambda: looked_up() > 0), pytest.raises(pacing.RequestCancelled):
+        index_listed_show(session, show_id=show.id, source=YtDlpSource())
+
+    assert looked_up() == 1
+    assert session.query(Episode).count() == 0
 
 
 def test_listed_episodes_download_through_the_page(listed, session, monkeypatch):
@@ -246,7 +316,7 @@ def test_a_listed_episode_whose_playback_is_protected_is_not_downloaded(listed, 
     download = EpisodeMediaDownload(media=show.episodes[0], local_media_profile=profile, type="episode", file_path="/downloads/x.ext")
     session.add(download)
     session.commit()
-    monkeypatch.setattr(listed, "video_playback", lambda **_: MoviePlayback(url="https://cdn.example/drm.m3u8", drm_protected=True))
+    monkeypatch.setattr(listed, "video_playback", lambda **_: Playback(url="https://cdn.example/drm.m3u8", drm_protected=True))
 
     with pytest.raises(EncryptedMediaError, match="Listed protects 'Video a' with DRM"):
         download_plans.prepare_download_plan(session, download.id, DownloadTracker())
@@ -260,7 +330,7 @@ def test_a_listed_show_bundle_is_seasonal_and_streams_only_downloads(listed, ses
 
     show = {
         "slug": "PL1", "sourceKey": "listed", "title": "A playlist", "sharingUrl": "https://listed.example/PL1",
-        "membershipLevel": "WL_ANY", "type": "series", "episodeIdentifier": "numbered",
+        "membershipLevel": "HIGHEST_ALLOWED", "type": "series", "episodeIdentifier": "numbered",
         "authorName": "A Channel", "authorSlug": "a-channel",
     }
     seasons = [{"slug": "s1", "name": "Season 1"}]

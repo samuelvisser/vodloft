@@ -1,14 +1,42 @@
-import {useState} from 'react'
+import {useMemo, useState} from 'react'
 import {useQueryClient} from '@tanstack/react-query'
 
 import {saveSourceDomain, useSourceDomains, useSourceLookup} from '../../lib/queries'
 import type {SourceDomainRead} from '../../types/schemas/source'
+import {createSelectRegistry} from '../../utils/selectRegistry'
+import SimpleSelect from '../common/SimpleSelect'
+
+function DomainSourceSelect({row, disabled, onChange}: {
+    row: SourceDomainRead
+    disabled: boolean
+    onChange: (sourceKey: string) => void
+}) {
+    const sources = useSourceLookup()
+    const registry = useMemo(() => createSelectRegistry(
+        `SourceDomain:${row.domain}`,
+        Object.fromEntries(row.sourceKeys.map((key) => [
+            key,
+            {label: `${sources.name(key)}${key === row.defaultSourceKey ? ' (default)' : ''}`},
+        ])),
+        row.sourceKeys,
+    ), [row.domain, row.sourceKeys, row.defaultSourceKey, sources])
+
+    return (
+        <SimpleSelect
+            aria-label={`Source to ask first for ${row.domain}`}
+            registry={registry}
+            value={row.preferredSourceKey ?? row.defaultSourceKey}
+            isDisabled={disabled}
+            menuPlacement="auto"
+            onChange={onChange}
+        />
+    )
+}
 
 /** Which Source VODLoft asks first for links on a site that several Sources can handle. */
 export default function SourceDomainsCard() {
     const queryClient = useQueryClient()
     const {data: domains, error: loadError} = useSourceDomains()
-    const sources = useSourceLookup()
     const [saving, setSaving] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
 
@@ -51,18 +79,11 @@ export default function SourceDomainsCard() {
                             <tr key={row.domain}>
                                 <td>{row.domain}</td>
                                 <td>
-                                    <select
-                                        aria-label={`Source to ask first for ${row.domain}`}
-                                        value={row.preferredSourceKey ?? row.defaultSourceKey}
+                                    <DomainSourceSelect
+                                        row={row}
                                         disabled={saving === row.domain}
-                                        onChange={(event) => void choose(row, event.target.value)}
-                                    >
-                                        {row.sourceKeys.map((key) => (
-                                            <option key={key} value={key}>
-                                                {sources.name(key)}{key === row.defaultSourceKey ? ' (default)' : ''}
-                                            </option>
-                                        ))}
-                                    </select>
+                                        onChange={(sourceKey) => void choose(row, sourceKey)}
+                                    />
                                 </td>
                             </tr>
                         ))}

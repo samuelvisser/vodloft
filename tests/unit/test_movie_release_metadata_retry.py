@@ -13,6 +13,7 @@ def _movie_with_lookup_error(session):
     from backend.types.media_types import MediaType
 
     movie = Movie(
+        source_key="dailywire",
         uuid="movie-retry-uuid",
         type=MediaType.MOVIE.value,
         slug="retry-movie",

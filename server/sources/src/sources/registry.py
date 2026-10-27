@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from urllib.parse import urlsplit
 
-from .contract import ANY_DOMAIN, Source
+from .contract import ANY_DOMAIN, Source, link_host, on_domain
 
 
 class UnknownSourceError(LookupError):
@@ -32,10 +31,6 @@ def all_sources() -> list[Source]:
     return list(_sources.values())
 
 
-def _on_domain(host: str, domain: str) -> bool:
-    return host == domain or host.endswith(f".{domain}")
-
-
 def sources_for(url: str, preferred: Mapping[str, str] | None = None) -> list[Source]:
     """All Sources that claim the link's domain, in registration order.
 
@@ -47,10 +42,10 @@ def sources_for(url: str, preferred: Mapping[str, str] | None = None) -> list[So
         (source for source in _sources.values() if source.handles(url)),
         key=lambda source: ANY_DOMAIN in source.domains,
     )
-    host = (urlsplit(url).hostname or "").lower().rstrip(".")
+    host = link_host(url)
     # The most specific domain wins, so a subdomain can prefer another Source.
     for domain, source_id in sorted((preferred or {}).items(), key=lambda item: -len(item[0])):
-        if _on_domain(host, domain):
+        if on_domain(host, domain):
             matching.sort(key=lambda source: source.id != source_id)
             break
     return matching

@@ -21,8 +21,8 @@ RECORDED_PUBLISHED_FINAL_META_KEY = "ep_status.recorded_published_final"
 
 _LIVE_ENDED_VALUE_PREFIX = "monitor:live_ended:"
 _PUBLISHED_FINAL_VALUE_PREFIX = "monitor:published_final:"
-_LAST_KNOWN_PENDING_VALUE_PREFIX = "wireloft:last_known_pending:"
-_RECORDED_PUBLISHED_FINAL_VALUE_PREFIX = "wireloft:recorded_published_final:"
+_LAST_KNOWN_PENDING_VALUE_PREFIX = "vodloft:last_known_pending:"
+_RECORDED_PUBLISHED_FINAL_VALUE_PREFIX = "vodloft:recorded_published_final:"
 
 
 class EpisodePublicationTiming(Protocol):

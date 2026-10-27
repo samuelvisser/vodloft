@@ -90,7 +90,7 @@ export default function ProgressButton({
     const accessibleLabel = ariaLabel || definition.label
 
     return (
-        <span className="wl-progress-with-details download-progress">
+        <span className="vl-progress-with-details download-progress">
         <span className={rootClassName}>
             {isActive ? (
                 <span
@@ -103,7 +103,7 @@ export default function ProgressButton({
                     aria-label={`${accessibleLabel}: ${resolvedActiveLabel}`}
                 >
                     {resolved && <ProgressFill presentation={resolved} className="progress-button-fill"/>}
-                    <span className="progress-button-label">{resolved?.mode !== 'determinate' && resolved && <FontAwesomeIcon className="wl-progress-icon" icon={resolved.icon}/>} {resolvedActiveLabel}</span>
+                    <span className="progress-button-label">{resolved?.mode !== 'determinate' && resolved && <FontAwesomeIcon className="vl-progress-icon" icon={resolved.icon}/>} {resolvedActiveLabel}</span>
                 </span>
             ) : (
                 <button

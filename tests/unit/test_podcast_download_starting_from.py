@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import available_artifact
 from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
@@ -14,6 +15,7 @@ def _make_show(session):
     from backend.types.show_types import EpisodeIdentifier, ShowType
 
     show = Show(
+        source_key="dailywire",
         uuid="starting-from-show-uuid",
         slug="starting-from-show",
         title="Starting From Show",
@@ -44,6 +46,7 @@ def _make_episode(session, show, season, *, index: int, published_at: datetime):
     from backend.utils.helpers import generate_uuid
 
     episode = Episode(
+        source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
         show=show,
@@ -186,7 +189,7 @@ def test_starting_from_never_deletes_older_downloads(db_session, tmp_path):
         media_item_id=old_episode.id,
         local_media_profile_id=local_media_profile.id,
         download_profile_id=profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         file_path=str(existing_file),
     )
     db_session.add(existing)

@@ -145,13 +145,13 @@ def test_db_downgrade_handler_reports_result_without_requiring_single_script_hea
         "get_database_status",
         Mock(side_effect=AssertionError("must not require a single Alembic head")),
     )
-    monkeypatch.setattr(backend_main, "get_db_path", lambda: "/tmp/wireloft.db")
+    monkeypatch.setattr(backend_main, "get_db_path", lambda: "/tmp/vodloft.db")
 
     backend_main._handle_db_command(args)
 
     downgrade.assert_called_once_with(revision)
     assert capsys.readouterr().out == (
-        "Database downgraded to: left_revision (/tmp/wireloft.db)\n"
+        "Database downgraded to: left_revision (/tmp/vodloft.db)\n"
     )
 
 

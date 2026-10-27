@@ -18,7 +18,8 @@ def _episode(*, identifier: str = "numbered"):
         source_key="dailywire",
         title="An Episode",
         description="Episode description",
-        slug="an-episode",
+        slug="show-an-episode",
+        source_slug="an-episode",
         uuid="episode-uuid",
         sharing_url="https://example.test/episode",
         published_date=datetime(2026, 9, 28, 12, 0, tzinfo=timezone.utc),
@@ -43,6 +44,8 @@ def test_episode_metadata_keeps_real_season_and_episode_numbers():
     assert metadata.episode_number == 7
     assert metadata.aired == date(2026, 9, 28)
     assert metadata.ffmpeg_tags()["episode_sort"] == "7"
+    # Media servers match the episode by its id at the Source.
+    assert metadata.ffmpeg_tags()["dailywire_id"] == "an-episode"
 
 
 def test_date_based_episode_metadata_does_not_invent_numbers():
@@ -62,6 +65,7 @@ def test_movie_nfo_contains_media_server_metadata(tmp_path):
     from downloader.metadata import write_nfo
 
     movie = SimpleNamespace(
+        source_key="dailywire",
         title="Example Movie",
         description="Movie description",
         slug="example-movie",
@@ -90,6 +94,7 @@ def test_movie_nfo_contains_media_server_metadata(tmp_path):
 
     assert root.tag == "movie"
     assert root.findtext("title") == "Example Movie"
+    assert root.find("uniqueid").attrib == {"type": "dailywire", "default": "true"}
     assert root.findtext("year") == "2025"
     assert root.findtext("mpaa") == "PG-13"
     assert [node.text for node in root.findall("genre")] == ["Documentary", "Drama"]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import mark_artifact_available
 import pytest
 from datetime import datetime, timedelta, timezone
 
@@ -22,6 +23,7 @@ def _make_download(session: Session, *, slug: str):
     from backend.utils.helpers import generate_uuid
 
     show = Show(
+        source_key="dailywire",
         uuid=f"{slug}-show-uuid",
         slug=f"{slug}-show",
         title="Queue Show",
@@ -35,6 +37,7 @@ def _make_download(session: Session, *, slug: str):
     )
     season = Season(show=show, index=1, slug=f"{slug}-season", name="One")
     episode = Episode(
+        source_key="dailywire",
         uuid=generate_uuid(),
         type=MediaType.EPISODE.value,
         show=show,
@@ -304,7 +307,7 @@ def test_download_page_filters_status_before_applying_limit():
     try:
         older = _make_download(session, slug="page-downloaded-old")
         newer = _make_download(session, slug="page-not-downloaded-new")
-        older.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        mark_artifact_available(older)
         session.commit()
 
         page = get_media_downloads_page(
@@ -500,7 +503,7 @@ def test_filtered_bulk_action_ids_do_not_depend_on_loaded_pages():
         downloaded = _make_download(session, slug="bulk-filter-downloaded")
         create_media_download_operation(session, queued_one)
         create_media_download_operation(session, queued_two)
-        downloaded.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        mark_artifact_available(downloaded)
         session.commit()
 
         assert set(get_media_download_bulk_action_ids(
@@ -540,7 +543,7 @@ def test_download_cursor_restarts_when_workflow_revision_changes():
             (boundary, datetime(2026, 9, 10, 2, 0, tzinfo=timezone.utc)),
             (newest, datetime(2026, 9, 10, 3, 0, tzinfo=timezone.utc)),
         ):
-            download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+            mark_artifact_available(download)
             download.downloaded_at = when
         session.commit()
 
@@ -556,7 +559,7 @@ def test_download_cursor_restarts_when_workflow_revision_changes():
 
         # Insert before deleting so SQLite cannot hand the new row the deleted id.
         inserted = _make_download(session, slug="cursor-inserted")
-        inserted.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        mark_artifact_available(inserted)
         inserted.downloaded_at = datetime(2026, 9, 10, 4, 0, tzinfo=timezone.utc)
         session.delete(newest)
         session.commit()
@@ -593,7 +596,7 @@ def test_download_cursor_only_invalidates_for_filtered_membership_or_order():
     try:
         active = _make_download(session, slug="cursor-filter-active")
         downloaded = _make_download(session, slug="cursor-filter-done")
-        downloaded.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        mark_artifact_available(downloaded)
         downloaded.downloaded_at = datetime(2026, 9, 10, 1, tzinfo=timezone.utc)
         operation = create_media_download_operation(session, active)
         definition_id = session.scalar(select(TaskDefinition.id).where(
@@ -689,7 +692,7 @@ def test_cursor_keeps_position_when_sort_timestamp_changes_but_order_does_not():
         middle = _make_download(session, slug="cursor-anchor-middle")
         oldest = _make_download(session, slug="cursor-anchor-oldest")
         for download, hour in ((latest, 5), (middle, 3), (oldest, 1)):
-            download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+            mark_artifact_available(download)
             download.downloaded_at = datetime(2026, 9, 10, hour, tzinfo=timezone.utc)
         session.commit()
 
@@ -727,7 +730,7 @@ def test_download_cursor_ignores_unrelated_changes_and_detects_reordering():
         second = _make_download(session, slug="cursor-irrelevant-second")
         excluded = _make_download(session, slug="cursor-irrelevant-excluded")
         for download, hour in ((first, 3), (second, 2), (excluded, 1)):
-            download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+            mark_artifact_available(download)
             download.downloaded_at = datetime(2026, 9, 10, hour, tzinfo=timezone.utc)
         excluded.artifact_status = MediaDownloadArtifactStatus.MISSING.value
         session.commit()
@@ -905,7 +908,7 @@ def test_workflow_terminal_states_share_one_last_state_change_timeline():
         missing = _make_download(session, slug="terminal-order-missing")
         not_downloaded = _make_download(session, slug="terminal-order-absent")
 
-        downloaded.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        mark_artifact_available(downloaded)
         downloaded.downloaded_at = datetime(2026, 9, 10, 12, tzinfo=timezone.utc)
         # A subsequent metadata update must not move an already-downloaded item.
         downloaded.updated_at = datetime(2026, 9, 10, 20, tzinfo=timezone.utc)
@@ -971,7 +974,7 @@ def test_workflow_terminal_downloaded_date_ignores_record_metadata_updates():
         older = _make_download(session, slug="terminal-metadata-older")
         newer = _make_download(session, slug="terminal-metadata-newer")
         for download, hour in ((older, 1), (newer, 2)):
-            download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+            mark_artifact_available(download)
             download.downloaded_at = datetime(2026, 9, 10, hour, tzinfo=timezone.utc)
         session.commit()
 
@@ -1005,7 +1008,7 @@ def test_workflow_downloaded_order_uses_latest_download_time_across_pages():
         middle = _make_download(session, slug="workflow-middle")
         new = _make_download(session, slug="workflow-new")
         for download, hour in ((old, 1), (middle, 2), (new, 3)):
-            download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+            mark_artifact_available(download)
             download.downloaded_at = datetime(2026, 9, 10, hour, tzinfo=timezone.utc)
         session.commit()
 
@@ -1053,7 +1056,7 @@ def test_workflow_orders_active_downloads_by_execution_start_across_pages():
         middle_started = _make_download(session, slug="active-start-middle")
         queued = _make_download(session, slug="active-start-queued")
         completed = _make_download(session, slug="active-start-completed")
-        completed.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        mark_artifact_available(completed)
         completed.downloaded_at = datetime(2026, 9, 10, 5, tzinfo=timezone.utc)
 
         definition_id = session.scalar(select(TaskDefinition.id).where(

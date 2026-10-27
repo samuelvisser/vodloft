@@ -58,7 +58,7 @@ They are deployment options, not keys inside `config.yml`.
 
 | Setting | Environment variable | Default | What it does |
 | --- | --- | --- | --- |
-| `databasePath` | `VL_DATABASE_PATH` | `<project>/config/wireloft.db` | Location of the SQLite database. The Docker image sets this to `/config/wireloft.db`. |
+| `databasePath` | `VL_DATABASE_PATH` | `<project>/config/vodloft.db` | Location of the SQLite database. The Docker image sets this to `/config/vodloft.db`. |
 | `logLevel` | `VL_LOG_LEVEL` | `INFO` | Logging detail: `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL`. |
 | `timezone` | `TZ` | `UTC` | Timezone used for schedules and displayed time-sensitive behavior. Use an [IANA](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List) value such as `Europe/Amsterdam`. |
 | `loginSession.ttlSeconds` | `VL_LOGIN_SESSION__TTL_SECONDS` | `2592000` (30 days) | How long a signed-in browser remains authenticated. |
@@ -84,8 +84,8 @@ These settings are available under **Settings → Downloads**.
 | --- | --- | --- | --- |
 | `downloadSettings.downloadRoot` | `VL_DOWNLOAD_SETTINGS__DOWNLOAD_ROOT` | `<project>/downloads` | Root directory used for paths beginning with `/downloads/`. In the supplied Docker layout, set/use `/downloads` to target the mounted media volume. |
 | `downloadSettings.downloadMode` | `VL_DOWNLOAD_SETTINGS__DOWNLOAD_MODE` | `temporary` | System default: stage downloads in the temporary folder before publishing them. Local Media Profiles can inherit or override it. |
-| `downloadSettings.temporaryDownloadRoot` | `VL_DOWNLOAD_SETTINGS__TEMPORARY_DOWNLOAD_ROOT` | system temp directory (`/tmp/wireloft-downloads` in Docker) | Staging directory used by temporary download mode. Keeping this on local storage avoids repeated remux/metadata I/O against a network media library. |
-| `downloadSettings.rssCacheRoot` | `VL_DOWNLOAD_SETTINGS__RSS_CACHE_ROOT` | `<download root>/.wireloft-rss-cache` | Root for media cached while fulfilling RSS requests. When omitted, its default follows the download root; an explicit value stays independent. |
+| `downloadSettings.temporaryDownloadRoot` | `VL_DOWNLOAD_SETTINGS__TEMPORARY_DOWNLOAD_ROOT` | system temp directory (`/tmp/vodloft-downloads` in Docker) | Staging directory used by temporary download mode. Keeping this on local storage avoids repeated remux/metadata I/O against a network media library. |
+| `downloadSettings.rssCacheRoot` | `VL_DOWNLOAD_SETTINGS__RSS_CACHE_ROOT` | `<download root>/.vodloft-rss-cache` | Root for media cached while fulfilling RSS requests. When omitted, its default follows the download root; an explicit value stays independent. |
 | `downloadSettings.rssCacheRetentionSeconds` | `VL_DOWNLOAD_SETTINGS__RSS_CACHE_RETENTION_SECONDS` | `604800` (7 days) | Retains cached RSS media for this long since it was last served. Expired files are cleaned at startup and while new cache entries are prepared. |
 | `downloadSettings.maxConcurrentDownloads` | `VL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS` | `5` | Maximum primary-media transfers running at once. Their slots are released while post-processing continues. |
 | `downloadSettings.maxDownloadAttempts` | `VL_DOWNLOAD_SETTINGS__MAX_DOWNLOAD_ATTEMPTS` | `3` | Automatic attempts before a download is left failed. |
@@ -268,8 +268,8 @@ logLevel: INFO
 downloadSettings:
   downloadRoot: /downloads
   downloadMode: temporary
-  temporaryDownloadRoot: /tmp/wireloft-downloads
-  rssCacheRoot: /tmp/wireloft-rss-cache
+  temporaryDownloadRoot: /tmp/vodloft-downloads
+  rssCacheRoot: /tmp/vodloft-rss-cache
   maxConcurrentDownloads: 3
   episodeDownloadDelayMinutes: 10
   filenameRestrictionMode: windows

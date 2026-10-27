@@ -2,7 +2,7 @@ import {useEffect, useMemo, useRef} from "react";
 import DailywireShowCard from "./DailywireShowCard";
 import ShowPreviewCard from "./ShowPreviewCard";
 import {useDailywireShow, useDailywireUserInfo, useListedShowDetails, useResolvedLink} from "../../lib/queries";
-import {SourceFeature, sourceHas} from "../../types/schemas/source";
+import {DAILYWIRE_SOURCE_KEY, SourceFeature, sourceHas} from "../../types/schemas/source";
 import ReadMore from "../../utils/ReadMore";
 import {Controller, SubmitHandler, useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
@@ -207,7 +207,11 @@ export default function ChooseShowStep({value, onChange, onSubmit: onSubmitParen
         }
 
         // Validate final payload. We do not save anything yet (only in the final widget step)
-        const payload: ShowCreatePayloadOut = ShowCreatePayloadSchema.parse({...formOnly, ...dailywireParsed.data});
+        const payload: ShowCreatePayloadOut = ShowCreatePayloadSchema.parse({
+            ...formOnly,
+            ...dailywireParsed.data,
+            sourceKey: DAILYWIRE_SOURCE_KEY,
+        });
         onSeasonsSubmit(seasonsParsed.data);
         onSubmitParent(payload);
         onContinue();

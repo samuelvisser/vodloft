@@ -120,7 +120,7 @@ After a Stream Profile is created, VODLoft shows its private RSS URL with **Copy
 The URL looks similar to:
 
 ```text
-https://wireloft.example.com/feeds/rss/<secret-token>/<show-slug>.xml
+https://vodloft.example.com/feeds/rss/<secret-token>/<show-slug>.xml
 ```
 
 The hostname is editable. This is useful when VODLoft sees an internal hostname but your podcast app needs a different LAN or public hostname.

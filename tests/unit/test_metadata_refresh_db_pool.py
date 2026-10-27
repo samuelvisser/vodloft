@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 
 def _final_episode(*, episode_id: int = 71):
-    from backend.types.dailywire_user_info import WlDwMembershipLevel
+    from backend.types.dailywire_user_info import DwMembershipLevel
     from backend.types.episode_types import EpisodePublishStatus
 
     return SimpleNamespace(
@@ -18,7 +18,7 @@ def _final_episode(*, episode_id: int = 71):
         safe_published_final=None,
         last_known_pending=None,
         published_date=datetime(2026, 9, 8, tzinfo=timezone.utc),
-        show=SimpleNamespace(membership_level=WlDwMembershipLevel.FREE.value),
+        show=SimpleNamespace(membership_level=DwMembershipLevel.FREE.value),
     )
 
 

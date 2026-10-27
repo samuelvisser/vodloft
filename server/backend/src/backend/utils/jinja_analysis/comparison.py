@@ -169,7 +169,7 @@ def compare_outputs(
             symbols: dict[tuple, str] = {}
             # Never confuse a user's literal filename text with a symbolic token.
             literals = "".join(part for variant in (lhs, rhs) for part in variant.parts if isinstance(part, str))
-            prefix = "WLJINJASYMBOL"
+            prefix = "VLJINJASYMBOL"
             while prefix in literals:
                 prefix += "X"
             while True:

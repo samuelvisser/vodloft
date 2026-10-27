@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from asyncio.log import logger
+import logging
 from dataclasses import dataclass, replace
 from typing import Any, Optional, Sequence
 
@@ -9,13 +9,13 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Season, Show
 from backend.services.show_assets import update_show_artwork_metadata
-from backend.types.dailywire_user_info import WlDwMembershipLevel
+from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.show_types import EpisodeIdentifier
 from sources.dailywire.api.dw_api.client import ByShowSeason, MiddlewareClient
 from sources.dailywire.api.records import DwEpisodeRecord, DwSeasonRecord
 from sources.dailywire.auth import DeviceAuthClient
-from sources import Feature, get_source
+from sources import Feature, Source, get_source
 from task_manager.events.transactional import queue_event
 from ._helpers import get_latest_ep_index, get_season_from_list_by_id, get_shows
 from ...helpers.episodes.events import queue_episode_status_events
@@ -43,6 +43,8 @@ from ...helpers.seasons import create_season_by_dw_season
 from ...types.general import RecordOrder
 from ..monitor_pending_episode.scheduling import MONITOR_REQUESTED_EVENT
 
+
+logger = logging.getLogger(__name__)
 
 SHOW_INDEXED_EVENT = "show.indexed"
 
@@ -145,21 +147,26 @@ async def run_fetch_new_episodes(
 ) -> FetchNewEpisodesResult:
     shows: Sequence[Show] = get_shows(s, show_id=show_id, show_slug=show_slug)
     show_ids = [show.id for show in shows]
+    lists_episodes = {show.id: get_source(show.source_key).has(Feature.EPISODE_LISTS) for show in shows}
 
     # Token refresh can itself require the internet. Do not retain the SELECT
     # transaction used to find the shows while waiting for OAuth/DNS/HTTP.
     s.rollback()
-    tokens = DeviceAuthClient().get_token()
-    access_token = tokens.access_token if tokens else None
-    client = MiddlewareClient(access_token=access_token)
+    access_token: str | None = None
+    client: MiddlewareClient | None = None
+    if not all(lists_episodes.values()):
+        tokens = DeviceAuthClient().get_token()
+        access_token = tokens.access_token if tokens else None
+        client = MiddlewareClient(access_token=access_token)
     completed: list[ShowEpisodeScanResult] = []
     for current_show_id in show_ids:
         show = s.get(Show, current_show_id)
         if show is None:
             continue
-        show_source = get_source(show.source_key)
-        if show_source.has(Feature.EPISODE_LISTS):
-            completed.append(_index_listed_show(s, show=show, source=show_source, dry_run=dry_run))
+        if lists_episodes[current_show_id]:
+            completed.append(_index_listed_show(
+                s, show=show, source=get_source(show.source_key), dry_run=dry_run, progress=progress,
+            ))
             continue
         try:
             found = await _fetch_show(
@@ -196,13 +203,13 @@ async def _fetch_show(
     show_id = show.id
     show_slug = show.slug
     membership_plan = show.membership_level
-    if membership_plan != WlDwMembershipLevel.FREE.value and access_token is None:
-        if membership_plan != WlDwMembershipLevel.WL_ANY.value:
+    if membership_plan != DwMembershipLevel.FREE.value and access_token is None:
+        if membership_plan != DwMembershipLevel.HIGHEST_ALLOWED.value:
             logger.warning("No valid access token for show %s", show_slug)
             return 0
-    if membership_plan == WlDwMembershipLevel.WL_ANY.value:
-        membership_plan = WlDwMembershipLevel.FREE.value
-    require_member_exclusive = membership_plan != WlDwMembershipLevel.FREE.value
+    if membership_plan == DwMembershipLevel.HIGHEST_ALLOWED.value:
+        membership_plan = DwMembershipLevel.FREE.value
+    require_member_exclusive = membership_plan != DwMembershipLevel.FREE.value
 
     latest_final_episode = s.execute(
         select(Episode)
@@ -466,14 +473,15 @@ async def _fetch_show(
     return total
 
 
-def _index_listed_show(s: Session, *, show: Show, source, dry_run: bool) -> ShowEpisodeScanResult:
+def _index_listed_show(s: Session, *, show: Show, source: Source, dry_run: bool, progress=None) -> ShowEpisodeScanResult:
     result = ShowEpisodeScanResult(show_id=show.id, show_slug=show.slug, show_title=show.title, episodes_found=0)
-    if dry_run:
-        return result
     from backend.services.custom_indexes import request_show_custom_index_reconciliation
     show_id = show.id
     try:
-        found = index_listed_show(s, show_id=show_id, source=source)
+        found = index_listed_show(s, show_id=show_id, source=source, progress=progress, dry_run=dry_run)
+        if dry_run:
+            update_progress(progress, 100, f"Dry run complete for '{result.show_slug}': {found} new episodes (nothing saved)")
+            return result
         show = s.get(Show, show_id)
         if show is not None:
             request_show_custom_index_reconciliation(s, show_id)

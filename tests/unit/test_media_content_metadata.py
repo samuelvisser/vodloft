@@ -16,6 +16,7 @@ def test_content_metadata_is_stored_by_concrete_owner_and_transparent_to_callers
     session = Session(engine)
     try:
         movie = Movie(
+            source_key="dailywire",
             uuid="movie-uuid",
             type=MediaType.MOVIE.value,
             slug="movie-a",
@@ -38,6 +39,7 @@ def test_content_metadata_is_stored_by_concrete_owner_and_transparent_to_callers
             thumbnail_square_path="extra-square.jpg",
         )
         extra = MovieExtra(
+            source_key="dailywire",
             uuid="extra-placement-uuid",
             type=MediaType.MOVIE_EXTRA.value,
             movie=movie,
@@ -138,6 +140,7 @@ def test_movie_extra_constructor_routes_source_table_columns():
 
     published_date = datetime(2026, 9, 9, tzinfo=timezone.utc)
     extra = MovieExtra(
+        source_key="dailywire",
         id=42,
         uuid="extra-constructor-uuid",
         type=MediaType.MOVIE_EXTRA.value,

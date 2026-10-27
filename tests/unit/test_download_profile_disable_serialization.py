@@ -18,6 +18,7 @@ def test_profile_reconciliation_reloads_current_enabled_state():
     session = Session(engine, expire_on_commit=False)
     try:
         show = Show(
+            source_key="dailywire",
             uuid="show-uuid",
             slug="test-show",
             title="Test Show",

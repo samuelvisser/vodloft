@@ -47,9 +47,9 @@ class _ApplicationLogHandler(logging.Handler):
             return
         # A record can pass through both a non-propagating uvicorn logger and the
         # root logger. Mark it on first capture so it only appears once.
-        if getattr(record, "_wireloft_log_buffered", False):
+        if getattr(record, "_vodloft_log_buffered", False):
             return
-        record._wireloft_log_buffered = True
+        record._vodloft_log_buffered = True
 
         global _next_id
         exception = None

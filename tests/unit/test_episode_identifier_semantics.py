@@ -751,6 +751,7 @@ def test_episode_read_view_derives_identifier_fields_during_model_validation():
     view = EpisodeAPIReadView.model_validate(
         {
             "id": 1,
+            "source_key": "dailywire",
             "show_id": 2,
             "season_id": 3,
             "index": 4,
@@ -787,6 +788,7 @@ def test_compact_episode_view_includes_identifier_semantics():
     session = Session(engine)
 
     show = Show(
+        source_key="dailywire",
         uuid="show-view-semantics",
         slug="view-semantics",
         title="View Semantics",
@@ -807,6 +809,7 @@ def test_compact_episode_view_includes_identifier_semantics():
         season_number=3,
     )
     episode = Episode(
+        source_key="dailywire",
         uuid="episode-view-semantics",
         type="episode",
         show=show,

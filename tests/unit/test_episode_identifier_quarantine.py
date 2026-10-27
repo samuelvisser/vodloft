@@ -83,6 +83,7 @@ def test_quarantine_identifier_reservation_is_atomic_across_sessions(
 
         with Session(engine) as session:
             show = Show(
+                source_key="dailywire",
                 uuid="concurrent-show-uuid",
                 slug="concurrent-show",
                 title="Concurrent Show",
@@ -110,6 +111,7 @@ def test_quarantine_identifier_reservation_is_atomic_across_sessions(
             episode_ids = []
             for index in range(1, 5):
                 episode = Episode(
+                    source_key="dailywire",
                     uuid=generate_uuid(),
                     type="episode",
                     show=show,

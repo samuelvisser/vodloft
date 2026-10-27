@@ -1,18 +1,11 @@
 import {useState} from 'react'
-import {useQueryClient} from '@tanstack/react-query'
-import toast from 'react-hot-toast'
-import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 
 import {isPublicationDelayWait} from '../../lib/downloadProgress'
-import {PreferredFormatReg} from '../../types/local_media_profile'
 import type {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import type {MediaDownloadViewRead} from '../../types/schemas/media_download'
-import {getErrorMessageFromResponse} from '../../utils/helpers'
 import {faIcon} from '../../icons/faIcon'
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
-import DownloadProgressStatus from '../DownloadProgress/DownloadProgressStatus'
-import DownloadLogDialog from '../MediaDownload/DownloadLogDialog'
-import ProgressExplanation from '../common/ProgressExplanation'
+import {DownloadRow, useDownloadRowRequest} from '../MediaDownload/DownloadRow'
 import {
     ImmediateSafeDelayConfirmDialog,
     SafeDelayConfirmDialog,
@@ -43,9 +36,7 @@ export function EpisodeDownloadRow({
     confirmSafeDelayDownload: boolean
     safeDelayReadyAt: Date | null
 }) {
-    const qc = useQueryClient()
-    const [busy, setBusy] = useState(false)
-    const [showLog, setShowLog] = useState(false)
+    const {busy, request, cancel} = useDownloadRowRequest(['episodeDownloads', episodeSlug])
     const [countdownConfirm, setCountdownConfirm] = useState(false)
     const [safeDelayDialog, setSafeDelayDialog] = useState<SafeDelayDialogState | null>(null)
     const [safeDelaySchedulePreferred, setSafeDelaySchedulePreferred] = useState<boolean | null>(null)
@@ -60,29 +51,6 @@ export function EpisodeDownloadRow({
     const schedulePreferred = safeDelaySchedulePreferred === true
     const safeDelayIsRetry = safeDelayDialog?.action === 'retry'
 
-    const invalidate = () =>
-        Promise.all([
-            qc.invalidateQueries({queryKey: ['episodeDownloads', episodeSlug]}),
-            qc.invalidateQueries({queryKey: ['mediaDownloads']}),
-            qc.invalidateQueries({queryKey: ['mediaDownloadsView']}),
-        ])
-
-    async function request(url: string, init: RequestInit, failure: string) {
-        setBusy(true)
-        try {
-            const response = await fetch(url, {credentials: 'include', ...init})
-            if (!response.ok) {
-                const {error} = await getErrorMessageFromResponse(response)
-                toast.error(error || failure)
-            }
-            await invalidate()
-        } catch {
-            toast.error(failure)
-        } finally {
-            setBusy(false)
-        }
-    }
-
     const startDownload = ({
         redownloadFinal = false,
         redownloadDelayPassed = false,
@@ -93,7 +61,7 @@ export function EpisodeDownloadRow({
         scheduleForDelay?: boolean
     } = {}) =>
         request(
-            `${(window as any).appConfig.API_URL}/episodes/${encodeURIComponent(episodeSlug)}/downloads`,
+            `/episodes/${encodeURIComponent(episodeSlug)}/downloads`,
             {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -115,7 +83,7 @@ export function EpisodeDownloadRow({
         scheduleForDelay?: boolean
     } = {}) =>
         request(
-            `${(window as any).appConfig.API_URL}/media-downloads/${download!.id}/retry`,
+            `/media-downloads/${download!.id}/retry`,
             {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -203,17 +171,6 @@ export function EpisodeDownloadRow({
         ))
     }
 
-    const cancelDownload = () =>
-        request(
-            `${(window as any).appConfig.API_URL}/media-downloads/${download!.id}/cancel`,
-            {method: 'POST'},
-            'Could not cancel the download',
-        )
-
-    const showDownloadButton = downloadStateKnown && (
-        !download
-        || (!download.presentation.active && download.presentation.status === 'not_downloaded')
-    )
     const showRetryButton = Boolean(
         download
         && (
@@ -222,86 +179,27 @@ export function EpisodeDownloadRow({
         )
     )
 
+    const succeeded = download?.presentation.outcome === 'success'
     return (
-        <div className="download-row" role="listitem" aria-label={`Download for ${profile.name}`}>
-            <div className="download-row-info">
-                <div className="download-row-name">{profile.name}</div>
-                <div className="download-row-format">{PreferredFormatReg.getLabelLoose(profile.preferredFormat)}</div>
-            </div>
-            <div className="download-row-state">
-                {!downloadStateKnown
-                    ? (
-                        <span
-                            className="download-row-loading"
-                            role="status"
-                            aria-label={`Loading download status for ${profile.name}`}
-                        >
-                            Loading…
-                        </span>
-                    )
-                    : download && !showDownloadButton
-                        ? <DownloadProgressStatus download={download} details={false}/>
-                        : <button
-                            type="button"
-                            className="btn btn-primary"
-                            onClick={requestDownload}
-                            disabled={busy}
-                            aria-label={`Download ${profile.name}`}
-                        >
-                            <FontAwesomeIcon icon={faIcon('fass', 'download')}/>
-                            Download
-                        </button>}
-            </div>
-            {downloadStateKnown && download && (
-                <div className="download-row-actions" aria-label={`Actions for ${profile.name}`}>
-                    <ProgressExplanation
-                        detail={download.presentation.detail + (download.presentation.secondary
-                            ? ` ${download.presentation.secondary}.`
-                            : '')}
-                    />
-                    {download.presentation.active && download.presentation.canCancel && (
-                        <button
-                            type="button"
-                            className="icon-btn"
-                            onClick={cancelDownload}
-                            disabled={busy}
-                            title="Cancel download"
-                            aria-label={`Cancel download for ${profile.name}`}
-                        >
-                            <FontAwesomeIcon icon={faIcon('fass', 'ban')}/>
-                        </button>
-                    )}
-                    {showRetryButton && (
-                        <button
-                            type="button"
-                            className="icon-btn"
-                            onClick={requestRetry}
-                            disabled={busy}
-                            title={publicationDelayWait
-                                ? 'Download now'
-                                : download.presentation.outcome === 'success'
-                                    ? 'Re-download'
-                                    : 'Retry download'}
-                            aria-label={publicationDelayWait
-                                ? `Download ${profile.name} now`
-                                : download.presentation.outcome === 'success'
-                                    ? `Re-download ${profile.name}`
-                                    : `Retry download for ${profile.name}`}
-                        >
-                            <FontAwesomeIcon icon={faIcon('fass', 'rotate-right')}/>
-                        </button>
-                    )}
-                    <button
-                        type="button"
-                        className="icon-btn"
-                        onClick={() => setShowLog(true)}
-                        title="View log"
-                        aria-label={`View log for ${profile.name}`}
-                    >
-                        <FontAwesomeIcon icon={faIcon('fass', 'file-lines')}/>
-                    </button>
-                </div>
-            )}
+        <DownloadRow
+            profile={profile}
+            download={download}
+            downloadStateKnown={downloadStateKnown}
+            busy={busy}
+            retry={showRetryButton
+                ? {
+                    title: publicationDelayWait ? 'Download now' : succeeded ? 'Re-download' : 'Retry download',
+                    label: publicationDelayWait
+                        ? `Download ${profile.name} now`
+                        : succeeded
+                            ? `Re-download ${profile.name}`
+                            : `Retry download for ${profile.name}`,
+                    onClick: requestRetry,
+                }
+                : null}
+            onDownload={requestDownload}
+            onCancel={() => download && void cancel(download)}
+        >
             <ConfirmDialog
                 open={countdownConfirm}
                 title="Download episode with countdown?"
@@ -364,7 +262,6 @@ export function EpisodeDownloadRow({
                 }}
                 onImmediate={downloadImmediately}
             />
-            <DownloadLogDialog row={showLog ? (download ?? null) : null} onClose={() => setShowLog(false)}/>
-        </div>
+        </DownloadRow>
     )
 }

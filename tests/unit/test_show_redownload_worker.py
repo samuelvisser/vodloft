@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import available_artifact
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -27,6 +28,7 @@ def _library(session: Session, tmp_path: Path):
     from backend.types.show_types import EpisodeIdentifier, ShowType
 
     show = Show(
+        source_key="dailywire",
         uuid="show-uuid",
         slug="test-show",
         title="Test Show",
@@ -40,6 +42,7 @@ def _library(session: Session, tmp_path: Path):
     )
     season = Season(show=show, index=1, slug="season-1", name="Season 1")
     episode = Episode(
+        source_key="dailywire",
         uuid="episode-uuid",
         type=MediaType.EPISODE.value,
         show=show,
@@ -85,7 +88,7 @@ def _library(session: Session, tmp_path: Path):
         type=MediaType.EPISODE.value,
         media_item_id=episode.id,
         local_media_profile_id=audio_profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         file_path=str(audio_path),
         downloaded_bytes=5,
         format_downloaded="audio",
@@ -96,7 +99,7 @@ def _library(session: Session, tmp_path: Path):
         type=MediaType.EPISODE.value,
         media_item_id=episode.id,
         local_media_profile_id=video_profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         file_path=str(video_path),
         downloaded_bytes=15,
         format_downloaded="video",

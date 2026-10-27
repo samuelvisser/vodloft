@@ -6,7 +6,7 @@ import {faIcon} from '../icons/faIcon'
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import MediaTypeTabs, {MediaType} from '../components/MediaTypeTabs/MediaTypeTabs'
 import {useDailywireMovieCatalog, useDailywireShowCatalog, useMovies, useShows, useSourceLookup} from '../lib/queries'
-import {SourceFeature, sourceHas} from '../types/schemas/source'
+import {DAILYWIRE_SOURCE_KEY, SourceFeature, sourceHas} from '../types/schemas/source'
 import {
     DailywireCatalogMovieRead,
     DailywireCatalogShowRead,
@@ -15,7 +15,6 @@ import {
 type ShowGrouping = 'alphabetical' | 'host'
 
 /** The catalogue on this page is The Daily Wire's, the only Source that can browse so far. */
-const CATALOG_SOURCE = 'dailywire'
 
 type BrowsePageProps = {
     onboarding?: boolean
@@ -39,7 +38,7 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
     const navigate = useNavigate()
     const [params, setParams] = useSearchParams()
     const sources = useSourceLookup()
-    const catalogSource = sources.get(CATALOG_SOURCE)
+    const catalogSource = sources.get(DAILYWIRE_SOURCE_KEY)
     const sourceName = catalogSource?.name ?? 'the catalogue'
     const canBrowse = !catalogSource || sourceHas(catalogSource, SourceFeature.BROWSE)
     const initialType = params.get('type') === 'movies' ? 'movies' : 'shows'

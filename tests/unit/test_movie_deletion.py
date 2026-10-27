@@ -1,3 +1,4 @@
+from conftest import available_artifact
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -32,6 +33,7 @@ def test_delete_movie_cascades_download_records_without_deleting_files(tmp_path)
             preferred_format="format_720p",
         )
         movie = Movie(
+            source_key="dailywire",
             uuid="movie-delete-uuid",
             type=MediaType.MOVIE.value,
             slug="movie-to-delete",
@@ -40,6 +42,7 @@ def test_delete_movie_cascades_download_records_without_deleting_files(tmp_path)
             duration=100,
         )
         trailer = MovieExtra(
+            source_key="dailywire",
             uuid="trailer-delete-uuid",
             type=MediaType.MOVIE_EXTRA.value,
             movie=movie,
@@ -84,7 +87,7 @@ def test_delete_movie_cascades_download_records_without_deleting_files(tmp_path)
                 type=MediaType.MOVIE.value,
                 media_item_id=movie.id,
                 local_media_profile_id=completed_profile.id,
-                artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+                **available_artifact(),
                 file_path=str(completed_path),
                 downloaded_bytes=len(b"download data"),
                 format_downloaded="720p",

@@ -6,7 +6,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Show
-from backend.types.dailywire_user_info import WlDwMembershipLevel
+from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode_publication_timing import best_effort_published_date
 from sources.dailywire.api.dw_api.client import ByShowSeason, MiddlewareAPIError, MiddlewareClient
@@ -42,9 +42,9 @@ logger = logging.getLogger(__name__)
 
 def _membership_plan(show: Show) -> tuple[str, bool]:
     membership_plan = show.membership_level
-    if membership_plan == WlDwMembershipLevel.WL_ANY.value:
-        return WlDwMembershipLevel.FREE.value, False
-    return membership_plan, membership_plan != WlDwMembershipLevel.FREE.value
+    if membership_plan == DwMembershipLevel.HIGHEST_ALLOWED.value:
+        return DwMembershipLevel.FREE.value, False
+    return membership_plan, membership_plan != DwMembershipLevel.FREE.value
 
 
 def _find_episode(

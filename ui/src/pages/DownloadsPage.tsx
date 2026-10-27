@@ -597,7 +597,7 @@ export default function DownloadsPage() {
                 {downloadsQuery.hasNextPage && (
                     <div className="downloads-table-loading" role="status">
                         <FontAwesomeIcon
-                            className="wl-progress-icon"
+                            className="vl-progress-icon"
                             icon={faIcon('fass', 'spinner')}
                             spin={downloadsQuery.isFetchingNextPage}
                         />

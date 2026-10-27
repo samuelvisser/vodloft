@@ -13,6 +13,7 @@ def test_show_view_maps_nested_orm_source_through_aliases():
     show = SimpleNamespace(
         id=1,
         uuid="show-uuid",
+        source_key="dailywire",
         slug="show",
         membership_level="FREE",
         type="podcast",
@@ -116,6 +117,7 @@ def test_media_download_view_maps_composed_sources_without_manual_serialization(
 
     episode = SimpleNamespace(
         slug="episode",
+        source_key="dailywire",
         title="Episode",
         episode_identifier="ep.42",
         show=SimpleNamespace(slug="show", title="Show"),

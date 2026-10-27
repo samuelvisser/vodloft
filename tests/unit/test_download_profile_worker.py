@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import available_artifact
 import asyncio
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -16,6 +17,7 @@ def _make_show(session, *, slug="test-show", episode_identifier=None):
     from backend.types.show_types import EpisodeIdentifier, ShowType
 
     show = Show(
+        source_key="dailywire",
         uuid=f"{slug}-uuid",
         slug=slug,
         title="Test Show",
@@ -46,6 +48,7 @@ def _make_episode(session, show, season, *, slug, ep_id, status, published_at, i
     from backend.utils.helpers import generate_uuid
 
     episode = Episode(
+        source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
         show=show,
@@ -1004,7 +1007,7 @@ def test_cleanup_older_episodes_deletes_download_record_and_file(db_session, tmp
             media_item_id=episode.id,
             local_media_profile_id=lmp.id,
             download_profile_id=profile.id,
-            artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+            **available_artifact(),
             file_path=str(path),
         )
         for episode, path in [(old_episode, old_file), (recent_episode, recent_file)]

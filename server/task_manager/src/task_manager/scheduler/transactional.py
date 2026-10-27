@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 
 logger = logging.getLogger(__name__)
-_PENDING_DISPATCHES_KEY = "wireloft.pending_task_dispatches"
+_PENDING_DISPATCHES_KEY = "vodloft.pending_task_dispatches"
 
 
 @dataclass(frozen=True)

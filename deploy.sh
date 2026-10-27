@@ -10,7 +10,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-IMAGE_NAME="wireloft"
+IMAGE_NAME="vodloft"
 REGISTRY="ghcr.io"
 GHCR_USER="${GHCR_USER:-samuelvisser}"
 CURRENT_BRANCH="$(git branch --show-current 2>/dev/null || true)"
@@ -47,8 +47,8 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-IMAGE_VERSION="${WIRELOFT_VERSION:-development}"
-if [ "${#EXPLICIT_TAGS[@]}" -gt 0 ] && [ -z "${WIRELOFT_VERSION:-}" ]; then
+IMAGE_VERSION="${VODLOFT_VERSION:-development}"
+if [ "${#EXPLICIT_TAGS[@]}" -gt 0 ] && [ -z "${VODLOFT_VERSION:-}" ]; then
     IMAGE_VERSION="${EXPLICIT_TAGS[0]}"
 fi
 
@@ -126,7 +126,7 @@ fi
 GIT_REVISION="$(git rev-parse HEAD 2>/dev/null || printf 'unknown')"
 
 FULL_IMAGE="$REGISTRY/$GHCR_USER/$IMAGE_NAME"
-TOKEN_FILE="${GHCR_TOKEN_FILE:-$HOME/.config/wireloft/ghcr_token}"
+TOKEN_FILE="${GHCR_TOKEN_FILE:-$HOME/.config/vodloft/ghcr_token}"
 NPMRC="ui/.npmrc"
 
 ensure_docker_running() {
@@ -215,9 +215,9 @@ resolve_token
 echo "Building $FULL_IMAGE with Font Awesome Pro icons for tags: ${TAGS[*]} ..."
 docker build \
     -f .docker/Dockerfile \
-    --build-arg WIRELOFT_PRO_ICONS=true \
-    --build-arg WIRELOFT_VERSION="$IMAGE_VERSION" \
-    --build-arg WIRELOFT_REVISION="$GIT_REVISION" \
+    --build-arg VODLOFT_PRO_ICONS=true \
+    --build-arg VODLOFT_VERSION="$IMAGE_VERSION" \
+    --build-arg VODLOFT_REVISION="$GIT_REVISION" \
     --secret id=npmrc,src="$NPMRC" \
     -t "$IMAGE_NAME" \
     .

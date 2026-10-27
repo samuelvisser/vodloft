@@ -8,7 +8,7 @@ from sqlalchemy.pool import NullPool
 def test_configure_db_does_not_bound_sqlite_connections(tmp_path, monkeypatch):
     from backend.db import core
 
-    database_path = tmp_path / "wireloft.db"
+    database_path = tmp_path / "vodloft.db"
     settings = SimpleNamespace(
         database_path=database_path,
         database_url=f"sqlite:///{database_path.as_posix()}",

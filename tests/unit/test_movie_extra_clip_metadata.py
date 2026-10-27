@@ -36,6 +36,7 @@ def test_download_clip_metadata_refresh_updates_canonical_source() -> None:
     session = Session(engine)
     try:
         movie = Movie(
+            source_key="dailywire",
             uuid="movie-clip-refresh",
             type=MediaType.MOVIE.value,
             slug="run-hide-fight",
@@ -44,6 +45,7 @@ def test_download_clip_metadata_refresh_updates_canonical_source() -> None:
             duration=6000,
         )
         extra = MovieExtra(
+            source_key="dailywire",
             uuid="extra-clip-refresh",
             type=MediaType.MOVIE_EXTRA.value,
             movie=movie,

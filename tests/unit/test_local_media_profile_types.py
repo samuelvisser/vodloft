@@ -262,6 +262,7 @@ def test_movie_output_template_uses_movie_metadata(tmp_path: Path, monkeypatch) 
 
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
     movie = Movie(
+        source_key="dailywire",
         uuid="movie-uuid",
         type=MediaType.MOVIE.value,
         slug="a-movie",
@@ -293,7 +294,7 @@ def test_manual_downloads_reject_the_wrong_local_media_profile_type() -> None:
         create_episode_download,
         create_movie_download,
     )
-    from backend.api.models.media_download import EpisodeDownloadAPICreate, MovieDownloadAPICreate
+    from backend.api.models.media_download import EpisodeDownloadAPICreate, MediaDownloadAPICreate
     from backend.api.models.download_profile import DownloadProfileAPICreate
     from backend.db.models import (
         Episode,
@@ -320,6 +321,7 @@ def test_manual_downloads_reject_the_wrong_local_media_profile_type() -> None:
         preferred_format="format_1080p",
     )
     show = Show(
+        source_key="dailywire",
         uuid="show-uuid",
         slug="show",
         title="Show",
@@ -333,6 +335,7 @@ def test_manual_downloads_reject_the_wrong_local_media_profile_type() -> None:
     )
     season = Season(show=show, index=1, slug="season-1", name="One")
     episode = Episode(
+        source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
         show=show,
@@ -356,14 +359,14 @@ def test_manual_downloads_reject_the_wrong_local_media_profile_type() -> None:
         )
     assert episode_error.value.status_code == 422
 
-    movie = Movie(uuid=generate_uuid(), slug="a-movie", title="A Movie", sharing_url="https://example.test/a-movie")
+    movie = Movie(source_key="dailywire", uuid=generate_uuid(), slug="a-movie", title="A Movie", sharing_url="https://example.test/a-movie")
     session.add(movie)
     session.flush()
     with pytest.raises(HTTPException, match="Movie Local Media Profile") as movie_error:
         create_movie_download(
             session,
             movie,
-            MovieDownloadAPICreate(local_media_profile_id=show_profile.id),
+            MediaDownloadAPICreate(local_media_profile_id=show_profile.id),
         )
     assert movie_error.value.status_code == 422
 

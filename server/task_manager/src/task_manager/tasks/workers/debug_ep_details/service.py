@@ -53,8 +53,8 @@ async def run_debug_ep_details(s: Session, *, show_slug: str, progress):  # prog
     print(f"DW ep - delivery_mode: {dw_ep_detail.delivery_mode}")
     print(f"DW ep - playback_status: {dw_ep_detail.playback_status}")
     print("-----------------------------")
-    print(f"WL - publish_status: {get_publish_status_from_dw_detail(dw_ep_detail)}")
-    print(f"WL - is_final: {"True" if is_published_final(dw_ep_detail) else "False" }")
+    print(f"VODLoft - publish_status: {get_publish_status_from_dw_detail(dw_ep_detail)}")
+    print(f"VODLoft - is_final: {"True" if is_published_final(dw_ep_detail) else "False" }")
     print("-----------------------------")
 
     info = get_vod_info(dw_ep_detail.video_url)

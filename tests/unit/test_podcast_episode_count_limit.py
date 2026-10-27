@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import available_artifact
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -12,6 +13,7 @@ def _make_show(session):
     from backend.types.show_types import EpisodeIdentifier, ShowType
 
     show = Show(
+        source_key="dailywire",
         uuid="episode-limit-show-uuid",
         slug="episode-limit-show",
         title="Episode Limit Show",
@@ -42,6 +44,7 @@ def _make_episode(session, show, season, *, index: int, published_at: datetime):
     from backend.utils.helpers import generate_uuid
 
     episode = Episode(
+        source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
         show=show,
@@ -164,7 +167,7 @@ def test_episode_count_cleanup_removes_available_and_absent_artifacts_outside_li
         media_item_id=episodes[0].id,
         local_media_profile_id=local_media_profile.id,
         download_profile_id=profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         file_path=str(completed_file),
     )
     absent = EpisodeMediaDownload(
@@ -180,7 +183,7 @@ def test_episode_count_cleanup_removes_available_and_absent_artifacts_outside_li
         media_item_id=episodes[2].id,
         local_media_profile_id=local_media_profile.id,
         download_profile_id=profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         file_path=str(tmp_path / "kept.m4a"),
     )
     db_session.add_all([completed, absent, kept])
@@ -221,7 +224,7 @@ def test_episode_count_cleanup_keeps_available_files_when_delete_older_is_off(db
         media_item_id=completed_episode.id,
         local_media_profile_id=local_media_profile.id,
         download_profile_id=profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         file_path=str(completed_file),
     )
     absent = EpisodeMediaDownload(

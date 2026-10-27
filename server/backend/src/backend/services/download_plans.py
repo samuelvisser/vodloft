@@ -12,7 +12,7 @@ from backend.db.models.media_download import MediaDownloadBase
 from backend.services.download_metadata import build_episode_metadata, build_movie_metadata, build_video_metadata, select_thumbnail_url
 from backend.services.download_options import effective_download_mode, effective_metadata_mode, effective_thumbnail_mode
 from backend.services.movies import update_movie_extra_source_metadata
-from backend.types.dailywire_user_info import WlDwMembershipLevel
+from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
 from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path, resolve_video_output_path
 from config import get_settings
@@ -80,7 +80,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
             source = resolve_download_source(playback.url, preferred_format=preferred, audio_only=audio_only, remux_video_to_mp4=remux, cancellation=tracker.is_canceled)
     elif episode is not None:
         video_url, audio_url = episode.video_url, episode.audio_url
-        member_only = episode.show.membership_level != WlDwMembershipLevel.FREE.value
+        member_only = episode.show.membership_level != DwMembershipLevel.FREE.value
         session.rollback()
         refreshed = False
         while True:

@@ -89,7 +89,7 @@ function filterCompletion(label: string, detail: string, info: string): Completi
     return {label, type: 'function', detail, info}
 }
 
-const wireloftFilterCompletionOptions: Completion[] = [
+const vodloftFilterCompletionOptions: Completion[] = [
     filterCompletion(
         'strftime',
         'strftime(format)',
@@ -603,7 +603,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
             return {
                 from: context.pos - currentWord.length,
                 options: [
-                    ...wireloftFilterCompletionOptions
+                    ...vodloftFilterCompletionOptions
                         .filter((option) => mode === 'show' || option.label !== 'custom_index')
                         .map((option) => currentWord ? option : {...option, boost: 99}),
                     ...jinjaNativeFilterCompletionOptions,

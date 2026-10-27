@@ -25,6 +25,7 @@ def _make_show(session: Session, *, slug: str, show_type: str):
     from backend.types.show_types import EpisodeIdentifier
 
     show = Show(
+        source_key="dailywire",
         uuid=f"{slug}-uuid",
         slug=slug,
         title=slug.replace("-", " ").title(),
@@ -64,6 +65,7 @@ def _add_episode(
         session.flush()
 
     episode = Episode(
+        source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
         show=show,
@@ -211,6 +213,7 @@ def test_movie_sources_include_movies_and_every_extra_with_server_search(db_sess
     from backend.types.local_media_profile_types import LocalMediaProfileType
 
     movie = Movie(
+        source_key="dailywire",
         uuid="alpha-movie",
         type="movie",
         slug="alpha-movie",
@@ -222,6 +225,7 @@ def test_movie_sources_include_movies_and_every_extra_with_server_search(db_sess
     )
     movie.movie_extras.extend([
         MovieExtra(
+            source_key="dailywire",
             uuid="alpha-trailer",
             type="movie_extra",
             movie_extra_type="trailer",
@@ -232,6 +236,7 @@ def test_movie_sources_include_movies_and_every_extra_with_server_search(db_sess
             published_date=datetime(2024, 1, 3, 12, 0, 0, tzinfo=timezone.utc),
         ),
         MovieExtra(
+            source_key="dailywire",
             uuid="alpha-interview",
             type="movie_extra",
             movie_extra_type="interview",
@@ -281,6 +286,7 @@ def test_movie_source_search_ranks_matching_extra_title_by_relevance(db_session)
     from backend.types.local_media_profile_types import LocalMediaProfileType
 
     movie = Movie(
+        source_key="dailywire",
         uuid="radical-islam-movie",
         type="movie",
         slug="radical-islam-movie",
@@ -291,6 +297,7 @@ def test_movie_source_search_ranks_matching_extra_title_by_relevance(db_session)
     )
     movie.movie_extras.extend([
         MovieExtra(
+            source_key="dailywire",
             uuid="radical-islam-commentary",
             type="movie_extra",
             movie_extra_type="commentary",
@@ -301,6 +308,7 @@ def test_movie_source_search_ranks_matching_extra_title_by_relevance(db_session)
             published_date=datetime(2024, 1, 3, 12, 0, 0, tzinfo=timezone.utc),
         ),
         MovieExtra(
+            source_key="dailywire",
             uuid="radical-islam-march",
             type="movie_extra",
             movie_extra_type="commentary",

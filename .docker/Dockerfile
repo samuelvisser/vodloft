@@ -7,14 +7,14 @@ FROM node:22-alpine AS ui-build
 
 WORKDIR /ui
 
-ARG WIRELOFT_PRO_ICONS=false
+ARG VODLOFT_PRO_ICONS=false
 
 COPY ui/package.json ui/package-lock.json ./
 
 # Keep npm's package download cache independently of Docker's normal layer cache
 RUN --mount=type=secret,id=npmrc,target=/ui/.npmrc,required=false \
     --mount=type=cache,id=vodloft-npm,target=/root/.npm,sharing=locked \
-    if [ "$WIRELOFT_PRO_ICONS" = "true" ]; then \
+    if [ "$VODLOFT_PRO_ICONS" = "true" ]; then \
         npm ci \
             --include=optional \
             --prefer-offline \
@@ -32,7 +32,7 @@ RUN --mount=type=secret,id=npmrc,target=/ui/.npmrc,required=false \
 COPY pyproject.toml /pyproject.toml
 COPY ui/ ./
 
-RUN if [ "$WIRELOFT_PRO_ICONS" = "true" ]; then \
+RUN if [ "$VODLOFT_PRO_ICONS" = "true" ]; then \
         npm run build:pro-icons; \
     else \
         npm run build; \
@@ -100,13 +100,13 @@ ENV PATH="/app/.venv/bin:${PATH}" \
     XDG_CONFIG_HOME=/config/keyring/config
 
 # OpenContainers metadata.
-ARG WIRELOFT_VERSION=development
-ARG WIRELOFT_REVISION=unknown
+ARG VODLOFT_VERSION=development
+ARG VODLOFT_REVISION=unknown
 
 LABEL org.opencontainers.image.title="VODLoft" \
       org.opencontainers.image.source="https://github.com/samuelvisser/vodloft" \
-      org.opencontainers.image.version="${WIRELOFT_VERSION}" \
-      org.opencontainers.image.revision="${WIRELOFT_REVISION}"
+      org.opencontainers.image.version="${VODLOFT_VERSION}" \
+      org.opencontainers.image.revision="${VODLOFT_REVISION}"
 
 VOLUME ["/config", "/downloads"]
 

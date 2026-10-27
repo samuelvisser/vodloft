@@ -32,7 +32,7 @@ from backend.db.migrations import (
     upgrade_database,
     validate_database_migration_state,
 )
-from config.registry import get_settings
+from config.registry import get_settings, replace_settings
 from .config import PROJECT_ROOT
 
 
@@ -141,7 +141,7 @@ def _validate_db_health() -> None:
 
 def _reload_startup_marker(supervisor_pid: str) -> Path:
     """Marker file shared by all worker subprocesses of one reload session."""
-    return Path(tempfile.gettempdir()) / f"wireloft-reload-startup-{supervisor_pid}.lock"
+    return Path(tempfile.gettempdir()) / f"vodloft-reload-startup-{supervisor_pid}.lock"
 
 
 _STOP_SIGTERM_TIMEOUT_S = 5.0
@@ -206,7 +206,13 @@ def _stop_backend() -> None:
 
 
 def _configure_database_for_args(args: argparse.Namespace) -> None:
-    os.environ["VL_DATABASE_PATH"] = str(_get_db_path(args))
+    db_path = _get_db_path(args)
+    # Reload workers build their own settings from the environment; this
+    # process already has settings, so point them at the database too.
+    os.environ["VL_DATABASE_PATH"] = str(db_path)
+    settings = get_settings()
+    if settings.database_path != db_path:
+        replace_settings(settings.model_copy(update={"database_path": db_path}))
     configure_db()
 
 
@@ -336,7 +342,7 @@ def main(argv: Optional[list[str]] = None) -> None:
 
             if debug:
                 supervisor_pid = str(os.getpid())
-                os.environ["WIRELOFT_RELOAD_SUPERVISOR_PID"] = supervisor_pid
+                os.environ["VODLOFT_RELOAD_SUPERVISOR_PID"] = supervisor_pid
                 _reload_startup_marker(supervisor_pid).unlink(missing_ok=True)
 
             try:

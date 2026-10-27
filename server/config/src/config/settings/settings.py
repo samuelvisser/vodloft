@@ -88,7 +88,7 @@ class AppSettings(SettingsBase):
     timezone: str = Field(default="UTC", min_length=1, description="Application timezone")
 
     crypto: CryptoSettings = Field(default=CryptoSettings(
-        default_secret_file=PROJECT_ROOT / "data" / "wl_secret.key"
+        default_secret_file=PROJECT_ROOT / "data" / "vodloft_secret.key"
     ))
     login_session: SessionSettings = Field(default=SessionSettings(
         ttl_seconds=60 * 60 * 24 * 30

@@ -187,7 +187,7 @@ def test_application_lifespan_is_ready_while_download_recovery_runs(monkeypatch)
         clean_reservations,
     )
     monkeypatch.setattr(
-        __import__("backend.app", fromlist=["cleanup_abandoned_temporary_downloads"]),
+        __import__("backend.services.download_recovery", fromlist=["cleanup_abandoned_temporary_downloads"]),
         "cleanup_abandoned_temporary_downloads",
         clean_temporary,
     )
@@ -227,7 +227,7 @@ def test_startup_cleanup_removes_partial_marker_without_touching_external_empty_
 
     reservation = reserve_unique_download_path(tmp_path / "Same title.m4a")
     reservation.path.unlink()
-    reservation.marker_path.write_bytes(b"WIRELOFT_DOWNLOAD_PATH")
+    reservation.marker_path.write_bytes(b"VODLOFT_DOWNLOAD_PATH")
     external = tmp_path / "External empty file.m4a"
     external.touch()
 

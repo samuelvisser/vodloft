@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import available_artifact
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,7 +19,7 @@ class _FakeURL:
 
 
 class _FakeRequest:
-    def __init__(self, base_url: str = "https://wireloft.test/", method: str = "GET"):
+    def __init__(self, base_url: str = "https://vodloft.test/", method: str = "GET"):
         self.base_url = _FakeURL(base_url)
         self.method = method
 
@@ -47,6 +48,7 @@ def _make_show(
     from backend.types.show_types import EpisodeIdentifier, ShowType
 
     show = Show(
+        source_key="dailywire",
         uuid=f"{slug}-uuid",
         slug=slug,
         title="Test Show",
@@ -102,6 +104,7 @@ def _make_episode(
 
     when = when or datetime.now(timezone.utc)
     episode = Episode(
+        source_key="dailywire",
         uuid=f"episode-{index}-uuid",
         type="episode",
         show=show,
@@ -159,7 +162,7 @@ def _make_available_download(
         media_item_id=episode.id,
         local_media_profile_id=profile.id,
         file_path=str(path),
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         downloaded_bytes=path.stat().st_size,
         downloaded_at=datetime.now(timezone.utc),
         downloaded_publish_status=episode.publish_status,
@@ -190,7 +193,7 @@ def _make_rss_profile(
         preferred_format=preferred_format,
         prefer_exact_match=False,
         ep_id_type_list=["ep"],
-        feed_url="https://wireloft.test/feeds/rss/token/show.xml",
+        feed_url="https://vodloft.test/feeds/rss/token/show.xml",
         video_output_mode=mode,
         stream_live_episodes=False,
         live_episode_handoff_ids=[],
@@ -262,11 +265,11 @@ def test_dailywire_enabled_feed_keeps_undownloaded_episode_with_stable_url(
 
     xml = render_rss_feed(db_session, _FakeRequest(), profile).decode()
     assert (
-        "https://wireloft.test/feeds/rss/token/episodes/episode-1/audio.m4a"
+        "https://vodloft.test/feeds/rss/token/episodes/episode-1/audio.m4a"
         in xml
     )
     assert (
-        "https://wireloft.test/feeds/rss/token/episodes/episode-1/video.m3u8"
+        "https://vodloft.test/feeds/rss/token/episodes/episode-1/video.m3u8"
         in xml
     )
     assert "dailywire" not in xml.lower()
@@ -364,7 +367,7 @@ def test_rss_media_urls_do_not_change_when_download_appears(
 
     after = render_rss_feed(db_session, _FakeRequest(), profile).decode()
 
-    base = "https://wireloft.test/feeds/rss/token/episodes/episode-1/"
+    base = "https://vodloft.test/feeds/rss/token/episodes/episode-1/"
     for suffix in stable_suffixes:
         stable_url = f"{base}{suffix}"
         assert stable_url in before
@@ -692,7 +695,7 @@ def test_create_stream_profile_generates_plain_stable_feed_url(db_session):
     assert stored is not None
     assert stored.overwrite_show_title is None
     assert created.effective_title == show.title
-    assert created.feed_url.startswith("https://wireloft.test/feeds/rss/")
+    assert created.feed_url.startswith("https://vodloft.test/feeds/rss/")
     assert created.feed_url.endswith("/show.xml")
     assert "dwVideoMethod" not in created.feed_url
     assert "?" not in created.feed_url

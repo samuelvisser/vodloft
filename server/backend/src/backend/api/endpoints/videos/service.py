@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend.api.models.video import VideoAPIRead
 from backend.db.models import Video
-from config.network import is_no_internet_error
+from backend.services.source_requests import asking_source
 from sources import Feature, Source, UnknownSourceError, VideoDetails, get_source
 
 
@@ -23,12 +23,8 @@ def video_source(source_key: str) -> Source:
 
 def fetch_video_details(source: Source, url: str) -> VideoDetails:
     """Ask the Source about a video. Call it outside a database transaction."""
-    try:
+    with asking_source(f"{source.name} could not look up this video"):
         return source.video_details(url)
-    except Exception as exc:
-        if is_no_internet_error(exc):
-            raise
-        raise HTTPException(status_code=502, detail=f"{source.name} could not look up this video: {exc}") from exc
 
 
 def get_video_record(s: Session, video_id: int) -> Video:

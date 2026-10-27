@@ -15,7 +15,7 @@ Public entrypoints:
 - task_manager.scheduler.scheduler.start_scheduler()
 - task_manager.scheduler.scheduler.schedule_job(...)
 - task_manager.scheduler.executor.trigger_now(...)
-- task_manager.events.registry.get_wireloft_event_emitter()
+- task_manager.events.registry.get_vodloft_event_emitter()
 - task_manager.events.emitters.emit_*() functions
 
 Note: This package expects the main app to have configured the database via backend.db.configure_db().

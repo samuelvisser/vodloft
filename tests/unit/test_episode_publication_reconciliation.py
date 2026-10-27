@@ -263,6 +263,7 @@ def _make_show_and_episode(session, *, identifier: str):
     from backend.types.show_types import EpisodeIdentifier, ShowType
     from backend.utils.helpers import generate_uuid
     show = Show(
+        source_key="dailywire",
         uuid="show-uuid", slug="the-ben-shapiro-show", title="The Ben Shapiro Show",
         description=None, sharing_url="https://example.test/show", membership_level="FREE",
         type=ShowType.PODCAST.value, episode_identifier=EpisodeIdentifier.NUMBERED.value,
@@ -279,6 +280,7 @@ def _make_show_and_episode(session, *, identifier: str):
     session.add_all([show, season])
     session.flush()
     episode = Episode(
+        source_key="dailywire",
         uuid=generate_uuid(), type="episode", show=show, season=season, index=2500,
         episode_identifier=identifier, slug="the-ben-shapiro-show-2500",
         title="BREAKING: Judge Threatens Mistrial", duration=2500,

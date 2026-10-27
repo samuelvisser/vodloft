@@ -174,7 +174,7 @@ def test_required_sidecar_failure_aborts_media_and_joins_writers(tmp_path, monke
         with pytest.raises(DownloadError, match='Artwork is invalid'):
             coordinator.execute_download_plan(value, tracker=tracker, resources=DownloadResources())
     assert not (tmp_path/'library/Example.mp4').exists()
-    assert not list((tmp_path/'temp/.wireloft-staging').glob('attempt-*'))
+    assert not list((tmp_path/'temp/.vodloft-staging').glob('attempt-*'))
 
 
 def test_optional_asset_failure_preserves_successful_media(tmp_path, monkeypatch):

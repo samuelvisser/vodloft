@@ -2,7 +2,7 @@ import {z} from "zod";
 import {EpisodeIdentifierReg, ShowTypeReg} from "../show";
 import {DwMembershipLevelReg} from "../dailywire_user_info";
 import {ApiDateTimeSchema} from "./datetime";
-import {DEFAULT_SOURCE_KEY, SourcedFields} from "./source";
+import {SourcedFields} from "./source";
 
 
 /** Ensure https:// if a scheme is missing */
@@ -54,7 +54,7 @@ const showUrl = z
 /* ------------------------------------------------------------------ */
 const ShowBaseFormSchema = z.object({
     url: showUrl,
-    membershipLevel: z.enum(DwMembershipLevelReg.Enum).default(DwMembershipLevelReg.Enum.WL_ANY),
+    membershipLevel: z.enum(DwMembershipLevelReg.Enum).default(DwMembershipLevelReg.Enum.HIGHEST_ALLOWED),
     type: z.union([z.enum(ShowTypeReg.values), z.literal('')]).default('').pipe(z.enum(ShowTypeReg.values)),
     episodeIdentifier: z.union([z.enum(EpisodeIdentifierReg.values), z.literal('')]).default('').pipe(z.enum(EpisodeIdentifierReg.values)),
 });
@@ -73,7 +73,7 @@ export type ShowUpdateFormOut = z.output<typeof ShowUpdateFormSchema>;
 /* PAYLOAD schema (what we POST to the backend)                    */
 /* ------------------------------------------------------------------ */
 const ShowBasePayloadSchema = ShowBaseFormSchema.extend({
-    sourceKey: z.string().default(DEFAULT_SOURCE_KEY),
+    sourceKey: z.string().min(1, "sourceKey missing"),
     dwId: z.string().min(1, "dwId missing").default(''),
     slug: z.string().min(1, "slug missing").default(''),
     title: z.string().min(1, "title missing").default(''),
@@ -110,7 +110,7 @@ export const ShowReadSchema = z.looseObject({
     uuid: z.string(),
     slug: z.string(),
     ...SourcedFields,
-    membershipLevel: z.union([z.enum(DwMembershipLevelReg.values), z.string()]).optional(),
+    membershipLevel: z.union([z.enum(DwMembershipLevelReg.values), z.string()]).nullable(),
     type: z.union([z.enum(ShowTypeReg.values), z.string()]),
     episodeIdentifier: z.union([z.enum(EpisodeIdentifierReg.values), z.string()]),
     authorSlug: z.string(),

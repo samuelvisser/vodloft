@@ -35,7 +35,7 @@ def build_episode_metadata(episode: Episode, show) -> MediaServerMetadata:
         kind="episode",
         title=episode.title,
         description=episode.description,
-        unique_id=episode.slug or episode.uuid,
+        unique_id=episode.source_slug,
         unique_id_type=episode.source_key,
         source_url=episode.sharing_url,
         show_title=show.title,
@@ -61,13 +61,14 @@ def build_movie_metadata(movie, media) -> MediaServerMetadata:
     directors = _named_values(movie.directed_by)
     writers = _named_values(movie.written_by)
     cast = _named_values(movie.starring) or _named_values(movie.cast_and_crew)
-    studios = _named_values(movie.production_companies) or ("The Daily Wire",)
+    studios = _named_values(movie.production_companies) or _studios(movie.source_key)
 
     return MediaServerMetadata(
         kind="movie_extra" if is_extra else "movie",
         title=media.title,
         description=media.description,
-        unique_id=getattr(media, "slug", None) or getattr(media, "uuid", None),
+        unique_id=media.slug,
+        unique_id_type=media.source_key,
         source_url=getattr(media, "sharing_url", None) or movie.sharing_url,
         release_date=release_date,
         duration_seconds=media.duration,

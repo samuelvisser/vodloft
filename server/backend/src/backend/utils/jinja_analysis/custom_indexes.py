@@ -13,7 +13,7 @@ from .paths import analyze_template
 
 
 ConditionSignature = frozenset[tuple[tuple, bool]]
-_MARKER_PREFIX = "\x00WIRELOFT_CUSTOM_INDEX:"
+_MARKER_PREFIX = "\x00VODLOFT_CUSTOM_INDEX:"
 _MARKER_SUFFIX = "\x00"
 
 

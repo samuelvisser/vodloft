@@ -10,7 +10,7 @@ def test_failed_lookup_uses_conditional_path_and_creates_download(tmp_path, monk
     from backend.api.endpoints.media_downloads.service import create_movie_download
     from backend.services.movies import index_dailywire_movie
     from backend.services import movies as movie_service
-    from backend.api.models.media_download import MovieDownloadAPICreate
+    from backend.api.models.media_download import MediaDownloadAPICreate
     from backend.db.core import Base
     from backend.db.models import Movie, MovieLocalMediaProfile
     from backend.db.models.media_download import MediaDownloadBase
@@ -57,7 +57,7 @@ def test_failed_lookup_uses_conditional_path_and_creates_download(tmp_path, monk
     download = create_movie_download(
         session,
         index_dailywire_movie(session, movie_data)[0],
-        MovieDownloadAPICreate(local_media_profile_id=profile.id),
+        MediaDownloadAPICreate(local_media_profile_id=profile.id),
     )
     session.commit()
 

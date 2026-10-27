@@ -32,6 +32,7 @@ def test_media_download_view_filters_episode_show_and_movie_in_sql():
 
     with Session(engine) as session:
         show = Show(
+            source_key="dailywire",
             uuid="show-scope",
             slug="scope-show",
             title="Scope Show",
@@ -45,6 +46,7 @@ def test_media_download_view_filters_episode_show_and_movie_in_sql():
         )
         season = Season(show=show, index=1, slug="season-1", name="Season 1")
         episode_one = Episode(
+            source_key="dailywire",
             uuid="episode-scope-1",
             type=MediaType.EPISODE.value,
             show=show,
@@ -60,6 +62,7 @@ def test_media_download_view_filters_episode_show_and_movie_in_sql():
             sharing_url="https://example.test/episode-one",
         )
         episode_two = Episode(
+            source_key="dailywire",
             uuid="episode-scope-2",
             type=MediaType.EPISODE.value,
             show=show,
@@ -82,6 +85,7 @@ def test_media_download_view_filters_episode_show_and_movie_in_sql():
         )
 
         movie = Movie(
+            source_key="dailywire",
             uuid="movie-scope",
             type=MediaType.MOVIE.value,
             slug="scope-movie",
@@ -90,6 +94,7 @@ def test_media_download_view_filters_episode_show_and_movie_in_sql():
             duration=600,
         )
         trailer = MovieExtra(
+            source_key="dailywire",
             uuid="movie-extra-scope",
             type=MediaType.MOVIE_EXTRA.value,
             movie=movie,

@@ -33,6 +33,7 @@ def _library(
     from downloader.storage.identity import inspect_artifact
 
     show = Show(
+        source_key="dailywire",
         uuid="show-uuid",
         slug="test-show",
         title="Test Show",
@@ -46,6 +47,7 @@ def _library(
     )
     season = Season(show=show, index=1, slug="season-1", name="Season 1")
     episode = Episode(
+        source_key="dailywire",
         uuid="episode-uuid",
         type=MediaType.EPISODE.value,
         show=show,

@@ -17,14 +17,14 @@ Then open http://localhost:8080.
 Or with plain `docker`:
 
 ```bash
-docker build -t wireloft -f .docker/Dockerfile .
+docker build -t vodloft -f .docker/Dockerfile .
 docker run -d \
   -p 8080:80 \
   -v $(pwd)/config:/config \
   -v $(pwd)/downloads:/downloads \
   -e TZ=Europe/Amsterdam \
-  --name wireloft \
-  wireloft
+  --name vodloft \
+  vodloft
 ```
 
 ### Font Awesome Pro builds
@@ -63,8 +63,8 @@ npm run build:pro-icons
 A Docker image with Pro icons can be built explicitly with:
 
 ```bash
-docker build -t wireloft -f .docker/Dockerfile . \
-  --build-arg WIRELOFT_PRO_ICONS=true \
+docker build -t vodloft -f .docker/Dockerfile . \
+  --build-arg VODLOFT_PRO_ICONS=true \
   --secret id=npmrc,src=ui/.npmrc
 ```
 
@@ -88,7 +88,7 @@ when no level is selected. Version-derived aliases are supplied by
 
 It needs a GitHub personal access token with `write:packages` scope to log
 in to ghcr.io, picked up in order from: the `GHCR_TOKEN` env var, a local
-token file (default `~/.config/wireloft/ghcr_token`, override with
+token file (default `~/.config/vodloft/ghcr_token`, override with
 `$GHCR_TOKEN_FILE`), or an interactive hidden prompt as a last resort --
 which then offers to save it to that file (created with permissions
 restricted to your user only) so later runs don't ask again. The token is
@@ -103,14 +103,14 @@ A web UI is included for navigation and demonstration purposes. It now uses a pr
 Bash:
 ```bash
 npm --prefix ui ci --registry=https://registry.npmjs.org
-cd <PROJECT_DIR>\wireloft\ui
+cd <PROJECT_DIR>\vodloft\ui
 npm run dev
 ```
 Open the URL shown by Vite (usually http://localhost:5173/). Edits to `.tsx` and `.css` files hot‑reload. The normal dev server uses Font Awesome Free; use `npm run dev:pro-icons` when you specifically need to inspect the paid icon set.
 
 ### Build for production
 ```bash
-cd <PROJECT_DIR>\wireloft\ui
+cd <PROJECT_DIR>\vodloft\ui
 npm run build
 ```
 
@@ -140,7 +140,7 @@ npm run dev
 ### Automated tests
 
 The default backend suite is isolated from both the live Daily Wire API and
-`config/wireloft.db`. Install the development dependency group and run it from
+`config/vodloft.db`. Install the development dependency group and run it from
 the repository root:
 
 ```bash
@@ -171,8 +171,8 @@ Options:
 ### Database (SQLite)
 
 This project includes a required SQLite database for the backend.
-- Default development DB path: config/wireloft.db
-- Docker mounts the same project `config` directory at `/config` and uses `/config/wireloft.db`, so local development and Docker operate on the same database by default.
+- Default development DB path: config/vodloft.db
+- Docker mounts the same project `config` directory at `/config` and uses `/config/vodloft.db`, so local development and Docker operate on the same database by default.
 
 #### Create and seed the database
 

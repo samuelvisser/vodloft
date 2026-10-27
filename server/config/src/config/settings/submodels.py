@@ -399,11 +399,11 @@ class DownloadSettings(SubmodelBase):
         description="Format used when upstream show artwork is neither JPEG nor PNG",
     )
     temporary_download_root: Path = Field(
-        default_factory=lambda: Path(tempfile.gettempdir()) / "wireloft-downloads",
+        default_factory=lambda: Path(tempfile.gettempdir()) / "vodloft-downloads",
         description="Directory used to stage complete downloads before publishing them to the download root",
     )
     rss_cache_root: Path = Field(
-        default_factory=lambda data: data["download_root"] / ".wireloft-rss-cache",
+        default_factory=lambda data: data["download_root"] / ".vodloft-rss-cache",
         description="Directory used as the root for media cached while fulfilling RSS requests",
     )
     rss_cache_retention_seconds: int = Field(

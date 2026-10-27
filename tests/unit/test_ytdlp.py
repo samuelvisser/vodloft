@@ -1,6 +1,7 @@
 """The yt-dlp Source: looking up links, downloading through yt-dlp, updates and cookies."""
 from __future__ import annotations
 
+import hashlib
 import sys
 import textwrap
 from contextlib import contextmanager
@@ -10,9 +11,12 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from backend.api.errors import source_request_error_handler
+from backend.services.source_requests import SourceRequestError
 from downloader.errors import DownloadError, EncryptedMediaError, MediaUnavailableError
 from sources import Feature, LinkKind, PlaybackKind, ProgramStatus, Source, registry
-from sources.ytdlp import GENERIC_SITE, YtDlpSource, runner
+from sources import ytdlp_runner as runner
+from sources.ytdlp import GENERIC_SITE, YtDlpSource
 
 
 YOUTUBE_VIDEO = {
@@ -109,24 +113,40 @@ def test_playback_hands_the_page_to_ytdlp_with_the_cookies_file(ytdlp_dir):
         source.save_cookies(b"not cookies")
 
 
+class _Release:
+    """The two files yt-dlp publishes with a release: its program and their checksums."""
+
+    def __init__(self, program: bytes, *, checksum_of: bytes | None = None):
+        self.program = program
+        self.checksum = hashlib.sha256(program if checksum_of is None else checksum_of).hexdigest()
+
+    def get(self, url, **_kwargs):
+        release = self
+
+        class Response:
+            text = f"{release.checksum}  yt-dlp\n{'0' * 64}  yt-dlp.exe\n"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+            def raise_for_status(self):
+                pass
+
+            def iter_content(self, _size):
+                yield release.program
+
+        assert url in (runner.RELEASE_URL, runner.CHECKSUMS_URL)
+        return Response()
+
+
 def test_the_updated_release_replaces_the_shipped_ytdlp(ytdlp_dir, monkeypatch):
     assert runner.program()[1:] == ("-m", "yt_dlp")
     assert runner.update_due()
 
-    class Response:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_):
-            return False
-
-        def raise_for_status(self):
-            pass
-
-        def iter_content(self, _size):
-            yield b"release"
-
-    monkeypatch.setattr(runner.requests, "get", lambda *_a, **_k: Response())
+    monkeypatch.setattr(runner.requests, "get", _Release(b"release").get)
     monkeypatch.setattr(runner, "version", lambda prog=None: "2026.10.21")
     status = YtDlpSource().update_program()
 
@@ -136,6 +156,18 @@ def test_the_updated_release_replaces_the_shipped_ytdlp(ytdlp_dir, monkeypatch):
     assert status.last_update_at is not None and status.last_update_error is None
     assert not runner.update_due()
     assert runner.update_due(datetime.now(timezone.utc) + timedelta(days=8))
+
+
+def test_a_release_that_does_not_match_its_checksum_is_not_used(ytdlp_dir, monkeypatch):
+    monkeypatch.setattr(runner.requests, "get", _Release(b"tampered", checksum_of=b"release").get)
+    monkeypatch.setattr(runner, "version", lambda prog=None: "2026.10.21")
+
+    with pytest.raises(runner.YtDlpError, match="checksum"):
+        runner.update()
+
+    assert not (ytdlp_dir / "yt-dlp").exists()
+    assert list(ytdlp_dir.glob(".yt-dlp-*")) == []
+    assert runner.last_update()[1] == "The downloaded yt-dlp release does not match its published checksum"
 
 
 def test_a_failed_update_keeps_the_current_ytdlp_and_says_why(ytdlp_dir, monkeypatch):
@@ -287,6 +319,7 @@ def client(tool_sources, monkeypatch):
     monkeypatch.setattr(source_router_module, "db_session", db_session)
     app = FastAPI()
     app.include_router(source_router_module.router, prefix="/api")
+    app.add_exception_handler(SourceRequestError, source_request_error_handler)
     with TestClient(app) as test_client:
         yield test_client
 

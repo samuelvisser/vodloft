@@ -17,7 +17,7 @@ def test_event_trigger_is_idempotent_and_preserves_supported_payload(monkeypatch
     import task_manager.scheduler.scheduler as scheduler_module
     from controller.app import setup_triggers_from_registry
     from task_manager.events.emitters import emit_event
-    from task_manager.events.registry import WireloftEventLinker, wait_for_events
+    from task_manager.events.registry import VodloftEventLinker, wait_for_events
 
     monkeypatch.setattr(registry_module, "_REGISTRY", {})
 
@@ -37,7 +37,7 @@ def test_event_trigger_is_idempotent_and_preserves_supported_payload(monkeypatch
 
     setup_triggers_from_registry()
     setup_triggers_from_registry()
-    assert WireloftEventLinker.get_subscriber_count_from_event("test.entity.changed") == 1
+    assert VodloftEventLinker.get_subscriber_count_from_event("test.entity.changed") == 1
 
     emit_event("test.entity.changed", {
         "resource_id": 0,
@@ -119,7 +119,7 @@ def test_cron_minimum_interval_policy_is_opt_in(monkeypatch):
 
 def test_domain_events_preserve_task_operation_context_across_executor_thread():
     from task_manager.events.emitters import emit_event
-    from task_manager.events.registry import WireloftEventLinker, wait_for_events
+    from task_manager.events.registry import VodloftEventLinker, wait_for_events
     from task_manager.scheduler.operation_context import current_operation_ids, operation_context
 
     observed: list[tuple[str, ...]] = []
@@ -127,7 +127,7 @@ def test_domain_events_preserve_task_operation_context_across_executor_thread():
     def handler(**_event_data):
         observed.append(current_operation_ids())
 
-    WireloftEventLinker.subscribe("test.operation.context", event_callback=handler)
+    VodloftEventLinker.subscribe("test.operation.context", event_callback=handler)
 
     with operation_context(("operation-a", "operation-b")):
         emit_event("test.operation.context", {"value": 1})

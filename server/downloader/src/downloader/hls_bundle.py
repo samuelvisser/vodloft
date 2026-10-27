@@ -19,7 +19,7 @@ _TARGET_HEIGHTS = (480, 720, 1080)
 _PROGRESS_INTERVAL_S = 1.0
 _CHUNK_SIZE = 256 * 1024
 _URI_ATTRIBUTE_RE = re.compile(r'URI="[^"]*"')
-_HLS_BUNDLE_MARKER = ".wireloft-hls-bundle"
+_HLS_BUNDLE_MARKER = ".vodloft-hls-bundle"
 
 
 @dataclass(frozen=True)

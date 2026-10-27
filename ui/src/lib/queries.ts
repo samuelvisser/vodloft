@@ -58,7 +58,7 @@ import {TaskOperationRead} from "../types/schemas/operation";
 import {MovieRead, MovieReadSchema} from "../types/schemas/movie";
 import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
-    CookiesRead, CookiesReadSchema, DEFAULT_SOURCE_KEY, ProgramStatusRead, ProgramStatusReadSchema, ResolvedLinkRead,
+    CookiesRead, CookiesReadSchema, ProgramStatusRead, ProgramStatusReadSchema, ResolvedLinkRead,
     ResolvedLinkReadSchema, SearchResultRead, SearchResultReadSchema, ShowDetailsRead, ShowDetailsReadSchema, SourceDomainRead, SourceDomainReadSchema, SourceRead,
     SourceReadSchema,
 } from "../types/schemas/source";
@@ -721,12 +721,13 @@ function syntheticDownload(operation: TaskOperationRead): MediaDownloadDomainVie
 
     const mediaItemId = contextNumber(operation, 'media_item_id')
     const localMediaProfileId = contextNumber(operation, 'local_media_profile_id')
-    if (mediaItemId == null || localMediaProfileId == null) return null
+    const sourceKey = contextString(operation, 'source_key')
+    if (mediaItemId == null || localMediaProfileId == null || sourceKey == null) return null
 
     const createdAt = operationDate(operation.createdAt) || new Date()
     return {
         id: operation.resourceId,
-        sourceKey: contextString(operation, 'source_key') || DEFAULT_SOURCE_KEY,
+        sourceKey,
         sourceFeatures: [],
         type: contextString(operation, 'media_type') || 'episode',
         mediaItemId,

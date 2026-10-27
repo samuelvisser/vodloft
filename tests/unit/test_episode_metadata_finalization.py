@@ -381,6 +381,7 @@ def test_startup_metadata_recovery_skips_live_and_active_operation_targets(monke
     Base.metadata.create_all(engine)
     with Session(engine) as session:
         show = Show(
+            source_key="dailywire",
             uuid="show-uuid", slug="show", title="Show", description=None,
             sharing_url="https://example.test/show", membership_level="FREE",
             type="podcast", episode_identifier="numbered",
@@ -389,6 +390,7 @@ def test_startup_metadata_recovery_skips_live_and_active_operation_targets(monke
         season = Season(show=show, index=1, slug="season-1", name="Season 1")
         episodes = [
             Episode(
+                source_key="dailywire",
                 uuid=f"episode-{index}", type="episode", show=show, season=season,
                 index=index, episode_identifier=f"ep.{index}", slug=f"episode-{index}",
                 title=f"Episode {index}", duration=60, publish_status=status,

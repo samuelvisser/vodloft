@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import available_artifact, mark_artifact_available
 import asyncio
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -30,6 +31,7 @@ def _make_show(session, *, slug="index-show"):
     from backend.types.show_types import EpisodeIdentifier, ShowType
 
     show = Show(
+        source_key="dailywire",
         uuid=f"{slug}-uuid",
         slug=slug,
         title="Index Show",
@@ -60,6 +62,7 @@ def _make_episode(session, show, season, *, index: int, slug: str, identifier: s
     from backend.utils.helpers import generate_uuid
 
     episode = Episode(
+        source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
         show=show,
@@ -416,7 +419,7 @@ def test_historical_episode_only_queues_rename_for_synchronized_file(db_session,
     source.parent.mkdir(parents=True, exist_ok=True)
     source.write_bytes(b"video")
     download = _make_download(db_session, last, profile, file_path=str(source))
-    download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+    mark_artifact_available(download)
     db_session.flush()
 
     _make_episode(db_session, show, season, index=200, slug="middle", identifier="ep.2")
@@ -466,14 +469,14 @@ def test_batch_file_rename_rollback_restores_cycle_without_overwrite(db_session,
         type=MediaType.EPISODE.value,
         media_item_id=first.id,
         local_media_profile_id=profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         file_path=str(second_expected),
     )
     second_download = EpisodeMediaDownload(
         type=MediaType.EPISODE.value,
         media_item_id=second.id,
         local_media_profile_id=profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         file_path=str(first_expected),
     )
     db_session.add_all([first_download, second_download])
@@ -537,14 +540,14 @@ def test_batch_file_rename_stages_source_destination_cycle(db_session):
         type=MediaType.EPISODE.value,
         media_item_id=first.id,
         local_media_profile_id=profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         file_path=str(second_expected),
     )
     second_download = EpisodeMediaDownload(
         type=MediaType.EPISODE.value,
         media_item_id=second.id,
         local_media_profile_id=profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         file_path=str(first_expected),
     )
     db_session.add_all([first_download, second_download])

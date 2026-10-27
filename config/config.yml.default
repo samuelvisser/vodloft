@@ -17,7 +17,7 @@ crypto:
   # Fallback location for the auto-generated session-signing key, used when
   # neither secretKey nor secretKeyFile is set. Keep this on a persistent
   # volume so logins survive container restarts.
-  defaultSecretFile: /config/wl_secret.key
+  defaultSecretFile: /config/vodloft_secret.key
 
 downloadSettings:
   # Stage downloads locally before publishing the completed media.

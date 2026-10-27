@@ -12,6 +12,7 @@ def test_show_output_template_supports_season_index(tmp_path, monkeypatch):
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
 
     show = Show(
+        source_key="dailywire",
         uuid="show-season-index",
         slug="the-ben-shapiro-show",
         title="The Ben Shapiro Show",
@@ -32,6 +33,7 @@ def test_show_output_template_supports_season_index(tmp_path, monkeypatch):
         season_number=6,
     )
     episode = Episode(
+        source_key="dailywire",
         uuid="episode-season-index",
         type="episode",
         show=show,

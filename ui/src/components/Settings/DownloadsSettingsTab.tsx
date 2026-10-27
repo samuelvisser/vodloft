@@ -116,7 +116,7 @@ export default function DownloadsSettingsTab({
         !isFieldExplicit('downloadSettings.rssCacheRoot')
         && !isFieldDirty('downloadSettings.rssCacheRoot')
     )
-        ? childPath(draft.downloadSettings.downloadRoot, '.wireloft-rss-cache')
+        ? childPath(draft.downloadSettings.downloadRoot, '.vodloft-rss-cache')
         : draft.downloadSettings.rssCacheRoot
 
     const storageInspectionIsCurrent = ![
@@ -192,11 +192,11 @@ export default function DownloadsSettingsTab({
                     help={
                         <ReadMore summary="Stores media VODLoft prepares or caches while fulfilling RSS requests.">
                             <p>
-                                By default, the cache lives in <code>.wireloft-rss-cache</code> inside the download root.
+                                By default, the cache lives in <code>.vodloft-rss-cache</code> inside the download root.
                             </p>
                             <p>
                                 You may explicitly place it anywhere VODLoft can write, including container-local storage such
-                                as <code>/tmp/wireloft-rss-cache</code>. A container-local cache does not need a host volume, but is lost when the
+                                as <code>/tmp/vodloft-rss-cache</code>. A container-local cache does not need a host volume, but is lost when the
                                 container is recreated.
                             </p>
                         </ReadMore>

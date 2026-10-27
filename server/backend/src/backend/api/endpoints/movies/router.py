@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from .service import *
 from ...models.movie import *
-from ...models.media_download import MovieDownloadAPICreate
+from ...models.media_download import MediaDownloadAPICreate
 from ...models.operations import (
     MediaDownloadOperationAccepted,
     MovieRedownloadOperationAccepted,
@@ -47,7 +47,7 @@ def movie_index(movie_slug: str):
     response_model=MediaDownloadOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
-def movie_download_create(movie_slug: str, body: MovieDownloadAPICreate):
+def movie_download_create(movie_slug: str, body: MediaDownloadAPICreate):
     """Persist a movie artifact target and start it as a generic UI operation."""
     try:
         movie_data = get_dailywire_movie(movie_slug)
@@ -80,7 +80,7 @@ def movie_download_create(movie_slug: str, body: MovieDownloadAPICreate):
     response_model=MediaDownloadOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
-def movie_extra_download_create(movie_slug: str, movie_extra_slug: str, body: MovieDownloadAPICreate):
+def movie_extra_download_create(movie_slug: str, movie_extra_slug: str, body: MediaDownloadAPICreate):
     """Persist a movie-extra artifact target and start it as a generic UI operation."""
     try:
         movie_data = get_dailywire_movie(movie_slug)

@@ -105,7 +105,7 @@ function TaskStatus({row}: {row: TaskLedgerEntryRead}) {
                 <span className="task-progress-label">
                     <FontAwesomeIcon
                         icon={wait?.icon ?? statusIcon(row.status)}
-                        className={active && !hasProgress && !wait ? 'wl-progress-icon' : undefined}
+                        className={active && !hasProgress && !wait ? 'vl-progress-icon' : undefined}
                         aria-hidden="true"
                     />
                     {wait?.label ?? (hasProgress ? `${row.progress}%` : text)}
@@ -350,7 +350,7 @@ export default function TasksPage() {
                 <div ref={sentinelRef} className="infinite-scroll-sentinel" aria-hidden="true"/>
                 {query.isFetchingNextPage && (
                     <div className="task-table-loading">
-                        <FontAwesomeIcon className="wl-progress-icon" icon={faIcon('fass', 'spinner')}/>
+                        <FontAwesomeIcon className="vl-progress-icon" icon={faIcon('fass', 'spinner')}/>
                         Loading more tasks...
                     </div>
                 )}

@@ -73,7 +73,7 @@ def test_rss_output_mode_migration_rewrites_methods_and_stabilizes_feed_urls(
                 ), {
                     "id": profile_id,
                     "feed_url": (
-                        f"https://wireloft.test/feed-{index}.xml?"
+                        f"https://vodloft.test/feed-{index}.xml?"
                         f"custom=value&dwVideoMethod={old_method}#fragment"
                     ),
                     "method": old_method,

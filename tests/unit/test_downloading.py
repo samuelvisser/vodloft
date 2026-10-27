@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import mark_artifact_available
 import asyncio
 from unittest.mock import Mock
 
@@ -134,6 +135,7 @@ def _db_with_episode():
     Base.metadata.create_all(engine)
     session = Session(engine)
     show = Show(
+        source_key="dailywire",
         uuid="show-uuid",
         slug="test-show",
         title="Test Show",
@@ -147,6 +149,7 @@ def _db_with_episode():
     )
     season = Season(show=show, index=1, slug="season-2026", name="2026")
     episode = Episode(
+        source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
         show=show,
@@ -231,7 +234,7 @@ def test_create_episode_download_enforces_one_per_profile(monkeypatch, tmp_path)
         "backend.api.endpoints.media_downloads.service._reconcile_existing_artifact",
         lambda s, existing: None,
     )
-    download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+    mark_artifact_available(download)
     session.commit()
     with pytest.raises(HTTPException) as exc_info:
         create_episode_download(session, episode.slug, body)

@@ -4,7 +4,7 @@ import {defineConfig, type Plugin} from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import {fontAwesomeCompiler} from './scripts/font-awesome-compiler.mjs'
 
-const VIRTUAL_VERSION_MODULE = 'virtual:wireloft-version'
+const VIRTUAL_VERSION_MODULE = 'virtual:vodloft-version'
 const RESOLVED_VIRTUAL_VERSION_MODULE = '\0' + VIRTUAL_VERSION_MODULE
 
 function findVODLoftManifest(): string {
@@ -19,10 +19,10 @@ function findVODLoftManifest(): string {
   return manifestPath
 }
 
-const wireLoftManifest = findVODLoftManifest()
+const vodLoftManifest = findVODLoftManifest()
 
 function readVODLoftVersion(): string {
-  const manifest = readFileSync(wireLoftManifest, 'utf8')
+  const manifest = readFileSync(vodLoftManifest, 'utf8')
   const projectStart = manifest.indexOf('[project]')
   if (projectStart < 0) {
     throw new Error('Root pyproject.toml does not define a [project] section')
@@ -41,9 +41,9 @@ function readVODLoftVersion(): string {
   return version
 }
 
-function wireLoftVersionPlugin(): Plugin {
+function vodLoftVersionPlugin(): Plugin {
   return {
-    name: 'wireloft-version',
+    name: 'vodloft-version',
     resolveId(id) {
       if (id === VIRTUAL_VERSION_MODULE) {
         return RESOLVED_VIRTUAL_VERSION_MODULE
@@ -51,7 +51,7 @@ function wireLoftVersionPlugin(): Plugin {
     },
     load(id) {
       if (id !== RESOLVED_VIRTUAL_VERSION_MODULE) return
-      return `export const WIRELOFT_VERSION = ${JSON.stringify(readVODLoftVersion())}`
+      return `export const VODLOFT_VERSION = ${JSON.stringify(readVODLoftVersion())}`
     },
   }
 }
@@ -60,7 +60,7 @@ function wireLoftVersionPlugin(): Plugin {
 // The paid kit is opt-in through `npm run dev:pro-icons` / `build:pro-icons`.
 export default defineConfig(({mode}) => ({
   plugins: [
-    wireLoftVersionPlugin(),
+    vodLoftVersionPlugin(),
     fontAwesomeCompiler({proIcons: mode === 'pro-icons'}),
     react(),
   ],

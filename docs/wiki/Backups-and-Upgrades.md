@@ -29,20 +29,20 @@ Remember that VODLoft cannot guarantee The Daily Wire will continue to make ever
 VODLoft uses SQLite. The simplest reliable backup is to stop VODLoft while copying `/config`:
 
 ```bash
-docker compose stop wireloft
+docker compose stop vodloft
 # back up ./config here
-docker compose start wireloft
+docker compose start vodloft
 ```
 
 If your storage/backup system supports application-consistent SQLite snapshots, you can use that instead.
 
-Do not run two VODLoft backends against the same SQLite database at the same time. For example, avoid starting a local development backend and a Docker instance that both point to the same `wireloft.db`.
+Do not run two VODLoft backends against the same SQLite database at the same time. For example, avoid starting a local development backend and a Docker instance that both point to the same `vodloft.db`.
 
 ## Do not lose the application key
 
 The normal Docker setup keeps VODLoft's generated application key under `/config`. Preserve it together with the database.
 
-Restoring only `wireloft.db` while losing the accompanying key and authentication state can result in an incomplete restore.
+Restoring only `vodloft.db` while losing the accompanying key and authentication state can result in an incomplete restore.
 
 ## Upgrade VODLoft
 
