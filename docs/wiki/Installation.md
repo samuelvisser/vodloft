@@ -5,7 +5,7 @@ Docker is the recommended way to run VODLoft. The published container includes t
 ## Quick start
 
 ```bash
-mkdir wireloft && cd wireloft
+mkdir vodloft && cd vodloft
 curl -O https://raw.githubusercontent.com/samuelvisser/vodloft/main/.docker/docker-compose.yml
 docker compose up -d
 ```
@@ -20,9 +20,9 @@ The supplied Compose file is equivalent to:
 
 ```yaml
 services:
-  wireloft:
+  vodloft:
     image: ghcr.io/samuelvisser/vodloft:latest
-    container_name: wireloft
+    container_name: vodloft
     restart: unless-stopped
     ports:
       - "5274:80"

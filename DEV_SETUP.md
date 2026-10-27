@@ -88,7 +88,7 @@ when no level is selected. Version-derived aliases are supplied by
 
 It needs a GitHub personal access token with `write:packages` scope to log
 in to ghcr.io, picked up in order from: the `GHCR_TOKEN` env var, a local
-token file (default `~/.config/wireloft/ghcr_token`, override with
+token file (default `~/.config/vodloft/ghcr_token`, override with
 `$GHCR_TOKEN_FILE`), or an interactive hidden prompt as a last resort --
 which then offers to save it to that file (created with permissions
 restricted to your user only) so later runs don't ask again. The token is

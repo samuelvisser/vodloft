@@ -10,7 +10,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-IMAGE_NAME="wireloft"
+IMAGE_NAME="vodloft"
 REGISTRY="ghcr.io"
 GHCR_USER="${GHCR_USER:-samuelvisser}"
 CURRENT_BRANCH="$(git branch --show-current 2>/dev/null || true)"
@@ -126,7 +126,7 @@ fi
 GIT_REVISION="$(git rev-parse HEAD 2>/dev/null || printf 'unknown')"
 
 FULL_IMAGE="$REGISTRY/$GHCR_USER/$IMAGE_NAME"
-TOKEN_FILE="${GHCR_TOKEN_FILE:-$HOME/.config/wireloft/ghcr_token}"
+TOKEN_FILE="${GHCR_TOKEN_FILE:-$HOME/.config/vodloft/ghcr_token}"
 NPMRC="ui/.npmrc"
 
 ensure_docker_running() {

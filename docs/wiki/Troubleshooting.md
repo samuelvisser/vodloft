@@ -226,7 +226,7 @@ If you are certain the entry should be removed immediately, use **Early Delete**
 
 Stop VODLoft before doing anything else and make a copy of the complete `/config` directory.
 
-Do not run multiple VODLoft backends against the same SQLite database. A common development mistake is running a local backend and a Docker instance that both use the same `wireloft.db` at the same time.
+Do not run multiple VODLoft backends against the same SQLite database. A common development mistake is running a local backend and a Docker instance that both use the same `vodloft.db` at the same time.
 
 If the database reports structural corruption, restore a known-good `/config` backup when available. Avoid repeatedly restarting or running migration commands against a database that is already reporting corruption.
 
@@ -234,6 +234,6 @@ See [[Backups-and-Upgrades]].
 
 ## Problems after restoring a backup
 
-Make sure you restored the **entire `/config` directory**, not only `wireloft.db`. The application key and Daily Wire authentication state live alongside the database/configuration.
+Make sure you restored the **entire `/config` directory**, not only `vodloft.db`. The application key and Daily Wire authentication state live alongside the database/configuration.
 
 If the hostname changed, update RSS Stream Profile URLs as well.

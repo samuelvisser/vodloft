@@ -61,7 +61,7 @@ The best way to run VODLoft is using its Docker container. Everything is managed
 Run the following to get started immediately:
 
 ```bash
-mkdir wireloft && cd wireloft
+mkdir vodloft && cd vodloft
 curl -O https://raw.githubusercontent.com/samuelvisser/vodloft/develop/.docker/docker-compose.yml
 docker compose up -d
 ```
@@ -75,7 +75,7 @@ See **Volumes** and **Useful environment variables** below for persistence and c
 
 ```yaml
 services:
-  wireloft:
+  vodloft:
     image: ghcr.io/samuelvisser/vodloft:latest
     restart: unless-stopped
     ports:

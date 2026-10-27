@@ -19,10 +19,10 @@ function findVODLoftManifest(): string {
   return manifestPath
 }
 
-const wireLoftManifest = findVODLoftManifest()
+const vodLoftManifest = findVODLoftManifest()
 
 function readVODLoftVersion(): string {
-  const manifest = readFileSync(wireLoftManifest, 'utf8')
+  const manifest = readFileSync(vodLoftManifest, 'utf8')
   const projectStart = manifest.indexOf('[project]')
   if (projectStart < 0) {
     throw new Error('Root pyproject.toml does not define a [project] section')
@@ -41,7 +41,7 @@ function readVODLoftVersion(): string {
   return version
 }
 
-function wireLoftVersionPlugin(): Plugin {
+function vodLoftVersionPlugin(): Plugin {
   return {
     name: 'vodloft-version',
     resolveId(id) {
@@ -60,7 +60,7 @@ function wireLoftVersionPlugin(): Plugin {
 // The paid kit is opt-in through `npm run dev:pro-icons` / `build:pro-icons`.
 export default defineConfig(({mode}) => ({
   plugins: [
-    wireLoftVersionPlugin(),
+    vodLoftVersionPlugin(),
     fontAwesomeCompiler({proIcons: mode === 'pro-icons'}),
     react(),
   ],
