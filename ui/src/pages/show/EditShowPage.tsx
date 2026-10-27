@@ -3,9 +3,11 @@ import { useNavigate, useParams } from 'react-router-dom'
 import ShowForm, { ShowFormValue, defaultShowFormValue } from '../../components/ShowForm'
 import CustomMetadataEditor from '../../components/CustomMetadataEditor/CustomMetadataEditor'
 import { useQueryClient } from '@tanstack/react-query'
+import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useShow} from '../../lib/queries'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
+import {faIcon} from '../../icons/faIcon'
 
 type RouteParams = { id?: string }
 
@@ -19,6 +21,7 @@ export default function EditShowPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const [metadataOpen, setMetadataOpen] = useState(false)
+  const [urlCopied, setUrlCopied] = useState(false)
   const {data: show} = useShow(id)
   const initializedShowId = useRef<string | undefined>(undefined)
 
@@ -129,6 +132,17 @@ export default function EditShowPage() {
     )
   }
 
+  const onCopyUrl = async () => {
+    if (!form.url) return
+    try {
+      await navigator.clipboard.writeText(form.url)
+      setUrlCopied(true)
+      setTimeout(() => setUrlCopied(false), 2000)
+    } catch {
+      // The URL stays visible in the field when clipboard access is unavailable.
+    }
+  }
+
   return (
     <section className="view" aria-labelledby="edit-show-title">
       <div className="view-header">
@@ -143,16 +157,36 @@ export default function EditShowPage() {
       <form className="form" onSubmit={(e) => e.preventDefault()}>
         <div className="form-row">
           <label htmlFor="show-url">Show URL</label>
-          <input
-            id="show-url"
-            className="input"
-            type="url"
-            inputMode="url"
-            placeholder="https://…"
-            value={form.url}
-            onChange={(e) => setForm({ ...form, url: e.target.value })}
-            disabled
-          />
+          <div className="rss-feed-url-group">
+            <input
+              id="show-url"
+              className="input rss-feed-url-input"
+              type="url"
+              inputMode="url"
+              placeholder="https://…"
+              value={form.url}
+              onChange={(e) => setForm({ ...form, url: e.target.value })}
+              disabled
+            />
+            <div className="rss-feed-url-actions">
+              <button
+                type="button"
+                className="rss-feed-url-action"
+                onClick={onCopyUrl}
+                disabled={!form.url}
+                aria-label={urlCopied ? 'Show URL copied' : 'Copy show URL'}
+                title={urlCopied ? 'Copied!' : 'Copy show URL'}
+                aria-live="polite"
+              >
+                <FontAwesomeIcon
+                  className="rss-feed-url-action-icon"
+                  icon={faIcon('fass', urlCopied ? 'check' : 'copy') as any}
+                  aria-hidden="true"
+                />
+                <span className="rss-feed-url-action-text">{urlCopied ? 'Copied!' : 'Copy'}</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="form-row">
