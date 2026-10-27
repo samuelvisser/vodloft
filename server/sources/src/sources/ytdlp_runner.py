@@ -21,6 +21,7 @@ from pathlib import Path
 import requests
 
 from config.settings.base import get_config_path
+from . import cookies as cookie_files
 from downloader.ytdlp import error_message
 
 RELEASE_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"
@@ -185,13 +186,7 @@ def update() -> str:
 
 def save_cookies(content: bytes) -> None:
     """Store a Netscape cookies file that every yt-dlp run uses."""
-    text = content.decode("utf-8", errors="replace")
-    if not any(line.strip() and (not line.startswith("#") or line.startswith("#HttpOnly_")) and len(line.split("\t")) >= 7 for line in text.splitlines()):
-        raise ValueError("This is not a cookies.txt file in the Netscape format")
-    path = cookies_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
-    os.chmod(path, 0o600)
+    cookie_files.store(cookies_path(), cookie_files.cookies_text(content))
 
 
 def remove_cookies() -> None:

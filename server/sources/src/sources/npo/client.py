@@ -8,6 +8,7 @@ from typing import Any
 import requests
 
 from .. import pacing
+from . import account
 
 ORIGIN = "https://npo.nl"
 API = f"{ORIGIN}/start/api/domain"
@@ -55,9 +56,9 @@ class NpoClient:
         except ValueError as exc:
             raise NpoError("NPO Start returned something that is not JSON") from exc
 
-    def get(self, endpoint: str, **params) -> Any:
+    def get(self, endpoint: str, *, cookies=None, **params) -> Any:
         query = {key: str(value).lower() if isinstance(value, bool) else value for key, value in params.items() if value is not None}
-        return self._send("GET", f"{API}/{endpoint}", params=query)
+        return self._send("GET", f"{API}/{endpoint}", params=query, cookies=cookies)
 
     def search(self, query: str, search_type: str) -> list[dict]:
         data = self.get(
@@ -80,8 +81,12 @@ class NpoClient:
         return _object(self.get("program-detail", slug=slug, ageRestriction="undefined", includePremiumContent=True))
 
     def stream_link(self, product_id: str, referrer_url: str) -> dict:
-        """The HLS stream NPO's player would play. A clear stream needs no headers to download."""
-        token = _object(self.get("player-token", productId=product_id)).get("jwt")
+        """The HLS stream NPO's player would play. A clear stream needs no headers to download.
+
+        With a signed-in npo.nl session, the player is asked as that account,
+        so programmes its subscription unlocks get a stream too.
+        """
+        token = _object(self.get("player-token", productId=product_id, cookies=account.load_cookies())).get("jwt")
         if not isinstance(token, str) or not token:
             raise NpoError("NPO Start gave no player token")
         return _object(self._send(

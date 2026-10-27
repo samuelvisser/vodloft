@@ -40,6 +40,8 @@ class SourceAPIRead(ResponseBase):
     features: list[str]
     search_label: Optional[str] = None
     subscription_name: Optional[str] = None
+    cookies_help: Optional[str] = None
+    subscription_active: bool = False
 
     @field_validator("features", mode="before")
     @classmethod

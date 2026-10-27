@@ -370,3 +370,103 @@ def test_the_background_migration_marks_stored_programmes_that_need_npo_plus(npo
         "een-huis-vol_1", "een-huis-vol_2", "een-huis-vol_3",
     }
     assert session.query(Video).one().needs_subscription is True
+
+
+COOKIES = "# Netscape HTTP Cookie File\n.npo.nl\tTRUE\t/\tTRUE\t0\tsession\tabc\n"
+
+
+@pytest.fixture
+def signed_in(tmp_path, monkeypatch):
+    from sources.npo import account
+
+    monkeypatch.setattr(account, "cookies_path", lambda: tmp_path / "npo" / "cookies.txt")
+    return account
+
+
+def test_a_cookies_file_signs_npo_start_in(npo, signed_in):
+    source, _ = npo
+    assert source.has(Feature.COOKIES) and source.cookies_help
+    assert source.subscription_active is False
+    with pytest.raises(ValueError, match="no npo.nl cookies"):
+        source.save_cookies(b"# Netscape HTTP Cookie File\n.example.com\tTRUE\t/\tTRUE\t0\tsession\tabc\n")
+    with pytest.raises(ValueError, match="Netscape"):
+        source.save_cookies(b"not a cookies file")
+    source.save_cookies(COOKIES.encode())
+    assert source.has_cookies() and source.subscription_active is True
+    assert [cookie.name for cookie in signed_in.load_cookies()] == ["session"]
+    source.remove_cookies()
+    assert source.subscription_active is False
+
+
+def test_signed_in_programmes_that_need_npo_plus_are_checked_and_played(npo, signed_in):
+    source, client = npo
+    source.save_cookies(COOKIES.encode())
+    client.programs["s2"] = [_premium(program) for program in client.programs["s2"]]
+    client.protected = {"NCRV_een-huis-vol_1"}
+    episodes = list(source.list_episodes("https://npo.nl/start/serie/een-huis-vol", known=frozenset()))
+    assert {e.slug: (e.needs_subscription, e.drm_protected) for e in episodes if e.season.number == 2} == {
+        "een-huis-vol_3": (True, False), "een-huis-vol_2": (True, False), "een-huis-vol_1": (True, True),
+    }
+    playback = source.video_playback(slug="een-huis-vol_2", url="https://npo.nl/start/afspelen/een-huis-vol_2")
+    assert (playback.needs_subscription, playback.url) == (False, CLEAR)
+
+
+def test_a_sign_in_without_npo_plus_still_cannot_play_them(npo, signed_in):
+    from sources.npo.client import NpoError
+
+    source, client = npo
+    source.save_cookies(COOKIES.encode())
+    client.programs["s2"] = [_premium(program) for program in client.programs["s2"]]
+
+    def refused(product_id, referrer_url):
+        raise NpoError("NPO Start answered with HTTP 403")
+    client.stream_link = refused
+    playback = source.video_playback(slug="een-huis-vol_2", url="https://npo.nl/start/afspelen/een-huis-vol_2")
+    assert playback.needs_subscription is True
+
+
+def test_signed_in_episodes_that_need_npo_plus_are_planned(npo, session, signed_in):
+    from backend.db.models import DownloadProfile, Show, ShowLocalMediaProfile
+    from task_manager.tasks.helpers.listed_shows import index_listed_show
+    from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
+
+    source, client = npo
+    client.programs["s2"] = [_premium(program) for program in client.programs["s2"]]
+    client.protected = set()
+    show = Show(
+        uuid="uuid-huis", slug="een-huis-vol", source_key="npo", title="Een huis vol",
+        sharing_url="https://npo.nl/start/serie/een-huis-vol/afleveringen", membership_level="FREE",
+        type="series", episode_identifier="seasonal", author_name="NCRV", author_slug="ncrv",
+    )
+    session.add(show)
+    session.commit()
+    index_listed_show(session, show_id=show.id, source=source)
+    local = ShowLocalMediaProfile(slug="shows", name="Shows", preferred_format="format_1080p",
+                                  output_template="/downloads/{{ show_title }}/{{ episode_title }}.ext")
+    profile = DownloadProfile(
+        show=show, local_media_profile=local, enable_profile=True, ep_id_type_list=["ep"],
+        download_with_countdown=False, redownload_final=False, download_days_in_past=0,
+        download_episode_count=0, delete_older_episodes=False,
+    )
+    session.add_all([local, profile])
+    session.flush()
+    profile.seasons = list(show.seasons)
+    assert len(get_download_profile_episodes(session, profile)) == 2
+    source.save_cookies(COOKIES.encode())
+    assert len(get_download_profile_episodes(session, profile)) == 5
+
+
+def test_signed_in_npo_downloads_run_one_at_a_time(npo, signed_in):
+    from downloader.capacity import DownloadResources
+
+    source, _ = npo
+    assert source.download_streams is None
+    source.save_cookies(COOKIES.encode())
+    assert source.download_streams == 1
+    resources = DownloadResources()
+    lane = resources.lane("source:npo", 1)
+    assert resources.lane("source:npo", 1) is lane
+    with lane.acquire(should_cancel=lambda: False, waiting=lambda _: None):
+        with pytest.raises(Exception, match="Canceled"):
+            with lane.acquire(should_cancel=lambda: True, waiting=lambda _: None):
+                pass

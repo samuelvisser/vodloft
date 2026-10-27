@@ -4,7 +4,7 @@ from __future__ import annotations
 import errno
 import os
 import shutil
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -151,8 +151,14 @@ def execute_download_plan(
             transfer_path = Path(str(media_path) + ".rawmedia")
         else:
             transfer_path = media_path
+        lane = resources.lane(*plan.media_lane) if plan.media_lane else None
         with tracker.activity("media"):
-            with resources.media.acquire(
+            with (
+                lane.acquire(
+                    should_cancel=tracker.is_canceled,
+                    waiting=lambda value: tracker.wait("media", "download_capacity" if value else None),
+                ) if lane else nullcontext()
+            ), resources.media.acquire(
                 should_cancel=tracker.is_canceled,
                 waiting=lambda value: tracker.wait("media", "download_capacity" if value else None),
             ):

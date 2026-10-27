@@ -8,6 +8,12 @@ function useSubscriptionName(sourceKey?: string | null): string {
     return useSourceLookup().get(sourceKey)?.subscriptionName ?? 'Subscription'
 }
 
+/** True when the item needs a subscription that VODLoft is not signed in with, so it cannot be downloaded. */
+export function useSubscriptionLocked(sourceKey: string | null | undefined, needsSubscription: boolean | undefined): boolean {
+    const source = useSourceLookup().get(sourceKey)
+    return Boolean(needsSubscription) && !source?.subscriptionActive
+}
+
 export function needsSubscriptionMessage(name: string): string {
     return `Needs ${name}, cannot be downloaded`
 }

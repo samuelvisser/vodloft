@@ -19,7 +19,7 @@ import './EpisodePage.css'
 import {faIcon} from '../../icons/faIcon'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
 import {RemovedBadge} from '../../components/common/RemovedFromSource'
-import {SubscriptionBadge, SubscriptionNotice} from '../../components/common/NeedsSubscription'
+import {SubscriptionBadge, SubscriptionNotice, useSubscriptionLocked} from '../../components/common/NeedsSubscription'
 
 
 const OPERATION_STARTING_MESSAGE = 'This task is starting...'
@@ -69,6 +69,7 @@ export default function EpisodePage() {
     } = useEpisode(episodeId)
     const {data: profiles, error: profilesError} = useLocalMediaProfiles()
     const sourceName = useSourceLookup().name(episode?.sourceKey ?? show?.sourceKey)
+    const subscriptionLocked = useSubscriptionLocked(episode?.sourceKey, episode?.needsSubscription)
     const {
         data: downloads,
         error: downloadsError,
@@ -143,7 +144,7 @@ export default function EpisodePage() {
         || publishStatus === EpisodePublishStatus.publishedFinal
     )
     // Media protected by DRM or only given to subscribers cannot be downloaded.
-    const locked = episode.drmProtected || episode.needsSubscription
+    const locked = episode.drmProtected || subscriptionLocked
     const downloadStateError = (profiles === undefined ? profilesError : null)
         ?? (!hasDownloadState ? downloadsError : null)
 
@@ -296,7 +297,7 @@ export default function EpisodePage() {
                     <div className="episode-downloads" aria-labelledby="episode-downloads-title">
                         <h2 id="episode-downloads-title">Downloads</h2>
                         {episode.drmProtected && <DrmNotice/>}
-                        {!episode.drmProtected && episode.needsSubscription && <SubscriptionNotice sourceKey={episode.sourceKey}/>}
+                        {!episode.drmProtected && subscriptionLocked && <SubscriptionNotice sourceKey={episode.sourceKey}/>}
                         {!locked && downloadStateError && (
                             <div className="form-error-card" role="alert">
                                 Could not load download status: {downloadStateError.message}

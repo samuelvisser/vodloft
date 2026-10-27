@@ -109,6 +109,8 @@ class DownloadPlan:
     stages: tuple[StageSpec, ...]
     publication_requires_copy: bool
     warnings: tuple[str, ...] = ()
+    media_lane: tuple[str, int] | None = None
+    """A named lane with its own limit on media transfers, such as one stream at a time for an account."""
 
     def __post_init__(self) -> None:
         stages = {stage.id: stage for stage in self.stages}
@@ -184,6 +186,7 @@ def build_download_plan(
     metadata_tags: tuple[tuple[str, str], ...] = (),
     artwork_asset_id: str | None = None,
     attempt_id: str | None = None,
+    media_lane: tuple[str, int] | None = None,
 ) -> DownloadPlan:
     """Resolve optional work once; the coordinator executes this plan verbatim."""
     if download_mode not in ("direct", "temporary"):
@@ -275,5 +278,5 @@ def build_download_plan(
     return DownloadPlan(
         attempt_id or str(uuid4()), source, str(requested_destination), download_mode,
         str(temporary_root), ffmpeg_path, tuple(assets), tuple(metadata_tags),
-        artwork_asset_id, tuple(stages), copying,
+        artwork_asset_id, tuple(stages), copying, media_lane=media_lane,
     )

@@ -10,6 +10,7 @@ from ..contract import (
     Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, SearchResults, SeasonRef, ShowDetails, Source, VideoDetails,
 )
 from .. import ytdlp_runner as runner
+from . import account
 from .client import ORIGIN, NpoClient, NpoError, NpoNotFoundError
 
 logger = logging.getLogger(__name__)
@@ -122,8 +123,13 @@ class NpoSource(Source):
     id = "npo"
     name = "NPO Start"
     domains = ("npo.nl",)
-    features = frozenset({Feature.SHOWS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.SEARCH})
+    features = frozenset({Feature.SHOWS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.SEARCH, Feature.COOKIES})
     subscription_name = "NPO Plus"
+    cookies_help = (
+        "Optional. Sign in with your NPO account to download programmes that need NPO Plus. Sign in on "
+        "npo.nl in your browser, export a cookies.txt file for npo.nl, and choose it here. VODLoft never "
+        "sees your password. Programmes protected by DRM still can't be downloaded."
+    )
 
     def __init__(self, client: NpoClient | None = None):
         self._client = client or NpoClient()
@@ -131,7 +137,7 @@ class NpoSource(Source):
     def _protected(self, program: dict) -> bool | None:
         """Whether the programme is protected by DRM, or None when NPO will not say right now,
         such as for a programme that is not out yet or needs a subscription."""
-        if needs_subscription(program):
+        if needs_subscription(program) and not self.subscription_active:
             # NPO gives no stream to an anonymous player for it, so asking would only fail.
             return None
         product_id = program.get("productId")
@@ -263,7 +269,8 @@ class NpoSource(Source):
         rest is taken to match. Otherwise each programme is looked up. A clear
         programme that turns out to be protected is marked when it is downloaded.
         """
-        programs = [program for program in programs if not needs_subscription(program)]
+        if not self.subscription_active:
+            programs = [program for program in programs if not needs_subscription(program)]
         if not programs:
             return {}
         ends = [programs[0], programs[-1]] if len(programs) > 1 else [programs[0]]
@@ -291,11 +298,18 @@ class NpoSource(Source):
     def video_playback(self, *, slug: str, url: str) -> Playback:
         parsed = parse_link(url)
         program = self._client.program_detail(parsed[1] if parsed else slug)
-        if needs_subscription(program):
+        premium = needs_subscription(program)
+        if premium and not self.subscription_active:
             return Playback(url=program_url(program.get("slug") or slug), needs_subscription=True)
         if not program.get("productId"):
             raise NpoError("NPO Start has no stream for this programme")
-        stream_link = self._client.stream_link(program["productId"], program_url(program["slug"]))
+        try:
+            stream_link = self._client.stream_link(program["productId"], program_url(program["slug"]))
+        except NpoError:
+            if premium:
+                # The sign-in no longer gives this account NPO Plus.
+                return Playback(url=program_url(program["slug"]), needs_subscription=True)
+            raise
         stream = stream_link.get("stream") if isinstance(stream_link.get("stream"), dict) else {}
         stream_url = stream.get("streamURL")
         if not isinstance(stream_url, str) or not stream_url.startswith("https://"):
@@ -305,4 +319,20 @@ class NpoSource(Source):
         # The stream keeps its audio in a rendition of its own, which yt-dlp joins to the video.
         return Playback(url=stream_url, kind=PlaybackKind.YTDLP, command=runner.command())
 
+    @property
+    def download_streams(self) -> int | None:
+        # NPO Plus plays two streams at once; one is left for watching.
+        return 1 if self.subscription_active else None
 
+    @property
+    def subscription_active(self) -> bool:
+        return account.has_cookies()
+
+    def has_cookies(self) -> bool:
+        return account.has_cookies()
+
+    def save_cookies(self, content: bytes) -> None:
+        account.save_cookies(content)
+
+    def remove_cookies(self) -> None:
+        account.remove_cookies()

@@ -237,7 +237,7 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
                             <p className="add-media-preview-description">{link.preview.description}</p>
                         )}
                         {link.drmProtected && <DrmNotice/>}
-                        {!link.drmProtected && link.needsSubscription && <SubscriptionNotice sourceKey={link.source.id}/>}
+                        {!link.drmProtected && link.needsSubscription && !link.source.subscriptionActive && <SubscriptionNotice sourceKey={link.source.id}/>}
                         {target ? (
                             <div className="add-media-preview-actions">
                                 <button className="btn btn-primary" type="button" onClick={proceed} disabled={addingVideo}>

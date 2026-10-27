@@ -57,6 +57,17 @@ class DownloadResources:
         self.media = CapacityLimiter(media)
         self.sidecars = CapacityLimiter(sidecars)
         self.processing = CapacityLimiter(processing)
+        self._lanes: dict[str, CapacityLimiter] = {}
+        self._lanes_condition = Condition()
+
+    def lane(self, name: str, limit: int) -> CapacityLimiter:
+        """The limiter of a named lane, created on first use and kept at ``limit``."""
+        with self._lanes_condition:
+            limiter = self._lanes.get(name)
+            if limiter is None:
+                limiter = self._lanes[name] = CapacityLimiter(limit)
+        limiter.configure(limit)
+        return limiter
 
 
 resources = DownloadResources()

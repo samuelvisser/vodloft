@@ -17,6 +17,8 @@ export default function SourceCookiesCard({source}: {source: SourceRead}) {
         setError(null)
         try {
             queryClient.setQueryData(['sourceCookies', source.id], await saveSourceCookies(source.id, content))
+            // Signing in or out can change what the Source's subscription allows.
+            await queryClient.invalidateQueries({queryKey: ['sources']})
         } catch (exc) {
             setError(exc instanceof Error ? exc.message : String(exc))
         } finally {
@@ -35,9 +37,13 @@ export default function SourceCookiesCard({source}: {source: SourceRead}) {
             <div className="source-setting-copy">
                 <h4>Cookies file</h4>
                 <p>
-                    Optional. Some videos are only available when you are signed in, such as age-restricted or
-                    members-only videos. Export a cookies.txt file from a browser where you are signed in, and
-                    {' '}{source.name} uses it for every lookup and download.
+                    {source.cookiesHelp ?? (
+                        <>
+                            Optional. Some videos are only available when you are signed in, such as age-restricted or
+                            members-only videos. Export a cookies.txt file from a browser where you are signed in, and
+                            {' '}{source.name} uses it for every lookup and download.
+                        </>
+                    )}
                     {' '}{cookies?.hasCookies ? 'A cookies file is in use.' : 'No cookies file is in use.'}
                 </p>
                 {error && <p className="source-setting-error" role="alert">{error}</p>}

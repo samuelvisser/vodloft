@@ -328,6 +328,8 @@ class Source(ABC):
     """Every tag the Source gives episodes, the main one first."""
     subscription_name: ClassVar[str | None] = None
     """What the Source calls the paid subscription some of its videos need, such as NPO Plus."""
+    cookies_help: ClassVar[str | None] = None
+    """What a cookies file does for this Source, for a Source with ``Feature.COOKIES``."""
     search_label: ClassVar[str | None] = None
     """What the search button names, when that is not the Source's name, such as YouTube for yt-dlp."""
 
@@ -434,6 +436,18 @@ class Source(ABC):
 
     def remove_cookies(self) -> None:
         raise NotImplementedError(f"{self.name} takes no cookies file")
+
+    @property
+    def download_streams(self) -> int | None:
+        """How many downloads from this Source may run at once, when the Source limits that,
+        such as the streams an account may play at the same time."""
+        return None
+
+    @property
+    def subscription_active(self) -> bool:
+        """True while VODLoft is signed in with the subscription some of this Source's
+        videos need, so it can download them."""
+        return False
 
     def problems(self) -> list[SourceProblem]:
         """What the user should fix about this Source right now."""
