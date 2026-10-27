@@ -50,7 +50,7 @@ git pull --ff-only
 
 `deploy.sh` accepts `--tag-level main|pre-release|develop|test`. Levels cascade through their sibling channel tags: `main` publishes `latest`, `pre-release`, `develop`, and `test`; `pre-release` publishes `pre-release`, `develop`, and `test`; `develop` publishes `develop` and `test`; and `test` publishes only `test`. Positional tags are added to that set. When neither a tag level nor positional tags are supplied, the level is inferred from the current branch. Version-derived tags remain the release tool's responsibility.
 
-The separate application tag push triggers `.github/workflows/release.yml`. The workflow verifies that the tag matches the version in the root `pyproject.toml` and creates a draft GitHub Release with generated notes. Review and edit those notes in GitHub, then publish the Release manually when it is ready.
+The separate application tag push triggers `.github/workflows/release.yml`. The workflow verifies that the tag matches the version in the root `pyproject.toml` and creates a draft GitHub Release with generated notes. While VODLoft is in beta, every `v0.*` release is marked as a pre-release; from 1.0.0 on, releases are marked as the latest release. Review and edit those notes in GitHub, then publish the Release manually when it is ready.
 
 If the tag-triggered workflow ever needs to be retried, open **Actions → Publish GitHub Release → Run workflow**, enter the existing application tag (for example `v1.0.0`), and run it. The manual workflow checks out that exact tag and performs the same version verification and draft-release creation as the automatic flow.
 
