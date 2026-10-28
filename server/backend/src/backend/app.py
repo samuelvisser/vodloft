@@ -47,10 +47,11 @@ def _recover_download_filesystem(download_settings, scheduled_work_pause) -> Non
         logger.info("Starting background download filesystem recovery")
         recovery = recover_download_filesystem(download_settings)
         logger.info(
-            "Download filesystem recovery complete: cleaned %s stale path claim(s), %s temporary workspace(s), and %s expired RSS cache file(s)",
+            "Download filesystem recovery complete: cleaned %s stale path claim(s), %s temporary workspace(s), %s expired RSS cache file(s) and %s quick download(s)",
             recovery.reservations,
             recovery.temporary_workspaces,
             recovery.rss_cache_files,
+            recovery.quick_downloads,
         )
     except Exception:
         # Filesystem recovery is best-effort crash cleanup. A transient mount or

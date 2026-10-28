@@ -289,6 +289,30 @@ def reload_user_schedules() -> None:
             logger.info("Reloaded %s user-created schedule(s)", count)
 
 
+QUICK_DOWNLOAD_SWEEP_JOB_ID = "vodloft-quick-download-sweep"
+
+
+def install_quick_download_sweep() -> None:
+    """Delete expired quick download files once a minute, like other housekeeping.
+
+    It is a plain scheduler job rather than a task, so it adds no row to the
+    Tasks page every minute.
+    """
+    from apscheduler.triggers.interval import IntervalTrigger
+    from backend.services.quick_downloads import run_scheduled_quick_download_sweep
+    from task_manager.scheduler.scheduler import start_scheduler
+
+    start_scheduler().add_job(
+        run_scheduled_quick_download_sweep,
+        trigger=IntervalTrigger(minutes=1),
+        id=QUICK_DOWNLOAD_SWEEP_JOB_ID,
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=None,
+    )
+
+
 def start_controller() -> None:
     """Start task registration, scheduler jobs, and event subscriptions once."""
     global _controller_started
@@ -323,6 +347,7 @@ def start_controller() -> None:
                 setup_triggers_from_registry()
 
             install_stalled_work_watchdog()
+            install_quick_download_sweep()
 
             recovered_targets = recover_pending_operations()
             if recovered_targets:

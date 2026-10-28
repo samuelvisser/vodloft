@@ -493,6 +493,24 @@ class DownloadSettings(SubmodelBase):
     )(_validate_non_empty_path)
 
 
+class QuickDownloadSettings(SubmodelBase):
+    keep_downloaded_minutes: int = Field(
+        default=10,
+        ge=0,
+        description="Minutes a quick download file stays after every byte has been sent, so a failed save can be retried; 0 deletes it at the last byte",
+    )
+    keep_unclaimed_hours: int = Field(
+        default=24,
+        ge=1,
+        description="Hours a ready quick download file waits for someone to download it before it is deleted",
+    )
+    keep_free_gigabytes: float = Field(
+        default=5,
+        ge=0,
+        description="Space to keep free in the temporary folder; a quick download that would leave less does not start",
+    )
+
+
 class FileWatcherSettings(SubmodelBase):
     enabled: bool = Field(..., description="Enable the file watcher that keeps downloaded episode files in sync with the database")
     scan_cron_enabled: bool = Field(
