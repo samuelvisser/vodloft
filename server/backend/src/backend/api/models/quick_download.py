@@ -36,6 +36,7 @@ class QuickDownloadCodecAPIRead(ResponseBase):
 class QuickDownloadVideoOptionAPIRead(ResponseBase):
     quality: Optional[int] = None
     size_bytes: Optional[int] = None
+    codec: Optional[str] = None
     codecs: list[QuickDownloadCodecAPIRead] = Field(default_factory=list)
 
 

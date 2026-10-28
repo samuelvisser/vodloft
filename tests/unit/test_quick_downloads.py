@@ -214,15 +214,15 @@ def test_the_option_list_has_each_quality_codec_and_size(quick_sources):
     assert options.format_choices and options.containers == ("mp4", "mkv")
     best, uhd, full_hd, low = options.videos
     # Best is what yt-dlp most likely takes: the highest, then the codec it prefers.
-    assert best == VideoOption(None, 750, (
+    assert best == VideoOption(None, 750, "av1", (
         CodecOption("h264", 360), CodecOption("vp9", 950), CodecOption("av1", 750),
     ))
-    assert uhd == VideoOption(2160, 750, (CodecOption("vp9", 950), CodecOption("av1", 750)))
+    assert uhd == VideoOption(2160, 750, "av1", (CodecOption("vp9", 950), CodecOption("av1", 750)))
     # 1088p counts as 1080p, and a codec with no size has none.
-    assert full_hd == VideoOption(1080, 360, (
+    assert full_hd == VideoOption(1080, 360, "h264", (
         CodecOption("h264", 360), CodecOption("vp9", 250), CodecOption("av1", None),
     ))
-    assert low == VideoOption(480, 70, (CodecOption("h264", 70),))
+    assert low == VideoOption(480, 70, "h264", (CodecOption("h264", 70),))
     assert options.audio == (
         AudioOption("m4a", size_bytes=50), AudioOption("mp3", 320, 4_000_000),
         AudioOption("mp3", 192, 2_400_000), AudioOption("mp3", 128, 1_600_000),

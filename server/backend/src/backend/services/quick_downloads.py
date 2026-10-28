@@ -287,6 +287,8 @@ class VideoOption:
     quality: int | None
     size_bytes: int | None = None
     """For Auto: the stream yt-dlp would most likely pick, plus audio."""
+    codec: str | None = None
+    """For Auto: the codec of that stream."""
     codecs: tuple[CodecOption, ...] = ()
 
 
@@ -350,7 +352,10 @@ def quick_options(source: Source, url: str) -> QuickOptions:
             matching = [entry for entry in entries if entry.codec == codec]
             if matching:
                 codecs.append(CodecOption(codec, _plus(_likely(matching).size_bytes, audio_size)))
-        return VideoOption(quality, _plus(_likely(entries).size_bytes, audio_size) if entries else None, tuple(codecs))
+        if not entries:
+            return VideoOption(quality)
+        likely = _likely(entries)
+        return VideoOption(quality, _plus(likely.size_bytes, audio_size), likely.codec, tuple(codecs))
 
     videos = [option(None, list(formats.videos))]
     videos += [option(step, by_step[step]) for step in QUALITY_STEPS if step in by_step]

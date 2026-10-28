@@ -154,6 +154,13 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
         else navigate('/browse')
     }
 
+    // Hand the link to the Quick download page: one video, episode or movie that can be downloaded.
+    const quickDownloadable = !!link && link.kind !== 'show' && !link.drmProtected && !link.needsSubscription
+    const quickDownload = () => {
+        if (!link) return
+        navigate(`/quick-download?url=${encodeURIComponent(link.url)}&source=${encodeURIComponent(link.source.id)}`)
+    }
+
     const image = toImageUrl(link?.preview.imageUrl)
     const actionLabel = (() => {
         if (!target) return null
@@ -244,6 +251,13 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
                                     {actionLabel}
                                     <FontAwesomeIcon icon={faIcon('fass', 'arrow-right')}/>
                                 </button>
+                                {quickDownloadable && !onboarding && (
+                                    <button className="btn" type="button" onClick={quickDownload}
+                                            title="Download the file without adding it to your library">
+                                        <FontAwesomeIcon icon={faIcon('fass', 'bolt')}/>
+                                        Quick download
+                                    </button>
+                                )}
                             </div>
                         ) : showsUnsupported ? (
                             <p role="alert">

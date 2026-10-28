@@ -125,7 +125,21 @@ export default function OperationNotifier({
       handledRef.current.add(operation.id)
       if (operation.source === 'UI' && !operation.notificationSeenAt) {
         const message = terminalMessage(operation, definitions)
-        if (operation.status === 'SUCCEEDED') {
+        const action = operation.status === 'SUCCEEDED'
+          ? definitions[operation.kind]?.successAction?.(operation)
+          : undefined
+        if (action) {
+          // Long enough to come back to the tab and press it.
+          toast.success((t) => (
+            <span className="toast-with-action">
+              <span>{message}</span>
+              <a className="btn btn-primary" href={action.href} download={action.download}
+                 onClick={() => toast.dismiss(t.id)}>
+                {action.label}
+              </a>
+            </span>
+          ), {duration: 60_000})
+        } else if (operation.status === 'SUCCEEDED') {
           toast.success(message, {duration: 5000})
         } else if (operation.status === 'PARTIAL' || operation.status === 'CANCELED') {
           toast(message, {duration: 6000})
