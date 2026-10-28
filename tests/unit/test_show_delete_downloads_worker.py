@@ -338,7 +338,7 @@ def test_bulk_delete_latest_download_limit_freezes_exact_download_ids(tmp_path, 
 
     from backend.api.endpoints.shows import service
     monkeypatch.setattr(service, "queue_operation_target_dispatch", lambda *_args, **_kwargs: None)
-    from backend.db.models import Episode, Season
+    from backend.db.models import DownloadProfile, Episode, Season
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
@@ -421,7 +421,10 @@ def test_bulk_delete_latest_download_limit_freezes_exact_download_ids(tmp_path, 
         }
         assert middle_download.id not in selected_ids
         assert recent_download.id not in selected_ids
-        assert result["download_profiles_disabled"] == 2
+        # A partial delete leaves Download Profiles on: the user may want the
+        # deleted episodes downloaded again.
+        assert result["download_profiles_disabled"] == 0
+        assert all(profile.enable_profile for profile in session.query(DownloadProfile))
 
         # A newly indexed older download must not expand a queued delete's scope.
         _, later_download, later_path = episode(5, 120, "later-added.m4a")
@@ -433,6 +436,8 @@ def test_bulk_delete_latest_download_limit_freezes_exact_download_ids(tmp_path, 
             download_profiles_disabled=result["download_profiles_disabled"],
         )
         assert work["episode_files"] == 2
+        assert work["download_profiles_disabled"] == 0
+        assert all(profile.enable_profile for profile in session.query(DownloadProfile))
         assert not audio_path.exists()
         assert not video_path.exists()
         assert middle_path.exists()

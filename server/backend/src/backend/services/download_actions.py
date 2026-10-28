@@ -352,10 +352,9 @@ def delete_media_download_action(
             # sidecars before deleting the row (and its durable action history).
             # A removal failure must not silently leave an orphan on disk.
             prepare_media_download_artifact(s, download, strict_cleanup=True)
-            if isinstance(download, EpisodeMediaDownload) and download.media is not None:
-                # As with Delete unavailable: without this marker the next
-                # Download Profile run would recreate and download it again.
-                download.media.set_download_dismissed(download.local_media_profile_id, True)
+            # Unlike Delete unavailable, the episode is not dismissed: a Download
+            # Profile that still covers it may download it again, which can be
+            # the reason for deleting it.
             s.delete(download)
             s.commit()
             return True

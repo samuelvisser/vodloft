@@ -1457,8 +1457,8 @@ def test_delete_media_download_action_removes_owned_files_and_history(tmp_path, 
         monkeypatch.setattr(download_actions, "db_session", test_db_session)
 
         assert download_actions.delete_media_download_action(download_id)
-        # The next Download Profile run must not download it again.
-        assert episode.download_dismissed(profile_id)
+        # A Download Profile may download it again.
+        assert not episode.download_dismissed(profile_id)
         assert not media.exists()
         assert not artwork.exists()
         assert not nfo.exists()
