@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, inspect, text
 
 def test_subtitle_migration_uses_existing_profile_scope():
     migration = import_module(
-        "backend.db.alembic.versions.e6a2c9d4f817_vodloft_subtitle_mode"
+        "backend.db.alembic.versions.e6a2c9d4f817_vodloft_0_4_0"
     )
     engine = create_engine("sqlite://")
     with engine.begin() as connection:
@@ -38,7 +38,7 @@ def test_subtitle_migration_uses_existing_profile_scope():
                 ), {"id": profile_id, "scope": scope})
 
         with Operations.context(MigrationContext.configure(connection)):
-            migration.upgrade()
+            migration._upgrade_subtitle_mode()
 
         stored = connection.execute(text(
             "SELECT id, subtitle_mode FROM local_media_profiles ORDER BY id"
@@ -57,7 +57,7 @@ def test_subtitle_migration_uses_existing_profile_scope():
         assert default == "'sidecar'"
 
         with Operations.context(MigrationContext.configure(connection)):
-            migration.downgrade()
+            migration._downgrade_subtitle_mode()
         assert "subtitle_mode" not in {
             col["name"] for col in inspect(connection).get_columns("local_media_profiles")
         }

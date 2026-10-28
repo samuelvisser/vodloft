@@ -1,8 +1,13 @@
-"""Remember quick downloads in a history: what, from where, as what, and how each one ended.
+"""Upgrade the VODLoft 0.3.1 schema to 0.4.0.
 
-Revision ID: b93d5e7a1c42
+Revision ID: e6a2c9d4f817
 Revises: c41e7a9d3f58
 Create Date: 2026-10-28
+
+The single release migration for 0.4.0. It adds the quick download history,
+and a subtitle mode on Local Media Profiles (ported from WireLoft 1.2.5).
+It keeps the revision of the last 0.4.0 prerelease migration, so a database
+that already ran both prerelease migrations stays at the current head.
 """
 from __future__ import annotations
 
@@ -10,13 +15,17 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "b93d5e7a1c42"
+revision = "e6a2c9d4f817"
 down_revision = "c41e7a9d3f58"
 branch_labels = None
 depends_on = None
 
 
-def upgrade() -> None:
+# Quick download history ------------------------------------------------------
+# What was downloaded, from where, as what, and how each one ended.
+
+
+def _upgrade_quick_download_history() -> None:
     op.create_table(
         "quick_download_history",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -42,6 +51,54 @@ def upgrade() -> None:
     op.create_index("ix_quick_download_history_started_at", "quick_download_history", ["started_at"])
 
 
-def downgrade() -> None:
+
+def _downgrade_quick_download_history() -> None:
     op.drop_index("ix_quick_download_history_started_at", table_name="quick_download_history")
     op.drop_table("quick_download_history")
+
+
+# Local Media Profile subtitles ----------------------------------------------
+# Movie profiles and show profiles that cover series save subtitles as sidecar
+# files on their next download; podcast-only show profiles and single-video
+# profiles get none.
+
+
+def _upgrade_subtitle_mode() -> None:
+    op.add_column(
+        "local_media_profiles",
+        sa.Column("subtitle_mode", sa.String(length=24), nullable=False, server_default="no_subtitles"),
+    )
+    op.execute(sa.text("""
+        UPDATE local_media_profiles
+        SET subtitle_mode = 'sidecar'
+        WHERE type = 'movie' OR (type = 'show' AND id IN (
+            SELECT id FROM local_media_profiles_show
+            WHERE show_scope IN ('series', 'both')
+        ))
+    """))
+    with op.batch_alter_table("local_media_profiles") as batch:
+        batch.alter_column(
+            "subtitle_mode",
+            existing_type=sa.String(length=24),
+            existing_nullable=False,
+            server_default="sidecar",
+        )
+
+
+
+def _downgrade_subtitle_mode() -> None:
+    with op.batch_alter_table("local_media_profiles") as batch:
+        batch.drop_column("subtitle_mode")
+
+
+# Release migration -----------------------------------------------------------
+
+
+def upgrade() -> None:
+    _upgrade_quick_download_history()
+    _upgrade_subtitle_mode()
+
+
+def downgrade() -> None:
+    _downgrade_subtitle_mode()
+    _downgrade_quick_download_history()
