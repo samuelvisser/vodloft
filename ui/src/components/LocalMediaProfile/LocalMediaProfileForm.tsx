@@ -10,6 +10,7 @@ import VideoLocalMediaProfileForm from './VideoLocalMediaProfileForm'
 type Props = {
     mode: LocalMediaProfileMode
     form: UseFormReturn<any>
+    isCreating: boolean
 }
 
 export type LocalMediaProfileMode = 'show' | 'movie' | 'video'
@@ -29,10 +30,10 @@ export function buildLocalMediaProfileOnSubmit<TIn extends FieldValues, TOut ext
     })
 }
 
-export default function LocalMediaProfileForm({form, mode}: Props) {
+export default function LocalMediaProfileForm({form, mode, isCreating}: Props) {
     return (
         <>
-            <LocalMediaProfileCommonFields form={form}/>
+            <LocalMediaProfileCommonFields form={form} mode={mode} isCreating={isCreating}/>
             {mode === 'movie' && <MovieLocalMediaProfileForm form={form}/>}
             {mode === 'video' && <VideoLocalMediaProfileForm form={form}/>}
             {mode === 'show' && <ShowLocalMediaProfileForm form={form}/>}

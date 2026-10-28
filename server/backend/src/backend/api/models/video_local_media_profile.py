@@ -8,7 +8,7 @@ from backend.api.models.local_media_profile import (
     LocalMediaProfileAPIBaseIn,
     LocalMediaProfileAPIBaseOut,
 )
-from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
+from backend.types.local_media_profile_types import LocalMediaProfileSubtitleMode, LocalMediaProfileType, PreferredFormat
 from backend.utils.output_template import (
     VIDEO_OUTPUT_TEMPLATE_FIELDS,
     output_template_custom_index_keys,
@@ -37,6 +37,9 @@ class _VideoLocalMediaProfileAPIBaseIn(LocalMediaProfileAPIBaseIn):
 
 class VideoLocalMediaProfileAPICreate(_VideoLocalMediaProfileAPIBaseIn):
     """Create a Video Local Media Profile."""
+
+    # Single videos come from yt-dlp, which VODLoft does not fetch subtitles for yet.
+    subtitle_mode: LocalMediaProfileSubtitleMode = LocalMediaProfileSubtitleMode.NO_SUBTITLES
 
 
 class VideoLocalMediaProfileAPIUpdate(_VideoLocalMediaProfileAPIBaseIn):
