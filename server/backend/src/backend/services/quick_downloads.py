@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import logging
 import threading
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Iterable, Literal
 
+from backend.services import quick_download_history
 from backend.utils.output_template import sanitize_path_component
 from config import get_settings
 from config.settings.submodels import FilenameRestrictionMode
@@ -20,7 +21,7 @@ from downloader import DownloadError, EncryptedMediaError, MediaUnavailableError
 from downloader.lifecycle import DownloadTracker
 from downloader.metadata import MediaServerMetadata
 from downloader.plan import DownloadPlan, ResolvedDownloadSource, SidecarSpec, build_download_plan
-from downloader.source import resolve_download_source
+from downloader.source import FORMAT_HEIGHTS, resolve_download_source
 from downloader.storage.quick import (
     QuickFolder,
     QuickManifest,
@@ -142,6 +143,98 @@ def check_quick_choice(source: Source, choice: QuickChoice) -> None:
         raise QuickDownloadRefused(f"{source.name} downloads only as Best MP4 video or M4A audio")
 
 
+@dataclass(frozen=True)
+class QuickRules:
+    """The limits in Settings › Quick download on what anyone may choose. None is no limit."""
+
+    max_quality: int | None = None
+    allowed_formats: frozenset[str] = frozenset({"mp4", "mkv", "m4a", "mp3"})
+    fixed_codec: str | None = None
+    max_bytes: int | None = None
+    max_duration: float | None = None
+    """In seconds."""
+    allowed_sources: frozenset[str] | None = None
+    lock_to_defaults: bool = False
+
+    @classmethod
+    def from_settings(cls) -> QuickRules:
+        quick = get_settings().quick_download
+        formats = {name for name, allowed in (
+            ("mp4", quick.allow_mp4), ("mkv", quick.allow_mkv), ("m4a", quick.allow_m4a), ("mp3", quick.allow_mp3),
+        ) if allowed}
+        sources = frozenset(key.strip() for key in quick.allowed_sources.split(",") if key.strip())
+        return cls(
+            max_quality=None if quick.max_quality == "best" else int(str(quick.max_quality).removesuffix("p")),
+            allowed_formats=frozenset(formats),
+            fixed_codec=None if quick.fixed_codec == "auto" else str(quick.fixed_codec),
+            max_bytes=int(quick.max_file_gigabytes * _GIGABYTE) or None,
+            max_duration=quick.max_duration_minutes * 60 or None,
+            allowed_sources=sources or None,
+            lock_to_defaults=quick.lock_to_defaults,
+        )
+
+
+def default_choice() -> QuickChoice:
+    """The choice Settings › Quick download starts the page with."""
+    quick = get_settings().quick_download
+    return QuickChoice(
+        kind=str(quick.default_kind),
+        quality=None if quick.default_quality == "best" else int(str(quick.default_quality).removesuffix("p")),
+        container=str(quick.default_container),
+        codec=None if quick.default_codec == "auto" else str(quick.default_codec),
+        audio_format=str(quick.default_audio_format),
+        audio_bitrate=quick.default_mp3_bitrate,
+        embed_metadata=quick.embed_metadata,
+        embed_artwork=quick.embed_artwork,
+    )
+
+
+def apply_quick_rules(source: Source, choice: QuickChoice, rules: QuickRules) -> QuickChoice:
+    """The choice as the rules make it: the defaults when they are locked, and the fixed codec."""
+    if rules.lock_to_defaults:
+        choice = default_choice()
+        if not source.has(Feature.FORMAT_CHOICES):
+            choice = replace(choice, quality=None, container="mp4", codec=None, audio_format="m4a")
+    if rules.fixed_codec and choice.kind == "video" and source.has(Feature.FORMAT_CHOICES):
+        choice = replace(choice, codec=rules.fixed_codec)
+    return choice
+
+
+def check_quick_rules(
+    source: Source, choice: QuickChoice, rules: QuickRules, *,
+    size_bytes: int | None = None, duration: float | None = None, codecs: Iterable[str] | None = None,
+) -> None:
+    """Refuse what the rules do not allow. Sizes, durations and codecs are checked when they are known."""
+    if rules.allowed_sources is not None and source.id not in rules.allowed_sources:
+        raise QuickDownloadRefused(f"Quick download from {source.name} is turned off in Settings")
+    picked = choice.audio_format if choice.kind == "audio" else choice.container
+    if picked not in rules.allowed_formats:
+        raise QuickDownloadRefused(f"{picked.upper()} is not allowed by the rules in Settings")
+    if choice.kind == "video" and rules.max_quality and choice.quality and choice.quality > rules.max_quality:
+        raise QuickDownloadRefused(f"{choice.quality}p is above the {rules.max_quality}p limit in Settings")
+    if choice.kind == "video" and rules.fixed_codec and source.has(Feature.FORMAT_CHOICES):
+        if choice.codec != rules.fixed_codec:
+            raise QuickDownloadRefused(f"The rules in Settings allow only {CODEC_NAMES[rules.fixed_codec]} video")
+        if codecs is not None and rules.fixed_codec not in set(codecs):
+            raise QuickDownloadRefused(f"This video is not offered in {CODEC_NAMES[rules.fixed_codec]}, which the rules in Settings require")
+    if rules.max_bytes and size_bytes and size_bytes > rules.max_bytes:
+        raise QuickDownloadRefused(
+            f"This file would be about {size_bytes / _GIGABYTE:.1f} GB, more than the {rules.max_bytes / _GIGABYTE:g} GB the rules in Settings allow"
+        )
+    if rules.max_duration and duration and duration > rules.max_duration:
+        raise QuickDownloadRefused(
+            f"This video is {round(duration / 60)} minutes long, longer than the {round(rules.max_duration / 60)} minutes the rules in Settings allow"
+        )
+
+
+def _best_format(rules: QuickRules) -> str:
+    """Best without format choices: the highest resolution, held to the quality limit."""
+    if rules.max_quality is None:
+        return _BEST_VIDEO
+    fitting = [name for name, height in FORMAT_HEIGHTS.items() if height <= rules.max_quality]
+    return max(fitting, key=FORMAT_HEIGHTS.__getitem__) if fitting else min(FORMAT_HEIGHTS, key=FORMAT_HEIGHTS.__getitem__)
+
+
 def quick_file_name(title: str, extension: str) -> str:
     """The title as a file name, made safe by the same rules as library files."""
     mode = FilenameRestrictionMode(get_settings().download_settings.filename_restriction_mode)
@@ -177,10 +270,14 @@ def _metadata(source: Source, request: QuickDownloadRequest, details) -> MediaSe
     )
 
 
-def _resolve_source(source: Source, request: QuickDownloadRequest, tracker: DownloadTracker) -> ResolvedDownloadSource:
+def _resolve_source(
+    source: Source, request: QuickDownloadRequest, tracker: DownloadTracker, rules: QuickRules,
+) -> ResolvedDownloadSource:
     settings = get_settings().download_settings
     choice = request.choice
     check_quick_choice(source, choice)
+    check_quick_rules(source, choice, rules)
+    best = _best_format(rules)
     audio_only = choice.kind == "audio"
     if request.kind is LinkKind.SHOW:
         raise DownloadError("Quick download takes one video, episode or movie, not a whole show")
@@ -190,7 +287,7 @@ def _resolve_source(source: Source, request: QuickDownloadRequest, tracker: Down
         tracker.ensure_active()
         tracker.preparing("inspect_stream")
         return resolve_download_source(
-            playback.url, preferred_format=_BEST_VIDEO, audio_only=audio_only, remux_video_to_mp4=True,
+            playback.url, preferred_format=best, audio_only=audio_only, remux_video_to_mp4=True,
             video_fallback_for_audio=audio_only, cancellation=tracker.is_canceled,
         )
     if request.kind is LinkKind.VIDEO or source.has(Feature.EPISODE_LISTS):
@@ -207,18 +304,19 @@ def _resolve_source(source: Source, request: QuickDownloadRequest, tracker: Down
             if source.has(Feature.FORMAT_CHOICES):
                 return resolve_ytdlp_quick_source(
                     playback.url, command=playback.command, audio_only=audio_only,
-                    container=choice.container, height=choice.quality, codec=choice.codec,
+                    container=choice.container, height=choice.quality or rules.max_quality, codec=choice.codec,
                     audio_format=choice.audio_format,
                     audio_bitrate=choice.mp3_bitrate if choice.audio_format == "mp3" else None,
-                    ffmpeg_path=settings.ffmpeg_path,
+                    strict_codec=choice.kind == "video" and rules.fixed_codec is not None,
+                    max_bytes=rules.max_bytes, ffmpeg_path=settings.ffmpeg_path,
                 )
             return resolve_ytdlp_source(
-                playback.url, command=playback.command, preferred_format=_BEST_VIDEO,
+                playback.url, command=playback.command, preferred_format=best,
                 audio_only=audio_only, ffmpeg_path=settings.ffmpeg_path,
             )
         tracker.preparing("inspect_stream")
         return resolve_download_source(
-            playback.url, preferred_format=_BEST_VIDEO, audio_only=audio_only, remux_video_to_mp4=True,
+            playback.url, preferred_format=best, audio_only=audio_only, remux_video_to_mp4=True,
             video_fallback_for_audio=audio_only, cancellation=tracker.is_canceled,
         )
 
@@ -238,7 +336,7 @@ def _resolve_source(source: Source, request: QuickDownloadRequest, tracker: Down
         raise MediaUnavailableError(f"{source.name} provides no playable media for '{request.title}'")
     tracker.preparing("inspect_stream")
     return resolve_download_source(
-        url, preferred_format=_BEST_VIDEO, audio_only=audio_only, remux_video_to_mp4=True,
+        url, preferred_format=best, audio_only=audio_only, remux_video_to_mp4=True,
         video_fallback_for_audio=audio_only and url == media.video_url, cancellation=tracker.is_canceled,
     )
 
@@ -248,14 +346,17 @@ def prepare_quick_download_plan(request: QuickDownloadRequest, folder: Path, tra
     settings = get_settings()
     download_settings, quick_settings = settings.download_settings, settings.quick_download
     source = get_source(request.source_key)
-    resolved = _resolve_source(source, request, tracker)
+    rules = QuickRules.from_settings()
+    resolved = _resolve_source(source, request, tracker, rules)
     tracker.ensure_active()
+    check_quick_rules(source, request.choice, rules, size_bytes=resolved.expected_bytes)
     ensure_free_space(
         download_settings.temporary_download_root, expected_bytes=resolved.expected_bytes,
         keep_free_bytes=int(quick_settings.keep_free_gigabytes * _GIGABYTE),
     )
     tracker.preparing("plan_outputs")
-    details = _video_details(source, request) if request.choice.embed_metadata else None
+    details = _video_details(source, request) if request.choice.embed_metadata or rules.max_duration else None
+    check_quick_rules(source, request.choice, rules, duration=details.duration if details is not None else None)
     assets: tuple[SidecarSpec, ...] = ()
     artwork_id = None
     if request.choice.embed_artwork and request.image_url:
@@ -369,6 +470,29 @@ def quick_options(source: Source, url: str) -> QuickOptions:
     )
 
 
+@dataclass(frozen=True)
+class ChoiceEstimate:
+    size_bytes: int | None
+    codecs: tuple[str, ...]
+    """The codecs offered at the chosen quality."""
+
+
+def estimate_choice(options: QuickOptions, choice: QuickChoice) -> ChoiceEstimate:
+    """How big a choice would be, from the option list, for the rules checked before it starts."""
+    if choice.kind == "audio":
+        wanted = ("mp3", choice.mp3_bitrate) if choice.audio_format == "mp3" else ("m4a", None)
+        audio = next((a for a in options.audio if (a.audio_format, a.bitrate) == wanted), None)
+        return ChoiceEstimate(audio.size_bytes if audio else None, ())
+    row = next((v for v in options.videos if v.quality == choice.quality), None)
+    if row is None:
+        return ChoiceEstimate(None, ())
+    codecs = tuple(c.codec for c in row.codecs)
+    if choice.codec is None:
+        return ChoiceEstimate(row.size_bytes, codecs)
+    match = next((c for c in row.codecs if c.codec == choice.codec), None)
+    return ChoiceEstimate(match.size_bytes if match else None, codecs)
+
+
 def ready_manifest(request: QuickDownloadRequest, path: Path, size_bytes: int, *, now: datetime | None = None) -> QuickManifest:
     """What the folder holds once the file is ready, and how long it waits for someone to fetch it."""
     now = now or datetime.now(timezone.utc)
@@ -395,6 +519,8 @@ def discard_quick_download(quick_id: str) -> bool:
     found = open_quick_folder(get_settings().download_settings.temporary_download_root, quick_id)
     if found is None:
         return False
+    if found.manifest is not None and found.manifest.state == "ready":
+        quick_download_history.record_outcome(quick_id, quick_download_history.DISCARDED, only_from=(quick_download_history.READY,))
     deliveries.forget(quick_id)
     return remove_quick_folder(found.path)
 
@@ -446,6 +572,8 @@ def mark_delivered(quick_id: str, *, now: datetime | None = None) -> QuickManife
     now = now or datetime.now(timezone.utc)
     keep_for = timedelta(minutes=get_settings().quick_download.keep_downloaded_minutes)
     manifest = found.manifest.delivered(now, keep_for=keep_for)
+    if found.manifest.state != "delivered":
+        quick_download_history.record_outcome(quick_id, quick_download_history.DOWNLOADED, only_from=(quick_download_history.READY,))
     if manifest.expired(now):
         remove_quick_folder(found.path)
     elif manifest != found.manifest:
@@ -461,15 +589,22 @@ def sweep_quick_downloads(
     Startup recovery also removes folders that never became ready, because no
     quick download can still be running then.
     """
-    return sweep_quick_folders(
+    sweep = sweep_quick_folders(
         temporary_root or get_settings().download_settings.temporary_download_root,
         now=now or datetime.now(timezone.utc), remove_unfinished=remove_unfinished,
     )
+    for manifest in sweep.expired:
+        if manifest.state == "ready":
+            quick_download_history.record_outcome(
+                manifest.id, quick_download_history.EXPIRED, only_from=(quick_download_history.READY,),
+            )
+    return sweep
 
 
 def run_scheduled_quick_download_sweep() -> None:
     """The once-a-minute housekeeping job; it must never take the scheduler down."""
     try:
         sweep_quick_downloads()
+        quick_download_history.forget_old_history()
     except Exception:
         logger.exception("Could not sweep expired quick downloads")

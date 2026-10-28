@@ -11,24 +11,29 @@ import {ClearInputButton} from '../components/common/ClearInputButton'
 import {useOperations} from '../components/OperationNotifier/OperationNotifier'
 import QuickOptionList from '../components/QuickDownload/QuickOptionList'
 import QuickFormatPanel from '../components/QuickDownload/QuickFormatPanel'
-import {QuickInProgressList, QuickReadyList} from '../components/QuickDownload/QuickDownloadLists'
+import {QuickHistoryList, QuickInProgressList, QuickReadyList} from '../components/QuickDownload/QuickDownloadLists'
 import '../components/QuickDownload/QuickDownload.css'
 import {refreshFrontendPuller} from '../lib/puller'
 import {
     QUICK_DOWNLOAD_OPERATION_KIND,
+    choiceFromHistory,
     choiceFromSettings,
     choiceSize,
     choiceSummary,
     fetchQuickDownloadOptions,
     fitChoice,
+    fitRules,
     quickDownloadsQueryKey,
+    ruleProblem,
+    rulesFromSettings,
     settingsFromChoice,
     sizeLabel,
     startQuickDownload,
+    useQuickDownloadHistory,
     useQuickDownloads,
 } from '../lib/quickDownloads'
 import {saveSettingsRequest, useSettings} from '../lib/settings'
-import type {QuickChoice, QuickDownloadOptions} from '../types/schemas/quick_download'
+import type {QuickChoice, QuickDownloadHistoryEntry, QuickDownloadOptions} from '../types/schemas/quick_download'
 import type {SettingsFieldPath} from '../types/schemas/settings'
 import type {SourceRead} from '../types/schemas/source'
 
@@ -49,7 +54,10 @@ export default function QuickDownloadPage() {
     const {data: settings} = useSettings()
     const {operations} = useOperations()
     const {data: quickDownloads} = useQuickDownloads()
+    const keepHistory = settings?.values.quickDownload.keepHistory ?? false
+    const {data: history} = useQuickDownloadHistory(keepHistory)
     const defaults = useMemo(() => choiceFromSettings(settings?.values.quickDownload), [settings])
+    const rules = useMemo(() => rulesFromSettings(settings?.values.quickDownload), [settings])
 
     const [url, setUrl] = useState(params.get('url') ?? '')
     const [options, setOptions] = useState<QuickDownloadOptions | null>(null)
@@ -65,7 +73,7 @@ export default function QuickDownloadPage() {
     const requestRef = useRef<AbortController | null>(null)
     const inputRef = useRef<HTMLInputElement>(null)
 
-    const lookUp = async (value: string, sourceKey?: string) => {
+    const lookUp = async (value: string, sourceKey?: string, wanted?: QuickChoice) => {
         const trimmed = value.trim()
         if (!trimmed) return
         if (!sourceKey) setCandidates([])
@@ -81,7 +89,7 @@ export default function QuickDownloadPage() {
             if (controller.signal.aborted) return
             setOptions(found)
             if (found.link.candidates.length) setCandidates(found.link.candidates)
-            const fitted = fitChoice(defaults, found)
+            const fitted = fitRules(fitChoice(wanted ?? defaults, found), found, rules)
             setChoice(fitted)
             setInitialChoice(fitted)
         } catch (exc) {
@@ -109,6 +117,12 @@ export default function QuickDownloadPage() {
         setResolving(false)
         setPanelOpen(false)
         inputRef.current?.focus()
+    }
+
+    const downloadAgain = (entry: QuickDownloadHistoryEntry) => {
+        setUrl(entry.url)
+        window.scrollTo({top: 0, behavior: 'smooth'})
+        void lookUp(entry.url, entry.sourceKey, choiceFromHistory(entry.choice, defaults))
     }
 
     const submit = (event: FormEvent) => {
@@ -157,7 +171,8 @@ export default function QuickDownloadPage() {
     const size = options ? choiceSize(options, choice) : null
     const summary = choiceSummary(choice)
     const recommended = options ? fitChoice(defaults, options).quality : null
-    const canDownload = !!options && !options.refused && !starting
+    const problem = options && !options.refused ? ruleProblem(options, choice, rules) : null
+    const canDownload = !!options && !options.refused && !problem && !starting
 
     return (
         <section className="view quick-download-view" aria-labelledby="quick-download-title">
@@ -228,12 +243,19 @@ export default function QuickDownloadPage() {
                             <p className="form-error-card" role="alert">{options.refused}</p>
                         ) : (
                             <>
-                                <QuickOptionList options={options} choice={choice} recommended={recommended} onChange={setChoice}/>
+                                <QuickOptionList options={options} choice={choice} recommended={recommended} rules={rules} onChange={setChoice}/>
+                                {problem && <p className="form-error-card" role="alert">{problem}</p>}
                                 <div className="quick-download-footer">
-                                    <button type="button" className="quick-link-button" onClick={() => setPanelOpen(true)}>
-                                        <FontAwesomeIcon icon={faIcon('fass', 'sliders')}/>
-                                        <span>Format and codec</span>
-                                    </button>
+                                    {rules.locked ? (
+                                        <span className="quick-muted quick-locked-note">
+                                            <FontAwesomeIcon icon={faIcon('fass', 'lock')}/> <span>Set in Settings › Quick download</span>
+                                        </span>
+                                    ) : (
+                                        <button type="button" className="quick-link-button" onClick={() => setPanelOpen(true)}>
+                                            <FontAwesomeIcon icon={faIcon('fass', 'sliders')}/>
+                                            <span>Format and codec</span>
+                                        </button>
+                                    )}
                                     <span className="quick-footer-choice" aria-hidden="true">
                                         <strong>{summary}</strong>
                                         <small>{sizeLabel(size) || 'size unknown'}</small>
@@ -253,14 +275,16 @@ export default function QuickDownloadPage() {
 
             <QuickInProgressList operations={active}/>
             <QuickReadyList ready={ready}/>
+            {keepHistory && <QuickHistoryList entries={history ?? []} onDownloadAgain={downloadAgain}/>}
 
-            {options && (
+            {options && !rules.locked && (
                 <QuickFormatPanel
                     open={panelOpen}
                     options={options}
                     sourceName={options.link.source.name}
                     choice={choice}
                     initial={initialChoice}
+                    rules={rules}
                     saveAsDefaults={saveAsDefaults}
                     onChange={setChoice}
                     onSaveAsDefaultsChange={setSaveAsDefaults}

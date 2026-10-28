@@ -5,10 +5,16 @@ import {toast} from 'react-hot-toast'
 import {faIcon} from '../../icons/faIcon'
 import {presentDownloadProgress} from '../../lib/downloadProgress'
 import {useControlOperation} from '../../lib/operations'
-import {quickDownloadFileUrl, quickDownloadsQueryKey, removeQuickDownload} from '../../lib/quickDownloads'
+import {
+    clearQuickDownloadHistory,
+    quickDownloadFileUrl,
+    quickDownloadHistoryQueryKey,
+    quickDownloadsQueryKey,
+    removeQuickDownload,
+} from '../../lib/quickDownloads'
 import {formatBytes} from '../../utils/formatting'
 import type {TaskOperationRead} from '../../types/schemas/operation'
-import type {QuickDownloadReady} from '../../types/schemas/quick_download'
+import type {QuickDownloadHistoryEntry, QuickDownloadReady} from '../../types/schemas/quick_download'
 import ProgressBar from '../common/ProgressBar'
 import SourceBadge from '../Source/SourceBadge'
 
@@ -127,6 +133,95 @@ export function QuickReadyList({ready}: {ready: QuickDownloadReady[]}) {
                             </a>
                             <button type="button" className="btn" disabled={busy === item.id} onClick={() => void discard(item)}>
                                 Discard
+                            </button>
+                        </span>
+                    </li>
+                ))}
+            </ul>
+        </section>
+    )
+}
+
+const OUTCOME_LABELS: Record<QuickDownloadHistoryEntry['outcome'], string> = {
+    working: 'Working',
+    ready: 'Ready',
+    downloaded: 'Downloaded',
+    expired: 'Deleted, never downloaded',
+    discarded: 'Discarded',
+    canceled: 'Canceled',
+    failed: 'Failed',
+    refused: 'Not downloaded',
+}
+
+const OUTCOME_TONES: Partial<Record<QuickDownloadHistoryEntry['outcome'], string>> = {
+    downloaded: 'quick-ok',
+    failed: 'quick-warn',
+    refused: 'quick-warn',
+}
+
+function whenLabel(date: Date): string {
+    return date.toLocaleString(undefined, {dateStyle: 'medium', timeStyle: 'short'})
+}
+
+/**
+ * What was quick downloaded, from where, as what and how it ended. Download
+ * again looks the link up once more with the same choices.
+ */
+export function QuickHistoryList({entries, onDownloadAgain}: {
+    entries: QuickDownloadHistoryEntry[]; onDownloadAgain: (entry: QuickDownloadHistoryEntry) => void
+}) {
+    const queryClient = useQueryClient()
+    const [clearing, setClearing] = useState(false)
+    const [confirming, setConfirming] = useState(false)
+    if (!entries.length) return null
+    const finished = entries.filter((entry) => entry.outcome !== 'working' && entry.outcome !== 'ready').length
+
+    const clear = async () => {
+        setClearing(true)
+        try {
+            await clearQuickDownloadHistory()
+            await queryClient.invalidateQueries({queryKey: quickDownloadHistoryQueryKey})
+            setConfirming(false)
+        } catch (exc) {
+            toast.error(exc instanceof Error ? exc.message : String(exc))
+        } finally {
+            setClearing(false)
+        }
+    }
+
+    return (
+        <section className="quick-list" aria-labelledby="quick-history">
+            <div className="quick-list-heading">
+                <h2 id="quick-history">History <span className="quick-count">{entries.length}</span></h2>
+                {finished > 0 && (confirming ? (
+                    <span className="quick-list-actions">
+                        <span className="quick-muted">Forget {finished} finished {finished === 1 ? 'entry' : 'entries'}?</span>
+                        <button type="button" className="btn btn-danger" disabled={clearing} onClick={() => void clear()}>Clear</button>
+                        <button type="button" className="btn" onClick={() => setConfirming(false)}>Keep</button>
+                    </span>
+                ) : (
+                    <button type="button" className="btn" onClick={() => setConfirming(true)}>Clear history</button>
+                ))}
+            </div>
+            <ul>
+                {entries.map((entry) => (
+                    <li key={entry.id} className="quick-list-row">
+                        <span className="quick-list-what">
+                            <SourceBadge sourceKey={entry.sourceKey}/>
+                            <span className="quick-list-title">{entry.title}</span>
+                            <small className="quick-muted">
+                                {[entry.format, entry.sizeBytes ? formatBytes(entry.sizeBytes) : null].filter(Boolean).join(' · ')}
+                            </small>
+                        </span>
+                        <span className="quick-list-progress">
+                            <span className={OUTCOME_TONES[entry.outcome]}>{OUTCOME_LABELS[entry.outcome]}</span>
+                            <small className="quick-muted">
+                                {entry.message ? `${entry.message} · ` : ''}{whenLabel(entry.startedAt)}
+                            </small>
+                        </span>
+                        <span className="quick-list-actions">
+                            <button type="button" className="btn" onClick={() => onDownloadAgain(entry)}>
+                                <FontAwesomeIcon icon={faIcon('fass', 'rotate-right')}/> Download again
                             </button>
                         </span>
                     </li>

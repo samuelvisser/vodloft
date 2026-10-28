@@ -13,8 +13,9 @@ from backend.services.quick_downloads import (
     quick_folder,
     ready_manifest,
 )
+from backend.services import quick_download_history as history
 from config import get_settings
-from downloader import DownloadCancelled, EncryptedMediaError, SubscriptionRequiredError
+from downloader import DownloadCancelled, EncryptedMediaError, FileTooLargeError, SubscriptionRequiredError
 from downloader.capacity import resources
 from downloader.coordinator import execute_download_plan
 from downloader.lifecycle import DownloadTracker
@@ -45,6 +46,11 @@ def _own_folder(quick_id: str, tracker: DownloadTracker) -> Iterator[Path]:
         yield folder
     finally:
         lock.release()
+
+
+def _refused(request: QuickDownloadRequest, summary: str, reason: str) -> TaskResult:
+    history.record_outcome(request.id, history.REFUSED, message=reason)
+    return TaskResult(summary=summary, outcome="failed")
 
 
 def run_quick_download(request_input: dict[str, Any], *, progress=None) -> TaskResult:
@@ -78,6 +84,7 @@ def run_quick_download(request_input: dict[str, Any], *, progress=None) -> TaskR
             manifest = ready_manifest(request, path, execution.identity.size_bytes)
             write_manifest(folder, manifest)
             ready = True
+        history.record_outcome(request.id, history.READY, size_bytes=manifest.size_bytes)
         return TaskResult(
             summary=f"{request.title} is ready to download",
             data={
@@ -93,13 +100,16 @@ def run_quick_download(request_input: dict[str, Any], *, progress=None) -> TaskR
     except BaseException as exc:
         tracker.cancel(user_requested=isinstance(exc, (DownloadCancelled, RequestCancelled)))
         tracker.stop_reporting()
+        # Retrying cannot help with any of these.
         if isinstance(exc, EncryptedMediaError):
-            # Retrying cannot help.
-            return TaskResult(summary=f"{request.title} is protected by DRM and cannot be downloaded", outcome="failed")
+            return _refused(request, f"{request.title} is protected by DRM and cannot be downloaded", "Protected by DRM")
         if isinstance(exc, SubscriptionRequiredError):
-            return TaskResult(summary=f"{request.title} needs a subscription and cannot be downloaded", outcome="failed")
+            return _refused(request, f"{request.title} needs a subscription and cannot be downloaded", "Needs a subscription")
         if isinstance(exc, QuickDownloadRefused):
-            return TaskResult(summary=str(exc), outcome="failed")
+            return _refused(request, str(exc), str(exc))
+        if isinstance(exc, FileTooLargeError):
+            history.record_outcome(request.id, history.FAILED, message=str(exc))
+            return TaskResult(summary=f"{request.title}: {exc}", outcome="failed")
         raise
     finally:
         if execution is not None:

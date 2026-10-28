@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 from backend.api.errors import source_request_error_handler
 from backend.services.source_requests import SourceRequestError
-from downloader.errors import DownloadError, EncryptedMediaError, MediaUnavailableError
+from downloader.errors import DownloadError, EncryptedMediaError, FileTooLargeError, MediaUnavailableError
 from sources import Feature, LinkKind, PlaybackKind, ProgramStatus, Source, registry
 from sources import ytdlp_runner as runner
 from sources.ytdlp import GENERIC_SITE, YtDlpSource
@@ -208,6 +208,9 @@ FAKE_YTDLP = textwrap.dedent('''
     if "gone" in url:
         print("ERROR: [youtube] x: Video unavailable")
         sys.exit(1)
+    if "huge" in url:
+        print("[download] File is larger than max-filesize (5000 bytes > 100 bytes). Aborting.")
+        sys.exit(0)
     work = pathlib.Path(args[args.index("-P") + 1])
     template = args[args.index("--progress-template") + 1].removeprefix("download:")
     for done in (10, 50, 100):
@@ -246,6 +249,8 @@ def test_ytdlp_errors_say_what_went_wrong(fake_ytdlp, tmp_path):
         download_ytdlp("https://x/drm", str(tmp_path / "a.mp4"), command=fake_ytdlp)
     with pytest.raises(MediaUnavailableError, match="Video unavailable"):
         download_ytdlp("https://x/gone", str(tmp_path / "b.mp4"), command=fake_ytdlp)
+    with pytest.raises(FileTooLargeError, match="larger than the largest file allowed"):
+        download_ytdlp("https://x/huge", str(tmp_path / "c.mp4"), command=fake_ytdlp)
     assert list(tmp_path.glob("*.mp4*")) == []
 
 

@@ -113,6 +113,18 @@ SettingFieldPath = Literal[
     "quickDownload.keepDownloadedMinutes",
     "quickDownload.keepUnclaimedHours",
     "quickDownload.keepFreeGigabytes",
+    "quickDownload.keepHistory",
+    "quickDownload.historyRetentionDays",
+    "quickDownload.maxQuality",
+    "quickDownload.allowMp4",
+    "quickDownload.allowMkv",
+    "quickDownload.allowM4a",
+    "quickDownload.allowMp3",
+    "quickDownload.fixedCodec",
+    "quickDownload.maxFileGigabytes",
+    "quickDownload.maxDurationMinutes",
+    "quickDownload.allowedSources",
+    "quickDownload.lockToDefaults",
 ]
 
 UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
@@ -191,6 +203,18 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "quickDownload.keepDownloadedMinutes",
     "quickDownload.keepUnclaimedHours",
     "quickDownload.keepFreeGigabytes",
+    "quickDownload.keepHistory",
+    "quickDownload.historyRetentionDays",
+    "quickDownload.maxQuality",
+    "quickDownload.allowMp4",
+    "quickDownload.allowMkv",
+    "quickDownload.allowM4a",
+    "quickDownload.allowMp3",
+    "quickDownload.fixedCodec",
+    "quickDownload.maxFileGigabytes",
+    "quickDownload.maxDurationMinutes",
+    "quickDownload.allowedSources",
+    "quickDownload.lockToDefaults",
 )
 
 
@@ -380,6 +404,19 @@ class QuickDownloadSettingsValue(_SettingsValueModel):
     keep_downloaded_minutes: int = Field(ge=0)
     keep_unclaimed_hours: int = Field(ge=1)
     keep_free_gigabytes: float = Field(ge=0)
+    keep_history: bool
+    history_retention_days: int = Field(ge=1)
+    max_quality: QuickDownloadQuality
+    allow_mp4: bool
+    allow_mkv: bool
+    # to_camel would give allowM4A, which reads oddly next to allowMp4 and allowMp3.
+    allow_m4a: bool = Field(alias="allowM4a")
+    allow_mp3: bool
+    fixed_codec: QuickDownloadCodec
+    max_file_gigabytes: float = Field(ge=0)
+    max_duration_minutes: int = Field(ge=0)
+    allowed_sources: str
+    lock_to_defaults: bool
 
     @field_validator("default_mp3_bitrate")
     @classmethod

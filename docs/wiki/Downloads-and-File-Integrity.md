@@ -4,6 +4,8 @@ The **Downloads** page is the central place to see actual media-file activity in
 
 Each row represents one media item and Local Media Profile combination, so the same episode can appear more than once when you keep multiple formats.
 
+Files from **Quick download** do not appear here, because they never go into the library. See [[Quick-Download]].
+
 ## Download statuses
 
 VODLoft can show downloads as:

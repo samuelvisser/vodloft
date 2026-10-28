@@ -82,3 +82,23 @@ export const QuickDownloadAcceptedSchema = z.looseObject({
     operationId: z.string(),
     quickDownloadId: z.string(),
 })
+
+export const QUICK_HISTORY_OUTCOMES = ['working', 'ready', 'downloaded', 'expired', 'discarded', 'canceled', 'failed', 'refused'] as const
+
+export const QuickDownloadHistoryEntrySchema = z.object({
+    id: z.number(),
+    quickDownloadId: z.string(),
+    title: z.string(),
+    sourceKey: z.string(),
+    sourceName: z.string(),
+    url: z.string(),
+    format: z.string(),
+    /** The choice as the server stored it, with snake_case keys. */
+    choice: z.record(z.string(), z.unknown()),
+    sizeBytes: z.number().nullable().optional(),
+    startedAt: ApiDateTimeSchema,
+    finishedAt: ApiDateTimeSchema.nullable().optional(),
+    outcome: z.enum(QUICK_HISTORY_OUTCOMES),
+    message: z.string().nullable().optional(),
+})
+export type QuickDownloadHistoryEntry = z.infer<typeof QuickDownloadHistoryEntrySchema>

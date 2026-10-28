@@ -3,6 +3,7 @@ from fastapi.responses import StreamingResponse
 
 from backend.api.models.quick_download import (
     QuickDownloadAPICreate,
+    QuickDownloadHistoryAPIRead,
     QuickDownloadOperationAccepted,
     QuickDownloadOptionsAPIRead,
     QuickDownloadOptionsAPIRequest,
@@ -13,6 +14,8 @@ from backend.services.quick_downloads import QuickDownloadRefused
 
 from .service import (
     RangeNotSatisfiable,
+    clear_quick_download_history,
+    quick_download_history,
     file_delivery,
     list_quick_downloads,
     quick_download_options,
@@ -59,6 +62,21 @@ def quick_download_list():
     """Quick downloads still working, and files ready to download."""
     with db_session() as s:
         return list_quick_downloads(s)
+
+
+@router.get("/history", response_model=list[QuickDownloadHistoryAPIRead])
+def quick_download_history_list():
+    """Past quick downloads, newest first, and how each one ended."""
+    with db_session() as s:
+        return quick_download_history(s)
+
+
+@router.delete("/history", status_code=status.HTTP_204_NO_CONTENT)
+def quick_download_history_clear():
+    """Forget every finished quick download. Ones still working or waiting to be downloaded stay."""
+    with db_session() as s:
+        clear_quick_download_history(s)
+    return Response(status_code=204)
 
 
 @router.api_route("/{quick_id}/file", methods=["GET", "HEAD"])

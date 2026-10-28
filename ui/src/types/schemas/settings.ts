@@ -142,6 +142,18 @@ const QuickDownloadSettingsSchema = z.object({
     keepDownloadedMinutes: z.number(),
     keepUnclaimedHours: z.number(),
     keepFreeGigabytes: z.number(),
+    keepHistory: z.boolean(),
+    historyRetentionDays: z.number(),
+    maxQuality: z.enum(['best', '2160p', '1440p', '1080p', '720p', '480p']),
+    allowMp4: z.boolean(),
+    allowMkv: z.boolean(),
+    allowM4a: z.boolean(),
+    allowMp3: z.boolean(),
+    fixedCodec: z.enum(['auto', 'h264', 'h265', 'vp9', 'av1']),
+    maxFileGigabytes: z.number(),
+    maxDurationMinutes: z.number(),
+    allowedSources: z.string(),
+    lockToDefaults: z.boolean(),
 })
 export type QuickDownloadSettings = z.infer<typeof QuickDownloadSettingsSchema>
 
@@ -249,6 +261,9 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
         keepDownloadedMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
         keepUnclaimedHours: requiredNumber().int().min(1, 'Must be at least 1 hour.'),
         keepFreeGigabytes: requiredNumber().min(0, 'Must be 0 GB or greater.'),
+        historyRetentionDays: requiredNumber().int().min(1, 'Must be at least 1 day.'),
+        maxFileGigabytes: requiredNumber().min(0, 'Must be 0 GB or greater.'),
+        maxDurationMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
     }),
 })
 
@@ -347,6 +362,18 @@ export const SETTINGS_FIELD_PATHS = [
     'quickDownload.keepDownloadedMinutes',
     'quickDownload.keepUnclaimedHours',
     'quickDownload.keepFreeGigabytes',
+    'quickDownload.keepHistory',
+    'quickDownload.historyRetentionDays',
+    'quickDownload.maxQuality',
+    'quickDownload.allowMp4',
+    'quickDownload.allowMkv',
+    'quickDownload.allowM4a',
+    'quickDownload.allowMp3',
+    'quickDownload.fixedCodec',
+    'quickDownload.maxFileGigabytes',
+    'quickDownload.maxDurationMinutes',
+    'quickDownload.allowedSources',
+    'quickDownload.lockToDefaults',
 ] as const
 
 export const SettingsFieldPathSchema = z.enum(SETTINGS_FIELD_PATHS)

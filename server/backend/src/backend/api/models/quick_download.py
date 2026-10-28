@@ -95,3 +95,19 @@ class QuickDownloadsAPIRead(ResponseBase):
     """Quick downloads still queued or working, as their operations."""
     ready: list[QuickDownloadAPIRead]
     """Files waiting to be downloaded, newest first."""
+
+
+class QuickDownloadHistoryAPIRead(ResponseBase):
+    id: int
+    quick_download_id: str
+    title: str
+    source_key: str
+    source_name: str
+    url: str
+    format: str
+    choice: dict
+    size_bytes: Optional[int] = None
+    started_at: datetime
+    finished_at: Optional[datetime] = None
+    outcome: Literal["working", "ready", "downloaded", "expired", "discarded", "canceled", "failed", "refused"]
+    message: Optional[str] = None

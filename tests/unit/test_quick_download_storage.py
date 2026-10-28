@@ -198,6 +198,7 @@ def test_startup_recovery_and_the_scheduled_sweep_use_the_quick_folder(tmp_path,
     write_manifest(folder, _manifest(ready, file_name="Video.mp4", expires_at=expires_at))
     reserve_quick_folder(temporary_root, unfinished)
     monkeypatch.setattr(cached_video, "cleanup_expired_rss_cache", lambda: 0)
+    monkeypatch.setattr(get_settings().quick_download, "keep_history", False)
 
     recovery = download_recovery.recover_download_filesystem(SimpleNamespace(
         download_root=tmp_path / "downloads", temporary_download_root=temporary_root,

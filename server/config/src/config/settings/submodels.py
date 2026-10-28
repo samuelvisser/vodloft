@@ -553,6 +553,28 @@ class QuickDownloadSettings(SubmodelBase):
         description="Space to keep free in the temporary folder; a quick download that would leave less does not start",
     )
 
+    keep_history: bool = Field(default=True, description="Remember finished quick downloads in a history list")
+    history_retention_days: int = Field(default=90, ge=1, description="Days a quick download stays in the history")
+    max_quality: QuickDownloadQuality = Field(
+        default=QuickDownloadQuality.BEST,
+        description="Rule: the highest video quality anyone may choose; best is no limit. For yt-dlp, Best is held to it",
+    )
+    allow_mp4: bool = Field(default=True, description="Rule: MP4 video may be chosen")
+    allow_mkv: bool = Field(default=True, description="Rule: MKV video may be chosen")
+    allow_m4a: bool = Field(default=True, description="Rule: M4A audio may be chosen")
+    allow_mp3: bool = Field(default=True, description="Rule: MP3 audio may be chosen")
+    fixed_codec: QuickDownloadCodec = Field(
+        default=QuickDownloadCodec.AUTO,
+        description="Rule: only video in this codec, for Sources that list their codecs; auto is no rule",
+    )
+    max_file_gigabytes: float = Field(default=0, ge=0, description="Rule: the largest file allowed; 0 is no limit")
+    max_duration_minutes: int = Field(default=0, ge=0, description="Rule: the longest video allowed; 0 is no limit")
+    allowed_sources: str = Field(
+        default="",
+        description="Rule: comma-separated ids of the Sources quick download may use; empty allows all",
+    )
+    lock_to_defaults: bool = Field(default=False, description="Rule: every quick download uses the defaults")
+
     @field_validator("default_mp3_bitrate")
     @classmethod
     def _known_mp3_bitrate(cls, value: int) -> int:

@@ -1,4 +1,5 @@
 import {useQuery} from '@tanstack/react-query'
+import {z} from 'zod'
 import {
     MP3_BITRATES,
     QUICK_QUALITIES,
@@ -6,6 +7,7 @@ import {
     QuickChoice,
     QuickCodec,
     QuickDownloadAcceptedSchema,
+    QuickDownloadHistoryEntrySchema,
     QuickDownloadOptions,
     QuickDownloadOptionsSchema,
     QuickDownloadsSchema,
@@ -76,6 +78,41 @@ export async function removeQuickDownload(quickId: string): Promise<void> {
 
 export function quickDownloadFileUrl(quickId: string): string {
     return `${apiBase()}/quick-downloads/${encodeURIComponent(quickId)}/file`
+}
+
+export const quickDownloadHistoryQueryKey = ['quickDownloads', 'history'] as const
+
+export function useQuickDownloadHistory(enabled = true) {
+    return useQuery({
+        queryKey: quickDownloadHistoryQueryKey,
+        enabled,
+        queryFn: async ({signal}) => {
+            const response = await fetch(`${apiBase()}/quick-downloads/history`, {signal, credentials: 'include'})
+            if (!response.ok) throw await responseError(response)
+            return z.array(QuickDownloadHistoryEntrySchema).parse(await response.json())
+        },
+        refetchInterval: 60_000,
+    })
+}
+
+export async function clearQuickDownloadHistory(): Promise<void> {
+    const response = await fetch(`${apiBase()}/quick-downloads/history`, {method: 'DELETE', credentials: 'include'})
+    if (!response.ok) throw await responseError(response)
+}
+
+/** A choice stored in the history, back in the shape the page uses. Unknown values fall back to the defaults. */
+export function choiceFromHistory(stored: Record<string, unknown>, defaults: QuickChoice): QuickChoice {
+    const pick = <T>(value: unknown, allowed: readonly T[], fallback: T): T => allowed.includes(value as T) ? value as T : fallback
+    return {
+        kind: pick(stored.kind, ['video', 'audio'] as const, defaults.kind),
+        quality: pick(stored.quality ?? null, [null, ...QUICK_QUALITIES] as const, defaults.quality),
+        container: pick(stored.container, ['mp4', 'mkv'] as const, defaults.container),
+        codec: pick(stored.codec ?? null, [null, 'h264', 'h265', 'vp9', 'av1'] as const, defaults.codec),
+        audioFormat: pick(stored.audio_format, ['m4a', 'mp3'] as const, defaults.audioFormat),
+        audioBitrate: pick(stored.audio_bitrate ?? null, [null, ...MP3_BITRATES] as const, defaults.audioBitrate),
+        embedMetadata: typeof stored.embed_metadata === 'boolean' ? stored.embed_metadata : defaults.embedMetadata,
+        embedArtwork: typeof stored.embed_artwork === 'boolean' ? stored.embed_artwork : defaults.embedArtwork,
+    }
 }
 
 export function useQuickDownloads() {
@@ -183,4 +220,85 @@ export function sizeLabel(size: number | null | undefined): string {
 
 export function isKnownQuality(value: number): value is QuickQuality {
     return (QUICK_QUALITIES as readonly number[]).includes(value)
+}
+
+/** The rules in Settings › Quick download, as the page applies them. The server checks them again. */
+export type QuickRules = {
+    maxQuality: number | null
+    allowed: ReadonlySet<string>
+    fixedCodec: QuickCodec | null
+    maxBytes: number | null
+    maxDurationSeconds: number | null
+    allowedSources: readonly string[] | null
+    locked: boolean
+}
+
+export const NO_RULES: QuickRules = {
+    maxQuality: null, allowed: new Set(['mp4', 'mkv', 'm4a', 'mp3']), fixedCodec: null, maxBytes: null,
+    maxDurationSeconds: null, allowedSources: null, locked: false,
+}
+
+export function rulesFromSettings(settings?: QuickDownloadSettings): QuickRules {
+    if (!settings) return NO_RULES
+    const allowed = new Set<string>()
+    if (settings.allowMp4) allowed.add('mp4')
+    if (settings.allowMkv) allowed.add('mkv')
+    if (settings.allowM4a) allowed.add('m4a')
+    if (settings.allowMp3) allowed.add('mp3')
+    const sources = settings.allowedSources.split(',').map((key) => key.trim()).filter(Boolean)
+    return {
+        maxQuality: settings.maxQuality === 'best' ? null : Number.parseInt(settings.maxQuality, 10),
+        allowed,
+        fixedCodec: settings.fixedCodec === 'auto' ? null : settings.fixedCodec,
+        maxBytes: settings.maxFileGigabytes > 0 ? settings.maxFileGigabytes * 1024 ** 3 : null,
+        maxDurationSeconds: settings.maxDurationMinutes > 0 ? settings.maxDurationMinutes * 60 : null,
+        allowedSources: sources.length ? sources : null,
+        locked: settings.lockToDefaults,
+    }
+}
+
+/** Why a quality row cannot be picked under the rules, or null. */
+export function qualityBlocked(quality: number | null | undefined, rules: QuickRules): string | null {
+    if (quality != null && rules.maxQuality != null && quality > rules.maxQuality) return `above the ${rules.maxQuality}p limit`
+    if (!rules.allowed.has('mp4') && !rules.allowed.has('mkv')) return 'video is not allowed'
+    return null
+}
+
+/** Make a choice fit the rules: allowed formats, the quality limit and the fixed codec. */
+export function fitRules(choice: QuickChoice, options: QuickDownloadOptions, rules: QuickRules): QuickChoice {
+    let next = {...choice}
+    if (!rules.allowed.has(next.container)) next.container = next.container === 'mp4' ? 'mkv' : 'mp4'
+    if (!rules.allowed.has(next.audioFormat)) next.audioFormat = next.audioFormat === 'm4a' ? 'mp3' : 'm4a'
+    if (options.formatChoices) {
+        if (rules.fixedCodec) next.codec = rules.fixedCodec
+        if (rules.maxQuality != null && (next.quality == null || next.quality > rules.maxQuality)) {
+            const capped = options.videos.map((v) => v.quality ?? null).filter((q): q is number => q != null && q <= rules.maxQuality!)
+            next.quality = (next.quality == null ? null : capped[0] ?? null) as QuickQuality | null
+        }
+    }
+    if (next.kind === 'video' && qualityBlocked(next.quality, rules) === 'video is not allowed') next = {...next, kind: 'audio'}
+    return next
+}
+
+/** What keeps the current choice from starting under the rules, as the page shows it. */
+export function ruleProblem(options: QuickDownloadOptions, choice: QuickChoice, rules: QuickRules): string | null {
+    if (rules.allowedSources && !rules.allowedSources.includes(options.link.source.id)) {
+        return `Quick download from ${options.link.source.name} is turned off in Settings.`
+    }
+    const format = choice.kind === 'audio' ? choice.audioFormat : choice.container
+    if (!rules.allowed.has(format)) return `${format.toUpperCase()} is not allowed by the rules in Settings.`
+    if (choice.kind === 'video' && options.formatChoices && rules.fixedCodec) {
+        const video = videoOption(options, choice.quality)
+        if (video && !video.codecs.some((c) => c.codec === rules.fixedCodec)) {
+            return `This quality is not offered in ${CODEC_NAMES[rules.fixedCodec]}, which the rules in Settings require.`
+        }
+    }
+    const size = choiceSize(options, choice)
+    if (rules.maxBytes && size && size > rules.maxBytes) {
+        return `This file would be about ${formatBytes(size)}. The rules allow up to ${formatBytes(rules.maxBytes)}. Pick a lower quality or Audio.`
+    }
+    if (rules.maxDurationSeconds && options.duration && options.duration > rules.maxDurationSeconds) {
+        return `This video is ${Math.round(options.duration / 60)} minutes long. The rules allow up to ${Math.round(rules.maxDurationSeconds / 60)} minutes.`
+    }
+    return null
 }

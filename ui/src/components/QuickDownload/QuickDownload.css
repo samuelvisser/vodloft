@@ -96,6 +96,11 @@
     cursor: pointer;
 }
 .quick-chip.is-on { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+.quick-chip.is-locked { opacity: 0.55; cursor: not-allowed; display: inline-flex; gap: 4px; align-items: center; }
+.quick-option.is-blocked { cursor: not-allowed; }
+.quick-option.is-blocked > :not(.quick-option-size) { opacity: 0.55; }
+.quick-option-codec svg { margin-left: 5px; }
+.quick-locked-note { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
 
 /* Download row; a fixed footer on phones */
 .quick-download-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -118,6 +123,7 @@
 
 /* In progress and ready */
 .quick-list { margin-top: 24px; }
+.quick-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .quick-list h2 { font-size: 16px; display: flex; align-items: center; gap: 8px; }
 .quick-count { color: var(--muted); font-size: 13px; font-weight: 500; }
 .quick-list ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -164,6 +170,7 @@
 .quick-panel-header h2 { margin: 0; font-size: 17px; }
 .quick-panel p { margin: 0; font-size: 13px; }
 .quick-panel-note { padding: 8px 10px; border-radius: 8px; background: rgba(148, 163, 184, 0.14); }
+.quick-panel-attention { background: rgba(245, 158, 11, 0.14); }
 .quick-panel-field { border: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
 .quick-panel-field legend {
     padding: 0;

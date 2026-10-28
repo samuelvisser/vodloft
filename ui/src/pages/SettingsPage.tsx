@@ -9,6 +9,7 @@ import AdvancedSettingsTab from '../components/Settings/AdvancedSettingsTab'
 import AutomationSettingsTab from '../components/Settings/AutomationSettingsTab'
 import DownloadsSettingsTab from '../components/Settings/DownloadsSettingsTab'
 import GeneralSettingsTab from '../components/Settings/GeneralSettingsTab'
+import QuickDownloadSettingsTab from '../components/Settings/QuickDownloadSettingsTab'
 import SourcesSettingsTab from '../components/Settings/SourcesSettingsTab'
 import {SettingsLoading} from '../components/Settings/SettingsControls'
 import {saveSettingsRequest, useSettings} from '../lib/settings'
@@ -26,7 +27,7 @@ import './SettingsPage.css'
 import './SettingsEnvironmentOverrides.css'
 
 
-type SettingsTab = 'general' | 'downloads' | 'automation' | 'sources' | 'advanced'
+type SettingsTab = 'general' | 'downloads' | 'quick-download' | 'automation' | 'sources' | 'advanced'
 
 type SettingsTabDefinition = {
     id: SettingsTab
@@ -37,6 +38,7 @@ type SettingsTabDefinition = {
 const SETTINGS_TABS: SettingsTabDefinition[] = [
     {id: 'general', label: 'General', description: 'Application behaviour and sessions'},
     {id: 'downloads', label: 'Downloads', description: 'Storage, naming, processing and verification'},
+    {id: 'quick-download', label: 'Quick download', description: 'Defaults, housekeeping and rules for quick downloads'},
     {id: 'automation', label: 'Automation', description: 'Scheduler and episode monitoring'},
     {id: 'sources', label: 'Sources', description: 'Services, sign-ins and their settings'},
     {id: 'advanced', label: 'Advanced', description: 'Encryption files and configuration details'},
@@ -278,6 +280,7 @@ export default function SettingsPage() {
                 >
                     {activeTab === 'general' ? <GeneralSettingsTab {...tabProps} /> : null}
                     {activeTab === 'downloads' ? <DownloadsSettingsTab {...tabProps} /> : null}
+                    {activeTab === 'quick-download' ? <QuickDownloadSettingsTab {...tabProps} /> : null}
                     {activeTab === 'automation' ? <AutomationSettingsTab {...tabProps} /> : null}
                     {activeTab === 'sources' ? <SourcesSettingsTab {...tabProps} /> : null}
                     {activeTab === 'advanced' ? <AdvancedSettingsTab {...tabProps} /> : null}

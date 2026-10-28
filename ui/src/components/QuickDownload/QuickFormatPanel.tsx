@@ -1,7 +1,7 @@
 import {useEffect, useId} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {faIcon} from '../../icons/faIcon'
-import {CODEC_NAMES, CODEC_NOTES, qualityLabel, sizeLabel, videoOption} from '../../lib/quickDownloads'
+import {CODEC_NAMES, CODEC_NOTES, type QuickRules, qualityLabel, sizeLabel, videoOption} from '../../lib/quickDownloads'
 import {
     MP3_BITRATES,
     QUICK_CODECS,
@@ -16,6 +16,7 @@ type QuickFormatPanelProps = {
     sourceName: string
     choice: QuickChoice
     initial: QuickChoice
+    rules: QuickRules
     saveAsDefaults: boolean
     onChange: (choice: QuickChoice) => void
     onSaveAsDefaultsChange: (value: boolean) => void
@@ -47,7 +48,7 @@ function Choice({selected, disabled, onPick, label, note, size}: {
  * greyed out with the reason.
  */
 export default function QuickFormatPanel({
-    open, options, sourceName, choice, initial, saveAsDefaults, onChange, onSaveAsDefaultsChange, onClose,
+    open, options, sourceName, choice, initial, rules, saveAsDefaults, onChange, onSaveAsDefaultsChange, onClose,
 }: QuickFormatPanelProps) {
     const titleId = useId()
 
@@ -62,6 +63,16 @@ export default function QuickFormatPanel({
     const video = choice.kind === 'video' ? videoOption(options, choice.quality) : undefined
     const offered = new Set(video?.codecs.map((c) => c.codec) ?? [])
     const set = (change: Partial<QuickChoice>) => onChange({...choice, ...change})
+    const locked = (value: string) => !rules.allowed.has(value)
+    const formatChip = <T extends string>(value: T, current: T, pick: (value: T) => void) => (
+        <button key={value} type="button" aria-pressed={current === value} disabled={locked(value)}
+                title={locked(value) ? 'Not allowed by a rule in Settings › Quick download' : undefined}
+                className={`quick-chip${current === value ? ' is-on' : ''}${locked(value) ? ' is-locked' : ''}`}
+                onClick={() => pick(value)}>
+            {value.toUpperCase()}
+            {locked(value) && <FontAwesomeIcon icon={faIcon('fass', 'lock')} aria-label="locked"/>}
+        </button>
+    )
 
     return (
         <div className="quick-panel-overlay" role="presentation" onClick={onClose}>
@@ -93,20 +104,20 @@ export default function QuickFormatPanel({
                         <fieldset className="quick-panel-field">
                             <legend>Format</legend>
                             <span className="quick-chips">
-                                {(['mp4', 'mkv'] as const).map((container) => (
-                                    <button key={container} type="button" aria-pressed={choice.container === container}
-                                            className={`quick-chip${choice.container === container ? ' is-on' : ''}`}
-                                            onClick={() => set({container})}>
-                                        {container.toUpperCase()}
-                                    </button>
-                                ))}
+                                {(['mp4', 'mkv'] as const).map((container) => formatChip(container, choice.container, (value) => set({container: value})))}
                             </span>
                             <small className="quick-muted">MP4 plays almost everywhere. MKV keeps VP9 and AV1 with Opus audio without converting.</small>
                         </fieldset>
                         <fieldset className="quick-panel-field" role="radiogroup">
                             <legend>Video codec</legend>
+                            {rules.fixedCodec && (
+                                <p className="quick-panel-note quick-panel-attention">
+                                    <FontAwesomeIcon icon={faIcon('fass', 'lock')}/> The codec is fixed to {CODEC_NAMES[rules.fixedCodec]} by a rule in Settings › Quick download.
+                                </p>
+                            )}
                             <Choice
                                 selected={choice.codec == null}
+                                disabled={rules.fixedCodec != null}
                                 onPick={() => set({codec: null})}
                                 label={`Auto${video?.codec ? ` · ${CODEC_NAMES[video.codec as QuickCodec] ?? video.codec}` : ''}`}
                                 note={`${sourceName} picks`}
@@ -116,10 +127,11 @@ export default function QuickFormatPanel({
                                 <Choice
                                     key={codec}
                                     selected={choice.codec === codec}
-                                    disabled={!offered.has(codec)}
+                                    disabled={!offered.has(codec) || (rules.fixedCodec != null && codec !== rules.fixedCodec)}
                                     onPick={() => set({codec})}
                                     label={CODEC_NAMES[codec]}
-                                    note={offered.has(codec) ? CODEC_NOTES[codec] : 'not offered for this video'}
+                                    note={!offered.has(codec) ? 'not offered for this video'
+                                        : rules.fixedCodec && codec !== rules.fixedCodec ? 'not allowed by rule' : CODEC_NOTES[codec]}
                                     size={video?.codecs.find((c) => c.codec === codec)?.sizeBytes}
                                 />
                             ))}
@@ -132,13 +144,7 @@ export default function QuickFormatPanel({
                         <fieldset className="quick-panel-field">
                             <legend>Format</legend>
                             <span className="quick-chips">
-                                {(['m4a', 'mp3'] as const).map((audioFormat) => (
-                                    <button key={audioFormat} type="button" aria-pressed={choice.audioFormat === audioFormat}
-                                            className={`quick-chip${choice.audioFormat === audioFormat ? ' is-on' : ''}`}
-                                            onClick={() => set({audioFormat})}>
-                                        {audioFormat.toUpperCase()}
-                                    </button>
-                                ))}
+                                {(['m4a', 'mp3'] as const).map((audioFormat) => formatChip(audioFormat, choice.audioFormat, (value) => set({audioFormat: value})))}
                             </span>
                             <small className="quick-muted">M4A keeps the original audio. MP3 converts it, for older players and car stereos.</small>
                         </fieldset>

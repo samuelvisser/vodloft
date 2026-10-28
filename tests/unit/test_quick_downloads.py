@@ -93,6 +93,8 @@ def temporary_root(tmp_path, monkeypatch):
     settings = get_settings()
     monkeypatch.setattr(settings.download_settings, "temporary_download_root", tmp_path / "temporary")
     monkeypatch.setattr(settings.quick_download, "keep_free_gigabytes", 0)
+    # The history has its own tests, with its table.
+    monkeypatch.setattr(settings.quick_download, "keep_history", False)
     return tmp_path / "temporary"
 
 
@@ -389,9 +391,14 @@ def api(quick_sources, temporary_root, task_database, monkeypatch):
     from task_manager.scheduler.db import TaskDefinition
     from task_manager.tasks import quick_download_operations
 
+    from backend.db.models import QuickDownloadHistory
+    from config import get_settings
+
     session = task_database()
+    QuickDownloadHistory.__table__.create(bind=session.get_bind())
     session.add(TaskDefinition(key="quick_download", title="Quick download", description="", allowed_resource_types=[]))
     session.commit()
+    monkeypatch.setattr(get_settings().quick_download, "keep_history", True)
 
     @contextmanager
     def db_session():
@@ -463,12 +470,12 @@ def test_choices_a_source_does_not_offer_are_refused(api):
     assert active["context"]["choice"] == "Audio · MP3 192 kbps"
 
 
-def _ready_file(temporary_root: Path, content: bytes = b"0123456789") -> str:
+def _ready_file(temporary_root: Path, content: bytes = b"0123456789", quick_id: str | None = None) -> str:
     from datetime import datetime, timedelta, timezone
 
     from downloader.storage.quick import QuickManifest, new_quick_download_id, reserve_quick_folder, write_manifest
 
-    quick_id = new_quick_download_id()
+    quick_id = quick_id or new_quick_download_id()
     folder = reserve_quick_folder(temporary_root, quick_id)
     (folder / "Clip é.mp4").write_bytes(content)
     now = datetime.now(timezone.utc)
@@ -519,3 +526,114 @@ def test_discarding_a_ready_file_deletes_it(api, temporary_root):
     assert api.client.delete(f"/api/quick-downloads/{quick_id}").status_code == 204
     assert open_quick_folder(temporary_root, quick_id) is None
     assert api.client.delete(f"/api/quick-downloads/{quick_id}").status_code == 404
+
+
+def _rules(monkeypatch, **values):
+    from config import get_settings
+
+    for key, value in values.items():
+        monkeypatch.setattr(get_settings().quick_download, key, value)
+
+
+def _start(api, url, **choice):
+    return api.client.post("/api/quick-downloads", json={"url": url, "choice": choice})
+
+
+def test_rules_refuse_what_settings_do_not_allow(api, monkeypatch):
+    tube = "https://tube.example/v/abc"
+    _rules(monkeypatch, max_quality="1080p", allow_mkv=False, allow_mp3=False)
+    assert "above the 1080p limit" in _start(api, tube, quality=2160).json()["detail"]
+    assert "MKV is not allowed" in _start(api, tube, container="mkv").json()["detail"]
+    assert "MP3 is not allowed" in _start(api, tube, kind="audio", audioFormat="mp3").json()["detail"]
+    assert _start(api, tube, quality=1080).status_code == 202
+
+    _rules(monkeypatch, max_quality="best", allow_mkv=True, allow_mp3=True, fixed_codec="av1")
+    # 480p is only offered in H.264, so a fixed AV1 cannot be met.
+    assert "not offered in AV1" in _start(api, tube, quality=480).json()["detail"]
+    assert _start(api, tube, quality=1080).status_code == 202
+
+    _rules(monkeypatch, fixed_codec="auto", max_file_gigabytes=300 / 1024 ** 3)
+    assert "more than the" in _start(api, tube, quality=1080).json()["detail"]
+    assert _start(api, tube, quality=480).status_code == 202
+
+    _rules(monkeypatch, max_file_gigabytes=0, max_duration_minutes=1)
+    assert "longer than the 1 minutes" in _start(api, tube).json()["detail"]
+
+    _rules(monkeypatch, max_duration_minutes=0, allowed_sources="clips, wire")
+    assert "from Tube is turned off" in _start(api, tube).json()["detail"]
+    assert _start(api, "https://clips.example/v/abc").status_code == 202
+
+
+def test_locked_defaults_and_a_quality_limit_shape_the_download(api, quick_sources, temporary_root, monkeypatch):
+    from backend.services.quick_downloads import prepare_quick_download_plan, quick_folder
+    from downloader.lifecycle import DownloadTracker
+
+    _rules(monkeypatch, lock_to_defaults=True, default_kind="audio", default_audio_format="mp3", default_mp3_bitrate=128)
+    assert _start(api, "https://tube.example/v/abc", quality=2160).status_code == 202
+    [operation] = api.client.get("/api/quick-downloads").json()["active"]
+    assert operation["context"]["choice"] == "Audio · MP3 128 kbps"
+
+    _rules(monkeypatch, lock_to_defaults=False, max_quality="720p", fixed_codec="h264", max_file_gigabytes=1)
+    request = _request("tube", codec="h264")
+    plan = prepare_quick_download_plan(request, quick_folder(request.id), DownloadTracker())
+    command = plan.source.ytdlp_command
+    # Best is held to the limit, and the codec is the only one taken.
+    assert command[command.index("-S") + 1] == "res:720,vcodec:h264"
+    assert command[command.index("-f") + 1] == "bv*[vcodec~='^(avc|h264)']+ba/b[vcodec~='^(avc|h264)']"
+    assert command[command.index("--max-filesize") + 1] == str(1024 ** 3)
+
+
+def test_the_history_follows_each_quick_download_to_its_end(api, temporary_root, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    from backend.services import quick_download_history as history
+    from backend.services.quick_downloads import sweep_quick_downloads
+    from task_manager.scheduler.operation_control import cancel_operation
+
+    monkeypatch.setattr("backend.services.quick_download_history.get_session", lambda: api.session)
+    monkeypatch.setattr(api.session, "close", lambda: None)
+
+    downloaded = _start(api, "https://clips.example/v/abc").json()
+    expired = _start(api, "https://clips.example/v/def", kind="audio").json()
+    canceled = _start(api, "https://clips.example/v/ghi").json()
+    assert _start(api, "https://clips.example/v/locked-1").status_code == 422
+    rows = {row["quickDownloadId"]: row for row in api.client.get("/api/quick-downloads/history").json()}
+    assert rows[downloaded["quickDownloadId"]]["outcome"] == "working"
+    [refused] = [row for row in rows.values() if row["outcome"] == "refused"]
+    assert refused["message"] == "Protected by DRM" and refused["title"] == "Clip: locked-1?"
+
+    # The worker makes two files ready; the third is canceled before it starts.
+    for done in (downloaded, expired):
+        history.record_outcome(done["quickDownloadId"], history.READY, size_bytes=10)
+        _ready_file(temporary_root, quick_id=done["quickDownloadId"])
+    cancel_operation(canceled["operationId"], reason="Canceled by user")
+    api.client.get(f"/api/quick-downloads/{downloaded['quickDownloadId']}/file")
+    sweep_quick_downloads(now=datetime.now(timezone.utc) + timedelta(days=2))
+
+    rows = {row["quickDownloadId"]: row for row in api.client.get("/api/quick-downloads/history").json()}
+    assert rows[downloaded["quickDownloadId"]]["outcome"] == "downloaded"
+    assert rows[expired["quickDownloadId"]]["outcome"] == "expired"
+    assert rows[expired["quickDownloadId"]]["format"] == "Audio · M4A"
+    assert rows[expired["quickDownloadId"]]["choice"]["kind"] == "audio"
+    assert rows[canceled["quickDownloadId"]]["outcome"] == "canceled"
+
+    # Clearing keeps what is still going on; old entries are forgotten after the retention period.
+    working = _start(api, "https://clips.example/v/jkl").json()
+    assert api.client.delete("/api/quick-downloads/history").status_code == 204
+    [left] = api.client.get("/api/quick-downloads/history").json()
+    assert left["quickDownloadId"] == working["quickDownloadId"]
+    assert history.forget_old_history(now=datetime.now(timezone.utc) + timedelta(days=91)) == 1
+
+    _rules(monkeypatch, keep_history=False)
+    _start(api, "https://clips.example/v/mno")
+    assert api.client.get("/api/quick-downloads/history").json() == []
+
+
+def test_every_quick_download_setting_is_sent_under_its_editable_path():
+    from backend.api.models.settings import SettingsValues, UI_SETTING_PATHS
+    from config.settings.settings import AppSettings
+
+    sent = SettingsValues.from_app_settings(AppSettings()).model_dump(mode="json", by_alias=True)["quickDownload"]
+
+    assert {f"quickDownload.{key}" for key in sent} <= set(UI_SETTING_PATHS)
+    assert sent["allowM4a"] is True

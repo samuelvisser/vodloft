@@ -14,6 +14,7 @@ from backend.api.models.source import ResolvedLinkAPIRead
 from backend.api.models.quick_download import (
     QuickDownloadAPICreate,
     QuickDownloadAPIRead,
+    QuickDownloadHistoryAPIRead,
     QuickDownloadOptionsAPIRead,
     QuickDownloadOptionsAPIRequest,
     QuickDownloadsAPIRead,
@@ -22,7 +23,11 @@ from backend.services.quick_downloads import (
     QuickChoice,
     QuickDownloadRefused,
     QuickDownloadRequest,
+    QuickRules,
+    apply_quick_rules,
     check_quick_choice,
+    check_quick_rules,
+    estimate_choice,
     check_quick_downloadable,
     deliveries,
     discard_quick_download,
@@ -31,10 +36,11 @@ from backend.services.quick_downloads import (
     quick_options,
     ready_quick_download,
 )
+from backend.services import quick_download_history as history
 from backend.services.source_requests import asking_source
 from config import get_settings
 from downloader.storage.quick import QuickFolder, list_quick_folders, new_quick_download_id
-from sources import LinkKind, get_source
+from sources import Feature, LinkKind, get_source
 from task_manager.scheduler.operation_control import cancel_operation
 from task_manager.scheduler.operations import get_operation
 from task_manager.tasks.media_download_operations import dispatch_queued_media_download_operations
@@ -48,20 +54,43 @@ _RANGE = re.compile(r"^bytes=(\d*)-(\d*)$")
 
 
 def start_quick_download(s: Session, body: QuickDownloadAPICreate) -> dict:
-    """Look up the link, refuse what cannot be downloaded, and queue the download."""
+    """Look up the link, refuse what cannot be downloaded or what the rules do not allow, and queue it."""
     link = resolve_link(s, body.url, body.source_key)
     source = get_source(link.source.id)
     kind = LinkKind(link.kind)
-    check_quick_downloadable(
-        source, kind, drm_protected=link.drm_protected, needs_subscription=link.needs_subscription,
-    )
     try:
         choice = QuickChoice(**body.choice.model_dump())
     except ValueError as exc:
         raise QuickDownloadRefused(str(exc)) from exc
+    rules = QuickRules.from_settings()
+    choice = apply_quick_rules(source, choice, rules)
+    quick_id = new_quick_download_id()
+    try:
+        check_quick_downloadable(
+            source, kind, drm_protected=link.drm_protected, needs_subscription=link.needs_subscription,
+        )
+    except QuickDownloadRefused as exc:
+        if link.drm_protected or link.needs_subscription:
+            # Remembered on its own, because the refusal rolls the request back.
+            history.record_refused(
+                quick_id=quick_id, title=link.preview.title, source_key=source.id, source_name=source.name,
+                url=link.url, choice=choice, message="Protected by DRM" if link.drm_protected else "Needs a subscription",
+            )
+        raise
     check_quick_choice(source, choice)
+    estimate = None
+    duration = None
+    if source.has(Feature.FORMAT_CHOICES) and (rules.max_bytes or rules.max_duration or rules.fixed_codec):
+        with asking_source(f"{source.name} could not list the formats of this video"):
+            options = quick_options(source, link.url)
+        estimate = estimate_choice(options, choice)
+        duration = options.duration
+    check_quick_rules(
+        source, choice, rules, size_bytes=estimate.size_bytes if estimate else None, duration=duration,
+        codecs=estimate.codecs if estimate else None,
+    )
     request = QuickDownloadRequest(
-        id=new_quick_download_id(),
+        id=quick_id,
         source_key=source.id,
         kind=kind,
         slug=link.slug,
@@ -73,6 +102,7 @@ def start_quick_download(s: Session, body: QuickDownloadAPICreate) -> dict:
         choice=choice,
     )
     operation = create_quick_download_operation(s, request)
+    history.record_started(request, source_name=source.name, session=s)
     dispatch_queued_media_download_operations(s)
     return {"queued": True, "operation_id": operation.id, "quick_download_id": request.id}
 
@@ -197,3 +227,13 @@ def file_delivery(quick_id: str, range_header: str | None) -> FileDelivery | Non
                 raise RangeNotSatisfiable(size)
             partial = True
     return FileDelivery(quick_id, str(found.file), found.manifest.file_name, size, start, end, partial)
+
+
+def quick_download_history(s: Session) -> list[QuickDownloadHistoryAPIRead]:
+    return [QuickDownloadHistoryAPIRead.model_validate(row) for row in history.list_history(s)]
+
+
+def clear_quick_download_history(s: Session) -> int:
+    removed = history.clear_history(s)
+    s.commit()
+    return removed
