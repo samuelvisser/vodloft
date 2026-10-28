@@ -41,6 +41,10 @@ Failed, cancelled, missing, or corrupted downloads can be retried where appropri
 
 Open the download log when you need to understand why a particular item failed or was retried. This is usually more useful than starting with the complete application log because it focuses on that media item.
 
+### Delete a download
+
+Open a download's log and press **Delete** to remove that one download: its record, its history, and the files VODLoft wrote for it (the media, artwork, NFO, subtitles and any unfinished parts). VODLoft asks you to confirm first and stops the download if it is still running. When a file cannot be removed, the record is kept and VODLoft says why, so nothing is left behind on disk without a record.
+
 ## Download limits and retries
 
 The system-wide defaults are:
