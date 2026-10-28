@@ -50,7 +50,7 @@ Local Media Profiles can automatically save subtitle tracks advertised by The Da
 
 Sidecars share the media filename, for example `Movie Name.mp4` and `Movie Name.en.srt` for English. Forced subtitles use names such as `Movie Name.en.forced.srt`. Plex and similar media servers can discover these files automatically. The same naming applies to movie extras and show episodes.
 
-Subtitles are fetched for Daily Wire media only. yt-dlp shows and single videos download without subtitles for now, whatever the profile says. Only subtitle tracks actually advertised by the source are downloaded. Missing or temporarily unavailable tracks do not prevent the primary media from downloading. HLS bundles cannot have subtitles embedded into a single file; use sidecars for that format.
+Subtitles are fetched for Daily Wire media only. yt-dlp and NPO Start media download without subtitles for now, whatever the profile says. Only subtitle tracks actually advertised by the source are downloaded. Missing or temporarily unavailable tracks do not prevent the primary media from downloading. HLS bundles cannot have subtitles embedded into a single file; use sidecars for that format.
 
 ## Preferred format
 
