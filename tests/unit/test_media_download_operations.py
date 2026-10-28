@@ -1447,6 +1447,7 @@ def test_delete_media_download_action_removes_owned_files_and_history(tmp_path, 
         download.set_asset_path("nfo", "nfo", str(nfo))
         record_media_download_history(session, download.id, MediaDownloadHistoryAction.CREATED)
         download_id = download.id
+        episode, profile_id = download.media, download.local_media_profile_id
         session.commit()
 
         @contextmanager
@@ -1456,6 +1457,8 @@ def test_delete_media_download_action_removes_owned_files_and_history(tmp_path, 
         monkeypatch.setattr(download_actions, "db_session", test_db_session)
 
         assert download_actions.delete_media_download_action(download_id)
+        # The next Download Profile run must not download it again.
+        assert episode.download_dismissed(profile_id)
         assert not media.exists()
         assert not artwork.exists()
         assert not nfo.exists()

@@ -228,8 +228,8 @@ def test_scheduled_scans_leave_quick_checked_shows_to_the_daily_rescan(quick, li
     quick.videos = [_video("v1", 1)]
     listed_too.videos = [_video("p1", 1)]
 
-    scheduled = asyncio.run(run_fetch_new_episodes(session, show_id=0, quick_checked=False))
-    rescan = asyncio.run(run_fetch_new_episodes(session, show_id=0, quick_checked=True))
+    scheduled = asyncio.run(run_fetch_new_episodes(session, show_id=None, quick_checked=False))
+    rescan = asyncio.run(run_fetch_new_episodes(session, show_id=None, quick_checked=True))
 
     assert [show.show_slug for show in scheduled.shows] == ["PL1"]
     assert [show.show_slug for show in rescan.shows] == ["UC1"]

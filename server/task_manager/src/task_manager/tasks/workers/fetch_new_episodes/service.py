@@ -150,7 +150,7 @@ async def run_fetch_new_episodes(
     shows whose Source has quick checks (True), which get a full re-scan once a day,
     or to the other shows (False)."""
     shows: Sequence[Show] = get_shows(s, show_id=show_id, show_slug=show_slug)
-    if quick_checked is not None and show_id in (None, 0) and not show_slug:
+    if quick_checked is not None and show_id is None and not show_slug:
         shows = [show for show in shows if get_source(show.source_key).has(Feature.QUICK_CHECK) == quick_checked]
     show_ids = [show.id for show in shows]
     lists_episodes = {show.id: get_source(show.source_key).has(Feature.EPISODE_LISTS) for show in shows}

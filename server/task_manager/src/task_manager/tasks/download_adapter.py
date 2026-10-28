@@ -163,6 +163,18 @@ def run_download(
                             for asset in current.assets
                         ),
                     )
+                    if previous is None:
+                        # The file at the recorded path no longer matches its
+                        # recorded identity (Corrupted, changed or never
+                        # fingerprinted). Replace it in place rather than
+                        # publishing the new download next to it as a duplicate.
+                        previous = capture_previous_download(
+                            current.file_path,
+                            size_bytes=None,
+                            fingerprint=None,
+                            assets=tuple((asset.path, None, None) for asset in current.assets),
+                            claim_current=True,
+                        )
                 # An attempt owns none of the previous output paths until a new
                 # artifact is committed. Never delete or reset the old artifact
                 # merely because retry work is starting, including Missing or

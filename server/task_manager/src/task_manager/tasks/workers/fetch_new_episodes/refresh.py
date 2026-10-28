@@ -45,7 +45,7 @@ class RefreshResult:
 def run_catalogue_refresh(s: Session, *, show_id: int | None = None) -> RefreshResult:
     """Refresh one show, or every show whose Source can refresh its items."""
     query = select(Show).order_by(Show.id)
-    if show_id:
+    if show_id is not None:
         query = query.where(Show.id == show_id)
     shows = [
         (show.id, show.title, get_source(show.source_key)) for show in s.scalars(query).all()

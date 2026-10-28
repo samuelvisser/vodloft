@@ -223,6 +223,10 @@ def embed_media(
             command += ["-i", path]
         # Data streams (such as RTP hint tracks) cannot be copied into MP4.
         command += ["-map", "0", "-map", "-0:d?"]
+        if subtitles:
+            # Our tracks replace any the media already carries, so the language
+            # and forced flags below land on the tracks they describe.
+            command += ["-map", "-0:s?"]
         if thumbnail_path is not None and not attach:
             command += ["-map", "1:v:0"]
         for index in range(len(subtitles)):

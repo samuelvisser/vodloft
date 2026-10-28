@@ -92,7 +92,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     runNow={{
                         definition: frontendOperationDefinitions['system.cron.find_episodes'],
                         job: 'find-episodes',
-                        ledger: {definitionKey: 'fetch_new_episodes', resourceType: 'show', resourceId: 0, includeUnscoped: true},
+                        ledger: {definitionKey: 'fetch_new_episodes', resourceType: 'show', includeUnscoped: true},
                     }}
                     value={draft.newEpisodeSchedule.findEpisodesCron}
                     enabled={draft.newEpisodeSchedule.findEpisodesCronEnabled}
@@ -149,7 +149,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     runNow={{
                         definition: frontendOperationDefinitions['system.cron.full_rescan'],
                         job: 'full-rescan',
-                        ledger: {definitionKey: 'rescan_quick_checked_shows', resourceType: 'show', resourceId: 0, includeUnscoped: true},
+                        ledger: {definitionKey: 'rescan_quick_checked_shows', resourceType: 'show', includeUnscoped: true},
                     }}
                     value={draft.newEpisodeSchedule.fullRescanCron}
                     enabled={draft.newEpisodeSchedule.fullRescanCronEnabled}

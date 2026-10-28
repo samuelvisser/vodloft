@@ -223,7 +223,7 @@ export default function DownloadLogDialog({row, onClose}: Props) {
                     This will stop any active download and remove its record, download history,
                     media file and associated downloaded files from the filesystem.
                 </p>
-                <p>This action cannot be undone. Automatic Download Profiles may download the media again later.</p>
+                <p>This action cannot be undone. Download Profiles will not download it again on their own; you can still download it yourself.</p>
             </ConfirmDialog>
         </>
     )

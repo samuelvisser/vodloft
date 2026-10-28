@@ -533,7 +533,7 @@ def test_task_cursor_uses_current_anchor_timestamp_for_unchanged_order():
         session.close()
         engine.dispose()
 
-def test_task_ledger_can_include_unscoped_and_legacy_global_runs():
+def test_task_ledger_can_include_unscoped_runs():
     import backend.db.models  # noqa: F401
     from backend.api.endpoints.tasks.service import query_ledger
     from backend.db import Base
@@ -551,7 +551,7 @@ def test_task_ledger_can_include_unscoped_and_legacy_global_runs():
         session.add(definition)
         session.flush()
         base = datetime(2026, 10, 14, tzinfo=timezone.utc)
-        for index, resource_id in enumerate((None, 0, 7, 8)):
+        for index, resource_id in enumerate((None, 6, 7, 8)):
             session.add(TaskRun(
                 definition_id=definition.id,
                 resource_type=ResourceType.SHOW,
@@ -567,16 +567,16 @@ def test_task_ledger_can_include_unscoped_and_legacy_global_runs():
         args = dict(
             definition_key="fetch_new_episodes",
             resource_type="show",
-            resource_ids=[0, 7],
+            resource_ids=[6, 7],
             order_by="started_at",
             order="desc",
         )
-        legacy = query_ledger(session, **args)
-        assert [run.resource_id for run in legacy.items] == [7, 0]
+        scoped = query_ledger(session, **args)
+        assert [run.resource_id for run in scoped.items] == [7, 6]
 
         first = query_ledger(session, **args, include_unscoped=True, limit=2)
         assert first.total == 3
-        assert [run.resource_id for run in first.items] == [7, 0]
+        assert [run.resource_id for run in first.items] == [7, 6]
         assert first.next_cursor is not None
 
         second = query_ledger(
@@ -587,5 +587,15 @@ def test_task_ledger_can_include_unscoped_and_legacy_global_runs():
 
         with pytest.raises(ValueError, match="Cursor does not match this task ledger"):
             query_ledger(session, **args, cursor=first.next_cursor, limit=2)
+
+        unscoped_only = query_ledger(
+            session,
+            definition_key="fetch_new_episodes",
+            resource_type="show",
+            include_unscoped=True,
+            order_by="started_at",
+            order="desc",
+        )
+        assert [run.resource_id for run in unscoped_only.items] == [None]
 
     engine.dispose()
