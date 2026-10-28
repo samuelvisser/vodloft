@@ -49,7 +49,7 @@ Open the download log when you need to understand why a particular item failed o
 
 ### Delete a download
 
-Open a download's log and press **Delete** to remove that one download: its record, its history, and the files VODLoft wrote for it (the media, artwork, NFO, subtitles and any unfinished parts). VODLoft asks you to confirm first and stops the download if it is still running. When a file cannot be removed, the record is kept and VODLoft says why, so nothing is left behind on disk without a record.
+Open a download's log and press **Delete** to remove that one download: its record, its history, and the files VODLoft wrote for it (the media, artwork, NFO, subtitles and any unfinished parts). VODLoft asks you to confirm first and stops the download if it is still running. When a file cannot be removed, the record is kept and VODLoft says why, so nothing is left behind on disk without a record. This is separate from the **Delete** buttons on the Downloads page, which only remove records whose file is Absent or Missing and never touch files on disk.
 
 ## Download limits and retries
 

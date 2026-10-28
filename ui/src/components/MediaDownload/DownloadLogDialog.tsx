@@ -57,7 +57,7 @@ export default function DownloadLogDialog({row, onClose}: Props) {
         setDeleteBusy(true)
         try {
             const base = (window as any).appConfig.API_URL
-            const response = await fetch(`${base}/media-downloads/${row.id}`, {
+            const response = await fetch(`${base}/media-downloads/${row.id}/files`, {
                 method: 'DELETE',
                 credentials: 'include',
             })

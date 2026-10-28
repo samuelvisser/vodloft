@@ -1575,3 +1575,31 @@ def test_delete_media_download_action_keeps_record_if_file_cleanup_fails(tmp_pat
     finally:
         session.close()
         engine.dispose()
+
+
+def test_download_delete_routes_keep_files_unless_asked(monkeypatch):
+    from backend.api.endpoints.media_downloads import router as media_downloads_router
+
+    calls = []
+    monkeypatch.setattr(
+        media_downloads_router,
+        "delete_unavailable_media_download_action",
+        lambda media_download_id: calls.append(("unavailable", media_download_id)),
+    )
+    monkeypatch.setattr(
+        media_downloads_router,
+        "delete_media_download_action",
+        lambda media_download_id: calls.append(("with_files", media_download_id)),
+    )
+
+    media_downloads_router.media_downloads_delete(7)
+    media_downloads_router.media_downloads_delete_with_files(8)
+
+    assert calls == [("unavailable", 7), ("with_files", 8)]
+    paths = {
+        (route.path, method)
+        for route in media_downloads_router.router.routes
+        for method in getattr(route, "methods", ())
+    }
+    assert ("/media-downloads/{media_download_id}", "DELETE") in paths
+    assert ("/media-downloads/{media_download_id}/files", "DELETE") in paths
