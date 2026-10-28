@@ -12,21 +12,21 @@ def test_settings_cron_operations_target_the_scheduled_workers():
     )
 
     cases = (
-        (FindEpisodesCronOperation(), "fetch_new_episodes", "show"),
-        (QuickCheckCronOperation(), "quick_check_new_videos", "system"),
-        (FullRescanCronOperation(), "rescan_quick_checked_shows", "show"),
-        (MonitorNoUsableMediaCronOperation(), "monitor_no_usable_media_episode", "show"),
-        (VerifyDownloadsCronOperation(), "download_profile_worker", "download_profile"),
-        (FileWatcherCronOperation(), "file_watcher", "show"),
+        (FindEpisodesCronOperation(), "fetch_new_episodes", "show", None),
+        (QuickCheckCronOperation(), "quick_check_new_videos", "system", 0),
+        (FullRescanCronOperation(), "rescan_quick_checked_shows", "show", None),
+        (MonitorNoUsableMediaCronOperation(), "monitor_no_usable_media_episode", "show", 0),
+        (VerifyDownloadsCronOperation(), "download_profile_worker", "download_profile", 0),
+        (FileWatcherCronOperation(), "file_watcher", "show", 0),
     )
 
-    for operation, task_key, resource_type in cases:
+    for operation, task_key, resource_type, resource_id in cases:
         targets = operation.targets()
         assert len(targets) == 1
         target = targets[0]
         assert target.task_key == task_key
         assert target.resource_type == resource_type
-        assert target.resource_id == 0
+        assert target.resource_id == resource_id
 
 
 def test_pending_episode_cron_operation_targets_each_pending_episode():
