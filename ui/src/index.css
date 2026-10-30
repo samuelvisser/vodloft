@@ -2129,3 +2129,15 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 /* A notification that offers one action, such as downloading a ready file. */
 .toast-with-action { display: flex; align-items: center; gap: 12px; }
 .toast-with-action .btn { flex: none; padding: 6px 10px; }
+.toast-close {
+    flex: none;
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: inherit;
+    opacity: 0.6;
+    padding: 6px;
+    margin-right: -6px;
+    cursor: pointer;
+}
+.toast-close:hover, .toast-close:focus-visible { opacity: 1; }

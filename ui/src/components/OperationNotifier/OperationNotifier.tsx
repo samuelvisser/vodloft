@@ -8,6 +8,8 @@ import {
 } from 'react'
 import {useQueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
+import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
+import {faIcon} from '../../icons/faIcon'
 import {type TaskOperationRead} from '../../types/schemas/operation'
 import {invalidateForOperation} from '../../lib/operationInvalidation'
 import {refreshFrontendPuller, useFrontendPuller} from '../../lib/puller'
@@ -137,6 +139,11 @@ export default function OperationNotifier({
                  onClick={() => toast.dismiss(t.id)}>
                 {action.label}
               </a>
+              {/* It stays up a long time (and while touched on a phone), so it can be closed by hand. */}
+              <button type="button" className="toast-close" aria-label="Close" title="Close"
+                      onClick={() => toast.dismiss(t.id)}>
+                <FontAwesomeIcon icon={faIcon('fass', 'xmark')} aria-hidden="true"/>
+              </button>
             </span>
           ), {duration: 60_000})
         } else if (operation.status === 'SUCCEEDED') {
