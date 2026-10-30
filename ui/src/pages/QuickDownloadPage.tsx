@@ -245,17 +245,17 @@ export default function QuickDownloadPage() {
                             <>
                                 <QuickOptionList options={options} choice={choice} recommended={recommended} rules={rules} onChange={setChoice}/>
                                 {problem && <p className="form-error-card" role="alert">{problem}</p>}
+                                {rules.locked ? (
+                                    <span className="quick-muted quick-locked-note">
+                                        <FontAwesomeIcon icon={faIcon('fass', 'lock')}/> <span>Set in Settings › Quick download</span>
+                                    </span>
+                                ) : (
+                                    <button type="button" className="quick-link-button" onClick={() => setPanelOpen(true)}>
+                                        <FontAwesomeIcon icon={faIcon('fass', 'sliders')}/>
+                                        <span>Format and codec</span>
+                                    </button>
+                                )}
                                 <div className="quick-download-footer">
-                                    {rules.locked ? (
-                                        <span className="quick-muted quick-locked-note">
-                                            <FontAwesomeIcon icon={faIcon('fass', 'lock')}/> <span>Set in Settings › Quick download</span>
-                                        </span>
-                                    ) : (
-                                        <button type="button" className="quick-link-button" onClick={() => setPanelOpen(true)}>
-                                            <FontAwesomeIcon icon={faIcon('fass', 'sliders')}/>
-                                            <span>Format and codec</span>
-                                        </button>
-                                    )}
                                     <span className="quick-footer-choice" aria-hidden="true">
                                         <strong>{summary}</strong>
                                         <small>{sizeLabel(size) || 'size unknown'}</small>

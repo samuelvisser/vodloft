@@ -6,6 +6,7 @@ import {faIcon} from '../../icons/faIcon'
 import {presentDownloadProgress} from '../../lib/downloadProgress'
 import {useControlOperation} from '../../lib/operations'
 import {
+    awaitQuickDownloadDelivery,
     clearQuickDownloadHistory,
     quickDownloadFileUrl,
     quickDownloadHistoryQueryKey,
@@ -104,9 +105,10 @@ export function QuickReadyList({ready}: {ready: QuickDownloadReady[]}) {
     }
 
     // The browser downloads the file itself; once every byte has gone out the file
-    // turns into "Downloaded", which the next refresh shows.
-    const downloaded = () => {
-        window.setTimeout(() => void queryClient.invalidateQueries({queryKey: quickDownloadsQueryKey}), 5_000)
+    // turns into "Downloaded". Check often until it does.
+    const downloaded = (item: QuickDownloadReady) => {
+        awaitQuickDownloadDelivery(item.id)
+        window.setTimeout(() => void queryClient.invalidateQueries({queryKey: quickDownloadsQueryKey}), 2_000)
     }
 
     return (
@@ -127,7 +129,7 @@ export function QuickReadyList({ready}: {ready: QuickDownloadReady[]}) {
                             </small>
                         </span>
                         <span className="quick-list-actions">
-                            <a className="btn btn-primary" href={quickDownloadFileUrl(item.id)} download={item.fileName} onClick={downloaded}>
+                            <a className="btn btn-primary" href={quickDownloadFileUrl(item.id)} download={item.fileName} onClick={() => downloaded(item)}>
                                 <FontAwesomeIcon icon={faIcon('fass', 'download')}/>
                                 Download file
                             </a>

@@ -103,8 +103,9 @@
 .quick-locked-note { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
 
 /* Download row; a fixed footer on phones */
-.quick-download-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.quick-download-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
 .quick-link-button {
+    margin-top: 8px;
     appearance: none;
     border: none;
     background: none;
@@ -233,8 +234,6 @@
     .quick-footer-choice { display: flex; flex: 1 1 auto; }
     .quick-download-button-long { display: none; }
     .quick-download-button-short { display: inline; }
-    .quick-link-button { font-size: 18px; padding: 8px; }
-    .quick-link-button span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
     /* The options panel becomes a sheet from the bottom. */
     .quick-panel-overlay { align-items: flex-end; }

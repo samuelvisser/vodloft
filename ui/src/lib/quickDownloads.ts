@@ -115,6 +115,15 @@ export function choiceFromHistory(stored: Record<string, unknown>, defaults: Qui
     }
 }
 
+// Ready files the browser is fetching. The server marks a file delivered once
+// every byte has gone out, which can take a while for a large file.
+const awaitingDelivery = new Set<string>()
+
+/** Check often until this ready file shows as delivered (or is gone). */
+export function awaitQuickDownloadDelivery(id: string) {
+    awaitingDelivery.add(id)
+}
+
 export function useQuickDownloads() {
     return useQuery({
         queryKey: quickDownloadsQueryKey,
@@ -123,8 +132,20 @@ export function useQuickDownloads() {
             if (!response.ok) throw await responseError(response)
             return QuickDownloadsSchema.parse(await response.json())
         },
-        // Ready files count down to their deletion, and a finished download marks them delivered.
-        refetchInterval: 30_000,
+        // Ready files count down to their deletion; one being downloaded is
+        // checked every few seconds until it shows as delivered.
+        refetchInterval: (query) => {
+            const ready = query.state.data?.ready
+            if (ready) {
+                for (const id of awaitingDelivery) {
+                    if (!ready.some((item) => item.id === id && item.state === 'ready')) awaitingDelivery.delete(id)
+                }
+            }
+            return awaitingDelivery.size ? 3_000 : 30_000
+        },
+        // A phone shows its own download sheet over the page; catch up when it is back.
+        refetchIntervalInBackground: true,
+        refetchOnWindowFocus: 'always',
         refetchOnMount: 'always',
     })
 }
