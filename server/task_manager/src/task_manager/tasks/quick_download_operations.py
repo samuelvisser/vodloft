@@ -17,6 +17,7 @@ from task_manager.scheduler.db import TaskDefinition, TaskOperation, TaskOperati
 from task_manager.scheduler.operation_context import current_operation_ids
 from task_manager.scheduler.operations import (
     OperationTargetSpec,
+    complete_operation,
     create_operation,
     link_run_to_operations,
     operation_target_needs_dispatch,
@@ -27,6 +28,7 @@ from task_manager.scheduler.types import OperationSource, OperationStatus, Resou
 logger = logging.getLogger(__name__)
 
 QUICK_DOWNLOAD_OPERATION_KIND = "quick.download"
+QUICK_DOWNLOAD_DELIVERED_OPERATION_KIND = "quick.delivered"
 QUICK_DOWNLOAD_TASK_KEY = "quick_download"
 _STARTED_CONTEXT_KEY = "quick_download_started"
 INTERRUPTED_MESSAGE = "Interrupted by a VODLoft restart"
@@ -64,6 +66,35 @@ def create_quick_download_operation(session: Session, request: QuickDownloadRequ
             "kind": request.choice.kind,
         },
     )
+
+
+def record_quick_download_delivered(quick_id: str, fallback_title: str) -> None:
+    """Tell the frontends a ready file has gone out in full.
+
+    Delivery happens in a file response, not in a worker, so it is recorded as
+    an operation that is complete at once. The frontend puller picks it up and
+    refreshes the quick download lists, like any other finished operation.
+    """
+    session = get_session()
+    try:
+        download = quick_download_operation(session, quick_id)
+        operation = create_operation(
+            session,
+            kind=QUICK_DOWNLOAD_DELIVERED_OPERATION_KIND,
+            source=OperationSource.SYSTEM.value,
+            resource_type=ResourceType.QUICK_DOWNLOAD.value,
+            resource_id=None,
+            title=download.title if download is not None else fallback_title,
+            targets=(),
+            context={"quick_download_id": quick_id},
+        )
+        complete_operation(session, operation.id, summary="Downloaded", data={"quick_download_id": quick_id})
+        session.commit()
+    except Exception:
+        session.rollback()
+        logger.warning("Could not record the delivery of quick download %s", quick_id, exc_info=True)
+    finally:
+        session.close()
 
 
 def active_quick_download_operations(session: Session) -> list[TaskOperation]:

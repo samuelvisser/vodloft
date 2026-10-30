@@ -47,6 +47,7 @@ from task_manager.tasks.media_download_operations import dispatch_queued_media_d
 from task_manager.tasks.quick_download_operations import (
     active_quick_download_operations,
     create_quick_download_operation,
+    record_quick_download_delivered,
 )
 
 _CHUNK = 1024 * 1024
@@ -202,6 +203,7 @@ class FileDelivery:
                 # Resumed only after the chunk went out; a dropped connection never gets here.
                 if deliveries.sent(self.quick_id, position, position + len(chunk), self.size):
                     mark_delivered(self.quick_id)
+                    record_quick_download_delivered(self.quick_id, self.file_name)
                 position += len(chunk)
 
 

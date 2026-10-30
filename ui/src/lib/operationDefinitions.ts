@@ -748,6 +748,13 @@ export const frontendOperationDefinitions = {
     failed: (operation) => operation.result?.summary
       ?? `Quick download failed for ${operation.title}${operation.error ? `: ${operation.error}` : ''}`,
   },
+  'quick.delivered': {
+    kind: 'quick.delivered',
+    resourceType: 'quick_download',
+    label: 'Quick download delivered',
+    invalidate: invalidateQuickDownloads,
+    success: (operation) => `${operation.title} was downloaded`,
+  },
 } satisfies Readonly<Record<string, FrontendOperationDefinition>>
 
 export const operationNotificationDefinitions: OperationNotificationDefinitions =

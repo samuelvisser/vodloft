@@ -503,11 +503,17 @@ def test_a_ready_file_downloads_in_ranges_and_is_deleted_after_the_grace_period(
     assert first.status_code == 206 and first.content == b"0123"
     assert first.headers["content-range"] == "bytes 0-3/10"
     assert open_quick_folder(temporary_root, quick_id).manifest.state == "ready"
+    from task_manager.scheduler.operations import list_operations
+    assert not list_operations(kind="quick.delivered")
 
     rest = api.client.get(f"/api/quick-downloads/{quick_id}/file", headers={"Range": "bytes=4-"})
     assert rest.content == b"456789"
     manifest = open_quick_folder(temporary_root, quick_id).manifest
     assert manifest.state == "delivered"
+    # The frontend puller hears of it as a finished operation and refreshes the lists.
+    [delivered] = list_operations(kind="quick.delivered", relevant=True)
+    assert delivered.status == "SUCCEEDED" and delivered.source == "SYSTEM"
+    assert delivered.context["quick_download_id"] == quick_id
     assert (manifest.expires_at - manifest.delivered_at).total_seconds() == 600
 
     assert api.client.get(f"/api/quick-downloads/{quick_id}/file", headers={"Range": "bytes=20-"}).status_code == 416
