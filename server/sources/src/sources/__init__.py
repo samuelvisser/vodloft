@@ -4,7 +4,7 @@ A Source is everything VODLoft knows about one service. Each lives in its own
 subpackage (``sources.dailywire``); the rest of VODLoft reaches it through the
 contract in ``sources.contract`` and the registry below.
 """
-from .contract import ANY_DOMAIN, ApiKeyRejected, ApiQuotaShare, ApiStatus, EpisodeMedia, EpisodeTag, Feature, ItemRef, ItemRefresh, MAIN_TAG, LinkKind, Playback, PlaybackKind, ProgramStatus, ResolvedLink, RssEpisodeType, SearchNotice, SearchResults, SeasonRef, ShowDetails, CookiesStatus, Source, SourceProblem, VideoDetails
+from .contract import ANY_DOMAIN, ApiKeyRejected, ApiQuotaShare, ApiStatus, EpisodeMedia, EpisodeTag, Feature, ItemRef, ItemRefresh, MAIN_TAG, LinkKind, Playback, PlaybackKind, ProgramStatus, ResolvedLink, RssEpisodeType, SearchNotice, SearchResults, SeasonRef, ShowDetails, CookiesStatus, Source, SourceProblem, VideoDetails, VideoFormat, VideoFormats
 from .registry import UnknownSourceError, all_sources, get_source, named_domains, register, sources_for
 from .dailywire import DailyWireSource
 from .npo import NpoSource
@@ -46,6 +46,8 @@ __all__ = [
     "CookiesStatus",
     "UnknownSourceError",
     "VideoDetails",
+    "VideoFormat",
+    "VideoFormats",
     "YtDlpSource",
     "all_sources",
     "get_source",

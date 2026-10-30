@@ -7,9 +7,13 @@ import {episodeQueryKeys} from './showQueryOptions'
 
 export type OperationMessageResolver = (operation: TaskOperationRead) => string
 
+export type OperationNotificationAction = {label: string; href: string; download?: string}
+
 export type OperationNotificationDefinition = {
   label: string
   success?: OperationMessageResolver
+  /** A link the success notification offers, such as the file a quick download made. */
+  successAction?: (operation: TaskOperationRead) => OperationNotificationAction | undefined
   partial?: OperationMessageResolver
   canceled?: OperationMessageResolver
   failed?: OperationMessageResolver
@@ -268,6 +272,25 @@ function invalidateMediaDownload(
       queryClient.invalidateQueries({queryKey: ['movieDownloads', movieSlug]}),
       queryClient.invalidateQueries({queryKey: ['movies']}),
     )
+  }
+}
+
+function invalidateQuickDownloads(
+  queryClient: QueryClient,
+  _operation: TaskOperationRead,
+  invalidations: InvalidationCollector,
+) {
+  invalidations.push(queryClient.invalidateQueries({queryKey: ['quickDownloads']}))
+}
+
+function quickDownloadFile(operation: TaskOperationRead): OperationNotificationAction | undefined {
+  const quickId = resultString(operation, 'quick_download_id') ?? contextString(operation, 'quick_download_id')
+  if (!quickId) return undefined
+  const base = ((window as any).appConfig?.API_URL || '/api').replace(/\/+$/, '')
+  return {
+    label: 'Download',
+    href: `${base}/quick-downloads/${encodeURIComponent(quickId)}/file`,
+    download: resultString(operation, 'file_name'),
   }
 }
 
@@ -574,7 +597,7 @@ export const frontendOperationDefinitions = {
   'show.delete_downloads': {
     kind: 'show.delete_downloads',
     resourceType: 'show',
-    label: 'Delete downloads',
+    label: 'Bulk delete downloads',
     invalidate: invalidateShowDownloadDeletion,
     success: (operation) => {
       const showTitle = contextString(operation, 'show_title') || operation.title
@@ -593,10 +616,24 @@ export const frontendOperationDefinitions = {
       return `Deleted downloads for ${showTitle}: ${files} episode ${plural(files, 'file')} deleted${profileDetail}${disabledDetail}`
     },
   },
+  'show.download_all': {
+    kind: 'show.download_all',
+    resourceType: 'show',
+    label: 'Bulk download',
+    invalidate: invalidateShowFiles,
+    success: (operation) => {
+      const showTitle = contextString(operation, 'show_title') || operation.title
+      const completed = resultNumber(operation, 'downloads_completed')
+        ?? resultNumber(operation, 'completed')
+        ?? contextNumber(operation, 'downloads_requested')
+        ?? 0
+      return `Bulk download finished for ${showTitle}: ${completed} ${plural(completed, 'episode')} downloaded`
+    },
+  },
   'show.redownload_episodes': {
     kind: 'show.redownload_episodes',
     resourceType: 'show',
-    label: 'Re-download',
+    label: 'Bulk delete and re-download',
     invalidate: invalidateShowFiles,
     success: (operation) => {
       const showTitle = contextString(operation, 'show_title') || operation.title
@@ -609,7 +646,7 @@ export const frontendOperationDefinitions = {
       const profileDetail = profiles === undefined
         ? ''
         : ` using ${profiles} ${plural(profiles, 'Local Media Profile')}`
-      return `Re-download finished for ${showTitle}: ${files} episode ${plural(files, 'file')} re-downloaded${profileDetail}`
+      return `Bulk delete and re-download finished for ${showTitle}: ${files} episode ${plural(files, 'file')} re-downloaded${profileDetail}`
     },
   },
   'movie.refresh_extras': {
@@ -697,6 +734,26 @@ export const frontendOperationDefinitions = {
     success: (operation) => operation.result?.summary || `Downloaded ${operation.title}`,
     failed: (operation) => httpErrorMessage(operation.error)
       ?? `Download failed for ${operation.title}${operation.error ? `: ${operation.error}` : ''}`,
+  },
+  'quick.download': {
+    kind: 'quick.download',
+    resourceType: 'quick_download',
+    label: 'Quick download',
+    invalidate: invalidateQuickDownloads,
+    success: (operation) => `${operation.title} is ready to download`,
+    successAction: quickDownloadFile,
+    canceled: (operation) => operation.message && operation.message !== 'Canceled by user'
+      ? `Quick download of ${operation.title} stopped: ${operation.message}`
+      : `Quick download of ${operation.title} was canceled`,
+    failed: (operation) => operation.result?.summary
+      ?? `Quick download failed for ${operation.title}${operation.error ? `: ${operation.error}` : ''}`,
+  },
+  'quick.delivered': {
+    kind: 'quick.delivered',
+    resourceType: 'quick_download',
+    label: 'Quick download delivered',
+    invalidate: invalidateQuickDownloads,
+    success: (operation) => `${operation.title} was downloaded`,
   },
 } satisfies Readonly<Record<string, FrontendOperationDefinition>>
 

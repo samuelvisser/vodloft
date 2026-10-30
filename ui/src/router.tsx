@@ -26,6 +26,7 @@ import StreamProfilesPage from './pages/StreamProfilesPage'
 import AddStreamProfilePage from './pages/stream-profile/AddStreamProfilePage'
 import EditStreamProfilePage from './pages/stream-profile/EditStreamProfilePage'
 import DownloadsPage from './pages/DownloadsPage'
+import QuickDownloadPage from './pages/QuickDownloadPage'
 import LibraryPage from './pages/LibraryPage'
 import BrowsePage from './pages/BrowsePage'
 import SourceSearchPage from './pages/SourceSearchPage'
@@ -57,6 +58,7 @@ export const router = createBrowserRouter(
       <Route path="browse" element={<BrowsePage />} />
       <Route path="browse/:sourceId" element={<SourceSearchPage />} />
       <Route path="add" element={<AddMediaPage />} />
+      <Route path="quick-download" element={<QuickDownloadPage />} />
       <Route path="downloads" element={<DownloadsPage />} />
       <Route path="local-media-profiles" element={<LocalMediaProfilesPage />} />
       <Route path="settings" element={<SettingsPage />} />

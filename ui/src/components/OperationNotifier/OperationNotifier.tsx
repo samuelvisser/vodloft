@@ -8,6 +8,8 @@ import {
 } from 'react'
 import {useQueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
+import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
+import {faIcon} from '../../icons/faIcon'
 import {type TaskOperationRead} from '../../types/schemas/operation'
 import {invalidateForOperation} from '../../lib/operationInvalidation'
 import {refreshFrontendPuller, useFrontendPuller} from '../../lib/puller'
@@ -125,7 +127,26 @@ export default function OperationNotifier({
       handledRef.current.add(operation.id)
       if (operation.source === 'UI' && !operation.notificationSeenAt) {
         const message = terminalMessage(operation, definitions)
-        if (operation.status === 'SUCCEEDED') {
+        const action = operation.status === 'SUCCEEDED'
+          ? definitions[operation.kind]?.successAction?.(operation)
+          : undefined
+        if (action) {
+          // Long enough to come back to the tab and press it.
+          toast.success((t) => (
+            <span className="toast-with-action">
+              <span>{message}</span>
+              <a className="btn btn-primary" href={action.href} download={action.download}
+                 onClick={() => toast.dismiss(t.id)}>
+                {action.label}
+              </a>
+              {/* It stays up a long time (and while touched on a phone), so it can be closed by hand. */}
+              <button type="button" className="toast-close" aria-label="Close" title="Close"
+                      onClick={() => toast.dismiss(t.id)}>
+                <FontAwesomeIcon icon={faIcon('fass', 'xmark')} aria-hidden="true"/>
+              </button>
+            </span>
+          ), {duration: 60_000})
+        } else if (operation.status === 'SUCCEEDED') {
           toast.success(message, {duration: 5000})
         } else if (operation.status === 'PARTIAL' || operation.status === 'CANCELED') {
           toast(message, {duration: 6000})

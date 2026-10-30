@@ -7,7 +7,7 @@ import {faIcon} from '../icons/faIcon'
 export function presentOperationProgress(operation?: TaskOperationRead, starting = false): ProgressPresentation | undefined {
     if (starting && !operation) return workingPresentation('Starting')
     if (!operation || !ACTIVE_OPERATION_STATUSES.has(operation.status)) return undefined
-    if (operation.kind === 'media.download') return presentDownloadProgress(undefined, operation)
+    if (operation.kind === 'media.download' || operation.kind === 'quick.download') return presentDownloadProgress(undefined, operation)
     if (operation.status === 'QUEUED') return waitingPresentation('download_capacity')
     const wait = operation.progressMeta?.wait_state as {reason?: string; message?: string; until?: number | null} | undefined
     if (operation.status === 'WAITING') return waitingPresentation(wait?.reason || 'dependency', wait?.message || operation.message, operation.progress ?? null, wait?.until)

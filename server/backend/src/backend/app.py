@@ -47,7 +47,8 @@ def _recover_download_filesystem(download_settings, scheduled_work_pause) -> Non
         logger.info("Starting background download filesystem recovery")
         recovery = recover_download_filesystem(download_settings)
         logger.info(
-            "Download filesystem recovery complete: cleaned %s stale path claim(s), %s temporary workspace(s), %s expired RSS cache file(s) and %s quick download(s)",
+            "Download filesystem recovery complete: reconciled %s replacement(s), cleaned %s stale path claim(s), %s temporary workspace(s), %s expired RSS cache file(s) and %s quick download(s)",
+            recovery.replacements,
             recovery.reservations,
             recovery.temporary_workspaces,
             recovery.rss_cache_files,
@@ -212,6 +213,7 @@ def create_app() -> FastAPI:
         operation_router,
         source_router,
         puller_router,
+        quick_download_router,
         episode_router,
         season_router,
         setting_router,
@@ -249,6 +251,7 @@ def create_app() -> FastAPI:
     app.include_router(source_router, prefix="/api")
     app.include_router(operation_router, prefix="/api")
     app.include_router(puller_router, prefix="/api")
+    app.include_router(quick_download_router, prefix="/api")
     app.include_router(setting_router, prefix="/api")
     app.include_router(local_media_profile_router, prefix="/api")
     app.include_router(show_local_media_profile_router, prefix="/api")

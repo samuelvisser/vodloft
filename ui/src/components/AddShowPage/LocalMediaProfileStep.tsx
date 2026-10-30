@@ -63,7 +63,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
 
     const snapshotRef = useRef<Pick<
         LocalMediaProfileCreateUnionIn,
-        'name' | 'showScope' | 'outputTemplate' | 'preferredFormat' | 'indexingValues'
+        'name' | 'showScope' | 'subtitleMode' | 'outputTemplate' | 'preferredFormat' | 'indexingValues'
     > | null>(null)
 
     const watchedOp = watch('op')
@@ -84,6 +84,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
             snapshotRef.current = {
                 name: watch('name'),
                 showScope: watch('showScope'),
+                subtitleMode: watch('subtitleMode'),
                 outputTemplate: watch('outputTemplate'),
                 preferredFormat: watch('preferredFormat'),
                 indexingValues: watch('indexingValues'),
@@ -96,6 +97,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
             slug: profile.slug,
             name: profile.name,
             showScope: profile.showScope,
+            subtitleMode: profile.subtitleMode,
             outputTemplate: profile.outputTemplate,
             preferredFormat: profile.preferredFormat,
             indexingValues: profile.indexingValues,
@@ -143,7 +145,12 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
                         {watchedOp === 'update_by_slug' ? 'Update current profile' : 'Or create a new profile'}
                     </div>
 
-                    <LocalMediaProfileCommonFields form={form}/>
+                    <LocalMediaProfileCommonFields
+                        key={watchedOp === 'update_by_slug' ? watchedSlug : 'create_new'}
+                        form={form}
+                        mode="show"
+                        isCreating={watchedOp !== 'update_by_slug'}
+                    />
                     <ShowLocalMediaProfileFields form={form}/>
                     <div className="form-row">
                         <label>Indexing values</label>

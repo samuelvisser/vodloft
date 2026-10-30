@@ -13,7 +13,7 @@ import threading
 from pathlib import Path
 from typing import Optional
 
-from .errors import DownloadCancelled, DownloadError, EncryptedMediaError, MediaUnavailableError
+from .errors import DownloadCancelled, DownloadError, EncryptedMediaError, FileTooLargeError, MediaUnavailableError
 from .models import CancelCheck, DownloadProgress, DownloadResult, ProgressCallback
 from .plan import ResolvedDownloadSource
 from .source import FORMAT_HEIGHTS
@@ -60,6 +60,96 @@ def resolve_ytdlp_source(
         use_hls=False,
         remux_to_mp4=False,
         extension="m4a" if audio_only else "mp4",
+        audio_only=audio_only,
+        ytdlp_command=(*command, *options),
+    )
+
+
+QUICK_VIDEO_CODECS = ("h264", "h265", "vp9", "av1")
+QUICK_AUDIO_FORMATS = ("m4a", "mp3")
+_CODEC_FILTERS = {
+    "h264": "vcodec~='^(avc|h264)'",
+    "h265": "vcodec~='^(hev|hvc|h265)'",
+    "vp9": "vcodec~='^(vp0?9)'",
+    "av1": "vcodec~='^(av01|av1)'",
+}
+
+
+def ytdlp_quick_options(
+    *,
+    audio_only: bool,
+    container: str = "mp4",
+    height: int | None = None,
+    codec: str | None = None,
+    audio_format: str = "m4a",
+    audio_bitrate: int | None = None,
+    strict_codec: bool = False,
+    max_bytes: int | None = None,
+) -> tuple[str, ...]:
+    """yt-dlp options for a quick download.
+
+    With no height and no codec this is yt-dlp's own default selection, with
+    no preferences of VODLoft's. A height or codec only steers yt-dlp's sort,
+    so a video without that exact stream still downloads in the nearest one,
+    unless ``strict_codec`` takes only streams in the codec. ``max_bytes``
+    makes yt-dlp stop a file that turns out larger.
+    """
+    limit = ("--max-filesize", str(max_bytes)) if max_bytes else ()
+    if audio_only:
+        if audio_format == "m4a":
+            return ("-f", "bestaudio[ext=m4a]/bestaudio/best", "-x", "--audio-format", "m4a", *limit)
+        if audio_format != "mp3":
+            raise DownloadError(f"Unsupported audio format '{audio_format}'")
+        options: tuple[str, ...] = ("-f", "bestaudio/best", "-x", "--audio-format", "mp3")
+        quality = ("--audio-quality", f"{audio_bitrate}K") if audio_bitrate else ()
+        return (*options, *quality, *limit)
+    if container not in ("mp4", "mkv"):
+        raise DownloadError(f"Unsupported video container '{container}'")
+    if codec is not None and codec not in QUICK_VIDEO_CODECS:
+        raise DownloadError(f"Unsupported video codec '{codec}'")
+    if strict_codec and codec is None:
+        raise DownloadError("A strict codec needs a codec")
+    sort = [part for part in (f"res:{height}" if height else None, f"vcodec:{codec}" if codec else None) if part]
+    options = ("-S", ",".join(sort)) if sort else ()
+    if strict_codec:
+        only = _CODEC_FILTERS[codec]
+        options = ("-f", f"bv*[{only}]+ba/b[{only}]", *options)
+    return (*options, "--merge-output-format", container, "--remux-video", container, *limit)
+
+
+def resolve_ytdlp_quick_source(
+    url: str,
+    *,
+    command: tuple[str, ...],
+    audio_only: bool,
+    container: str = "mp4",
+    height: int | None = None,
+    codec: str | None = None,
+    audio_format: str = "m4a",
+    audio_bitrate: int | None = None,
+    strict_codec: bool = False,
+    max_bytes: int | None = None,
+    ffmpeg_path: str = "ffmpeg",
+) -> ResolvedDownloadSource:
+    """A quick download in the format chosen for it; see ``ytdlp_quick_options``."""
+    if not command:
+        raise DownloadError("A yt-dlp download needs the yt-dlp command")
+    options = ytdlp_quick_options(
+        audio_only=audio_only, container=container, height=height, codec=codec,
+        audio_format=audio_format, audio_bitrate=audio_bitrate, strict_codec=strict_codec, max_bytes=max_bytes,
+    )
+    if os.sep in ffmpeg_path:
+        options += ("--ffmpeg-location", ffmpeg_path)
+    if audio_only:
+        downloaded = f"audio {audio_format}" + (f" {audio_bitrate} kbps" if audio_format == "mp3" and audio_bitrate else "")
+    else:
+        downloaded = f"up to {height}p" if height else "best"
+    return ResolvedDownloadSource(
+        url=url,
+        format_downloaded=downloaded,
+        use_hls=False,
+        remux_to_mp4=False,
+        extension=audio_format if audio_only else container,
         audio_only=audio_only,
         ytdlp_command=(*command, *options),
     )
@@ -177,6 +267,9 @@ def download_ytdlp(
         if process.wait() != 0:
             raise _error(output)
         if not produced or not Path(produced).is_file():
+            # --max-filesize ends without a file and without an error.
+            if any("larger than max-filesize" in line for line in output):
+                raise FileTooLargeError("The file is larger than the largest file allowed")
             raise DownloadError("yt-dlp finished without producing a file")
         size = Path(produced).stat().st_size
         os.replace(produced, dest_path)

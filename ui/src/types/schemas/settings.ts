@@ -130,6 +130,33 @@ const FileWatcherSettingsSchema = z.object({
     verifyFileSize: z.boolean(),
 })
 
+const QuickDownloadSettingsSchema = z.object({
+    defaultKind: z.enum(['video', 'audio']),
+    defaultQuality: z.enum(['best', '2160p', '1440p', '1080p', '720p', '480p']),
+    defaultContainer: z.enum(['mp4', 'mkv']),
+    defaultCodec: z.enum(['auto', 'h264', 'h265', 'vp9', 'av1']),
+    defaultAudioFormat: z.enum(['m4a', 'mp3']),
+    defaultMp3Bitrate: z.number(),
+    embedMetadata: z.boolean(),
+    embedArtwork: z.boolean(),
+    keepDownloadedMinutes: z.number(),
+    keepUnclaimedHours: z.number(),
+    keepFreeGigabytes: z.number(),
+    keepHistory: z.boolean(),
+    historyRetentionDays: z.number(),
+    maxQuality: z.enum(['best', '2160p', '1440p', '1080p', '720p', '480p']),
+    allowMp4: z.boolean(),
+    allowMkv: z.boolean(),
+    allowM4a: z.boolean(),
+    allowMp3: z.boolean(),
+    fixedCodec: z.enum(['auto', 'h264', 'h265', 'vp9', 'av1']),
+    maxFileGigabytes: z.number(),
+    maxDurationMinutes: z.number(),
+    allowedSources: z.string(),
+    lockToDefaults: z.boolean(),
+})
+export type QuickDownloadSettings = z.infer<typeof QuickDownloadSettingsSchema>
+
 export const SettingsValuesSchema = z.object({
     logLevel: z.enum(['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']),
     timezone: z.string(),
@@ -145,6 +172,7 @@ export const SettingsValuesSchema = z.object({
     downloadSettings: DownloadSettingsSchema,
     youtubeApi: YouTubeApiSettingsSchema,
     fileWatcher: FileWatcherSettingsSchema,
+    quickDownload: QuickDownloadSettingsSchema,
 })
 export type SettingsValues = z.infer<typeof SettingsValuesSchema>
 
@@ -228,6 +256,14 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
     ),
     fileWatcher: FileWatcherSettingsSchema.extend({
         scanCron: cronExpression,
+    }),
+    quickDownload: QuickDownloadSettingsSchema.extend({
+        keepDownloadedMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
+        keepUnclaimedHours: requiredNumber().int().min(1, 'Must be at least 1 hour.'),
+        keepFreeGigabytes: requiredNumber().min(0, 'Must be 0 GB or greater.'),
+        historyRetentionDays: requiredNumber().int().min(1, 'Must be at least 1 day.'),
+        maxFileGigabytes: requiredNumber().min(0, 'Must be 0 GB or greater.'),
+        maxDurationMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
     }),
 })
 
@@ -315,6 +351,29 @@ export const SETTINGS_FIELD_PATHS = [
     'fileWatcher.scanCronEnabled',
     'fileWatcher.scanCron',
     'fileWatcher.verifyFileSize',
+    'quickDownload.defaultKind',
+    'quickDownload.defaultQuality',
+    'quickDownload.defaultContainer',
+    'quickDownload.defaultCodec',
+    'quickDownload.defaultAudioFormat',
+    'quickDownload.defaultMp3Bitrate',
+    'quickDownload.embedMetadata',
+    'quickDownload.embedArtwork',
+    'quickDownload.keepDownloadedMinutes',
+    'quickDownload.keepUnclaimedHours',
+    'quickDownload.keepFreeGigabytes',
+    'quickDownload.keepHistory',
+    'quickDownload.historyRetentionDays',
+    'quickDownload.maxQuality',
+    'quickDownload.allowMp4',
+    'quickDownload.allowMkv',
+    'quickDownload.allowM4a',
+    'quickDownload.allowMp3',
+    'quickDownload.fixedCodec',
+    'quickDownload.maxFileGigabytes',
+    'quickDownload.maxDurationMinutes',
+    'quickDownload.allowedSources',
+    'quickDownload.lockToDefaults',
 ] as const
 
 export const SettingsFieldPathSchema = z.enum(SETTINGS_FIELD_PATHS)

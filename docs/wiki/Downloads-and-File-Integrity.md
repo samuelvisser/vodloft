@@ -4,6 +4,8 @@ The **Downloads** page is the central place to see actual media-file activity in
 
 Each row represents one media item and Local Media Profile combination, so the same episode can appear more than once when you keep multiple formats.
 
+Files from **Quick download** do not appear here, because they never go into the library. See [[Quick-Download]].
+
 ## Download statuses
 
 VODLoft can show downloads as:
@@ -35,9 +37,19 @@ Active or queued work can be cancelled. Cancellation stops the VODLoft download 
 
 Failed, cancelled, missing, or corrupted downloads can be retried where appropriate. Queued items do not show Retry because they have not failed—they can be prioritized instead.
 
+When you **re-download an existing file**, VODLoft keeps the previous version available while it transfers the replacement, completes processing, and publishes the new file. It switches to the finished replacement only after successful publication. A failed or cancelled replacement leaves the previous completed download intact.
+
+For ordinary files with an unchanged destination, the completed replacement is staged beside the original file and then atomically renamed over it. The recorded file path never changes. If VODLoft crashes during publication, the existing startup filesystem recovery verifies file identities and finishes any interrupted replacement without downloading everything again.
+
+When the output destination changes or a local HLS bundle cannot be replaced as one file, VODLoft publishes the new version separately before retiring the old one. Files modified outside VODLoft are never deliberately overwritten. Re-downloads can temporarily require enough disk space for both versions.
+
 ### Download log
 
 Open the download log when you need to understand why a particular item failed or was retried. This is usually more useful than starting with the complete application log because it focuses on that media item.
+
+### Delete a download
+
+Open a download's log and press **Delete** to remove that one download: its record, its history, and the files VODLoft wrote for it (the media, artwork, NFO, subtitles and any unfinished parts). VODLoft asks you to confirm first and stops the download if it is still running. When a file cannot be removed, the record is kept and VODLoft says why, so nothing is left behind on disk without a record. A Download Profile that still covers the episode may download it again. This is separate from the **Delete** buttons on the Downloads page, which only remove records whose file is Absent or Missing and never touch files on disk.
 
 ## Download limits and retries
 

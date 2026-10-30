@@ -493,7 +493,50 @@ class DownloadSettings(SubmodelBase):
     )(_validate_non_empty_path)
 
 
+class QuickDownloadKind(StrEnum):
+    VIDEO = "video"
+    AUDIO = "audio"
+
+
+class QuickDownloadQuality(StrEnum):
+    BEST = "best"
+    P2160 = "2160p"
+    P1440 = "1440p"
+    P1080 = "1080p"
+    P720 = "720p"
+    P480 = "480p"
+
+
+class QuickDownloadContainer(StrEnum):
+    MP4 = "mp4"
+    MKV = "mkv"
+
+
+class QuickDownloadCodec(StrEnum):
+    AUTO = "auto"
+    H264 = "h264"
+    H265 = "h265"
+    VP9 = "vp9"
+    AV1 = "av1"
+
+
+class QuickDownloadAudioFormat(StrEnum):
+    M4A = "m4a"
+    MP3 = "mp3"
+
+
+QUICK_DOWNLOAD_MP3_BITRATES = (320, 192, 128)
+
+
 class QuickDownloadSettings(SubmodelBase):
+    default_kind: QuickDownloadKind = Field(default=QuickDownloadKind.VIDEO, description="Video or audio, as the Quick download page first suggests")
+    default_quality: QuickDownloadQuality = Field(default=QuickDownloadQuality.P1080, description="The video quality the Quick download page recommends")
+    default_container: QuickDownloadContainer = Field(default=QuickDownloadContainer.MP4, description="MP4 or MKV for quick download videos")
+    default_codec: QuickDownloadCodec = Field(default=QuickDownloadCodec.AUTO, description="The video codec quick downloads prefer; auto leaves it to the Source")
+    default_audio_format: QuickDownloadAudioFormat = Field(default=QuickDownloadAudioFormat.M4A, description="M4A or MP3 for quick download audio")
+    default_mp3_bitrate: int = Field(default=192, description="MP3 bitrate in kbps: 320, 192 or 128")
+    embed_metadata: bool = Field(default=True, description="Embed title, show or channel and date in quick download files")
+    embed_artwork: bool = Field(default=True, description="Embed cover art in quick download files")
     keep_downloaded_minutes: int = Field(
         default=10,
         ge=0,
@@ -509,6 +552,35 @@ class QuickDownloadSettings(SubmodelBase):
         ge=0,
         description="Space to keep free in the temporary folder; a quick download that would leave less does not start",
     )
+
+    keep_history: bool = Field(default=True, description="Remember finished quick downloads in a history list")
+    history_retention_days: int = Field(default=90, ge=1, description="Days a quick download stays in the history")
+    max_quality: QuickDownloadQuality = Field(
+        default=QuickDownloadQuality.BEST,
+        description="Rule: the highest video quality anyone may choose; best is no limit. For yt-dlp, Best is held to it",
+    )
+    allow_mp4: bool = Field(default=True, description="Rule: MP4 video may be chosen")
+    allow_mkv: bool = Field(default=True, description="Rule: MKV video may be chosen")
+    allow_m4a: bool = Field(default=True, description="Rule: M4A audio may be chosen")
+    allow_mp3: bool = Field(default=True, description="Rule: MP3 audio may be chosen")
+    fixed_codec: QuickDownloadCodec = Field(
+        default=QuickDownloadCodec.AUTO,
+        description="Rule: only video in this codec, for Sources that list their codecs; auto is no rule",
+    )
+    max_file_gigabytes: float = Field(default=0, ge=0, description="Rule: the largest file allowed; 0 is no limit")
+    max_duration_minutes: int = Field(default=0, ge=0, description="Rule: the longest video allowed; 0 is no limit")
+    allowed_sources: str = Field(
+        default="",
+        description="Rule: comma-separated ids of the Sources quick download may use; empty allows all",
+    )
+    lock_to_defaults: bool = Field(default=False, description="Rule: every quick download uses the defaults")
+
+    @field_validator("default_mp3_bitrate")
+    @classmethod
+    def _known_mp3_bitrate(cls, value: int) -> int:
+        if value not in QUICK_DOWNLOAD_MP3_BITRATES:
+            raise ValueError("MP3 bitrate must be 320, 192 or 128 kbps")
+        return value
 
 
 class FileWatcherSettings(SubmodelBase):

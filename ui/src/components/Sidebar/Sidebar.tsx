@@ -8,6 +8,7 @@ import {faIcon} from '../../icons/faIcon'
 const items: NavItem[] = [
     {path: '/', label: 'Home', icon: faIcon('fass', 'house'), end: true},
     {path: '/library', label: 'Library', icon: faIcon('fass', 'books')},
+    {path: '/quick-download', label: 'Quick download', icon: faIcon('fass', 'bolt')},
     {path: '/downloads', label: 'Downloads', icon: faIcon('fass', 'circle-down')},
     {
         label: 'Profiles',

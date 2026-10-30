@@ -24,6 +24,12 @@ from config.settings.submodels import (
     DownloadMode,
     FilenameRestrictionMode,
     MetadataMode,
+    QUICK_DOWNLOAD_MP3_BITRATES,
+    QuickDownloadAudioFormat,
+    QuickDownloadCodec,
+    QuickDownloadContainer,
+    QuickDownloadKind,
+    QuickDownloadQuality,
     ShowArtworkFallbackFormat,
     ThumbnailMode,
     normalize_metadata_refresh_intervals,
@@ -96,6 +102,29 @@ SettingFieldPath = Literal[
     "fileWatcher.scanCronEnabled",
     "fileWatcher.scanCron",
     "fileWatcher.verifyFileSize",
+    "quickDownload.defaultKind",
+    "quickDownload.defaultQuality",
+    "quickDownload.defaultContainer",
+    "quickDownload.defaultCodec",
+    "quickDownload.defaultAudioFormat",
+    "quickDownload.defaultMp3Bitrate",
+    "quickDownload.embedMetadata",
+    "quickDownload.embedArtwork",
+    "quickDownload.keepDownloadedMinutes",
+    "quickDownload.keepUnclaimedHours",
+    "quickDownload.keepFreeGigabytes",
+    "quickDownload.keepHistory",
+    "quickDownload.historyRetentionDays",
+    "quickDownload.maxQuality",
+    "quickDownload.allowMp4",
+    "quickDownload.allowMkv",
+    "quickDownload.allowM4a",
+    "quickDownload.allowMp3",
+    "quickDownload.fixedCodec",
+    "quickDownload.maxFileGigabytes",
+    "quickDownload.maxDurationMinutes",
+    "quickDownload.allowedSources",
+    "quickDownload.lockToDefaults",
 ]
 
 UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
@@ -163,6 +192,29 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "fileWatcher.scanCronEnabled",
     "fileWatcher.scanCron",
     "fileWatcher.verifyFileSize",
+    "quickDownload.defaultKind",
+    "quickDownload.defaultQuality",
+    "quickDownload.defaultContainer",
+    "quickDownload.defaultCodec",
+    "quickDownload.defaultAudioFormat",
+    "quickDownload.defaultMp3Bitrate",
+    "quickDownload.embedMetadata",
+    "quickDownload.embedArtwork",
+    "quickDownload.keepDownloadedMinutes",
+    "quickDownload.keepUnclaimedHours",
+    "quickDownload.keepFreeGigabytes",
+    "quickDownload.keepHistory",
+    "quickDownload.historyRetentionDays",
+    "quickDownload.maxQuality",
+    "quickDownload.allowMp4",
+    "quickDownload.allowMkv",
+    "quickDownload.allowM4a",
+    "quickDownload.allowMp3",
+    "quickDownload.fixedCodec",
+    "quickDownload.maxFileGigabytes",
+    "quickDownload.maxDurationMinutes",
+    "quickDownload.allowedSources",
+    "quickDownload.lockToDefaults",
 )
 
 
@@ -340,6 +392,40 @@ class FileWatcherSettingsValue(_SettingsValueModel):
 
 
 
+class QuickDownloadSettingsValue(_SettingsValueModel):
+    default_kind: QuickDownloadKind
+    default_quality: QuickDownloadQuality
+    default_container: QuickDownloadContainer
+    default_codec: QuickDownloadCodec
+    default_audio_format: QuickDownloadAudioFormat
+    default_mp3_bitrate: int
+    embed_metadata: bool
+    embed_artwork: bool
+    keep_downloaded_minutes: int = Field(ge=0)
+    keep_unclaimed_hours: int = Field(ge=1)
+    keep_free_gigabytes: float = Field(ge=0)
+    keep_history: bool
+    history_retention_days: int = Field(ge=1)
+    max_quality: QuickDownloadQuality
+    allow_mp4: bool
+    allow_mkv: bool
+    # to_camel would give allowM4A, which reads oddly next to allowMp4 and allowMp3.
+    allow_m4a: bool = Field(alias="allowM4a")
+    allow_mp3: bool
+    fixed_codec: QuickDownloadCodec
+    max_file_gigabytes: float = Field(ge=0)
+    max_duration_minutes: int = Field(ge=0)
+    allowed_sources: str
+    lock_to_defaults: bool
+
+    @field_validator("default_mp3_bitrate")
+    @classmethod
+    def _known_mp3_bitrate(cls, value: int) -> int:
+        if value not in QUICK_DOWNLOAD_MP3_BITRATES:
+            raise ValueError("Choose 320, 192 or 128 kbps")
+        return value
+
+
 class SettingsValues(_SettingsValueModel):
     """Every application setting intentionally exposed by the Settings UI.
 
@@ -362,6 +448,7 @@ class SettingsValues(_SettingsValueModel):
     download_settings: DownloadSettingsValue
     youtube_api: YouTubeApiSettingsValue
     file_watcher: FileWatcherSettingsValue
+    quick_download: QuickDownloadSettingsValue
 
     @field_validator("log_level", mode="before")
     @classmethod
@@ -404,6 +491,7 @@ class SettingsValues(_SettingsValueModel):
             download_settings=DownloadSettingsValue.model_validate(settings.download_settings),
             youtube_api=YouTubeApiSettingsValue.model_validate(settings.youtube_api),
             file_watcher=FileWatcherSettingsValue.model_validate(settings.file_watcher),
+            quick_download=QuickDownloadSettingsValue.model_validate(settings.quick_download),
         )
 
     def to_config_document(self) -> dict[str, Any]:

@@ -45,7 +45,7 @@ async def quick_check_new_videos(*, resource_id: int | None = None, progress=Non
     cron=get_settings().new_episode_schedule.full_rescan_cron,
     enabled=get_settings().new_episode_schedule.full_rescan_cron_enabled,
     resource_type="show",
-    resource_id=0,
+    resource_id=None,
     coalesce=True,
 )
 @task(

@@ -13,6 +13,7 @@ from .onboarding import onboarding_router
 from .operations import operation_router
 from .sources import source_router
 from .puller import puller_router
+from .quick_downloads import quick_download_router
 from .settings import setting_router
 from .shows import show_router
 from .config import config_router

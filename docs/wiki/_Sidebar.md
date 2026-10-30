@@ -12,6 +12,7 @@
 - [[Local-Media-Profiles]]
 - [[Download-Profiles]]
 - [[Downloads-and-File-Integrity]]
+- [[Quick-Download]]
 - [[Podcast-RSS-Feeds]]
 
 **How VODLoft stays current**

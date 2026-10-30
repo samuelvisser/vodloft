@@ -112,6 +112,10 @@ Temporary mode is useful when a media server watches the destination and should 
 
 ---
 
+## Quick download
+
+These settings are under **Settings → Quick download**: the defaults the page suggests, how long files wait in the temporary folder, the history, and optional rules. See [[Quick-Download#settings]] for the full list.
+
 ## File watcher
 
 | Setting | Environment variable | Default | What it does |

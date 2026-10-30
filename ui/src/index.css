@@ -1175,6 +1175,9 @@ th[aria-sort="descending"] .th-sort-icon { opacity: 1; }
 .log-dialog-actions {
   flex: 0 0 auto;
 }
+.log-dialog-delete {
+  margin-right: auto;
+}
 .log-attempt {
   border: 1px solid #e2e8f0;
   border-radius: 8px;
@@ -2122,3 +2125,19 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 @media (prefers-color-scheme: dark) {
   .search-notice--warning .search-notice__badge { background: rgba(253,186,116,.16); color: #fdba74; }
 }
+
+/* A notification that offers one action, such as downloading a ready file. */
+.toast-with-action { display: flex; align-items: center; gap: 12px; }
+.toast-with-action .btn { flex: none; padding: 6px 10px; }
+.toast-close {
+    flex: none;
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: inherit;
+    opacity: 0.6;
+    padding: 6px;
+    margin-right: -6px;
+    cursor: pointer;
+}
+.toast-close:hover, .toast-close:focus-visible { opacity: 1; }

@@ -47,18 +47,21 @@ def _seed_local_media_profiles(session: Session) -> None:
         ShowLocalMediaProfile(
             slug="vodloft-shows-video",
             name="VODLoft Shows (Video)",
+            subtitle_mode="sidecar",
             output_template=_SHOW_VIDEO_TEMPLATE,
             preferred_format="format_1080p",
         ),
         ShowLocalMediaProfile(
             slug="vodloft-shows-audio",
             name="VODLoft Shows (Audio)",
+            subtitle_mode="sidecar",
             output_template=_SHOW_AUDIO_TEMPLATE,
             preferred_format="format_audio_only",
         ),
         MovieLocalMediaProfile(
             slug="vodloft-movies",
             name="VODLoft Movies",
+            subtitle_mode="sidecar",
             output_template=_MOVIE_TEMPLATE,
             preferred_format="format_1080p",
         ),
