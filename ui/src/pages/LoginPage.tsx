@@ -1,4 +1,7 @@
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { faIcon } from '../icons/faIcon'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { buildServerAwareSubmit } from '../utils/buildServerAwareSubmit'
@@ -14,6 +17,7 @@ type LoginValues = z.input<typeof LoginSchema>
 
 export default function LoginPage() {
   const accountsEnabled = Boolean(getPublicConfig()?.userAccounts?.enabled)
+  const [showPassword, setShowPassword] = useState(false)
   const form = useForm<LoginValues>({
     resolver: zodResolver(LoginSchema),
     defaultValues: LoginSchema.partial().parse({}),
@@ -92,15 +96,30 @@ export default function LoginPage() {
               </>
             )}
             <label htmlFor="password" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13 }}>Password</label>
-            <input
-              id="password"
-              type="password"
-              autoFocus={!accountsEnabled}
-              autoComplete="current-password"
-              {...register('password')}
-              placeholder="Enter password"
-              style={inputStyle(Boolean(errors.password))}
-            />
+            <div style={{ position: 'relative', display: 'grid' }}>
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                autoFocus={!accountsEnabled}
+                autoComplete="current-password"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                {...register('password')}
+                placeholder="Enter password"
+                style={{ ...inputStyle(Boolean(errors.password)), paddingRight: 48 }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((shown) => !shown)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-pressed={showPassword}
+                title={showPassword ? 'Hide password' : 'Show password'}
+                style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', width: 40, height: 36, display: 'grid', placeItems: 'center', background: 'transparent', border: 'none', borderRadius: 8, color: 'rgba(255,255,255,0.7)', cursor: 'pointer' }}
+              >
+                <FontAwesomeIcon icon={showPassword ? faIcon('fass', 'eye-slash') : faIcon('fass', 'eye')} />
+              </button>
+            </div>
             {errors.password && (
               <div role="alert" style={{ color: '#ffb3b3', fontSize: 12 }}>{errors.password.message?.toString()}</div>
             )}
