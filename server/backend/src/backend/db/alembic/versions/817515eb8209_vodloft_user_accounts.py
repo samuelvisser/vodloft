@@ -1,12 +1,14 @@
-"""Add optional user accounts.
+"""VODLoft 0.5.0: optional user accounts.
 
-Revision ID: 6719db3d610f
+Revision ID: 817515eb8209
 Revises: e6a2c9d4f817
 Create Date: 2026-11-01
 
 Users, their level per area of VODLoft, the Sources a limited user may use,
-and the switch that turns accounts on. Accounts start off, so an existing
-install keeps working exactly as before.
+and the switch that turns accounts on. Operations remember who asked for
+them, Stream Profiles belong to a user, and shows, movies and videos
+remember who added them. Accounts start off, so an existing install keeps
+working exactly as before.
 """
 from __future__ import annotations
 
@@ -14,7 +16,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "6719db3d610f"
+revision = "817515eb8209"
 down_revision = "e6a2c9d4f817"
 branch_labels = None
 depends_on = None
@@ -98,8 +100,60 @@ def upgrade() -> None:
             comment="Everyone signs in with their own account instead of the one shared password",
         ))
 
+    # Operations: who asked.
+    with op.batch_alter_table("task_operations") as batch:
+        batch.add_column(sa.Column(
+            "requested_by_user_id", sa.Integer(), nullable=True,
+            comment="The user whose request created this operation; null for VODLoft's own work or without user accounts",
+        ))
+        batch.create_index(batch.f("ix_task_operations_requested_by_user_id"), ["requested_by_user_id"], unique=False)
+        batch.create_foreign_key(
+            batch.f("fk_task_operations_requested_by_user_id_users"), "users",
+            ["requested_by_user_id"], ["id"], ondelete="SET NULL",
+        )
+
+    # Ownership: Stream Profile owners, and who added shows, movies and videos.
+    with op.batch_alter_table("media_items_movie") as batch:
+        batch.add_column(sa.Column("created_by_user_id", sa.Integer(), nullable=True, comment="The user who added it; empty without user accounts"))
+        batch.create_foreign_key(batch.f("fk_media_items_movie_created_by_user_id_users"), "users", ["created_by_user_id"], ["id"], ondelete="SET NULL")
+
+    with op.batch_alter_table("media_items_video") as batch:
+        batch.add_column(sa.Column("created_by_user_id", sa.Integer(), nullable=True, comment="The user who added it; empty without user accounts"))
+        batch.create_foreign_key(batch.f("fk_media_items_video_created_by_user_id_users"), "users", ["created_by_user_id"], ["id"], ondelete="SET NULL")
+
+    with op.batch_alter_table("shows") as batch:
+        batch.add_column(sa.Column("created_by_user_id", sa.Integer(), nullable=True, comment="The user who added it; empty without user accounts"))
+        batch.create_foreign_key(batch.f("fk_shows_created_by_user_id_users"), "users", ["created_by_user_id"], ["id"], ondelete="SET NULL")
+
+    with op.batch_alter_table("stream_profiles") as batch:
+        batch.add_column(sa.Column("owner_user_id", sa.Integer(), nullable=True, comment="The user whose feed this is; only they and those who manage every Stream Profile see it"))
+        batch.create_index(batch.f("ix_stream_profiles_owner_user_id"), ["owner_user_id"], unique=False)
+        batch.create_foreign_key(batch.f("fk_stream_profiles_owner_user_id_users"), "users", ["owner_user_id"], ["id"], ondelete="SET NULL")
+
 
 def downgrade() -> None:
+    with op.batch_alter_table("stream_profiles") as batch:
+        batch.drop_constraint(batch.f("fk_stream_profiles_owner_user_id_users"), type_="foreignkey")
+        batch.drop_index(batch.f("ix_stream_profiles_owner_user_id"))
+        batch.drop_column("owner_user_id")
+
+    with op.batch_alter_table("shows") as batch:
+        batch.drop_constraint(batch.f("fk_shows_created_by_user_id_users"), type_="foreignkey")
+        batch.drop_column("created_by_user_id")
+
+    with op.batch_alter_table("media_items_video") as batch:
+        batch.drop_constraint(batch.f("fk_media_items_video_created_by_user_id_users"), type_="foreignkey")
+        batch.drop_column("created_by_user_id")
+
+    with op.batch_alter_table("media_items_movie") as batch:
+        batch.drop_constraint(batch.f("fk_media_items_movie_created_by_user_id_users"), type_="foreignkey")
+        batch.drop_column("created_by_user_id")
+
+    with op.batch_alter_table("task_operations") as batch:
+        batch.drop_constraint(batch.f("fk_task_operations_requested_by_user_id_users"), type_="foreignkey")
+        batch.drop_index(batch.f("ix_task_operations_requested_by_user_id"))
+        batch.drop_column("requested_by_user_id")
+
     with op.batch_alter_table("settings") as batch:
         batch.drop_column("user_accounts_enabled")
     op.drop_table("user_source_access")
