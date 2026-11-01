@@ -13,9 +13,14 @@ export const _PublicAdminAuthSchema = z.object({
     enabled: z.boolean(),
 })
 
+export const _PublicUserAccountsSchema = z.object({
+    enabled: z.boolean(),
+})
+
 export const ConfigPublicSchema = z.object({
     appVersion: z.string(),
     loginSession: _PublicSessionConfigSchema,
     adminAuth: _PublicAdminAuthSchema,
+    userAccounts: _PublicUserAccountsSchema,
 })
 export type ConfigPublic = z.infer<typeof ConfigPublicSchema>

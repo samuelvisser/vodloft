@@ -7,6 +7,7 @@ import threading
 from contextlib import asynccontextmanager, contextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -18,12 +19,21 @@ from backend.api.errors import integrity_error_handler, source_request_error_han
 from backend.services.source_requests import SourceRequestError
 from backend.utils.custom_index import CustomIndexNotReadyError
 from backend.db import get_session
-from backend.security.auth import is_authenticated
+from backend.security.auth import resolve_access
+from backend.services.users import UserError
 from config import get_settings
 from config.network import NO_INTERNET_CONNECTION_MESSAGE, is_no_internet_error
 
 
 logger = logging.getLogger(__name__)
+
+# API paths anyone may call, signed in or not.
+PUBLIC_API_PATHS = frozenset({
+    "/api/auth/status",
+    "/api/auth/login",
+    "/api/auth/logout",
+    "/api/config/public",
+})
 
 
 @contextmanager
@@ -172,7 +182,18 @@ def create_app() -> FastAPI:
                 session.commit()
         return JSONResponse({"detail": str(error)}, status_code=409)
 
-    # Auth middleware to protect all API endpoints except /api/auth/*
+    @app.exception_handler(UserError)
+    async def _user_error(_request: Request, error: UserError):
+        if error.field is None:
+            return JSONResponse({"detail": str(error)}, status_code=error.status_code)
+        return JSONResponse(
+            {"detail": [{"loc": ["body", error.field], "msg": str(error), "type": "value_error"}]},
+            status_code=error.status_code,
+        )
+
+    # Auth middleware: every /api/* call needs someone signed in, except signing
+    # in itself and the public config the login page reads. Who it is, and what
+    # they may do, travels on request.state.access to the routes' requires(...).
     @app.middleware("http")
     async def _auth_guard(request: Request, call_next):
         try:
@@ -181,13 +202,13 @@ def create_app() -> FastAPI:
                 return await call_next(request)
 
             path = request.url.path
-            # Protect all /api/* except public auth endpoints
-            is_api = path.startswith("/api/")
-            is_public_auth = path.startswith("/api/auth")
-            is_public_config = path == "/api/config/public"
-            if is_api and not (is_public_auth or is_public_config):
-                if not is_authenticated(request):
+            if path.startswith("/api/") and path not in PUBLIC_API_PATHS:
+                access = await run_in_threadpool(resolve_access, request)
+                if access is None:
                     return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+                if access.must_change_password and not path.startswith("/api/auth/"):
+                    return JSONResponse({"detail": "Choose a new password first."}, status_code=403)
+                request.state.access = access
             return await call_next(request)
         except Exception as exc:
             # External HTTP clients use several libraries. Normalize only strong
@@ -229,10 +250,11 @@ def create_app() -> FastAPI:
         feeds_router,
         custom_metadata_router,
         logs_router,
+        user_router,
     )
     from backend.api.endpoints.auth.router import router as auth_router
 
-    # Public auth endpoints
+    # Signing in, and who is signed in
     app.include_router(auth_router, prefix="/api")
 
     # Keep podcast feed endpoints outside of /api to prevent authentication
@@ -264,5 +286,6 @@ def create_app() -> FastAPI:
     app.include_router(stream_profile_router, prefix="/api")
     app.include_router(task_router, prefix="/api")
     app.include_router(logs_router, prefix="/api")
+    app.include_router(user_router, prefix="/api")
 
     return app

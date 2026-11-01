@@ -98,6 +98,21 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         command_parser = background_subparsers.add_parser(command_name, help=help_text)
         command_parser.add_argument("--db", dest="db", help="Path to SQLite database file")
 
+    users_parser = subparsers.add_parser("users", help="User account recovery")
+    users_parser.add_argument("--db", dest="db", help="Path to SQLite database file")
+    users_subparsers = users_parser.add_subparsers(dest="users_command", required=True, help="User operation")
+    users_subparsers.add_parser("list", help="List user accounts")
+    reset_parser = users_subparsers.add_parser(
+        "reset-password",
+        help="Set a new password for a user, enable them and sign them out everywhere",
+    )
+    reset_parser.add_argument("username", help="The user's username")
+    reset_parser.add_argument(
+        "--administrator",
+        action="store_true",
+        help="Also make the user an administrator, to recover from a lockout",
+    )
+
     subparsers.add_parser("stop", help="Stop all running backend-api processes")
     return parser.parse_args(argv)
 
@@ -315,6 +330,53 @@ def _handle_background_migration_command(args: argparse.Namespace) -> None:
     )
 
 
+def _handle_users_command(args: argparse.Namespace) -> None:
+    from getpass import getpass
+
+    from backend.db import get_session
+    from backend.security.access import TEMPLATES, ADMINISTRATOR_TEMPLATE
+    from backend.services import users
+    from config.security.passwords import derive_admin_password_client_value
+
+    _configure_database_for_args(args)
+    require_database_current()
+
+    with get_session() as session:
+        if args.users_command == "list":
+            listed = users.list_users(session)
+            if not listed:
+                print("No user accounts.")
+            for user in listed:
+                role = "administrator" if users.is_administrator(user) else (user.template_key or "custom")
+                state = "enabled" if user.is_enabled else "disabled"
+                print(f"{user.username}  ({role}, {state})")
+            print(f"User accounts are {'on' if users.accounts_enabled(session) else 'off'}.")
+            return
+
+        if args.users_command == "reset-password":
+            user = users.find_user(session, args.username)
+            if user is None:
+                print(f"No user named {args.username!r}.", file=sys.stderr)
+                sys.exit(1)
+            password = getpass("New password: ")
+            if len(password) < 7:
+                print("Use at least 7 characters.", file=sys.stderr)
+                sys.exit(1)
+            if getpass("Again: ") != password:
+                print("The passwords differ.", file=sys.stderr)
+                sys.exit(1)
+            users.reset_password(user, derive_admin_password_client_value(password), must_change=False)
+            if args.administrator:
+                users.update_user(session, user, access=users.AccessList.from_template(ADMINISTRATOR_TEMPLATE))
+            users.update_user(session, user, enabled=True)
+            session.commit()
+            role = TEMPLATES[ADMINISTRATOR_TEMPLATE].name.lower() if users.is_administrator(user) else "user"
+            print(f"{user.username} ({role}) can sign in with the new password. Their other sessions are signed out.")
+            return
+
+    raise RuntimeError(f"Unsupported users command: {args.users_command}")
+
+
 def main(argv: Optional[list[str]] = None) -> None:
     args = _parse_args(argv)
 
@@ -325,6 +387,10 @@ def main(argv: Optional[list[str]] = None) -> None:
     try:
         if args.command == "db":
             _handle_db_command(args)
+            return
+
+        if args.command == "users":
+            _handle_users_command(args)
             return
 
         if args.command in {"background-migrations", "migrate"}:

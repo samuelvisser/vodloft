@@ -21,7 +21,8 @@ export default function Footer({ wrapperClass }: FooterProps) {
     }
   }
 
-  const adminAuthEnabled = Boolean((window as any).publicConfig?.adminAuth?.enabled)
+  const publicConfig = (window as any).publicConfig
+  const signInRequired = Boolean(publicConfig?.adminAuth?.enabled || publicConfig?.userAccounts?.enabled)
 
   return (
     <footer className={wrapperClass} aria-label="Footer">
@@ -37,7 +38,7 @@ export default function Footer({ wrapperClass }: FooterProps) {
           </span>
           <span>GitHub</span>
         </a>
-        {adminAuthEnabled && (
+        {signInRequired && (
           <button
             type="button"
             className="footer-link"

@@ -13,7 +13,12 @@ class PublicAdminAuth(ResponseBase):
     enabled: bool = Field(description="Whether admin auth is enabled (derived from presence of a configured password hash)")
 
 
+class PublicUserAccounts(ResponseBase):
+    enabled: bool = Field(description="Whether everyone signs in with their own username and password")
+
+
 class ConfigPublicRead(ResponseBase):
     app_version: str
     login_session: PublicSessionConfig
     admin_auth: PublicAdminAuth
+    user_accounts: PublicUserAccounts

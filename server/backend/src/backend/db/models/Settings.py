@@ -18,6 +18,13 @@ class Settings(Base):
         server_default=false(),
         nullable=False,
     )
+    user_accounts_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default=false(),
+        nullable=False,
+        comment="Everyone signs in with their own account instead of the one shared password",
+    )
     alembic_version_num: Mapped[Optional[str]] = mapped_column(
         String(32),
         nullable=True,
