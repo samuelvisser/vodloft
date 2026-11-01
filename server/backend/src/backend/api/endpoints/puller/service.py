@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from config import get_settings
 
+from backend.security.access import Access
+
 from backend.api.endpoints.operations.service import list_operations
 from backend.api.models.puller import FrontendPullAPIRead, FrontendPullData
 from task_manager.scheduler.types import OperationStatus
@@ -14,9 +16,9 @@ _ACTIVE_OPERATION_STATUSES = {
 }
 
 
-def get_frontend_pull() -> FrontendPullAPIRead:
+def get_frontend_pull(access: Access) -> FrontendPullAPIRead:
     """Return the frontend's generic changing-execution snapshot."""
-    operations = list_operations(relevant=True, limit=500)
+    operations = list_operations(access, relevant=True, limit=500)
     has_active_operation = any(
         operation.status in _ACTIVE_OPERATION_STATUSES
         for operation in operations

@@ -34,6 +34,8 @@ from .output_template import (
     _EXAMPLE_VIDEO_VALUES,
     get_output_template_preview,
 )
+from backend.security.access import Area, Level
+from backend.security.deps import requires_any
 
 router = APIRouter()
 
@@ -183,7 +185,7 @@ def get_local_media_profile_preview(
     return result
 
 
-@router.post("/preview", response_model=LocalMediaProfilePreviewResult)
+@router.post("/preview", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=LocalMediaProfilePreviewResult)
 def local_media_profile_preview(body: LocalMediaProfilePreviewRequest):
     """Preview an entire unsaved Local Media Profile without modifying the library."""
     with db_session() as session:
@@ -191,7 +193,7 @@ def local_media_profile_preview(body: LocalMediaProfilePreviewRequest):
             return get_local_media_profile_preview(session, body)
 
 
-@router.post("/preview/plan", response_model=LocalMediaProfilePreviewPlan)
+@router.post("/preview/plan", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=LocalMediaProfilePreviewPlan)
 def local_media_profile_preview_plan(body: LocalMediaProfilePreviewRequest):
     """Plan a preview without running historical Custom Index simulation."""
     with db_session() as session:

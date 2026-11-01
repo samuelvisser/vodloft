@@ -3,10 +3,12 @@ from fastapi import APIRouter, status
 from .service import *
 from ...models.season import *
 from backend.app import db_session
+from backend.security.access import Area, Level
+from backend.security.deps import requires
 
 router = APIRouter(prefix="/shows/{show_slug}/seasons", tags=["Seasons"])
 
-@router.get("", response_model=list[SeasonAPIRead])
+@router.get("", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[SeasonAPIRead])
 def season_list(show_slug: str):
     """
     List all seasons for a specific show.
@@ -17,7 +19,7 @@ def season_list(show_slug: str):
         return get_seasons_list(s, show_slug)
 
 
-@router.post("", response_model=SeasonAPIRead, status_code=status.HTTP_201_CREATED)
+@router.post("", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=SeasonAPIRead, status_code=status.HTTP_201_CREATED)
 def season_create(body: SeasonAPICreate):
     """
     Create a new season for a show.
@@ -35,7 +37,7 @@ def season_create(body: SeasonAPICreate):
             raise
 
 
-@router.get("/{season_slug}", response_model=SeasonAPIRead)
+@router.get("/{season_slug}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=SeasonAPIRead)
 def season_detail(show_slug: str, season_slug: str):
     """
     Retrieve detailed information for a specific season.
@@ -46,7 +48,7 @@ def season_detail(show_slug: str, season_slug: str):
         return get_season(s, show_slug, season_slug)
 
 
-@router.patch("/{season_slug}", response_model=SeasonAPIRead)
+@router.patch("/{season_slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=SeasonAPIRead)
 def season_update(show_slug: str, season_slug: str, body: SeasonAPIUpdate):
     """
     Update an existing season's metadata.
@@ -64,7 +66,7 @@ def season_update(show_slug: str, season_slug: str, body: SeasonAPIUpdate):
             raise
 
 
-@router.delete("/{season_slug}", response_model=SeasonAPIRead)
+@router.delete("/{season_slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=SeasonAPIRead)
 def season_delete(show_slug: str, season_slug: str):
     """
     Delete a season from the system.

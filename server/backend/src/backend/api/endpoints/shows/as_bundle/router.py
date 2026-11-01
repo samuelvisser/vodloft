@@ -4,11 +4,13 @@ from .service import *
 from ....models.show import ShowAPIRead
 from ....models.show_as_bundle import ShowAPICreateBundle
 from backend.app import db_session
+from backend.security.access import Area, Level
+from backend.security.deps import requires
 
 router = APIRouter(prefix = "/as-bundle")
 
 
-@router.post("", response_model=ShowAPIRead, status_code=status.HTTP_201_CREATED)
+@router.post("", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=ShowAPIRead, status_code=status.HTTP_201_CREATED)
 def show_create_as_bundle(body: ShowAPICreateBundle, request: Request):
     """
     Create a new show, optionally with media, download, and stream profiles in a single operation.

@@ -17,6 +17,7 @@ from backend.security.login_throttle import login_throttle
 from backend.services import users
 
 from .service import describe_access
+from backend.security.deps import signed_in
 
 router = APIRouter(tags=["auth"], prefix="/auth")
 
@@ -88,7 +89,7 @@ async def logout(response: Response) -> None:
     return
 
 
-@router.get("/me", response_model=AuthMeRead)
+@router.get("/me", dependencies=[signed_in()], response_model=AuthMeRead)
 def auth_me(request: Request) -> AuthMeRead:
     """Who is signed in, and what they may see and change."""
     access = request_access(request)
@@ -96,7 +97,7 @@ def auth_me(request: Request) -> AuthMeRead:
         return describe_access(s, access)
 
 
-@router.post("/password", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/password", dependencies=[signed_in()], status_code=status.HTTP_204_NO_CONTENT)
 def change_password(body: PasswordChangeInput, request: Request, response: Response) -> None:
     """Choose a new password for the signed-in account. Other sessions are signed out."""
     access = request_access(request)

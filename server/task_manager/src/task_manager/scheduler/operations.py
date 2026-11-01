@@ -25,6 +25,7 @@ from task_manager.scheduler.operation_control import (
     run_cancel_requested,
 )
 from task_manager.scheduler.registry import task_tracks_progress
+from task_manager.scheduler.requester import current_requester
 from task_manager.scheduler.transactional import queue_task_after_commit
 from task_manager.scheduler.types import (
     OperationDependencyCancelPolicy,
@@ -193,6 +194,7 @@ class OperationSnapshot:
     finished_at: datetime | None
     created_at: datetime | None
     updated_at: datetime | None
+    requested_by_user_id: int | None = None
 
 
 def create_operation(
@@ -219,6 +221,7 @@ def create_operation(
         progress=0,
         completion_progress=0,
         context=dict(context or {}),
+        requested_by_user_id=current_requester.get(),
     )
     session.add(operation)
     session.flush()
@@ -1019,10 +1022,14 @@ def list_operations(
         kind: str | None = None,
         relevant: bool = False,
         limit: int = 100,
+        requested_by_user_id: int | None = None,
 ) -> list[OperationSnapshot]:
+    """Operations, newest first. With ``requested_by_user_id``, only those that user asked for."""
     session = get_session()
     try:
         statement = select(TaskOperation).options(*_operation_run_graph())
+        if requested_by_user_id is not None:
+            statement = statement.where(TaskOperation.requested_by_user_id == requested_by_user_id)
         if source is not None:
             statement = statement.where(TaskOperation.source == source)
         if resource_type is not None:
@@ -1129,6 +1136,7 @@ def _operation_snapshot(operation: TaskOperation) -> OperationSnapshot:
         status=operation.status,
         progress=operation.progress,
         completion_progress=operation.completion_progress,
+        requested_by_user_id=operation.requested_by_user_id,
         progress_current=terminal_count,
         progress_total=len(targets) + len(dependencies),
         message=operation.message,

@@ -3,11 +3,13 @@ from fastapi import APIRouter, status
 from .service import *
 from ....models.show import *
 from backend.app import db_session
+from backend.security.access import Area, Level
+from backend.security.deps import requires
 
 router = APIRouter(prefix = "/as-view")
 
 
-@router.get("", response_model=list[ShowAPIReadView])
+@router.get("", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[ShowAPIReadView])
 def show_view_list():
     """
     List all shows with extended view information.
@@ -19,7 +21,7 @@ def show_view_list():
         return get_show_views_list(s)
 
 
-@router.get("/{show_slug}", response_model=ShowAPIReadView)
+@router.get("/{show_slug}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=ShowAPIReadView)
 def show_view_detail(show_slug: str):
     """
     Retrieve extended view information for a specific show.

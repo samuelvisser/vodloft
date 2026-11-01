@@ -21,6 +21,7 @@ from backend.utils.custom_index import CustomIndexNotReadyError
 from backend.db import get_session
 from backend.security.auth import resolve_access
 from backend.services.users import UserError
+from task_manager.scheduler.requester import current_requester
 from config import get_settings
 from config.network import NO_INTERNET_CONNECTION_MESSAGE, is_no_internet_error
 
@@ -209,6 +210,8 @@ def create_app() -> FastAPI:
                 if access.must_change_password and not path.startswith("/api/auth/"):
                     return JSONResponse({"detail": "Choose a new password first."}, status_code=403)
                 request.state.access = access
+                # Operations created while handling this request remember who asked.
+                current_requester.set(access.user_id)
             return await call_next(request)
         except Exception as exc:
             # External HTTP clients use several libraries. Normalize only strong

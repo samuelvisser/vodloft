@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Integer, JSON, String, Text, func
+from sqlalchemy import ForeignKey, Integer, JSON, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
@@ -40,6 +40,12 @@ class TaskOperation(Base):
     result: Mapped[Optional[dict]] = mapped_column(JSON)
     context: Mapped[Optional[dict]] = mapped_column(JSON)
     error: Mapped[Optional[str]] = mapped_column(Text)
+
+    requested_by_user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        index=True,
+        comment="The user whose request created this operation; null for VODLoft's own work or without user accounts",
+    )
 
     notification_seen_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), index=True)
     prioritized_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), index=True)

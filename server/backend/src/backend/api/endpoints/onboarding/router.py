@@ -4,12 +4,14 @@ from backend.api.models.onboarding import OnboardingStatusAPIRead
 from backend.app import db_session
 
 from .service import complete_onboarding, get_onboarding_status
+from backend.security.access import Area, Level
+from backend.security.deps import requires, signed_in
 
 
 router = APIRouter(prefix="/onboarding", tags=["Onboarding"])
 
 
-@router.get("/status", response_model=OnboardingStatusAPIRead)
+@router.get("/status", dependencies=[signed_in()], response_model=OnboardingStatusAPIRead)
 def onboarding_status():
     """Return whether the one-time first-run experience has been completed."""
     with db_session() as s:
@@ -22,7 +24,7 @@ def onboarding_status():
             raise
 
 
-@router.post("/complete", response_model=OnboardingStatusAPIRead)
+@router.post("/complete", dependencies=[requires(Area.SETTINGS, Level.MANAGE)], response_model=OnboardingStatusAPIRead)
 def onboarding_complete():
     """Permanently mark the first-run experience as complete."""
     with db_session() as s:

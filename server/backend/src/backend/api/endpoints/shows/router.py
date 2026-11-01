@@ -33,13 +33,15 @@ from ...models.show import (
     ShowRedownloadEpisodesAPIRequest,
 )
 from backend.app import db_session
+from backend.security.access import Area, Level
+from backend.security.deps import may_delete_files, requires
 
 router = APIRouter(prefix="/shows", tags=["Shows"])
 
 router.include_router(show_view_router)
 router.include_router(show_as_bundle_router)
 
-@router.get("", response_model=list[ShowAPIRead])
+@router.get("", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[ShowAPIRead])
 def show_list():
     """
     List all shows in the system.
@@ -50,7 +52,7 @@ def show_list():
         return get_shows_list(s)
 
 
-@router.post("", response_model=ShowAPIRead, status_code=status.HTTP_201_CREATED)
+@router.post("", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=ShowAPIRead, status_code=status.HTTP_201_CREATED)
 def show_create(body: ShowAPICreate) -> ShowAPIRead:
     """
     Create a new show entry.
@@ -71,6 +73,7 @@ def show_create(body: ShowAPICreate) -> ShowAPIRead:
 
 @router.post(
     "/{show_slug}/sync",
+    dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
     response_model=TaskOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
@@ -88,6 +91,7 @@ def show_sync(show_slug: str):
 
 @router.post(
     "/{show_slug}/refresh-metadata",
+    dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
     response_model=ShowMetadataOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
@@ -105,6 +109,7 @@ def show_metadata_refresh(show_slug: str):
 
 @router.post(
     "/{show_slug}/download-all",
+    dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE)],
     response_model=ShowDownloadAllOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
@@ -122,6 +127,7 @@ def show_download_all(show_slug: str, body: ShowDownloadAllAPIRequest):
 
 @router.post(
     "/{show_slug}/rename-files",
+    dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
     response_model=ShowFileRenameOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
@@ -143,6 +149,7 @@ def show_rename_files(show_slug: str, body: ShowFileRenameAPIRequest):
 
 @router.post(
     "/{show_slug}/delete-downloads",
+    dependencies=[requires(Area.LIBRARY, Level.MANAGE), may_delete_files()],
     response_model=ShowDeleteDownloadsOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
@@ -167,6 +174,7 @@ def show_delete_downloads(show_slug: str, body: ShowDeleteDownloadsAPIRequest):
 
 @router.post(
     "/{show_slug}/redownload-episodes",
+    dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE)],
     response_model=ShowRedownloadOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
@@ -189,7 +197,7 @@ def show_redownload_episodes(show_slug: str, body: ShowRedownloadEpisodesAPIRequ
             raise
 
 
-@router.get("/{show_slug}", response_model=ShowAPIRead)
+@router.get("/{show_slug}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=ShowAPIRead)
 def show_detail(show_slug: str):
     """
     Retrieve detailed information for a specific show.
@@ -200,7 +208,7 @@ def show_detail(show_slug: str):
         return get_show(s, show_slug)
 
 
-@router.patch("/{show_slug}", response_model=ShowAPIRead)
+@router.patch("/{show_slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=ShowAPIRead)
 def show_update(show_slug: str, body: ShowAPIUpdate):
     """
     Update an existing show's metadata.
@@ -218,7 +226,7 @@ def show_update(show_slug: str, body: ShowAPIUpdate):
             raise
 
 
-@router.delete("/{show_slug}", response_model=ShowAPIRead)
+@router.delete("/{show_slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=ShowAPIRead)
 def show_delete(show_slug: str):
     """
     Delete a show from the system.

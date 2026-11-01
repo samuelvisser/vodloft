@@ -3,11 +3,13 @@ from fastapi import APIRouter
 from .service import *
 from ....models.stream_profile import StreamProfileAPIReadView
 from backend.app import db_session
+from backend.security.access import Area, Level
+from backend.security.deps import requires_any
 
 router = APIRouter(prefix="/as-view")
 
 
-@router.get("", response_model=list[StreamProfileAPIReadView])
+@router.get("", dependencies=[requires_any((Area.STREAM_PROFILES, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=list[StreamProfileAPIReadView])
 def stream_profile_view_list():
     """
     List all stream profiles with extended view information.
@@ -19,7 +21,7 @@ def stream_profile_view_list():
         return get_stream_profile_views_list(s)
 
 
-@router.get("/{stream_profile_id}", response_model=StreamProfileAPIReadView)
+@router.get("/{stream_profile_id}", dependencies=[requires_any((Area.STREAM_PROFILES, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=StreamProfileAPIReadView)
 def stream_profile_view_detail(stream_profile_id: int):
     """
     Retrieve extended view information for a specific stream profile.

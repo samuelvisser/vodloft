@@ -10,11 +10,13 @@ from sources.dailywire.api.records import (
 )
 
 from .service import get_catalog, get_catalog_movies, get_catalog_shows
+from backend.security.access import Area, Level
+from backend.security.deps import requires
 
 router = APIRouter(prefix="/catalog", tags=["DailyWire Catalog"])
 
 
-@router.get("/shows", response_model=DwCatalogShowPageRecord)
+@router.get("/shows", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=DwCatalogShowPageRecord)
 def catalog_shows(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=24, ge=1, le=60),
@@ -29,7 +31,7 @@ def catalog_shows(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
-@router.get("/movies", response_model=DwCatalogMoviePageRecord)
+@router.get("/movies", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=DwCatalogMoviePageRecord)
 def catalog_movies(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=24, ge=1, le=60),
@@ -41,7 +43,7 @@ def catalog_movies(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
-@router.get("", response_model=DwCatalogRecord)
+@router.get("", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=DwCatalogRecord)
 def catalog_detail():
     try:
         return api_timezone_payload(get_catalog())

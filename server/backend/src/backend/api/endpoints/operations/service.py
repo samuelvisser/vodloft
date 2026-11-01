@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from backend.security.access import Access, Area
+
 from backend.api.models.operations import TaskOperationRead
 from task_manager.scheduler.operation_control import (
     cancel_operation as cancel_task_operation,
@@ -21,7 +23,14 @@ def _read(snapshot) -> TaskOperationRead | None:
     return TaskOperationRead.model_validate(snapshot) if snapshot is not None else None
 
 
+def _visible_to(access: Access, snapshot) -> bool:
+    return access.allows(Area.TASKS) or (
+        access.user_id is not None and snapshot.requested_by_user_id == access.user_id
+    )
+
+
 def list_operations(
+        access: Access,
         *,
         source: str | None = None,
         resource_type: str | None = None,
@@ -39,15 +48,21 @@ def list_operations(
             kind=kind,
             relevant=relevant,
             limit=limit,
+            requested_by_user_id=None if access.allows(Area.TASKS) else access.user_id or -1,
         )
     ]
 
 
-def get_operation(operation_id: str) -> TaskOperationRead | None:
-    return _read(get_task_operation(operation_id))
+def get_operation(access: Access, operation_id: str) -> TaskOperationRead | None:
+    snapshot = get_task_operation(operation_id)
+    if snapshot is None or not _visible_to(access, snapshot):
+        return None
+    return _read(snapshot)
 
 
-def mark_operation_seen(operation_id: str) -> TaskOperationRead | None:
+def mark_operation_seen(access: Access, operation_id: str) -> TaskOperationRead | None:
+    if get_operation(access, operation_id) is None:
+        return None
     return _read(mark_task_operation_seen(operation_id))
 
 

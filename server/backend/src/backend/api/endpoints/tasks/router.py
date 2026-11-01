@@ -24,37 +24,39 @@ from .service import (
     list_schedules,
     trigger_now,
 )
+from backend.security.access import Area, Level
+from backend.security.deps import requires
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
 
-@router.get("/definitions", response_model=list[TaskDefinitionRead])
+@router.get("/definitions", dependencies=[requires(Area.TASKS, Level.VIEW)], response_model=list[TaskDefinitionRead])
 def definitions():
     return list_definitions()
 
 
-@router.get("/schedules", response_model=list[TaskScheduleRead])
+@router.get("/schedules", dependencies=[requires(Area.TASKS, Level.VIEW)], response_model=list[TaskScheduleRead])
 def schedules(resource_type: str | None = None, resource_id: int | None = None):
     return list_schedules(resource_type, resource_id)
 
 
-@router.post("/schedules", response_model=TaskScheduleRead)
+@router.post("/schedules", dependencies=[requires(Area.TASKS, Level.MANAGE)], response_model=TaskScheduleRead)
 def create(body: TaskScheduleCreate):
     return create_schedule(body)
 
 
-@router.delete("/schedules/{schedule_id}")
+@router.delete("/schedules/{schedule_id}", dependencies=[requires(Area.TASKS, Level.MANAGE)])
 def delete(schedule_id: int):
     delete_schedule(schedule_id)
     return {"ok": True}
 
 
-@router.post("/runs/trigger", response_model=TaskTriggerRead)
+@router.post("/runs/trigger", dependencies=[requires(Area.TASKS, Level.MANAGE)], response_model=TaskTriggerRead)
 def trigger(definition_key: str, resource_type: str, resource_id: int, max_retries: int | None = None):
     return trigger_now(definition_key, resource_type, resource_id, max_retries)
 
 
-@router.get("/runs", response_model=list[TaskRunRead])
+@router.get("/runs", dependencies=[requires(Area.TASKS, Level.VIEW)], response_model=list[TaskRunRead])
 def runs(
         resource_type: str | None = None,
         resource_id: int | None = None,
@@ -69,7 +71,7 @@ def runs(
     )
 
 
-@router.get("/ledger", response_model=TaskLedgerPageRead)
+@router.get("/ledger", dependencies=[requires(Area.TASKS, Level.VIEW)], response_model=TaskLedgerPageRead)
 def ledger(
         definition_key: str | None = None,
         resource_type: ResourceType | None = None,

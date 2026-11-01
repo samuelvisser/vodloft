@@ -38,27 +38,29 @@ from .service import (
     get_local_media_profile_views_list,
     get_local_media_profiles_list,
 )
+from backend.security.access import Area, Level
+from backend.security.deps import may_delete_files, requires, requires_any
 
 router = APIRouter(prefix="/local-media-profiles", tags=["Media Profiles (base)"])
 router.include_router(preview_router)
 router.include_router(advisory_router)
 
 
-@router.get("", response_model=list[LocalMediaProfileAPIRead])
+@router.get("", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=list[LocalMediaProfileAPIRead])
 def local_media_profiles_list():
     """List Local Media Profiles of every type."""
     with db_session() as s:
         return get_local_media_profiles_list(s)
 
 
-@router.get("/as-view", response_model=list[LocalMediaProfileViewAPIRead])
+@router.get("/as-view", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=list[LocalMediaProfileViewAPIRead])
 def local_media_profiles_view_list():
     """List Local Media Profiles together with management statistics."""
     with db_session() as s:
         return get_local_media_profile_views_list(s)
 
 
-@router.get("/template/variables", response_model=list[LocalMediaProfileTemplateVariable])
+@router.get("/template/variables", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=list[LocalMediaProfileTemplateVariable])
 def local_media_profile_template_variables(
     type: LocalMediaProfileType = Query(...),
 ):
@@ -70,7 +72,7 @@ def local_media_profile_template_variables(
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@router.get("/template/sources", response_model=LocalMediaProfileTemplateSourcePage)
+@router.get("/template/sources", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=LocalMediaProfileTemplateSourcePage)
 def local_media_profile_template_sources(
     type: LocalMediaProfileType = Query(...),
     show_scope: ShowLocalMediaProfileScope = Query(ShowLocalMediaProfileScope.BOTH),
@@ -97,6 +99,7 @@ def local_media_profile_template_sources(
 
 @router.get(
     "/template/sources/random-show-episode",
+    dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))],
     response_model=LocalMediaProfileTemplateSource | None,
 )
 def local_media_profile_random_show_template_source(
@@ -109,6 +112,7 @@ def local_media_profile_random_show_template_source(
 
 @router.get(
     "/{local_media_profile_slug}/view",
+    dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))],
     response_model=LocalMediaProfileViewAPIRead,
 )
 def local_media_profiles_view(local_media_profile_slug: str):
@@ -119,6 +123,7 @@ def local_media_profiles_view(local_media_profile_slug: str):
 
 @router.post(
     "/{local_media_profile_slug}/rename-files",
+    dependencies=[requires(Area.LOCAL_MEDIA_PROFILES, Level.MANAGE)],
     response_model=LocalMediaProfileFileRenameOperationAccepted,
     status_code=202,
 )
@@ -138,6 +143,7 @@ def local_media_profiles_rename_files(local_media_profile_slug: str):
 
 @router.post(
     "/{local_media_profile_slug}/delete-downloads",
+    dependencies=[requires(Area.LOCAL_MEDIA_PROFILES, Level.MANAGE), may_delete_files()],
     response_model=LocalMediaProfileDeleteDownloadsOperationAccepted,
     status_code=202,
 )
@@ -157,6 +163,7 @@ def local_media_profiles_delete_downloads(local_media_profile_slug: str):
 
 @router.post(
     "/{local_media_profile_slug}/redownload-media",
+    dependencies=[requires(Area.LOCAL_MEDIA_PROFILES, Level.MANAGE)],
     response_model=LocalMediaProfileRedownloadOperationAccepted,
     status_code=202,
 )
@@ -174,7 +181,7 @@ def local_media_profiles_redownload_media(local_media_profile_slug: str):
             raise
 
 
-@router.get("/{local_media_profile_slug}", response_model=LocalMediaProfileAPIRead)
+@router.get("/{local_media_profile_slug}", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=LocalMediaProfileAPIRead)
 def local_media_profiles_detail(local_media_profile_slug: str):
     """Retrieve a Local Media Profile of any type."""
     with db_session() as s:

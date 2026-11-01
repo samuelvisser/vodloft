@@ -26,17 +26,19 @@ from task_manager.tasks.media_download_operations import (
     prioritize_media_download_operation,
     get_media_download_queue_positions
 )
+from backend.security.access import Area, Level
+from backend.security.deps import may_delete_files, requires
 
 router = APIRouter(prefix="/media-downloads", tags=["Media Downloads"])
 
 
-@router.get("", response_model=list[MediaDownloadAPIRead])
+@router.get("", dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.VIEW)], response_model=list[MediaDownloadAPIRead])
 def media_downloads_list():
     with db_session() as s:
         return get_media_downloads_list(s)
 
 
-@router.get("/as-view/action-ids", response_model=list[int])
+@router.get("/as-view/action-ids", dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.VIEW)], response_model=list[int])
 def media_download_bulk_action_ids(
         action: str = Query(pattern="^(retry|cancel|delete-unavailable)$"),
         status_filter: Optional[list[str]] = Query(default=None, alias="status"),
@@ -49,7 +51,7 @@ def media_download_bulk_action_ids(
         )
 
 
-@router.get("/as-view/page", response_model=MediaDownloadPageRead)
+@router.get("/as-view/page", dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.VIEW)], response_model=MediaDownloadPageRead)
 def media_downloads_page(
         status_filter: Optional[list[str]] = Query(default=None, alias="status"),
         order: str = Query(default="workflow", pattern="^(workflow|recent)$"),
@@ -66,7 +68,7 @@ def media_downloads_page(
         )
 
 
-@router.get("/as-view", response_model=list[MediaDownloadAPIReadView])
+@router.get("/as-view", dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.VIEW)], response_model=list[MediaDownloadAPIReadView])
 def media_downloads_view(
         episode_slug: Optional[str] = None,
         movie_slug: Optional[str] = None,
@@ -100,6 +102,7 @@ def _queue_bulk_operation(operation):
 
 @router.post(
     "/bulk/retry",
+    dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE)],
     response_model=MediaDownloadBulkOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
@@ -112,6 +115,7 @@ def media_downloads_bulk_retry(body: MediaDownloadBulkActionAPIRequest):
 
 @router.post(
     "/bulk/cancel",
+    dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE)],
     response_model=MediaDownloadBulkOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
@@ -124,6 +128,7 @@ def media_downloads_bulk_cancel(body: MediaDownloadBulkActionAPIRequest):
 
 @router.post(
     "/bulk/delete-unavailable",
+    dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE)],
     response_model=MediaDownloadBulkOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
@@ -136,6 +141,7 @@ def media_downloads_bulk_delete_unavailable(body: MediaDownloadBulkActionAPIRequ
 
 @router.post(
     "/{media_download_id}/retry",
+    dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE)],
     response_model=MediaDownloadOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
@@ -162,6 +168,7 @@ def media_downloads_retry(
 
 @router.post(
     "/{media_download_id}/prioritize",
+    dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE)],
     response_model=MediaDownloadOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
@@ -196,13 +203,13 @@ def media_downloads_prioritize(media_download_id: int):
         }
 
 
-@router.post("/{media_download_id}/cancel", response_model=MediaDownloadAPIRead)
+@router.post("/{media_download_id}/cancel", dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE)], response_model=MediaDownloadAPIRead)
 def media_downloads_cancel(media_download_id: int):
     """Cancel the active media.download operation and suppress automatic requeue."""
     return cancel_media_download_action(media_download_id)
 
 
-@router.get("/{media_download_id}/history", response_model=MediaDownloadHistoryPageRead)
+@router.get("/{media_download_id}/history", dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.VIEW)], response_model=MediaDownloadHistoryPageRead)
 def media_downloads_history(
         media_download_id: int,
         offset: int = Query(default=0, ge=0),
@@ -218,25 +225,25 @@ def media_downloads_history(
         )
 
 
-@router.get("/{media_download_id}", response_model=MediaDownloadAPIRead)
+@router.get("/{media_download_id}", dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.VIEW)], response_model=MediaDownloadAPIRead)
 def media_downloads_detail(media_download_id: int):
     with db_session() as s:
         return get_media_download(s, media_download_id)
 
 
-@router.delete("/{media_download_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{media_download_id}", dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE)], status_code=status.HTTP_204_NO_CONTENT)
 def media_downloads_delete(media_download_id: int):
     """Delete a persistent MediaDownload row after confirming no artifact is available."""
     delete_unavailable_media_download_action(media_download_id)
 
 
-@router.delete("/{media_download_id}/files", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{media_download_id}/files", dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE), may_delete_files()], status_code=status.HTTP_204_NO_CONTENT)
 def media_downloads_delete_with_files(media_download_id: int):
     """Delete one download record, its action history and its managed files."""
     delete_media_download_action(media_download_id)
 
 
-@router.patch("/{media_download_id}", response_model=MediaDownloadAPIRead)
+@router.patch("/{media_download_id}", dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE)], response_model=MediaDownloadAPIRead)
 def media_downloads_update(media_download_id: int, body: MediaDownloadAPIUpdate):
     with db_session() as s:
         try:

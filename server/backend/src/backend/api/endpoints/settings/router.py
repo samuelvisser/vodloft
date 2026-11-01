@@ -11,18 +11,20 @@ from .service import (
     save_ui_settings,
     run_cron_job_now,
 )
+from backend.security.access import Area, Level
+from backend.security.deps import requires
 
 
 router = APIRouter(prefix="/settings", tags=["Settings"])
 
 
-@router.get("", response_model=SettingsAPIRead)
+@router.get("", dependencies=[requires(Area.SETTINGS, Level.MANAGE)], response_model=SettingsAPIRead)
 def settings_get():
     """Return all settings intentionally exposed by the VODLoft UI."""
     return get_ui_settings()
 
 
-@router.put("", response_model=SettingsAPIRead)
+@router.put("", dependencies=[requires(Area.SETTINGS, Level.MANAGE)], response_model=SettingsAPIRead)
 def settings_update(body: SettingsAPIUpdate):
     """Persist only explicitly changed UI fields into config.yml."""
     try:
@@ -45,6 +47,7 @@ def settings_update(body: SettingsAPIUpdate):
 
 @router.post(
     "/cron/{job}/run",
+    dependencies=[requires(Area.SETTINGS, Level.MANAGE)],
     response_model=TaskOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )

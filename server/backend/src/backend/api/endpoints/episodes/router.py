@@ -13,12 +13,15 @@ from task_manager.tasks.media_download_operations import (
     create_media_download_operation,
     dispatch_queued_media_download_operations,
 )
+from backend.security.access import Area, Level
+from backend.security.deps import may_delete_files, requires
 
 router = APIRouter(prefix="/episodes", tags=["Episodes"])
 
 
 @router.post(
     "/{episode_slug}/downloads",
+    dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE)],
     response_model=MediaDownloadOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
@@ -56,21 +59,21 @@ def episode_download_create(episode_slug: str, body: EpisodeDownloadAPICreate):
             raise
 
 
-@router.get("/by-show-slug/{show_slug}", response_model=list[EpisodeAPIRead])
+@router.get("/by-show-slug/{show_slug}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[EpisodeAPIRead])
 def episodes_by_show_list(show_slug: str, limit: int | None = None):
     """List complete episode records for callers that need episode detail fields."""
     with db_session() as s:
         return get_episodes_by_show_list(s, show_slug, limit)
 
 
-@router.get("/as-view/by-show-slug/{show_slug}", response_model=list[EpisodeAPIReadView])
+@router.get("/as-view/by-show-slug/{show_slug}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[EpisodeAPIReadView])
 def episode_views_by_show_list(show_slug: str, limit: int | None = None):
     """List compact episode fields."""
     with db_session() as s:
         return get_episode_views_by_show_list(s, show_slug, limit)
 
 
-@router.get("/as-view/by-show-slug/{show_slug}/page", response_model=EpisodeAPIReadViewPage)
+@router.get("/as-view/by-show-slug/{show_slug}/page", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=EpisodeAPIReadViewPage)
 def episode_views_by_show_page(
         show_slug: str,
         cursor: str | None = Query(default=None, max_length=2048),
@@ -88,7 +91,7 @@ def episode_views_by_show_page(
         )
 
 
-@router.get("/as-view/recently-indexed", response_model=list[EpisodeIndexedActivityAPIRead])
+@router.get("/as-view/recently-indexed", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[EpisodeIndexedActivityAPIRead])
 def recently_indexed_episode_views(
         limit: int = Query(default=7, ge=1, le=50),
 ):
@@ -97,7 +100,7 @@ def recently_indexed_episode_views(
         return get_recently_indexed_episodes(s, limit=limit)
 
 
-@router.post("", response_model=EpisodeAPIRead, status_code=status.HTTP_201_CREATED)
+@router.post("", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=EpisodeAPIRead, status_code=status.HTTP_201_CREATED)
 def episode_create(body: EpisodeAPICreate):
     """
     Create a new episode for a show.
@@ -117,6 +120,7 @@ def episode_create(body: EpisodeAPICreate):
 
 @router.post(
     "/{episode_slug}/refresh-metadata",
+    dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
     response_model=EpisodeMetadataOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
@@ -134,6 +138,7 @@ def episode_metadata_refresh(episode_slug: str):
 
 @router.post(
     "/{episode_slug}/early-delete",
+    dependencies=[requires(Area.LIBRARY, Level.MANAGE), may_delete_files()],
     response_model=TaskOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
@@ -149,13 +154,13 @@ def episode_early_delete(episode_slug: str):
             raise
 
 
-@router.get("/{episode_slug}", response_model=EpisodeAPIRead)
+@router.get("/{episode_slug}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=EpisodeAPIRead)
 def episode_detail(episode_slug: str):
     with db_session() as s:
         return get_episode(s, episode_slug)
 
 
-@router.patch("/{episode_slug}", response_model=EpisodeAPIRead)
+@router.patch("/{episode_slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=EpisodeAPIRead)
 def episode_update(episode_slug: str, body: EpisodeAPIUpdate):
     with db_session() as s:
         try:
@@ -167,7 +172,7 @@ def episode_update(episode_slug: str, body: EpisodeAPIUpdate):
             raise
 
 
-@router.delete("/{episode_slug}", response_model=EpisodeAPIRead)
+@router.delete("/{episode_slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=EpisodeAPIRead)
 def episode_delete(episode_slug: str):
     with db_session() as s:
         try:

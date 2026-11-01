@@ -13,6 +13,8 @@ from starlette.concurrency import run_in_threadpool
 
 from backend.api.models.dailywire_auth import *
 from sources.dailywire.auth import DeviceAuthClient
+from backend.security.access import Area, Level
+from backend.security.deps import requires, signed_in
 
 router = APIRouter(prefix="/auth", tags=["DailyWire Auth"])
 
@@ -38,7 +40,7 @@ def get_client() -> DeviceAuthClient:
     return _client
 
 
-@router.post("/device", response_model=DeviceAuthResponse, status_code=status.HTTP_200_OK)
+@router.post("/device", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=DeviceAuthResponse, status_code=status.HTTP_200_OK)
 async def initiate_device_flow():
     """
     Initiate OAuth 2.0 Device Authorization Grant flow.
@@ -71,7 +73,7 @@ async def initiate_device_flow():
         )
 
 
-@router.post("/poll", response_model=PollResponse, status_code=status.HTTP_200_OK)
+@router.post("/poll", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=PollResponse, status_code=status.HTTP_200_OK)
 async def poll_for_authorization(request: PollRequest):
     """
     Complete the device authorization flow by polling until authorized.
@@ -168,7 +170,7 @@ async def poll_for_authorization(request: PollRequest):
         )
 
 
-@router.get("/status", response_model=StatusResponse, status_code=status.HTTP_200_OK)
+@router.get("/status", dependencies=[signed_in()], response_model=StatusResponse, status_code=status.HTTP_200_OK)
 async def get_auth_status():
     """
     Check the current authentication status.
@@ -193,7 +195,7 @@ async def get_auth_status():
         )
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/logout", dependencies=[requires(Area.SOURCES, Level.MANAGE)], status_code=status.HTTP_204_NO_CONTENT)
 async def logout():
     """
     Logout the user by revoking and deleting stored tokens.

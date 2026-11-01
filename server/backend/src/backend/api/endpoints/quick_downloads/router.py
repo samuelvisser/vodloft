@@ -22,12 +22,14 @@ from .service import (
     remove_quick_download,
     start_quick_download,
 )
+from backend.security.access import Area, Level
+from backend.security.deps import requires
 
 
 router = APIRouter(prefix="/quick-downloads", tags=["Quick downloads"])
 
 
-@router.post("", response_model=QuickDownloadOperationAccepted, status_code=status.HTTP_202_ACCEPTED)
+@router.post("", dependencies=[requires(Area.QUICK_DOWNLOADS, Level.VIEW)], response_model=QuickDownloadOperationAccepted, status_code=status.HTTP_202_ACCEPTED)
 def quick_download_create(body: QuickDownloadAPICreate):
     """Fetch one video, episode or movie as a file to download, without adding it to the library."""
     from backend.api.endpoints.sources.service import LinkNotRecognisedError
@@ -45,7 +47,7 @@ def quick_download_create(body: QuickDownloadAPICreate):
             raise
 
 
-@router.post("/options", response_model=QuickDownloadOptionsAPIRead)
+@router.post("/options", dependencies=[requires(Area.QUICK_DOWNLOADS, Level.VIEW)], response_model=QuickDownloadOptionsAPIRead)
 def quick_download_option_list(body: QuickDownloadOptionsAPIRequest):
     """What a link can be quick downloaded as, with sizes where its Source reports them."""
     from backend.api.endpoints.sources.service import LinkNotRecognisedError
@@ -57,21 +59,21 @@ def quick_download_option_list(body: QuickDownloadOptionsAPIRequest):
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@router.get("", response_model=QuickDownloadsAPIRead)
+@router.get("", dependencies=[requires(Area.QUICK_DOWNLOADS, Level.VIEW)], response_model=QuickDownloadsAPIRead)
 def quick_download_list():
     """Quick downloads still working, and files ready to download."""
     with db_session() as s:
         return list_quick_downloads(s)
 
 
-@router.get("/history", response_model=list[QuickDownloadHistoryAPIRead])
+@router.get("/history", dependencies=[requires(Area.QUICK_DOWNLOADS, Level.VIEW)], response_model=list[QuickDownloadHistoryAPIRead])
 def quick_download_history_list():
     """Past quick downloads, newest first, and how each one ended."""
     with db_session() as s:
         return quick_download_history(s)
 
 
-@router.delete("/history", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/history", dependencies=[requires(Area.QUICK_DOWNLOADS, Level.VIEW)], status_code=status.HTTP_204_NO_CONTENT)
 def quick_download_history_clear():
     """Forget every finished quick download. Ones still working or waiting to be downloaded stay."""
     with db_session() as s:
@@ -79,7 +81,7 @@ def quick_download_history_clear():
     return Response(status_code=204)
 
 
-@router.api_route("/{quick_id}/file", methods=["GET", "HEAD"])
+@router.api_route("/{quick_id}/file", dependencies=[requires(Area.QUICK_DOWNLOADS, Level.VIEW)], methods=["GET", "HEAD"])
 def quick_download_file(quick_id: str, request: Request):
     """The ready file, as an attachment. Range requests resume a download.
 
@@ -99,7 +101,7 @@ def quick_download_file(quick_id: str, request: Request):
     )
 
 
-@router.delete("/{quick_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{quick_id}", dependencies=[requires(Area.QUICK_DOWNLOADS, Level.VIEW)], status_code=status.HTTP_204_NO_CONTENT)
 def quick_download_delete(quick_id: str):
     """Cancel a quick download that is still working, or delete a file that is ready."""
     with db_session() as s:

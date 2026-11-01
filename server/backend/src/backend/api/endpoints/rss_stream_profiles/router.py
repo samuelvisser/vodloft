@@ -3,11 +3,13 @@ from fastapi import APIRouter, Request, status
 from .service import *
 from ...models.rss_stream_profile import *
 from backend.app import db_session
+from backend.security.access import Area, Level
+from backend.security.deps import requires, requires_any
 
 router = APIRouter(prefix="/rss-stream-profiles", tags=["Stream Profiles (rss)"])
 
 
-@router.get("", response_model=list[RssStreamProfileAPIRead])
+@router.get("", dependencies=[requires_any((Area.STREAM_PROFILES, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=list[RssStreamProfileAPIRead])
 def rss_stream_profiles_list():
     """
     List all RSS stream profiles in the system.
@@ -18,7 +20,7 @@ def rss_stream_profiles_list():
         return get_rss_stream_profiles_list(s)
 
 
-@router.post("", response_model=RssStreamProfileAPIRead, status_code=status.HTTP_201_CREATED)
+@router.post("", dependencies=[requires(Area.STREAM_PROFILES, Level.MANAGE)], response_model=RssStreamProfileAPIRead, status_code=status.HTTP_201_CREATED)
 def rss_stream_profiles_create(body: RssStreamProfileAPICreate, request: Request):
     """
     Create a new RSS stream profile.
@@ -37,7 +39,7 @@ def rss_stream_profiles_create(body: RssStreamProfileAPICreate, request: Request
             raise
 
 
-@router.get("/{rss_stream_profile_id}", response_model=RssStreamProfileAPIRead)
+@router.get("/{rss_stream_profile_id}", dependencies=[requires_any((Area.STREAM_PROFILES, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=RssStreamProfileAPIRead)
 def rss_stream_profiles_detail(rss_stream_profile_id: int):
     """
     Retrieve detailed information for a specific RSS stream profile.
@@ -48,7 +50,7 @@ def rss_stream_profiles_detail(rss_stream_profile_id: int):
         return get_stream_profile_rss(s, rss_stream_profile_id)
 
 
-@router.patch("/{rss_stream_profile_id}", response_model=RssStreamProfileAPIRead)
+@router.patch("/{rss_stream_profile_id}", dependencies=[requires(Area.STREAM_PROFILES, Level.MANAGE)], response_model=RssStreamProfileAPIRead)
 def rss_stream_profiles_update(rss_stream_profile_id: int, body: RssStreamProfileAPIUpdate):
     """
     Update an existing RSS stream profile.
@@ -66,7 +68,7 @@ def rss_stream_profiles_update(rss_stream_profile_id: int, body: RssStreamProfil
             raise
 
 
-@router.post("/{rss_stream_profile_id}/regenerate-token", response_model=RssStreamProfileAPIRead)
+@router.post("/{rss_stream_profile_id}/regenerate-token", dependencies=[requires(Area.STREAM_PROFILES, Level.MANAGE)], response_model=RssStreamProfileAPIRead)
 def rss_stream_profiles_regenerate_token(rss_stream_profile_id: int, request: Request):
     """
     Rotate the secret token backing this profile's feed and media URLs.
@@ -83,7 +85,7 @@ def rss_stream_profiles_regenerate_token(rss_stream_profile_id: int, request: Re
             raise
 
 
-@router.delete("/{rss_stream_profile_id}", response_model=RssStreamProfileAPIRead)
+@router.delete("/{rss_stream_profile_id}", dependencies=[requires(Area.STREAM_PROFILES, Level.MANAGE)], response_model=RssStreamProfileAPIRead)
 def rss_stream_profiles_delete(rss_stream_profile_id: int):
     """
     Delete an RSS stream profile from the system.
