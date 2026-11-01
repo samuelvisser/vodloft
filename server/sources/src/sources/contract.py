@@ -126,6 +126,16 @@ class LinkKind(StrEnum):
 
 
 @dataclass(frozen=True)
+class LinkPreview:
+    """A first look at a link, from a faster lookup than ``resolve``: enough to show while the rest loads."""
+
+    title: str
+    image_url: str | None = None
+    author_name: str | None = None
+    site: str | None = None
+
+
+@dataclass(frozen=True)
 class ResolvedLink:
     """What a link points to, with enough to show a preview before anything is added.
 
@@ -389,6 +399,10 @@ class Source(ABC):
     @abstractmethod
     def resolve(self, url: str) -> ResolvedLink | None:
         """Say what a link points to, or None when this Source does not recognise it."""
+
+    def preview(self, url: str) -> LinkPreview | None:
+        """A title and image for a link, faster than ``resolve``, or None when this Source has no faster way."""
+        return None
 
     def episode_media(
         self, *, slug: str, members_only: bool, interactive: bool = False,

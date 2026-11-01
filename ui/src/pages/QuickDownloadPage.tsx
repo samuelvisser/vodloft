@@ -21,6 +21,7 @@ import {
     choiceSize,
     choiceSummary,
     fetchQuickDownloadOptions,
+    fetchQuickDownloadPreview,
     fitChoice,
     fitRules,
     quickDownloadSettingsQueryKey,
@@ -34,6 +35,7 @@ import {
     useQuickDownloadHistory,
     useQuickDownloadSettings,
     useQuickDownloads,
+    type QuickDownloadPreview,
 } from '../lib/quickDownloads'
 import {saveSettingsRequest, useSettings} from '../lib/settings'
 import {can, getAccess} from '../lib/access'
@@ -73,6 +75,8 @@ export default function QuickDownloadPage() {
     const [options, setOptions] = useState<QuickDownloadOptions | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [resolving, setResolving] = useState(false)
+    const [preview, setPreview] = useState<QuickDownloadPreview | null>(null)
+    const [lookupStarted, setLookupStarted] = useState(0)
     const [candidates, setCandidates] = useState<SourceRead[]>([])
     const [askedSource, setAskedSource] = useState<string | null>(null)
     const [choice, setChoice] = useState<QuickChoice>(defaults)
@@ -94,6 +98,12 @@ export default function QuickDownloadPage() {
         setResolving(true)
         setError(null)
         setOptions(null)
+        setPreview(null)
+        setLookupStarted(Date.now())
+        // The title and thumbnail come back well before the formats; show them as soon as they do.
+        void fetchQuickDownloadPreview(trimmed, controller.signal, sourceKey).then((found) => {
+            if (!controller.signal.aborted) setPreview(found)
+        })
         try {
             const found = await fetchQuickDownloadOptions(trimmed, controller.signal, sourceKey)
             if (controller.signal.aborted) return
@@ -125,6 +135,7 @@ export default function QuickDownloadPage() {
         setCandidates([])
         setAskedSource(null)
         setResolving(false)
+        setPreview(null)
         setPanelOpen(false)
         inputRef.current?.focus()
     }
@@ -256,6 +267,8 @@ export default function QuickDownloadPage() {
 
                 {error && <div className="form-error-card" role="alert">{error}</div>}
 
+                {resolving && !options && <QuickLookupProgress preview={preview} started={lookupStarted}/>}
+
                 {options && link && (
                     <>
                         <article className="quick-preview" aria-label="Link preview">
@@ -323,5 +336,45 @@ export default function QuickDownloadPage() {
                 />
             )}
         </section>
+    )
+}
+
+/**
+ * While a link is being looked up: its title and thumbnail as soon as they are
+ * known, and what VODLoft is still doing, with the time it has taken so far.
+ */
+function QuickLookupProgress({preview, started}: {preview: QuickDownloadPreview | null; started: number}) {
+    const [now, setNow] = useState(() => Date.now())
+    useEffect(() => {
+        const timer = window.setInterval(() => setNow(Date.now()), 1000)
+        return () => window.clearInterval(timer)
+    }, [])
+    const seconds = Math.max(0, Math.floor((now - started) / 1000))
+    const image = toImageUrl(preview?.imageUrl)
+    return (
+        <div className="quick-lookup" aria-live="polite" aria-busy="true">
+            {preview && (
+                <article className="quick-preview" aria-label="Link preview">
+                    {image && <img src={image} alt="" decoding="async"/>}
+                    <div className="quick-preview-copy">
+                        <SourceBadge sourceKey={preview.sourceKey}/>
+                        <strong>{preview.title}</strong>
+                        <small className="quick-muted">{[preview.site, preview.authorName].filter(Boolean).join(' · ')}</small>
+                    </div>
+                </article>
+            )}
+            <ol className="quick-lookup-steps">
+                <li className={preview ? 'is-done' : 'is-active'}>
+                    <FontAwesomeIcon icon={preview ? faIcon('fass', 'check') : faIcon('fass', 'spinner')} spin={!preview}/>
+                    <span>{preview ? 'Found the video' : 'Looking up the link'}</span>
+                </li>
+                <li className={preview ? 'is-active' : ''}>
+                    <FontAwesomeIcon icon={preview ? faIcon('fass', 'spinner') : faIcon('fass', 'circle')} spin={!!preview}/>
+                    <span>Listing formats and sizes</span>
+                    {seconds >= 2 && <small className="quick-muted">{seconds} s</small>}
+                </li>
+            </ol>
+            <div className="quick-lookup-bar" aria-hidden="true"><span/></div>
+        </div>
     )
 }

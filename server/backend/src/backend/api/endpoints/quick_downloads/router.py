@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
 
@@ -7,6 +9,7 @@ from backend.api.models.quick_download import (
     QuickDownloadOperationAccepted,
     QuickDownloadOptionsAPIRead,
     QuickDownloadOptionsAPIRequest,
+    QuickDownloadPreviewAPIRead,
     QuickDownloadsAPIRead,
 )
 from backend.api.models.settings import QuickDownloadPreferencesValue, QuickDownloadSettingsForUser
@@ -23,6 +26,7 @@ from .service import (
     file_delivery,
     list_quick_downloads,
     quick_download_options,
+    quick_download_preview,
     remove_quick_download,
     start_quick_download,
 )
@@ -49,6 +53,13 @@ def quick_download_create(body: QuickDownloadAPICreate, access: Access = signed_
         except Exception:
             s.rollback()
             raise
+
+
+@router.post("/preview", dependencies=[requires(Area.QUICK_DOWNLOADS, Level.VIEW)], response_model=Optional[QuickDownloadPreviewAPIRead])
+def quick_download_link_preview(body: QuickDownloadOptionsAPIRequest, access: Access = signed_in()):
+    """A link's title and thumbnail from a faster lookup, to show while ``/options`` runs; null when there is none."""
+    with db_session() as s:
+        return quick_download_preview(s, access, body)
 
 
 @router.post("/options", dependencies=[requires(Area.QUICK_DOWNLOADS, Level.VIEW)], response_model=QuickDownloadOptionsAPIRead)
