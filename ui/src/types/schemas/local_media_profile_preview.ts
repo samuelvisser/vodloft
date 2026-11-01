@@ -9,10 +9,10 @@ export const LocalMediaProfilePreviewSchema = z.object({
         missingIndexingValues: z.array(z.string()),
         provisionalIndexingValues: z.array(z.string()),
     }),
-    showRoot: z.object({
+    collectionRoot: z.object({
         path: z.string().nullable(),
         reason: z.string().nullable(),
-        showTitle: z.string().nullable(),
+        collectionTitle: z.string().nullable(),
         systemEnabled: z.boolean(),
     }).nullable(),
 })

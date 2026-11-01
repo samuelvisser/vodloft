@@ -6,15 +6,15 @@ import {z} from 'zod'
 
 import type {IndexingValueEntry} from '../../types/schemas/custom_metadata'
 import {
-    SHOW_LOCAL_MEDIA_PROFILE_INDEXING_VALUES_MAX_ITEMS,
-    ShowLocalMediaProfileIndexingValuesSchema,
-} from '../../types/schemas/show_local_media_profile'
+    COLLECTION_LOCAL_MEDIA_PROFILE_INDEXING_VALUES_MAX_ITEMS,
+    CollectionLocalMediaProfileIndexingValuesSchema,
+} from '../../types/schemas/collection_local_media_profile'
 import '../CustomMetadataEditor/CustomMetadataEditor.css'
 import ReadMore from "../../utils/ReadMore";
 
 
 const IndexingValuesDialogSchema = z.object({
-    indexingValues: ShowLocalMediaProfileIndexingValuesSchema,
+    indexingValues: CollectionLocalMediaProfileIndexingValuesSchema,
 })
 type IndexingValuesDialogValues = z.infer<typeof IndexingValuesDialogSchema>
 
@@ -178,7 +178,7 @@ export default function IndexingValuesEditorButton({
                             className="btn custom-metadata-add"
                             type="button"
                             onClick={() => append({key: '', name: ''})}
-                            disabled={fields.length >= SHOW_LOCAL_MEDIA_PROFILE_INDEXING_VALUES_MAX_ITEMS}
+                            disabled={fields.length >= COLLECTION_LOCAL_MEDIA_PROFILE_INDEXING_VALUES_MAX_ITEMS}
                         >
                             Add indexing value
                         </button>

@@ -2,7 +2,7 @@
 
 **Quick download** gets you one file from a link, without adding anything to your library. Paste a link, pick what you want, and your browser downloads the file. VODLoft deletes its own copy shortly after.
 
-Use it for a single video you want to keep on a laptop or phone, or for the audio of a talk. For a show you want to follow, add it on **Add media** instead (see [[Shows-and-Library]]).
+Use it for a single video you want to keep on a laptop or phone, or for the audio of a talk. For a collection you want to follow, add it on **Add media** instead (see [[Collections-and-Library]]).
 
 ## Downloading a file
 
@@ -20,7 +20,7 @@ The chips on each row choose the format: **MP4** or **MKV** for video, **M4A** o
 
 - **Video codec**: Auto leaves it to the Source. H.264 plays everywhere; H.265, VP9 and AV1 are smaller but need newer devices. Codecs a video does not offer are greyed out.
 - **MP3 quality**: 320, 192 or 128 kbps. M4A keeps the original audio; MP3 converts it, for older players and car stereos.
-- **Inside the file**: the title, show or channel and date, and the cover art.
+- **Inside the file**: the title, collection or channel and date, and the cover art.
 
 Format and codec choices are offered for links that list their formats, such as yt-dlp links. Other Sources, such as The Daily Wire, offer each quality their stream has, with a size measured from a few segments, as MP4 video, or M4A audio. A link whose stream has one quality downloads as Best MP4 video or M4A audio.
 
@@ -68,7 +68,7 @@ VODLoft checks the rules itself when a quick download starts, so a choice the ru
 | `quickDownload.defaultCodec` | `VL_QUICK_DOWNLOAD__DEFAULT_CODEC` | `auto` | The codec quick downloads prefer. |
 | `quickDownload.defaultAudioFormat` | `VL_QUICK_DOWNLOAD__DEFAULT_AUDIO_FORMAT` | `m4a` | M4A or MP3 for audio. |
 | `quickDownload.defaultMp3Bitrate` | `VL_QUICK_DOWNLOAD__DEFAULT_MP3_BITRATE` | `192` | 320, 192 or 128 kbps. |
-| `quickDownload.embedMetadata` | `VL_QUICK_DOWNLOAD__EMBED_METADATA` | `true` | Embed title, show or channel and date. |
+| `quickDownload.embedMetadata` | `VL_QUICK_DOWNLOAD__EMBED_METADATA` | `true` | Embed title, collection or channel and date. |
 | `quickDownload.embedArtwork` | `VL_QUICK_DOWNLOAD__EMBED_ARTWORK` | `true` | Embed cover art. |
 | `quickDownload.keepDownloadedMinutes` | `VL_QUICK_DOWNLOAD__KEEP_DOWNLOADED_MINUTES` | `10` | Minutes a file stays after it was downloaded. 0 deletes it at the last byte. |
 | `quickDownload.keepUnclaimedHours` | `VL_QUICK_DOWNLOAD__KEEP_UNCLAIMED_HOURS` | `24` | Hours a ready file waits for someone to download it. |

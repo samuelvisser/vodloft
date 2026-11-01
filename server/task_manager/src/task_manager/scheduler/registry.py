@@ -36,7 +36,7 @@ class TaskMeta:
     key: str
     title: str
     description: str = ""
-    allowed_resource_types: tuple[str, ...] = ("show", "season", "episode", "movie")
+    allowed_resource_types: tuple[str, ...] = ("collection", "season", "episode", "movie")
     default_max_retries: Optional[int] = None
     tracks_progress: bool = True
     pauses_scheduled_work: bool = False
@@ -106,7 +106,7 @@ def task(
             title=title,
             description=description,
             allowed_resource_types=allowed_resource_types
-            or ("show", "season", "episode", "movie"),
+            or ("collection", "season", "episode", "movie"),
             default_max_retries=default_max_retries,
             tracks_progress=tracks_progress,
             pauses_scheduled_work=pauses_scheduled_work,
@@ -126,7 +126,7 @@ def task(
 
 def on_cron(
     cron: str,
-    resource_type: str = "show",
+    resource_type: str = "collection",
     resource_id: Optional[int] = 0,
     coalesce: bool = True,
     enabled: bool = True,
@@ -164,7 +164,7 @@ def on_event(event_name: str, resource_type: Optional[str] = None):
     """Decorator to add an event-based trigger to a task.
 
     Args:
-        event_name: Name of the event to listen for (e.g., "show.added", "episode.published_final")
+        event_name: Name of the event to listen for (e.g., "collection.added", "episode.published_final")
         resource_type: Fixed resource type. When omitted, use the event payload's
             resource_type (falling back to "show" for older unscoped events).
     """

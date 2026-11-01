@@ -22,29 +22,29 @@ export function sourceControls(item: SourcedItem) {
 
 export type ResolvedLinkLike = {
     source: {id: string}
-    kind: 'show' | 'movie' | 'episode' | 'video'
+    kind: 'collection' | 'movie' | 'episode' | 'video'
     slug: string
     url: string
-    showSlug?: string | null
-    showUrl?: string | null
+    collectionSlug?: string | null
+    collectionUrl?: string | null
     preview: {title: string}
 }
 
-/** What a link hands off to: a show to add or open, a movie page, or a single video to add. */
+/** What a link hands off to: a collection to add or open, a movie page, or a single video to add. */
 export type MediaLinkTarget = {
-    kind: 'show' | 'movie' | 'video'
+    kind: 'collection' | 'movie' | 'video'
     sourceKey: string
     slug: string
     url: string
     title: string
 }
 
-/** The show, movie or video a resolved link should open. An episode opens its show. */
+/** The collection, movie or video a resolved link should open. An episode opens its collection. */
 export function linkTarget(link: ResolvedLinkLike): MediaLinkTarget | null {
     const base = {sourceKey: link.source.id, title: link.preview.title}
     if (link.kind === 'movie') return {...base, kind: 'movie', slug: link.slug, url: link.url}
-    if (link.kind === 'show') return {...base, kind: 'show', slug: link.slug, url: link.url}
+    if (link.kind === 'collection') return {...base, kind: 'collection', slug: link.slug, url: link.url}
     if (link.kind === 'video') return {...base, kind: 'video', slug: link.slug, url: link.url}
-    if (link.showSlug && link.showUrl) return {...base, kind: 'show', slug: link.showSlug, url: link.showUrl}
+    if (link.collectionSlug && link.collectionUrl) return {...base, kind: 'collection', slug: link.collectionSlug, url: link.collectionUrl}
     return null
 }

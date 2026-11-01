@@ -23,34 +23,34 @@ def _library(
     session: Session,
     tmp_path: Path,
     *,
-    output_template: str = "/downloads/{{ show }}/{{ episode_identifier }}.ext",
+    output_template: str = "/downloads/{{ collection }}/{{ episode_identifier }}.ext",
 ):
-    from backend.db.models import Episode, LocalMediaProfile, Season, Show
+    from backend.db.models import Episode, LocalMediaProfile, Season, Collection
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
     from downloader.storage.identity import inspect_artifact
 
-    show = Show(
+    collection = Collection(
         source_key="dailywire",
-        uuid="show-uuid",
-        slug="test-show",
+        uuid="collection-uuid",
+        slug="test-collection",
         title="Test Show",
         description=None,
-        sharing_url="https://example.test/show",
+        sharing_url="https://example.test/collection",
         membership_level="FREE",
-        type=ShowType.PODCAST.value,
+        type=CollectionType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Host",
         author_slug="host",
     )
-    season = Season(show=show, index=1, slug="season-1", name="Season 1")
+    season = Season(collection=collection, index=1, slug="season-1", name="Season 1")
     episode = Episode(
         source_key="dailywire",
         uuid="episode-uuid",
         type=MediaType.EPISODE.value,
-        show=show,
+        collection=collection,
         season=season,
         index=2,
         episode_identifier="ep.2",
@@ -67,7 +67,7 @@ def _library(
         output_template=output_template,
         preferred_format="format_audio_only",
     )
-    session.add_all([show, season, episode, local_profile])
+    session.add_all([collection, season, episode, local_profile])
     session.flush()
 
     old_path = tmp_path / "legacy" / "episode.m4a"
@@ -88,7 +88,7 @@ def _library(
     session.add(download)
     session.commit()
     assert download.download_profile_id is None
-    return show, episode, local_profile, download, old_path
+    return collection, episode, local_profile, download, old_path
 
 
 def test_rename_file_worker_moves_manual_artifact_and_updates_path(monkeypatch, tmp_path):
@@ -98,11 +98,11 @@ def test_rename_file_worker_moves_manual_artifact_and_updates_path(monkeypatch, 
     session, engine = _session()
     try:
         monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
-        _show, episode, _local_profile, download, old_path = _library(session, tmp_path)
+        _collection, episode, _local_profile, download, old_path = _library(session, tmp_path)
 
         result = asyncio.run(run_rename_file_worker(session, episode_id=episode.id))
 
-        expected = (tmp_path / "test-show" / "ep.2.m4a").resolve()
+        expected = (tmp_path / "test-collection" / "ep.2.m4a").resolve()
         session.refresh(download)
         assert result.data["files_renamed"] == 1
         assert result.data["files_recovered"] == 0
@@ -132,7 +132,7 @@ def test_rename_file_worker_reconciles_manual_rename_before_template_rename(monk
     session, engine = _session()
     try:
         monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
-        _show, episode, _local_profile, download, old_path = _library(session, tmp_path)
+        _collection, episode, _local_profile, download, old_path = _library(session, tmp_path)
         manually_renamed = old_path.with_name("renamed-by-user.m4a")
         old_path.rename(manually_renamed)
         download.artifact_status = MediaDownloadArtifactStatus.MISSING.value
@@ -141,7 +141,7 @@ def test_rename_file_worker_reconciles_manual_rename_before_template_rename(monk
 
         result = asyncio.run(run_rename_file_worker(session, episode_id=episode.id))
 
-        expected = (tmp_path / "test-show" / "ep.2.m4a").resolve()
+        expected = (tmp_path / "test-collection" / "ep.2.m4a").resolve()
         session.refresh(download)
         assert result.data["files_renamed"] == 1
         assert result.data["files_recovered"] == 0
@@ -162,8 +162,8 @@ def test_rename_file_worker_recovers_move_completed_before_database_commit(monke
     session, engine = _session()
     try:
         monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
-        _show, episode, _local_profile, download, old_path = _library(session, tmp_path)
-        expected = (tmp_path / "test-show" / "ep.2.m4a").resolve()
+        _collection, episode, _local_profile, download, old_path = _library(session, tmp_path)
+        expected = (tmp_path / "test-collection" / "ep.2.m4a").resolve()
         expected.parent.mkdir(parents=True)
         old_path.replace(expected)
 
@@ -186,10 +186,10 @@ def test_identifier_event_scope_skips_templates_not_derived_from_identifier(monk
     session, engine = _session()
     try:
         monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
-        _show, episode, _local_profile, download, old_path = _library(
+        _collection, episode, _local_profile, download, old_path = _library(
             session,
             tmp_path,
-            output_template="/downloads/{{ show }}/{{ episode }}.ext",
+            output_template="/downloads/{{ collection }}/{{ episode }}.ext",
         )
 
         result = asyncio.run(run_rename_file_worker(
@@ -207,24 +207,24 @@ def test_identifier_event_scope_skips_templates_not_derived_from_identifier(monk
         engine.dispose()
 
 
-def test_show_file_rename_operation_targets_selected_local_media_profile(tmp_path):
-    from backend.api.endpoints.shows import service
+def test_collection_file_rename_operation_targets_selected_local_media_profile(tmp_path):
+    from backend.api.endpoints.collections import service
     from backend.db.models import LocalMediaProfile
     from task_manager.scheduler.db import TaskOperationTarget
 
     session, engine = _session()
     try:
-        show, episode, local_profile, _download, _old_path = _library(session, tmp_path)
+        collection, episode, local_profile, _download, _old_path = _library(session, tmp_path)
 
-        result = service.request_show_file_rename(session, show.slug, local_profile.id)
+        result = service.request_collection_file_rename(session, collection.slug, local_profile.id)
 
         assert result["queued"] is True
         assert result["episodes_queued"] == 1
         assert result["local_media_profiles_queued"] == 1
         target = session.query(TaskOperationTarget).filter_by(operation_id=result["operation_id"]).one()
-        assert target.task_key == "rename_show_profile_files"
-        assert target.resource_type == "show"
-        assert target.resource_id == show.id
+        assert target.task_key == "rename_collection_profile_files"
+        assert target.resource_type == "collection"
+        assert target.resource_id == collection.id
         assert target.task_kwargs == {"local_media_profile_id": local_profile.id}
 
         unused_profile = LocalMediaProfile(
@@ -236,7 +236,7 @@ def test_show_file_rename_operation_targets_selected_local_media_profile(tmp_pat
         session.add(unused_profile)
         session.commit()
         with pytest.raises(HTTPException) as exc:
-            service.request_show_file_rename(session, show.slug, unused_profile.id)
+            service.request_collection_file_rename(session, collection.slug, unused_profile.id)
         assert exc.value.status_code == 422
     finally:
         session.close()
@@ -249,16 +249,16 @@ def test_local_media_profile_rename_operation_targets_affected_episodes(tmp_path
 
     session, engine = _session()
     try:
-        show, _episode, local_profile, _download, _old_path = _library(session, tmp_path)
+        collection, _episode, local_profile, _download, _old_path = _library(session, tmp_path)
 
-        result = file_rename.request_show_local_media_profile_file_rename(session, local_profile.slug)
+        result = file_rename.request_collection_local_media_profile_file_rename(session, local_profile.slug)
 
         assert result["queued"] is True
         assert result["episodes_queued"] == 1
         target = session.query(TaskOperationTarget).filter_by(operation_id=result["operation_id"]).one()
-        assert target.task_key == "rename_show_profile_files"
-        assert target.resource_type == "show"
-        assert target.resource_id == show.id
+        assert target.task_key == "rename_collection_profile_files"
+        assert target.resource_type == "collection"
+        assert target.resource_id == collection.id
         assert target.task_kwargs == {"local_media_profile_id": local_profile.id}
     finally:
         session.close()
@@ -275,7 +275,7 @@ def test_rename_file_worker_moves_hls_companion_assets(monkeypatch, tmp_path):
     session, engine = _session()
     try:
         monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
-        _show, episode, local_profile, download, old_audio_path = _library(
+        _collection, episode, local_profile, download, old_audio_path = _library(
             session,
             tmp_path,
         )
@@ -319,7 +319,7 @@ def test_rename_file_worker_moves_hls_companion_assets(monkeypatch, tmp_path):
 
         result = asyncio.run(run_rename_file_worker(session, episode_id=episode.id))
 
-        expected = (tmp_path / "test-show" / "ep.2.m3u8").resolve()
+        expected = (tmp_path / "test-collection" / "ep.2.m3u8").resolve()
         expected_assets = hls_asset_root(expected)
         session.refresh(download)
         assert result.data["files_renamed"] == 1

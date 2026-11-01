@@ -19,7 +19,7 @@ class SeasonAPIRequestDetached(_SeasonAPIBaseIn):
 class SeasonAPICreate(_SeasonAPIBaseIn):
     """Request body for creating a season."""
 
-    show_id: int
+    collection_id: int
     index: int
     slug: str
 
@@ -34,7 +34,7 @@ class SeasonAPIUpdate(_SeasonAPIBaseIn):
 class _SeasonAPIBaseOut(ResponseBase):
     """Fields for responses: no validators, no constraints."""
     id: int
-    show_id: int
+    collection_id: int
     index: int
     name: str
     slug: str

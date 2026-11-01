@@ -3,10 +3,10 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.db.models import CustomIndexState, Episode, Show, ShowLocalMediaProfile
+from backend.db.models import CustomIndexState, Episode, Collection, CollectionLocalMediaProfile
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.custom_indexes import (
-    profile_show_scope_filter, reconcile_show_profile_custom_indexes,
+    profile_collection_scope_filter, reconcile_collection_profile_custom_indexes,
 )
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from task_manager.scheduler.operations import (
@@ -19,21 +19,21 @@ from task_manager.tasks.helpers.custom_index_readiness import custom_index_pair_
 
 
 def _queue_targeted_rename(
-    session: Session, *, show_id: int, local_media_profile_id: int,
+    session: Session, *, collection_id: int, local_media_profile_id: int,
     episode_ids: tuple[int, ...],
     expected_sources: tuple[tuple[int, str], ...],
 ) -> None:
     if not episode_ids:
         return
     target = OperationTargetSpec(
-        task_key="rename_show_profile_files", resource_type="show",
-        resource_id=show_id,
+        task_key="rename_collection_profile_files", resource_type="collection",
+        resource_id=collection_id,
         task_kwargs={
             "local_media_profile_id": local_media_profile_id,
             "episode_ids": list(episode_ids),
             "expected_sources": {str(id_): path for id_, path in expected_sources},
         },
-        slot_key=f"show:{show_id}:profile:{local_media_profile_id}",
+        slot_key=f"collection:{collection_id}:profile:{local_media_profile_id}",
     )
     operation = create_operation(
         session, kind="local_media_profile.rename_files",
@@ -45,10 +45,10 @@ def _queue_targeted_rename(
     queue_operation_target_dispatch(session, operation.id, target.resolved_slot_key())
 
 
-def _queue_profile_rename(session: Session, profile: ShowLocalMediaProfile) -> bool:
-    show_ids = tuple(session.scalars(
-        select(Show.id)
-        .join(Episode, Episode.show_id == Show.id)
+def _queue_profile_rename(session: Session, profile: CollectionLocalMediaProfile) -> bool:
+    collection_ids = tuple(session.scalars(
+        select(Collection.id)
+        .join(Episode, Episode.collection_id == Collection.id)
         .join(EpisodeMediaDownload, EpisodeMediaDownload.media_item_id == Episode.id)
         .where(
             EpisodeMediaDownload.local_media_profile_id == profile.id,
@@ -56,19 +56,19 @@ def _queue_profile_rename(session: Session, profile: ShowLocalMediaProfile) -> b
                 MediaDownloadArtifactStatus.AVAILABLE.value,
                 MediaDownloadArtifactStatus.CORRUPTED.value,
             )),
-            profile_show_scope_filter(profile),
+            profile_collection_scope_filter(profile),
         )
         .distinct()
-        .order_by(Show.id)
+        .order_by(Collection.id)
     ))
-    if not show_ids:
+    if not collection_ids:
         return False
     targets = [
         OperationTargetSpec(
-            task_key="rename_show_profile_files", resource_type="show",
-            resource_id=show_id, task_kwargs={"local_media_profile_id": profile.id},
-            slot_key=f"show:{show_id}",
-        ) for show_id in show_ids
+            task_key="rename_collection_profile_files", resource_type="collection",
+            resource_id=collection_id, task_kwargs={"local_media_profile_id": profile.id},
+            slot_key=f"collection:{collection_id}",
+        ) for collection_id in collection_ids
     ]
     operation = create_operation(
         session, kind="local_media_profile.rename_files",
@@ -82,18 +82,18 @@ def _queue_profile_rename(session: Session, profile: ShowLocalMediaProfile) -> b
 
 
 def run_manage_custom_indexes(
-    session: Session, *, show_id: int, local_media_profile_id: int, progress=None,
+    session: Session, *, collection_id: int, local_media_profile_id: int, progress=None,
 ) -> TaskResult:
     update_progress(progress, 5, "Calculating Episode index ranks")
     while True:
-        result = reconcile_show_profile_custom_indexes(
-            session, show_id=show_id, local_media_profile_id=local_media_profile_id,
+        result = reconcile_collection_profile_custom_indexes(
+            session, collection_id=collection_id, local_media_profile_id=local_media_profile_id,
         )
         if not result.superseded:
             break
         session.rollback()
     _queue_targeted_rename(
-        session, show_id=show_id, local_media_profile_id=local_media_profile_id,
+        session, collection_id=collection_id, local_media_profile_id=local_media_profile_id,
         episode_ids=result.synced_episode_ids,
         expected_sources=result.synced_source_paths,
     )
@@ -115,13 +115,13 @@ async def run_manage_profile_custom_indexes(
 ) -> TaskResult:
     states = list(session.scalars(select(CustomIndexState).where(
         CustomIndexState.local_media_profile_id == local_media_profile_id,
-    ).order_by(CustomIndexState.show_id)))
+    ).order_by(CustomIndexState.collection_id)))
     changed = 0
     for index, state in enumerate(states, start=1):
-        async with custom_index_pair_lock(state.show_id, local_media_profile_id):
+        async with custom_index_pair_lock(state.collection_id, local_media_profile_id):
             while True:
-                result = reconcile_show_profile_custom_indexes(
-                    session, show_id=state.show_id,
+                result = reconcile_collection_profile_custom_indexes(
+                    session, collection_id=state.collection_id,
                     local_media_profile_id=local_media_profile_id,
                     auto_rename=False,
                 )
@@ -130,17 +130,17 @@ async def run_manage_profile_custom_indexes(
                 session.rollback()
             session.commit()
         changed += result.assignments_changed
-        update_progress(progress, round(index / max(len(states), 1) * 90), f"Indexed {index}/{len(states)} shows")
+        update_progress(progress, round(index / max(len(states), 1) * 90), f"Indexed {index}/{len(states)} collections")
 
     rename_queued = False
     if rename_after:
-        profile = session.get(ShowLocalMediaProfile, local_media_profile_id)
+        profile = session.get(CollectionLocalMediaProfile, local_media_profile_id)
         if profile is not None:
             rename_queued = _queue_profile_rename(session, profile)
             session.commit()
     update_progress(progress, 100, "Custom index maintenance complete")
     return TaskResult(
         summary="Custom index maintenance complete",
-        data={"shows_considered": len(states), "assignments_changed": changed,
+        data={"collections_considered": len(states), "assignments_changed": changed,
               "rename_queued": int(rename_queued)},
     )

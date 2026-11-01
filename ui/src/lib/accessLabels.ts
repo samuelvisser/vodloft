@@ -4,8 +4,8 @@ import type {SourceRead} from '../types/schemas/source'
 import type {UserAccessInput} from '../types/schemas/user'
 
 export const AREA_LABELS: Record<Area, {label: string, group: string, help: string}> = {
-    library: {label: 'Library', group: 'Library', help: 'Shows, movies, videos and their episodes. Manage: edit, sync and delete them.'},
-    add_media: {label: 'Add media', group: 'Library', help: 'Browse, search and add shows, movies and videos.'},
+    library: {label: 'Library', group: 'Library', help: 'Collections, movies, videos and their episodes. Manage: edit, sync and delete them.'},
+    add_media: {label: 'Add media', group: 'Library', help: 'Browse, search and add collections, movies and videos.'},
     managed_downloads: {label: 'Managed downloads', group: 'Downloads', help: 'The Downloads page. Manage: start, retry and cancel downloads.'},
     quick_downloads: {label: 'Quick downloads', group: 'Downloads', help: 'Quick download links as files. View: their own; Manage: everyone’s.'},
     download_profiles: {label: 'Download Profiles', group: 'Profiles', help: 'View: use them when adding media. Manage: create and change them.'},

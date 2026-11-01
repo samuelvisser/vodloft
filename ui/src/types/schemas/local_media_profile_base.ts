@@ -51,7 +51,7 @@ export const LocalMediaProfileOutputTemplateSchema = z.string()
     )
     .refine(
         (value) => !SINGLE_BRACE_OUTPUT_TEMPLATE_VARIABLE.test(value),
-        {message: "Output template variables must use Jinja syntax such as '{{ show }}'; single-brace variables are not supported"},
+        {message: "Output template variables must use Jinja syntax such as '{{ collection }}'; single-brace variables are not supported"},
     )
     .min(16)
     .max(4096)

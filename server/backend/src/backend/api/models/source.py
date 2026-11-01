@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import Literal, Optional
 
 from pydantic import Field, computed_field, field_validator
@@ -39,6 +39,7 @@ class SourceAPIRead(ResponseBase):
     domains: list[str]
     features: list[str]
     search_label: Optional[str] = None
+    kind_names: dict[str, str] = {}
     subscription_name: Optional[str] = None
     cookies_help: Optional[str] = None
     subscription_active: bool = False
@@ -47,6 +48,11 @@ class SourceAPIRead(ResponseBase):
     @classmethod
     def _sorted_feature_names(cls, features: Iterable[Feature | str]) -> list[str]:
         return sorted(str(feature) for feature in features)
+
+    @field_validator("kind_names", mode="before")
+    @classmethod
+    def _kind_name_keys(cls, kind_names: Mapping[object, str]) -> dict[str, str]:
+        return {str(kind): name for kind, name in kind_names.items()}
 
 
 class ResolveAPIRequest(RequestBase):
@@ -69,13 +75,13 @@ class ProgramStatusAPIRead(ResponseBase):
     last_update_error: Optional[str] = None
 
 
-class ShowDetailsSeasonAPIRead(ResponseBase):
+class CollectionDetailsSeasonAPIRead(ResponseBase):
     slug: str
     name: str
 
 
-class ShowDetailsAPIRead(ResponseBase):
-    """A show at a Source with listed episodes, shaped like the fields of a new show."""
+class CollectionDetailsAPIRead(ResponseBase):
+    """A collection at a Source with listed episodes, shaped like the fields of a new collection."""
 
     source_key: str
     slug: str
@@ -85,8 +91,8 @@ class ShowDetailsAPIRead(ResponseBase):
     author_name: str
     author_slug: str
     thumbnail_landscape_path: Optional[str] = None
-    # The show's own seasons, oldest first; empty for a Source that has none.
-    seasons: list[ShowDetailsSeasonAPIRead] = Field(default_factory=list)
+    # The collection's own seasons, oldest first; empty for a Source that has none.
+    seasons: list[CollectionDetailsSeasonAPIRead] = Field(default_factory=list)
 
 
 class CookiesStatusAPIRead(ResponseBase):
@@ -123,9 +129,9 @@ class ApiStatusAPIRead(ResponseBase):
     resets_at: datetime
     problem: Optional[str] = None
     problem_fix_url: Optional[str] = None
-    # The shows the key speeds up, and the units one full re-scan of them costs,
-    # so the settings can say how often each show gets checked.
-    show_count: int
+    # The collections the key speeds up, and the units one full re-scan of them costs,
+    # so the settings can say how often each collection gets checked.
+    collection_count: int
     rescan_units: int
 
 
@@ -147,11 +153,11 @@ class CookiesAPIUpdate(RequestBase):
 
 class ResolvedLinkAPIRead(ResponseBase):
     source: SourceAPIRead
-    kind: Literal["show", "movie", "episode", "video"]
+    kind: Literal["collection", "movie", "episode", "video"]
     slug: str
     url: str
-    show_slug: Optional[str] = None
-    show_url: Optional[str] = None
+    collection_slug: Optional[str] = None
+    collection_url: Optional[str] = None
     site: Optional[str] = None
     drm_protected: bool = False
     needs_subscription: bool = False
@@ -161,15 +167,15 @@ class ResolvedLinkAPIRead(ResponseBase):
 
 
 class SearchResultAPIRead(ResponseBase):
-    kind: Literal["show", "movie", "episode", "video"]
+    kind: Literal["collection", "movie", "episode", "video"]
     slug: str
     url: str
     title: str
     description: Optional[str] = None
     image_url: Optional[str] = None
     author_name: Optional[str] = None
-    show_slug: Optional[str] = None
-    show_url: Optional[str] = None
+    collection_slug: Optional[str] = None
+    collection_url: Optional[str] = None
     kind_label: Optional[str] = None
     facts: list[str] = []
     needs_subscription: bool = False

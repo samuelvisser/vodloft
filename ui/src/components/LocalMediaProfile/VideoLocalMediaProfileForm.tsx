@@ -16,7 +16,7 @@ export default function VideoLocalMediaProfileForm({form}: { form: UseFormReturn
                 help={(
                     <>
                         <p>
-                            A Video profile stores single videos that you added on their own, outside any show.
+                            A Video profile stores single videos that you added on their own, outside any collection.
                             Date variables use the upload date. Sites do not always say when a video was uploaded or
                             who uploaded it, so those variables can be empty; a conditional can leave them out.
                         </p>

@@ -83,14 +83,14 @@ def test_other_sites_are_prefixed_and_unknown_pages_are_best_effort(lookups):
     assert source.resolve("https://example.com/about") is None
 
 
-def test_playlists_resolve_to_shows_but_are_not_videos(lookups):
+def test_playlists_resolve_to_collections_but_are_not_videos(lookups):
     answers, _ = lookups
     answers["https://www.youtube.com/playlist?list=PL1"] = {
         "_type": "playlist", "id": "PL1", "extractor_key": "YoutubeTab", "title": "A playlist", "uploader": "A Channel",
     }
     source = YtDlpSource()
     link = source.resolve("https://www.youtube.com/playlist?list=PL1")
-    assert (link.kind, link.slug, link.title) == (LinkKind.SHOW, "PL1", "A playlist")
+    assert (link.kind, link.slug, link.title) == (LinkKind.COLLECTION, "PL1", "A playlist")
     with pytest.raises(runner.YtDlpError, match="not a single video"):
         source.video_details("https://www.youtube.com/playlist?list=PL1")
 

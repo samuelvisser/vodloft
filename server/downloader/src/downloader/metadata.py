@@ -16,7 +16,7 @@ class MediaServerMetadata:
     # Which service ``unique_id`` belongs to, as media servers read it. Set with ``unique_id``.
     unique_id_type: str | None = None
     source_url: str | None = None
-    show_title: str | None = None
+    collection_title: str | None = None
     season_number: int | None = None
     episode_index: int | None = None
     episode_number: int | None = None
@@ -40,9 +40,9 @@ class MediaServerMetadata:
         if self.description:
             tags["description"] = self.description
             tags["comment"] = self.description
-        if self.show_title:
-            tags["show"] = self.show_title
-            tags["album"] = self.show_title
+        if self.collection_title:
+            tags["show"] = self.collection_title
+            tags["album"] = self.collection_title
         if self.authors:
             joined = ", ".join(self.authors)
             tags["artist"] = joined
@@ -120,7 +120,7 @@ def _nfo_root(metadata: MediaServerMetadata) -> ET.Element:
     if metadata.unique_id and metadata.unique_id_type:
         unique = ET.SubElement(root, "uniqueid", {"type": metadata.unique_id_type, "default": "true"})
         unique.text = metadata.unique_id
-    _text(root, "showtitle", metadata.show_title)
+    _text(root, "showtitle", metadata.collection_title)
     _text(root, "season", metadata.season_number)
     _text(root, "episode", metadata.episode_number)
     _text(root, "aired", metadata.aired)

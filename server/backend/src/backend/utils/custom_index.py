@@ -41,11 +41,11 @@ class CustomIndexNotReadyError(RuntimeError):
     """Raised when an artifact needs a defined index that has not been assigned yet."""
 
     def __init__(
-        self, message: str, *, repair_show_id: int | None = None,
+        self, message: str, *, repair_collection_id: int | None = None,
         repair_profile_id: int | None = None,
     ) -> None:
         super().__init__(message)
-        self.repair_show_id = repair_show_id
+        self.repair_collection_id = repair_collection_id
         self.repair_profile_id = repair_profile_id
 
 

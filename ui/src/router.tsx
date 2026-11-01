@@ -13,12 +13,12 @@ import LocalMediaProfilesPage from './pages/LocalMediaProfilesPage'
 import SettingsPage from './pages/SettingsPage'
 import LogsPage from './pages/LogsPage'
 import TasksPage from './pages/TasksPage'
-import AddShowPage from './pages/show/AddShowPage'
+import AddCollectionPage from './pages/collection/AddCollectionPage'
 import AddLocalMediaProfilePage from './pages/local-media-profile/AddLocalMediaProfilePage'
 import EditLocalMediaProfilePage from './pages/local-media-profile/EditLocalMediaProfilePage'
 import LocalMediaProfilePage from './pages/local-media-profile/LocalMediaProfilePage'
-import ShowPage from './pages/show/ShowPage'
-import EditShow from './pages/show/EditShowPage'
+import CollectionPage from './pages/collection/CollectionPage'
+import EditCollection from './pages/collection/EditCollectionPage'
 import EpisodePage from './pages/episode/EpisodePage'
 import DownloadProfilesPage from './pages/DownloadProfilesPage'
 import AddDownloadProfilePage from './pages/download-profile/AddDownloadProfilePage'
@@ -63,9 +63,9 @@ function g(area: Area, element: React.ReactNode, level: Level = 'view') {
   return <Guard area={area} level={level}>{element}</Guard>
 }
 
-function AddShowRoute() {
+function AddCollectionRoute() {
   const navigate = useNavigate()
-  return <AddShowPage onCancel={() => navigate('/library')} />
+  return <AddCollectionPage onCancel={() => navigate('/library')} />
 }
 
 export const router = createBrowserRouter(
@@ -73,7 +73,7 @@ export const router = createBrowserRouter(
     <Route path="/" element={<RootRoute />}>
       <Route index element={g('library', <HomePage />)} />
       <Route path="library" element={g('library', <LibraryPage />)} />
-      <Route path="shows" element={<Navigate to="/library?type=shows" replace />} />
+      <Route path="collections" element={<Navigate to="/library?type=collections" replace />} />
       <Route path="browse" element={g('add_media', <BrowsePage />)} />
       <Route path="browse/:sourceId" element={g('add_media', <SourceSearchPage />)} />
       <Route path="add" element={g('add_media', <AddMediaPage />)} />
@@ -83,7 +83,7 @@ export const router = createBrowserRouter(
       <Route path="settings" element={<Guard when={() => canAnySettings()}><SettingsPage /></Guard>} />
       <Route path="logs" element={g('logs', <LogsPage />)} />
       <Route path="tasks" element={g('tasks', <TasksPage />)} />
-      <Route path="add-show" element={g('add_media', <AddShowRoute />)} />
+      <Route path="add-collection" element={g('add_media', <AddCollectionRoute />)} />
       <Route path="add-local-media-profile" element={g('local_media_profiles', <AddLocalMediaProfilePage />, 'manage')} />
       <Route path="local-media-profile/:slug" element={g('local_media_profiles', <LocalMediaProfilePage />)} />
       <Route path="edit-local-media-profile/:slug" element={g('local_media_profiles', <EditLocalMediaProfilePage />, 'manage')} />
@@ -93,12 +93,12 @@ export const router = createBrowserRouter(
       <Route path="stream-profiles" element={g('stream_profiles', <StreamProfilesPage />)} />
       <Route path="add-stream-profile" element={g('stream_profiles', <AddStreamProfilePage />)} />
       <Route path="edit-stream-profile/:type/:id" element={g('stream_profiles', <EditStreamProfilePage />)} />
-      <Route path="show/:id" element={g('library', <ShowPage />)} />
+      <Route path="collection/:id" element={g('library', <CollectionPage />)} />
       <Route path="movie/:slug" element={g('library', <MoviePage />)} />
       <Route path="edit-movie/:slug" element={g('library', <EditMoviePage />, 'manage')} />
       <Route path="video/:id" element={g('library', <VideoPage />)} />
-      <Route path="show/:id/episode/:episodeId" element={g('library', <EpisodePage />)} />
-      <Route path="edit-show/:id" element={g('library', <EditShow />, 'manage')} />
+      <Route path="collection/:id/episode/:episodeId" element={g('library', <EpisodePage />)} />
+      <Route path="edit-collection/:id" element={g('library', <EditCollection />, 'manage')} />
       <Route path="account" element={<AccountPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Route>,

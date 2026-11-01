@@ -1,8 +1,8 @@
 # Download Profiles
 
-Download Profiles decide **which show episodes VODLoft should download automatically**. The attached Local Media Profile decides the file format, download behavior, and output path. See [[Local-Media-Profiles]].
+Download Profiles decide **which collection episodes VODLoft should download automatically**. The attached Local Media Profile decides the file format, download behavior, and output path. See [[Local-Media-Profiles]].
 
-A show can have more than one Download Profile. For example, you can keep audio for every episode while retaining video only for the newest five.
+A collection can have more than one Download Profile. For example, you can keep audio for every episode while retaining video only for the newest five.
 
 Movies do not use Download Profiles; movie downloads are started manually from the movie page.
 
@@ -18,12 +18,12 @@ Disabling a profile keeps its configuration but stops it from automatically sele
 
 ## Which options a profile shows
 
-The options follow how the show identifies its episodes (its **Episode identification**, chosen when you add the show), not whether it is a podcast or a series:
+The options follow how the collection identifies its episodes (its **Episode identification**, chosen when you add the collection), not whether it is a podcast or a series:
 
-- a **Seasonal** show filters by season first, and can use every date option below on top of that;
-- a **Date-based** or **Numbered** show uses the date options only.
+- a **Seasonal** collection filters by season first, and can use every date option below on top of that;
+- a **Date-based** or **Numbered** collection uses the date options only.
 
-If you change a show's episode identification later, its Download Profiles follow: the season choice only counts while the show is seasonal.
+If you change a collection's episode identification later, its Download Profiles follow: the season choice only counts while the collection is seasonal.
 
 ## Seasons
 
@@ -43,7 +43,7 @@ Selecting all seasons in the UI also enables future seasons so the profile keeps
 
 ### Limit by
 
-Choose how many episodes the profile should consider. On a seasonal show the limit counts only episodes in the chosen seasons:
+Choose how many episodes the profile should consider. On a seasonal collection the limit counts only episodes in the chosen seasons:
 
 - **No limits** — every eligible episode can be downloaded.
 - **Date** — only episodes inside a recent number-of-days window are eligible.
@@ -55,7 +55,7 @@ When **No limits** is selected, you can optionally set **Download starting from*
 
 VODLoft will ignore eligible episodes older than that date and continue downloading new episodes published after it. Existing files are not deleted simply because they predate the cutoff.
 
-This is useful when you want to begin archiving a show from a particular date without downloading its complete history.
+This is useful when you want to begin archiving a collection from a particular date without downloading its complete history.
 
 ### Delete older episodes
 

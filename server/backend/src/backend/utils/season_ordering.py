@@ -34,7 +34,7 @@ def season_type_from_name(name: str) -> SeasonType:
 
 
 def order_initial_seasons(seasons: Sequence[SeasonT]) -> list[SeasonT]:
-    """Return deterministic persistent season order for a newly added show.
+    """Return deterministic persistent season order for a newly added collection.
 
     This deliberately preserves VODLoft's existing internal-index behavior:
     unstructured slugs stay first in The Daily Wire API order, while recognizable

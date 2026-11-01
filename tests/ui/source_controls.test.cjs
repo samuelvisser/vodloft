@@ -27,7 +27,7 @@ const {sourceControls, linkTarget} = load('lib/sourceControls.ts', {'../types/sc
 const stubItem = {sourceKey: 'stub', sourceFeatures: []}
 const dailyWireItem = {
     sourceKey: 'dailywire',
-    sourceFeatures: ['browse', 'live_episodes', 'login', 'membership_levels', 'movie_extras', 'movies', 'rss_streaming', 'shows'],
+    sourceFeatures: ['browse', 'live_episodes', 'login', 'membership_levels', 'movie_extras', 'movies', 'rss_streaming', 'collections'],
 }
 
 test('a Source without Features gets none of the Daily Wire controls', () => {
@@ -42,7 +42,7 @@ test('a Source without Features gets none of the Daily Wire controls', () => {
 })
 
 test('a Source that lists its episodes has no metadata refresh', () => {
-    assert.equal(sourceControls({sourceKey: 'ytdlp', sourceFeatures: ['shows', 'episode_lists']}).metadataRefresh, false)
+    assert.equal(sourceControls({sourceKey: 'ytdlp', sourceFeatures: ['collections', 'episode_lists']}).metadataRefresh, false)
 })
 
 test('Daily Wire items keep every control', () => {
@@ -66,16 +66,16 @@ test('read schemas fill in the Source fields when an older backend leaves them o
     assert.equal(sourceSchemas.sourceHas(parsed.source, sourceSchemas.SourceFeature.BROWSE), false)
 })
 
-test('links hand off to a show or a movie, and an episode opens its show', () => {
+test('links hand off to a collection or a movie, and an episode opens its collection', () => {
     const base = {source: {id: 'stub'}, preview: {title: 'Title'}}
     assert.deepEqual(
-        plain(linkTarget({...base, kind: 'show', slug: 'a-show', url: 'https://stub.example/show/a-show'})),
-        {sourceKey: 'stub', title: 'Title', kind: 'show', slug: 'a-show', url: 'https://stub.example/show/a-show'},
+        plain(linkTarget({...base, kind: 'collection', slug: 'a-collection', url: 'https://stub.example/collection/a-collection'})),
+        {sourceKey: 'stub', title: 'Title', kind: 'collection', slug: 'a-collection', url: 'https://stub.example/collection/a-collection'},
     )
     assert.equal(linkTarget({...base, kind: 'movie', slug: 'm', url: 'u'}).kind, 'movie')
     assert.deepEqual(
-        plain(linkTarget({...base, kind: 'episode', slug: 'ep', url: 'e', showSlug: 'a-show', showUrl: 'https://stub.example/show/a-show'})),
-        {sourceKey: 'stub', title: 'Title', kind: 'show', slug: 'a-show', url: 'https://stub.example/show/a-show'},
+        plain(linkTarget({...base, kind: 'episode', slug: 'ep', url: 'e', collectionSlug: 'a-collection', collectionUrl: 'https://stub.example/collection/a-collection'})),
+        {sourceKey: 'stub', title: 'Title', kind: 'collection', slug: 'a-collection', url: 'https://stub.example/collection/a-collection'},
     )
     assert.equal(linkTarget({...base, kind: 'episode', slug: 'ep', url: 'e'}), null)
 })

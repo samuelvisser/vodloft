@@ -116,7 +116,7 @@ export default function MoviePage() {
     const sourceKey = localMovie?.sourceKey ?? DAILYWIRE_SOURCE_KEY
     const sources = useSourceLookup()
     const sourceName = sources.name(sourceKey)
-    const showsExtras = sourceControls(localMovie).movieExtras
+    const collectionsExtras = sourceControls(localMovie).movieExtras
     const drmProtected = Boolean(localMovie?.drmProtected)
     const refreshAttemptedSlugs = useRef(new Set<string>())
     const shouldRefreshMovie = Boolean(
@@ -520,7 +520,7 @@ export default function MoviePage() {
                 {localMovie && (
                     <ActionMenu
                         items={[
-                            ...(showsExtras ? [{
+                            ...(collectionsExtras ? [{
                                 label: 'Refresh extras',
                                 icon: faIcon('fass', 'rotate'),
                                 disabled: refreshingExtras,
@@ -628,7 +628,7 @@ export default function MoviePage() {
                 </aside>
             </div>
 
-            {showsExtras && movieExtras.length > 0 && (
+            {collectionsExtras && movieExtras.length > 0 && (
                 <section className="movie-extras" aria-labelledby="movie-extras-title">
                     <div className="movie-section-heading">
                         <div>

@@ -37,14 +37,14 @@ export default function EditStreamProfilePage() {
         if (!downloadProfiles) return undefined
         if (!streamProfile) return []
         return downloadProfiles
-            .filter((profile) => profile.showSlug === streamProfile.showSlug)
+            .filter((profile) => profile.collectionSlug === streamProfile.collectionSlug)
             .map((profile) => ({
                 id: profile.id,
                 preferredFormat: profile.localMediaProfilePreferredFormat,
                 episodeTypes: profile.epIdTypeList,
                 enabled: profile.enableProfile,
             }))
-    }, [downloadProfiles, streamProfile?.showSlug])
+    }, [downloadProfiles, streamProfile?.collectionSlug])
 
     const form = useForm<RssStreamProfileUpdateIn>({
         resolver: zodResolver(RssStreamProfileUpdateSchema),
@@ -140,8 +140,8 @@ export default function EditStreamProfilePage() {
                     </div>
 
                     <div className="form-row">
-                        <label>Show</label>
-                        <div style={{padding: '6px 0'}}>{streamProfile?.showTitle}</div>
+                        <label>Collection</label>
+                        <div style={{padding: '6px 0'}}>{streamProfile?.collectionTitle}</div>
                     </div>
 
                     {errors.root && (
@@ -153,12 +153,12 @@ export default function EditStreamProfilePage() {
                     <StreamProfileForm
                         form={form as any}
                         mode="rss"
-                        showRoot={false}
+                        collectionRoot={false}
                         onRegenerateToken={onRegenerateToken}
                         regeneratingToken={regenerating}
                         downloadProfileDefaults={downloadProfileDefaults}
-                        showSlug={streamProfile?.showSlug}
-                        showTitle={streamProfile?.showTitle}
+                        collectionSlug={streamProfile?.collectionSlug}
+                        collectionTitle={streamProfile?.collectionTitle}
                     />
 
                     <div className="actions">

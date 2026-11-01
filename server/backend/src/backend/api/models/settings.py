@@ -30,7 +30,7 @@ from config.settings.submodels import (
     QuickDownloadContainer,
     QuickDownloadKind,
     QuickDownloadQuality,
-    ShowArtworkFallbackFormat,
+    CollectionArtworkFallbackFormat,
     ThumbnailMode,
     normalize_metadata_refresh_intervals,
 )
@@ -86,8 +86,8 @@ SettingFieldPath = Literal[
     "downloadSettings.downloadMode",
     "downloadSettings.thumbnailMode",
     "downloadSettings.metadataMode",
-    "downloadSettings.downloadShowAssets",
-    "downloadSettings.showArtworkFallbackFormat",
+    "downloadSettings.downloadCollectionAssets",
+    "downloadSettings.collectionArtworkFallbackFormat",
     "downloadSettings.temporaryDownloadRoot",
     "downloadSettings.rssCacheRoot",
     "downloadSettings.quickDownloadRoot",
@@ -178,7 +178,7 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "downloadSettings.downloadMode",
     "downloadSettings.thumbnailMode",
     "downloadSettings.metadataMode",
-    "downloadSettings.downloadShowAssets",
+    "downloadSettings.downloadCollectionAssets",
     "downloadSettings.temporaryDownloadRoot",
     "downloadSettings.rssCacheRoot",
     "downloadSettings.quickDownloadRoot",
@@ -351,8 +351,8 @@ class DownloadSettingsValue(_SettingsValueModel):
     download_mode: DownloadMode
     thumbnail_mode: ThumbnailMode
     metadata_mode: MetadataMode
-    download_show_assets: bool
-    show_artwork_fallback_format: ShowArtworkFallbackFormat
+    download_collection_assets: bool
+    collection_artwork_fallback_format: CollectionArtworkFallbackFormat
     temporary_download_root: Path
     rss_cache_root: Path
     quick_download_root: Path

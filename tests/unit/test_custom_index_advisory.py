@@ -33,8 +33,8 @@ PLEX = (
     '{% set ep_num = "%02d"|format(episode_number|int) %}'
     "{% set is_extra = season_type == 'extra' or episode_type == 'aux' or episode_type == 'trailer' %}"
     "{% set extra_num = 'extra' | custom_index %}"
-    "{% set plex_year = ' (' ~ meta_show_year ~ ')' if meta_show_year %}"
-    "{% set plex_show_title = show_title ~ plex_year %}"
+    "{% set plex_year = ' (' ~ meta_collection_year ~ ')' if meta_collection_year %}"
+    "{% set plex_show_title = collection_title ~ plex_year %}"
     "{% set plex_season = 'Specials' if is_extra else 'Season ' ~ season_num %}"
     "{% set plex_ep_id = 'other' ~ extra_num if is_extra else 'S' ~ season_num ~ 'E' ~ ep_num %}"
     "{% set plex_title = title | replace('[', '(') | replace(']', ')') %}"
@@ -47,7 +47,7 @@ def test_reversed_inline_condition_still_gets_a_safe_set_block_suggestion(enviro
     source = (
         "{% set season_num = '%02d'|format(season_index|int) %}"
         "{% set ep_num = '%02d'|format(episode_number|int) %}"
-        "{% set plex_year = ' (' ~ meta_show_year ~ ')' if meta_show_year != '' else '' %}"
+        "{% set plex_year = ' (' ~ meta_collection_year ~ ')' if meta_collection_year != '' else '' %}"
         "{% set extra_num='extra'|custom_index %}"
         "{% set is_extra = season_type == 'extra' or episode_type == 'aux' or episode_type == 'trailer' %}"
         "{% set plex_season = 'Season ' ~ season_num if not is_extra else 'Specials' %}"
@@ -66,7 +66,7 @@ def test_reversed_inline_condition_still_gets_a_safe_set_block_suggestion(enviro
         values = dict(
             season_index='1',
             episode_number='4',
-            meta_show_year='',
+            meta_collection_year='',
             season_type='extra' if is_extra else 'normal',
             episode_type='ep',
             resolve=lambda key: used.append(key) or 7,
@@ -85,8 +85,8 @@ def test_no_else_inline_condition_gets_a_safe_conditional_set_block(environment)
         '{% set ep_num = "%02d"|format(episode_number|int) %}'
         "{% set is_extra = season_type == 'extra' or episode_type == 'aux' or episode_type == 'trailer' %}"
         "{% set extra_num = 'extra' | custom_index %}"
-        "{% set plex_year = ' (' ~ meta_show_year ~ ')' if meta_show_year %}"
-        "{% set plex_show_title = show_title ~ plex_year %}"
+        "{% set plex_year = ' (' ~ meta_collection_year ~ ')' if meta_collection_year %}"
+        "{% set plex_show_title = collection_title ~ plex_year %}"
         "{% set plex_season = 'Specials' if is_extra else 'Season ' ~ season_num %}"
         "{% set plex_ep_id = 'other' ~ extra_num if is_extra %}"
         "/downloads/{{ plex_show_title }}/{{ plex_season }}/{{ plex_ep_id }}.ext"
@@ -109,8 +109,8 @@ def test_no_else_inline_condition_gets_a_safe_conditional_set_block(environment)
             episode_number='4',
             season_type='normal',
             episode_type=episode_type,
-            meta_show_year='',
-            show_title='A Show',
+            meta_collection_year='',
+            collection_title='A Collection',
         )
         before = environment.from_string(source).render(
             **values, resolve=lambda key: before_used.append(key) or 7,
@@ -220,7 +220,7 @@ def test_plex_suggestion_uses_existing_condition_and_a_native_set_block(environm
             return counters[key]
 
         values = dict(season_number='1', episode_number='4', season_type='normal', episode_type=kind,
-                      meta_show_year='', show_title='A Show', title='Title', resolve=resolve)
+                      meta_collection_year='', collection_title='A Collection', title='Title', resolve=resolve)
         rendered = environment.from_string(suggestion.output_template).render(values)
         assigned.append(dict(counters) if used else {})
         if kind == 'ep':

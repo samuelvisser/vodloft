@@ -8,7 +8,7 @@ import {sourceComponents} from '../Source/sourceComponents'
 import type {SettingsTabProps} from './SettingsTabTypes'
 
 const FEATURE_LABELS: Record<string, string> = {
-    [SourceFeature.SHOWS]: 'Shows',
+    [SourceFeature.COLLECTIONS]: 'Collections',
     [SourceFeature.MOVIES]: 'Movies',
     [SourceFeature.MOVIE_EXTRAS]: 'Movie extras',
     [SourceFeature.BROWSE]: 'Browse',

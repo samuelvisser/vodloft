@@ -51,8 +51,8 @@ class _RenamedArtifact:
 async def run_file_watcher(
     s: Session,
     *,
-    show_id: Optional[int] = None,
-    show_slug: Optional[str] = None,
+    collection_id: Optional[int] = None,
+    collection_slug: Optional[str] = None,
     progress=None,
 ) -> None:
     """Reconcile persistent MediaDownload artifact facts with the filesystem.
@@ -69,7 +69,7 @@ async def run_file_watcher(
         return
 
     print("Starting file_watcher")
-    downloads = get_tracked_downloads(s, show_id=show_id, show_slug=show_slug)
+    downloads = get_tracked_downloads(s, collection_id=collection_id, collection_slug=collection_slug)
 
     # SELECT starts SQLAlchemy's implicit transaction. Detach the fully loaded
     # MediaDownload objects before ending that transaction so their scalar

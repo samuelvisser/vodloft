@@ -23,11 +23,11 @@ def test_no_show_today_detection_uses_slug_only():
 
 # ---------- shared fixtures ----------
 
-def _make_show(session, *, slug="test-show"):
-    from backend.db.models import Show
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+def _make_collection(session, *, slug="test-collection"):
+    from backend.db.models import Collection
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
 
-    show = Show(
+    collection = Collection(
         source_key="dailywire",
         uuid=f"{slug}-uuid",
         slug=slug,
@@ -35,20 +35,20 @@ def _make_show(session, *, slug="test-show"):
         description=None,
         sharing_url=f"https://example.test/{slug}",
         membership_level="FREE",
-        type=ShowType.PODCAST.value,
+        type=CollectionType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Host",
         author_slug="host",
     )
-    session.add(show)
+    session.add(collection)
     session.flush()
-    return show
+    return collection
 
 
-def _make_season(session, show, *, index=1, slug="season-1", name="One"):
+def _make_season(session, collection, *, index=1, slug="season-1", name="One"):
     from backend.db.models import Season
 
-    season = Season(show=show, index=index, slug=slug, name=name)
+    season = Season(collection=collection, index=index, slug=slug, name=name)
     session.add(season)
     session.flush()
     return season
@@ -56,7 +56,7 @@ def _make_season(session, show, *, index=1, slug="season-1", name="One"):
 
 def _make_episode(
         session,
-        show,
+        collection,
         season,
         *,
         slug,
@@ -74,7 +74,7 @@ def _make_episode(
         source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
-        show=show,
+        collection=collection,
         season=season,
         index=index,
         episode_identifier=ep_id,
@@ -96,7 +96,7 @@ def _make_local_media_profile(session, *, slug="audio"):
     profile = LocalMediaProfile(
         slug=slug,
         name=slug,
-        output_template="/downloads/{{ show }}/{{ episode }}.ext",
+        output_template="/downloads/{{ collection }}/{{ episode }}.ext",
         preferred_format="format_audio_only",
     )
     session.add(profile)
@@ -178,11 +178,11 @@ def _patch_usable_hls(monkeypatch):
 def test_title_alone_does_not_make_episode_no_show_today(db_session):
     from task_manager.tasks.helpers.episodes.save import upsert_episode
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     episode = upsert_episode(
         db_session,
-        show=show,
+        collection=collection,
         season=season,
         ep=_dw_episode_record("matt-walsh-1809", "The Matt Walsh Show - No Show Today"),
         index_value=1,
@@ -204,8 +204,8 @@ def test_slug_marks_no_show_today_without_persisted_boolean(db_session):
         episode_no_usable_media_reason,
     )
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     record = _dw_episode_record("matt-walsh-1809-no-show-today", "Ordinary title")
     [resolved] = resolve_dw_episodes(
         episodes=[("ep.1809", record)],
@@ -218,7 +218,7 @@ def test_slug_marks_no_show_today_without_persisted_boolean(db_session):
 
     _, saved = save_resolved_episodes_per_season_asc(
         db_session,
-        show=show,
+        collection=collection,
         season=season,
         episodes=[resolved],
         start_index=1,
@@ -238,16 +238,16 @@ def test_episode_api_does_not_return_is_no_show_today(db_session):
         save_resolved_episodes_per_season_asc,
     )
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     [resolved] = resolve_dw_episodes(
-        episodes=[("ep.1", _dw_episode_record("test-show-1-no-show-today", "Anything"))],
+        episodes=[("ep.1", _dw_episode_record("test-collection-1-no-show-today", "Anything"))],
         client=object(),
         require_member_exclusive=False,
     )
     _, saved = save_resolved_episodes_per_season_asc(
         db_session,
-        show=show,
+        collection=collection,
         season=season,
         episodes=[resolved],
         start_index=1,
@@ -268,13 +268,13 @@ def test_download_profile_excludes_unusable_and_processing_statuses(db_session):
         get_download_profile_episodes,
     )
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     lmp = _make_local_media_profile(db_session)
 
     real_ep = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="ep-real",
         ep_id="ep.1",
@@ -283,7 +283,7 @@ def test_download_profile_excludes_unusable_and_processing_statuses(db_session):
     )
     unusable_ep = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="ep-unusable",
         ep_id="aux.1",
@@ -293,7 +293,7 @@ def test_download_profile_excludes_unusable_and_processing_statuses(db_session):
     )
     processing_ep = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="ep-processing",
         ep_id="aux.2",
@@ -303,7 +303,7 @@ def test_download_profile_excludes_unusable_and_processing_statuses(db_session):
     )
 
     profile = DownloadProfile(
-        show=show,
+        collection=collection,
         local_media_profile=lmp,
         enable_profile=True,
         ep_id_type_list=[EpIdType.EP.value, EpIdType.AUX.value],
@@ -340,11 +340,11 @@ def test_monitor_keeps_recent_no_show_today(db_session, monkeypatch):
     from task_manager.tasks.workers.monitor_no_usable_media_episode import service
 
     now = datetime.now(timezone.utc)
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     episode = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="ep-no-show-today",
         ep_id="aux.1",
@@ -381,11 +381,11 @@ def test_monitor_keeps_old_no_show_today_while_dailywire_still_returns_it(db_ses
     from task_manager.tasks.workers.monitor_no_usable_media_episode import service
 
     now = datetime.now(timezone.utc)
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     episode = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="ep-no-show-today",
         ep_id="aux.1",
@@ -423,11 +423,11 @@ def test_monitor_recovers_no_show_placeholder_that_became_real_episode(db_sessio
     from task_manager.tasks.workers.monitor_no_usable_media_episode import service
 
     now = datetime.now(timezone.utc)
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     episode = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="ep-no-show-today",
         ep_id="ep.1",
@@ -471,11 +471,11 @@ def test_monitor_deletes_continuous_404_after_four_hours(db_session, monkeypatch
     from task_manager.tasks.workers.monitor_no_usable_media_episode import service
 
     now = datetime.now(timezone.utc)
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     episode = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="bad-remote-episode",
         ep_id="ep.1",
@@ -513,11 +513,11 @@ def test_monitor_verifies_recent_404_but_does_not_delete_it(db_session, monkeypa
     from task_manager.tasks.workers.monitor_no_usable_media_episode import service
 
     now = datetime.now(timezone.utc)
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     episode = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="temporarily-missing",
         ep_id="ep.1",
@@ -561,11 +561,11 @@ def test_monitor_recovers_episode_when_404_endpoint_has_usable_media(db_session,
     from task_manager.tasks.workers.monitor_no_usable_media_episode import service
 
     now = datetime.now(timezone.utc)
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     episode = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="recovered-episode",
         ep_id="ep.1",
@@ -606,11 +606,11 @@ def test_monitor_ignores_genuine_dw_processing(db_session, monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
     from task_manager.tasks.workers.monitor_no_usable_media_episode import service
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     episode = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="real-processing",
         ep_id="ep.1",

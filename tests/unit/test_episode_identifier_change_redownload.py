@@ -7,12 +7,12 @@ from unittest.mock import AsyncMock, Mock
 
 def _fake_episode(*, status: str, identifier: str = "ep-extra.other.2500.1"):
     metadata: dict[str, str | None] = {}
-    show = SimpleNamespace(id=7, slug="test-show")
+    collection = SimpleNamespace(id=7, slug="test-collection")
     episode = SimpleNamespace(
         id=42,
         slug="test-episode",
-        show_id=show.id,
-        show=show,
+        collection_id=collection.id,
+        collection=collection,
         season_id=3,
         index=2500,
         episode_identifier=identifier,
@@ -63,7 +63,7 @@ def test_identifier_change_event_only_fires_after_initial_publication(monkeypatc
     events.queue_episode_status_events(
         object(),
         episode=episode,
-        show=episode.show,
+        collection=episode.collection,
         old_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
         new_status=EpisodePublishStatus.DW_PROCESSING,
         was_created=False,

@@ -32,7 +32,7 @@ class Share(StrEnum):
     """Quick checks for new videos and full re-scans."""
     SEARCH = "search"
     RESERVE = "reserve"
-    """Adding shows, testing the key and manual refreshes: whatever the other two leave."""
+    """Adding collections, testing the key and manual refreshes: whatever the other two leave."""
 
 
 @dataclass(frozen=True)
@@ -142,20 +142,20 @@ def mark_exhausted(now: datetime | None = None) -> None:
 
 
 def rescan_units(episode_counts: list[int]) -> int:
-    """Units one full re-scan of these shows costs: a page of IDs and a batch of details per 50 videos."""
+    """Units one full re-scan of these collections costs: a page of IDs and a batch of details per 50 videos."""
     return sum(2 * max(math.ceil(count / 50), 1) for count in episode_counts)
 
 
-def check_interval_minutes(show_count: int, rescan_cost: int, checks_quota: int, min_interval: int) -> int | None:
-    """How often each show can get a quick check from what the daily re-scan leaves of the checks share.
+def check_interval_minutes(collection_count: int, rescan_cost: int, checks_quota: int, min_interval: int) -> int | None:
+    """How often each collection can get a quick check from what the daily re-scan leaves of the checks share.
 
     A check costs one unit, plus a batch of details when something is new;
     the tenth on top covers those. None when the share leaves no room for checks.
     """
-    if show_count == 0:
+    if collection_count == 0:
         return min_interval
     room = checks_quota - rescan_cost
     if room <= 0:
         return None
-    checks_per_show = room / (show_count * 1.1)
-    return max(min_interval, math.ceil(24 * 60 / checks_per_show))
+    checks_per_collection = room / (collection_count * 1.1)
+    return max(min_interval, math.ceil(24 * 60 / checks_per_collection))

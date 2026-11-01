@@ -55,12 +55,12 @@ function harness() {
     }
 }
 
-const request = (show, sourceId = 'episode:1') => ({
-    type: 'show', sourceId, outputTemplate: '/downloads/{{ show_title }}/{{ title }}.ext',
+const request = (collection, sourceId = 'episode:1') => ({
+    type: 'collection', sourceId, outputTemplate: '/downloads/{{ collection_title }}/{{ title }}.ext',
     preferredFormat: 'format_1080p', localMediaProfileId: null, indexingValues: [],
-    values: {show_title: show, title: 'Episode'},
+    values: {collection_title: collection, title: 'Episode'},
 })
-const payload = (show) => ({output: {outputPath: `/media/${show}/Episode.mp4`, error: null}, showRoot: {path: `/media/${show}`}})
+const payload = (collection) => ({output: {outputPath: `/media/${collection}/Episode.mp4`, error: null}, collectionRoot: {path: `/media/${collection}`}})
 const respond = (call, data, ok = true) => call.resolve({ok, json: async () => data})
 
 test('one request carries selected source and edits and supplies both paths', async () => {
@@ -73,7 +73,7 @@ test('one request carries selected source and edits and supplies both paths', as
     respond(h.requests[0], payload('Edited')); await job
     const state = h.render(body)
     assert.equal(state.loading, false)
-    assert.equal(state.result.showRoot.path, '/media/Edited')
+    assert.equal(state.result.collectionRoot.path, '/media/Edited')
     assert.equal(state.result.output.outputPath, '/media/Edited/Episode.mp4')
 })
 
@@ -81,18 +81,18 @@ test('edited values keep the last preview stable until the next response arrives
     const h = harness(), first = request('First'), second = request('Second')
     h.render(first); const firstJob = h.start()
     respond(h.requests[0], payload('First')); await firstJob
-    assert.equal(h.render(first).result.showRoot.path, '/media/First')
+    assert.equal(h.render(first).result.collectionRoot.path, '/media/First')
 
     const pending = h.render(second)
     assert.equal(pending.loading, true)
-    assert.equal(pending.result.showRoot.path, '/media/First')
+    assert.equal(pending.result.collectionRoot.path, '/media/First')
     assert.equal(pending.result.output.outputPath, '/media/First/Episode.mp4')
 
     const secondJob = h.start()
     respond(h.requests[1], payload('Second')); await secondJob
     const settled = h.render(second)
     assert.equal(settled.loading, false)
-    assert.equal(settled.result.showRoot.path, '/media/Second')
+    assert.equal(settled.result.collectionRoot.path, '/media/Second')
     assert.equal(settled.result.output.outputPath, '/media/Second/Episode.mp4')
 })
 
@@ -106,7 +106,7 @@ test('out-of-order responses cannot restore paths from an older example', async 
     respond(h.requests[1], payload('B')); await second
     respond(h.requests[0], payload('A')); await first
     const current = h.render(b)
-    assert.equal(current.result.showRoot.path, '/media/B')
+    assert.equal(current.result.collectionRoot.path, '/media/B')
     assert.equal(current.result.output.outputPath, '/media/B/Episode.mp4')
 })
 

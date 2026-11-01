@@ -4,7 +4,7 @@ import {RssStreamProfileReadSchema} from './rss_stream_profile'
 
 export const StreamProfileReadSchema = z.looseObject({
     id: z.int(),
-    showId: z.int(),
+    collectionId: z.int(),
     enableProfile: z.boolean(),
     useDownloads: z.boolean(),
     useDwStream: z.boolean(),
@@ -19,8 +19,8 @@ export type StreamProfileRead = z.infer<typeof StreamProfileReadSchema>
 
 // Unified read view from /stream-profiles/as-view
 export const StreamProfileReadViewSchema = StreamProfileReadSchema.extend({
-    showTitle: z.string(),
-    showSlug: z.string(),
+    collectionTitle: z.string(),
+    collectionSlug: z.string(),
     streamProfileImpl: RssStreamProfileReadSchema,
 })
 export type StreamProfileReadView = z.infer<typeof StreamProfileReadViewSchema>

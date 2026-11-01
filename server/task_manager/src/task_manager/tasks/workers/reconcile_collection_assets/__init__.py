@@ -1,0 +1,1 @@
+from .entrypoint import reconcile_collection_assets

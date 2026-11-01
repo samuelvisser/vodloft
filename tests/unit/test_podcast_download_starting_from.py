@@ -10,38 +10,38 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 
-def _make_show(session):
-    from backend.db.models import Show
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+def _make_collection(session):
+    from backend.db.models import Collection
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
 
-    show = Show(
+    collection = Collection(
         source_key="dailywire",
-        uuid="starting-from-show-uuid",
-        slug="starting-from-show",
+        uuid="starting-from-collection-uuid",
+        slug="starting-from-collection",
         title="Starting From Show",
         description=None,
-        sharing_url="https://example.test/starting-from-show",
+        sharing_url="https://example.test/starting-from-collection",
         membership_level="FREE",
-        type=ShowType.PODCAST.value,
+        type=CollectionType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Host",
         author_slug="host",
     )
-    session.add(show)
+    session.add(collection)
     session.flush()
-    return show
+    return collection
 
 
-def _make_season(session, show):
+def _make_season(session, collection):
     from backend.db.models import Season
 
-    season = Season(show=show, index=1, slug="season-1", name="One")
+    season = Season(collection=collection, index=1, slug="season-1", name="One")
     session.add(season)
     session.flush()
     return season
 
 
-def _make_episode(session, show, season, *, index: int, published_at: datetime):
+def _make_episode(session, collection, season, *, index: int, published_at: datetime):
     from backend.db.models import Episode
     from backend.utils.helpers import generate_uuid
 
@@ -49,7 +49,7 @@ def _make_episode(session, show, season, *, index: int, published_at: datetime):
         source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
-        show=show,
+        collection=collection,
         season=season,
         index=index,
         episode_identifier=f"ep.{index}",
@@ -71,7 +71,7 @@ def _make_local_media_profile(session):
     profile = LocalMediaProfile(
         slug="starting-from-audio",
         name="Starting from audio",
-        output_template="/downloads/{{ show }}/{{ episode }}.ext",
+        output_template="/downloads/{{ collection }}/{{ episode }}.ext",
         preferred_format="format_audio_only",
     )
     session.add(profile)
@@ -79,12 +79,12 @@ def _make_local_media_profile(session):
     return profile
 
 
-def _make_podcast_profile(session, show, local_media_profile, *, starting_from: date):
+def _make_podcast_profile(session, collection, local_media_profile, *, starting_from: date):
     from backend.db.models.download_profile import DownloadProfile
     from backend.types.download_profile_types import EpIdType
 
     profile = DownloadProfile(
-        show=show,
+        collection=collection,
         local_media_profile=local_media_profile,
         enable_profile=True,
         ep_id_type_list=[EpIdType.EP.value],
@@ -120,33 +120,33 @@ def db_session(tmp_path, monkeypatch):
 def test_podcast_profile_downloads_from_fixed_date_inclusively(db_session):
     from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     local_media_profile = _make_local_media_profile(db_session)
     before = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         index=1,
         published_at=datetime(2026, 1, 9, 12, tzinfo=timezone.utc),
     )
     on_date = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         index=2,
         published_at=datetime(2026, 1, 10, 0, tzinfo=timezone.utc),
     )
     later = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         index=3,
         published_at=datetime(2026, 8, 1, 12, tzinfo=timezone.utc),
     )
     profile = _make_podcast_profile(
         db_session,
-        show,
+        collection,
         local_media_profile,
         starting_from=date(2026, 1, 10),
     )
@@ -165,19 +165,19 @@ def test_starting_from_never_deletes_older_downloads(db_session, tmp_path):
     from backend.types.media_types import MediaType
     from task_manager.tasks.workers.download_profile_worker._helpers import cleanup_older_episodes
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     local_media_profile = _make_local_media_profile(db_session)
     old_episode = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         index=1,
         published_at=datetime(2025, 1, 1, 12, tzinfo=timezone.utc),
     )
     profile = _make_podcast_profile(
         db_session,
-        show,
+        collection,
         local_media_profile,
         starting_from=date(2026, 1, 1),
     )
@@ -205,7 +205,7 @@ def test_api_rejects_starting_from_with_rolling_limit():
 
     with pytest.raises(ValidationError, match="Download starting from can only be used"):
         DownloadProfileAPICreate(
-            show_id=1,
+            collection_id=1,
             local_media_profile_id=1,
             enable_profile=True,
             ep_id_type_list=["ep"],
@@ -225,7 +225,7 @@ def test_api_rejects_date_and_episode_count_limits_together():
 
     with pytest.raises(ValidationError, match="Choose either a date limit or an episode-count limit, not both"):
         DownloadProfileAPICreate(
-            show_id=1,
+            collection_id=1,
             local_media_profile_id=1,
             enable_profile=True,
             ep_id_type_list=["ep"],

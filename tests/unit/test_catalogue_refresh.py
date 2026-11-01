@@ -7,9 +7,9 @@ from sources import Feature, ItemRef, ItemRefresh, VideoDetails, registry
 from sources.ytdlp import YtDlpSource
 from sources.ytdlp.youtube_api import quota
 
-from test_quick_check import _show, _video, session  # noqa: F401
+from test_quick_check import _collection, _video, session  # noqa: F401
 from test_youtube_catalogue import _video_item, lookups, youtube, ytdlp_dir  # noqa: F401
-from test_ytdlp_shows import ListedSource
+from test_ytdlp_collections import ListedSource
 
 CHANNEL = "https://www.youtube.com/channel/UC1/videos"
 
@@ -73,7 +73,7 @@ def test_without_a_key_other_sites_refresh_from_their_listing(lookups):
 
 class RefreshingSource(ListedSource):
     id = "refreshing"
-    features = frozenset({Feature.SHOWS, Feature.EPISODE_LISTS, Feature.CATALOGUE_REFRESH})
+    features = frozenset({Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.CATALOGUE_REFRESH})
 
     def __init__(self):
         super().__init__()
@@ -91,11 +91,11 @@ def refreshing(monkeypatch):
 
 def test_the_refresh_updates_marks_and_unmarks_episodes(refreshing, session):
     from backend.db.models import Episode
-    from task_manager.tasks.helpers.listed_shows import add_listed_episodes
+    from task_manager.tasks.helpers.listed_collections import add_listed_episodes
     from task_manager.tasks.workers.fetch_new_episodes.refresh import run_catalogue_refresh
 
-    show = _show(session, "UC1", source_key="refreshing")
-    add_listed_episodes(session, show_id=show.id, found=[_video("v1", 1), _video("v2", 2), _video("v3", 3)])
+    collection = _collection(session, "UC1", source_key="refreshing")
+    add_listed_episodes(session, collection_id=collection.id, found=[_video("v1", 1), _video("v2", 2), _video("v3", 3)])
     session.commit()
     session.query(Episode).filter(Episode.source_slug == "v3").one().removed_from_source = True
     session.commit()
@@ -109,8 +109,8 @@ def test_the_refresh_updates_marks_and_unmarks_episodes(refreshing, session):
 
     result = run_catalogue_refresh(session)
 
-    episodes = {e.source_slug: e for e in session.query(Episode).filter(Episode.show_id == show.id)}
-    assert (result.shows, result.updated, result.removed, result.returned) == (1, 1, 1, 1)
+    episodes = {e.source_slug: e for e in session.query(Episode).filter(Episode.collection_id == collection.id)}
+    assert (result.collections, result.updated, result.removed, result.returned) == (1, 1, 1, 1)
     assert episodes["v1"].title == "New title"
     assert episodes["v1"].thumbnail_landscape_path == "https://i.example/v1.jpg"
     # File names follow the identifier, which never changes.

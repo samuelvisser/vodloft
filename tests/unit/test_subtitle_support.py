@@ -172,41 +172,41 @@ def test_movie_profiles_default_to_subtitle_sidecars():
     ("series", "sidecar"),
     ("podcast", "no_subtitles"),
 ])
-def test_show_subtitle_default_follows_scope_when_not_specified(scope, expected):
-    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
+def test_collection_subtitle_default_follows_scope_when_not_specified(scope, expected):
+    from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPICreate
 
-    show = ShowLocalMediaProfileAPICreate(
-        name="Show", type="show", show_scope=scope,
+    collection = CollectionLocalMediaProfileAPICreate(
+        name="Collection", type="collection", collection_scope=scope,
         preferred_format="format_1080p",
-        output_template="/downloads/shows/{{ show }}/{{ episode }}.ext",
+        output_template="/downloads/shows/{{ collection }}/{{ episode }}.ext",
     )
-    assert show.subtitle_mode == expected
-    assert show.model_dump(by_alias=True, mode="json")["subtitle_mode"] == expected
+    assert collection.subtitle_mode == expected
+    assert collection.model_dump(by_alias=True, mode="json")["subtitle_mode"] == expected
 
 
 @pytest.mark.parametrize("mode", [
     "no_subtitles", "embed", "sidecar", "embed_and_sidecar",
 ])
 @pytest.mark.parametrize("scope", ["podcast", "series", "both"])
-def test_manual_subtitle_selection_overrides_show_scope(scope, mode):
-    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
+def test_manual_subtitle_selection_overrides_collection_scope(scope, mode):
+    from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPICreate
 
-    profile = ShowLocalMediaProfileAPICreate(
-        name="Show", preferred_format="format_1080p",
-        show_scope=scope, subtitle_mode=mode,
-        output_template="/downloads/shows/{{ show }}/{{ episode }}.ext",
+    profile = CollectionLocalMediaProfileAPICreate(
+        name="Collection", preferred_format="format_1080p",
+        collection_scope=scope, subtitle_mode=mode,
+        output_template="/downloads/shows/{{ collection }}/{{ episode }}.ext",
     )
     assert profile.subtitle_mode == mode
 
 
 def test_subtitle_system_mode_is_no_longer_valid():
     from pydantic import ValidationError
-    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
+    from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPICreate
 
     with pytest.raises(ValidationError):
-        ShowLocalMediaProfileAPICreate(
-            name="Show", preferred_format="format_1080p", subtitle_mode="system",
-            output_template="/downloads/shows/{{ show }}/{{ episode }}.ext",
+        CollectionLocalMediaProfileAPICreate(
+            name="Collection", preferred_format="format_1080p", subtitle_mode="system",
+            output_template="/downloads/shows/{{ collection }}/{{ episode }}.ext",
         )
 
 

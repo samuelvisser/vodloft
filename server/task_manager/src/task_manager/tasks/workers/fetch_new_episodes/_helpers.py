@@ -2,20 +2,20 @@ from typing import Optional, Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Show, Season, Episode
+from backend.db.models import Collection, Season, Episode
 
 
-def get_shows(s: Session, *, show_id: Optional[int], show_slug: Optional[str]) -> Sequence[Show]:
-    """Resolve one Show, or all shows when no show is given."""
-    if show_slug:
-        show = s.scalar(select(Show).where(Show.slug == show_slug))
-        return [show] if show is not None else []
+def get_collections(s: Session, *, collection_id: Optional[int], collection_slug: Optional[str]) -> Sequence[Collection]:
+    """Resolve one Collection, or all collections when no collection is given."""
+    if collection_slug:
+        collection = s.scalar(select(Collection).where(Collection.slug == collection_slug))
+        return [collection] if collection is not None else []
 
-    if show_id is not None:
-        show = s.get(Show, show_id)
-        return [show] if show is not None else []
+    if collection_id is not None:
+        collection = s.get(Collection, collection_id)
+        return [collection] if collection is not None else []
 
-    return s.scalars(select(Show)).all()
+    return s.scalars(select(Collection)).all()
 
 
 def get_season_from_list_by_id(season_list: list[Season], season_id: int) -> Optional[Season]:
@@ -25,5 +25,5 @@ def get_season_from_list_by_id(season_list: list[Season], season_id: int) -> Opt
     return None
 
 
-def get_latest_ep_index(s: Session, *, show: Show) -> Optional[int]:
-    return s.execute(select(Episode.index).where(Episode.show_id == show.id).order_by(Episode.index.desc()).limit(1)).scalar()
+def get_latest_ep_index(s: Session, *, collection: Collection) -> Optional[int]:
+    return s.execute(select(Episode.index).where(Episode.collection_id == collection.id).order_by(Episode.index.desc()).limit(1)).scalar()

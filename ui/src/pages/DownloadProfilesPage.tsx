@@ -10,7 +10,7 @@ import DataTable, {Column} from '../components/DataTable/DataTable'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
 import PageSubtitle from "../components/common/PageSubtitle";
 import ProfileEnabledSwitch from '../components/common/ProfileEnabledSwitch'
-import {EpisodeIdentifierReg} from "../types/show";
+import {EpisodeIdentifierReg} from "../types/collection";
 import {DownloadProfileUpdateSchema} from '../types/schemas/download_profile'
 import {faIcon} from '../icons/faIcon'
 
@@ -45,7 +45,7 @@ export default function DownloadProfilesPage() {
 
             await Promise.allSettled([
                 queryClient.invalidateQueries({queryKey: ['downloadProfilesView']}),
-                queryClient.invalidateQueries({queryKey: ['downloadProfilesByShowSlug']}),
+                queryClient.invalidateQueries({queryKey: ['downloadProfilesByCollectionSlug']}),
             ])
         } catch (updateError) {
             toast.error(`Failed to ${enableProfile ? 'enable' : 'disable'} download profile`)
@@ -55,8 +55,8 @@ export default function DownloadProfilesPage() {
 
     const columns: Column<DownloadProfileReadView>[] = [
         {
-            header: 'Show Title',
-            accessor: (p) => p.showTitle,
+            header: 'Collection Title',
+            accessor: (p) => p.collectionTitle,
             mobileHidden: true,
         },
         {
@@ -69,14 +69,14 @@ export default function DownloadProfilesPage() {
         },
         {
             header: 'Episode identification',
-            accessor: (p) => EpisodeIdentifierReg.getLabelLoose(p.showEpisodeIdentifier),
+            accessor: (p) => EpisodeIdentifierReg.getLabelLoose(p.collectionEpisodeIdentifier),
         },
         {
             header: 'Enabled',
             cell: (p) => (
                 <ProfileEnabledSwitch
                     checked={p.enableProfile}
-                    ariaLabel={`Automatic downloads for ${p.showTitle}`}
+                    ariaLabel={`Automatic downloads for ${p.collectionTitle}`}
                     onChange={(checked) => setProfileEnabled(p, checked)}
                 />
             ),
@@ -88,9 +88,9 @@ export default function DownloadProfilesPage() {
         <section className="view" aria-labelledby="profiles-title">
             <div className="view-header">
                 <h1 id="profiles-title">Download Profiles</h1>
-                <PageSubtitle summary={<>Create rules for how each show is downloaded.</>}>
+                <PageSubtitle summary={<>Create rules for how each collection is downloaded.</>}>
                     <p>A Download Profile tells VODLoft what to download and how long to retain your downloads.
-                        Each show can contain multiple download profiles, allowing you to
+                        Each collection can contain multiple download profiles, allowing you to
                         download both audio and video versions of episodes for example.</p>
                     <p>Download Profiles are always connected to a Local Media Profile, which defines where your
                         downloads will be stored and what their file name should be.</p>
@@ -106,16 +106,16 @@ export default function DownloadProfilesPage() {
                     loading={isLoading}
                     error={error}
                     rowKey={(p) => String(p.id)}
-                    rowAriaLabel={(p) => p.showTitle}
+                    rowAriaLabel={(p) => p.collectionTitle}
                     mobileSummary={(p) => (
                         <>
-                            <span className="mobile-summary-title">{p.showTitle}</span>
+                            <span className="mobile-summary-title">{p.collectionTitle}</span>
                             <span className="mobile-summary-meta">
                                 <span>{p.localMediaProfileName}</span>
                                 <span aria-hidden="true">•</span>
                                 <span>{PreferredFormatReg.getLabelLoose(p.localMediaProfilePreferredFormat)}</span>
                                 <span aria-hidden="true">•</span>
-                                <span>{EpisodeIdentifierReg.getLabelLoose(p.showEpisodeIdentifier)}</span>
+                                <span>{EpisodeIdentifierReg.getLabelLoose(p.collectionEpisodeIdentifier)}</span>
                                 <span className={`mobile-summary-status ${p.enableProfile ? 'is-success' : ''}`}>
                                     {p.enableProfile ? 'Enabled' : 'Disabled'}
                                 </span>
@@ -143,12 +143,12 @@ export default function DownloadProfilesPage() {
             <ConfirmDeleteDialog
                 ref={confirmRef}
                 title="Delete download profile"
-                subjectProp="showTitle"
+                subjectProp="collectionTitle"
                 deleteRequest={(p) => fetch(
                     `${(window as any).appConfig.API_URL}/download-profiles/${p.id}`,
                     {method: 'DELETE', credentials: 'include'},
                 )}
-                invalidateQueries={[["downloadProfilesView"], ["downloadProfilesByShowSlug"]]}
+                invalidateQueries={[["downloadProfilesView"], ["downloadProfilesByCollectionSlug"]]}
                 inUseMessage="This download profile is in use, it cannot be deleted"
             />
         </section>

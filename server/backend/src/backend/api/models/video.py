@@ -18,7 +18,7 @@ class VideoAPICreate(RequestBase):
 
 
 class VideoAPIRead(SourcedResponse):
-    """A single video added on its own, outside any show."""
+    """A single video added on its own, outside any collection."""
 
     id: int
     uuid: str

@@ -12,12 +12,12 @@ def test_settings_cron_operations_target_the_scheduled_workers():
     )
 
     cases = (
-        (FindEpisodesCronOperation(), "fetch_new_episodes", "show", None),
+        (FindEpisodesCronOperation(), "fetch_new_episodes", "collection", None),
         (QuickCheckCronOperation(), "quick_check_new_videos", "system", 0),
-        (FullRescanCronOperation(), "rescan_quick_checked_shows", "show", None),
-        (MonitorNoUsableMediaCronOperation(), "monitor_no_usable_media_episode", "show", 0),
+        (FullRescanCronOperation(), "rescan_quick_checked_collections", "collection", None),
+        (MonitorNoUsableMediaCronOperation(), "monitor_no_usable_media_episode", "collection", 0),
         (VerifyDownloadsCronOperation(), "download_profile_worker", "download_profile", 0),
-        (FileWatcherCronOperation(), "file_watcher", "show", 0),
+        (FileWatcherCronOperation(), "file_watcher", "collection", 0),
     )
 
     for operation, task_key, resource_type, resource_id in cases:

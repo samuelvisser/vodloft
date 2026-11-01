@@ -29,28 +29,28 @@ def test_factory_creates_operation_target_and_context():
     from task_manager.scheduler.operation_factory import OperationDefinition, create_operation
 
     class IndexOperation(OperationDefinition[_Resource]):
-        kind = "show.index"
-        resource_type = "show"
+        kind = "collection.index"
+        resource_type = "collection"
         task = "test_worker"
 
         def context(self) -> dict[str, str]:
-            return {"show_slug": self.resource.slug}
+            return {"collection_slug": self.resource.slug}
 
     session, engine = _session()
     try:
         operation = create_operation(
             session,
-            IndexOperation(_Resource(id=42, title="Test Show", slug="test-show")),
+            IndexOperation(_Resource(id=42, title="Test Show", slug="test-collection")),
         )
 
-        assert operation.kind == "show.index"
-        assert operation.resource_type == "show"
+        assert operation.kind == "collection.index"
+        assert operation.resource_type == "collection"
         assert operation.resource_id == 42
         assert operation.title == "Test Show"
-        assert operation.context == {"show_slug": "test-show"}
+        assert operation.context == {"collection_slug": "test-collection"}
         assert len(operation.targets) == 1
         assert operation.targets[0].task_key == "test_worker"
-        assert operation.targets[0].resource_type == "show"
+        assert operation.targets[0].resource_type == "collection"
         assert operation.targets[0].resource_id == 42
         assert session.info.get("vodloft.pending_events", []) == []
     finally:
@@ -64,8 +64,8 @@ def test_factory_coalesces_with_compatible_running_work_without_dispatching():
     from task_manager.scheduler.types import OperationStatus, ResourceType, TaskStatus
 
     class SyncOperation(OperationDefinition[_Resource]):
-        kind = "show.sync"
-        resource_type = "show"
+        kind = "collection.sync"
+        resource_type = "collection"
         task = "test_worker"
 
     session, engine = _session()
@@ -74,7 +74,7 @@ def test_factory_coalesces_with_compatible_running_work_without_dispatching():
             key="test_worker",
             title="Test worker",
             description=None,
-            allowed_resource_types=["show"],
+            allowed_resource_types=["collection"],
             default_max_retries=0,
         )
         session.add(definition)
@@ -83,7 +83,7 @@ def test_factory_coalesces_with_compatible_running_work_without_dispatching():
         run = TaskRun(
             schedule_id=None,
             definition_id=definition.id,
-            resource_type=ResourceType.SHOW,
+            resource_type=ResourceType.COLLECTION,
             resource_id=42,
             status=TaskStatus.RUNNING,
             progress=35,
@@ -103,7 +103,7 @@ def test_factory_coalesces_with_compatible_running_work_without_dispatching():
 
         operation = create_operation(
             session,
-            SyncOperation(_Resource(id=42, title="Test Show", slug="test-show")),
+            SyncOperation(_Resource(id=42, title="Test Show", slug="test-collection")),
         )
 
         assert operation.status == OperationStatus.RUNNING.value

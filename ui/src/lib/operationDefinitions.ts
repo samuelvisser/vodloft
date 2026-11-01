@@ -3,7 +3,7 @@ import {type QueryClient} from '@tanstack/react-query'
 import {PUBLISH_STATUS_LABELS} from '../types/episode'
 import {type TaskOperationRead} from '../types/schemas/operation'
 import {removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from './cache'
-import {episodeQueryKeys} from './showQueryOptions'
+import {episodeQueryKeys} from './collectionQueryOptions'
 
 export type OperationMessageResolver = (operation: TaskOperationRead) => string
 
@@ -92,72 +92,72 @@ function fileRenameSuccessMessage(operation: TaskOperationRead, title: string): 
   return `File Rename finished for ${title}: ${renamed} ${plural(renamed, 'file')} renamed${unchangedDetail}`
 }
 
-function invalidateShowEpisodeQueries(
+function invalidateCollectionEpisodeQueries(
   queryClient: QueryClient,
-  showSlug: string,
+  collectionSlug: string,
   invalidations: InvalidationCollector,
 ) {
-  removeEpisodePreviewFromStorage(showSlug)
+  removeEpisodePreviewFromStorage(collectionSlug)
   invalidations.push(
-    queryClient.invalidateQueries({queryKey: episodeQueryKeys.forShow(showSlug)}),
+    queryClient.invalidateQueries({queryKey: episodeQueryKeys.forCollection(collectionSlug)}),
   )
 }
 
-function invalidateShowEpisodeData(
+function invalidateCollectionEpisodeData(
   queryClient: QueryClient,
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
-  const showSlug = contextString(operation, 'show_slug')
+  const collectionSlug = contextString(operation, 'collection_slug')
   invalidations.push(
-    queryClient.invalidateQueries({queryKey: ['shows']}),
-    queryClient.invalidateQueries({queryKey: ['showsView']}),
+    queryClient.invalidateQueries({queryKey: ['collections']}),
+    queryClient.invalidateQueries({queryKey: ['collectionsView']}),
   )
-  if (showSlug) {
-    invalidations.push(queryClient.invalidateQueries({queryKey: ['show', showSlug]}))
-    invalidateShowEpisodeQueries(queryClient, showSlug, invalidations)
+  if (collectionSlug) {
+    invalidations.push(queryClient.invalidateQueries({queryKey: ['collection', collectionSlug]}))
+    invalidateCollectionEpisodeQueries(queryClient, collectionSlug, invalidations)
   }
 }
 
-function invalidateShowStructure(
+function invalidateCollectionStructure(
   queryClient: QueryClient,
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
-  invalidateShowEpisodeData(queryClient, operation, invalidations)
+  invalidateCollectionEpisodeData(queryClient, operation, invalidations)
   invalidations.push(
     queryClient.invalidateQueries({queryKey: ['recentlyIndexedEpisodes']}),
   )
-  const showSlug = contextString(operation, 'show_slug')
-  if (!showSlug) return
+  const collectionSlug = contextString(operation, 'collection_slug')
+  if (!collectionSlug) return
 
-  removeSeasonsFromStorage(showSlug)
+  removeSeasonsFromStorage(collectionSlug)
   invalidations.push(
-    queryClient.invalidateQueries({queryKey: ['seasons', showSlug]}),
+    queryClient.invalidateQueries({queryKey: ['seasons', collectionSlug]}),
   )
 }
 
-function invalidateShowFiles(
+function invalidateCollectionFiles(
   queryClient: QueryClient,
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
-  const showSlug = contextString(operation, 'show_slug')
+  const collectionSlug = contextString(operation, 'collection_slug')
   invalidations.push(
     queryClient.invalidateQueries({queryKey: ['mediaDownloads']}),
     queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
   )
-  if (showSlug) {
-    invalidations.push(queryClient.invalidateQueries({queryKey: ['showDownloads', showSlug]}))
+  if (collectionSlug) {
+    invalidations.push(queryClient.invalidateQueries({queryKey: ['collectionDownloads', collectionSlug]}))
   }
 }
 
-function invalidateShowDownloadDeletion(
+function invalidateCollectionDownloadDeletion(
   queryClient: QueryClient,
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
-  invalidateShowFiles(queryClient, operation, invalidations)
+  invalidateCollectionFiles(queryClient, operation, invalidations)
   invalidations.push(queryClient.invalidateQueries({queryKey: ['downloadProfilesView']}))
 }
 
@@ -168,15 +168,15 @@ function invalidateEpisode(
 ) {
   const episodeSlug = contextString(operation, 'episode_slug')
   const resultEpisodeSlug = resultString(operation, 'episode_slug')
-  const showSlug = contextString(operation, 'show_slug')
+  const collectionSlug = contextString(operation, 'collection_slug')
   if (episodeSlug) {
     invalidations.push(queryClient.invalidateQueries({queryKey: ['episode', episodeSlug]}))
   }
   if (resultEpisodeSlug && resultEpisodeSlug !== episodeSlug) {
     invalidations.push(queryClient.invalidateQueries({queryKey: ['episode', resultEpisodeSlug]}))
   }
-  if (showSlug) {
-    invalidateShowEpisodeQueries(queryClient, showSlug, invalidations)
+  if (collectionSlug) {
+    invalidateCollectionEpisodeQueries(queryClient, collectionSlug, invalidations)
   }
 }
 
@@ -220,7 +220,7 @@ function invalidateLocalMediaProfileFiles(
     queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
     queryClient.invalidateQueries({queryKey: ['episodeDownloads']}),
     queryClient.invalidateQueries({queryKey: ['movieDownloads']}),
-    queryClient.invalidateQueries({queryKey: ['showDownloads']}),
+    queryClient.invalidateQueries({queryKey: ['collectionDownloads']}),
     queryClient.invalidateQueries({queryKey: ['localMediaProfiles']}),
     queryClient.invalidateQueries({queryKey: ['localMediaProfile']}),
     queryClient.invalidateQueries({queryKey: ['localMediaProfileView']}),
@@ -235,7 +235,7 @@ function invalidateLocalMediaProfileDownloadDeletion(
   invalidateLocalMediaProfileFiles(queryClient, operation, invalidations)
   invalidations.push(
     queryClient.invalidateQueries({queryKey: ['downloadProfilesView']}),
-    queryClient.invalidateQueries({queryKey: ['downloadProfilesByShowSlug']}),
+    queryClient.invalidateQueries({queryKey: ['downloadProfilesByCollectionSlug']}),
   )
 }
 
@@ -245,7 +245,7 @@ function invalidateMediaDownload(
   invalidations: InvalidationCollector,
 ) {
   const episodeSlug = contextString(operation, 'episode_slug')
-  const showSlug = contextString(operation, 'show_slug')
+  const collectionSlug = contextString(operation, 'collection_slug')
   const movieSlug = contextString(operation, 'movie_slug')
 
   invalidations.push(
@@ -262,9 +262,9 @@ function invalidateMediaDownload(
       queryClient.invalidateQueries({queryKey: ['episodeDownloads', episodeSlug]}),
     )
   }
-  if (showSlug) {
+  if (collectionSlug) {
     invalidations.push(
-      queryClient.invalidateQueries({queryKey: ['showDownloads', showSlug]}),
+      queryClient.invalidateQueries({queryKey: ['collectionDownloads', collectionSlug]}),
     )
   }
   if (movieSlug) {
@@ -304,7 +304,7 @@ function invalidateMediaDownloadCollection(
     queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
     queryClient.invalidateQueries({queryKey: ['episodeDownloads']}),
     queryClient.invalidateQueries({queryKey: ['movieDownloads']}),
-    queryClient.invalidateQueries({queryKey: ['showDownloads']}),
+    queryClient.invalidateQueries({queryKey: ['collectionDownloads']}),
     queryClient.invalidateQueries({queryKey: ['movies']}),
   )
 }
@@ -326,8 +326,8 @@ function invalidateEpisodeCronJob(
   invalidations: InvalidationCollector,
 ) {
   invalidations.push(
-    queryClient.invalidateQueries({queryKey: ['shows']}),
-    queryClient.invalidateQueries({queryKey: ['showsView']}),
+    queryClient.invalidateQueries({queryKey: ['collections']}),
+    queryClient.invalidateQueries({queryKey: ['collectionsView']}),
     queryClient.invalidateQueries({queryKey: ['episodes']}),
     queryClient.invalidateQueries({queryKey: ['recentlyIndexedEpisodes']}),
   )
@@ -380,7 +380,7 @@ function invalidateFullRescanCron(
   invalidations: InvalidationCollector,
 ) {
   invalidateEpisodeCronJob(queryClient, operation, invalidations)
-  invalidateTaskLedgerDefinition(queryClient, 'rescan_quick_checked_shows', invalidations)
+  invalidateTaskLedgerDefinition(queryClient, 'rescan_quick_checked_collections', invalidations)
 }
 
 function invalidatePendingEpisodeCron(
@@ -435,7 +435,7 @@ export const frontendOperationDefinitions = {
   'system.cron.full_rescan': {
     kind: 'system.cron.full_rescan',
     resourceType: 'system',
-    label: 'Re-scan shows with quick checks',
+    label: 'Re-scan collections with quick checks',
     invalidate: invalidateFullRescanCron,
   },
   'system.cron.monitor_pending_episodes': {
@@ -462,41 +462,41 @@ export const frontendOperationDefinitions = {
     label: 'File watcher',
     invalidate: invalidateFileWatcherCron,
   },
-  'show.index': {
-    kind: 'show.index',
-    resourceType: 'show',
-    label: 'Show indexing',
-    invalidate: invalidateShowStructure,
+  'collection.index': {
+    kind: 'collection.index',
+    resourceType: 'collection',
+    label: 'Collection indexing',
+    invalidate: invalidateCollectionStructure,
     success: (operation) => {
-      const showTitle = contextString(operation, 'show_title') || operation.title
+      const collectionTitle = contextString(operation, 'collection_title') || operation.title
       const count = resultNumber(operation, 'episodes_found')
       return count === undefined
-        ? `Indexing finished for ${showTitle}`
-        : `Indexed ${showTitle}: ${count} ${plural(count, 'episode')} found`
+        ? `Indexing finished for ${collectionTitle}`
+        : `Indexed ${collectionTitle}: ${count} ${plural(count, 'episode')} found`
     },
   },
-  'show.sync': {
-    kind: 'show.sync',
-    resourceType: 'show',
+  'collection.sync': {
+    kind: 'collection.sync',
+    resourceType: 'collection',
     label: 'Sync',
-    invalidate: invalidateShowStructure,
+    invalidate: invalidateCollectionStructure,
     success: (operation) => {
-      const showTitle = contextString(operation, 'show_title') || operation.title
+      const collectionTitle = contextString(operation, 'collection_title') || operation.title
       const count = resultNumber(operation, 'episodes_found') ?? 0
-      return `Sync finished for ${showTitle}: ${count} new ${plural(count, 'episode')} found`
+      return `Sync finished for ${collectionTitle}: ${count} new ${plural(count, 'episode')} found`
     },
   },
-  'show.refresh_metadata': {
-    kind: 'show.refresh_metadata',
-    resourceType: 'show',
+  'collection.refresh_metadata': {
+    kind: 'collection.refresh_metadata',
+    resourceType: 'collection',
     label: 'Metadata refresh',
-    invalidate: invalidateShowEpisodeData,
+    invalidate: invalidateCollectionEpisodeData,
     success: (operation) => {
-      const showTitle = contextString(operation, 'show_title') || operation.title
+      const collectionTitle = contextString(operation, 'collection_title') || operation.title
       const count = operation.progressTotal
       return count === 0
-        ? `No episodes to refresh in ${showTitle}`
-        : `Metadata refresh completed for ${count} ${plural(count, 'episode')} in ${showTitle}`
+        ? `No episodes to refresh in ${collectionTitle}`
+        : `Metadata refresh completed for ${count} ${plural(count, 'episode')} in ${collectionTitle}`
     },
   },
   'episode.refresh_metadata': {
@@ -535,14 +535,14 @@ export const frontendOperationDefinitions = {
       return `Early delete completed for ${episodeTitle}`
     },
   },
-  'show.rename_files': {
-    kind: 'show.rename_files',
-    resourceType: 'show',
+  'collection.rename_files': {
+    kind: 'collection.rename_files',
+    resourceType: 'collection',
     label: 'File Rename',
-    invalidate: invalidateShowFiles,
+    invalidate: invalidateCollectionFiles,
     success: (operation) => {
-      const showTitle = contextString(operation, 'show_title') || operation.title
-      return fileRenameSuccessMessage(operation, showTitle)
+      const collectionTitle = contextString(operation, 'collection_title') || operation.title
+      return fileRenameSuccessMessage(operation, collectionTitle)
     },
   },
   'local_media_profile.manage_custom_indexes': {
@@ -594,13 +594,13 @@ export const frontendOperationDefinitions = {
       return `Deleted downloads for ${profileName}: ${files} ${plural(files, 'file')} removed${disabledDetail}`
     },
   },
-  'show.delete_downloads': {
-    kind: 'show.delete_downloads',
-    resourceType: 'show',
+  'collection.delete_downloads': {
+    kind: 'collection.delete_downloads',
+    resourceType: 'collection',
     label: 'Bulk delete downloads',
-    invalidate: invalidateShowDownloadDeletion,
+    invalidate: invalidateCollectionDownloadDeletion,
     success: (operation) => {
-      const showTitle = contextString(operation, 'show_title') || operation.title
+      const collectionTitle = contextString(operation, 'collection_title') || operation.title
       const files = resultNumber(operation, 'episode_files')
         ?? resultNumber(operation, 'completed')
         ?? 0
@@ -613,30 +613,30 @@ export const frontendOperationDefinitions = {
       const disabledDetail = disabledProfiles > 0
         ? `; ${disabledProfiles} ${plural(disabledProfiles, 'Download Profile')} disabled`
         : ''
-      return `Deleted downloads for ${showTitle}: ${files} episode ${plural(files, 'file')} deleted${profileDetail}${disabledDetail}`
+      return `Deleted downloads for ${collectionTitle}: ${files} episode ${plural(files, 'file')} deleted${profileDetail}${disabledDetail}`
     },
   },
-  'show.download_all': {
-    kind: 'show.download_all',
-    resourceType: 'show',
+  'collection.download_all': {
+    kind: 'collection.download_all',
+    resourceType: 'collection',
     label: 'Bulk download',
-    invalidate: invalidateShowFiles,
+    invalidate: invalidateCollectionFiles,
     success: (operation) => {
-      const showTitle = contextString(operation, 'show_title') || operation.title
+      const collectionTitle = contextString(operation, 'collection_title') || operation.title
       const completed = resultNumber(operation, 'downloads_completed')
         ?? resultNumber(operation, 'completed')
         ?? contextNumber(operation, 'downloads_requested')
         ?? 0
-      return `Bulk download finished for ${showTitle}: ${completed} ${plural(completed, 'episode')} downloaded`
+      return `Bulk download finished for ${collectionTitle}: ${completed} ${plural(completed, 'episode')} downloaded`
     },
   },
-  'show.redownload_episodes': {
-    kind: 'show.redownload_episodes',
-    resourceType: 'show',
+  'collection.redownload_episodes': {
+    kind: 'collection.redownload_episodes',
+    resourceType: 'collection',
     label: 'Bulk delete and re-download',
-    invalidate: invalidateShowFiles,
+    invalidate: invalidateCollectionFiles,
     success: (operation) => {
-      const showTitle = contextString(operation, 'show_title') || operation.title
+      const collectionTitle = contextString(operation, 'collection_title') || operation.title
       const files = resultNumber(operation, 'episode_files')
         ?? resultNumber(operation, 'completed')
         ?? contextNumber(operation, 'downloads_requested')
@@ -646,7 +646,7 @@ export const frontendOperationDefinitions = {
       const profileDetail = profiles === undefined
         ? ''
         : ` using ${profiles} ${plural(profiles, 'Local Media Profile')}`
-      return `Bulk delete and re-download finished for ${showTitle}: ${files} episode ${plural(files, 'file')} re-downloaded${profileDetail}`
+      return `Bulk delete and re-download finished for ${collectionTitle}: ${files} episode ${plural(files, 'file')} re-downloaded${profileDetail}`
     },
   },
   'movie.refresh_extras': {

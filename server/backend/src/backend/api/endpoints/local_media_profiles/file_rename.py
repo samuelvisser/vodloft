@@ -8,7 +8,7 @@ from backend.db.models import (
     Episode,
     LocalMediaProfileBase,
     MovieLocalMediaProfile,
-    ShowLocalMediaProfile,
+    CollectionLocalMediaProfile,
     VideoLocalMediaProfile,
 )
 from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
@@ -27,13 +27,13 @@ _PHYSICAL_ARTIFACT_STATUSES = (
 )
 
 
-def request_show_local_media_profile_file_rename(
+def request_collection_local_media_profile_file_rename(
         s: Session,
         local_media_profile_slug: str,
 ) -> dict[str, bool | int | str]:
-    """Rename every existing episode artifact using one Show Local Media Profile."""
+    """Rename every existing episode artifact using one Collection Local Media Profile."""
     local_media_profile = (
-        s.query(ShowLocalMediaProfile)
+        s.query(CollectionLocalMediaProfile)
         .filter_by(slug=local_media_profile_slug)
         .one_or_none()
     )
@@ -50,25 +50,25 @@ def request_show_local_media_profile_file_rename(
         .distinct()
         .order_by(Episode.id.asc())
     ))
-    show_ids = tuple(s.scalars(
-        select(Episode.show_id)
+    collection_ids = tuple(s.scalars(
+        select(Episode.collection_id)
         .join(EpisodeMediaDownload, EpisodeMediaDownload.media_item_id == Episode.id)
         .where(
             EpisodeMediaDownload.local_media_profile_id == local_media_profile.id,
             EpisodeMediaDownload.artifact_status.in_(_PHYSICAL_ARTIFACT_STATUSES),
         )
         .distinct()
-        .order_by(Episode.show_id.asc())
+        .order_by(Episode.collection_id.asc())
     ))
 
     operation = create_operation(
         s,
         LocalMediaProfileFileRenameOperation(
             local_media_profile,
-            show_ids=show_ids,
+            collection_ids=collection_ids,
         ),
     )
-    if not show_ids:
+    if not collection_ids:
         complete_operation(
             s,
             operation.id,
@@ -81,8 +81,8 @@ def request_show_local_media_profile_file_rename(
             },
         )
     else:
-        for show_id in show_ids:
-            queue_operation_target_dispatch(s, operation.id, f"show:{show_id}")
+        for collection_id in collection_ids:
+            queue_operation_target_dispatch(s, operation.id, f"collection:{collection_id}")
 
     s.flush()
     return {
@@ -160,8 +160,8 @@ def request_local_media_profile_file_rename(
     if profile is None:
         raise HTTPException(status_code=404, detail="Media profile not found")
 
-    if profile.type == LocalMediaProfileType.SHOW.value:
-        return request_show_local_media_profile_file_rename(
+    if profile.type == LocalMediaProfileType.COLLECTION.value:
+        return request_collection_local_media_profile_file_rename(
             s,
             local_media_profile_slug,
         )

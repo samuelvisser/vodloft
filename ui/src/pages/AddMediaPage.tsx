@@ -7,33 +7,33 @@ import {faIcon} from '../icons/faIcon'
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import SourceBadge from '../components/Source/SourceBadge'
 import {useQueryClient} from '@tanstack/react-query'
-import {addVideo, resolveLink, useMovies, useShows, useSources, useVideos} from '../lib/queries'
+import {addVideo, resolveLink, useMovies, useCollections, useSources, useVideos} from '../lib/queries'
 import {linkTarget, type MediaLinkTarget} from '../lib/sourceControls'
-import {ResolvedLinkRead, SourceFeature, SourceRead, searchName, sourceHas} from '../types/schemas/source'
+import {ResolvedLinkRead, SourceFeature, SourceRead, kindName, searchName, sourceHas} from '../types/schemas/source'
 import {DrmNotice} from '../components/common/DrmProtected'
 import {SubscriptionNotice} from '../components/common/NeedsSubscription'
 import {ClearInputButton} from '../components/common/ClearInputButton'
 
 type AddMediaPageProps = {
     onboarding?: boolean
-    onShow?: (target: MediaLinkTarget) => void
+    onCollection?: (target: MediaLinkTarget) => void
     onMovie?: (target: MediaLinkTarget) => void
     onBrowse?: (sourceId: string) => void
     onSkip?: () => void
 }
 
 const KIND_LABEL: Record<ResolvedLinkRead['kind'], string> = {
-    show: 'Show',
+    collection: 'Collection',
     movie: 'Movie',
     episode: 'Episode',
     video: 'Video',
 }
 
-export default function AddMediaPage({onboarding = false, onShow, onMovie, onBrowse, onSkip}: AddMediaPageProps = {}) {
+export default function AddMediaPage({onboarding = false, onCollection, onMovie, onBrowse, onSkip}: AddMediaPageProps = {}) {
     const navigate = useNavigate()
     const [params] = useSearchParams()
     const {data: sources} = useSources()
-    const {data: localShows} = useShows()
+    const {data: localCollections} = useCollections()
     const {data: localMovies} = useMovies()
     const {data: localVideos} = useVideos()
     const queryClient = useQueryClient()
@@ -96,11 +96,11 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
         void lookUp(url)
     }
 
-    // A show link from a Source that cannot add shows yet, such as a playlist at a video site.
-    const showsUnsupported = !!link && (link.kind === 'show' || link.kind === 'episode') && !sourceHas(link.source, SourceFeature.SHOWS)
-    const target = link && !showsUnsupported ? linkTarget(link) : null
-    const localShow = target?.kind === 'show'
-        ? localShows?.find((show) => show.slug === target.slug && show.sourceKey === target.sourceKey)
+    // A collection link from a Source that cannot add collections yet, such as a playlist at a video site.
+    const collectionsUnsupported = !!link && (link.kind === 'collection' || link.kind === 'episode') && !sourceHas(link.source, SourceFeature.COLLECTIONS)
+    const target = link && !collectionsUnsupported ? linkTarget(link) : null
+    const localCollection = target?.kind === 'collection'
+        ? localCollections?.find((collection) => collection.slug === target.slug && collection.sourceKey === target.sourceKey)
         : undefined
     const localMovie = target?.kind === 'movie'
         ? localMovies?.find((movie) => movie.slug === target.slug && movie.sourceKey === target.sourceKey)
@@ -139,12 +139,12 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
             else navigate(`/movie/${target.slug}`)
             return
         }
-        if (onShow) {
-            onShow(target)
+        if (onCollection) {
+            onCollection(target)
             return
         }
-        if (localShow) navigate(`/show/${localShow.slug}`)
-        else navigate(`/add-show?url=${encodeURIComponent(target.url)}`)
+        if (localCollection) navigate(`/collection/${localCollection.slug}`)
+        else navigate(`/add-collection?url=${encodeURIComponent(target.url)}`)
     }
 
     // A Source with a catalogue is browsed; one without is searched. Onboarding only browses.
@@ -156,7 +156,7 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
     }
 
     // Hand the link to the Quick download page: one video, episode or movie that can be downloaded.
-    const quickDownloadable = !!link && link.kind !== 'show' && !link.drmProtected && !link.needsSubscription
+    const quickDownloadable = !!link && link.kind !== 'collection' && !link.drmProtected && !link.needsSubscription
     const quickDownload = () => {
         if (!link) return
         navigate(`/quick-download?url=${encodeURIComponent(link.url)}&source=${encodeURIComponent(link.source.id)}`)
@@ -167,8 +167,8 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
         if (!target) return null
         if (target.kind === 'video') return localVideo ? 'Open video' : addingVideo ? 'Adding video…' : 'Add this video'
         if (target.kind === 'movie') return localMovie ? 'Open movie' : 'Continue with this movie'
-        if (localShow) return 'Open show'
-        return link?.kind === 'episode' ? 'Add its show' : 'Continue with this show'
+        if (localCollection) return 'Open collection'
+        return link?.kind === 'episode' ? 'Add its collection' : 'Continue with this collection'
     })()
 
     return (
@@ -177,7 +177,7 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
                 <div>
                     <h1 id="add-media-title">{onboarding ? 'Add your first media' : 'Add media'}</h1>
                     <p className="view-description">
-                        Paste a link to a show, an episode, a movie or a video. VODLoft finds the service it comes from and
+                        Paste a link to a collection, an episode, a movie or a video. VODLoft finds the service it comes from and
                         lets you confirm everything before anything is saved.
                     </p>
                 </div>
@@ -239,7 +239,7 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
                     )}
                     <div className="add-media-preview-copy">
                         <SourceBadge sourceKey={link.source.id}/>
-                        <p>{[KIND_LABEL[link.kind], link.site, link.preview.authorName].filter(Boolean).join(' · ')}</p>
+                        <p>{[kindName(link.source, link.kind, KIND_LABEL[link.kind]), link.site, link.preview.authorName].filter(Boolean).join(' · ')}</p>
                         <h2>{link.preview.title}</h2>
                         {link.preview.description && (
                             <p className="add-media-preview-description">{link.preview.description}</p>
@@ -260,13 +260,13 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
                                     </button>
                                 )}
                             </div>
-                        ) : showsUnsupported ? (
+                        ) : collectionsUnsupported ? (
                             <p role="alert">
                                 VODLoft cannot add channels or playlists from {link.source.name} yet. Paste the link to one video instead.
                             </p>
                         ) : (
                             <p role="alert">
-                                {link.source.name} did not say which show this episode belongs to. Paste the show's link instead.
+                                {link.source.name} did not say which collection this episode belongs to. Paste the collection's link instead.
                             </p>
                         )}
                     </div>

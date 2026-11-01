@@ -127,32 +127,32 @@ def test_select_rendition_requires_resolutions():
 
 def _db_with_episode():
     from backend.db import Base
-    from backend.db.models import Episode, Season, Show
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+    from backend.db.models import Episode, Season, Collection
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
     from backend.utils.helpers import generate_uuid
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     session = Session(engine)
-    show = Show(
+    collection = Collection(
         source_key="dailywire",
-        uuid="show-uuid",
-        slug="test-show",
+        uuid="collection-uuid",
+        slug="test-collection",
         title="Test Show",
         description=None,
-        sharing_url="https://example.test/show",
+        sharing_url="https://example.test/collection",
         membership_level="FREE",
-        type=ShowType.PODCAST.value,
+        type=CollectionType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Host",
         author_slug="host",
     )
-    season = Season(show=show, index=1, slug="season-2026", name="2026")
+    season = Season(collection=collection, index=1, slug="season-2026", name="2026")
     episode = Episode(
         source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
-        show=show,
+        collection=collection,
         season=season,
         index=1,
         episode_identifier="ep.101",
@@ -163,7 +163,7 @@ def _db_with_episode():
         publish_status="published_final",
         sharing_url="https://example.test/ep",
     )
-    session.add_all([show, season, episode])
+    session.add_all([collection, season, episode])
     session.commit()
     return session, engine, episode
 
@@ -176,11 +176,11 @@ def test_resolve_episode_output_path(tmp_path, monkeypatch):
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
 
     path = resolve_episode_output_path(
-        "/downloads/audio/{{ show }}/{{ season }}/{{ episode_identifier }} - {{ episode }}.ext",
+        "/downloads/audio/{{ collection }}/{{ season }}/{{ episode_identifier }} - {{ episode }}.ext",
         episode=episode,
         extension="m4a",
     )
-    assert path == tmp_path.resolve() / "audio" / "test-show" / "season-2026" / "ep.101 - test-episode-101.m4a"
+    assert path == tmp_path.resolve() / "audio" / "test-collection" / "season-2026" / "ep.101 - test-episode-101.m4a"
 
     # Unsafe characters in substitutions never escape into the path structure
     titled = resolve_episode_output_path("/downloads/{{ title }}.ext", episode=episode, extension="ts")
@@ -188,7 +188,7 @@ def test_resolve_episode_output_path(tmp_path, monkeypatch):
     assert "/" not in titled.name and "<" not in titled.name
 
     # Without a known extension the template's .ext marker is kept
-    pending = resolve_episode_output_path("/downloads/{{ show }}/{{ episode }}.ext", episode=episode)
+    pending = resolve_episode_output_path("/downloads/{{ collection }}/{{ episode }}.ext", episode=episode)
     assert pending.name == "test-episode-101.ext"
 
     session.close()
@@ -202,17 +202,17 @@ def test_create_episode_download_enforces_one_per_profile(monkeypatch, tmp_path)
 
     from backend.api.endpoints.media_downloads.service import create_episode_download
     from backend.api.models.media_download import EpisodeDownloadAPICreate
-    from backend.db.models import ShowLocalMediaProfile
+    from backend.db.models import CollectionLocalMediaProfile
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from config import get_settings
 
     session, engine, episode = _db_with_episode()
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
 
-    profile = ShowLocalMediaProfile(
+    profile = CollectionLocalMediaProfile(
         slug="audio",
         name="Audio",
-        output_template="/downloads/{{ show }}/{{ episode }}.ext",
+        output_template="/downloads/{{ collection }}/{{ episode }}.ext",
         preferred_format="format_audio_only",
     )
     session.add(profile)

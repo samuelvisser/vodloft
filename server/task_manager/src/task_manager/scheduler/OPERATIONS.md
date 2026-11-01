@@ -25,8 +25,8 @@ Prefer an `OperationDefinition` plus `create_operation(session, definition)` whe
 `OperationDefinition` deliberately does not emit domain events. Events describe domain facts and should stay explicit at the business call site, including their literal event name. When the same action both creates an operation and announces a domain fact, keep those as separate statements in the same transaction:
 
 ```python
-create_operation(s, ShowIndexOperation(show))
-queue_event(s, "show.added", ShowAdded(show))
+create_operation(s, ShowIndexOperation(collection))
+queue_event(s, "collection.added", ShowAdded(show))
 ```
 
 The event may independently have multiple consumers. If one consumer starts work matching the operation target, the resulting TaskRun attaches to the operation through the normal task/resource/input matching rules.
@@ -109,7 +109,7 @@ Domain resources that can own scheduler work use `HasTaskResourcesMixin`. It exp
 
 Deleting a resource through SQLAlchemy therefore deletes the scheduler rows owned by that resource through normal ORM cascade semantics. Once the transaction commits, matching in-memory APScheduler jobs are removed as well. A retry whose TaskRun has already been deleted is ignored rather than recreating an orphaned run. If deletion removes a pending reservation from a constrained task lane, the task definition's generic terminal callback may refill the released slot; a still-running worker waits until its cooperative cancellation actually exits before releasing its slot.
 
-This is intentionally generic. Show, season, episode, movie, movie-extra, download-profile and media-download deletion should not need action-specific scheduler cleanup code.
+This is intentionally generic. Collection, season, episode, movie, movie-extra, download-profile and media-download deletion should not need action-specific scheduler cleanup code.
 
 ## Retries, restarts and cancellation
 

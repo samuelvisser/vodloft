@@ -22,19 +22,19 @@ def db_session():
     engine.dispose()
 
 
-def _show(session: Session):
-    from backend.db.models import Show
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+def _collection(session: Session):
+    from backend.db.models import Collection
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
 
-    item = Show(
+    item = Collection(
         source_key="dailywire",
-        uuid="show-uuid",
-        slug="show",
-        title="Show",
+        uuid="collection-uuid",
+        slug="collection",
+        title="Collection",
         description="Description",
-        sharing_url="https://example.test/show",
+        sharing_url="https://example.test/collection",
         membership_level="FREE",
-        type=ShowType.PODCAST.value,
+        type=CollectionType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Host",
         author_slug="host",
@@ -44,10 +44,10 @@ def _show(session: Session):
     return item
 
 
-def _season(session: Session, show):
+def _season(session: Session, collection):
     from backend.db.models import Season
 
-    item = Season(show=show, index=1, slug="season-1", name="Season 1")
+    item = Season(collection=collection, index=1, slug="season-1", name="Season 1")
     session.add(item)
     session.flush()
     return item
@@ -55,7 +55,7 @@ def _season(session: Session, show):
 
 def _episode(
     session: Session,
-    show,
+    collection,
     season,
     *,
     status: str = "live",
@@ -68,7 +68,7 @@ def _episode(
         source_key="dailywire",
         uuid=f"episode-{index}-uuid",
         type="episode",
-        show=show,
+        collection=collection,
         season=season,
         index=index,
         episode_identifier=f"ep.{index}",
@@ -100,11 +100,11 @@ def _local_profile(session: Session, *, slug: str, preferred_format: str):
     return item
 
 
-def _download_profile(session: Session, show, local_profile, *, enabled: bool = True):
+def _download_profile(session: Session, collection, local_profile, *, enabled: bool = True):
     from backend.db.models import DownloadProfile
 
     item = DownloadProfile(
-        show=show,
+        collection=collection,
         local_media_profile=local_profile,
         enable_profile=enabled,
         ep_id_type_list=["ep"],
@@ -121,7 +121,7 @@ def _download_profile(session: Session, show, local_profile, *, enabled: bool = 
 
 def _rss_profile(
     session: Session,
-    show,
+    collection,
     *,
     use_dw_stream: bool,
     mode: str = "audio_hls",
@@ -131,7 +131,7 @@ def _rss_profile(
     from backend.db.models import RssStreamProfile
 
     item = RssStreamProfile(
-        show=show,
+        collection=collection,
         enable_profile=True,
         token="token",
         use_downloads=True,
@@ -221,10 +221,10 @@ def _available_file(session: Session, episode, local_profile, download_profile, 
 def test_live_hls_with_dailywire_enabled_is_included(db_session):
     from backend.api.endpoints.feeds.service import get_feed_items
 
-    show = _show(db_session)
-    season = _season(db_session, show)
-    episode = _episode(db_session, show, season)
-    profile = _rss_profile(db_session, show, use_dw_stream=True)
+    collection = _collection(db_session)
+    season = _season(db_session, collection)
+    episode = _episode(db_session, collection, season)
+    profile = _rss_profile(db_session, collection, use_dw_stream=True)
 
     assert get_feed_items(db_session, profile) == [(episode, None)]
 
@@ -234,17 +234,17 @@ def test_live_hls_without_normal_dailywire_requires_matching_hls_download_profil
 ):
     from backend.api.endpoints.feeds.service import get_feed_items
 
-    show = _show(db_session)
-    season = _season(db_session, show)
-    episode = _episode(db_session, show, season)
-    profile = _rss_profile(db_session, show, use_dw_stream=False)
+    collection = _collection(db_session)
+    season = _season(db_session, collection)
+    episode = _episode(db_session, collection, season)
+    profile = _rss_profile(db_session, collection, use_dw_stream=False)
 
     normal_video = _local_profile(
         db_session,
         slug="video",
         preferred_format="format_1080p",
     )
-    _download_profile(db_session, show, normal_video)
+    _download_profile(db_session, collection, normal_video)
 
     assert get_feed_items(db_session, profile) == []
 
@@ -253,7 +253,7 @@ def test_live_hls_without_normal_dailywire_requires_matching_hls_download_profil
         slug="hls",
         preferred_format="format_hls",
     )
-    _download_profile(db_session, show, hls)
+    _download_profile(db_session, collection, hls)
 
     # audio_hls also advertises an audio enclosure, which nothing downloads yet.
     assert get_feed_items(db_session, profile) == []
@@ -263,7 +263,7 @@ def test_live_hls_without_normal_dailywire_requires_matching_hls_download_profil
         slug="audio",
         preferred_format="format_audio_only",
     )
-    _download_profile(db_session, show, audio)
+    _download_profile(db_session, collection, audio)
 
     assert get_feed_items(db_session, profile) == [(episode, None)]
 
@@ -279,20 +279,20 @@ def test_download_only_live_episode_needs_every_enclosure_to_download(
 ):
     from backend.api.endpoints.feeds.service import get_feed_items
 
-    show = _show(db_session)
-    season = _season(db_session, show)
-    episode = _episode(db_session, show, season)
-    profile = _rss_profile(db_session, show, use_dw_stream=False, mode=mode)
+    collection = _collection(db_session)
+    season = _season(db_session, collection)
+    episode = _episode(db_session, collection, season)
+    profile = _rss_profile(db_session, collection, use_dw_stream=False, mode=mode)
 
     hls = _local_profile(db_session, slug="hls", preferred_format="format_hls")
-    _download_profile(db_session, show, hls)
+    _download_profile(db_session, collection, hls)
 
     # Only half of the feed's media would ever be downloaded, so the episode
     # could never stay in a download-only feed once it is published.
     assert get_feed_items(db_session, profile) == []
 
     partner = _local_profile(db_session, slug="partner", preferred_format=partner_format)
-    _download_profile(db_session, show, partner)
+    _download_profile(db_session, collection, partner)
 
     assert get_feed_items(db_session, profile) == [(episode, None)]
 
@@ -300,12 +300,12 @@ def test_download_only_live_episode_needs_every_enclosure_to_download(
 def test_live_toggle_has_no_effect_for_non_hls_output_mode(db_session):
     from backend.api.endpoints.feeds.service import get_feed_items
 
-    show = _show(db_session)
-    season = _season(db_session, show)
-    _episode(db_session, show, season)
+    collection = _collection(db_session)
+    season = _season(db_session, collection)
+    _episode(db_session, collection, season)
     profile = _rss_profile(
         db_session,
-        show,
+        collection,
         use_dw_stream=True,
         mode="audio_mp4",
         live=True,
@@ -324,22 +324,22 @@ def test_live_handoff_keeps_same_remote_hls_url_usable_until_final_hls_exists(
         remember_live_episode_handoff,
     )
 
-    show = _show(db_session)
-    season = _season(db_session, show)
-    episode = _episode(db_session, show, season)
+    collection = _collection(db_session)
+    season = _season(db_session, collection)
+    episode = _episode(db_session, collection, season)
     hls = _local_profile(
         db_session,
         slug="hls",
         preferred_format="format_hls",
     )
-    download_profile = _download_profile(db_session, show, hls)
+    download_profile = _download_profile(db_session, collection, hls)
     audio_profile = _local_profile(
         db_session,
         slug="audio",
         preferred_format="format_audio_only",
     )
-    audio_download_profile = _download_profile(db_session, show, audio_profile)
-    profile = _rss_profile(db_session, show, use_dw_stream=False)
+    audio_download_profile = _download_profile(db_session, collection, audio_profile)
+    profile = _rss_profile(db_session, collection, use_dw_stream=False)
 
     # The HLS route records this only after a real GET has opened the live stream.
     remember_live_episode_handoff(profile, episode)
@@ -378,24 +378,24 @@ def test_live_handoff_is_not_dropped_just_because_episode_leaves_rss_window(
 ):
     from backend.api.endpoints.feeds.service import get_feed_items, remember_live_episode_handoff
 
-    show = _show(db_session)
-    season = _season(db_session, show)
-    live_episode = _episode(db_session, show, season)
+    collection = _collection(db_session)
+    season = _season(db_session, collection)
+    live_episode = _episode(db_session, collection, season)
     hls = _local_profile(
         db_session,
         slug="hls",
         preferred_format="format_hls",
     )
-    _download_profile(db_session, show, hls)
+    _download_profile(db_session, collection, hls)
     audio = _local_profile(
         db_session,
         slug="audio",
         preferred_format="format_audio_only",
     )
-    _download_profile(db_session, show, audio)
+    _download_profile(db_session, collection, audio)
     profile = _rss_profile(
         db_session,
-        show,
+        collection,
         use_dw_stream=False,
         max_items=1,
     )
@@ -405,7 +405,7 @@ def test_live_handoff_is_not_dropped_just_because_episode_leaves_rss_window(
 
     # Add a newer live episode so the original cached RSS item falls outside
     # max_items. Its previously published stable URL must still retain handoff state.
-    newer = _episode(db_session, show, season, index=2)
+    newer = _episode(db_session, collection, season, index=2)
     newer.went_live_date = datetime.now(timezone.utc)
     db_session.flush()
 

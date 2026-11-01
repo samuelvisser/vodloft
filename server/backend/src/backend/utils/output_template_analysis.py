@@ -11,7 +11,7 @@ from .jinja_analysis.comparison import OutputComparison, OutputOverlap, compare_
 
 
 # Only aliases guaranteed by episode_output_template_values are equivalent.
-_SHOW_ALIASES = {
+_COLLECTION_ALIASES = {
     "title": "episode_title",
     "episode_published_date": "date",
     "episode_published_time": "time",
@@ -42,14 +42,14 @@ def analyze_profile_outputs(
     environment: Environment,
     namespace: str,
 ) -> ProfileOutputAnalysis:
-    """Analyze Show profiles, or separately analyze movie features and extras.
+    """Analyze Collection profiles, or separately analyze movie features and extras.
 
     Movie parent/item aliases coincide for the feature, but NOT for its extras.
     Local custom indexes remain profile-scoped symbols and are never evaluated.
     """
     extension = {"format_audio_only": "m4a", "format_hls": "m3u8"}.get(preferred_format, "mp4")
-    if profile_type == "show":
-        scenarios = (analyze_template(template, environment=environment, aliases=_SHOW_ALIASES, namespace=namespace),)
+    if profile_type == "collection":
+        scenarios = (analyze_template(template, environment=environment, aliases=_COLLECTION_ALIASES, namespace=namespace),)
     elif profile_type == "movie":
         feature = analyze_template(template, environment=environment, aliases=_MOVIE_ALIASES,
                                    known_values={"media_type": "movie"}, namespace=namespace)
@@ -61,7 +61,7 @@ def analyze_profile_outputs(
         )
         scenarios = (feature, extra)
     else:
-        raise ValueError("Output analysis requires a Show or Movie Local Media Profile")
+        raise ValueError("Output analysis requires a Collection or Movie Local Media Profile")
     return ProfileOutputAnalysis(profile_type, extension, scenarios)
 
 

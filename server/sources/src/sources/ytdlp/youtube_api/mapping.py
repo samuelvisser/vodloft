@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from ...contract import MAIN_TAG, ShowDetails, VideoDetails, link_host, on_domain
+from ...contract import MAIN_TAG, CollectionDetails, VideoDetails, link_host, on_domain
 
 SHORT_MAX_SECONDS = 180
 """YouTube Shorts are three minutes at most, so a longer video is never one."""
@@ -27,7 +27,7 @@ _TAB_PLAYLIST_PREFIXES = {"videos": "UU", "shorts": "UUSH", "streams": "UULV"}
 
 @dataclass(frozen=True)
 class YouTubeRef:
-    """What a YouTube show link points at.
+    """What a YouTube collection link points at.
 
     ``kind`` is handle, channel, username or custom (an old /c/ link the API
     cannot read) for a channel, or playlist. A channel's Videos tab stands for
@@ -127,9 +127,9 @@ def video(item: dict, *, short: bool) -> VideoDetails:
     )
 
 
-def channel_show(item: dict, url: str) -> ShowDetails:
+def channel_collection(item: dict, url: str) -> CollectionDetails:
     snippet = item.get("snippet") or {}
-    return ShowDetails(
+    return CollectionDetails(
         slug=item["id"],
         url=url,
         title=snippet.get("title") or url,
@@ -140,10 +140,10 @@ def channel_show(item: dict, url: str) -> ShowDetails:
     )
 
 
-def playlist_show(item: dict, url: str) -> ShowDetails:
+def playlist_collection(item: dict, url: str) -> CollectionDetails:
     snippet = item.get("snippet") or {}
     channel_id = snippet.get("channelId")
-    return ShowDetails(
+    return CollectionDetails(
         slug=item["id"],
         url=url,
         title=snippet.get("title") or url,

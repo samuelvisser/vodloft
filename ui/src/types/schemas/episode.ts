@@ -13,7 +13,7 @@ const EpisodeBaseSchema = z.object({
 })
 
 export const EpisodeCreateSchema = EpisodeBaseSchema.extend({
-    showId: z.int(),
+    collectionId: z.int(),
     index: z.number(),
     dwId: z.string().optional(),
     slug: z.string(),
@@ -29,7 +29,7 @@ export const EpisodeReadSchema = z.looseObject({
     id: z.int(),
     ...SourcedFields,
     uuid: z.string(),
-    showId: z.int(),
+    collectionId: z.int(),
     seasonId: z.int(),
     index: z.number(),
     episodeIdentifier: z.string(),
@@ -66,7 +66,7 @@ export type EpisodeRead = z.infer<typeof EpisodeReadSchema>
 export const EpisodeReadViewSchema = z.object({
     id: z.int(),
     ...SourcedFields,
-    showId: z.int(),
+    collectionId: z.int(),
     seasonId: z.int(),
     index: z.number(),
     episodeIdentifier: z.string(),
@@ -93,7 +93,7 @@ export const EpisodeReadViewPageSchema = z.object({
     items: EpisodeReadViewSchema.array(),
     limit: z.int().positive(),
     total: z.int().nonnegative(),
-    showTotal: z.int().nonnegative(),
+    collectionTotal: z.int().nonnegative(),
     nextCursor: z.string().nullable().optional(),
     previousCursor: z.string().nullable().optional(),
     hasMore: z.boolean(),
@@ -107,8 +107,8 @@ export const EpisodeIndexedActivityReadSchema = z.object({
     id: z.int(),
     title: z.string(),
     slug: z.string(),
-    showTitle: z.string(),
-    showSlug: z.string(),
+    collectionTitle: z.string(),
+    collectionSlug: z.string(),
     indexedAt: ApiDateTimeSchema,
 })
 export type EpisodeIndexedActivityRead = z.infer<typeof EpisodeIndexedActivityReadSchema>

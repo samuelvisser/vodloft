@@ -1,6 +1,6 @@
 # Automation and Background Tasks
 
-VODLoft performs routine work automatically so you do not have to keep refreshing shows or manually checking every download.
+VODLoft performs routine work automatically so you do not have to keep refreshing collections or manually checking every download.
 
 For most installations, the defaults are a good balance between keeping content current and avoiding unnecessary Daily Wire requests.
 
@@ -8,7 +8,7 @@ For most installations, the defaults are a good balance between keeping content 
 
 | What VODLoft checks | Default |
 | --- | --- |
-| New episodes on managed shows | Every 30 minutes |
+| New episodes on managed collections | Every 30 minutes |
 | Known episodes that are still publishing | Every 2 minutes |
 | Episodes temporarily without usable media | Every 20 minutes |
 | Recent episode metadata | 15m, 30m, 1h, 3h, 6h, 24h, 3d after publication |
@@ -21,15 +21,15 @@ The yt-dlp update runs on its own schedule. You can also start it from the Sourc
 
 ## Finding new episodes
 
-Every 30 minutes by default, VODLoft checks the shows in your Library for newly known episodes.
+Every 30 minutes by default, VODLoft checks the collections in your Library for newly known episodes.
 
 This is the normal automatic discovery process. It does not mean every episode is downloaded; Download Profiles decide what happens after an episode has been found.
 
 ### Sync now
 
-Use a show's **Sync now** action when you know something new has appeared on The Daily Wire and you do not want to wait for the next scheduled check.
+Use a collection's **Sync now** action when you know something new has appeared on The Daily Wire and you do not want to wait for the next scheduled check.
 
-The show keeps recent synchronization results so you can see whether VODLoft checked successfully and whether anything new was found.
+The collection keeps recent synchronization results so you can see whether VODLoft checked successfully and whether anything new was found.
 
 ## Following live and newly published episodes
 
@@ -122,7 +122,7 @@ VODLoft validates enabled worker schedules against its Daily Wire request-pacing
 
 ## Tuning advice
 
-More frequent checks are rarely necessary. If you occasionally need a show updated immediately, use **Sync now** instead of making every show refresh much more often.
+More frequent checks are rarely necessary. If you occasionally need a collection updated immediately, use **Sync now** instead of making every collection refresh much more often.
 
 If you do tune automation:
 

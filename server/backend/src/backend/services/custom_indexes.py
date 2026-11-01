@@ -7,10 +7,10 @@ from pathlib import Path
 from sqlalchemy import delete, or_, select, true, update
 from sqlalchemy.orm import Session
 
-from backend.db.models import CustomIndexState, Episode, Metadata, Show, ShowLocalMediaProfile
+from backend.db.models import CustomIndexState, Episode, Metadata, Collection, CollectionLocalMediaProfile
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
-from backend.types.local_media_profile_types import ShowLocalMediaProfileScope
+from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope
 from backend.utils.custom_index import (
     CustomIndexNotReadyError,
     INDEX_ASSIGNMENT_PREFIX,
@@ -24,8 +24,8 @@ from backend.utils.jinja_analysis import (
     compare_custom_index_reachability,
 )
 from backend.utils.output_template import (
-    SHOW_OUTPUT_TEMPLATE_FIELDS,
-    SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+    COLLECTION_OUTPUT_TEMPLATE_FIELDS,
+    COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
     episode_output_template_values,
     output_template_custom_index_keys,
     prepare_output_template,
@@ -42,7 +42,7 @@ from task_manager.scheduler.db import TaskOperation, TaskOperationTarget
 
 @dataclass(frozen=True)
 class CustomIndexReconciliationResult:
-    show_id: int
+    collection_id: int
     local_media_profile_id: int
     episodes_considered: int
     assignments_changed: int
@@ -51,26 +51,26 @@ class CustomIndexReconciliationResult:
     synced_source_paths: tuple[tuple[int, str], ...] = ()
 
 
-def profile_applies_to_show(profile: ShowLocalMediaProfile, show: Show) -> bool:
-    return profile.show_scope == ShowLocalMediaProfileScope.BOTH or profile.show_scope == show.type
+def profile_applies_to_collection(profile: CollectionLocalMediaProfile, collection: Collection) -> bool:
+    return profile.collection_scope == CollectionLocalMediaProfileScope.BOTH or profile.collection_scope == collection.type
 
 
-def profile_show_scope_filter_for_show_type(show_type: str):
-    """SQL predicate for Show Local Media Profiles that apply to one show type."""
+def profile_collection_scope_filter_for_collection_type(collection_type: str):
+    """SQL predicate for Collection Local Media Profiles that apply to one collection type."""
     return or_(
-        ShowLocalMediaProfile.show_scope == ShowLocalMediaProfileScope.BOTH,
-        ShowLocalMediaProfile.show_scope == show_type,
+        CollectionLocalMediaProfile.collection_scope == CollectionLocalMediaProfileScope.BOTH,
+        CollectionLocalMediaProfile.collection_scope == collection_type,
     )
 
 
-def profile_show_scope_filter(profile: ShowLocalMediaProfile):
-    """SQL predicate for Shows that are in one Local Media Profile's scope."""
-    if profile.show_scope == ShowLocalMediaProfileScope.BOTH:
+def profile_collection_scope_filter(profile: CollectionLocalMediaProfile):
+    """SQL predicate for Collections that are in one Local Media Profile's scope."""
+    if profile.collection_scope == CollectionLocalMediaProfileScope.BOTH:
         return true()
-    return Show.type == profile.show_scope
+    return Collection.type == profile.collection_scope
 
 
-def profile_uses_custom_indexes(profile: ShowLocalMediaProfile) -> bool:
+def profile_uses_custom_indexes(profile: CollectionLocalMediaProfile) -> bool:
     return bool(
         output_template_custom_index_keys(profile.output_template)
         & indexing_value_definition_keys(profile)
@@ -118,16 +118,16 @@ def compare_custom_index_assignments(
 
 
 def request_custom_index_reconciliation(
-    session: Session, *, show_id: int, local_media_profile_id: int,
+    session: Session, *, collection_id: int, local_media_profile_id: int,
     dispatch: bool = True,
 ) -> CustomIndexState:
     """Invalidate a pair in the transaction that changes its inputs."""
     state = session.scalar(select(CustomIndexState).where(
-        CustomIndexState.show_id == show_id,
+        CustomIndexState.collection_id == collection_id,
         CustomIndexState.local_media_profile_id == local_media_profile_id,
     ))
     if state is None:
-        state = CustomIndexState(show_id=show_id, local_media_profile_id=local_media_profile_id)
+        state = CustomIndexState(collection_id=collection_id, local_media_profile_id=local_media_profile_id)
         session.add(state)
         session.flush()
     else:
@@ -137,21 +137,21 @@ def request_custom_index_reconciliation(
         session.refresh(state)
     if dispatch:
         dispatch_custom_index_reconciliation(
-            session, show_id=show_id, local_media_profile_id=local_media_profile_id,
+            session, collection_id=collection_id, local_media_profile_id=local_media_profile_id,
         )
     return state
 
 
 def dispatch_custom_index_reconciliation(
-    session: Session, *, show_id: int, local_media_profile_id: int,
+    session: Session, *, collection_id: int, local_media_profile_id: int,
 ) -> None:
     active = session.scalar(select(TaskOperationTarget.id).join(
         TaskOperation, TaskOperation.id == TaskOperationTarget.operation_id,
     ).where(
         TaskOperation.kind == "local_media_profile.manage_custom_indexes",
         TaskOperation.resource_id == local_media_profile_id,
-        TaskOperationTarget.resource_type == "show",
-        TaskOperationTarget.resource_id == show_id,
+        TaskOperationTarget.resource_type == "collection",
+        TaskOperationTarget.resource_id == collection_id,
         TaskOperation.status.in_((
             OperationStatus.QUEUED, OperationStatus.RUNNING,
             OperationStatus.WAITING,
@@ -160,9 +160,9 @@ def dispatch_custom_index_reconciliation(
     if active is not None:
         return
     target = OperationTargetSpec(
-            task_key="manage_custom_indexes", resource_type="show", resource_id=show_id,
+            task_key="manage_custom_indexes", resource_type="collection", resource_id=collection_id,
             task_kwargs={"local_media_profile_id": local_media_profile_id},
-            slot_key=f"show:{show_id}:profile:{local_media_profile_id}",
+            slot_key=f"collection:{collection_id}:profile:{local_media_profile_id}",
     )
     operation = create_operation(
             session, kind="local_media_profile.manage_custom_indexes",
@@ -173,44 +173,44 @@ def dispatch_custom_index_reconciliation(
     queue_operation_target_dispatch(session, operation.id, target.resolved_slot_key())
 
 
-def request_show_custom_index_reconciliation(session: Session, show_id: int) -> None:
-    show = session.get(Show, show_id)
-    if show is None:
+def request_collection_custom_index_reconciliation(session: Session, collection_id: int) -> None:
+    collection = session.get(Collection, collection_id)
+    if collection is None:
         return
 
     existing_profile_ids = set(session.scalars(
         select(CustomIndexState.local_media_profile_id).where(
-            CustomIndexState.show_id == show_id,
+            CustomIndexState.collection_id == collection_id,
         )
     ))
     profile_stmt = (
-        select(ShowLocalMediaProfile)
+        select(CollectionLocalMediaProfile)
         .where(or_(
-            ShowLocalMediaProfile.id.in_(existing_profile_ids),
-            profile_show_scope_filter_for_show_type(show.type),
+            CollectionLocalMediaProfile.id.in_(existing_profile_ids),
+            profile_collection_scope_filter_for_collection_type(collection.type),
         ))
-        .order_by(ShowLocalMediaProfile.id)
+        .order_by(CollectionLocalMediaProfile.id)
     )
     for profile in session.scalars(profile_stmt):
         if profile.id in existing_profile_ids or profile_uses_custom_indexes(profile):
             request_custom_index_reconciliation(
-                session, show_id=show_id, local_media_profile_id=profile.id,
+                session, collection_id=collection_id, local_media_profile_id=profile.id,
             )
 
 
 def ensure_episode_custom_indexes_ready(
-    session: Session, *, episode: Episode, profile: ShowLocalMediaProfile,
+    session: Session, *, episode: Episode, profile: CollectionLocalMediaProfile,
 ) -> None:
     if not profile_uses_custom_indexes(profile):
         return
     state = session.scalar(select(CustomIndexState).where(
-        CustomIndexState.show_id == episode.show_id,
+        CustomIndexState.collection_id == episode.collection_id,
         CustomIndexState.local_media_profile_id == profile.id,
     ))
     if state is None:
         raise CustomIndexNotReadyError(
             "Custom indexes have not been reconciled",
-            repair_show_id=episode.show_id, repair_profile_id=profile.id,
+            repair_collection_id=episode.collection_id, repair_profile_id=profile.id,
         )
     if state.completed_generation != state.requested_generation:
         raise CustomIndexNotReadyError("Waiting for Manage Custom Indexes to complete")
@@ -225,8 +225,8 @@ def simulate_episode_indexes(
     desired: dict[int, dict[str, int]] = {}
     prepared = prepare_output_template(
         template,
-        allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
-        allowed_metadata_scopes=SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+        allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
+        allowed_metadata_scopes=COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
     )
     for episode in sorted(episodes, key=lambda item: (item.index, item.id)):
         selected: dict[str, int] = {}
@@ -248,7 +248,7 @@ def simulate_episode_indexes(
 
 
 def _synced_downloads_before_reindex(
-    session: Session, profile: ShowLocalMediaProfile, episodes: list[Episode],
+    session: Session, profile: CollectionLocalMediaProfile, episodes: list[Episode],
 ) -> dict[int, str]:
     """Only previously synchronized physical paths qualify for an automatic move."""
     episode_by_id = {episode.id: episode for episode in episodes}
@@ -282,24 +282,24 @@ def _synced_downloads_before_reindex(
     return synced
 
 
-def reconcile_show_profile_custom_indexes(
-    session: Session, *, show_id: int, local_media_profile_id: int,
+def reconcile_collection_profile_custom_indexes(
+    session: Session, *, collection_id: int, local_media_profile_id: int,
     auto_rename: bool = True,
 ) -> CustomIndexReconciliationResult:
     state = session.scalar(select(CustomIndexState).where(
-        CustomIndexState.show_id == show_id,
+        CustomIndexState.collection_id == collection_id,
         CustomIndexState.local_media_profile_id == local_media_profile_id,
     ))
-    profile = session.get(ShowLocalMediaProfile, local_media_profile_id)
-    show = session.get(Show, show_id)
-    empty = CustomIndexReconciliationResult(show_id, local_media_profile_id, 0, 0, ())
-    if state is None or profile is None or show is None:
+    profile = session.get(CollectionLocalMediaProfile, local_media_profile_id)
+    collection = session.get(Collection, collection_id)
+    empty = CustomIndexReconciliationResult(collection_id, local_media_profile_id, 0, 0, ())
+    if state is None or profile is None or collection is None:
         return empty
 
     generation = state.requested_generation
-    episodes = list(session.scalars(select(Episode).where(Episode.show_id == show_id)
+    episodes = list(session.scalars(select(Episode).where(Episode.collection_id == collection_id)
         .order_by(Episode.index.asc(), Episode.id.asc())))
-    applicable = profile_applies_to_show(profile, show)
+    applicable = profile_applies_to_collection(profile, collection)
     desired = simulate_episode_indexes(
         episodes, template=profile.output_template,
         definitions=indexing_value_definition_keys(profile),
@@ -313,7 +313,7 @@ def reconcile_show_profile_custom_indexes(
         CustomIndexState.requested_generation == generation,
     ).values(completed_generation=generation)).rowcount
     if not updated:
-        return CustomIndexReconciliationResult(show_id, local_media_profile_id, len(episodes), 0, (), True)
+        return CustomIndexReconciliationResult(collection_id, local_media_profile_id, len(episodes), 0, (), True)
 
     changed = 0
     synced_episode_ids: list[int] = []
@@ -345,7 +345,7 @@ def reconcile_show_profile_custom_indexes(
             synced_episode_ids.append(episode.id)
     session.flush()
     return CustomIndexReconciliationResult(
-        show_id, local_media_profile_id, len(episodes), changed, tuple(synced_episode_ids),
+        collection_id, local_media_profile_id, len(episodes), changed, tuple(synced_episode_ids),
         synced_source_paths=tuple((id_, synced[id_]) for id_ in synced_episode_ids),
     )
 

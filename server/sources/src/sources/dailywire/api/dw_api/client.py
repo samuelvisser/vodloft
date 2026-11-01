@@ -132,14 +132,14 @@ class MiddlewareClient:
             params['membershipPlan'] = membership_plan
         payload = self._get('v4/getPage', params)
 
-        shows: dict[str, DwCatalogShowRecord] = {}
+        collections: dict[str, DwCatalogShowRecord] = {}
         movies: dict[str, DwCatalogMovieRecord] = {}
         for component in payload.get('components') or []:
             for item in component.get('items') or []:
                 raw_show = item.get('show')
                 if isinstance(raw_show, dict) and raw_show.get('slug'):
                     record = self._catalog_show_from_payload(raw_show)
-                    shows.setdefault(record.slug, record)
+                    collections.setdefault(record.slug, record)
 
                 raw_movie = item.get('video')
                 if isinstance(raw_movie, dict) and raw_movie.get('slug'):
@@ -147,7 +147,7 @@ class MiddlewareClient:
                     movies.setdefault(record.slug, record)
 
         return DwCatalogRecord(
-            shows=sorted(shows.values(), key=lambda value: value.title.casefold()),
+            collections=sorted(collections.values(), key=lambda value: value.title.casefold()),
             movies=sorted(movies.values(), key=lambda value: value.title.casefold()),
         )
 
@@ -316,7 +316,7 @@ class MiddlewareClient:
 
         return record
 
-    def get_episodes_paginated(self, show_slug: str, selector: ByNextPage | ByShowSeason | ByPodcastSeason) -> EpisodesPaginatedResult:
+    def get_episodes_paginated(self, collection_slug: str, selector: ByNextPage | ByShowSeason | ByPodcastSeason) -> EpisodesPaginatedResult:
         """
         Fetch a single page of episodes for a show.
 
@@ -358,7 +358,7 @@ class MiddlewareClient:
 
             case _BySeason(season_dw_id=sid) as sel:
                 params = {
-                    "slug": show_slug,
+                    "slug": collection_slug,
                     "orderBy": sel.order_by,
                     "pageNumber": sel.page_number,
                     "pageSize": sel.page_size,
@@ -439,15 +439,15 @@ class MiddlewareClient:
             raise MiddlewareAPIError(f"Daily Wire episode '{episode_slug}' was not found")
         return payload
 
-    def get_show_id_by_slug(self, show_slug: str) -> str:
-        dw_show = self.get_show_page(show_slug)
+    def get_show_id_by_slug(self, collection_slug: str) -> str:
+        dw_show = self.get_show_page(collection_slug)
         return dw_show.dw_id
 
-    def get_season_id_by_slugs(self, show_slug: str, season_slug: str) -> str:
-        dw_show = self.get_show_page(show_slug)
+    def get_season_id_by_slugs(self, collection_slug: str, season_slug: str) -> str:
+        dw_show = self.get_show_page(collection_slug)
         dw_season = next((s for s in dw_show.seasons if s.slug == season_slug), None)
         if dw_season is None:
-            raise ValueError(f"Season '{season_slug}' not found in DW API for show '{show_slug}'")
+            raise ValueError(f"Season '{season_slug}' not found in DW API for show '{collection_slug}'")
         return dw_season.dw_id
 
     @staticmethod

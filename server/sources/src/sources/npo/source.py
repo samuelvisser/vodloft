@@ -4,10 +4,11 @@ import logging
 from collections.abc import Iterator
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from types import MappingProxyType
 from urllib.parse import urlsplit
 
 from ..contract import (
-    Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, SearchResults, SeasonRef, ShowDetails, Source,
+    Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, SearchResults, SeasonRef, CollectionDetails, Source,
     CookiesStatus, SourceProblem, VideoDetails,
 )
 from .. import ytdlp_runner as runner
@@ -44,7 +45,7 @@ def parse_link(url: str) -> tuple[LinkKind, str] | None:
         return None
     if parts[-1] == "afspelen" and len(parts) >= 5:
         return LinkKind.VIDEO, parts[-2]
-    return LinkKind.SHOW, parts[2]
+    return LinkKind.COLLECTION, parts[2]
 
 
 def _image(item: dict) -> str | None:
@@ -125,8 +126,9 @@ class NpoSource(Source):
     id = "npo"
     name = "NPO Start"
     domains = ("npo.nl",)
-    features = frozenset({Feature.SHOWS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.SEARCH, Feature.COOKIES})
+    features = frozenset({Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.SEARCH, Feature.COOKIES})
     subscription_name = "NPO Plus"
+    kind_names = MappingProxyType({LinkKind.COLLECTION: "Series"})
     cookies_help = (
         "Optional. Sign in with your NPO account to download programmes that need NPO Plus. Sign in on "
         "npo.nl in a private browser window, export a cookies.txt file for npo.nl, choose it here, and then "
@@ -171,8 +173,8 @@ class NpoSource(Source):
             episode_number=_number(program.get("programKey")),
         )
 
-    def _show(self, series: dict) -> ShowDetails:
-        return ShowDetails(
+    def _collection(self, series: dict) -> CollectionDetails:
+        return CollectionDetails(
             slug=series["slug"],
             url=series_url(series["slug"]),
             title=series.get("title") or series["slug"],
@@ -193,11 +195,11 @@ class NpoSource(Source):
             return None
         kind, slug = parsed
         try:
-            if kind is LinkKind.SHOW:
-                show = self._show(self._series(slug))
+            if kind is LinkKind.COLLECTION:
+                collection = self._collection(self._series(slug))
                 return ResolvedLink(
-                    kind=LinkKind.SHOW, slug=show.slug, url=show.url, title=show.title,
-                    description=show.description, image_url=show.image_url, author_name=show.author_name,
+                    kind=LinkKind.COLLECTION, slug=collection.slug, url=collection.url, title=collection.title,
+                    description=collection.description, image_url=collection.image_url, author_name=collection.author_name,
                 )
             program = self._client.program_detail(slug)
         except NpoNotFoundError:
@@ -214,8 +216,8 @@ class NpoSource(Source):
             kind=LinkKind.EPISODE if in_series else LinkKind.VIDEO,
             slug=video.slug, url=video.url, title=video.title, description=video.description,
             image_url=video.image_url, author_name=video.author_name,
-            show_slug=series.get("slug") if in_series else None,
-            show_url=series_url(series["slug"]) if in_series else None,
+            collection_slug=series.get("slug") if in_series else None,
+            collection_url=series_url(series["slug"]) if in_series else None,
             drm_protected=drm_protected,
             needs_subscription=video.needs_subscription,
         )
@@ -226,7 +228,7 @@ class NpoSource(Source):
             return SearchResults([])
         results = [
             ResolvedLink(
-                kind=LinkKind.SHOW, slug=item["slug"], url=series_url(item["slug"]),
+                kind=LinkKind.COLLECTION, slug=item["slug"], url=series_url(item["slug"]),
                 title=item.get("title") or item["slug"], image_url=_image(item),
             )
             for item in self._client.search(query, "series")[:_SEARCH_LIMIT] if item.get("slug")
@@ -237,13 +239,13 @@ class NpoSource(Source):
         ]
         return SearchResults(results)
 
-    def show_details(self, url: str) -> ShowDetails:
+    def collection_details(self, url: str) -> CollectionDetails:
         parsed = parse_link(url)
-        if parsed is None or parsed[0] is not LinkKind.SHOW:
+        if parsed is None or parsed[0] is not LinkKind.COLLECTION:
             raise NpoError("This is not a link to a series on NPO Start")
         series = self._series(parsed[1])
         seasons = tuple(ref for _guid, ref in self._seasons(series))
-        return replace(self._show(series), seasons=seasons)
+        return replace(self._collection(series), seasons=seasons)
 
     def _seasons(self, series: dict) -> list[tuple[str, SeasonRef]]:
         """Each season's guid and how VODLoft names it, oldest first."""
@@ -284,7 +286,7 @@ class NpoSource(Source):
 
     def list_episodes(self, url: str, *, known: frozenset[str]) -> Iterator[VideoDetails]:
         parsed = parse_link(url)
-        if parsed is None or parsed[0] is not LinkKind.SHOW:
+        if parsed is None or parsed[0] is not LinkKind.COLLECTION:
             raise NpoError("This is not a link to a series on NPO Start")
         series = self._series(parsed[1])
         for guid, ref in self._seasons(series):

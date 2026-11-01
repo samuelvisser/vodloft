@@ -172,21 +172,21 @@ def seed_db() -> None:
 
     from sqlalchemy import select
 
-    from backend.db.fake_data import episodes_for, shows as seed_shows
-    from backend.db.models import Episode, Season, Show
+    from backend.db.fake_data import episodes_for, collections as seed_collections
+    from backend.db.models import Episode, Season, Collection
 
     session = get_session()
     try:
-        for show_index, show_data in enumerate(seed_shows, start=1):
-            if session.scalar(select(Show.id).where(Show.uuid == show_data["uuid"])) is not None:
+        for collection_index, collection_data in enumerate(seed_collections, start=1):
+            if session.scalar(select(Collection.id).where(Collection.uuid == collection_data["uuid"])) is not None:
                 continue
-            show = Show(**show_data)
-            season = Season(show=show, index=1, slug=f"{show.slug}-episodes", name="Episodes", season_number=1)
-            session.add_all([show, season])
+            collection = Collection(**collection_data)
+            season = Season(collection=collection, index=1, slug=f"{collection.slug}-episodes", name="Episodes", season_number=1)
+            session.add_all([collection, season])
             session.flush()
             session.add_all(
-                Episode(show_id=show.id, season_id=season.id, **episode_data)
-                for episode_data in episodes_for(show_data, show_index)
+                Episode(collection_id=collection.id, season_id=season.id, **episode_data)
+                for episode_data in episodes_for(collection_data, collection_index)
             )
 
         session.commit()

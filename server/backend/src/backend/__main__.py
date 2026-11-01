@@ -28,7 +28,7 @@ from backend.db.migrations import (
     get_head_revisions,
     initialize_database,
     require_database_current,
-    show_history,
+    collection_history,
     upgrade_database,
     validate_database_migration_state,
 )
@@ -55,7 +55,7 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     for command_name, help_text in (
         ("init", "Initialize a new or empty database at the latest schema"),
         ("upgrade", "Apply all pending database migrations"),
-        ("current", "Show the current and latest database revisions"),
+        ("current", "Collection the current and latest database revisions"),
         ("history", "Show the Alembic migration history"),
         ("check", "Verify the DB is current and ORM metadata matches migrations"),
         ("seed", "Seed the database with demo data"),
@@ -91,7 +91,7 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         help="Background migration operation",
     )
     for command_name, help_text in (
-        ("current", "Show the current and latest background migration revisions"),
+        ("current", "Collection the current and latest background migration revisions"),
         ("history", "Show the ordered background migration history"),
         ("check", "Verify the background migration chain and stored revision"),
     ):
@@ -272,7 +272,7 @@ def _handle_db_command(args: argparse.Namespace) -> None:
         return
 
     if args.db_command == "history":
-        show_history()
+        collection_history()
         return
 
     if args.db_command == "check":

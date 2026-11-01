@@ -1,6 +1,6 @@
 # Daily Wire Integration
 
-VODLoft connects to The Daily Wire for catalog information, show and episode metadata, account authorization, and media access. Most of this happens automatically; the main thing you need to decide is whether to connect a Daily Wire account.
+VODLoft connects to The Daily Wire for catalog information, collection and episode metadata, account authorization, and media access. Most of this happens automatically; the main thing you need to decide is whether to connect a Daily Wire account.
 
 ## Connecting your account
 
@@ -24,24 +24,24 @@ The secret token in a VODLoft RSS URL only authorizes access to that VODLoft fee
 
 **Browse** shows content VODLoft can discover from The Daily Wire. Adding something creates a managed copy of its metadata in **Library**.
 
-Once a show is in your Library, VODLoft will keep its seasons and episodes synchronized even if you never download a file. Downloads and RSS feeds are optional behavior layered on top of the Library.
+Once a collection is in your Library, VODLoft will keep its seasons and episodes synchronized even if you never download a file. Downloads and RSS feeds are optional behavior layered on top of the Library.
 
 ## New episodes and changing metadata
 
-VODLoft checks managed shows for new episodes every 30 minutes by default. Episodes that are scheduled, live, processing, or otherwise still settling are checked more frequently until their media becomes usable and final.
+VODLoft checks managed collections for new episodes every 30 minutes by default. Episodes that are scheduled, live, processing, or otherwise still settling are checked more frequently until their media becomes usable and final.
 
 The Daily Wire can also change titles, thumbnails, episode numbers, or other metadata after publication. VODLoft performs several follow-up refreshes for recently published episodes so those changes can settle without repeatedly refreshing your entire historical library.
 
-You can use **Sync now** on a show whenever you want to check that show immediately rather than wait for the next scheduled discovery pass.
+You can use **Sync now** on a collection whenever you want to check that collection immediately rather than wait for the next scheduled discovery pass.
 
-To re-check every episode in a show that VODLoft knows about with the version The Daily Wire currently publishes, use **Refresh all metadata** on a show.
+To re-check every episode in a collection that VODLoft knows about with the version The Daily Wire currently publishes, use **Refresh all metadata** on a collection.
 This is a heavy task with many API requests, so VODLoft automatically paces it to prevent hitting The Daily Wire's API rate limits.
 
 See [[Automation-and-Background-Tasks]] for the default schedules.
 
 ## Live and newly published episodes
 
-A Daily Wire episode may appear before its final media is ready. Depending on the show, VODLoft may see a scheduled or live item, a temporary countdown version, processing media, and eventually the final episode.
+A Daily Wire episode may appear before its final media is ready. Depending on the collection, VODLoft may see a scheduled or live item, a temporary countdown version, processing media, and eventually the final episode.
 
 Podcast Download Profiles can choose whether to:
 

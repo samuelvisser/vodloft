@@ -31,7 +31,7 @@ class _VideoLocalMediaProfileAPIBaseIn(LocalMediaProfileAPIBaseIn):
     def _validate_output_template(cls, value: str) -> str:
         validate_output_template_path_requirements(value, allowed_fields=VIDEO_OUTPUT_TEMPLATE_FIELDS)
         if output_template_custom_index_keys(value):
-            raise ValueError("custom_index is only available to Show Local Media Profiles")
+            raise ValueError("custom_index is only available to Collection Local Media Profiles")
         return value
 
 

@@ -247,7 +247,7 @@ def get_database_status() -> tuple[tuple[str, ...], str]:
     return get_current_revisions(), get_head_revision()
 
 
-def show_history() -> None:
+def collection_history() -> None:
     try:
         command.history(get_alembic_config(), verbose=True)
     except CommandError as exc:

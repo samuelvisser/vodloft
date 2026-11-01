@@ -56,7 +56,7 @@ def disable_download_profiles_for_episode_scope(
         return 0
 
     statement = select(DownloadProfile).where(
-        DownloadProfile.show_id == scope.show.id,
+        DownloadProfile.collection_id == scope.collection.id,
         DownloadProfile.local_media_profile_id.in_(local_media_profile_ids),
         DownloadProfile.enable_profile.is_(True),
     )
@@ -64,8 +64,8 @@ def disable_download_profiles_for_episode_scope(
         # SQLite has a database-wide writer lock. Acquire it before selecting the
         # profiles so the enabled-state read cannot race a profile reconciliation.
         s.execute(
-            text("UPDATE download_profiles SET id = id WHERE show_id = :show_id"),
-            {"show_id": scope.show.id},
+            text("UPDATE download_profiles SET id = id WHERE collection_id = :collection_id"),
+            {"collection_id": scope.collection.id},
         )
     else:
         statement = statement.with_for_update()
@@ -80,7 +80,7 @@ def disable_download_profiles_for_episode_scope(
         queue_event(s, "download_profile.updated", {
             "resource_id": profile.id,
             "id": profile.id,
-            "show_id": profile.show_id,
+            "collection_id": profile.collection_id,
         })
 
     s.flush()

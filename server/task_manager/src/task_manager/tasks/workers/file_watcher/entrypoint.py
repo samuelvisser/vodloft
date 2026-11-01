@@ -10,13 +10,13 @@ from .service import run_file_watcher
 
 @on_event(
     event_name="app.startup",
-    resource_type="show",
+    resource_type="collection",
 )
 @on_cron(
     cron=get_settings().file_watcher.scan_cron,
     enabled=get_settings().file_watcher.scan_cron_enabled,
     minimum_interval_ms=get_settings().dw_timeout.min_slow_request_ms,
-    resource_type="show",
+    resource_type="collection",
     resource_id=0,
     coalesce=True,
 )
@@ -24,7 +24,7 @@ from .service import run_file_watcher
     key="file_watcher",
     title="Watch local files",
     description="Watch local files to keep them in sync with VODLoft database.",
-    allowed_resource_types=("show",),
+    allowed_resource_types=("collection",),
     default_max_retries=5,
     tracks_progress=False,
 )
@@ -34,11 +34,11 @@ async def file_watcher(*, resource_id: Optional[int] = None, slug: Optional[str]
 
     Parameters:
     resource_id : Optional[int]
-        The ID of a specific show if the scan needs to focus on one.
+        The ID of a specific collection if the scan needs to focus on one.
     slug : Optional[str]
-        The slug of a specific show if the scan needs to focus on one.
+        The slug of a specific collection if the scan needs to focus on one.
     progress : Any
         A progress tracker object.
     """
     with db_session() as s:
-        await run_file_watcher(s, show_id=resource_id, show_slug=slug, progress=progress)
+        await run_file_watcher(s, collection_id=resource_id, collection_slug=slug, progress=progress)

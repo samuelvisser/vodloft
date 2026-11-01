@@ -113,49 +113,49 @@ def test_movie_variables_separate_parent_movie_from_current_media() -> None:
 
 def test_jinja_validation_reports_syntax_and_unknown_variables():
     from backend.utils.output_template import (
-        SHOW_OUTPUT_TEMPLATE_FIELDS,
+        COLLECTION_OUTPUT_TEMPLATE_FIELDS,
         validate_output_template_fields,
     )
 
     with pytest.raises(ValueError, match="Invalid Jinja template"):
         validate_output_template_fields(
-            "/downloads/{{ show }/{% endif %}/episode.ext",
-            allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+            "/downloads/{{ collection }/{% endif %}/episode.ext",
+            allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
         )
 
     with pytest.raises(ValueError, match="unknown_value"):
         validate_output_template_fields(
-            "/downloads/{{ show }}/{{ unknown_value }}.ext",
-            allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+            "/downloads/{{ collection }}/{{ unknown_value }}.ext",
+            allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
         )
 
 
 def test_single_brace_placeholders_are_rejected_instead_of_upgraded():
-    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
+    from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPICreate
     from backend.utils.output_template import (
-        SHOW_OUTPUT_TEMPLATE_FIELDS,
+        COLLECTION_OUTPUT_TEMPLATE_FIELDS,
         validate_output_template_fields,
     )
 
-    old_style = "/downloads/{show}/{episode}.ext"
+    old_style = "/downloads/{collection}/{episode}.ext"
     with pytest.raises(ValueError, match="Jinja syntax"):
         validate_output_template_fields(
             old_style,
-            allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+            allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
         )
 
     with pytest.raises(ValueError, match="Jinja syntax"):
-        ShowLocalMediaProfileAPICreate.model_validate({
-            "type": "show",
+        CollectionLocalMediaProfileAPICreate.model_validate({
+            "type": "collection",
             "name": "Old style",
             "outputTemplate": old_style,
             "preferredFormat": "format_audio_only",
         })
 
-    compact_jinja = "/downloads/{{show}}/{{episode}}.ext"
+    compact_jinja = "/downloads/{{collection}}/{{episode}}.ext"
     assert validate_output_template_fields(
         compact_jinja,
-        allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+        allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
     ) == compact_jinja
 
 
@@ -183,10 +183,10 @@ def test_preview_prefix_error_includes_actual_rendered_output():
     from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview
 
     preview = LocalMediaProfileTemplatePreview(
-        type="show",
+        type="collection",
         preferred_format="format_audio_only",
-        output_template="{{ show_title }}/downloads/{{ episode_title }}.ext",
-        values={"show_title": "Example Show", "episode_title": "Episode One"},
+        output_template="{{ collection_title }}/downloads/{{ episode_title }}.ext",
+        values={"collection_title": "Example Show", "episode_title": "Episode One"},
     )
 
     with pytest.raises(
@@ -201,10 +201,10 @@ def test_preview_resolves_audio_extension_in_backend():
     from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview
 
     result = get_output_template_preview(None, LocalMediaProfileTemplatePreview(
-        type="show",
+        type="collection",
         preferred_format="format_audio_only",
-        output_template="/downloads/{{ show_title }}/{{ episode_title }}.ext",
-        values={"show_title": "Example Show", "episode_title": "Episode One"},
+        output_template="/downloads/{{ collection_title }}/{{ episode_title }}.ext",
+        values={"collection_title": "Example Show", "episode_title": "Episode One"},
     ))
 
     assert result.output_path == "/downloads/Example Show/Episode One.m4a"
@@ -215,7 +215,7 @@ def test_preview_reports_filter_argument_errors_as_validation_errors():
     from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview
 
     preview = LocalMediaProfileTemplatePreview(
-        type="show",
+        type="collection",
         preferred_format="format_audio_only",
         output_template="/downloads/{{ episode_title | regex_replace('Episode') }}.ext",
         values={"episode_title": "Episode One"},
@@ -230,7 +230,7 @@ def test_preview_reports_filter_argument_errors_as_validation_errors():
 
 
 def test_jinja_logic_uses_raw_unsanitized_values(monkeypatch) -> None:
-    from backend.utils.output_template import SHOW_OUTPUT_TEMPLATE_FIELDS, render_output_template
+    from backend.utils.output_template import COLLECTION_OUTPUT_TEMPLATE_FIELDS, render_output_template
     from config import get_settings
     from config.settings.submodels import FilenameRestrictionMode
 
@@ -246,7 +246,7 @@ def test_jinja_logic_uses_raw_unsanitized_values(monkeypatch) -> None:
             "/downloads/{% if is_extra %}extra{% else %}regular{% endif %}-{{ episode_type }}.ext"
         ),
         {"episode_type": "aux"},
-        allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+        allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
     )
 
     assert rendered == "/downloads/extra-aux.ext"
@@ -265,7 +265,7 @@ def test_preview_does_not_apply_filename_restrictions(monkeypatch) -> None:
     )
 
     result = get_output_template_preview(None, LocalMediaProfileTemplatePreview(
-        type="show",
+        type="collection",
         preferred_format="format_audio_only",
         output_template="/downloads/{{ episode_type }}.ext",
         values={"episode_type": "aux"},

@@ -15,7 +15,7 @@ from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
     ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, Feature, LinkKind, LinkPreview, Playback, PlaybackKind, ProgramStatus,
-    ResolvedLink, SearchResults, ShowDetails, Source, SourceProblem, VideoDetails, VideoFormat, VideoFormats,
+    ResolvedLink, SearchResults, CollectionDetails, Source, SourceProblem, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
 )
 from .. import pacing, ytdlp_runner as runner
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 GENERIC_SITE = "Other sites · best effort"
 _CACHE_SECONDS = 300
-# Pause between per-video lookups while listing a show, so a large channel
+# Pause between per-video lookups while listing a collection, so a large channel
 # does not look like a scraper to the site.
 _LISTING_PAUSE_SECONDS = 1.0
 _YOUTUBE_CHANNEL = re.compile(r"^/(@[^/]+|channel/[^/]+|c/[^/]+|user/[^/]+)/?$")
@@ -50,12 +50,12 @@ _PENDING_STATUSES = {"is_live", "is_upcoming"}
 _CHANNEL_EXTRA_TABS = ("shorts", "streams")
 # The same search within an hour is answered from memory, so going back to the results costs nothing.
 _SEARCH_CACHE_SECONDS = 3600
-# How many of a show's newest videos a quick check through yt-dlp looks at, per tab.
+# How many of a collection's newest videos a quick check through yt-dlp looks at, per tab.
 _LATEST_COUNT = 15
 
 
-def show_url(url: str) -> str:
-    """A YouTube channel's link lists its tabs; the show is its Videos tab."""
+def collection_url(url: str) -> str:
+    """A YouTube channel's link lists its tabs; the collection is its Videos tab."""
     parts = urlsplit(url)
     if on_domain(link_host(url), "youtube.com") and _YOUTUBE_CHANNEL.match(parts.path):
         return urlunsplit(parts._replace(path=parts.path.rstrip("/") + "/videos"))
@@ -63,8 +63,8 @@ def show_url(url: str) -> str:
 
 
 def _listing_urls(url: str) -> list[str]:
-    """The pages that list a show's videos: for a channel's Videos tab, its Shorts and Live tabs too."""
-    url = show_url(url)
+    """The pages that list a collection's videos: for a channel's Videos tab, its Shorts and Live tabs too."""
+    url = collection_url(url)
     ref = mapping.youtube_ref(url)
     if ref is None or ref.kind == "playlist" or ref.tab != "videos":
         return [url]
@@ -204,7 +204,7 @@ class YtDlpSource(Source):
     name = "yt-dlp"
     domains = (ANY_DOMAIN,)
     features = frozenset({
-        Feature.SHOWS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.API_KEY,
+        Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.API_KEY,
         Feature.QUICK_CHECK, Feature.CATALOGUE_REFRESH, Feature.SEARCH, Feature.COSTLY_SEARCH,
         Feature.FORMAT_CHOICES,
     })
@@ -237,7 +237,7 @@ class YtDlpSource(Source):
 
     @staticmethod
     def _catalogue(*, adding: bool) -> Catalogue | None:
-        """The YouTube Data API, when a key is set. Adding a show is paid from the units kept free first."""
+        """The YouTube Data API, when a key is set. Adding a collection is paid from the units kept free first."""
         key = api_key.load()
         if key is None:
             return None
@@ -252,7 +252,7 @@ class YtDlpSource(Source):
         return ref
 
     def _channel_ref(self, url: str, catalogue: Catalogue | None) -> mapping.YouTubeRef | None:
-        """The channel or playlist a show link points at, with a channel always by its ID.
+        """The channel or playlist a collection link points at, with a channel always by its ID.
 
         A handle or user name is looked up through the API when there is one, and
         through yt-dlp otherwise, once.
@@ -271,14 +271,14 @@ class YtDlpSource(Source):
             self._channel_ids[name] = str(channel_id)
         return mapping.YouTubeRef("channel", self._channel_ids[name], ref.tab)
 
-    def _api_show(self, url: str) -> ShowDetails | None:
-        """The show through the YouTube Data API, or None to ask yt-dlp."""
+    def _api_collection(self, url: str) -> CollectionDetails | None:
+        """The collection through the YouTube Data API, or None to ask yt-dlp."""
         catalogue = self._catalogue(adding=True)
         if catalogue is None or mapping.youtube_ref(url) is None:
             return None
         try:
             ref = self._youtube_ref(url)
-            return catalogue.show(ref, url) if ref is not None else None
+            return catalogue.collection(ref, url) if ref is not None else None
         except (YouTubeApiError, runner.YtDlpError) as exc:
             logger.info("Looking %s up with yt-dlp, because the YouTube API could not: %s", url, exc)
             return None
@@ -289,7 +289,7 @@ class YtDlpSource(Source):
         yt-dlp's full lookup takes several seconds; this shows the video while it
         runs. A link already looked up is answered from that lookup.
         """
-        url = show_url(url)
+        url = collection_url(url)
         with self._cache_lock:
             cached = self._cache.get(url)
         if cached is not None and cached[1].get("_type") != "playlist":
@@ -317,11 +317,11 @@ class YtDlpSource(Source):
         )
 
     def resolve(self, url: str) -> ResolvedLink | None:
-        url = show_url(url)
-        if show := self._api_show(url):
+        url = collection_url(url)
+        if collection := self._api_collection(url):
             return ResolvedLink(
-                kind=LinkKind.SHOW, slug=show.slug, url=show.url, title=show.title,
-                description=show.description, image_url=show.image_url, author_name=show.author_name,
+                kind=LinkKind.COLLECTION, slug=collection.slug, url=collection.url, title=collection.title,
+                description=collection.description, image_url=collection.image_url, author_name=collection.author_name,
                 site="YouTube",
             )
         try:
@@ -332,10 +332,10 @@ class YtDlpSource(Source):
             raise
         site = _site(info)
         if info.get("_type") == "playlist":
-            show = self._show(info, url)
+            collection = self._collection(info, url)
             return ResolvedLink(
-                kind=LinkKind.SHOW, slug=show.slug, url=show.url, title=show.title,
-                description=show.description, image_url=show.image_url, author_name=show.author_name,
+                kind=LinkKind.COLLECTION, slug=collection.slug, url=collection.url, title=collection.title,
+                description=collection.description, image_url=collection.image_url, author_name=collection.author_name,
                 site=site,
             )
         return ResolvedLink(
@@ -380,11 +380,11 @@ class YtDlpSource(Source):
         )
 
     @staticmethod
-    def _show(info: dict, url: str) -> ShowDetails:
+    def _collection(info: dict, url: str) -> CollectionDetails:
         channel = info.get("channel") or info.get("uploader")
-        # A channel's Videos tab is titled "<channel> - Videos"; the show is the channel.
+        # A channel's Videos tab is titled "<channel> - Videos"; the collection is the channel.
         is_channel = bool(info.get("channel_id")) and info.get("channel_id") == info.get("id")
-        return ShowDetails(
+        return CollectionDetails(
             slug=str(info.get("id") or url),
             url=info.get("webpage_url") or url,
             title=(channel if is_channel else info.get("title")) or channel or url,
@@ -394,25 +394,25 @@ class YtDlpSource(Source):
             author_url=info.get("channel_url") or info.get("uploader_url"),
         )
 
-    def show_details(self, url: str) -> ShowDetails:
-        url = show_url(url)
-        if show := self._api_show(url):
-            return show
+    def collection_details(self, url: str) -> CollectionDetails:
+        url = collection_url(url)
+        if collection := self._api_collection(url):
+            return collection
         info = self._info(url)
         if info.get("_type") != "playlist":
             raise runner.YtDlpError("This link is a single video, not a channel or playlist")
-        return self._show(info, url)
+        return self._collection(info, url)
 
     def list_episodes(self, url: str, *, known: frozenset[str]) -> Iterator[VideoDetails]:
-        """A YouTube show's videos come through the API when a key is set, and through yt-dlp otherwise.
+        """A YouTube collection's videos come through the API when a key is set, and through yt-dlp otherwise.
 
         The API lists all of a channel's uploads in seconds. yt-dlp lists the
         Videos, Shorts and Live tabs and looks every new video up on its own.
         """
-        catalogue = self._catalogue(adding=not known) if mapping.youtube_ref(show_url(url)) else None
+        catalogue = self._catalogue(adding=not known) if mapping.youtube_ref(collection_url(url)) else None
         if catalogue is not None:
             try:
-                ref = self._channel_ref(show_url(url), catalogue)
+                ref = self._channel_ref(collection_url(url), catalogue)
                 ids = catalogue.video_ids(catalogue.playlist_id(ref)) if ref is not None else None
             except (YouTubeApiError, runner.YtDlpError) as exc:
                 logger.info("Listing %s with yt-dlp, because the YouTube API could not: %s", url, exc)
@@ -477,8 +477,8 @@ class YtDlpSource(Source):
                     yield details
 
     def latest_items(self, url: str) -> list[ItemRef]:
-        """A YouTube show's 50 newest videos through the API, else its RSS feed's 15, else yt-dlp's listing."""
-        url = show_url(url)
+        """A YouTube collection's 50 newest videos through the API, else its RSS feed's 15, else yt-dlp's listing."""
+        url = collection_url(url)
         if mapping.youtube_ref(url) is None:
             return self._latest_with_ytdlp(url)
         catalogue = self._catalogue(adding=False)
@@ -562,7 +562,7 @@ class YtDlpSource(Source):
         return ItemRefresh(details=details, removed=frozenset(removed))
 
     def _refresh_from_listing(self, url: str, wanted: frozenset[str]) -> dict[str, VideoDetails]:
-        """Titles from the show's flat listing, which takes one request a page instead of one a video.
+        """Titles from the collection's flat listing, which takes one request a page instead of one a video.
 
         The listing has no reliable description or picture, so those are kept.
         """
@@ -619,10 +619,10 @@ class YtDlpSource(Source):
                 reason = "error"
         return SearchResults(youtube_search.search_ytdlp(query), youtube_search.ytdlp_notice(reason))
 
-    def quick_check_minutes(self, shows: Sequence[tuple[str, int]]) -> int:
+    def quick_check_minutes(self, collections: Sequence[tuple[str, int]]) -> int:
         """With a key, as often as the checks share allows after the daily re-scan; RSS needs no quota."""
         settings = get_settings().youtube_api
-        counts = [count for url, count in shows if _is_youtube(url)]
+        counts = [count for url, count in collections if _is_youtube(url)]
         if api_key.load() is None:
             return settings.min_check_interval_minutes
         interval = quota.check_interval_minutes(
@@ -671,9 +671,9 @@ class YtDlpSource(Source):
             ))
         return problems
 
-    def api_status(self, shows: Sequence[tuple[str, int]] = ()) -> ApiStatus:
+    def api_status(self, collections: Sequence[tuple[str, int]] = ()) -> ApiStatus:
         key = api_key.load()
-        counts = [count for url, count in shows if on_domain(link_host(url), "youtube.com")]
+        counts = [count for url, count in collections if on_domain(link_host(url), "youtube.com")]
         status = quota.status()
         problem = api_key.problem() if key else None
         return ApiStatus(
@@ -684,7 +684,7 @@ class YtDlpSource(Source):
             resets_at=status.resets_at,
             problem=problem.message if problem else None,
             problem_fix_url=problem.fix_url if problem else None,
-            show_count=len(counts),
+            collection_count=len(counts),
             rescan_units=quota.rescan_units(counts),
         )
 

@@ -19,7 +19,7 @@ from backend.api.models.local_media_profile import (
     LocalMediaProfileTemplateSourcePage,
     LocalMediaProfileTemplateVariable,
 )
-from backend.db.models import Episode, Movie, MovieExtra, MovieExtraSource, Season, Show, ShowLocalMediaProfile, Video
+from backend.db.models import Episode, Movie, MovieExtra, MovieExtraSource, Season, Collection, CollectionLocalMediaProfile, Video
 from backend.services.custom_index_preview import (
     CustomIndexPreviewMode,
     plan_custom_index_preview,
@@ -28,9 +28,9 @@ from backend.services.custom_indexes import simulate_episode_indexes
 from backend.types.local_media_profile_types import (
     LocalMediaProfileType,
     PreferredFormat,
-    ShowLocalMediaProfileScope,
+    CollectionLocalMediaProfileScope,
 )
-from backend.types.show_types import ShowType
+from backend.types.collection_types import CollectionType
 from backend.utils.custom_index import indexing_value_definition_keys
 from backend.utils.custom_metadata import (
     CustomMetadataScope,
@@ -39,8 +39,8 @@ from backend.utils.custom_metadata import (
 from backend.utils.output_template import (
     MOVIE_OUTPUT_TEMPLATE_FIELDS,
     MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
-    SHOW_OUTPUT_TEMPLATE_FIELDS,
-    SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+    COLLECTION_OUTPUT_TEMPLATE_FIELDS,
+    COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
     VIDEO_OUTPUT_TEMPLATE_FIELDS,
     episode_output_template_values,
     movie_output_template_values,
@@ -55,9 +55,9 @@ from backend.utils.search import search_all_terms, search_relevance_score
 from ..custom_metadata.service import get_custom_metadata_fields
 
 
-_EXAMPLE_SHOW_VALUES = {
-    "show": "example-show",
-    "show_title": "Example Show",
+_EXAMPLE_COLLECTION_VALUES = {
+    "collection": "example-collection",
+    "collection_title": "Example Show",
     "season": "season-1",
     "season_name": "Season 1",
     "season_index": "1",
@@ -146,9 +146,9 @@ def get_output_template_variables(
     profile_type: LocalMediaProfileType,
 ) -> list[LocalMediaProfileTemplateVariable]:
     """Return custom template variables available to one Local Media Profile type."""
-    if profile_type == LocalMediaProfileType.SHOW:
-        scope: CustomMetadataScope = "show"
-        description = "Custom show metadata"
+    if profile_type == LocalMediaProfileType.COLLECTION:
+        scope: CustomMetadataScope = "collection"
+        description = "Custom collection metadata"
     elif profile_type == LocalMediaProfileType.MOVIE:
         scope = "movie"
         description = "Custom movie metadata"
@@ -156,7 +156,7 @@ def get_output_template_variables(
         # Videos have no custom metadata.
         return []
     else:
-        raise ValueError("Template variables are only available for Show and Movie profiles")
+        raise ValueError("Template variables are only available for Collection and Movie profiles")
 
     return [
         LocalMediaProfileTemplateVariable(
@@ -167,27 +167,27 @@ def get_output_template_variables(
     ]
 
 
-def _show_type_values(show_scope: ShowLocalMediaProfileScope) -> tuple[str, ...]:
-    if show_scope == ShowLocalMediaProfileScope.BOTH:
-        return (ShowType.PODCAST.value, ShowType.SERIES.value)
-    if show_scope == ShowLocalMediaProfileScope.PODCAST:
-        return (ShowType.PODCAST.value,)
-    if show_scope == ShowLocalMediaProfileScope.SERIES:
-        return (ShowType.SERIES.value,)
-    raise ValueError(f"Unsupported show template source scope: {show_scope}")
+def _collection_type_values(collection_scope: CollectionLocalMediaProfileScope) -> tuple[str, ...]:
+    if collection_scope == CollectionLocalMediaProfileScope.BOTH:
+        return (CollectionType.PODCAST.value, CollectionType.SERIES.value)
+    if collection_scope == CollectionLocalMediaProfileScope.PODCAST:
+        return (CollectionType.PODCAST.value,)
+    if collection_scope == CollectionLocalMediaProfileScope.SERIES:
+        return (CollectionType.SERIES.value,)
+    raise ValueError(f"Unsupported collection template source scope: {collection_scope}")
 
 
-def _show_template_source(episode: Episode) -> LocalMediaProfileTemplateSource:
+def _collection_template_source(episode: Episode) -> LocalMediaProfileTemplateSource:
     return LocalMediaProfileTemplateSource(
         id=f"episode:{episode.id}",
-        label=f"{episode.show.title} — {episode.title}",
+        label=f"{episode.collection.title} — {episode.title}",
         values=episode_output_template_values(episode),
     )
 
 
-def _show_source_anchor_offset(
+def _collection_source_anchor_offset(
     session: Session,
-    show_scope: ShowLocalMediaProfileScope,
+    collection_scope: CollectionLocalMediaProfileScope,
     source_id: str,
     *,
     limit: int,
@@ -199,24 +199,24 @@ def _show_source_anchor_offset(
 
     episode = session.scalar(
         select(Episode)
-        .options(joinedload(Episode.show))
+        .options(joinedload(Episode.collection))
         .where(Episode.id == int(identifier))
     )
-    if episode is None or episode.show.type not in _show_type_values(show_scope):
+    if episode is None or episode.collection.type not in _collection_type_values(collection_scope):
         return None
 
-    show_title = episode.show.title.lower()
+    collection_title = episode.collection.title.lower()
     before_anchor = or_(
-        func.lower(Show.title) < show_title,
-        and_(func.lower(Show.title) == show_title, Show.id < episode.show_id),
+        func.lower(Collection.title) < collection_title,
+        and_(func.lower(Collection.title) == collection_title, Collection.id < episode.collection_id),
         and_(
-            func.lower(Show.title) == show_title,
-            Show.id == episode.show_id,
+            func.lower(Collection.title) == collection_title,
+            Collection.id == episode.collection_id,
             Episode.index < episode.index,
         ),
         and_(
-            func.lower(Show.title) == show_title,
-            Show.id == episode.show_id,
+            func.lower(Collection.title) == collection_title,
+            Collection.id == episode.collection_id,
             Episode.index == episode.index,
             Episode.id < episode.id,
         ),
@@ -224,9 +224,9 @@ def _show_source_anchor_offset(
     position = session.scalar(
         select(func.count())
         .select_from(Episode)
-        .join(Episode.show)
+        .join(Episode.collection)
         .join(Episode.season)
-        .where(Show.type.in_(_show_type_values(show_scope)))
+        .where(Collection.type.in_(_collection_type_values(collection_scope)))
         .where(before_anchor)
     ) or 0
     return max(0, position - limit // 2)
@@ -239,24 +239,24 @@ def _modified_timestamp(model):
     ))
 
 
-def _show_source_revision(
+def _collection_source_revision(
     session: Session,
-    show_scope: ShowLocalMediaProfileScope,
+    collection_scope: CollectionLocalMediaProfileScope,
 ) -> str:
-    episode_changed, show_changed, season_changed = session.execute(
+    episode_changed, collection_changed, season_changed = session.execute(
         select(
             _modified_timestamp(Episode),
-            _modified_timestamp(Show),
+            _modified_timestamp(Collection),
             _modified_timestamp(Season),
         )
         .select_from(Episode)
-        .join(Episode.show)
+        .join(Episode.collection)
         .join(Episode.season)
-        .where(Show.type.in_(_show_type_values(show_scope)))
+        .where(Collection.type.in_(_collection_type_values(collection_scope)))
     ).one()
     return "|".join(
         value.isoformat() if value is not None else ""
-        for value in (episode_changed, show_changed, season_changed)
+        for value in (episode_changed, collection_changed, season_changed)
     )
 
 
@@ -293,9 +293,9 @@ def _movie_source_revision(session: Session) -> str:
     ])
 
 
-def _show_source_page(
+def _collection_source_page(
     session: Session,
-    show_scope: ShowLocalMediaProfileScope,
+    collection_scope: CollectionLocalMediaProfileScope,
     *,
     search: str | None,
     cursor: str | None,
@@ -303,30 +303,30 @@ def _show_source_page(
     anchor_offset: int | None = None,
 ) -> tuple[list[LocalMediaProfileTemplateSource], str | None, str | None, str]:
     search_text = (search or "").strip()
-    revision = _show_source_revision(session, show_scope)
+    revision = _collection_source_revision(session, collection_scope)
     relevance = search_relevance_score(
         search,
         Episode.title,
-        Show.title,
+        Collection.title,
         Season.name,
         Episode.slug,
-        Show.slug,
+        Collection.slug,
         Episode.episode_identifier,
-        Show.author_name,
+        Collection.author_name,
         Season.slug,
     )
     relevance_expr = relevance if relevance is not None else literal(0)
-    group_sort = func.lower(Show.title)
+    group_sort = func.lower(Collection.title)
 
     natural_fields = [
         (relevance_expr, True),
         (group_sort, False),
-        (Show.id, False),
+        (Collection.id, False),
         (Episode.index, False),
         (Episode.id, False),
     ] if relevance is not None else [
         (group_sort, False),
-        (Show.id, False),
+        (Collection.id, False),
         (Episode.index, False),
         (Episode.id, False),
     ]
@@ -338,8 +338,8 @@ def _show_source_page(
         try:
             values = decode_cursor(cursor)
             if (
-                values.get("kind") != "template-show"
-                or values.get("scope") != show_scope.value
+                values.get("kind") != "template-collection"
+                or values.get("scope") != collection_scope.value
                 or values.get("search") != search_text
                 or values.get("direction") not in {"next", "previous"}
             ):
@@ -360,15 +360,15 @@ def _show_source_page(
             relevance_expr.label("relevance"),
             group_sort.label("group_sort"),
         )
-        .join(Episode.show)
+        .join(Episode.collection)
         .join(Episode.season)
-        .options(contains_eager(Episode.show), contains_eager(Episode.season))
-        .where(Show.type.in_(_show_type_values(show_scope)))
+        .options(contains_eager(Episode.collection), contains_eager(Episode.season))
+        .where(Collection.type.in_(_collection_type_values(collection_scope)))
         .where(*search_all_terms(
             search,
-            Show.title,
-            Show.slug,
-            Show.author_name,
+            Collection.title,
+            Collection.slug,
+            Collection.author_name,
             Episode.title,
             Episode.slug,
             Episode.episode_identifier,
@@ -417,7 +417,7 @@ def _show_source_page(
             values.append(int(row._mapping["relevance"]))
         values.extend([
             row._mapping["group_sort"],
-            episode.show_id,
+            episode.collection_id,
             episode.index,
             episode.id,
         ])
@@ -427,8 +427,8 @@ def _show_source_page(
     next_cursor = None
     if has_previous and raw_rows:
         previous_cursor = encode_cursor({
-            "kind": "template-show",
-            "scope": show_scope.value,
+            "kind": "template-collection",
+            "scope": collection_scope.value,
             "search": search_text,
             "direction": "previous",
             "revision": revision,
@@ -436,8 +436,8 @@ def _show_source_page(
         })
     if has_next and raw_rows:
         next_cursor = encode_cursor({
-            "kind": "template-show",
-            "scope": show_scope.value,
+            "kind": "template-collection",
+            "scope": collection_scope.value,
             "search": search_text,
             "direction": "next",
             "revision": revision,
@@ -445,36 +445,36 @@ def _show_source_page(
         })
 
     return [
-        _show_template_source(row[0])
+        _collection_template_source(row[0])
         for row in raw_rows
     ], next_cursor, previous_cursor, revision
 
 
-def get_random_show_template_source(
+def get_random_collection_template_source(
     session: Session,
-    show_scope: ShowLocalMediaProfileScope = ShowLocalMediaProfileScope.BOTH,
+    collection_scope: CollectionLocalMediaProfileScope = CollectionLocalMediaProfileScope.BOTH,
 ) -> LocalMediaProfileTemplateSource | None:
-    """Choose an example uniformly by Show, then uniformly within that Show."""
-    show_id = session.scalar(
-        select(Episode.show_id)
-        .join(Episode.show)
+    """Choose an example uniformly by Collection, then uniformly within that Collection."""
+    collection_id = session.scalar(
+        select(Episode.collection_id)
+        .join(Episode.collection)
         .join(Episode.season)
-        .where(Show.type.in_(_show_type_values(show_scope)))
-        .group_by(Episode.show_id)
+        .where(Collection.type.in_(_collection_type_values(collection_scope)))
+        .group_by(Episode.collection_id)
         .order_by(func.random())
         .limit(1)
     )
-    if show_id is None:
+    if collection_id is None:
         return None
 
     episode = session.scalar(
         select(Episode)
         .join(Episode.season)
-        .where(Episode.show_id == show_id)
+        .where(Episode.collection_id == collection_id)
         .order_by(func.random())
         .limit(1)
     )
-    return _show_template_source(episode) if episode is not None else None
+    return _collection_template_source(episode) if episode is not None else None
 
 
 def _movie_source_page(
@@ -775,7 +775,7 @@ def _video_source_page(
 def get_output_template_source_page(
     session: Session,
     profile_type: LocalMediaProfileType,
-    show_scope: ShowLocalMediaProfileScope = ShowLocalMediaProfileScope.BOTH,
+    collection_scope: CollectionLocalMediaProfileScope = CollectionLocalMediaProfileScope.BOTH,
     *,
     search: str | None = None,
     cursor: str | None = None,
@@ -783,25 +783,25 @@ def get_output_template_source_page(
     anchor_source_id: str | None = None,
 ) -> LocalMediaProfileTemplateSourcePage:
     """Search locally stored media with stable bidirectional cursor pagination."""
-    if profile_type == LocalMediaProfileType.SHOW:
+    if profile_type == LocalMediaProfileType.COLLECTION:
         anchor_offset = None
         if cursor is None and anchor_source_id and not (search or "").strip():
-            anchor_offset = _show_source_anchor_offset(
+            anchor_offset = _collection_source_anchor_offset(
                 session,
-                show_scope,
+                collection_scope,
                 anchor_source_id,
                 limit=limit,
             )
-        sources, next_cursor, previous_cursor, revision = _show_source_page(
+        sources, next_cursor, previous_cursor, revision = _collection_source_page(
             session,
-            show_scope,
+            collection_scope,
             search=search,
             cursor=cursor,
             limit=limit,
             anchor_offset=anchor_offset,
         )
-        fallback_values = _EXAMPLE_SHOW_VALUES
-        fallback_label = "Example show episode"
+        fallback_values = _EXAMPLE_COLLECTION_VALUES
+        fallback_label = "Example collection episode"
     elif profile_type == LocalMediaProfileType.MOVIE:
         sources, next_cursor, previous_cursor, revision = _movie_source_page(
             session,
@@ -821,7 +821,7 @@ def get_output_template_source_page(
         fallback_values = _EXAMPLE_VIDEO_VALUES
         fallback_label = "Example video"
     else:
-        raise ValueError("Template examples are only available for Show, Movie and Video profiles")
+        raise ValueError("Template examples are only available for Collection, Movie and Video profiles")
 
     if not sources and cursor is None and not (search or "").strip():
         sources = [LocalMediaProfileTemplateSource(
@@ -844,7 +844,7 @@ class _PersistedPreviewAssignmentMissing(Exception):
     pass
 
 
-def _simulate_show_preview_assignments(
+def _simulate_collection_preview_assignments(
     session: Session | None,
     episode: Episode | None,
     body: LocalMediaProfileTemplatePreview,
@@ -854,9 +854,9 @@ def _simulate_show_preview_assignments(
         return {}
     episodes = list(session.scalars(
         select(Episode)
-        .options(joinedload(Episode.show), joinedload(Episode.season))
+        .options(joinedload(Episode.collection), joinedload(Episode.season))
         .where(
-            Episode.show_id == episode.show_id,
+            Episode.collection_id == episode.collection_id,
             Episode.index <= episode.index,
         )
         .order_by(Episode.index.asc(), Episode.id.asc())
@@ -869,7 +869,7 @@ def _simulate_show_preview_assignments(
     )[episode.id]
 
 
-def _render_show_preview(
+def _render_collection_preview(
     session: Session | None,
     body: LocalMediaProfileTemplatePreview,
     *,
@@ -880,15 +880,15 @@ def _render_show_preview(
             render_output_template(
                 body.output_template,
                 body.values,
-                allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
-                allowed_metadata_scopes=SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+                allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
+                allowed_metadata_scopes=COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
             ),
             frozenset(),
             frozenset(),
         )
 
     profile = (
-        session.get(ShowLocalMediaProfile, body.local_media_profile_id)
+        session.get(CollectionLocalMediaProfile, body.local_media_profile_id)
         if (
             body.indexing_values is None
             and session is not None
@@ -906,8 +906,8 @@ def _render_show_preview(
             render_output_template(
                 body.output_template,
                 body.values,
-                allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
-                allowed_metadata_scopes=SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+                allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
+                allowed_metadata_scopes=COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
                 custom_index_resolver=lambda _key: "",
             ),
             definitions,
@@ -931,7 +931,7 @@ def _render_show_preview(
         referenced_keys=index_keys,
     )
     assignments = (
-        _simulate_show_preview_assignments(session, episode, body, definitions)
+        _simulate_collection_preview_assignments(session, episode, body, definitions)
         if plan.mode == CustomIndexPreviewMode.SIMULATE
         else plan.persisted_assignments
     )
@@ -952,8 +952,8 @@ def _render_show_preview(
         return render_output_template(
             body.output_template,
             body.values,
-            allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
-            allowed_metadata_scopes=SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+            allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
+            allowed_metadata_scopes=COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
             custom_index_resolver=resolve_index if index_keys else None,
         )
 
@@ -965,7 +965,7 @@ def _render_show_preview(
         # correctness.
         provisional.clear()
         output_path = render(
-            _simulate_show_preview_assignments(session, episode, body, definitions)
+            _simulate_collection_preview_assignments(session, episode, body, definitions)
         )
     return output_path, definitions, frozenset(provisional)
 
@@ -977,15 +977,15 @@ def get_output_template_preview(
     index_keys = output_template_custom_index_keys(body.output_template)
     definition_keys: frozenset[str] = frozenset()
     provisional_keys: frozenset[str] = frozenset()
-    if body.type == LocalMediaProfileType.SHOW:
-        output_path, definition_keys, provisional_keys = _render_show_preview(
+    if body.type == LocalMediaProfileType.COLLECTION:
+        output_path, definition_keys, provisional_keys = _render_collection_preview(
             session,
             body,
             index_keys=index_keys,
         )
     elif body.type == LocalMediaProfileType.MOVIE:
         if index_keys:
-            raise ValueError("custom_index is only available to Show Local Media Profiles")
+            raise ValueError("custom_index is only available to Collection Local Media Profiles")
         output_path = render_output_template(
             body.output_template,
             body.values,
@@ -994,14 +994,14 @@ def get_output_template_preview(
         )
     elif body.type == LocalMediaProfileType.VIDEO:
         if index_keys:
-            raise ValueError("custom_index is only available to Show Local Media Profiles")
+            raise ValueError("custom_index is only available to Collection Local Media Profiles")
         output_path = render_output_template(
             body.output_template,
             body.values,
             allowed_fields=VIDEO_OUTPUT_TEMPLATE_FIELDS,
         )
     else:
-        raise ValueError("Template previews are only available for Show, Movie and Video profiles")
+        raise ValueError("Template previews are only available for Collection, Movie and Video profiles")
 
     if body.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY:
         extension = "m4a"

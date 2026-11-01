@@ -9,12 +9,12 @@ from task_manager.scheduler.results import TaskResult
 from .service import run_monitor_no_usable_media_episode
 
 
-@on_event(event_name="app.startup", resource_type="show")
+@on_event(event_name="app.startup", resource_type="collection")
 @on_cron(
     cron=get_settings().new_episode_schedule.monitor_no_usable_media_episode_cron,
     enabled=get_settings().new_episode_schedule.monitor_no_usable_media_episode_cron_enabled,
     minimum_interval_ms=get_settings().dw_timeout.min_slow_request_ms,
-    resource_type="show",
+    resource_type="collection",
     resource_id=0,
     coalesce=True,
 )
@@ -22,7 +22,7 @@ from .service import run_monitor_no_usable_media_episode
     key="monitor_no_usable_media_episode",
     title="Monitor no-usable-media episodes",
     description="Verify quarantined episodes, recover usable media and delete only confirmed 404s after the grace period.",
-    allowed_resource_types=("show",),
+    allowed_resource_types=("collection",),
     default_max_retries=2,
     tracks_progress=True,
 )
@@ -35,12 +35,12 @@ async def monitor_no_usable_media_episode(
     progress=None,
 ) -> TaskResult:
     settings = get_settings()
-    show_id = None if resource_id in {None, 0} else resource_id
+    collection_id = None if resource_id in {None, 0} else resource_id
     with db_session() as s:
         return await run_monitor_no_usable_media_episode(
             s,
-            show_id=show_id,
-            show_slug=slug,
+            collection_id=collection_id,
+            collection_slug=slug,
             episode_id=episode_id,
             force=force,
             delete_after_minutes=settings.episode_status_timing.no_usable_media_delete_after_minutes,

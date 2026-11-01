@@ -9,7 +9,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "817515eb8209"
+HEAD_REVISION = "d0f28c7f863e"
+VODLOFT_0_5_0_REVISION = "817515eb8209"
 VODLOFT_0_4_0_REVISION = "e6a2c9d4f817"
 VODLOFT_NEEDS_SUBSCRIPTION_REVISION = "c41e7a9d3f58"
 VODLOFT_REMOVED_FROM_SOURCE_REVISION = "a7e4c2d91b35"
@@ -251,7 +252,8 @@ def test_migration_history_has_one_head(migration_database):
     )
 
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == VODLOFT_0_4_0_REVISION
+    assert script.get_revision(HEAD_REVISION).down_revision == VODLOFT_0_5_0_REVISION
+    assert script.get_revision(VODLOFT_0_5_0_REVISION).down_revision == VODLOFT_0_4_0_REVISION
     assert script.get_revision(VODLOFT_0_4_0_REVISION).down_revision == VODLOFT_NEEDS_SUBSCRIPTION_REVISION
     assert script.get_revision(VODLOFT_NEEDS_SUBSCRIPTION_REVISION).down_revision == VODLOFT_REMOVED_FROM_SOURCE_REVISION
     assert script.get_revision(VODLOFT_REMOVED_FROM_SOURCE_REVISION).down_revision == VODLOFT_STORED_NAMES_REVISION
@@ -294,7 +296,7 @@ def test_demo_seed_runs_on_a_fresh_database(migration_database):
     seed_db()
 
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT count(*) FROM shows")).scalar_one() == 3
+        assert connection.execute(text("SELECT count(*) FROM collections")).scalar_one() == 3
         assert connection.execute(text("SELECT count(*) FROM media_items_episode")).scalar_one() == 57
 
 
@@ -451,14 +453,14 @@ def test_fresh_database_upgrades_to_wireloft_1_1(migration_database):
             "FROM local_media_profiles ORDER BY slug"
         )).mappings().all()
         assert [profile["slug"] for profile in profiles] == [
+            "vodloft-collections-audio",
+            "vodloft-collections-video",
             "vodloft-movies",
-            "vodloft-shows-audio",
-            "vodloft-shows-video",
             "vodloft-videos",
         ]
-        assert {profile["type"] for profile in profiles} == {"movie", "show", "video"}
+        assert {profile["type"] for profile in profiles} == {"movie", "collection", "video"}
         assert connection.execute(text(
-            "SELECT COUNT(*) FROM local_media_profiles_show"
+            "SELECT COUNT(*) FROM local_media_profiles_collection"
         )).scalar_one() == 2
         assert connection.execute(text(
             "SELECT COUNT(*) FROM local_media_profiles_movie"
@@ -544,7 +546,7 @@ def test_upgrade_from_wireloft_1_0_preserves_release_data(migration_database):
         retired_counters = connection.execute(
             text(
                 "SELECT key FROM metadata "
-                "WHERE parent_table = 'shows' AND parent_id = :show_id "
+                "WHERE parent_table = 'collections' AND parent_id = :show_id "
                 "AND (key = 'ep_id.latest_ep_num' "
                 "OR key = 'ep_id.latest_ep_extra_num' "
                 "OR key LIKE 'ep_id.latest_season_%_ep')"
@@ -606,7 +608,7 @@ def test_upgrade_from_wireloft_1_0_preserves_release_data(migration_database):
         ), {"id": seeded["profile_id"]}).scalar_one()
         assert profile == "system"
         assert connection.execute(text(
-            "SELECT show_scope FROM local_media_profiles_show WHERE id = :id"
+            "SELECT collection_scope FROM local_media_profiles_collection WHERE id = :id"
         ), {"id": seeded["profile_id"]}).scalar_one() == "both"
 
 
@@ -691,7 +693,7 @@ def test_sources_migration_marks_existing_rows_as_daily_wire(migration_database)
     with engine.begin() as connection:
         connection.execute(text("INSERT INTO media_items (uuid, type) VALUES ('existing', 'movie')"))
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, VODLOFT_0_4_0_REVISION)
     with engine.connect() as connection:
         assert connection.execute(text("SELECT source_key FROM media_items")).scalar_one() == "dailywire"
     inspector = inspect(engine)
@@ -741,7 +743,7 @@ def test_source_identity_migration_moves_source_slugs_into_their_column(migratio
             "VALUES ('media_items_episode', :id, 'source.slug', 'def')"
         ), {"id": prefixed})
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, VODLOFT_0_4_0_REVISION)
     with engine.connect() as connection:
         slugs = dict(connection.execute(text("SELECT id, source_slug FROM media_items_episode")).all())
         assert slugs == {plain: "abc", prefixed: "def"}
@@ -783,7 +785,7 @@ def test_stored_names_migration_renames_wireloft_values(migration_database):
                 list(connection.execute(text("SELECT value FROM metadata ORDER BY id")).scalars()),
             )
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, VODLOFT_0_4_0_REVISION)
     assert stored() == ("HIGHEST_ALLOWED", [
         "vodloft:last_known_pending:2026-01-01T00:00:00+00:00",
         "vodloft:recorded_published_final:2026-01-02T00:00:00+00:00",
@@ -868,7 +870,7 @@ def test_unified_download_profiles_migration_keeps_every_profile_setting(migrati
             "VALUES (1, :id, 'DOWNLOAD_PROFILE_SERIES', 'interval', '{}', 1)"
         ), {"id": series_profile})
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, VODLOFT_0_4_0_REVISION)
     with engine.connect() as connection:
         rows = {
             row.id: row
@@ -911,3 +913,75 @@ def test_unified_download_profiles_migration_keeps_every_profile_setting(migrati
         assert connection.execute(text(
             "SELECT season_id FROM download_profile_series_seasons WHERE download_profiles_series_id = :id"
         ), {"id": series_profile}).scalar_one() == chosen_season
+
+
+def test_collections_migration_renames_shows_and_their_stored_values(migration_database):
+    _database_path, engine = migration_database
+    import json
+
+    from backend.db.migrations import downgrade_database, get_alembic_config
+
+    config = get_alembic_config(allow_version_storage_migration=True)
+    command.upgrade(config, VODLOFT_0_5_0_REVISION)
+    with engine.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO shows (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+            "author_name, author_slug, source_key) VALUES (1, 'uuid-1', 'a-show', 'A Show', 'https://example.test/a', "
+            "'free', 'series', 'numbered', 'Author', 'author', 'ytdlp')"
+        ))
+        connection.execute(text(
+            "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, type) VALUES "
+            "(5, 'vodloft-shows-video', 'VODLoft Shows (Video)', "
+            "'/downloads/{{ show }}/{{ meta_show_year }} {{ show_title | upper }} {{ showtime }}.ext', "
+            "'format_1080p', 'show')"
+        ))
+        connection.execute(text("INSERT INTO local_media_profiles_show (id, show_scope) VALUES (5, 'podcast')"))
+        connection.execute(text(
+            "INSERT INTO metadata (parent_table, parent_id, key, value) VALUES ('shows', 1, 'custom.year', '2024')"
+        ))
+        connection.execute(text(
+            "INSERT INTO task_definitions (id, key, title, allowed_resource_types, default_max_retries) "
+            "VALUES (9, 'reconcile_show_assets', 'Reconcile', :allowed, 0)"
+        ), {"allowed": json.dumps(["show", "download_profile"])})
+        connection.execute(text(
+            "INSERT INTO task_runs (id, definition_id, resource_type, resource_id, status, attempt_count, "
+            "max_retries, meta) VALUES (1, 9, 'SHOW', 1, 'QUEUED', 0, 0, :meta)"
+        ), {"meta": json.dumps({"show_id": 1, "no_show_today": True, "resource_type": "show"})})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        profile = connection.execute(text(
+            "SELECT type, slug, name, output_template FROM local_media_profiles WHERE id = 5"
+        )).mappings().one()
+        assert dict(profile) == {
+            "type": "collection",
+            "slug": "vodloft-collections-video",
+            "name": "VODLoft Collections (Video)",
+            "output_template": (
+                "/downloads/{{ collection }}/{{ meta_collection_year }} "
+                "{{ collection_title | upper }} {{ showtime }}.ext"
+            ),
+        }
+        assert connection.execute(text(
+            "SELECT collection_scope FROM local_media_profiles_collection WHERE id = 5"
+        )).scalar_one() == "podcast"
+        assert connection.execute(text("SELECT title FROM collections")).scalar_one() == "A Show"
+        assert connection.execute(text("SELECT parent_table FROM metadata")).scalar_one() == "collections"
+        assert connection.execute(text(
+            "SELECT key FROM task_definitions WHERE id = 9"
+        )).scalar_one() == "reconcile_collection_assets"
+        assert json.loads(connection.execute(text(
+            "SELECT allowed_resource_types FROM task_definitions WHERE id = 9"
+        )).scalar_one()) == ["collection", "download_profile"]
+        run = connection.execute(text("SELECT resource_type, meta FROM task_runs")).one()
+        assert run.resource_type == "COLLECTION"
+        assert json.loads(run.meta) == {"collection_id": 1, "no_show_today": True, "resource_type": "collection"}
+
+    downgrade_database(VODLOFT_0_5_0_REVISION)
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT title FROM shows")).scalar_one() == "A Show"
+        assert connection.execute(text(
+            "SELECT output_template FROM local_media_profiles WHERE id = 5"
+        )).scalar_one() == "/downloads/{{ show }}/{{ meta_show_year }} {{ show_title | upper }} {{ showtime }}.ext"
+        assert connection.execute(text("SELECT resource_type FROM task_runs")).scalar_one() == "SHOW"

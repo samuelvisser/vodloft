@@ -9,13 +9,13 @@ import './mobileHeaderScroll.css'
 import './icons/fontAwesome'
 import { queryClient } from './lib/queryClient'
 import { prefetchCoreData } from './lib/queries'
-import { loadShowsFromStorage, loadProfilesFromStorage } from './lib/cache'
+import { loadCollectionsFromStorage, loadProfilesFromStorage } from './lib/cache'
 import {
   hydrateCachedSeasonQueries,
-  hydrateCurrentShowRouteCache,
-  installShowDataQueryPersistence,
-  scheduleShowDataCacheWarm,
-} from './lib/showDataCacheWarmer'
+  hydrateCurrentCollectionRouteCache,
+  installCollectionDataQueryPersistence,
+  scheduleCollectionDataCacheWarm,
+} from './lib/collectionDataCacheWarmer'
 import { loadAppConfig } from './general_utils.js'
 import { loadPublicConfig } from './lib/publicConfig'
 import { router } from './router'
@@ -42,24 +42,24 @@ async function bootstrap() {
   const library = can('library')
 
   // Restore cached data synchronously before initial render to prevent flashes.
-  const cachedShows = library ? loadShowsFromStorage() : null
-  if (cachedShows) {
-    queryClient.setQueryData(['shows'], cachedShows)
-    // Season lists are small and seasonal show pages need them before rendering episode cards.
+  const cachedCollections = library ? loadCollectionsFromStorage() : null
+  if (cachedCollections) {
+    queryClient.setQueryData(['collections'], cachedCollections)
+    // Season lists are small and seasonal collection pages need them before rendering episode cards.
     // Hydrating them now avoids a skeleton gate without parsing every potentially-large episode list.
-    hydrateCachedSeasonQueries(queryClient, cachedShows)
+    hydrateCachedSeasonQueries(queryClient, cachedCollections)
   }
   const cachedProfiles = can('local_media_profiles') ? loadProfilesFromStorage() : null
   if (cachedProfiles) {
     queryClient.setQueryData(['localMediaProfiles'], cachedProfiles)
   }
 
-  // A direct reload of a seasonal show should get its small cached season list before React mounts.
+  // A direct reload of a seasonal collection should get its small cached season list before React mounts.
   // Episode previews are read lazily by ShowPage so startup never parses unrelated episode data.
-  if (library) hydrateCurrentShowRouteCache(queryClient)
+  if (library) hydrateCurrentCollectionRouteCache(queryClient)
 
   // Persist small season-query results produced by normal foreground refreshes.
-  installShowDataQueryPersistence(queryClient)
+  installCollectionDataQueryPersistence(queryClient)
 
   // Warm the existing core cache without blocking the first render.
   prefetchCoreData(queryClient)
@@ -74,7 +74,7 @@ async function bootstrap() {
     </React.StrictMode>,
   )
 
-  // Warm only the bounded recent-episode preview per stale show after first paint.
-  if (library) scheduleShowDataCacheWarm(queryClient)
+  // Warm only the bounded recent-episode preview per stale collection after first paint.
+  if (library) scheduleCollectionDataCacheWarm(queryClient)
 }
 void bootstrap()

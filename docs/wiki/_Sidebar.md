@@ -8,7 +8,7 @@
 
 **Using VODLoft**
 - [[Sources]]
-- [[Shows-and-Library]]
+- [[Collections-and-Library]]
 - [[Local-Media-Profiles]]
 - [[Download-Profiles]]
 - [[Downloads-and-File-Integrity]]

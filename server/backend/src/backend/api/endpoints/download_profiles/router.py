@@ -22,13 +22,13 @@ def download_profiles_list():
         return get_download_profiles_list(s)
 
 
-@router.get("/by-show-slug/{show_slug}", dependencies=[requires_any((Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=list[DownloadProfileAPIRead])
-def download_profiles_by_show_slug_list(show_slug: str):
+@router.get("/by-collection-slug/{collection_slug}", dependencies=[requires_any((Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=list[DownloadProfileAPIRead])
+def download_profiles_by_collection_slug_list(collection_slug: str):
     """
-    List all download profiles in any show.
+    List all download profiles in any collection.
     """
     with db_session() as s:
-        return get_download_profiles_list(s, show_slug)
+        return get_download_profiles_list(s, collection_slug)
 
 
 @router.get("/{download_profile_id}", dependencies=[requires_any((Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=DownloadProfileAPIRead)
@@ -45,7 +45,7 @@ def download_profiles_create(body: DownloadProfileAPICreate):
     """
     Create a new download profile.
 
-    Creates a profile defining which episodes of a show to download automatically.
+    Creates a profile defining which episodes of a collection to download automatically.
     Returns the created profile with tracking information.
     """
     with db_session() as s:

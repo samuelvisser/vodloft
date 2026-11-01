@@ -230,7 +230,7 @@ class YouTubeApiSettings(SubmodelBase):
     The key itself is stored by the yt-dlp Source, next to its cookies file.
     Google gives a project 10,000 units a day; the split is VODLoft's own.
     What the checks and search shares leave of the daily total is kept free
-    for adding shows, testing the key and manual refreshes.
+    for adding collections, testing the key and manual refreshes.
     """
 
     daily_quota: int = Field(
@@ -251,7 +251,7 @@ class YouTubeApiSettings(SubmodelBase):
     min_check_interval_minutes: int = Field(
         default=10,
         ge=10,
-        description="Shortest time between two quick checks of the same show",
+        description="Shortest time between two quick checks of the same collection",
     )
 
     @model_validator(mode="after")
@@ -297,21 +297,21 @@ class TrackNewEpisodeSchedule(SubmodelBase):
     find_episodes_cron: str = Field(..., min_length=1, description="Cron schedule string for finding new episodes")
     quick_check_cron_enabled: bool = Field(
         default=True,
-        description="Enable the quick check for new videos in shows whose Source has quick checks",
+        description="Enable the quick check for new videos in collections whose Source has quick checks",
     )
     quick_check_cron: str = Field(
         default="*/5 * * * *",
         min_length=1,
-        description="Cron schedule that wakes the quick check; the Source decides how often each show is checked",
+        description="Cron schedule that wakes the quick check; the Source decides how often each collection is checked",
     )
     full_rescan_cron_enabled: bool = Field(
         default=True,
-        description="Enable the full re-scan of shows whose Source has quick checks",
+        description="Enable the full re-scan of collections whose Source has quick checks",
     )
     full_rescan_cron: str = Field(
         default="0 4 * * *",
         min_length=1,
-        description="Cron schedule for the full re-scan of shows whose Source has quick checks",
+        description="Cron schedule for the full re-scan of collections whose Source has quick checks",
     )
     monitor_pending_episode_cron_enabled: bool = Field(
         default=True,
@@ -386,7 +386,7 @@ class MetadataMode(StrEnum):
     EMBED_AND_NFO = "embed_and_nfo"
 
 
-class ShowArtworkFallbackFormat(StrEnum):
+class CollectionArtworkFallbackFormat(StrEnum):
     JPG = "jpg"
     PNG = "png"
 
@@ -445,13 +445,13 @@ class DownloadSettings(SubmodelBase):
         default=MetadataMode.EMBED,
         description="Whether downloaded media embeds metadata, writes an NFO sidecar, does both, or stores no metadata",
     )
-    download_show_assets: bool = Field(
+    download_collection_assets: bool = Field(
         default=True,
-        description="Download shared show artwork to the inferred show directory; Local Media Profiles can override this default",
+        description="Download shared collection artwork to the inferred collection directory; Local Media Profiles can override this default",
     )
-    show_artwork_fallback_format: ShowArtworkFallbackFormat = Field(
-        default=ShowArtworkFallbackFormat.JPG,
-        description="Format used when upstream show artwork is neither JPEG nor PNG",
+    collection_artwork_fallback_format: CollectionArtworkFallbackFormat = Field(
+        default=CollectionArtworkFallbackFormat.JPG,
+        description="Format used when upstream collection artwork is neither JPEG nor PNG",
     )
     temporary_download_root: Path = Field(
         default_factory=lambda: Path(tempfile.gettempdir()) / "vodloft-downloads",
@@ -543,7 +543,7 @@ class QuickDownloadSettings(SubmodelBase):
     default_codec: QuickDownloadCodec = Field(default=QuickDownloadCodec.AUTO, description="The video codec quick downloads prefer; auto leaves it to the Source")
     default_audio_format: QuickDownloadAudioFormat = Field(default=QuickDownloadAudioFormat.M4A, description="M4A or MP3 for quick download audio")
     default_mp3_bitrate: int = Field(default=192, description="MP3 bitrate in kbps: 320, 192 or 128")
-    embed_metadata: bool = Field(default=True, description="Embed title, show or channel and date in quick download files")
+    embed_metadata: bool = Field(default=True, description="Embed title, collection or channel and date in quick download files")
     embed_artwork: bool = Field(default=True, description="Embed cover art in quick download files")
     keep_downloaded_minutes: int = Field(
         default=10,

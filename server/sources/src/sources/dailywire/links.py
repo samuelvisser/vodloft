@@ -12,8 +12,8 @@ from .auth import DeviceAuthClient
 SITE_URL = "https://www.dailywire.com"
 
 _KIND_BY_SECTION = {
-    "show": LinkKind.SHOW,
-    "shows": LinkKind.SHOW,
+    "show": LinkKind.COLLECTION,
+    "shows": LinkKind.COLLECTION,
     "videos": LinkKind.MOVIE,
     "movie": LinkKind.MOVIE,
     "movies": LinkKind.MOVIE,
@@ -42,7 +42,7 @@ def _first(*values: Any) -> str | None:
     return next((value for value in values if isinstance(value, str) and value), None)
 
 
-def show_url(slug: str) -> str:
+def collection_url(slug: str) -> str:
     return f"{SITE_URL}/show/{slug}"
 
 
@@ -53,12 +53,12 @@ def resolve_link(url: str) -> ResolvedLink | None:
     kind, slug = parsed
     token = _access_token()
 
-    if kind is LinkKind.SHOW:
+    if kind is LinkKind.COLLECTION:
         show = MiddlewareClient(access_token=token, request_priority="interactive").get_show_page(slug=slug)
         return ResolvedLink(
             kind=kind,
             slug=show.slug,
-            url=show_url(show.slug),
+            url=collection_url(show.slug),
             title=show.title,
             description=show.description,
             image_url=_first(show.thumbnail_portrait_path, show.thumbnail_landscape_path, show.background_image_path),
@@ -79,7 +79,7 @@ def resolve_link(url: str) -> ResolvedLink | None:
 
     payload = MiddlewareClient(access_token=token, request_priority="interactive").get_episode_payload(slug)
     show = payload.get("show") if isinstance(payload.get("show"), dict) else {}
-    show_slug = _first(show.get("slug"), payload.get("showSlug"))
+    collection_slug = _first(show.get("slug"), payload.get("showSlug"))
     images = payload.get("images") if isinstance(payload.get("images"), dict) else {}
     thumbnail = images.get("thumbnail") if isinstance(images.get("thumbnail"), dict) else {}
     return ResolvedLink(
@@ -90,6 +90,6 @@ def resolve_link(url: str) -> ResolvedLink | None:
         description=_first(payload.get("description")),
         image_url=_first(thumbnail.get("land"), thumbnail.get("port"), payload.get("backgroundImage")),
         author_name=_first((show.get("author") or {}).get("name") if isinstance(show.get("author"), dict) else None),
-        show_slug=show_slug,
-        show_url=show_url(show_slug) if show_slug else None,
+        collection_slug=collection_slug,
+        collection_url=collection_url(collection_slug) if collection_slug else None,
     )

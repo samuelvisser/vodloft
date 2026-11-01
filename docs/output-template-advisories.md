@@ -19,9 +19,9 @@ The advice uses the template and definitions currently in the form, including
 unsaved edits. It does not inspect the selected example or scan the episode
 library. Preview requests continue independently and never wait for advice.
 
-## Use the existing episode index for show-wide numbering
+## Use the existing episode index for collection-wide numbering
 
-`episode_index` is VODLoft's stored index for that episode within its show.
+`episode_index` is VODLoft's stored index for that episode within its collection.
 It includes all episode types, does not restart for each season or type, and is
 not the database row ID or the media-facing `episode_number`.
 

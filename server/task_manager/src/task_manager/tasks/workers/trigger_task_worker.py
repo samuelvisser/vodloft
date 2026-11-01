@@ -8,10 +8,10 @@ from task_manager.scheduler.registry import task
     key="trigger_task_worker",
     title="Triggers task",
     description="Trigger task",
-    allowed_resource_types=("show",),
+    allowed_resource_types=("collection",),
     default_max_retries=5,
     tracks_progress=True,
 )
 async def trigger_task_worker(*, progress=None) -> None:
 
-    exec_trigger_now(def_key="fetch_new_episodes", resource_type="show", resource_id=2)
+    exec_trigger_now(def_key="fetch_new_episodes", resource_type="collection", resource_id=2)

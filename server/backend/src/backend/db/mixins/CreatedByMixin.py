@@ -11,7 +11,7 @@ def _requester() -> Optional[int]:
 
 
 class CreatedByMixin:
-    """Remembers which user added a show, movie or video, for the library to show.
+    """Remembers which user added a collection, movie or video, for the library to show.
 
     Filled in from the request that adds it; empty without user accounts and
     for anything VODLoft adds on its own.

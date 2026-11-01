@@ -161,11 +161,11 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(CustomIndexNotReadyError)
     async def _custom_index_waiting(_request: Request, error: CustomIndexNotReadyError):
-        if error.repair_show_id is not None and error.repair_profile_id is not None:
+        if error.repair_collection_id is not None and error.repair_profile_id is not None:
             from backend.services.custom_indexes import request_custom_index_reconciliation
             with db_session() as session:
                 request_custom_index_reconciliation(
-                    session, show_id=error.repair_show_id,
+                    session, collection_id=error.repair_collection_id,
                     local_media_profile_id=error.repair_profile_id,
                 )
                 session.commit()
@@ -239,7 +239,7 @@ def create_app() -> FastAPI:
         dailywire_router,
         download_profile_router,
         media_download_router,
-        show_router,
+        collection_router,
         movie_router,
         video_router,
         onboarding_router,
@@ -251,7 +251,7 @@ def create_app() -> FastAPI:
         season_router,
         setting_router,
         local_media_profile_router,
-        show_local_media_profile_router,
+        collection_local_media_profile_router,
         movie_local_media_profile_router,
         video_local_media_profile_router,
         meta_router,
@@ -278,7 +278,7 @@ def create_app() -> FastAPI:
     app.include_router(episode_router, prefix="/api")
     app.include_router(season_router, prefix="/api")
     app.include_router(media_download_router, prefix="/api")
-    app.include_router(show_router, prefix="/api")
+    app.include_router(collection_router, prefix="/api")
     app.include_router(movie_router, prefix="/api")
     app.include_router(video_router, prefix="/api")
     app.include_router(onboarding_router, prefix="/api")
@@ -288,7 +288,7 @@ def create_app() -> FastAPI:
     app.include_router(quick_download_router, prefix="/api")
     app.include_router(setting_router, prefix="/api")
     app.include_router(local_media_profile_router, prefix="/api")
-    app.include_router(show_local_media_profile_router, prefix="/api")
+    app.include_router(collection_local_media_profile_router, prefix="/api")
     app.include_router(movie_local_media_profile_router, prefix="/api")
     app.include_router(video_local_media_profile_router, prefix="/api")
     app.include_router(custom_metadata_router, prefix="/api")

@@ -63,7 +63,7 @@ function mediaTypeLabel(type: string, movieExtraType?: string | null): string {
 
 function rowContext(row: MediaDownloadViewRead): string {
     if (row.type === 'movie' || row.type === 'movie_extra') return mediaTypeLabel(row.type, row.movieExtraType)
-    return row.showTitle ?? mediaTypeLabel(String(row.type))
+    return row.collectionTitle ?? mediaTypeLabel(String(row.type))
 }
 
 function setsEqual(a: Set<string>, b: Set<string>): boolean {
@@ -220,7 +220,7 @@ export default function DownloadsPage() {
         if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
         if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
         if (row.type === 'video') await qc.invalidateQueries({queryKey: ['videoDownloads', row.mediaItemId]})
-        if (row.showSlug) await qc.invalidateQueries({queryKey: ['showDownloads', row.showSlug]})
+        if (row.collectionSlug) await qc.invalidateQueries({queryKey: ['collectionDownloads', row.collectionSlug]})
     }
 
     const retryRequest = async (row: MediaDownloadViewRead): Promise<string | null> => {
@@ -248,7 +248,7 @@ export default function DownloadsPage() {
         if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
         if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
         if (row.type === 'video') await qc.invalidateQueries({queryKey: ['videoDownloads', row.mediaItemId]})
-        if (row.showSlug) await qc.invalidateQueries({queryKey: ['showDownloads', row.showSlug]})
+        if (row.collectionSlug) await qc.invalidateQueries({queryKey: ['collectionDownloads', row.collectionSlug]})
     }
 
     const cancel = async (row: MediaDownloadViewRead) => {
@@ -267,7 +267,7 @@ export default function DownloadsPage() {
         if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
         if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
         if (row.type === 'video') await qc.invalidateQueries({queryKey: ['videoDownloads', row.mediaItemId]})
-        if (row.showSlug) await qc.invalidateQueries({queryKey: ['showDownloads', row.showSlug]})
+        if (row.collectionSlug) await qc.invalidateQueries({queryKey: ['collectionDownloads', row.collectionSlug]})
     }
 
     const deleteUnavailable = async () => {
@@ -540,7 +540,7 @@ export default function DownloadsPage() {
                     onRowClick={(row) => {
                         if (row.movieSlug) navigate(`/movie/${row.movieSlug}`)
                         else if (row.type === 'video') navigate(`/video/${row.mediaItemId}`)
-                        else if (row.showSlug && row.episodeSlug) navigate(`/show/${row.showSlug}/episode/${row.episodeSlug}`)
+                        else if (row.collectionSlug && row.episodeSlug) navigate(`/collection/${row.collectionSlug}/episode/${row.episodeSlug}`)
                     }}
                     actions={(row) => {
                         const status = String(row.downloadStatus)

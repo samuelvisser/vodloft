@@ -11,12 +11,12 @@ from backend.api.models.local_media_profile_preview import (
     LocalMediaProfilePreviewPlan,
     LocalMediaProfilePreviewRequest,
     LocalMediaProfilePreviewResult,
-    LocalMediaProfileShowPreview,
+    LocalMediaProfileCollectionPreview,
 )
 from backend.app import db_session
-from backend.db.models import Episode, Movie, MovieExtra, ShowLocalMediaProfile, Video
+from backend.db.models import Episode, Movie, MovieExtra, CollectionLocalMediaProfile, Video
 from backend.services.custom_index_preview import plan_custom_index_preview
-from backend.services.show_assets import get_show_asset_root_preview
+from backend.services.collection_assets import get_collection_asset_root_preview
 from backend.utils.custom_index import indexing_value_definition_keys
 from backend.utils.output_template import (
     _finish_output_path,
@@ -30,7 +30,7 @@ from config import get_settings
 
 from .output_template import (
     _EXAMPLE_MOVIE_VALUES,
-    _EXAMPLE_SHOW_VALUES,
+    _EXAMPLE_COLLECTION_VALUES,
     _EXAMPLE_VIDEO_VALUES,
     get_output_template_preview,
 )
@@ -45,14 +45,14 @@ def _example_values(session: Session, body: LocalMediaProfilePreviewRequest) -> 
     source_id = body.source_id
     if source_id is None or source_id == f"example:{body.type}":
         original = {
-            "show": _EXAMPLE_SHOW_VALUES,
+            "collection": _EXAMPLE_COLLECTION_VALUES,
             "movie": _EXAMPLE_MOVIE_VALUES,
             "video": _EXAMPLE_VIDEO_VALUES,
         }[body.type]
     else:
         kind, separator, identifier = source_id.partition(":")
         models = {
-            "show": {"episode": Episode},
+            "collection": {"episode": Episode},
             "movie": {"movie": Movie, "movie-extra": MovieExtra},
             "video": {"video": Video},
         }[body.type]
@@ -76,7 +76,7 @@ def _example_values(session: Session, body: LocalMediaProfilePreviewRequest) -> 
 
 def _selected_episode(session: Session, body: LocalMediaProfilePreviewRequest) -> Episode | None:
     source_id = body.source_id or ""
-    if body.type != "show" or not source_id.startswith("episode:"):
+    if body.type != "collection" or not source_id.startswith("episode:"):
         return None
     identifier = source_id.split(":", 1)[1]
     if not identifier.isascii() or not identifier.isdigit():
@@ -93,7 +93,7 @@ def get_local_media_profile_preview_plan(
     Invalid/incomplete draft Jinja is normal while the user is typing. Planning
     is advisory, so expected template/value errors return a non-simulating plan
     """
-    if body.type != "show":
+    if body.type != "collection":
         return LocalMediaProfilePreviewPlan(simulates_custom_indexes=False)
 
     try:
@@ -102,7 +102,7 @@ def get_local_media_profile_preview_plan(
             return LocalMediaProfilePreviewPlan(simulates_custom_indexes=False)
 
         profile = (
-            session.get(ShowLocalMediaProfile, body.local_media_profile_id)
+            session.get(CollectionLocalMediaProfile, body.local_media_profile_id)
             if body.indexing_values is None and body.local_media_profile_id is not None
             else None
         )
@@ -142,20 +142,20 @@ def get_local_media_profile_preview(
     """Return one read-only snapshot, including independent path diagnostics.
 
     Render errors are expected while typing. A bad filename does not suppress an
-    otherwise resolvable show folder, and an ambiguous folder does not suppress
+    otherwise resolvable collection folder, and an ambiguous folder does not suppress
     a valid episode path. Both consumers receive exactly the same example values.
     """
     result = LocalMediaProfilePreviewResult(output=LocalMediaProfileOutputPreview())
-    if body.type == "show":
-        result.show_root = LocalMediaProfileShowPreview(
-            system_enabled=get_settings().download_settings.download_show_assets,
+    if body.type == "collection":
+        result.collection_root = LocalMediaProfileCollectionPreview(
+            system_enabled=get_settings().download_settings.download_collection_assets,
         )
     try:
         values = _example_values(session, body)
     except ValueError as exc:
         result.output.error = str(exc)
-        if result.show_root is not None:
-            result.show_root.reason = str(exc)
+        if result.collection_root is not None:
+            result.collection_root.reason = str(exc)
         return result
 
     draft = body.model_copy(update={"values": values})
@@ -164,8 +164,8 @@ def get_local_media_profile_preview(
         result.output.used_variables = sorted(output_template_fields(draft.output_template))
         rendered = get_output_template_preview(session, draft)
         result.output = LocalMediaProfileOutputPreview.model_validate(rendered)
-        # Use the same concrete filesystem root and filename policy as show art,
-        # rather than mixing a logical /downloads path with a real show path.
+        # Use the same concrete filesystem root and filename policy as collection art,
+        # rather than mixing a logical /downloads path with a real collection path.
         result.output.output_path = str(_finish_output_path(
             rendered.output_path, extension=Path(rendered.output_path).suffix,
         ))
@@ -173,15 +173,15 @@ def get_local_media_profile_preview(
         result.output.output_path = None
         result.output.error = str(exc)
 
-    if result.show_root is not None:
+    if result.collection_root is not None:
         try:
-            result.show_root = LocalMediaProfileShowPreview.model_validate(get_show_asset_root_preview(
+            result.collection_root = LocalMediaProfileCollectionPreview.model_validate(get_collection_asset_root_preview(
                 session, source_id=draft.source_id, output_template=draft.output_template,
                 local_media_profile_id=draft.local_media_profile_id, values_overrides=values,
             ))
         except (TemplateError, ValueError, TypeError, ArithmeticError) as exc:
-            result.show_root.reason = str(exc)
-            result.show_root.show_title = values.get("show_title")
+            result.collection_root.reason = str(exc)
+            result.collection_root.collection_title = values.get("collection_title")
     return result
 
 

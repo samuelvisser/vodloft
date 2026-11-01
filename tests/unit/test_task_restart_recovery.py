@@ -19,7 +19,7 @@ def test_restart_cancels_every_nonterminal_task_run(task_database):
             key="restart-recovery-test",
             title="Restart recovery test",
             description=None,
-            allowed_resource_types=["show"],
+            allowed_resource_types=["collection"],
             default_max_retries=0,
         )
         session.add(definition)
@@ -28,7 +28,7 @@ def test_restart_cancels_every_nonterminal_task_run(task_database):
         runs = [
             TaskRun(
                 definition_id=definition.id,
-                resource_type=ResourceType.SHOW,
+                resource_type=ResourceType.COLLECTION,
                 resource_id=index + 1,
                 status=status,
                 progress=index * 10,
@@ -37,7 +37,7 @@ def test_restart_cancels_every_nonterminal_task_run(task_database):
         ]
         completed = TaskRun(
             definition_id=definition.id,
-            resource_type=ResourceType.SHOW,
+            resource_type=ResourceType.COLLECTION,
             resource_id=99,
             status=TaskStatus.SUCCEEDED,
             progress=100,

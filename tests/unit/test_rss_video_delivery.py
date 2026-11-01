@@ -33,7 +33,7 @@ def _profile(mode: str):
     return SimpleNamespace(
         preferred_format="format_1080p",
         video_output_mode=mode,
-        show=SimpleNamespace(episode_identifier="numbered"),
+        collection=SimpleNamespace(episode_identifier="numbered"),
     )
 
 
@@ -93,7 +93,7 @@ def test_audio_only_uses_stable_m4a_without_video_alternate():
     profile = SimpleNamespace(
         preferred_format="format_audio_only",
         video_output_mode=None,
-        show=SimpleNamespace(episode_identifier="numbered"),
+        collection=SimpleNamespace(episode_identifier="numbered"),
     )
     channel = Element("channel")
     _append_item(
@@ -120,8 +120,8 @@ def test_feed_url_does_not_encode_video_delivery_mode():
     assert build_rss_feed_url(
         request,
         token="token",
-        show_slug="show",
-    ) == "https://vodloft.example/feeds/rss/token/show.xml"
+        collection_slug="collection",
+    ) == "https://vodloft.example/feeds/rss/token/collection.xml"
 
 
 def test_cached_mp4_path_uses_configured_rss_cache_root(monkeypatch, tmp_path):
@@ -239,7 +239,7 @@ def test_feed_and_stable_media_routes_accept_head_requests():
     from backend.api.endpoints.feeds.router import router
 
     expected_paths = {
-        "/feeds/rss/{token}/{show_slug}.xml",
+        "/feeds/rss/{token}/{collection_slug}.xml",
         "/feeds/rss/{token}/episodes/{episode_slug}",
         "/feeds/rss/{token}/episodes/{episode_slug}/audio.m4a",
         "/feeds/rss/{token}/episodes/{episode_slug}/video.mp4",

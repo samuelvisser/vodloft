@@ -31,7 +31,7 @@ class _EpisodeAPIBaseIn(RequestBase):
 class EpisodeAPICreate(_EpisodeAPIBaseIn):
     """Request body for creating an episode."""
 
-    show_id: int
+    collection_id: int
     index: int
     slug: str
 
@@ -85,7 +85,7 @@ class _EpisodeAPIBaseOut(SourcedResponse, _EpisodeIdentifierAPIOut):
 
 
     id: int
-    show_id: int
+    collection_id: int
     season_id: int
     index: int
     publish_status: Union[EpisodePublishStatus, str]
@@ -121,10 +121,10 @@ class EpisodeAPIRead(_EpisodeAPIBaseOut):
 
 
 class EpisodeAPIReadView(SourcedResponse, _EpisodeIdentifierAPIOut):
-    """Small episode representation used by show grids and browser-side warm caches."""
+    """Small episode representation used by collection grids and browser-side warm caches."""
 
     id: int
-    show_id: int
+    collection_id: int
     season_id: int
     index: int
     publish_status: Union[EpisodePublishStatus, str]
@@ -139,10 +139,10 @@ class EpisodeAPIReadView(SourcedResponse, _EpisodeIdentifierAPIOut):
 
 
 class EpisodeAPIReadViewPage(CursorPageRead[EpisodeAPIReadView]):
-    """One cursor page of compact episode rows for a show grid."""
+    """One cursor page of compact episode rows for a collection grid."""
 
     total: int
-    show_total: int
+    collection_total: int
     revision: str
 
 
@@ -152,6 +152,6 @@ class EpisodeIndexedActivityAPIRead(ResponseBase):
     id: int
     title: str
     slug: str
-    show_title: str
-    show_slug: str
+    collection_title: str
+    collection_slug: str
     indexed_at: datetime

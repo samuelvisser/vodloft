@@ -60,18 +60,18 @@ class VideoSource(Source):
         raise NotImplementedError
 
 
-class ShowOnlySource(VideoSource):
-    id = "shows_only"
+class CollectionOnlySource(VideoSource):
+    id = "collections_only"
     name = "Shows Only"
-    domains = ("shows.example",)
-    features = frozenset({Feature.SHOWS})
+    domains = ("collections.example",)
+    features = frozenset({Feature.COLLECTIONS})
 
 
 @pytest.fixture
 def video_sources(monkeypatch):
     monkeypatch.setattr(registry, "_sources", dict(registry._sources))
     clips = registry.register(VideoSource())
-    registry.register(ShowOnlySource())
+    registry.register(CollectionOnlySource())
     return clips
 
 
@@ -150,7 +150,7 @@ def test_the_same_id_at_two_sources_is_two_videos(video_sources, session):
 
 
 def test_only_sources_with_videos_can_add_one(client):
-    response = client.post("/api/videos", json={"url": "https://shows.example/v/x", "sourceKey": "shows_only"})
+    response = client.post("/api/videos", json={"url": "https://collections.example/v/x", "sourceKey": "collections_only"})
     assert response.status_code == 422
     assert "Shows Only has no single videos" in response.json()["detail"]
 
@@ -184,7 +184,7 @@ def test_video_output_paths_use_the_channel_date_and_id(video_sources, session):
     assert path.as_posix().endswith("/videos/Clips/Clip abc [abc].mp4")
 
 
-def test_video_profiles_take_audio_but_not_hls_or_show_variables():
+def test_video_profiles_take_audio_but_not_hls_or_collection_variables():
     from pydantic import ValidationError
 
     from backend.api.models.video_local_media_profile import VideoLocalMediaProfileAPICreate
@@ -195,10 +195,10 @@ def test_video_profiles_take_audio_but_not_hls_or_show_variables():
     assert audio.type == "video"
     with pytest.raises(ValidationError, match="HLS"):
         VideoLocalMediaProfileAPICreate(name="HLS", preferred_format="format_hls", output_template=VIDEO_TEMPLATE)
-    with pytest.raises(ValidationError, match="show_title"):
+    with pytest.raises(ValidationError, match="collection_title"):
         VideoLocalMediaProfileAPICreate(
             name="Wrong", preferred_format="format_1080p",
-            output_template="/downloads/{{ show_title }}/{{ title }}.ext",
+            output_template="/downloads/{{ collection_title }}/{{ title }}.ext",
         )
 
 

@@ -5,7 +5,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from backend.db.models import Episode, Show
+from backend.db.models import Episode, Collection
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode_publication_timing import best_effort_published_date
@@ -34,14 +34,14 @@ from ...helpers.episodes.unusable_media import (
     clear_episode_no_usable_media_tracking,
     mark_episode_no_usable_media,
 )
-from ...helpers.shows.get import get_show_from_params
+from ...helpers.collections.get import get_collection_from_params
 
 
 logger = logging.getLogger(__name__)
 
 
-def _membership_plan(show: Show) -> tuple[str, bool]:
-    membership_plan = show.membership_level
+def _membership_plan(collection: Collection) -> tuple[str, bool]:
+    membership_plan = collection.membership_level
     if membership_plan == DwMembershipLevel.HIGHEST_ALLOWED.value:
         return DwMembershipLevel.FREE.value, False
     return membership_plan, membership_plan != DwMembershipLevel.FREE.value
@@ -50,7 +50,7 @@ def _membership_plan(show: Show) -> tuple[str, bool]:
 def _find_episode(
     s: Session,
     *,
-    show: Show,
+    collection: Collection,
     episode_id: int | None,
     episode_slug: str | None,
     episode_identifier: str | None,
@@ -62,7 +62,7 @@ def _find_episode(
     if episode_slug is not None:
         episode = (
             s.query(Episode)
-            .filter(Episode.show_id == show.id, Episode.slug == episode_slug)
+            .filter(Episode.collection_id == collection.id, Episode.slug == episode_slug)
             .one_or_none()
         )
         if episode is not None:
@@ -72,31 +72,31 @@ def _find_episode(
     return (
         s.query(Episode)
         .filter(
-            Episode.show_id == show.id,
+            Episode.collection_id == collection.id,
             Episode.episode_identifier == episode_identifier,
         )
         .one_or_none()
     )
 
 
-def _reload_episode_and_show(
+def _reload_episode_and_collection(
     s: Session,
     *,
     episode_id: int,
-    show_id: int,
-) -> tuple[Episode, Show]:
-    show = s.get(Show, show_id)
+    collection_id: int,
+) -> tuple[Episode, Collection]:
+    collection = s.get(Collection, collection_id)
     episode = s.get(Episode, episode_id)
-    if show is None or episode is None:
-        raise ValueError("Pending episode or show was removed while it was being refreshed")
-    return episode, show
+    if collection is None or episode is None:
+        raise ValueError("Pending episode or collection was removed while it was being refreshed")
+    return episode, collection
 
 
 def _try_reconcile_slug_after_404(
     s: Session,
     *,
     client: MiddlewareClient,
-    show: Show,
+    collection: Collection,
     episode: Episode,
 ) -> str | None:
     """Try the same conservative pending-slug reconciliation used by discovery.
@@ -105,16 +105,16 @@ def _try_reconcile_slug_after_404(
     can fan out across many pending episodes, so retaining one checked-out
     connection per request can otherwise exhaust the pool during an outage.
     """
-    membership_plan, _ = _membership_plan(show)
-    show_id = show.id
+    membership_plan, _ = _membership_plan(collection)
+    collection_id = collection.id
     episode_id = episode.id
-    show_slug = show.slug
+    collection_slug = collection.slug
     season_slug = episode.season.slug
     s.rollback()
 
-    show_page = client.get_show_page(show_slug, membership_plan=membership_plan)
+    collection_page = client.get_show_page(collection_slug, membership_plan=membership_plan)
     remote_season = next(
-        (candidate for candidate in show_page.seasons if candidate.slug == season_slug),
+        (candidate for candidate in collection_page.seasons if candidate.slug == season_slug),
         None,
     )
     if remote_season is None:
@@ -122,7 +122,7 @@ def _try_reconcile_slug_after_404(
 
     records = fetch_all_episodes_paginated(
         client,
-        show_slug,
+        collection_slug,
         ByShowSeason(
             season_dw_id=remote_season.dw_id,
             membership_plan=membership_plan,
@@ -131,14 +131,14 @@ def _try_reconcile_slug_after_404(
         ),
     )
 
-    episode, show = _reload_episode_and_show(
+    episode, collection = _reload_episode_and_collection(
         s,
         episode_id=episode_id,
-        show_id=show_id,
+        collection_id=collection_id,
     )
     reconciled = reconcile_single_pending_episode_slug(
         s,
-        show=show,
+        collection=collection,
         season=episode.season,
         remote_records=records,
     )
@@ -163,7 +163,7 @@ def _quarantine_404(
     s: Session,
     *,
     episode: Episode,
-    show: Show,
+    collection: Collection,
     old_status: str,
 ) -> EpisodePublishStatus:
     new_status = EpisodePublishStatus.NO_USABLE_MEDIA
@@ -180,7 +180,7 @@ def _quarantine_404(
     queue_episode_status_events(
         s,
         episode=episode,
-        show=show,
+        collection=collection,
         old_status=old_status,
         new_status=new_status,
         was_created=False,
@@ -188,7 +188,7 @@ def _quarantine_404(
     queue_monitor_completion_if_settled(
         s,
         episode=episode,
-        show=show,
+        collection=collection,
         old_status=old_status,
     )
     s.commit()
@@ -206,8 +206,8 @@ async def run_monitor_pending_episode(
     *,
     episode_id: Optional[int] = None,
     episode_slug: Optional[str] = None,
-    show_id: Optional[int] = None,
-    show_slug: Optional[str] = None,
+    collection_id: Optional[int] = None,
+    collection_slug: Optional[str] = None,
     season_id: Optional[int] = None,
     episode_identifier: Optional[str] = None,
     episode_index: Optional[int] = None,
@@ -216,19 +216,19 @@ async def run_monitor_pending_episode(
     del season_id, episode_index
     print(f"Starting monitor_pending_episode for {episode_slug or episode_id}")
 
-    show = get_show_from_params(
+    collection = get_collection_from_params(
         s,
         episode_id=episode_id,
         episode_slug=episode_slug,
-        show_id=show_id,
-        show_slug=show_slug,
+        collection_id=collection_id,
+        collection_slug=collection_slug,
     )
-    if show is None:
-        raise ValueError("Show not found; provide a valid show_slug or show_id")
+    if collection is None:
+        raise ValueError("Collection not found; provide a valid collection_slug or collection_id")
 
     episode = _find_episode(
         s,
-        show=show,
+        collection=collection,
         episode_id=episode_id,
         episode_slug=episode_slug,
         episode_identifier=episode_identifier,
@@ -244,16 +244,16 @@ async def run_monitor_pending_episode(
         queue_monitor_completion_if_settled(
             s,
             episode=episode,
-            show=show,
+            collection=collection,
             old_status=old_status,
         )
         s.commit()
         return EpisodePublishStatus(old_status)
 
     episode_db_id = episode.id
-    show_db_id = show.id
+    collection_db_id = collection.id
     request_slug = episode.slug
-    _, require_member_exclusive = _membership_plan(show)
+    _, require_member_exclusive = _membership_plan(collection)
     client = MiddlewareClient()
 
     # A SELECT starts an ORM transaction. Release it before DNS/HTTP/HLS work so
@@ -268,27 +268,27 @@ async def run_monitor_pending_episode(
         if exc.status_code != 404:
             raise
 
-        episode, show = _reload_episode_and_show(
+        episode, collection = _reload_episode_and_collection(
             s,
             episode_id=episode_db_id,
-            show_id=show_db_id,
+            collection_id=collection_db_id,
         )
         reconciled_slug = _try_reconcile_slug_after_404(
             s,
             client=client,
-            show=show,
+            collection=collection,
             episode=episode,
         )
         if reconciled_slug is None:
-            episode, show = _reload_episode_and_show(
+            episode, collection = _reload_episode_and_collection(
                 s,
                 episode_id=episode_db_id,
-                show_id=show_db_id,
+                collection_id=collection_db_id,
             )
             return _quarantine_404(
                 s,
                 episode=episode,
-                show=show,
+                collection=collection,
                 old_status=episode.publish_status,
             )
 
@@ -300,15 +300,15 @@ async def run_monitor_pending_episode(
         except MiddlewareAPIError as reconciled_exc:
             if reconciled_exc.status_code != 404:
                 raise
-            episode, show = _reload_episode_and_show(
+            episode, collection = _reload_episode_and_collection(
                 s,
                 episode_id=episode_db_id,
-                show_id=show_db_id,
+                collection_id=collection_db_id,
             )
             return _quarantine_404(
                 s,
                 episode=episode,
-                show=show,
+                collection=collection,
                 old_status=episode.publish_status,
             )
 
@@ -316,17 +316,17 @@ async def run_monitor_pending_episode(
     # ORM transaction, then reload current rows before recording trusted facts.
     observed = observe_episode_detail(detail)
 
-    episode, show = _reload_episode_and_show(
+    episode, collection = _reload_episode_and_collection(
         s,
         episode_id=episode_db_id,
-        show_id=show_db_id,
+        collection_id=collection_db_id,
     )
     old_status = episode.publish_status
     if old_status not in PENDING_EPISODE_PUBLISH_STATUSES:
         queue_monitor_completion_if_settled(
             s,
             episode=episode,
-            show=show,
+            collection=collection,
             old_status=old_status,
         )
         s.commit()
@@ -398,7 +398,7 @@ async def run_monitor_pending_episode(
     queue_episode_status_events(
         s,
         episode=episode,
-        show=show,
+        collection=collection,
         old_status=old_status,
         new_status=new_status,
         was_created=False,
@@ -406,7 +406,7 @@ async def run_monitor_pending_episode(
     queue_monitor_completion_if_settled(
         s,
         episode=episode,
-        show=show,
+        collection=collection,
         old_status=old_status,
     )
     s.commit()

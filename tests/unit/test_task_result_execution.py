@@ -14,7 +14,7 @@ def test_executor_persists_task_result_and_completes_operation(task_database):
     @task(
         key=task_key,
         title="Structured result test",
-        allowed_resource_types=("show",),
+        allowed_resource_types=("collection",),
         default_max_retries=0,
         tracks_progress=True,
     )
@@ -31,13 +31,13 @@ def test_executor_persists_task_result_and_completes_operation(task_database):
     operation = create_operation(
         session,
         kind="test.structured_result",
-        resource_type="show",
+        resource_type="collection",
         resource_id=42,
         title="Test Show",
         targets=[
             OperationTargetSpec(
                 task_key=task_key,
-                resource_type="show",
+                resource_type="collection",
                 resource_id=42,
             )
         ],
@@ -48,7 +48,7 @@ def test_executor_persists_task_result_and_completes_operation(task_database):
 
     execute_task(
         def_key=task_key,
-        resource_type="show",
+        resource_type="collection",
         resource_id=42,
         operation_ids=(operation_id,),
     )

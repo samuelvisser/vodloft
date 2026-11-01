@@ -58,7 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # list
     p_list = sub.add_parser("list", help="List available workers (task definitions)")
-    p_list.add_argument("--verbose", action="store_true", help="Show full descriptions")
+    p_list.add_argument("--verbose", action="store_true", help="Collection full descriptions")
 
     # run
     p_run = sub.add_parser("run", help="Run a worker by its definition key")
@@ -69,7 +69,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--slug", help="Resource slug for the task (if supported by the worker)")
 
     # Generic passthrough kwargs: name=value; accepts several per flag and
-    # may be repeated (e.g. --arg slug=foo show_slug=bar --arg season_id=1)
+    # may be repeated (e.g. --arg slug=foo collection_slug=bar --arg season_id=1)
     p_run.add_argument(
         "--arg",
         action="extend",

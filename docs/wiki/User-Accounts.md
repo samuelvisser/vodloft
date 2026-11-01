@@ -31,7 +31,7 @@ The first time they sign in, they must choose their own password before anything
 
 On the right of the editor you choose which Sources the user may use: every Source, or only some. For a Source that takes links from any site, such as yt-dlp, you can limit them to a few domains. The suggestions add a site's usual domains together, such as `youtube.com` and `youtu.be` for YouTube. A domain also allows its subdomains, so `youtube.com` allows `m.youtube.com`.
 
-These limits apply to looking up links, Browse and Search, adding shows, movies and videos, and Quick download. VODLoft also checks the link a Source resolves to, so a short link or redirect cannot lead somewhere else. A refused link says why, and which domains the user may use. The limits do not hide library items that came from other Sources; that is what the Library level is for.
+These limits apply to looking up links, Browse and Search, adding collections, movies and videos, and Quick download. VODLoft also checks the link a Source resolves to, so a short link or redirect cannot lead somewhere else. A refused link says why, and which domains the user may use. The limits do not hide library items that came from other Sources; that is what the Library level is for.
 
 ### Members-only media
 
@@ -46,7 +46,7 @@ Deleting downloaded files from disk is a separate switch, on top of the user's l
 - **Quick downloads** belong to whoever asked for them. Users see, fetch and cancel only their own, and only see their own history. Those with **Quick downloads: Everyone's** see everyone's.
 - **Stream Profiles** belong to whoever made them. Users see and change only their own feeds; **Stream Profiles: Everyone's** sees all of them. Profiles made before user accounts were turned on belong to the first administrator.
 - **Operations** (the progress notifications) show only what the user asked for, unless they may see **Tasks**.
-- Shows, movies and videos remember who added them. Administrators see **Added by** on their pages.
+- Collections, movies and videos remember who added them. Administrators see **Added by** on their pages.
 - **Quick download preferences.** The rules in **Settings › Quick download** (highest quality, formats, codec, largest file, longest video, Sources) apply to everyone. Within them, each user can tick **Use these as my defaults next time** in the format panel to save their own choice of kind, quality, format, codec and audio to their account. **Use this VODLoft's defaults instead of mine** goes back. With **Lock to defaults** on, everyone gets the install's defaults.
 - In **Quick downloads: Everyone's**, ready files and history show who asked for them.
 

@@ -21,13 +21,13 @@ def test_event_trigger_is_idempotent_and_preserves_supported_payload(monkeypatch
 
     monkeypatch.setattr(registry_module, "_REGISTRY", {})
 
-    @registry_module.on_event("test.entity.changed", resource_type="show")
+    @registry_module.on_event("test.entity.changed", resource_type="collection")
     @registry_module.task(
         key="test_event_target",
         title="Test event target",
-        allowed_resource_types=("show",),
+        allowed_resource_types=("collection",),
     )
-    async def target(*, resource_id=None, slug=None, show_id=None, refresh=False, progress=None):
+    async def target(*, resource_id=None, slug=None, collection_id=None, refresh=False, progress=None):
         return None
 
     trigger_now = Mock()
@@ -43,7 +43,7 @@ def test_event_trigger_is_idempotent_and_preserves_supported_payload(monkeypatch
         "resource_id": 0,
         "id": 99,
         "slug": "stable-slug",
-        "show_id": 7,
+        "collection_id": 7,
         "refresh": True,
         "ignored": "not accepted by the worker",
     })
@@ -51,10 +51,10 @@ def test_event_trigger_is_idempotent_and_preserves_supported_payload(monkeypatch
 
     trigger_now.assert_called_once_with(
         def_key="test_event_target",
-        resource_type="show",
+        resource_type="collection",
         resource_id=0,
         slug="stable-slug",
-        show_id=7,
+        collection_id=7,
         refresh=True,
     )
 
@@ -70,7 +70,7 @@ def test_disabled_cron_trigger_is_not_registered(monkeypatch):
     @registry_module.task(
         key="test_disabled_cron",
         title="Disabled cron",
-        allowed_resource_types=("show",),
+        allowed_resource_types=("collection",),
     )
     async def target(*, resource_id=None, progress=None):
         return None
@@ -95,7 +95,7 @@ def test_cron_minimum_interval_policy_is_opt_in(monkeypatch):
     @registry_module.task(
         key="test_paced_cron",
         title="Paced cron",
-        allowed_resource_types=("show",),
+        allowed_resource_types=("collection",),
     )
     async def paced(*, resource_id=None, progress=None):
         return None
@@ -104,7 +104,7 @@ def test_cron_minimum_interval_policy_is_opt_in(monkeypatch):
     @registry_module.task(
         key="test_unpaced_cron",
         title="Unpaced cron",
-        allowed_resource_types=("show",),
+        allowed_resource_types=("collection",),
     )
     async def unpaced(*, resource_id=None, progress=None):
         return None
@@ -145,7 +145,7 @@ def test_cron_trigger_preserves_none_and_zero_resource_scopes(monkeypatch):
     @registry_module.on_cron("0 * * * *", resource_id=None)
     @registry_module.task(
         key="test_cron_unscoped", title="Unscoped cron",
-        allowed_resource_types=("show",),
+        allowed_resource_types=("collection",),
     )
     async def unscoped(*, resource_id=None, progress=None):
         return None
@@ -153,7 +153,7 @@ def test_cron_trigger_preserves_none_and_zero_resource_scopes(monkeypatch):
     @registry_module.on_cron("0 * * * *", resource_id=0)
     @registry_module.task(
         key="test_cron_legacy_global", title="Legacy global cron",
-        allowed_resource_types=("show",),
+        allowed_resource_types=("collection",),
     )
     async def legacy(*, resource_id=None, progress=None):
         return None

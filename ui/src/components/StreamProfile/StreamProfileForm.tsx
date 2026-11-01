@@ -10,7 +10,7 @@ import StreamProfileAdvisory, {type StreamDownloadProfileDefault} from './Stream
 import SegmentedOptions from '../SegmentedOptions/SegmentedOptions'
 import {MediaTypeReg} from "../../types/stream_profile";
 import {createSelectRegistry} from '../../utils/selectRegistry'
-import {useShowEpisodeTags, useShows, useSourceLookup} from '../../lib/queries'
+import {useCollectionEpisodeTags, useCollections, useSourceLookup} from '../../lib/queries'
 import {sourceControls} from '../../lib/sourceControls'
 
 export type StreamProfileMode = 'rss' | 'base'
@@ -34,16 +34,16 @@ function sameEpisodeTypes(a: readonly string[], b: readonly string[]) {
 type Props = {
     form: UseFormReturn<any>
     mode: StreamProfileMode
-    showRoot?: boolean
+    collectionRoot?: boolean
     isCreating?: boolean
     onRegenerateToken?: () => void | Promise<void>
     regeneratingToken?: boolean
     downloadProfileDefaults?: StreamDownloadProfileDefault[]
     episodeTypesManuallyChanged?: boolean
     onEpisodeTypesManuallyChanged?: () => void
-    showSlug?: string
-    showTitle?: string
-    /** The Source of a show that is not saved yet. */
+    collectionSlug?: string
+    collectionTitle?: string
+    /** The Source of a collection that is not saved yet. */
     sourceKey?: string
     canOpenDownloadProfiles?: boolean
 }
@@ -51,30 +51,30 @@ type Props = {
 export default function StreamProfileForm({
     form,
     mode,
-    showRoot,
+    collectionRoot,
     isCreating,
     onRegenerateToken,
     regeneratingToken,
     downloadProfileDefaults,
     episodeTypesManuallyChanged,
     onEpisodeTypesManuallyChanged,
-    showSlug,
-    showTitle,
+    collectionSlug,
+    collectionTitle,
     sourceKey,
     canOpenDownloadProfiles = true,
 }: Props) {
     const {control, formState: {errors}, getValues, register, setValue, watch} = form
-    showRoot ??= true
+    collectionRoot ??= true
 
-    // A show that is not saved yet takes the options of the Source it is added from.
-    const {data: shows} = useShows()
+    // A collection that is not saved yet takes the options of the Source it is added from.
+    const {data: collections} = useCollections()
     const sources = useSourceLookup()
-    const show = showSlug ? shows?.find((item) => item.slug === showSlug) : undefined
-    const newShowSource = !show && sourceKey ? sources.get(sourceKey) : undefined
-    const controls = sourceControls(show ?? (newShowSource ? {sourceFeatures: newShowSource.features} : undefined))
+    const collection = collectionSlug ? collections?.find((item) => item.slug === collectionSlug) : undefined
+    const newCollectionSource = !collection && sourceKey ? sources.get(sourceKey) : undefined
+    const controls = sourceControls(collection ?? (newCollectionSource ? {sourceFeatures: newCollectionSource.features} : undefined))
     const canStreamFromSource = controls.rssStreaming
     const canStreamLiveEpisodes = controls.liveEpisodes
-    const streamSourceName = show ? sources.name(show.sourceKey) : newShowSource?.name ?? 'The Daily Wire'
+    const streamSourceName = collection ? sources.name(collection.sourceKey) : newCollectionSource?.name ?? 'The Daily Wire'
 
     const useDownloads = watch('useDownloads')
     const useDwStream = watch('useDwStream')
@@ -82,25 +82,25 @@ export default function StreamProfileForm({
     const videoOutputMode = watch('videoOutputMode')
     const streamLiveEpisodes = watch('streamLiveEpisodes')
     const selectedEpisodeTypes: string[] = watch('epIdTypeList') || []
-    const {data: tags} = useShowEpisodeTags({showSlug, sourceKey})
+    const {data: tags} = useCollectionEpisodeTags({collectionSlug, sourceKey})
     const tagOptions: UIOption[] = useMemo(() => (tags ?? []).map((tag) => ({value: tag.key, label: tag.label})), [tags])
     const internalEpisodeTypesManuallyChanged = useRef(false)
     const episodeTypeDefaultsInitialized = useRef(false)
     const lastSuggestedTitle = useRef<string | undefined>(undefined)
 
     useEffect(() => {
-        if (!showTitle) return
+        if (!collectionTitle) return
 
         const currentTitle = (getValues('title') || '') as string
         const previousSuggestedTitle = lastSuggestedTitle.current
         if (!currentTitle || currentTitle === previousSuggestedTitle) {
-            setValue('title', showTitle, {
+            setValue('title', collectionTitle, {
                 shouldDirty: false,
                 shouldValidate: true,
             })
         }
-        lastSuggestedTitle.current = showTitle
-    }, [getValues, setValue, showTitle])
+        lastSuggestedTitle.current = collectionTitle
+    }, [getValues, setValue, collectionTitle])
 
     const selectedSources = [
         ...(useDownloads ? ['downloads'] as const : []),
@@ -201,7 +201,7 @@ export default function StreamProfileForm({
             streamLiveEpisodes={!!streamLiveEpisodes}
             selectedEpisodeTypes={selectedEpisodeTypes}
             downloadProfileDefaults={downloadProfileDefaults}
-            showSlug={showSlug}
+            collectionSlug={collectionSlug}
             canOpenDownloadProfiles={canOpenDownloadProfiles}
             sourceName={streamSourceName}
             onEnableDownloads={() => setValue('useDownloads', true, {
@@ -217,7 +217,7 @@ export default function StreamProfileForm({
 
     return (
         <>
-            {showRoot && errors.root && (
+            {collectionRoot && errors.root && (
                 <div className="form-error-card" role="alert" aria-live="polite">
                     {String(errors.root.message)}
                 </div>
@@ -419,7 +419,7 @@ export default function StreamProfileForm({
                     <ReadMore summary={<span>What episode types to stream</span>}>
                         <p>Select all episode types you want this profile to stream.</p>
                         {(tags ?? []).map((tag) => <p key={tag.key}><b>{tag.label}</b>: {tag.help}.</p>)}
-                        <p>Until you change this selection manually, VODLoft uses {(tags ?? []).filter((tag) => tag.selectedByDefault).map((tag) => tag.label).join(' and ') || 'the usual types'} by default. When Use Downloads is enabled and a Download Profile for the same show has the selected Preferred format, its episode types are used as the default instead.</p>
+                        <p>Until you change this selection manually, VODLoft uses {(tags ?? []).filter((tag) => tag.selectedByDefault).map((tag) => tag.label).join(' and ') || 'the usual types'} by default. When Use Downloads is enabled and a Download Profile for the same collection has the selected Preferred format, its episode types are used as the default instead.</p>
                     </ReadMore>
                 </div>
             </div>

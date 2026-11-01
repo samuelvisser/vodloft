@@ -15,8 +15,8 @@ def test_local_media_profile_mutations_are_type_specific() -> None:
     from backend.api.endpoints.movie_local_media_profiles.router import (
         router as movie_router,
     )
-    from backend.api.endpoints.show_local_media_profiles.router import (
-        router as show_router,
+    from backend.api.endpoints.collection_local_media_profiles.router import (
+        router as collection_router,
     )
 
     assert _methods(base_router, "/local-media-profiles") == {"GET"}
@@ -26,16 +26,16 @@ def test_local_media_profile_mutations_are_type_specific() -> None:
     ) == {"GET"}
 
     assert {"GET", "POST"} <= _methods(
-        show_router,
-        "/show-local-media-profiles",
+        collection_router,
+        "/collection-local-media-profiles",
     )
     assert {"GET", "PATCH", "DELETE"} <= _methods(
-        show_router,
-        "/show-local-media-profiles/{local_media_profile_slug}",
+        collection_router,
+        "/collection-local-media-profiles/{local_media_profile_slug}",
     )
     assert _methods(
-        show_router,
-        "/show-local-media-profiles/{local_media_profile_slug}/rename-files",
+        collection_router,
+        "/collection-local-media-profiles/{local_media_profile_slug}/rename-files",
     ) == {"POST"}
 
     assert {"GET", "POST"} <= _methods(
@@ -52,9 +52,9 @@ def test_local_media_profile_request_models_only_expose_their_own_fields() -> No
     from backend.api.models.movie_local_media_profile import (
         MovieLocalMediaProfileAPICreate,
     )
-    from backend.api.models.show_local_media_profile import (
-        ShowLocalMediaProfileAPICreate,
+    from backend.api.models.collection_local_media_profile import (
+        CollectionLocalMediaProfileAPICreate,
     )
 
-    assert "show_scope" in ShowLocalMediaProfileAPICreate.model_fields
-    assert "show_scope" not in MovieLocalMediaProfileAPICreate.model_fields
+    assert "collection_scope" in CollectionLocalMediaProfileAPICreate.model_fields
+    assert "collection_scope" not in MovieLocalMediaProfileAPICreate.model_fields

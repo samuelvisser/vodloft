@@ -34,16 +34,16 @@ function optionForSource(
         }
     }
 
-    if (mode === 'show') {
-        const showTitle = source.values.show_title?.trim()
+    if (mode === 'collection') {
+        const collectionTitle = source.values.collection_title?.trim()
         const episodeTitle = source.values.episode_title?.trim()
         return {
             value: source.id,
             label: episodeTitle || source.label,
-            selectedLabel: showTitle && episodeTitle
-                ? `${showTitle} — ${episodeTitle}`
+            selectedLabel: collectionTitle && episodeTitle
+                ? `${collectionTitle} — ${episodeTitle}`
                 : source.label,
-            group: showTitle || undefined,
+            group: collectionTitle || undefined,
         }
     }
 

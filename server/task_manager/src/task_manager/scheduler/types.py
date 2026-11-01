@@ -29,7 +29,7 @@ class OperationSource(StrEnum):
 
 class ResourceType(StrEnum):
     SYSTEM = "system"
-    SHOW = "show"
+    COLLECTION = "collection"
     SEASON = "season"
     EPISODE = "episode"
     MOVIE = "movie"

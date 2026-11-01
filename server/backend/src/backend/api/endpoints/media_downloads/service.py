@@ -39,7 +39,7 @@ from backend.db.models import (
     Movie,
     MovieExtra,
     MovieExtraSource,
-    Show,
+    Collection,
     Video,
 )
 from backend.db.models.media_download import (
@@ -126,8 +126,8 @@ class _MediaDownloadViewSource:
         return None
 
     @property
-    def show(self) -> Show | None:
-        return self.media.show if isinstance(self.media, Episode) else None
+    def collection(self) -> Collection | None:
+        return self.media.collection if isinstance(self.media, Episode) else None
 
     @property
     def latest_task_is_redownload(self) -> Optional[bool]:
@@ -180,10 +180,10 @@ def _load_media_items_for_view(
                     Episode.source_key,
                     raiseload=True,
                 ),
-                joinedload(Episode.show).load_only(
-                    Show.id,
-                    Show.slug,
-                    Show.title,
+                joinedload(Episode.collection).load_only(
+                    Collection.id,
+                    Collection.slug,
+                    Collection.title,
                     raiseload=True,
                 ),
                 raiseload("*"),
@@ -265,7 +265,7 @@ def _media_download_view_statement(
         *,
         episode_slug: Optional[str],
         movie_slug: Optional[str],
-        show_slug: Optional[str],
+        collection_slug: Optional[str],
         statuses: Optional[list[str]],
         limit: Optional[int],
         ids: Optional[list[int]] = None,
@@ -298,13 +298,13 @@ def _media_download_view_statement(
         episode_ids = select(Episode.id).where(Episode.slug == episode_slug)
         stmt = stmt.where(download.media_item_id.in_(episode_ids))
 
-    if show_slug is not None:
-        show_episode_ids = (
+    if collection_slug is not None:
+        collection_episode_ids = (
             select(Episode.id)
-            .join(Show, Show.id == Episode.show_id)
-            .where(Show.slug == show_slug)
+            .join(Collection, Collection.id == Episode.collection_id)
+            .where(Collection.slug == collection_slug)
         )
-        stmt = stmt.where(download.media_item_id.in_(show_episode_ids))
+        stmt = stmt.where(download.media_item_id.in_(collection_episode_ids))
 
     if movie_slug is not None:
         movie_ids = select(Movie.id).where(Movie.slug == movie_slug)
@@ -363,7 +363,7 @@ def get_media_downloads_view(
         *,
         episode_slug: Optional[str] = None,
         movie_slug: Optional[str] = None,
-        show_slug: Optional[str] = None,
+        collection_slug: Optional[str] = None,
         video_id: Optional[int] = None,
         statuses: Optional[list[str]] = None,
         limit: Optional[int] = None,
@@ -372,7 +372,7 @@ def get_media_downloads_view(
     downloads = list(s.scalars(_media_download_view_statement(
         episode_slug=episode_slug,
         movie_slug=movie_slug,
-        show_slug=show_slug,
+        collection_slug=collection_slug,
         video_id=video_id,
         statuses=statuses,
         limit=limit,
@@ -481,7 +481,7 @@ def get_media_downloads_page(
                 _media_download_view_statement(
                     episode_slug=None,
                     movie_slug=None,
-                    show_slug=None,
+                    collection_slug=None,
                     statuses=None,
                     limit=None,
                     ids=selected_ids,
@@ -627,7 +627,7 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
         raise HTTPException(status_code=422, detail="Episode media is still processing on Daily Wire")
     _ensure_downloadable(episode)
 
-    profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.SHOW)
+    profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.COLLECTION)
     redownload_when_final = (
         body.redownload_when_final
         and episode.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN.value
@@ -823,7 +823,7 @@ def create_video_download(
 
 
 _PROFILE_TYPE_LABELS = {
-    LocalMediaProfileType.SHOW: "Episodes",
+    LocalMediaProfileType.COLLECTION: "Episodes",
     LocalMediaProfileType.MOVIE: "Movies and movie extras",
     LocalMediaProfileType.VIDEO: "Videos",
 }

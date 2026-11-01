@@ -4,7 +4,7 @@ This package is meant to link together the various components of VODLoft.
 It contains a scheduler to schedule and run jobs at a given time or interval. It also contains
 an event bus to communicate between components. It is designed to keep VODLoft dynamic and extensible.
 
-For example, if a show gets added certain actions need to run, and others (like checking for new episodes)
+For example, if a collection gets added certain actions need to run, and others (like checking for new episodes)
 need to start running periodically. This allows for a more dynamic and extensible system, where new features
 can be added without requiring significant changes to existing code.
 

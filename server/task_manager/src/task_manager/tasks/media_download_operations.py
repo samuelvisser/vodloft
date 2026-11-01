@@ -186,7 +186,7 @@ def _operation_context(
     episode = media if isinstance(media, Episode) else None
     movie_extra = media if isinstance(media, MovieExtra) else None
     movie = media if isinstance(media, Movie) else (movie_extra.movie if movie_extra else None)
-    show = episode.show if episode else None
+    collection = episode.collection if episode else None
     profile = download.local_media_profile
 
     return {
@@ -206,8 +206,8 @@ def _operation_context(
         "episode_title": episode.title if episode else None,
         "episode_identifier": episode.episode_identifier if episode else None,
         "episode_publish_status": episode.publish_status if episode else None,
-        "show_slug": show.slug if show else None,
-        "show_title": show.title if show else None,
+        "collection_slug": collection.slug if collection else None,
+        "collection_title": collection.title if collection else None,
         "movie_slug": movie.slug if movie else None,
         "movie_title": movie.title if movie else None,
         "movie_extra_type": movie_extra.movie_extra_type if movie_extra else None,

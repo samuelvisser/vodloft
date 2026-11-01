@@ -31,20 +31,20 @@ To share VODLoft with other people, each with their own username and password an
 
 Private RSS feeds do not use this administrator login. Each feed has its own secret URL. See [[Security-and-Remote-Access]].
 
-## 3. Add your first show, movie or video
+## 3. Add your first collection, movie or video
 
-Paste a link to a show, an episode, a movie or a video, such as a Daily Wire show, a YouTube channel or playlist, or an NPO Start series. VODLoft finds the Source that recognises the link, shows a preview, and continues to the normal Add Show wizard or movie page. A link to an episode opens its show, and a single video is added under **Videos**. You can also search YouTube or NPO Start, or browse The Daily Wire's catalogue, instead.
+Paste a link to a collection, an episode, a movie or a video, such as a Daily Wire show, a YouTube channel or playlist, or an NPO Start series. VODLoft finds the Source that recognises the link, shows a preview, and continues to the normal Add Collection wizard or movie page. A link to an episode opens its collection, and a single video is added under **Videos**. You can also search YouTube or NPO Start, or browse The Daily Wire's catalogue, instead.
 
-### Shows
+### Collections
 
-When you add a show, the wizard can set up any combination of:
+When you add a collection, the wizard can set up any combination of:
 
-- the show itself, with no automatic downloads;
+- the collection itself, with no automatic downloads;
 - a **Local Media Profile** describing the file format, download behavior, and output path;
 - a **Download Profile** for automatic downloads;
 - an **RSS Stream Profile** for a private podcast/video feed.
 
-You do not have to configure everything at once. A good first step is to add the show, confirm its seasons and episodes look correct, and then add the download/RSS behavior you want.
+You do not have to configure everything at once. A good first step is to add the collection, confirm its seasons and episodes look correct, and then add the download/RSS behavior you want.
 
 ### Movies
 
@@ -60,7 +60,7 @@ For most installations:
 2. Set `TZ` to your local timezone.
 3. Sign in to The Daily Wire under Settings → Sources if you use member content.
 4. Protect the VODLoft UI if it is not confined to a trusted network.
-5. Add one show with **Add media** in the Library.
+5. Add one collection with **Add media** in the Library.
 6. Create a Local Media Profile with the format and folder structure you want.
 7. Add a Download Profile if you want automatic downloads.
 8. Add an RSS Stream Profile only if you want to use VODLoft as a private podcast/video feed.

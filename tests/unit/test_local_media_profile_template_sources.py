@@ -20,11 +20,11 @@ def db_session():
     engine.dispose()
 
 
-def _make_show(session: Session, *, slug: str, show_type: str):
-    from backend.db.models import Show
-    from backend.types.show_types import EpisodeIdentifier
+def _make_collection(session: Session, *, slug: str, collection_type: str):
+    from backend.db.models import Collection
+    from backend.types.collection_types import EpisodeIdentifier
 
-    show = Show(
+    collection = Collection(
         source_key="dailywire",
         uuid=f"{slug}-uuid",
         slug=slug,
@@ -32,19 +32,19 @@ def _make_show(session: Session, *, slug: str, show_type: str):
         description=None,
         sharing_url=f"https://example.test/{slug}",
         membership_level="FREE",
-        type=show_type,
+        type=collection_type,
         episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Host",
         author_slug="host",
     )
-    session.add(show)
+    session.add(collection)
     session.flush()
-    return show
+    return collection
 
 
 def _add_episode(
     session: Session,
-    show,
+    collection,
     *,
     index: int,
     title: str | None = None,
@@ -53,12 +53,12 @@ def _add_episode(
     from backend.db.models import Episode, Season
     from backend.utils.helpers import generate_uuid
 
-    season = next((item for item in show.seasons if item.name == season_name), None)
+    season = next((item for item in collection.seasons if item.name == season_name), None)
     if season is None:
         season = Season(
-            show=show,
-            index=len(show.seasons) + 1,
-            slug=f"season-{len(show.seasons) + 1}",
+            collection=collection,
+            index=len(collection.seasons) + 1,
+            slug=f"season-{len(collection.seasons) + 1}",
             name=season_name,
         )
         session.add(season)
@@ -68,15 +68,15 @@ def _add_episode(
         source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
-        show=show,
+        collection=collection,
         season=season,
         index=index,
         episode_identifier=f"ep.{index}",
-        slug=f"{show.slug}-episode-{index}",
+        slug=f"{collection.slug}-episode-{index}",
         title=title or f"Episode {index}",
         duration=100.0,
         publish_status="published_final",
-        sharing_url=f"https://example.test/{show.slug}/{index}",
+        sharing_url=f"https://example.test/{collection.slug}/{index}",
         published_date=datetime(2026, 9, 1, 12, 0, 0, tzinfo=timezone.utc) + timedelta(days=index),
     )
     session.add(episode)
@@ -84,18 +84,18 @@ def _add_episode(
     return episode
 
 
-def test_show_sources_page_through_every_episode_in_scope(db_session):
+def test_collection_sources_page_through_every_episode_in_scope(db_session):
     from backend.api.endpoints.local_media_profiles.output_template import (
         get_output_template_source_page,
     )
     from backend.types.local_media_profile_types import (
         LocalMediaProfileType,
-        ShowLocalMediaProfileScope,
+        CollectionLocalMediaProfileScope,
     )
-    from backend.types.show_types import ShowType
+    from backend.types.collection_types import CollectionType
 
-    podcast = _make_show(db_session, slug="alpha-podcast", show_type=ShowType.PODCAST.value)
-    series = _make_show(db_session, slug="beta-series", show_type=ShowType.SERIES.value)
+    podcast = _make_collection(db_session, slug="alpha-podcast", collection_type=CollectionType.PODCAST.value)
+    series = _make_collection(db_session, slug="beta-series", collection_type=CollectionType.SERIES.value)
     for index in range(1, 5):
         _add_episode(db_session, podcast, index=index)
     for index in range(1, 4):
@@ -103,15 +103,15 @@ def test_show_sources_page_through_every_episode_in_scope(db_session):
 
     first = get_output_template_source_page(
         db_session,
-        LocalMediaProfileType.SHOW,
-        ShowLocalMediaProfileScope.PODCAST,
+        LocalMediaProfileType.COLLECTION,
+        CollectionLocalMediaProfileScope.PODCAST,
         cursor=None,
         limit=2,
     )
     second = get_output_template_source_page(
         db_session,
-        LocalMediaProfileType.SHOW,
-        ShowLocalMediaProfileScope.PODCAST,
+        LocalMediaProfileType.COLLECTION,
+        CollectionLocalMediaProfileScope.PODCAST,
         cursor=first.next_cursor,
         limit=2,
     )
@@ -121,29 +121,29 @@ def test_show_sources_page_through_every_episode_in_scope(db_session):
     assert [source.values["episode_number"] for source in first.items + second.items] == [
         "1", "2", "3", "4",
     ]
-    assert {source.values["show_title"] for source in first.items + second.items} == {
+    assert {source.values["collection_title"] for source in first.items + second.items} == {
         "Alpha Podcast",
     }
 
 
-def test_show_source_search_can_match_parent_and_episode_terms(db_session):
+def test_collection_source_search_can_match_parent_and_episode_terms(db_session):
     from backend.api.endpoints.local_media_profiles.output_template import (
         get_output_template_source_page,
     )
     from backend.types.local_media_profile_types import LocalMediaProfileType
-    from backend.types.show_types import ShowType
+    from backend.types.collection_types import CollectionType
 
-    show = _make_show(
+    collection = _make_collection(
         db_session,
         slug="biblical-series-genesis",
-        show_type=ShowType.SERIES.value,
+        collection_type=CollectionType.SERIES.value,
     )
-    _add_episode(db_session, show, index=1, title="Jacob: Wrestling with God")
-    _add_episode(db_session, show, index=2, title="Joseph and the Coat of Many Colors")
+    _add_episode(db_session, collection, index=1, title="Jacob: Wrestling with God")
+    _add_episode(db_session, collection, index=2, title="Joseph and the Coat of Many Colors")
 
     result = get_output_template_source_page(
         db_session,
-        LocalMediaProfileType.SHOW,
+        LocalMediaProfileType.COLLECTION,
         search="Genesis Jacob",
         limit=30,
     )
@@ -153,56 +153,56 @@ def test_show_source_search_can_match_parent_and_episode_terms(db_session):
     ]
 
 
-def test_show_source_search_ranks_the_strongest_phrase_match_first(db_session):
+def test_collection_source_search_ranks_the_strongest_phrase_match_first(db_session):
     from backend.api.endpoints.local_media_profiles.output_template import (
         get_output_template_source_page,
     )
     from backend.types.local_media_profile_types import LocalMediaProfileType
-    from backend.types.show_types import ShowType
+    from backend.types.collection_types import CollectionType
 
-    show = _make_show(
+    collection = _make_collection(
         db_session,
         slug="the-ben-shapiro-show",
-        show_type=ShowType.PODCAST.value,
+        collection_type=CollectionType.PODCAST.value,
     )
-    _add_episode(db_session, show, index=1, title="Trump Gets It Right On Radical Islam")
-    _add_episode(db_session, show, index=2, title="Radical Islam's Front Group EXPOSED By Texas!")
-    _add_episode(db_session, show, index=3, title="Radical Islam INVADES The US Senate?!")
-    _add_episode(db_session, show, index=4, title="Radical Islam Is On The March")
+    _add_episode(db_session, collection, index=1, title="Trump Gets It Right On Radical Islam")
+    _add_episode(db_session, collection, index=2, title="Radical Islam's Front Group EXPOSED By Texas!")
+    _add_episode(db_session, collection, index=3, title="Radical Islam INVADES The US Senate?!")
+    _add_episode(db_session, collection, index=4, title="Radical Islam Is On The March")
 
     result = get_output_template_source_page(
         db_session,
-        LocalMediaProfileType.SHOW,
+        LocalMediaProfileType.COLLECTION,
         search="Radical Islam is on the",
     )
 
     assert result.items[0].values["episode_title"] == "Radical Islam Is On The March"
 
 
-def test_show_scope_excludes_other_show_types_even_when_search_matches(db_session):
+def test_collection_scope_excludes_other_collection_types_even_when_search_matches(db_session):
     from backend.api.endpoints.local_media_profiles.output_template import (
         get_output_template_source_page,
     )
     from backend.types.local_media_profile_types import (
         LocalMediaProfileType,
-        ShowLocalMediaProfileScope,
+        CollectionLocalMediaProfileScope,
     )
-    from backend.types.show_types import ShowType
+    from backend.types.collection_types import CollectionType
 
-    podcast = _make_show(db_session, slug="shared-podcast", show_type=ShowType.PODCAST.value)
-    series = _make_show(db_session, slug="shared-series", show_type=ShowType.SERIES.value)
+    podcast = _make_collection(db_session, slug="shared-podcast", collection_type=CollectionType.PODCAST.value)
+    series = _make_collection(db_session, slug="shared-series", collection_type=CollectionType.SERIES.value)
     _add_episode(db_session, podcast, index=1, title="Shared title")
     _add_episode(db_session, series, index=1, title="Shared title")
 
     result = get_output_template_source_page(
         db_session,
-        LocalMediaProfileType.SHOW,
-        ShowLocalMediaProfileScope.SERIES,
+        LocalMediaProfileType.COLLECTION,
+        CollectionLocalMediaProfileScope.SERIES,
         search="Shared",
     )
 
     assert len(result.items) == 1
-    assert result.items[0].values["show_title"] == "Shared Series"
+    assert result.items[0].values["collection_title"] == "Shared Series"
 
 
 def test_movie_sources_include_movies_and_every_extra_with_server_search(db_session):
@@ -358,74 +358,74 @@ def test_empty_library_uses_fallback_but_empty_search_does_not(db_session):
 
 
 
-def test_random_show_source_weights_shows_equally_before_episodes(db_session, monkeypatch):
+def test_random_collection_source_weights_collections_equally_before_episodes(db_session, monkeypatch):
     from backend.api.endpoints.local_media_profiles import output_template
     from backend.db.models import Episode
-    from backend.types.local_media_profile_types import ShowLocalMediaProfileScope
-    from backend.types.show_types import ShowType
+    from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope
+    from backend.types.collection_types import CollectionType
 
-    crowded = _make_show(
+    crowded = _make_collection(
         db_session,
         slug="crowded-podcast",
-        show_type=ShowType.PODCAST.value,
+        collection_type=CollectionType.PODCAST.value,
     )
-    small = _make_show(
+    small = _make_collection(
         db_session,
         slug="small-podcast",
-        show_type=ShowType.PODCAST.value,
+        collection_type=CollectionType.PODCAST.value,
     )
     for index in range(1, 11):
         _add_episode(db_session, crowded, index=index)
     _add_episode(db_session, small, index=1)
 
-    # Make the SQL random ordering deterministic. Ordering the grouped show rows
-    # by show id proves the first draw is over shows, not over all episode rows.
+    # Make the SQL random ordering deterministic. Ordering the grouped collection rows
+    # by collection id proves the first draw is over collections, not over all episode rows.
     monkeypatch.setattr(
         output_template.func,
         "random",
-        lambda: Episode.show_id.desc(),
+        lambda: Episode.collection_id.desc(),
     )
-    source = output_template.get_random_show_template_source(
+    source = output_template.get_random_collection_template_source(
         db_session,
-        ShowLocalMediaProfileScope.PODCAST,
+        CollectionLocalMediaProfileScope.PODCAST,
     )
 
     assert source is not None
-    assert source.values["show_title"] == "Small Podcast"
+    assert source.values["collection_title"] == "Small Podcast"
     assert source.values["episode_title"] == "Episode 1"
 
 
-def test_random_show_source_respects_profile_scope(db_session):
+def test_random_collection_source_respects_profile_scope(db_session):
     from backend.api.endpoints.local_media_profiles import output_template
-    from backend.types.local_media_profile_types import ShowLocalMediaProfileScope
-    from backend.types.show_types import ShowType
+    from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope
+    from backend.types.collection_types import CollectionType
 
-    podcast = _make_show(db_session, slug="podcast", show_type=ShowType.PODCAST.value)
-    series = _make_show(db_session, slug="series", show_type=ShowType.SERIES.value)
+    podcast = _make_collection(db_session, slug="podcast", collection_type=CollectionType.PODCAST.value)
+    series = _make_collection(db_session, slug="series", collection_type=CollectionType.SERIES.value)
     _add_episode(db_session, podcast, index=1)
     _add_episode(db_session, series, index=1)
 
-    source = output_template.get_random_show_template_source(
+    source = output_template.get_random_collection_template_source(
         db_session,
-        ShowLocalMediaProfileScope.SERIES,
+        CollectionLocalMediaProfileScope.SERIES,
     )
 
     assert source is not None
-    assert source.values["show_title"] == "Series"
+    assert source.values["collection_title"] == "Series"
 
 
-def test_show_source_anchor_opens_at_selected_episode_in_natural_order(db_session):
+def test_collection_source_anchor_opens_at_selected_episode_in_natural_order(db_session):
     from backend.api.endpoints.local_media_profiles.output_template import (
         get_output_template_source_page,
     )
     from backend.types.local_media_profile_types import (
         LocalMediaProfileType,
-        ShowLocalMediaProfileScope,
+        CollectionLocalMediaProfileScope,
     )
-    from backend.types.show_types import ShowType
+    from backend.types.collection_types import CollectionType
 
-    alpha = _make_show(db_session, slug="alpha-show", show_type=ShowType.PODCAST.value)
-    beta = _make_show(db_session, slug="beta-show", show_type=ShowType.PODCAST.value)
+    alpha = _make_collection(db_session, slug="alpha-collection", collection_type=CollectionType.PODCAST.value)
+    beta = _make_collection(db_session, slug="beta-collection", collection_type=CollectionType.PODCAST.value)
     for index in range(1, 6):
         _add_episode(db_session, alpha, index=index)
     beta_episodes = [
@@ -436,8 +436,8 @@ def test_show_source_anchor_opens_at_selected_episode_in_natural_order(db_sessio
     selected = beta_episodes[19]
     page = get_output_template_source_page(
         db_session,
-        LocalMediaProfileType.SHOW,
-        ShowLocalMediaProfileScope.PODCAST,
+        LocalMediaProfileType.COLLECTION,
+        CollectionLocalMediaProfileScope.PODCAST,
         limit=5,
         anchor_source_id=f"episode:{selected.id}",
     )
@@ -450,20 +450,20 @@ def test_show_source_anchor_opens_at_selected_episode_in_natural_order(db_sessio
     assert page.items[2].id == f"episode:{selected.id}"
 
 
-def test_show_source_anchor_does_not_override_search_order(db_session):
+def test_collection_source_anchor_does_not_override_search_order(db_session):
     from backend.api.endpoints.local_media_profiles.output_template import (
         get_output_template_source_page,
     )
     from backend.types.local_media_profile_types import LocalMediaProfileType
-    from backend.types.show_types import ShowType
+    from backend.types.collection_types import CollectionType
 
-    show = _make_show(db_session, slug="search-show", show_type=ShowType.PODCAST.value)
-    first = _add_episode(db_session, show, index=1, title="Ordinary episode")
-    _add_episode(db_session, show, index=2, title="Unique selected result")
+    collection = _make_collection(db_session, slug="search-collection", collection_type=CollectionType.PODCAST.value)
+    first = _add_episode(db_session, collection, index=1, title="Ordinary episode")
+    _add_episode(db_session, collection, index=2, title="Unique selected result")
 
     page = get_output_template_source_page(
         db_session,
-        LocalMediaProfileType.SHOW,
+        LocalMediaProfileType.COLLECTION,
         search="Ordinary",
         limit=5,
         anchor_source_id=f"episode:{first.id}",
@@ -474,27 +474,27 @@ def test_show_source_anchor_does_not_override_search_order(db_session):
 
 
 
-def test_show_source_cursor_survives_changes_before_boundary(db_session):
+def test_collection_source_cursor_survives_changes_before_boundary(db_session):
     from backend.api.endpoints.local_media_profiles.output_template import (
         get_output_template_source_page,
     )
     from backend.types.local_media_profile_types import (
         LocalMediaProfileType,
-        ShowLocalMediaProfileScope,
+        CollectionLocalMediaProfileScope,
     )
-    from backend.types.show_types import ShowType
+    from backend.types.collection_types import CollectionType
 
-    show = _make_show(db_session, slug="cursor-show", show_type=ShowType.PODCAST.value)
+    collection = _make_collection(db_session, slug="cursor-collection", collection_type=CollectionType.PODCAST.value)
     episodes = [
-        _add_episode(db_session, show, index=index)
+        _add_episode(db_session, collection, index=index)
         for index in range(1, 6)
     ]
     db_session.commit()
 
     first = get_output_template_source_page(
         db_session,
-        LocalMediaProfileType.SHOW,
-        ShowLocalMediaProfileScope.PODCAST,
+        LocalMediaProfileType.COLLECTION,
+        CollectionLocalMediaProfileScope.PODCAST,
         cursor=None,
         limit=2,
     )
@@ -504,13 +504,13 @@ def test_show_source_cursor_survives_changes_before_boundary(db_session):
     # Remove and insert rows before the saved boundary. A cursor based on the
     # boundary's sort values must still resume at episode 3.
     db_session.delete(episodes[0])
-    _add_episode(db_session, show, index=0, title="Inserted before cursor")
+    _add_episode(db_session, collection, index=0, title="Inserted before cursor")
     db_session.commit()
 
     second = get_output_template_source_page(
         db_session,
-        LocalMediaProfileType.SHOW,
-        ShowLocalMediaProfileScope.PODCAST,
+        LocalMediaProfileType.COLLECTION,
+        CollectionLocalMediaProfileScope.PODCAST,
         cursor=first.next_cursor,
         limit=2,
     )
@@ -519,8 +519,8 @@ def test_show_source_cursor_survives_changes_before_boundary(db_session):
 
     previous = get_output_template_source_page(
         db_session,
-        LocalMediaProfileType.SHOW,
-        ShowLocalMediaProfileScope.PODCAST,
+        LocalMediaProfileType.COLLECTION,
+        CollectionLocalMediaProfileScope.PODCAST,
         cursor=second.previous_cursor,
         limit=2,
     )

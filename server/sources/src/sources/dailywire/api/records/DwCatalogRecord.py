@@ -385,7 +385,7 @@ class DwMovieDetailRecord(BaseRecord):
 
 
 class DwCatalogRecord(BaseRecord):
-    shows: list[DwCatalogShowRecord] = Field(default_factory=list)
+    collections: list[DwCatalogShowRecord] = Field(default_factory=list)
     movies: list[DwCatalogMovieRecord] = Field(default_factory=list)
 
 

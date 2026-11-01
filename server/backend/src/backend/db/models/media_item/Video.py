@@ -15,7 +15,7 @@ from .MediaItemBase import MediaItemBase
 
 
 class Video(MediaItemBase, MediaContentMetadataMixin, CreatedByMixin):
-    """A single video added on its own, outside any show."""
+    """A single video added on its own, outside any collection."""
 
     __tablename__ = "media_items_video"
     __mapper_args__ = {"polymorphic_identity": MediaType.VIDEO.value, "polymorphic_load": "selectin"}

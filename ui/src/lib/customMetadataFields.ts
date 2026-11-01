@@ -1,6 +1,6 @@
 import {useQuery} from '@tanstack/react-query'
 
-export type CustomMetadataFieldScope = 'show' | 'movie'
+export type CustomMetadataFieldScope = 'collection' | 'movie'
 
 export function useCustomMetadataFields(
     scope: CustomMetadataFieldScope,

@@ -10,7 +10,7 @@ from backend.db.datetime_types import UTCDateTime
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 
 if TYPE_CHECKING:
-    from backend.db.models import EpisodeMediaDownload, LocalMediaProfileBase, Season, Show
+    from backend.db.models import EpisodeMediaDownload, LocalMediaProfileBase, Season, Collection
 
 
 download_profile_seasons = Table(
@@ -22,10 +22,10 @@ download_profile_seasons = Table(
 
 
 class DownloadProfile(Base, HasTaskResourcesMixin):
-    """Which episodes of a show to download automatically.
+    """Which episodes of a collection to download automatically.
 
-    The options that apply follow the show's episode identification: every show
-    uses the episode-type and date filters, and a seasonal show also filters by
+    The options that apply follow the collection's episode identification: every collection
+    uses the episode-type and date filters, and a seasonal collection also filters by
     season.
     """
 
@@ -34,7 +34,7 @@ class DownloadProfile(Base, HasTaskResourcesMixin):
 
     # Columns
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    show_id: Mapped[int] = mapped_column(ForeignKey("shows.id"))
+    collection_id: Mapped[int] = mapped_column(ForeignKey("collections.id"))
     local_media_profile_id: Mapped[int] = mapped_column(ForeignKey("local_media_profiles.id"))
     enable_profile: Mapped[bool] = mapped_column(default=True)
     ep_id_type_list: Mapped[list[str]] = mapped_column(
@@ -51,7 +51,7 @@ class DownloadProfile(Base, HasTaskResourcesMixin):
     download_starting_from: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     delete_older_episodes: Mapped[bool] = mapped_column(default=True)
 
-    # Season filter, used only when the show is identified by season
+    # Season filter, used only when the collection is identified by season
     include_upcoming_seasons: Mapped[bool] = mapped_column(default=True)
 
     created_at: Mapped[datetime] = mapped_column(
@@ -62,7 +62,7 @@ class DownloadProfile(Base, HasTaskResourcesMixin):
     )
 
     # Relationships
-    show: Mapped["Show"] = relationship(back_populates="download_profiles")
+    collection: Mapped["Collection"] = relationship(back_populates="download_profiles")
     local_media_profile: Mapped["LocalMediaProfileBase"] = relationship(back_populates="download_profiles")
     seasons: Mapped[list["Season"]] = relationship(secondary=download_profile_seasons)
 
@@ -72,4 +72,4 @@ class DownloadProfile(Base, HasTaskResourcesMixin):
 
 
     def __repr__(self) -> str:
-        return f"<DownloadProfile(id={self.id}, show_id={self.show_id}, enable_profile={self.enable_profile}, created_at={self.created_at}, updated_at={self.updated_at})>"
+        return f"<DownloadProfile(id={self.id}, collection_id={self.collection_id}, enable_profile={self.enable_profile}, created_at={self.created_at}, updated_at={self.updated_at})>"

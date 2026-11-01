@@ -16,9 +16,9 @@ import {
     MovieLocalMediaProfileUpdateSchema,
 } from '../../types/schemas/movie_local_media_profile'
 import {
-    ShowLocalMediaProfileUpdateIn,
-    ShowLocalMediaProfileUpdateSchema,
-} from '../../types/schemas/show_local_media_profile'
+    CollectionLocalMediaProfileUpdateIn,
+    CollectionLocalMediaProfileUpdateSchema,
+} from '../../types/schemas/collection_local_media_profile'
 import {
     VideoLocalMediaProfileUpdateIn,
     VideoLocalMediaProfileUpdateSchema,
@@ -37,7 +37,7 @@ import './EditLocalMediaProfilePage.css'
 function canonicalProfileValues(profile: LocalMediaProfileRead): LocalMediaProfileUpdateIn {
     if (profile.type === 'movie') return MovieLocalMediaProfileUpdateSchema.parse(profile)
     if (profile.type === 'video') return VideoLocalMediaProfileUpdateSchema.parse(profile)
-    return ShowLocalMediaProfileUpdateSchema.parse(profile)
+    return CollectionLocalMediaProfileUpdateSchema.parse(profile)
 }
 
 export default function EditLocalMediaProfilePage() {
@@ -61,8 +61,8 @@ export default function EditLocalMediaProfilePage() {
         },
     })
 
-    const formShow = useForm<WithRoot<ShowLocalMediaProfileUpdateIn>>({
-        resolver: zodResolver(ShowLocalMediaProfileUpdateSchema),
+    const formCollection = useForm<WithRoot<CollectionLocalMediaProfileUpdateIn>>({
+        resolver: zodResolver(CollectionLocalMediaProfileUpdateSchema),
         mode: 'onBlur',
         shouldFocusError: true,
     })
@@ -80,7 +80,7 @@ export default function EditLocalMediaProfilePage() {
     })
 
     const form = (
-        profile?.type === 'movie' ? formMovie : profile?.type === 'video' ? formVideo : formShow
+        profile?.type === 'movie' ? formMovie : profile?.type === 'video' ? formVideo : formCollection
     ) as UseFormReturn<any>
 
     useEffect(() => {
@@ -186,10 +186,10 @@ export default function EditLocalMediaProfilePage() {
 
     const onFormSubmit = (event: FormEvent<HTMLFormElement>) => {
         const outputTemplateChanged = (
-            profile.type === 'show'
+            profile.type === 'collection'
             && form.getValues('outputTemplate') !== profile.outputTemplate
         )
-        const indexKeysChanged = profile.type === 'show' &&
+        const indexKeysChanged = profile.type === 'collection' &&
             JSON.stringify((form.getValues('indexingValues') ?? []).map((value: {key: string}) => value.key).sort()) !==
             JSON.stringify(profile.indexingValues.map(({key}) => key).sort())
         if ((outputTemplateChanged || indexKeysChanged) && renameDecisionRef.current === null) {
@@ -220,7 +220,7 @@ export default function EditLocalMediaProfilePage() {
         <section className="view" aria-labelledby="edit-media-profile-title">
             <div className="view-header">
                 <h1 id="edit-media-profile-title">Edit local media profile</h1>
-                {profile.type === 'show' && <IndexingValuesEditorButton form={form}/>}
+                {profile.type === 'collection' && <IndexingValuesEditorButton form={form}/>}
             </div>
 
             <form id={formId} className="form" onSubmit={onFormSubmit} noValidate>
@@ -288,7 +288,7 @@ export default function EditLocalMediaProfilePage() {
                     The output path rules changed. VODLoft will reconcile Episode indexes before renaming existing files that use this Local Media Profile.
                 </p>
                 <p>
-                    Close this dialog to keep editing, or save without moving existing files and run File Rename later from a show's Actions menu.
+                    Close this dialog to keep editing, or save without moving existing files and run File Rename later from a collection's Actions menu.
                 </p>
             </ConfirmDialog>
         </section>

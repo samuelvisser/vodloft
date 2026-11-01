@@ -1,7 +1,7 @@
 import {ReactNode} from 'react'
 import {Link} from 'react-router-dom'
 import ReadMore from '../../utils/ReadMore'
-import {useShowEpisodeTags} from '../../lib/queries'
+import {useCollectionEpisodeTags} from '../../lib/queries'
 import {EpisodeTagRead, episodeTagLabel} from '../../types/schemas/source'
 import './StreamProfileAdvisory.css'
 
@@ -23,9 +23,9 @@ type Props = {
     streamLiveEpisodes?: boolean
     selectedEpisodeTypes: string[]
     downloadProfileDefaults?: StreamDownloadProfileDefault[]
-    showSlug?: string
+    collectionSlug?: string
     canOpenDownloadProfiles?: boolean
-    /** The show's Source, named in the streaming advice. */
+    /** The collection's Source, named in the streaming advice. */
     sourceName?: string
     onEnableDownloads: () => void
     onDisableDwStream: () => void
@@ -52,7 +52,7 @@ type Coverage = {
 type CoverageRequirementProps = {
     coverage: Coverage
     preferredFormat?: string
-    showSlug?: string
+    collectionSlug?: string
     canOpenDownloadProfiles: boolean
     useDownloads: boolean
     onEnableDownloads: () => void
@@ -185,7 +185,7 @@ function downloadFormatForKind(
 
 function createDownloadProfileHref(
     kind: DownloadMediaKind,
-    showSlug?: string,
+    collectionSlug?: string,
     preferredFormat?: string,
     {
         latestFive = false,
@@ -195,10 +195,10 @@ function createDownloadProfileHref(
         episodeTypes?: readonly string[]
     } = {},
 ) {
-    if (!showSlug) return undefined
+    if (!collectionSlug) return undefined
 
     const params = new URLSearchParams({
-        show: showSlug,
+        collection: collectionSlug,
         preferredFormat: downloadFormatForKind(kind, preferredFormat),
     })
     if (latestFive) params.set('downloadEpisodeCount', '5')
@@ -211,13 +211,13 @@ function createDownloadProfileHref(
 function CoverageRequirement({
     coverage,
     preferredFormat,
-    showSlug,
+    collectionSlug,
     canOpenDownloadProfiles,
     useDownloads,
     onEnableDownloads,
     latestFive = false,
 }: CoverageRequirementProps) {
-    const {data: tags} = useShowEpisodeTags({showSlug})
+    const {data: tags} = useCollectionEpisodeTags({collectionSlug})
     const {
         kind,
         profiles,
@@ -233,7 +233,7 @@ function CoverageRequirement({
     const createHref = createEpisodeTypes.length > 0
         ? createDownloadProfileHref(
             kind,
-            showSlug,
+            collectionSlug,
             preferredFormat,
             {
                 latestFive,
@@ -263,7 +263,7 @@ function CoverageRequirement({
                                 : `No enabled ${kindLabel(kind)} Download Profile exists.`}
                 </span>
             </div>
-            {canOpenDownloadProfiles && showSlug ? (
+            {canOpenDownloadProfiles && collectionSlug ? (
                 <div className="stream-profile-advisory-requirement-actions">
                     {editHref ? (
                         <Link
@@ -302,7 +302,7 @@ export default function StreamProfileAdvisory({
     streamLiveEpisodes = false,
     selectedEpisodeTypes,
     downloadProfileDefaults,
-    showSlug,
+    collectionSlug,
     canOpenDownloadProfiles = true,
     sourceName = 'The Daily Wire',
     onEnableDownloads,
@@ -428,7 +428,7 @@ export default function StreamProfileAdvisory({
                             key={coverage.kind}
                             coverage={coverage}
                             preferredFormat={preferredFormat}
-                            showSlug={showSlug}
+                            collectionSlug={collectionSlug}
                             canOpenDownloadProfiles={canOpenDownloadProfiles}
                             useDownloads={useDownloads}
                             onEnableDownloads={onEnableDownloads}
@@ -483,7 +483,7 @@ export default function StreamProfileAdvisory({
                     <CoverageRequirement
                         coverage={videoCoverage}
                         preferredFormat={preferredFormat}
-                        showSlug={showSlug}
+                        collectionSlug={collectionSlug}
                         canOpenDownloadProfiles={canOpenDownloadProfiles}
                         useDownloads={useDownloads}
                         onEnableDownloads={onEnableDownloads}

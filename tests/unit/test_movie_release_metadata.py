@@ -265,13 +265,13 @@ def test_movie_release_date_condition_omits_unknown_metadata(tmp_path, monkeypat
     assert result == (tmp_path / "A Movie" / "a-movie.ext").resolve()
 
 
-def test_show_date_component_placeholders_use_episode_publish_datetime(tmp_path, monkeypatch):
+def test_collection_date_component_placeholders_use_episode_publish_datetime(tmp_path, monkeypatch):
     from backend.utils.output_template import resolve_episode_output_path
     from config import get_settings
 
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
     episode = SimpleNamespace(
-        show=SimpleNamespace(slug="show", title="Show", meta_items=[]),
+        collection=SimpleNamespace(slug="collection", title="Collection", meta_items=[]),
         season=SimpleNamespace(slug="season", name="Season", index=1, season_type="normal", season_number=1),
         slug="episode",
         index=1,

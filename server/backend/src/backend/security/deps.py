@@ -39,7 +39,7 @@ class AnyAccessRequirement:
     """Passes when the request has at least one of several area levels.
 
     For data that more than one part of VODLoft needs, such as the profile
-    lists the Add show wizard offers.
+    lists the Add collection wizard offers.
     """
 
     def __init__(self, *requirements: tuple[Area, Level]) -> None:

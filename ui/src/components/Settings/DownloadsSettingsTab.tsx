@@ -2,7 +2,7 @@ import type {
     DownloadMode,
     FilenameRestrictionMode,
     MetadataMode,
-    ShowArtworkFallbackFormat,
+    CollectionArtworkFallbackFormat,
     ThumbnailMode,
 } from '../../types/schemas/settings'
 import ReadMore from '../../utils/ReadMore'
@@ -45,7 +45,7 @@ const MetadataModeReg = createSelectRegistry('MetadataMode', {
     embed_and_nfo: {label: 'Both embed and download'},
 })
 
-const ShowArtworkFallbackFormatReg = createSelectRegistry('ShowArtworkFallbackFormat', {
+const CollectionArtworkFallbackFormatReg = createSelectRegistry('CollectionArtworkFallbackFormat', {
     jpg: {label: 'JPEG'},
     png: {label: 'PNG'},
 })
@@ -74,7 +74,7 @@ export function EnsureSafeDelayToggle({
                 <ReadMore summary={<span>Use a deliberately conservative timestamp when applying the episode download delay.</span>}>
                     <p>
                         Unfortunately, a source does not always provide an accurate time at which an episode was published.
-                        The time they define as published differs wildly per show, and is at times very inaccurate. Therefore, to
+                        The time they define as published differs wildly per collection, and is at times very inaccurate. Therefore, to
                         apply the download delay, VODLoft tries to make a best- effort guess when the episode was published based
                         primarily on when it observed it being published, but with with fallback to other timestamps or the official
                         time as reported by the source if VODLoft cannot prove it was online while the episode was published.
@@ -310,27 +310,27 @@ export default function DownloadsSettingsTab({
                     }
                 />
                 <ToggleField
-                    id="settings-show-assets"
-                    label="Download show assets"
-                    checked={draft.downloadSettings.downloadShowAssets}
-                    environmentVariable={environmentVariableFor('downloadSettings.downloadShowAssets')}
+                    id="settings-collection-assets"
+                    label="Download collection assets"
+                    checked={draft.downloadSettings.downloadCollectionAssets}
+                    environmentVariable={environmentVariableFor('downloadSettings.downloadCollectionAssets')}
                     onChange={(checked) => updateDraft((next) => {
-                        next.downloadSettings.downloadShowAssets = checked
+                        next.downloadSettings.downloadCollectionAssets = checked
                     })}
-                    help="Save poster, fanart, square artwork and clearlogo.png in each show's inferred shared folder. Native JPEG and PNG formats are preserved. Local Media Profiles can inherit or override this setting. Existing custom artwork is preserved."
+                    help="Save poster, fanart, square artwork and clearlogo.png in each collection's inferred shared folder. Native JPEG and PNG formats are preserved. Local Media Profiles can inherit or override this setting. Existing custom artwork is preserved."
                     wide
                 />
                 <SelectField
-                    id="settings-show-artwork-fallback-format"
-                    label="Show artwork fallback format"
-                    value={draft.downloadSettings.showArtworkFallbackFormat}
-                    registry={ShowArtworkFallbackFormatReg}
-                    error={errorFor('downloadSettings.showArtworkFallbackFormat')}
-                    environmentVariable={environmentVariableFor('downloadSettings.showArtworkFallbackFormat')}
+                    id="settings-collection-artwork-fallback-format"
+                    label="Collection artwork fallback format"
+                    value={draft.downloadSettings.collectionArtworkFallbackFormat}
+                    registry={CollectionArtworkFallbackFormatReg}
+                    error={errorFor('downloadSettings.collectionArtworkFallbackFormat')}
+                    environmentVariable={environmentVariableFor('downloadSettings.collectionArtworkFallbackFormat')}
                     onChange={(value) => updateDraft((next) => {
-                        next.downloadSettings.showArtworkFallbackFormat = value as ShowArtworkFallbackFormat
+                        next.downloadSettings.collectionArtworkFallbackFormat = value as CollectionArtworkFallbackFormat
                     })}
-                    help="Used only when upstream show artwork is neither JPEG nor PNG. Clear logos are always stored as PNG to preserve transparency."
+                    help="Used only when upstream collection artwork is neither JPEG nor PNG. Clear logos are always stored as PNG to preserve transparency."
                 />
                 <SelectField
                     id="settings-filename-restriction-mode"
@@ -503,7 +503,7 @@ export default function DownloadsSettingsTab({
                     runNow={{
                         definition: frontendOperationDefinitions['system.cron.file_watcher'],
                         job: 'file-watcher',
-                        ledger: {definitionKey: 'file_watcher', resourceType: 'show', resourceId: 0},
+                        ledger: {definitionKey: 'file_watcher', resourceType: 'collection', resourceId: 0},
                     }}
                     value={draft.fileWatcher.scanCron}
                     enabled={draft.fileWatcher.scanCronEnabled}

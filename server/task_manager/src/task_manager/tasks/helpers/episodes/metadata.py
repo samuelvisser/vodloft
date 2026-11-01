@@ -73,7 +73,7 @@ def update_episode_from_dailywire(
     """Refresh Daily Wire metadata without changing VODLoft-owned lifecycle state."""
     protected_fields = {
         "id",
-        "show_id",
+        "collection_id",
         "season_id",
         "index",
         "episode_identifier",

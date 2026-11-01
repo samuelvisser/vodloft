@@ -10,32 +10,32 @@ from sqlalchemy.orm import Session
 def _make_download(session: Session, *, slug: str = "episode-1"):
     import backend.db.models  # noqa: F401
     import task_manager.scheduler.db  # noqa: F401
-    from backend.db.models import Episode, LocalMediaProfile, Season, Show
+    from backend.db.models import Episode, LocalMediaProfile, Season, Collection
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
     from backend.utils.helpers import generate_uuid
 
-    show = Show(
+    collection = Collection(
         source_key="dailywire",
         uuid=f"{slug}-show-uuid",
         slug=f"{slug}-show",
         title="Operation Show",
         description=None,
-        sharing_url=f"https://example.test/show/{slug}",
+        sharing_url=f"https://example.test/collection/{slug}",
         membership_level="FREE",
-        type=ShowType.PODCAST.value,
+        type=CollectionType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Host",
         author_slug="host",
     )
-    season = Season(show=show, index=1, slug=f"{slug}-season", name="One")
+    season = Season(collection=collection, index=1, slug=f"{slug}-season", name="One")
     episode = Episode(
         source_key="dailywire",
         uuid=generate_uuid(),
         type=MediaType.EPISODE.value,
-        show=show,
+        collection=collection,
         season=season,
         index=1,
         episode_identifier="ep.1",
@@ -49,10 +49,10 @@ def _make_download(session: Session, *, slug: str = "episode-1"):
     profile = LocalMediaProfile(
         slug=f"{slug}-audio",
         name=f"Audio {slug}",
-        output_template=f"/downloads/{slug}/{{ show }}/{{ episode }}.ext",
+        output_template=f"/downloads/{slug}/{{ collection }}/{{ episode }}.ext",
         preferred_format="format_audio_only",
     )
-    session.add_all([show, season, episode, profile])
+    session.add_all([collection, season, episode, profile])
     session.flush()
     download = EpisodeMediaDownload(
         type=MediaType.EPISODE.value,
@@ -1084,7 +1084,7 @@ def test_prioritized_downloads_dispatch_first_latest_click_in_front(monkeypatch)
         engine.dispose()
 
 
-def test_deleting_parent_show_cascades_download_and_operation_graph():
+def test_deleting_parent_collection_cascades_download_and_operation_graph():
     from task_manager.scheduler.db import TaskOperation, TaskOperationTarget
     from task_manager.scheduler.types import OperationSource
     from task_manager.tasks.media_download_operations import create_media_download_operation
@@ -1099,13 +1099,13 @@ def test_deleting_parent_show_cascades_download_and_operation_graph():
         )
         operation_id = operation.id
         download_id = download.id
-        show = download.media.show
+        collection = download.media.collection
         session.commit()
 
         assert session.get(TaskOperation, operation_id) is not None
         assert session.query(TaskOperationTarget).filter_by(operation_id=operation_id).count() == 1
 
-        session.delete(show)
+        session.delete(collection)
         session.commit()
 
         assert session.get(type(download), download_id) is None
@@ -1116,7 +1116,7 @@ def test_deleting_parent_show_cascades_download_and_operation_graph():
         engine.dispose()
 
 
-def test_deleting_parent_show_releases_reserved_download_queue_slot(monkeypatch):
+def test_deleting_parent_collection_releases_reserved_download_queue_slot(monkeypatch):
     from task_manager.tasks import load_all_tasks
 
     load_all_tasks()
@@ -1165,7 +1165,7 @@ def test_deleting_parent_show_releases_reserved_download_queue_slot(monkeypatch)
         original_callback = task_meta.terminal_callback
         task_meta.terminal_callback = lambda **_: callbacks.append(True)
         try:
-            session.delete(download.media.show)
+            session.delete(download.media.collection)
             session.commit()
             assert callbacks == [True]
         finally:
@@ -1175,7 +1175,7 @@ def test_deleting_parent_show_releases_reserved_download_queue_slot(monkeypatch)
         engine.dispose()
 
 
-def test_episode_with_any_media_download_can_only_be_removed_with_show():
+def test_episode_with_any_media_download_can_only_be_removed_with_collection():
     import pytest
     from fastapi import HTTPException
 
@@ -1187,7 +1187,7 @@ def test_episode_with_any_media_download_can_only_be_removed_with_show():
         download = _make_download(session, slug="persistent-history")
         download_id = download.id
         episode_slug = download.media.slug
-        show = download.media.show
+        collection = download.media.collection
         session.commit()
 
         with pytest.raises(HTTPException) as exc_info:
@@ -1195,7 +1195,7 @@ def test_episode_with_any_media_download_can_only_be_removed_with_show():
         assert exc_info.value.status_code == 409
         assert session.get(MediaDownloadBase, download_id) is not None
 
-        session.delete(show)
+        session.delete(collection)
         session.commit()
         assert session.get(MediaDownloadBase, download_id) is None
     finally:

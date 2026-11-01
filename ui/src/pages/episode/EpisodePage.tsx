@@ -4,10 +4,10 @@ import {Link, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {useShow, useEpisode, useEpisodeDownloads, useLocalMediaProfiles, useSourceLookup} from '../../lib/queries'
+import {useCollection, useEpisode, useEpisodeDownloads, useLocalMediaProfiles, useSourceLookup} from '../../lib/queries'
 import {useLibraryDefaults} from '../../lib/settings'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
-import {isShowLocalMediaProfileAvailableFor} from '../../types/local_media_profile'
+import {isCollectionLocalMediaProfileAvailableFor} from '../../types/local_media_profile'
 import {EpisodePublishStatus, PUBLISH_STATUS_LABELS} from '../../types/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
@@ -54,21 +54,21 @@ function EpisodePageSkeleton() {
 }
 
 export default function EpisodePage() {
-    const {id: showId, episodeId} = useParams()
+    const {id: collectionId, episodeId} = useParams()
     const qc = useQueryClient()
     const startOperation = useStartOperation()
     const [metadataRefreshStarting, setMetadataRefreshStarting] = useState(false)
     const [earlyDeleteConfirm, setEarlyDeleteConfirm] = useState(false)
     const [earlyDeleteStarting, setEarlyDeleteStarting] = useState(false)
 
-    const {data: show, isPending: isShowPending, isFetching: isShowFetching, error} = useShow(showId)
+    const {data: collection, isPending: isCollectionPending, isFetching: isCollectionFetching, error} = useCollection(collectionId)
     const {
         data: episode,
         isPending: isEpisodePending,
         isFetching: isEpisodeFetching,
     } = useEpisode(episodeId)
     const {data: profiles, error: profilesError} = useLocalMediaProfiles()
-    const sourceName = useSourceLookup().name(episode?.sourceKey ?? show?.sourceKey)
+    const sourceName = useSourceLookup().name(episode?.sourceKey ?? collection?.sourceKey)
     const subscriptionLocked = useSubscriptionLocked(episode?.sourceKey, episode?.needsSubscription)
     const {
         data: downloads,
@@ -76,7 +76,7 @@ export default function EpisodePage() {
         hasDomainData: hasDownloadState,
     } = useEpisodeDownloads(episodeId)
     const settingsQuery = useLibraryDefaults()
-    const showProfiles = profiles?.filter((profile) => isShowLocalMediaProfileAvailableFor(profile, show?.type))
+    const collectionProfiles = profiles?.filter((profile) => isCollectionLocalMediaProfileAvailableFor(profile, collection?.type))
     const metadataRefreshOperation = useActiveOperation(
         'episode.refresh_metadata',
         'episode',
@@ -90,27 +90,27 @@ export default function EpisodePage() {
     const metadataRefreshBusy = metadataRefreshStarting || metadataRefreshOperation !== undefined
     const earlyDeleteBusy = earlyDeleteStarting || earlyDeleteOperation !== undefined
 
-    if (!showId) {
+    if (!collectionId) {
         return (
             <section className="view episode-view">
                 <div className="view-header">
                     <h1>Episode</h1>
                 </div>
-                <p>Show not found.</p>
+                <p>Collection not found.</p>
                 <p><Link to="/">Go home</Link></p>
             </section>
         )
     }
 
-    if (!show && (isShowPending || isShowFetching)) return <EpisodePageSkeleton/>
+    if (!collection && (isCollectionPending || isCollectionFetching)) return <EpisodePageSkeleton/>
 
-    if (!show) {
+    if (!collection) {
         return (
             <section className="view episode-view">
                 <div className="view-header">
                     <h1>Episode</h1>
                 </div>
-                <p>{(error as any)?.message ?? 'Show not found.'}</p>
+                <p>{(error as any)?.message ?? 'Collection not found.'}</p>
                 <p><Link to="/">Go home</Link></p>
             </section>
         )
@@ -125,7 +125,7 @@ export default function EpisodePage() {
                     <h1>Episode</h1>
                 </div>
                 <p>Episode not found.</p>
-                <p><Link to={`/show/${showId}`}>Back to show</Link></p>
+                <p><Link to={`/collection/${collectionId}`}>Back to collection</Link></p>
             </section>
         )
     }
@@ -221,7 +221,7 @@ export default function EpisodePage() {
                 <nav className="episode-breadcrumb" aria-label="Breadcrumb">
                     <Link to="/library">Library</Link>
                     <FontAwesomeIcon icon={faIcon('fass', 'chevron-right')} aria-hidden="true"/>
-                    <Link to={`/show/${showId}`}>{show.title}</Link>
+                    <Link to={`/collection/${collectionId}`}>{collection.title}</Link>
                 </nav>
 
                 <div className="episode-cover">
@@ -236,7 +236,7 @@ export default function EpisodePage() {
                         <h1 id="episode-title" className="episode-title-text">{episode.title}</h1>
                         <ActionMenu
                             items={[
-                                ...(sourceControls(show).metadataRefresh ? [{
+                                ...(sourceControls(collection).metadataRefresh ? [{
                                     label: 'Refresh metadata',
                                     icon: faIcon('fass', 'arrows-rotate'),
                                     disabled: metadataRefreshBusy,
@@ -308,15 +308,15 @@ export default function EpisodePage() {
                                 Loading download options…
                             </div>
                         )}
-                        {!locked && !downloadStateError && profiles !== undefined && !showProfiles?.length && (
+                        {!locked && !downloadStateError && profiles !== undefined && !collectionProfiles?.length && (
                             <p>
                                 No Local Media Profiles configured yet.{' '}
                                 <Link to="/add-local-media-profile">Add one</Link> to download this episode.
                             </p>
                         )}
-                        {!locked && !downloadStateError && !!showProfiles?.length && (
+                        {!locked && !downloadStateError && !!collectionProfiles?.length && (
                             <div role="list" aria-label="Available downloads per Local Media Profile">
-                                {showProfiles.map((profile) => {
+                                {collectionProfiles.map((profile) => {
                                     const download = downloadByProfileId.get(profile.id)
                                     return (
                                         <EpisodeDownloadRow

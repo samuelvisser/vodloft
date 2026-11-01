@@ -86,7 +86,7 @@ def test_immediate_operation_jobs_do_not_expire_while_waiting_for_worker(monkeyp
 
     job_id = scheduler_module.trigger_now(
         def_key="worker",
-        resource_type="show",
+        resource_type="collection",
         resource_id=1,
         operation_ids=("operation-id",),
     )
@@ -145,7 +145,7 @@ def test_scheduled_work_pause_is_reference_counted(monkeypatch):
     @registry_module.task(
         key="normal_test_worker",
         title="Normal test worker",
-        allowed_resource_types=("show",),
+        allowed_resource_types=("collection",),
     )
     async def normal_test_worker(*, resource_id=None, progress=None):
         return None

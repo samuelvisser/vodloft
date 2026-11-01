@@ -9,32 +9,32 @@ from sqlalchemy.orm import Session
 def _episode_fixture():
     import backend.db.models  # noqa: F401
     from backend.db import Base
-    from backend.db.models import Episode, Season, Show
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+    from backend.db.models import Episode, Season, Collection
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
     from backend.utils.helpers import generate_uuid
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     session = Session(engine)
-    show = Show(
+    collection = Collection(
         source_key="dailywire",
-        uuid="timing-show-uuid",
-        slug="timing-show",
+        uuid="timing-collection-uuid",
+        slug="timing-collection",
         title="Timing Show",
         description=None,
-        sharing_url="https://example.test/show",
+        sharing_url="https://example.test/collection",
         membership_level="FREE",
-        type=ShowType.PODCAST.value,
+        type=CollectionType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Host",
         author_slug="host",
     )
-    season = Season(show=show, index=1, slug="season-1", name="One")
+    season = Season(collection=collection, index=1, slug="season-1", name="One")
     episode = Episode(
         source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
-        show=show,
+        collection=collection,
         season=season,
         index=1,
         episode_identifier="ep.1",
@@ -45,7 +45,7 @@ def _episode_fixture():
         sharing_url="https://example.test/episode",
         published_date=datetime(2026, 10, 2, 8, tzinfo=timezone.utc),
     )
-    session.add_all([show, season, episode])
+    session.add_all([collection, season, episode])
     session.commit()
     return engine, session, episode
 
@@ -321,7 +321,7 @@ def test_episode_lifecycle_records_final_without_monitor_continuity():
         queue_episode_status_events(
             session,
             episode=episode,
-            show=episode.show,
+            collection=episode.collection,
             old_status=EpisodePublishStatus.DW_PROCESSING.value,
             new_status=EpisodePublishStatus.PUBLISHED_FINAL,
             was_created=False,

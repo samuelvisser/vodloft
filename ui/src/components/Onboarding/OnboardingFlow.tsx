@@ -2,7 +2,7 @@ import {useCallback, useEffect, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Route, Routes, useNavigate} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
-import AddShowPage from '../AddShowPage/AddShowPage'
+import AddCollectionPage from '../AddCollectionPage/AddCollectionPage'
 import AddMediaPage from '../../pages/AddMediaPage'
 import type {MediaLinkTarget} from '../../lib/sourceControls'
 import BrowsePage from '../../pages/BrowsePage'
@@ -11,15 +11,15 @@ import {useMovies, useSources} from '../../lib/queries'
 import {sourceComponents} from '../Source/sourceComponents'
 import {SourceFeature, sourceHas} from '../../types/schemas/source'
 import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
-import {ShowRead} from '../../types/schemas/show'
+import {CollectionRead} from '../../types/schemas/collection'
 import OnboardingMovieProfileStep from './OnboardingMovieProfileStep'
 import './Onboarding.css'
 import {faIcon} from '../../icons/faIcon'
 
 
-type OnboardingStep = 'welcome' | 'sources' | 'security' | 'add' | 'browse' | 'show' | 'movie-profile' | 'movie'
+type OnboardingStep = 'welcome' | 'sources' | 'security' | 'add' | 'browse' | 'collection' | 'movie-profile' | 'movie'
 
-/** The show or movie picked as the first media, from a link or from browsing. */
+/** The collection or movie picked as the first media, from a link or from browsing. */
 type SelectedMedia = {slug: string; title: string; url: string}
 
 type Props = {
@@ -42,8 +42,8 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
     const {data: localMovies} = useMovies()
     const [step, setStep] = useState<OnboardingStep>('welcome')
     const {data: sources} = useSources()
-    const [selectedShow, setSelectedShow] = useState<SelectedMedia | null>(null)
-    const [selectedShowWasPresent, setSelectedShowWasPresent] = useState(false)
+    const [selectedCollection, setSelectedCollection] = useState<SelectedMedia | null>(null)
+    const [selectedCollectionWasPresent, setSelectedCollectionWasPresent] = useState(false)
     const [selectedMovie, setSelectedMovie] = useState<SelectedMedia | null>(null)
     const [movieProfile, setMovieProfile] = useState<LocalMediaProfileRead | null>(null)
     const [isCompleting, setIsCompleting] = useState(false)
@@ -70,21 +70,21 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
         }
     }, [onComplete])
 
-    const selectShow = (show: SelectedMedia) => {
-        const currentShows = queryClient.getQueryData<ShowRead[]>(['shows']) ?? []
-        setSelectedShowWasPresent(currentShows.some((item) => item.slug === show.slug))
-        setSelectedShow(show)
+    const selectCollection = (collection: SelectedMedia) => {
+        const currentCollections = queryClient.getQueryData<CollectionRead[]>(['collections']) ?? []
+        setSelectedCollectionWasPresent(currentCollections.some((item) => item.slug === collection.slug))
+        setSelectedCollection(collection)
         setError(null)
-        setStep('show')
+        setStep('collection')
     }
 
-    const leaveShowWizard = async () => {
+    const leaveCollectionWizard = async () => {
         try {
-            const response = await fetch(`${(window as any).appConfig.API_URL}/shows`, {credentials: 'include'})
+            const response = await fetch(`${(window as any).appConfig.API_URL}/collections`, {credentials: 'include'})
             if (response.ok) {
-                const currentShows = await response.json() as ShowRead[]
-                queryClient.setQueryData(['shows'], currentShows)
-                const wasAdded = !selectedShowWasPresent && currentShows.some((item) => item.slug === selectedShow?.slug)
+                const currentCollections = await response.json() as CollectionRead[]
+                queryClient.setQueryData(['collections'], currentCollections)
+                const wasAdded = !selectedCollectionWasPresent && currentCollections.some((item) => item.slug === selectedCollection?.slug)
                 if (wasAdded) {
                     await completeOnboarding()
                     return
@@ -158,7 +158,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                         <span className="onboarding-eyebrow">Sources</span>
                         <h1>Where your media comes from</h1>
                         <p>
-                            VODLoft adds shows and movies from these services. Signing in is optional: it is only
+                            VODLoft adds collections and movies from these services. Signing in is optional: it is only
                             needed for content that requires an account, and you can do it later in Settings › Sources.
                         </p>
                     </div>
@@ -242,7 +242,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                 <main className="onboarding-stage onboarding-stage-wide">
                     <AddMediaPage
                         onboarding
-                        onShow={(target: MediaLinkTarget) => selectShow(target)}
+                        onCollection={(target: MediaLinkTarget) => selectCollection(target)}
                         onMovie={(target: MediaLinkTarget) => selectMovie(target)}
                         onBrowse={() => setStep('browse')}
                         onSkip={() => void completeOnboarding()}
@@ -258,7 +258,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                     </button>
                     <BrowsePage
                         onboarding
-                        onShowSelect={(show, url) => selectShow({slug: show.slug, title: show.title, url})}
+                        onCollectionSelect={(collection, url) => selectCollection({slug: collection.slug, title: collection.title, url})}
                         onMovieSelect={(movie, url) => selectMovie({slug: movie.slug, title: movie.title, url})}
                         onSkip={() => void completeOnboarding()}
                     />
@@ -266,16 +266,16 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                 </main>
             )}
 
-            {step === 'show' && selectedShow && (
+            {step === 'collection' && selectedCollection && (
                 <main className="onboarding-stage onboarding-stage-wide onboarding-wizard-stage">
                     <div className="onboarding-section-heading onboarding-nested-heading">
-                        <span className="onboarding-eyebrow">Add your first show</span>
-                        <h1>{selectedShow.title}</h1>
-                        <p>The normal Add Show wizard will let you confirm a Local Media Profile before any downloads are configured.</p>
+                        <span className="onboarding-eyebrow">Add your first collection</span>
+                        <h1>{selectedCollection.title}</h1>
+                        <p>The normal Add Collection wizard will let you confirm a Local Media Profile before any downloads are configured.</p>
                     </div>
-                    <AddShowPage
-                        initialUrl={selectedShow.url}
-                        onCancel={() => void leaveShowWizard()}
+                    <AddCollectionPage
+                        initialUrl={selectedCollection.url}
+                        onCancel={() => void leaveCollectionWizard()}
                     />
                 </main>
             )}

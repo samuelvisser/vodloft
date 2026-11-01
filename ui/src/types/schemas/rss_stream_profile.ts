@@ -60,7 +60,7 @@ const validateVideoOutput = (
 }
 
 export const RssStreamProfileCreateSchema = RssStreamProfileBaseSchema.extend({
-    showId: z.int(),
+    collectionId: z.int(),
     feedUrl: z.string().optional(),
 }).superRefine(validateVideoOutput)
 export type RssStreamProfileCreateIn = z.input<typeof RssStreamProfileCreateSchema>
@@ -74,7 +74,7 @@ export type RssStreamProfileUpdateOut = z.output<typeof RssStreamProfileUpdateSc
 
 export const RssStreamProfileReadSchema = z.looseObject({
     id: z.int(),
-    showId: z.int(),
+    collectionId: z.int(),
     enableProfile: z.boolean(),
     useDownloads: z.boolean(),
     useDwStream: z.boolean(),

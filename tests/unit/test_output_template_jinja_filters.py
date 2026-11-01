@@ -2,49 +2,49 @@ import pytest
 
 
 def _render(template: str, title: str) -> str:
-    from backend.utils.output_template import SHOW_OUTPUT_TEMPLATE_FIELDS, render_output_template
+    from backend.utils.output_template import COLLECTION_OUTPUT_TEMPLATE_FIELDS, render_output_template
 
     return render_output_template(
         template,
         {"title": title},
-        allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+        allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
     )
 
 
 def test_strftime_formats_vodloft_date_and_datetime_values() -> None:
-    from backend.utils.output_template import SHOW_OUTPUT_TEMPLATE_FIELDS, render_output_template
+    from backend.utils.output_template import COLLECTION_OUTPUT_TEMPLATE_FIELDS, render_output_template
 
     assert render_output_template(
         '/downloads/{{ date | strftime("%d-%m-%Y") }}.ext',
         {"date": "2026-09-24"},
-        allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+        allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
     ) == "/downloads/24-09-2026.ext"
 
     assert render_output_template(
         '/downloads/{{ datetime | strftime("%Y%m%d-%H%M%S") }}.ext',
         {"datetime": "2026-09-24 20:13:05"},
-        allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+        allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
     ) == "/downloads/20260924-201305.ext"
 
 
 def test_strftime_keeps_missing_date_empty() -> None:
-    from backend.utils.output_template import SHOW_OUTPUT_TEMPLATE_FIELDS, render_output_template
+    from backend.utils.output_template import COLLECTION_OUTPUT_TEMPLATE_FIELDS, render_output_template
 
     assert render_output_template(
         '/downloads/prefix{{ date | strftime("%Y%m%d") }}.ext',
         {"date": ""},
-        allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+        allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
     ) == "/downloads/prefix.ext"
 
 
 def test_strftime_rejects_non_date_values() -> None:
-    from backend.utils.output_template import SHOW_OUTPUT_TEMPLATE_FIELDS, render_output_template
+    from backend.utils.output_template import COLLECTION_OUTPUT_TEMPLATE_FIELDS, render_output_template
 
     with pytest.raises(ValueError, match="strftime requires a VODLoft date/time value"):
         render_output_template(
             '/downloads/{{ date | strftime("%Y%m%d") }}.ext',
             {"date": "not-a-date"},
-            allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+            allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
         )
 
 
@@ -102,7 +102,7 @@ def test_preview_returns_invalid_regex_as_output_error() -> None:
     from backend.db import Base
 
     body = LocalMediaProfilePreviewRequest(
-        type="show",
+        type="collection",
         preferred_format="format_audio_only",
         output_template="/downloads/{{ title | regex_search('(') }}.ext",
         values={"title": "Example"},

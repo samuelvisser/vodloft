@@ -99,7 +99,7 @@ export default function QuickDownloadSettingsTab({draft, updateDraft, environmen
                              {...field('defaultAudioFormat')} onChange={(value) => set('defaultAudioFormat', value as QuickDownloadSettings['defaultAudioFormat'])}/>
                 <SelectField id="settings-quick-mp3-bitrate" label="MP3 bitrate" value={String(quick.defaultMp3Bitrate)} registry={Mp3BitrateReg}
                              {...field('defaultMp3Bitrate')} onChange={(value) => set('defaultMp3Bitrate', Number(value))}/>
-                <ToggleField id="settings-quick-embed-metadata" label="Embed title, show or channel and date" checked={quick.embedMetadata}
+                <ToggleField id="settings-quick-embed-metadata" label="Embed title, collection or channel and date" checked={quick.embedMetadata}
                              environmentVariable={environmentVariableFor('quickDownload.embedMetadata')}
                              onChange={(value) => set('embedMetadata', value)}/>
                 <ToggleField id="settings-quick-embed-artwork" label="Embed cover art" checked={quick.embedArtwork}

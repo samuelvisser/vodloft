@@ -14,7 +14,7 @@ from ..fetch_new_episodes.service import run_fetch_new_episodes
     resource_type="system",
 )
 @on_cron(
-    # Wakes up often; the Source decides how often each show is actually checked.
+    # Wakes up often; the Source decides how often each collection is actually checked.
     cron=get_settings().new_episode_schedule.quick_check_cron,
     enabled=get_settings().new_episode_schedule.quick_check_cron_enabled,
     resource_type="system",
@@ -25,7 +25,7 @@ from ..fetch_new_episodes.service import run_fetch_new_episodes
     key="quick_check_new_videos",
     title="Quick check for new videos",
     description=(
-        "Checks YouTube channels and other shows with quick checks for new videos, as often as the "
+        "Checks YouTube channels and other collections with quick checks for new videos, as often as the "
         "YouTube API quota allows, and adds only what is new."
     ),
     allowed_resource_types=("system",),
@@ -44,25 +44,25 @@ async def quick_check_new_videos(*, resource_id: int | None = None, progress=Non
 @on_cron(
     cron=get_settings().new_episode_schedule.full_rescan_cron,
     enabled=get_settings().new_episode_schedule.full_rescan_cron_enabled,
-    resource_type="show",
+    resource_type="collection",
     resource_id=None,
     coalesce=True,
 )
 @task(
-    key="rescan_quick_checked_shows",
-    title="Re-scan shows with quick checks",
+    key="rescan_quick_checked_collections",
+    title="Re-scan collections with quick checks",
     description=(
-        "Lists YouTube channels and other shows with quick checks in full, to catch anything a quick check "
+        "Lists YouTube channels and other collections with quick checks in full, to catch anything a quick check "
         "missed, and refreshes their episodes' titles and thumbnails and which ones the Source no longer has."
     ),
-    allowed_resource_types=("show",),
+    allowed_resource_types=("collection",),
     default_max_retries=3,
     tracks_progress=False,
 )
-async def rescan_quick_checked_shows(*, resource_id: int | None = None, progress=None) -> TaskResult:
+async def rescan_quick_checked_collections(*, resource_id: int | None = None, progress=None) -> TaskResult:
     with db_session() as s:
-        result = await run_fetch_new_episodes(s, show_id=resource_id, quick_checked=True, progress=progress)
-        refreshed = run_catalogue_refresh(s, show_id=resource_id)
+        result = await run_fetch_new_episodes(s, collection_id=resource_id, quick_checked=True, progress=progress)
+        refreshed = run_catalogue_refresh(s, collection_id=resource_id)
     return TaskResult(
         summary=f"{result.summary()}. {refreshed.summary()}",
         data={**result.as_data(), "refresh": refreshed.as_data()},

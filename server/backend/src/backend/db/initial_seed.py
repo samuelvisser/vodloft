@@ -13,11 +13,11 @@ from .core import get_session, load_database_models
 # This module runs only after Alembic has brought a fresh database to the
 # current schema. Keep schema/data transformations for existing installations
 # in migrations; keep development/demo fixtures in backend.db.fake_data.
-_SHOW_VIDEO_TEMPLATE = (
-    "/downloads/shows/{{ show_title }}/{{ season_name }}/{{ episode_title }}.ext"
+_COLLECTION_VIDEO_TEMPLATE = (
+    "/downloads/shows/{{ collection_title }}/{{ season_name }}/{{ episode_title }}.ext"
 )
-_SHOW_AUDIO_TEMPLATE = (
-    "/downloads/podcasts/{{ show_title }}/"
+_COLLECTION_AUDIO_TEMPLATE = (
+    "/downloads/podcasts/{{ collection_title }}/"
     "{{ episode_published_date }} - {{ episode_title }}.ext"
 )
 _MOVIE_TEMPLATE = (
@@ -39,23 +39,23 @@ def _seed_local_media_profiles(session: Session) -> None:
     from backend.db.models import (
         LocalMediaProfileBase,
         MovieLocalMediaProfile,
-        ShowLocalMediaProfile,
+        CollectionLocalMediaProfile,
         VideoLocalMediaProfile,
     )
 
     profiles = (
-        ShowLocalMediaProfile(
-            slug="vodloft-shows-video",
-            name="VODLoft Shows (Video)",
+        CollectionLocalMediaProfile(
+            slug="vodloft-collections-video",
+            name="VODLoft Collections (Video)",
             subtitle_mode="sidecar",
-            output_template=_SHOW_VIDEO_TEMPLATE,
+            output_template=_COLLECTION_VIDEO_TEMPLATE,
             preferred_format="format_1080p",
         ),
-        ShowLocalMediaProfile(
-            slug="vodloft-shows-audio",
-            name="VODLoft Shows (Audio)",
+        CollectionLocalMediaProfile(
+            slug="vodloft-collections-audio",
+            name="VODLoft Collections (Audio)",
             subtitle_mode="sidecar",
-            output_template=_SHOW_AUDIO_TEMPLATE,
+            output_template=_COLLECTION_AUDIO_TEMPLATE,
             preferred_format="format_audio_only",
         ),
         MovieLocalMediaProfile(

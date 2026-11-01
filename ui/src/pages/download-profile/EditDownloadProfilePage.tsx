@@ -2,7 +2,7 @@ import {useCallback, useEffect, useMemo} from 'react'
 import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate, useParams} from 'react-router-dom'
-import {useDownloadProfilesByShowSlug, useLocalMediaProfiles, useShowSeasons} from '../../lib/queries'
+import {useDownloadProfilesByCollectionSlug, useLocalMediaProfiles, useCollectionSeasons} from '../../lib/queries'
 import DownloadProfileForm from '../../components/DownloadProfile/DownloadProfileForm'
 import {
     DownloadProfileUpdateIn, DownloadProfileUpdateOut, DownloadProfileUpdateSchema, forEpisodeIdentifier,
@@ -13,7 +13,7 @@ import {useLocalMediaProfileSelectRegistry} from "../../types/local_media_profil
 import {DownloadProfileReadView} from "../../types/schemas/download_profile_view";
 import {useQuery, useQueryClient} from "@tanstack/react-query";
 import ReadMore from "../../utils/ReadMore";
-import {EpisodeIdentifierReg} from "../../types/show";
+import {EpisodeIdentifierReg} from "../../types/collection";
 
 type RouteParams = { id?: string }
 
@@ -35,13 +35,13 @@ export default function EditDownloadProfilePage() {
             return await res.json() as Promise<DownloadProfileReadView>
         },
     })
-    const showTitle: string | undefined = downloadProfile?.showTitle
+    const collectionTitle: string | undefined = downloadProfile?.collectionTitle
 
     const {data: mediaProfiles} = useLocalMediaProfiles()
-    const {data: seasonsData} = useShowSeasons(downloadProfile?.showSlug)
-    const {data: showProfiles} = useDownloadProfilesByShowSlug(downloadProfile?.showSlug)
+    const {data: seasonsData} = useCollectionSeasons(downloadProfile?.collectionSlug)
+    const {data: collectionProfiles} = useDownloadProfilesByCollectionSlug(downloadProfile?.collectionSlug)
 
-    const episodeIdentifier = downloadProfile?.showEpisodeIdentifier
+    const episodeIdentifier = downloadProfile?.collectionEpisodeIdentifier
     const schema = useMemo(
         () => forEpisodeIdentifier(DownloadProfileUpdateSchema, episodeIdentifier),
         [episodeIdentifier],
@@ -59,25 +59,25 @@ export default function EditDownloadProfilePage() {
         form.reset(DownloadProfileUpdateSchema.parse(downloadProfile))
     }, [downloadProfile, form])
 
-    const showType = downloadProfile?.showType
+    const collectionType = downloadProfile?.collectionType
     const mediaProfileReg = useLocalMediaProfileSelectRegistry(
         mediaProfiles,
-        'show',
-        showType === 'podcast' || showType === 'series' ? showType : undefined,
+        'collection',
+        collectionType === 'podcast' || collectionType === 'series' ? collectionType : undefined,
     )
     const selectedLocalMediaProfileId = form.watch('localMediaProfileId')
 
     const disabledEpisodeTypes = useMemo(() => {
         if (typeof selectedLocalMediaProfileId !== 'number') return new Set<string>()
         return new Set<string>(
-            (showProfiles ?? [])
+            (collectionProfiles ?? [])
                 .filter((profile) => (
                     profile.id !== profileId
                     && profile.localMediaProfileId === selectedLocalMediaProfileId
                 ))
                 .flatMap((profile) => profile.epIdTypeList)
         )
-    }, [profileId, selectedLocalMediaProfileId, showProfiles])
+    }, [profileId, selectedLocalMediaProfileId, collectionProfiles])
 
     const onCancel = useCallback(() => navigate('/download-profiles'), [navigate])
 
@@ -92,7 +92,7 @@ export default function EditDownloadProfilePage() {
 
     const onSuccess = async () => {
         await qc.invalidateQueries({queryKey: ['downloadProfilesView']})
-        await qc.invalidateQueries({queryKey: ['downloadProfilesByShowSlug']})
+        await qc.invalidateQueries({queryKey: ['downloadProfilesByCollectionSlug']})
 
         navigate('/download-profiles')
     }
@@ -138,8 +138,8 @@ export default function EditDownloadProfilePage() {
                     )}
 
                     <div className="form-row">
-                        <label>Show</label>
-                        <div style={{padding: '6px 0'}}>{showTitle}</div>
+                        <label>Collection</label>
+                        <div style={{padding: '6px 0'}}>{collectionTitle}</div>
                     </div>
 
                     <div className="form-row">
@@ -176,7 +176,7 @@ export default function EditDownloadProfilePage() {
                             <ReadMore summary={<span>The Local Media Profile defines the type and output path of downloaded media.</span>}>
                                 <p>When changing the Local Media Profile for an existing Download Profile, new episodes will be downloaded to the new
                                     location in the new format. Old episodes will be left in their original location.</p>
-                                <p>The same Local Media Profile can be used by multiple Download Profiles for a show, but each episode type can belong to only one of those profiles.</p>
+                                <p>The same Local Media Profile can be used by multiple Download Profiles for a collection, but each episode type can belong to only one of those profiles.</p>
                             </ReadMore>
                         </div>
                     </div>
@@ -184,9 +184,9 @@ export default function EditDownloadProfilePage() {
                     <DownloadProfileForm
                         form={form}
                         episodeIdentifier={episodeIdentifier}
-                        showId={downloadProfile?.showId}
+                        collectionId={downloadProfile?.collectionId}
                         seasons={seasonsData}
-                        showRoot={false}
+                        collectionRoot={false}
                         disabledEpisodeTypes={disabledEpisodeTypes}
                     />
 

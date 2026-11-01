@@ -15,10 +15,10 @@ def ensure_dir_from_template(output_template: str) -> Path:
     return dir_path
 
 
-def pick_thumbnail_url(show) -> Optional[str]:
+def pick_thumbnail_url(collection) -> Optional[str]:
     # Try in preference order
     for attr in ("thumbnail_landscape_path", "thumbnail_portrait_path", "thumbnail_square_path"):
-        val = getattr(show, attr, None)
+        val = getattr(collection, attr, None)
         if val:
             return val
     return None

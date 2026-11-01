@@ -16,7 +16,7 @@ import {
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import './CustomMetadataEditor.css'
 
-export type CustomMetadataScope = 'show' | 'movie'
+export type CustomMetadataScope = 'collection' | 'movie'
 
 type Props = {
     open: boolean
@@ -34,12 +34,12 @@ type PendingRemoval = {
 }
 
 const VARIABLE_PREFIX: Record<CustomMetadataScope, string> = {
-    show: 'meta_show_',
+    collection: 'meta_collection_',
     movie: 'meta_movie_',
 }
 
 const SCOPE_LABEL: Record<CustomMetadataScope, {singular: string; plural: string}> = {
-    show: {singular: 'show', plural: 'shows'},
+    collection: {singular: 'collection', plural: 'collections'},
     movie: {singular: 'movie', plural: 'movies'},
 }
 

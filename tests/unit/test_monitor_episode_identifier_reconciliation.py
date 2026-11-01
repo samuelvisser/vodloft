@@ -11,9 +11,9 @@ from sqlalchemy.orm import Session
 def test_monitor_reconciles_identifier_while_episode_stays_pending(monkeypatch):
     import backend.db.models  # noqa: F401
     from backend.db import Base
-    from backend.db.models import Episode, Season, Show
+    from backend.db.models import Episode, Season, Collection
     from backend.types.episode_types import EpisodePublishStatus
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
     from backend.utils.helpers import generate_uuid
     from sources.dailywire.api.records import DwEpisodeDetailRecord
     from task_manager.tasks.helpers.episodes import events as episode_events
@@ -26,21 +26,21 @@ def test_monitor_reconciles_identifier_while_episode_stays_pending(monkeypatch):
     Base.metadata.create_all(engine)
     session = Session(engine)
 
-    show = Show(
+    collection = Collection(
         source_key="dailywire",
-        uuid="show-uuid",
+        uuid="collection-uuid",
         slug="the-ben-shapiro-show",
         title="The Ben Shapiro Show",
         description=None,
-        sharing_url="https://example.test/show",
+        sharing_url="https://example.test/collection",
         membership_level="FREE",
-        type=ShowType.PODCAST.value,
+        type=CollectionType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Ben Shapiro",
         author_slug="ben-shapiro",
     )
-    season = Season(show=show, index=1, slug="2026", name="2026", season_type="normal", season_number=1)
-    session.add_all([show, season])
+    season = Season(collection=collection, index=1, slug="2026", name="2026", season_type="normal", season_number=1)
+    session.add_all([collection, season])
     session.flush()
 
     old_identifier = "ep-extra.other.2500.1"
@@ -48,7 +48,7 @@ def test_monitor_reconciles_identifier_while_episode_stays_pending(monkeypatch):
         source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
-        show=show,
+        collection=collection,
         season=season,
         index=2500,
         episode_identifier=old_identifier,
@@ -106,7 +106,7 @@ def test_monitor_reconciles_identifier_while_episode_stays_pending(monkeypatch):
             session,
             episode_id=episode.id,
             episode_slug=episode.slug,
-            show_slug=show.slug,
+            collection_slug=collection.slug,
             season_id=season.id,
             episode_identifier=old_identifier,
             episode_index=episode.index,

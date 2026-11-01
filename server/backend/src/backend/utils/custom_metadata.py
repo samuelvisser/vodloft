@@ -17,7 +17,7 @@ class _CustomMetadataResource(Protocol):
         ...
 
 
-CustomMetadataScope = Literal["show", "movie"]
+CustomMetadataScope = Literal["collection", "movie"]
 
 CUSTOM_METADATA_DB_PREFIX = "custom."
 CUSTOM_METADATA_KEY_MAX_LENGTH = 64
@@ -26,7 +26,7 @@ CUSTOM_METADATA_MAX_ITEMS = 100
 CUSTOM_METADATA_KEY_PATTERN = re.compile(r"^[a-z_][a-z0-9_]*$")
 
 CUSTOM_METADATA_TEMPLATE_PREFIXES: dict[CustomMetadataScope, str] = {
-    "show": "meta_show_",
+    "collection": "meta_collection_",
     "movie": "meta_movie_",
 }
 

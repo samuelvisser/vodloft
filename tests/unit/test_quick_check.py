@@ -14,7 +14,7 @@ from sources.ytdlp import YtDlpSource, youtube_rss
 from sources.ytdlp.youtube_api import Share, key as key_store, quota
 
 from test_youtube_catalogue import FakeResponse, _video_item, lookups, youtube, ytdlp_dir  # noqa: F401
-from test_ytdlp_shows import ListedSource
+from test_ytdlp_collections import ListedSource
 
 FEED = """<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns="http://www.w3.org/2005/Atom">
@@ -123,17 +123,17 @@ def test_without_a_key_details_come_from_ytdlp(lookups):
 
 def test_the_check_interval_follows_the_quota(youtube):
     source = YtDlpSource()
-    shows = [(f"https://www.youtube.com/channel/UC{n}/videos", 500) for n in range(100)]
-    assert 30 <= source.quick_check_minutes(shows) <= 35
-    assert source.quick_check_minutes(shows[:5]) == 10
+    collections = [(f"https://www.youtube.com/channel/UC{n}/videos", 500) for n in range(100)]
+    assert 30 <= source.quick_check_minutes(collections) <= 35
+    assert source.quick_check_minutes(collections[:5]) == 10
     key_store.remove()
     # RSS needs no quota.
-    assert source.quick_check_minutes(shows) == 10
+    assert source.quick_check_minutes(collections) == 10
 
 
 class QuickSource(ListedSource):
     id = "quick"
-    features = frozenset({Feature.SHOWS, Feature.EPISODE_LISTS, Feature.QUICK_CHECK})
+    features = frozenset({Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.QUICK_CHECK})
 
     def __init__(self):
         super().__init__()
@@ -148,7 +148,7 @@ class QuickSource(ListedSource):
         self.detailed.append([item.slug for item in items])
         return {item.slug: next(v for v in self.videos if v.slug == item.slug) for item in items}
 
-    def quick_check_minutes(self, shows):
+    def quick_check_minutes(self, collections):
         return 15
 
 
@@ -164,7 +164,7 @@ def quick(monkeypatch):
 @pytest.fixture
 def session():
     from backend.db.core import Base
-    import backend.api.endpoints.shows.router  # noqa: F401  (loads every model first)
+    import backend.api.endpoints.collections.router  # noqa: F401  (loads every model first)
 
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
@@ -174,17 +174,17 @@ def session():
     engine.dispose()
 
 
-def _show(session, slug: str, source_key: str = "quick"):
-    from backend.db.models import Show
+def _collection(session, slug: str, source_key: str = "quick"):
+    from backend.db.models import Collection
 
-    show = Show(
-        uuid=f"uuid-{slug}", slug=slug, source_key=source_key, title=f"Show {slug}",
+    collection = Collection(
+        uuid=f"uuid-{slug}", slug=slug, source_key=source_key, title=f"Collection {slug}",
         sharing_url=f"https://www.youtube.com/channel/{slug}/videos", membership_level="FREE", type="podcast",
         episode_identifier="numbered", author_name="A", author_slug="a",
     )
-    session.add(show)
+    session.add(collection)
     session.commit()
-    return show
+    return collection
 
 
 def _video(slug: str, day: int) -> VideoDetails:
@@ -198,13 +198,13 @@ def test_a_quick_check_adds_only_new_videos_and_waits_for_the_next_interval(quic
     from backend.db.models import Episode
     from task_manager.tasks.workers.fetch_new_episodes.quick_check import run_quick_check
 
-    show = _show(session, "UC1")
-    never_indexed = _show(session, "UC2")
+    collection = _collection(session, "UC1")
+    never_indexed = _collection(session, "UC2")
     quick.videos = [_video("v1", 1), _video("v2", 2)]
     now = datetime(2024, 2, 1, tzinfo=timezone.utc)
 
     first = run_quick_check(session, now=now)
-    # Both shows were never indexed, so both get their full first index.
+    # Both collections were never indexed, so both get their full first index.
     assert (first.checked, first.found) == (2, 4)
     assert quick.checked == []
 
@@ -214,25 +214,25 @@ def test_a_quick_check_adds_only_new_videos_and_waits_for_the_next_interval(quic
 
     assert (later.checked, later.found) == (2, 2)
     assert quick.detailed == [["v3"], ["v3"]]
-    episodes = session.query(Episode).filter(Episode.show_id == show.id).order_by(Episode.index).all()
+    episodes = session.query(Episode).filter(Episode.collection_id == collection.id).order_by(Episode.index).all()
     assert [(e.source_slug, e.episode_identifier) for e in episodes] == [("v1", "ep.1"), ("v2", "ep.2"), ("v3", "ep.3")]
-    assert session.query(Episode).filter(Episode.show_id == never_indexed.id).count() == 3
+    assert session.query(Episode).filter(Episode.collection_id == never_indexed.id).count() == 3
 
 
-def test_scheduled_scans_leave_quick_checked_shows_to_the_daily_rescan(quick, listed_too, session):
+def test_scheduled_scans_leave_quick_checked_collections_to_the_daily_rescan(quick, listed_too, session):
     import asyncio
     from task_manager.tasks.workers.fetch_new_episodes.service import run_fetch_new_episodes
 
-    _show(session, "UC1")
-    _show(session, "PL1", source_key="listed")
+    _collection(session, "UC1")
+    _collection(session, "PL1", source_key="listed")
     quick.videos = [_video("v1", 1)]
     listed_too.videos = [_video("p1", 1)]
 
-    scheduled = asyncio.run(run_fetch_new_episodes(session, show_id=None, quick_checked=False))
-    rescan = asyncio.run(run_fetch_new_episodes(session, show_id=None, quick_checked=True))
+    scheduled = asyncio.run(run_fetch_new_episodes(session, collection_id=None, quick_checked=False))
+    rescan = asyncio.run(run_fetch_new_episodes(session, collection_id=None, quick_checked=True))
 
-    assert [show.show_slug for show in scheduled.shows] == ["PL1"]
-    assert [show.show_slug for show in rescan.shows] == ["UC1"]
+    assert [collection.collection_slug for collection in scheduled.collections] == ["PL1"]
+    assert [collection.collection_slug for collection in rescan.collections] == ["UC1"]
 
 
 @pytest.fixture

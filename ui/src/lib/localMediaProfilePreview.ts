@@ -7,7 +7,7 @@ import {
 } from '../types/schemas/local_media_profile_preview'
 
 type PreviewRequest = {
-    type: 'show' | 'movie' | 'video'
+    type: 'collection' | 'movie' | 'video'
     outputTemplate: string
     preferredFormat: string
     sourceId: string
@@ -54,7 +54,7 @@ export function useLocalMediaProfilePreview(request: PreviewRequest | null): Loc
             // Planning is intentionally separate from the full preview so the
             // UI can announce the historical simulation while that longer
             // request is still running.
-            if (request?.type === 'show' && request.outputTemplate.includes('custom_index')) {
+            if (request?.type === 'collection' && request.outputTemplate.includes('custom_index')) {
                 void fetch(
                     `${(window as any).appConfig.API_URL}/local-media-profiles/preview/plan`,
                     requestOptions,

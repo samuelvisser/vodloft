@@ -38,17 +38,17 @@ def db_session():
     engine.dispose()
 
 
-def _make_show(
+def _make_collection(
     session: Session,
     *,
-    slug: str = "show",
+    slug: str = "collection",
     episode_identifier: str | None = None,
-    show_type: str | None = None,
+    collection_type: str | None = None,
 ):
-    from backend.db.models import Show
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+    from backend.db.models import Collection
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
 
-    show = Show(
+    collection = Collection(
         source_key="dailywire",
         uuid=f"{slug}-uuid",
         slug=slug,
@@ -56,21 +56,21 @@ def _make_show(
         description="Description",
         sharing_url=f"https://example.test/{slug}",
         membership_level="FREE",
-        type=show_type or ShowType.PODCAST.value,
+        type=collection_type or CollectionType.PODCAST.value,
         episode_identifier=(
             episode_identifier or EpisodeIdentifier.NUMBERED.value
         ),
         author_name="Host",
         author_slug="host",
     )
-    session.add(show)
+    session.add(collection)
     session.flush()
-    return show
+    return collection
 
 
 def _make_season(
     session: Session,
-    show,
+    collection,
     *,
     index: int = 1,
     season_number: int = 1,
@@ -79,7 +79,7 @@ def _make_season(
     from backend.db.models import Season
 
     season = Season(
-        show=show,
+        collection=collection,
         index=index,
         slug=f"season-{index}",
         name=name,
@@ -92,7 +92,7 @@ def _make_season(
 
 def _make_episode(
     session: Session,
-    show,
+    collection,
     season,
     *,
     index: int,
@@ -108,7 +108,7 @@ def _make_episode(
         source_key="dailywire",
         uuid=f"episode-{index}-uuid",
         type="episode",
-        show=show,
+        collection=collection,
         season=season,
         index=index,
         episode_identifier=episode_identifier or f"ep.{index}",
@@ -175,7 +175,7 @@ def _make_available_download(
 
 def _make_rss_profile(
     session: Session,
-    show,
+    collection,
     *,
     mode: str = "audio_hls",
     preferred_format: str = "format_1080p",
@@ -186,7 +186,7 @@ def _make_rss_profile(
     from backend.db.models import RssStreamProfile
 
     profile = RssStreamProfile(
-        show=show,
+        collection=collection,
         enable_profile=True,
         token="token",
         use_downloads=use_downloads,
@@ -194,7 +194,7 @@ def _make_rss_profile(
         preferred_format=preferred_format,
         prefer_exact_match=False,
         ep_id_type_list=["ep"],
-        feed_url="https://vodloft.test/feeds/rss/token/show.xml",
+        feed_url="https://vodloft.test/feeds/rss/token/collection.xml",
         video_output_mode=mode,
         stream_live_episodes=False,
         live_episode_handoff_ids=[],
@@ -211,12 +211,12 @@ def test_download_only_feed_excludes_episodes_without_relevant_local_media(
 ):
     from backend.api.endpoints.feeds.service import get_feed_items
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
-    newest = _make_episode(db_session, show, season, index=2)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
+    newest = _make_episode(db_session, collection, season, index=2)
     older = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         index=1,
         when=datetime.now(timezone.utc) - timedelta(days=1),
@@ -234,7 +234,7 @@ def test_download_only_feed_excludes_episodes_without_relevant_local_media(
     )
     profile = _make_rss_profile(
         db_session,
-        show,
+        collection,
         mode="mp4",
         use_downloads=True,
         use_dw_stream=False,
@@ -251,12 +251,12 @@ def test_dailywire_enabled_feed_keeps_undownloaded_episode_with_stable_url(
 ):
     from backend.api.endpoints.feeds.service import get_feed_items, render_rss_feed
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
-    episode = _make_episode(db_session, show, season, index=1)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
+    episode = _make_episode(db_session, collection, season, index=1)
     profile = _make_rss_profile(
         db_session,
-        show,
+        collection,
         mode="audio_hls",
         use_downloads=True,
         use_dw_stream=True,
@@ -296,12 +296,12 @@ def test_rss_media_urls_do_not_change_when_download_appears(
     from downloader.storage.identity import inspect_artifact
     from downloader import hls_asset_marker, hls_asset_root
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
-    episode = _make_episode(db_session, show, season, index=1)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
+    episode = _make_episode(db_session, collection, season, index=1)
     profile = _make_rss_profile(
         db_session,
-        show,
+        collection,
         mode=mode,
         use_downloads=True,
         use_dw_stream=True,
@@ -382,27 +382,27 @@ def test_rss_media_urls_do_not_change_when_download_appears(
 def test_max_items_keeps_newest_feed_entries(db_session):
     from backend.api.endpoints.feeds.service import get_feed_items
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     now = datetime.now(timezone.utc)
-    newest = _make_episode(db_session, show, season, index=3, when=now)
+    newest = _make_episode(db_session, collection, season, index=3, when=now)
     second = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         index=2,
         when=now - timedelta(hours=1),
     )
     _make_episode(
         db_session,
-        show,
+        collection,
         season,
         index=1,
         when=now - timedelta(hours=2),
     )
     profile = _make_rss_profile(
         db_session,
-        show,
+        collection,
         mode="mp4",
         use_downloads=False,
         use_dw_stream=True,
@@ -417,29 +417,29 @@ def test_max_items_keeps_newest_feed_entries(db_session):
 
 def test_seasonal_feed_emits_apple_and_podcasting20_numbering(db_session):
     from backend.api.endpoints.feeds.service import render_rss_feed
-    from backend.types.show_types import EpisodeIdentifier
+    from backend.types.collection_types import EpisodeIdentifier
 
-    show = _make_show(
+    collection = _make_collection(
         db_session,
         episode_identifier=EpisodeIdentifier.SEASONAL.value,
     )
     season = _make_season(
         db_session,
-        show,
+        collection,
         index=4,
         season_number=2,
         name="Second Season",
     )
     _make_episode(
         db_session,
-        show,
+        collection,
         season,
         index=7,
         episode_identifier="ep.S02E07",
     )
     profile = _make_rss_profile(
         db_session,
-        show,
+        collection,
         mode="mp4",
         use_downloads=False,
         use_dw_stream=True,
@@ -457,29 +457,29 @@ def test_seasonal_feed_emits_apple_and_podcasting20_numbering(db_session):
 
 def test_series_feed_is_serial_even_with_seasonal_identifiers(db_session):
     from backend.api.endpoints.feeds.service import render_rss_feed
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
 
-    show = _make_show(
+    collection = _make_collection(
         db_session,
         episode_identifier=EpisodeIdentifier.SEASONAL.value,
-        show_type=ShowType.SERIES.value,
+        collection_type=CollectionType.SERIES.value,
     )
     season = _make_season(
         db_session,
-        show,
+        collection,
         season_number=1,
         name="Season 1",
     )
     _make_episode(
         db_session,
-        show,
+        collection,
         season,
         index=1,
         episode_identifier="ep.S01E01",
     )
     profile = _make_rss_profile(
         db_session,
-        show,
+        collection,
         mode="mp4",
         use_downloads=False,
         use_dw_stream=True,
@@ -496,28 +496,28 @@ def test_series_feed_is_serial_even_with_seasonal_identifiers(db_session):
 
 def test_seasonal_attached_extra_keeps_parent_episode_number(db_session):
     from backend.api.endpoints.feeds.service import render_rss_feed
-    from backend.types.show_types import EpisodeIdentifier
+    from backend.types.collection_types import EpisodeIdentifier
 
-    show = _make_show(
+    collection = _make_collection(
         db_session,
         episode_identifier=EpisodeIdentifier.SEASONAL.value,
     )
     season = _make_season(
         db_session,
-        show,
+        collection,
         season_number=3,
         name="Season 3",
     )
     _make_episode(
         db_session,
-        show,
+        collection,
         season,
         index=1,
         episode_identifier="ep-extra.other.S03E12.1",
     )
     profile = _make_rss_profile(
         db_session,
-        show,
+        collection,
         mode="mp4",
         use_downloads=False,
         use_dw_stream=True,
@@ -536,18 +536,18 @@ def test_seasonal_attached_extra_keeps_parent_episode_number(db_session):
 def test_numbered_episodic_feed_emits_episode_metadata(db_session):
     from backend.api.endpoints.feeds.service import render_rss_feed
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     _make_episode(
         db_session,
-        show,
+        collection,
         season,
         index=27,
         episode_identifier="ep.27",
     )
     profile = _make_rss_profile(
         db_session,
-        show,
+        collection,
         mode="mp4",
         use_downloads=False,
         use_dw_stream=True,
@@ -566,18 +566,18 @@ def test_numbered_episodic_feed_emits_episode_metadata(db_session):
 def test_numbered_episodic_bonus_uses_parent_episode_number(db_session):
     from backend.api.endpoints.feeds.service import render_rss_feed
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     _make_episode(
         db_session,
-        show,
+        collection,
         season,
         index=1,
         episode_identifier="ep-extra.other.27.2",
     )
     profile = _make_rss_profile(
         db_session,
-        show,
+        collection,
         mode="mp4",
         use_downloads=False,
         use_dw_stream=True,
@@ -594,16 +594,16 @@ def test_numbered_episodic_bonus_uses_parent_episode_number(db_session):
 
 def test_date_based_podcast_omits_episode_numbers(db_session):
     from backend.api.endpoints.feeds.service import render_rss_feed
-    from backend.types.show_types import EpisodeIdentifier
+    from backend.types.collection_types import EpisodeIdentifier
 
-    show = _make_show(
+    collection = _make_collection(
         db_session,
         episode_identifier=EpisodeIdentifier.DATE_BASED.value,
     )
-    season = _make_season(db_session, show)
+    season = _make_season(db_session, collection)
     _make_episode(
         db_session,
-        show,
+        collection,
         season,
         index=91,
         episode_identifier="ep.2026-09-26T09:00:00.000000",
@@ -611,7 +611,7 @@ def test_date_based_podcast_omits_episode_numbers(db_session):
     )
     profile = _make_rss_profile(
         db_session,
-        show,
+        collection,
         mode="mp4",
         use_downloads=False,
         use_dw_stream=True,
@@ -633,12 +633,12 @@ def test_get_source_stream_url_selects_requested_media(
 ):
     import backend.api.endpoints.feeds.service as service
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
-    episode = _make_episode(db_session, show, season, index=1)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
+    episode = _make_episode(db_session, collection, season, index=1)
     profile = _make_rss_profile(
         db_session,
-        show,
+        collection,
         use_downloads=False,
         use_dw_stream=True,
     )
@@ -676,10 +676,10 @@ def test_create_stream_profile_generates_plain_stable_feed_url(db_session):
     )
     from backend.api.models.rss_stream_profile import RssStreamProfileAPICreate
 
-    show = _make_show(db_session)
+    collection = _make_collection(db_session)
     body = RssStreamProfileAPICreate(
-        show_id=show.id,
-        title=show.title,
+        collection_id=collection.id,
+        title=collection.title,
         enable_profile=True,
         use_downloads=True,
         use_dw_stream=True,
@@ -694,10 +694,10 @@ def test_create_stream_profile_generates_plain_stable_feed_url(db_session):
 
     stored = db_session.get(RssStreamProfile, created.id)
     assert stored is not None
-    assert stored.overwrite_show_title is None
-    assert created.effective_title == show.title
+    assert stored.overwrite_collection_title is None
+    assert created.effective_title == collection.title
     assert created.feed_url.startswith("https://vodloft.test/feeds/rss/")
-    assert created.feed_url.endswith("/show.xml")
+    assert created.feed_url.endswith("/collection.xml")
     assert "dwVideoMethod" not in created.feed_url
     assert "?" not in created.feed_url
 
@@ -714,13 +714,13 @@ def test_stream_profile_custom_title_is_persisted_used_and_can_be_cleared(db_ses
     )
     from backend.db.models import RssStreamProfile
 
-    show = _make_show(db_session)
+    collection = _make_collection(db_session)
     custom_title = "My Custom Podcast"
     created = create_stream_profile_rss(
         db_session,
         _FakeRequest(),
         RssStreamProfileAPICreate(
-            show_id=show.id,
+            collection_id=collection.id,
             title=custom_title,
             enable_profile=True,
             use_downloads=True,
@@ -734,7 +734,7 @@ def test_stream_profile_custom_title_is_persisted_used_and_can_be_cleared(db_ses
 
     stored = db_session.get(RssStreamProfile, created.id)
     assert stored is not None
-    assert stored.overwrite_show_title == custom_title
+    assert stored.overwrite_collection_title == custom_title
     assert created.effective_title == custom_title
     assert f"<title>{custom_title}</title>" in render_rss_feed(
         db_session,
@@ -747,7 +747,7 @@ def test_stream_profile_custom_title_is_persisted_used_and_can_be_cleared(db_ses
         Access.full(),
         created.id,
         RssStreamProfileAPIUpdate(
-            title=show.title,
+            title=collection.title,
             enable_profile=True,
             use_downloads=True,
             use_dw_stream=True,
@@ -758,15 +758,15 @@ def test_stream_profile_custom_title_is_persisted_used_and_can_be_cleared(db_ses
         ),
     )
 
-    assert stored.overwrite_show_title is None
-    assert updated.effective_title == show.title
+    assert stored.overwrite_collection_title is None
+    assert updated.effective_title == collection.title
 
 
 def test_api_defaults_to_audio_hls_with_live_streaming_off():
     from backend.api.models.rss_stream_profile import RssStreamProfileAPICreate
 
     profile = RssStreamProfileAPICreate(
-        show_id=1,
+        collection_id=1,
         title="Test Show",
         enable_profile=True,
         use_downloads=True,
@@ -787,7 +787,7 @@ def test_stream_profile_rejects_local_hls_as_preferred_format():
 
     with pytest.raises(ValidationError, match="Local Media Profile download format"):
         RssStreamProfileAPICreate(
-            show_id=1,
+            collection_id=1,
             title="Test Show",
             enable_profile=True,
             use_downloads=True,
@@ -804,7 +804,7 @@ def test_live_streaming_requires_hls_video_output_mode():
 
     with pytest.raises(ValidationError, match="requires an HLS"):
         RssStreamProfileAPICreate(
-            show_id=1,
+            collection_id=1,
             title="Test Show",
             enable_profile=True,
             use_downloads=True,
@@ -852,12 +852,12 @@ def test_download_only_audio_hls_requires_both_advertised_local_sources(
 ):
     from backend.api.endpoints.feeds.service import get_feed_items
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
-    episode = _make_episode(db_session, show, season, index=1)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
+    episode = _make_episode(db_session, collection, season, index=1)
     profile = _make_rss_profile(
         db_session,
-        show,
+        collection,
         mode="audio_hls",
         use_downloads=True,
         use_dw_stream=False,
@@ -906,12 +906,12 @@ def test_download_only_mp4_hls_requires_both_advertised_video_sources(
 ):
     from backend.api.endpoints.feeds.service import get_feed_items
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
-    episode = _make_episode(db_session, show, season, index=1)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
+    episode = _make_episode(db_session, collection, season, index=1)
     profile = _make_rss_profile(
         db_session,
-        show,
+        collection,
         mode="mp4_hls",
         use_downloads=True,
         use_dw_stream=False,

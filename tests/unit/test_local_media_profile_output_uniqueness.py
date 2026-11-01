@@ -17,7 +17,7 @@ def _environment():
     return environment
 
 
-def _compare(left, right, *, kind='show', left_format='format_1080p', right_format='format_1080p', finalize=None):
+def _compare(left, right, *, kind='collection', left_format='format_1080p', right_format='format_1080p', finalize=None):
     environment = _environment()
     lhs = analyze_profile_outputs(left, kind, left_format, environment=environment, namespace='left')
     rhs = analyze_profile_outputs(right, kind, right_format, environment=environment, namespace='right')
@@ -104,16 +104,16 @@ def test_profile_scoped_indexes_do_not_create_false_guard_contradictions():
     environment = _environment()
     environment.filters['custom_index'] = lambda _key: pytest.fail('Must remain symbolic')
     lhs = analyze_profile_outputs("{% if 'x'|custom_index == 1 %}/downloads/same.ext{% else %}/downloads/left.ext{% endif %}",
-                                  'show', 'format_1080p', environment=environment, namespace='left')
+                                  'collection', 'format_1080p', environment=environment, namespace='left')
     rhs = analyze_profile_outputs("{% if 'x'|custom_index != 1 %}/downloads/same.ext{% else %}/downloads/right.ext{% endif %}",
-                                  'show', 'format_1080p', environment=environment, namespace='right')
+                                  'collection', 'format_1080p', environment=environment, namespace='right')
     assert compare_profile_outputs(lhs, rhs, environment=environment,
                                    finalize_path=lambda path, ext: path[:-3]+ext).status == OutputOverlap.OVERLAP
 
 
 def test_source_and_profile_types_are_separate():
     environment = _environment()
-    left = analyze_profile_outputs('/downloads/{{ title }}.ext', 'show', 'format_1080p', environment=environment, namespace='left')
+    left = analyze_profile_outputs('/downloads/{{ title }}.ext', 'collection', 'format_1080p', environment=environment, namespace='left')
     right = analyze_profile_outputs('/downloads/{{ title }}.ext', 'movie', 'format_1080p', environment=environment, namespace='right')
     assert compare_profile_outputs(left, right, environment=environment,
                                    finalize_path=lambda path, ext: path[:-3]+ext).status == OutputOverlap.DISJOINT
@@ -126,30 +126,30 @@ def test_create_and_update_use_conditional_collision_analysis():
     from sqlalchemy.orm import Session
     from backend.db import Base
     import backend.db.models  # noqa: F401
-    from backend.api.endpoints.show_local_media_profiles.service import create_show_local_media_profile, update_show_local_media_profile
-    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate, ShowLocalMediaProfileAPIUpdate
+    from backend.api.endpoints.collection_local_media_profiles.service import create_collection_local_media_profile, update_collection_local_media_profile
+    from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPICreate, CollectionLocalMediaProfileAPIUpdate
 
     engine = create_engine('sqlite:///:memory:')
     Base.metadata.create_all(engine)
     try:
         with Session(engine) as session:
-            original = create_show_local_media_profile(session, ShowLocalMediaProfileAPICreate(
+            original = create_collection_local_media_profile(session, CollectionLocalMediaProfileAPICreate(
                 name='Original', preferred_format='format_1080p',
                 output_template='/downloads/{% if episode_type == "aux" %}Extras/{% else %}Episodes/{% endif %}{{ episode_title }}.ext'))
             with pytest.raises(HTTPException) as conflict:
-                create_show_local_media_profile(session, ShowLocalMediaProfileAPICreate(
+                create_collection_local_media_profile(session, CollectionLocalMediaProfileAPICreate(
                     name='Conflicting', preferred_format='format_720p',
                     output_template='{% macro label(value) %}{{ value }}{% endmacro %}/downloads/Extras/{{ label(title) }}.ext'))
             assert conflict.value.status_code == 409
             assert conflict.value.detail[0]['loc'] == ['body', 'outputTemplate']
             assert conflict.value.detail[0]['type'] == 'output_path_collision'
             assert 'Original' in conflict.value.detail[0]['msg']
-            separate = create_show_local_media_profile(session, ShowLocalMediaProfileAPICreate(
+            separate = create_collection_local_media_profile(session, CollectionLocalMediaProfileAPICreate(
                 name='Separate', preferred_format='format_1080p', output_template='/downloads/Separate/{{ title }}.ext'))
             with pytest.raises(HTTPException):
-                update_show_local_media_profile(session, separate.slug, ShowLocalMediaProfileAPIUpdate(
+                update_collection_local_media_profile(session, separate.slug, CollectionLocalMediaProfileAPIUpdate(
                     name='Separate', preferred_format='format_1080p', output_template='/downloads/Extras/{{ title }}.ext'))
-            update_show_local_media_profile(session, original.slug, ShowLocalMediaProfileAPIUpdate(
+            update_collection_local_media_profile(session, original.slug, CollectionLocalMediaProfileAPIUpdate(
                 name='Original', preferred_format='format_1080p', output_template=original.output_template))
     finally:
         engine.dispose()
@@ -161,14 +161,14 @@ def test_mutually_exclusive_layouts_are_not_rejected_by_the_api():
     from sqlalchemy.orm import Session
     from backend.db import Base
     import backend.db.models  # noqa: F401
-    from backend.api.endpoints.show_local_media_profiles.service import create_show_local_media_profile
-    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
+    from backend.api.endpoints.collection_local_media_profiles.service import create_collection_local_media_profile
+    from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPICreate
     engine = create_engine('sqlite:///:memory:')
     Base.metadata.create_all(engine)
     try:
         with Session(engine) as session:
             for name, condition in [('A', '=='), ('B', '!=')]:
-                create_show_local_media_profile(session, ShowLocalMediaProfileAPICreate(
+                create_collection_local_media_profile(session, CollectionLocalMediaProfileAPICreate(
                     name=name, preferred_format='format_1080p',
                     output_template='/downloads/{% if episode_type '+condition+' "aux" %}Shared/{% else %}'+name+'/{% endif %}{{ title }}.ext'))
     finally:

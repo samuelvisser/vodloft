@@ -39,15 +39,15 @@ export default function CustomIndexAdvisories({template, indexingValues, onApply
                         {kind === 'episode_index' ? (
                             <>
                                 This Custom Index runs for every episode and has no conditional uses. Use VODLoft&apos;s{' '}
-                                <code>{'{{\u00a0episode_index\u00a0}}'}</code> variable for this show-wide numbering instead of
+                                <code>{'{{\u00a0episode_index\u00a0}}'}</code> variable for this collection-wide numbering instead of
                                 maintaining a separate Custom Index. The stored episode index includes all episode
                                 types and can contain gaps, so review the preview before saving.
                             </>
                         ) : (
                             <>
-                                Custom Indexes are designed to apply an index to only some episodes within a show, using conditions defined
+                                Custom Indexes are designed to apply an index to only some episodes within a collection, using conditions defined
                                 by you in the output template. As currently set up, this Custom Index is triggered by every episode, even
-                                when its number is not used in the path. If you intend to use show-wide numbering, you should probably use the{' '}
+                                when its number is not used in the path. If you intend to use collection-wide numbering, you should probably use the{' '}
                                 <code>{'{{\u00a0episode_index\u00a0}}'}</code> variable VODLoft provides. To number only some episodes, put the{' '}
                                 <code>custom_index</code> call inside the condition that selects them.
                             </>
@@ -57,7 +57,7 @@ export default function CustomIndexAdvisories({template, indexingValues, onApply
                         <details className="template-index-suggestion">
                             <summary>Suggested change for <code>{key}</code></summary>
                             <p>{kind === 'episode_index'
-                                ? <>Use the existing show-wide episode index. The <code>int</code> filter preserves numeric formatting and
+                                ? <>Use the existing collection-wide episode index. The <code>int</code> filter preserves numeric formatting and
                                     arithmetic.</>
                                 : <>VODLoft was able to auto- generate a possible solution which would keep your existing output path logic, but
                                     request the index only where its value is needed.</>

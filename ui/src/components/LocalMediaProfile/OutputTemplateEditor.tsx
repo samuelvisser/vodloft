@@ -17,7 +17,7 @@ import {
     type LocalMediaProfileTemplateSource,
     useLocalMediaProfileTemplateSources,
     useLocalMediaProfileTemplateVariables,
-    useRandomShowTemplateSource,
+    useRandomCollectionTemplateSource,
 } from '../../lib/localMediaProfileTemplateSources'
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
 import TemplateSourceSelect from './TemplateSourceSelect'
@@ -487,7 +487,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
     const {control, formState: {errors}} = form
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
-    const showScope = useWatch({control, name: 'showScope'}) ?? 'both'
+    const collectionScope = useWatch({control, name: 'collectionScope'}) ?? 'both'
     const indexingValues = useWatch({control, name: 'indexingValues'}) ?? []
     const rawLocalMediaProfileId = useWatch({control, name: 'id'})
     const localMediaProfileId = typeof rawLocalMediaProfileId === 'number'
@@ -516,11 +516,11 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
     const [testValues, setTestValues] = useState<Record<string, string>>({})
     const [testValuesExpanded, setTestValuesExpanded] = useState(false)
     const sourceQuery = useLocalMediaProfileTemplateSources(mode, {
-        showScope,
+        collectionScope,
         search: sourceSearch,
         anchorSourceId: selectedSource?.id,
     })
-    const randomShowSourceQuery = useRandomShowTemplateSource(showScope, mode === 'show')
+    const randomCollectionSourceQuery = useRandomCollectionTemplateSource(collectionScope, mode === 'collection')
     const variableQuery = useLocalMediaProfileTemplateVariables(mode)
     const customVariables = (variableQuery.data ?? []) as OutputTemplateVariable[]
     const variables = useMemo(
@@ -539,7 +539,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
     const usedVariablesKey = usedVariables.map(({name}) => name).join('|')
     const missingMetadataVariables = useMemo(() => {
         if (mode === 'video') return []
-        const prefix = mode === 'movie' ? 'meta_movie_' : 'meta_show_'
+        const prefix = mode === 'movie' ? 'meta_movie_' : 'meta_collection_'
         const available = new Set(customVariables.map(({name}) => name))
         return [...new Set(
             usedVariableNames.filter((name) => name.startsWith(prefix) && !available.has(name)),
@@ -604,7 +604,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
                 from: context.pos - currentWord.length,
                 options: [
                     ...vodloftFilterCompletionOptions
-                        .filter((option) => mode === 'show' || option.label !== 'custom_index')
+                        .filter((option) => mode === 'collection' || option.label !== 'custom_index')
                         .map((option) => currentWord ? option : {...option, boost: 99}),
                     ...jinjaNativeFilterCompletionOptions,
                 ],
@@ -720,15 +720,15 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
         setSelectedSource(null)
         setTestValues({})
         setSourceSearch('')
-    }, [mode, showScope])
+    }, [mode, collectionScope])
 
     useEffect(() => {
         if (selectedSource) return
-        if (mode === 'show') {
-            if (randomShowSourceQuery.isLoading) return
-            if (randomShowSourceQuery.data) {
-                setSelectedSource(randomShowSourceQuery.data)
-                setTestValues({...randomShowSourceQuery.data.values})
+        if (mode === 'collection') {
+            if (randomCollectionSourceQuery.isLoading) return
+            if (randomCollectionSourceQuery.data) {
+                setSelectedSource(randomCollectionSourceQuery.data)
+                setTestValues({...randomCollectionSourceQuery.data.values})
                 return
             }
         }
@@ -737,8 +737,8 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
         setTestValues({...sources[0].values})
     }, [
         mode,
-        randomShowSourceQuery.data,
-        randomShowSourceQuery.isLoading,
+        randomCollectionSourceQuery.data,
+        randomCollectionSourceQuery.isLoading,
         selectedSource,
         sources,
     ])
@@ -763,15 +763,15 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
         preferredFormat,
         values: testValues,
         sourceId: selectedSource.id,
-        localMediaProfileId: mode === 'show' ? localMediaProfileId : null,
-        indexingValues: mode === 'show' ? indexingValues : null,
+        localMediaProfileId: mode === 'collection' ? localMediaProfileId : null,
+        indexingValues: mode === 'collection' ? indexingValues : null,
     } : null)
     const previewPath = preview.result?.output.outputPath ?? ''
     const previewError = preview.error || preview.result?.output.error || ''
     const previewLoading = preview.loading
     const previewIndicatorLoading = selectedSource
         ? previewLoading
-        : sourceQuery.isLoading || (mode === 'show' && randomShowSourceQuery.isLoading)
+        : sourceQuery.isLoading || (mode === 'collection' && randomCollectionSourceQuery.isLoading)
 
     useEffect(() => {
         // Keep editable controls mounted while the shared request is pending.
@@ -836,7 +836,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
                             {missingMetadataVariables.length === 1 ? ' does' : ' do'} not exist yet and will render as empty.
                         </div>
                     )}
-                    {mode === 'show' && (
+                    {mode === 'collection' && (
                         <CustomIndexAdvisories
                             template={template}
                             indexingValues={indexingValues}
@@ -885,7 +885,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
                                         sourceQuery.isLoading
                                         || sourceQuery.isFetchingNextPage
                                         || sourceQuery.isFetchingPreviousPage
-                                        || (mode === 'show' && !selectedSource && randomShowSourceQuery.isLoading)
+                                        || (mode === 'collection' && !selectedSource && randomCollectionSourceQuery.isLoading)
                                     }
                                     hasMore={sourceQuery.hasNextPage ?? false}
                                     hasPrevious={sourceQuery.hasPreviousPage ?? false}
@@ -907,7 +907,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
                             <p className="error" role="alert">Examples could not be loaded. Try refreshing the page.</p>
                         )}
                         {selectedSource?.fallback && (
-                            <p className="template-preview-status">No {({show: 'episodes', movie: 'movies', video: 'videos'} as const)[mode]} found yet, so example values are
+                            <p className="template-preview-status">No {({collection: 'episodes', movie: 'movies', video: 'videos'} as const)[mode]} found yet, so example values are
                                 being used.</p>
                         )}
 

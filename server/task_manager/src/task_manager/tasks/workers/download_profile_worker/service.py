@@ -47,7 +47,7 @@ async def run_download_profile_worker(
 
     if not profile_ids:
         # A final-publication event must also release manual bulk downloads
-        # waiting for a countdown, even when this show has no Download Profiles.
+        # waiting for a countdown, even when this collection has no Download Profiles.
         dispatch_queued_media_download_operations(s)
         s.commit()
         update_progress(progress, 100, "No enabled download profile in scope")
@@ -60,7 +60,7 @@ async def run_download_profile_worker(
 
     for index, profile_id in enumerate(profile_ids):
         pending_profile = s.get(DownloadProfile, profile_id)
-        pair = (pending_profile.show_id, pending_profile.local_media_profile_id) if pending_profile is not None else None
+        pair = (pending_profile.collection_id, pending_profile.local_media_profile_id) if pending_profile is not None else None
         s.rollback()
         if pair is not None:
             await wait_for_custom_index_pair(*pair)

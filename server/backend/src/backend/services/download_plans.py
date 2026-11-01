@@ -42,7 +42,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     if episode is None and movie is None and video is None:
         raise DownloadError("Unsupported media type")
     expected_type = (
-        LocalMediaProfileType.SHOW.value if episode is not None
+        LocalMediaProfileType.COLLECTION.value if episode is not None
         else LocalMediaProfileType.VIDEO.value if video is not None
         else LocalMediaProfileType.MOVIE.value
     )
@@ -87,7 +87,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
             source = resolve_download_source(playback.url, preferred_format=preferred, audio_only=audio_only, remux_video_to_mp4=remux, cancellation=tracker.is_canceled)
     elif episode is not None:
         video_url, audio_url = episode.video_url, episode.audio_url
-        member_only = episode.show.membership_level != DwMembershipLevel.FREE.value
+        member_only = episode.collection.membership_level != DwMembershipLevel.FREE.value
         session.rollback()
         refreshed = False
         while True:
@@ -174,7 +174,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     media = download.media
     if isinstance(media, Episode):
         destination = resolve_episode_output_path(output_template, episode=media, local_media_profile=download.local_media_profile, media_download=download, extension=source.extension)
-        metadata = build_episode_metadata(media, media.show)
+        metadata = build_episode_metadata(media, media.collection)
     elif isinstance(media, Video):
         destination = resolve_video_output_path(output_template, video=media, extension=source.extension)
         metadata = build_video_metadata(media, source_name=media_source.name)

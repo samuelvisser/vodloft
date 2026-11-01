@@ -76,7 +76,7 @@ export default function DownloadLogDialog({row, onClose}: Props) {
                 ['mediaDownloads'],
                 ['mediaDownloadsView'],
                 ['episodeDownloads'],
-                ['showDownloads'],
+                ['collectionDownloads'],
                 ['movieDownloads'],
                 ['videoDownloads'],
                 ['movies'],
@@ -123,7 +123,7 @@ export default function DownloadLogDialog({row, onClose}: Props) {
                     <dl className="log-meta">
                         <div><dt>Media type</dt><dd>{mediaTypeLabel(String(row.type), row.movieExtraType)}</dd></div>
                         {row.type === 'movie_extra' && <div><dt>Movie</dt><dd>{row.movieTitle ?? '—'}</dd></div>}
-                        {row.type === 'episode' && <div><dt>Show</dt><dd>{row.showTitle ?? '—'}</dd></div>}
+                        {row.type === 'episode' && <div><dt>Collection</dt><dd>{row.collectionTitle ?? '—'}</dd></div>}
                         <div><dt>Profile</dt><dd>{row.localMediaProfileName ?? '—'}</dd></div>
                         <div>
                             <dt>Current status</dt>

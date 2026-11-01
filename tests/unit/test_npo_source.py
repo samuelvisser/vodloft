@@ -91,9 +91,9 @@ def npo():
 
 
 def test_npo_links_are_parsed_by_path():
-    assert parse_link("https://npo.nl/start/serie/een-huis-vol/afleveringen") == (LinkKind.SHOW, "een-huis-vol")
-    assert parse_link("https://npo.nl/start/serie/een-huis-vol/afleveringen/seizoen-2") == (LinkKind.SHOW, "een-huis-vol")
-    assert parse_link("https://www.npo.nl/start/serie/een-huis-vol") == (LinkKind.SHOW, "een-huis-vol")
+    assert parse_link("https://npo.nl/start/serie/een-huis-vol/afleveringen") == (LinkKind.COLLECTION, "een-huis-vol")
+    assert parse_link("https://npo.nl/start/serie/een-huis-vol/afleveringen/seizoen-2") == (LinkKind.COLLECTION, "een-huis-vol")
+    assert parse_link("https://www.npo.nl/start/serie/een-huis-vol") == (LinkKind.COLLECTION, "een-huis-vol")
     assert parse_link("https://npo.nl/start/afspelen/een-huis-vol_62") == (LinkKind.VIDEO, "een-huis-vol_62")
     assert parse_link("https://npo.nl/start/serie/een-huis-vol/seizoen-2/een-huis-vol_62/afspelen") == (LinkKind.VIDEO, "een-huis-vol_62")
     assert parse_link("https://npo.nl/start") is None
@@ -105,21 +105,21 @@ def test_npo_is_asked_before_yt_dlp_for_its_own_links():
     assert get_source("npo").has(Feature.SEARCH)
 
 
-def test_a_series_link_resolves_to_a_show(npo):
+def test_a_series_link_resolves_to_a_collection(npo):
     source, _ = npo
     link = source.resolve("https://npo.nl/start/serie/een-huis-vol/afleveringen/seizoen-2")
-    assert link.kind is LinkKind.SHOW
+    assert link.kind is LinkKind.COLLECTION
     assert link.url == "https://npo.nl/start/serie/een-huis-vol/afleveringen"
     assert link.image_url == "https://images.npo.nl/default.jpg"
     assert link.author_name == "NCRV"
     assert source.resolve("https://npo.nl/start/serie/bestaat-niet") is None
 
 
-def test_an_episode_link_names_its_show_and_its_drm(npo):
+def test_an_episode_link_names_its_collection_and_its_drm(npo):
     source, _ = npo
     clear = source.resolve("https://npo.nl/start/afspelen/een-huis-vol_2")
     assert clear.kind is LinkKind.EPISODE
-    assert clear.show_url == "https://npo.nl/start/serie/een-huis-vol/afleveringen"
+    assert clear.collection_url == "https://npo.nl/start/serie/een-huis-vol/afleveringen"
     assert clear.drm_protected is False
     assert source.resolve("https://npo.nl/start/afspelen/een-huis-vol_11").drm_protected is True
 
@@ -166,7 +166,7 @@ def test_search_finds_series_and_programmes(npo):
     source, _ = npo
     results = source.search("huis").results
     assert [(r.kind, r.title, r.url) for r in results] == [
-        (LinkKind.SHOW, "Een huis vol", "https://npo.nl/start/serie/een-huis-vol/afleveringen"),
+        (LinkKind.COLLECTION, "Een huis vol", "https://npo.nl/start/serie/een-huis-vol/afleveringen"),
         (LinkKind.VIDEO, "De film", "https://npo.nl/start/afspelen/de-film_1"),
     ]
     assert source.search("  ").results == []
@@ -186,19 +186,19 @@ def session():
 
 
 def test_an_npo_series_is_indexed_with_its_own_seasons(npo, session):
-    from backend.db.models import Episode, Show
-    from task_manager.tasks.helpers.listed_shows import index_listed_show
+    from backend.db.models import Episode, Collection
+    from task_manager.tasks.helpers.listed_collections import index_listed_collection
 
     source, client = npo
-    show = Show(
+    collection = Collection(
         uuid="uuid-huis", slug="een-huis-vol", source_key="npo", title="Een huis vol",
         sharing_url="https://npo.nl/start/serie/een-huis-vol/afleveringen", membership_level="FREE",
         type="podcast", episode_identifier="seasonal", author_name="NCRV", author_slug="ncrv",
     )
-    session.add(show)
+    session.add(collection)
     session.commit()
 
-    assert index_listed_show(session, show_id=show.id, source=source) == 5
+    assert index_listed_collection(session, collection_id=collection.id, source=source) == 5
     episodes = session.query(Episode).order_by(Episode.index).all()
     assert [(e.slug, e.episode_identifier, e.season.name, e.drm_protected) for e in episodes] == [
         ("een-huis-vol_1", "ep.S02E01", "Season 2", False),
@@ -207,47 +207,47 @@ def test_an_npo_series_is_indexed_with_its_own_seasons(npo, session):
         ("een-huis-vol_11", "ep.S03E01", "Season 3", True),
         ("een-huis-vol_12", "ep.S03E02", "Season 3", True),
     ]
-    session.refresh(show)
-    assert [(s.season_number, s.slug, s.index) for s in sorted(show.seasons, key=lambda s: s.index)] == [
+    session.refresh(collection)
+    assert [(s.season_number, s.slug, s.index) for s in sorted(collection.seasons, key=lambda s: s.index)] == [
         (2, "seizoen-2", 1), (3, "seizoen-2_2", 2),
     ]
 
     # A new episode keeps the number NPO gives it.
     client.programs["s2"].insert(0, _program("een-huis-vol_4", 4, 2, "s2"))
     session.commit()
-    assert index_listed_show(session, show_id=show.id, source=source) == 1
+    assert index_listed_collection(session, collection_id=collection.id, source=source) == 1
     assert session.query(Episode).filter_by(slug="een-huis-vol_4").one().episode_identifier == "ep.S02E04"
 
 
 def test_a_series_names_its_seasons_before_it_is_indexed(npo):
     source, _ = npo
-    details = source.show_details("https://npo.nl/start/serie/een-huis-vol/afleveringen")
+    details = source.collection_details("https://npo.nl/start/serie/een-huis-vol/afleveringen")
     assert [(season.slug, season.number, season.name) for season in details.seasons] == [
         ("seizoen-2", 2, "Season 2"), ("seizoen-2_2", 3, "Season 3"),
     ]
 
 
-def test_seasons_picked_when_the_show_was_added_get_its_episodes(npo, session):
-    from backend.db.models import Episode, Season, Show
-    from task_manager.tasks.helpers.listed_shows import index_listed_show
+def test_seasons_picked_when_the_collection_was_added_get_its_episodes(npo, session):
+    from backend.db.models import Episode, Season, Collection
+    from task_manager.tasks.helpers.listed_collections import index_listed_collection
 
     source, _ = npo
-    show = Show(
+    collection = Collection(
         uuid="uuid-huis", slug="een-huis-vol", source_key="npo", title="Een huis vol",
         sharing_url="https://npo.nl/start/serie/een-huis-vol/afleveringen", membership_level="FREE",
         type="series", episode_identifier="seasonal", author_name="NCRV", author_slug="ncrv",
     )
-    # As the Add Show wizard stores them: numbered in order, not by NPO.
-    show.seasons = [
+    # As the Add Collection wizard stores them: numbered in order, not by NPO.
+    collection.seasons = [
         Season(index=1, slug="seizoen-2", name="Season 2", season_number=1),
         Season(index=2, slug="seizoen-2_2", name="Season 3", season_number=2),
     ]
-    session.add(show)
+    session.add(collection)
     session.commit()
 
-    assert index_listed_show(session, show_id=show.id, source=source) == 5
-    session.refresh(show)
-    assert sorted((s.slug, s.season_number, s.index, len(s.episodes)) for s in show.seasons) == [
+    assert index_listed_collection(session, collection_id=collection.id, source=source) == 5
+    session.refresh(collection)
+    assert sorted((s.slug, s.season_number, s.index, len(s.episodes)) for s in collection.seasons) == [
         ("seizoen-2", 2, 1, 3), ("seizoen-2_2", 3, 2, 2),
     ]
     assert session.query(Episode).filter_by(slug="een-huis-vol_11").one().episode_identifier == "ep.S03E01"
@@ -300,35 +300,35 @@ def test_a_programme_that_needs_npo_plus_resolves_and_plays_as_such(npo):
 
 
 def test_episodes_that_need_npo_plus_are_stored_but_not_planned(npo, session):
-    from backend.db.models import DownloadProfile, Episode, Show, ShowLocalMediaProfile
-    from task_manager.tasks.helpers.listed_shows import index_listed_show
+    from backend.db.models import DownloadProfile, Episode, Collection, CollectionLocalMediaProfile
+    from task_manager.tasks.helpers.listed_collections import index_listed_collection
     from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
 
     source, client = npo
     client.programs["s2"] = [_premium(program) for program in client.programs["s2"]]
     client.protected = set()
-    show = Show(
+    collection = Collection(
         uuid="uuid-huis", slug="een-huis-vol", source_key="npo", title="Een huis vol",
         sharing_url="https://npo.nl/start/serie/een-huis-vol/afleveringen", membership_level="FREE",
         type="series", episode_identifier="seasonal", author_name="NCRV", author_slug="ncrv",
     )
-    session.add(show)
+    session.add(collection)
     session.commit()
-    index_listed_show(session, show_id=show.id, source=source)
+    index_listed_collection(session, collection_id=collection.id, source=source)
     assert {e.slug: e.needs_subscription for e in session.query(Episode)} == {
         "een-huis-vol_1": True, "een-huis-vol_2": True, "een-huis-vol_3": True,
         "een-huis-vol_11": False, "een-huis-vol_12": False,
     }
-    local = ShowLocalMediaProfile(slug="shows", name="Shows", preferred_format="format_1080p",
-                                  output_template="/downloads/{{ show_title }}/{{ episode_title }}.ext")
+    local = CollectionLocalMediaProfile(slug="collections", name="Collections", preferred_format="format_1080p",
+                                  output_template="/downloads/{{ collection_title }}/{{ episode_title }}.ext")
     profile = DownloadProfile(
-        show=show, local_media_profile=local, enable_profile=True, ep_id_type_list=["ep"],
+        collection=collection, local_media_profile=local, enable_profile=True, ep_id_type_list=["ep"],
         download_with_countdown=False, redownload_final=False, download_days_in_past=0,
         download_episode_count=0, delete_older_episodes=False,
     )
     session.add_all([local, profile])
     session.flush()
-    profile.seasons = list(show.seasons)
+    profile.seasons = list(collection.seasons)
     assert sorted(e.slug for e in get_download_profile_episodes(session, profile)) == ["een-huis-vol_11", "een-huis-vol_12"]
 
 
@@ -336,24 +336,24 @@ def test_the_background_migration_marks_stored_programmes_that_need_npo_plus(npo
     import asyncio
     import importlib
 
-    from backend.db.models import Episode, Show, Video
-    from task_manager.tasks.helpers.listed_shows import index_listed_show
+    from backend.db.models import Episode, Collection, Video
+    from task_manager.tasks.helpers.listed_collections import index_listed_collection
 
     migration = importlib.import_module("backend.db.background_migrations.versions.5e2b8c71d0a4_npo_plus_labels")
     source, client = npo
-    show = Show(
+    collection = Collection(
         uuid="uuid-huis", slug="een-huis-vol", source_key="npo", title="Een huis vol",
         sharing_url="https://npo.nl/start/serie/een-huis-vol/afleveringen", membership_level="FREE",
         type="series", episode_identifier="seasonal", author_name="NCRV", author_slug="ncrv",
     )
-    session.add(show)
+    session.add(collection)
     session.add(Video(
         uuid="uuid-video", type="video", source_key="npo", slug="een-huis-vol_2", title="Een huis vol",
         sharing_url="https://npo.nl/start/afspelen/een-huis-vol_2", duration=0.0,
     ))
     session.commit()
     # Indexed by an older VODLoft, before NPO started asking for NPO Plus.
-    index_listed_show(session, show_id=show.id, source=source)
+    index_listed_collection(session, collection_id=collection.id, source=source)
     client.programs["s2"] = [_premium(program) for program in client.programs["s2"]]
 
     bind = session.get_bind()
@@ -432,31 +432,31 @@ def test_a_sign_in_without_npo_plus_still_cannot_play_them(npo, signed_in):
 
 
 def test_signed_in_episodes_that_need_npo_plus_are_planned(npo, session, signed_in):
-    from backend.db.models import DownloadProfile, Show, ShowLocalMediaProfile
-    from task_manager.tasks.helpers.listed_shows import index_listed_show
+    from backend.db.models import DownloadProfile, Collection, CollectionLocalMediaProfile
+    from task_manager.tasks.helpers.listed_collections import index_listed_collection
     from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
 
     source, client = npo
     client.programs["s2"] = [_premium(program) for program in client.programs["s2"]]
     client.protected = set()
-    show = Show(
+    collection = Collection(
         uuid="uuid-huis", slug="een-huis-vol", source_key="npo", title="Een huis vol",
         sharing_url="https://npo.nl/start/serie/een-huis-vol/afleveringen", membership_level="FREE",
         type="series", episode_identifier="seasonal", author_name="NCRV", author_slug="ncrv",
     )
-    session.add(show)
+    session.add(collection)
     session.commit()
-    index_listed_show(session, show_id=show.id, source=source)
-    local = ShowLocalMediaProfile(slug="shows", name="Shows", preferred_format="format_1080p",
-                                  output_template="/downloads/{{ show_title }}/{{ episode_title }}.ext")
+    index_listed_collection(session, collection_id=collection.id, source=source)
+    local = CollectionLocalMediaProfile(slug="collections", name="Collections", preferred_format="format_1080p",
+                                  output_template="/downloads/{{ collection_title }}/{{ episode_title }}.ext")
     profile = DownloadProfile(
-        show=show, local_media_profile=local, enable_profile=True, ep_id_type_list=["ep"],
+        collection=collection, local_media_profile=local, enable_profile=True, ep_id_type_list=["ep"],
         download_with_countdown=False, redownload_final=False, download_days_in_past=0,
         download_episode_count=0, delete_older_episodes=False,
     )
     session.add_all([local, profile])
     session.flush()
-    profile.seasons = list(show.seasons)
+    profile.seasons = list(collection.seasons)
     assert len(get_download_profile_episodes(session, profile)) == 2
     source.save_cookies(COOKIES.encode())
     # Checked once with npo.nl; every NPO Start instance shares the answer.

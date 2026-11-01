@@ -86,8 +86,8 @@ def _resolved_download_path(s, download) -> Path | None:
     )
 
 
-@router.api_route("/rss/{token}/{show_slug}.xml", methods=["GET", "HEAD"])
-def rss_feed(token: str, show_slug: str, request: Request):
+@router.api_route("/rss/{token}/{collection_slug}.xml", methods=["GET", "HEAD"])
+def rss_feed(token: str, collection_slug: str, request: Request):
     with db_session() as s:
         profile = get_rss_stream_profile_by_token(s, token)
         xml = render_rss_feed(s, request, profile)

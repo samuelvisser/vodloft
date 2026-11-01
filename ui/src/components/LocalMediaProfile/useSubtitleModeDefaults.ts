@@ -4,7 +4,7 @@ import type {UseFormReturn} from 'react-hook-form'
 import {
     defaultSubtitleModeForProfile,
     type LocalMediaProfileType,
-    type ShowLocalMediaProfileScope,
+    type CollectionLocalMediaProfileScope,
 } from '../../types/local_media_profile'
 import type {LocalMediaProfileSubtitleMode} from '../../types/schemas/local_media_profile_base'
 
@@ -35,14 +35,14 @@ export function useSubtitleModeDefaults(
             const priorValue = prior.form.getValues('subtitleMode') as LocalMediaProfileSubtitleMode | undefined
             const priorDefault = defaultSubtitleModeForProfile(
                 prior.mode,
-                prior.form.getValues('showScope') as ShowLocalMediaProfileScope,
+                prior.form.getValues('collectionScope') as CollectionLocalMediaProfileScope,
             )
             if (manuallySelected.current === null && priorValue && priorValue !== priorDefault) {
                 manuallySelected.current = priorValue
             }
 
             const nextValue = manuallySelected.current ?? defaultSubtitleModeForProfile(
-                mode, form.getValues('showScope') as ShowLocalMediaProfileScope,
+                mode, form.getValues('collectionScope') as CollectionLocalMediaProfileScope,
             )
             form.setValue('subtitleMode', nextValue, {shouldDirty: true, shouldValidate: true})
         }
@@ -53,12 +53,12 @@ export function useSubtitleModeDefaults(
         if (isCreating) manuallySelected.current = value
     }
 
-    const onScopeChange = (nextScope: ShowLocalMediaProfileScope) => {
+    const onScopeChange = (nextScope: CollectionLocalMediaProfileScope) => {
         if (!isCreating) return
         if (manuallySelected.current === null) {
             const currentValue = form.getValues('subtitleMode') as LocalMediaProfileSubtitleMode | undefined
             const previousDefault = defaultSubtitleModeForProfile(
-                mode, form.getValues('showScope') as ShowLocalMediaProfileScope,
+                mode, form.getValues('collectionScope') as CollectionLocalMediaProfileScope,
             )
             if (currentValue && currentValue !== previousDefault) {
                 manuallySelected.current = currentValue
@@ -66,7 +66,7 @@ export function useSubtitleModeDefaults(
         }
 
         if (manuallySelected.current === null) {
-            form.setValue('subtitleMode', defaultSubtitleModeForProfile('show', nextScope), {
+            form.setValue('subtitleMode', defaultSubtitleModeForProfile('collection', nextScope), {
                 shouldDirty: true,
                 shouldValidate: true,
             })

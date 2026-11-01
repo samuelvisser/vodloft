@@ -16,7 +16,7 @@ from sqlalchemy import select
 
 from backend.db.core import get_session
 from backend.db.datetime_types import utc_datetime
-from backend.db.models import Metadata, Show
+from backend.db.models import Metadata, Collection
 from backend.db.models.media_item import Episode
 from sources.dailywire.api.dw_api.client import (
     ByNextPage,
@@ -45,7 +45,7 @@ _SEASONAL_EXTRA_RE = re.compile(
     r"^ep-extra\.(?:other|trailer)\.(S\d+E\d+)\.(\d+)$"
 )
 _PREVIOUS_IDENTIFIER_KEY = "no_usable_media.previous_identifier"
-_SHOW_AUX_SEGMENT_START = 20
+_COLLECTION_AUX_SEGMENT_START = 20
 
 
 @dataclass(frozen=True)
@@ -67,7 +67,7 @@ class LocalEpisode:
 
 
 @dataclass(frozen=True)
-class LocalShow:
+class LocalCollection:
     id: int
     slug: str
     sharing_url: str
@@ -89,8 +89,8 @@ class EpisodePlan:
 
 
 @dataclass(frozen=True)
-class ShowPlan:
-    show_id: int
+class CollectionPlan:
+    collection_id: int
     episodes: tuple[EpisodePlan, ...]
     latest_aux_num: int
     latest_trailer_num: int
@@ -189,7 +189,7 @@ def _direct_identifier(
                 f"S{season_number:02d}E{number:02d}.0",
             )
 
-    if 0 < segment < _SHOW_AUX_SEGMENT_START:
+    if 0 < segment < _COLLECTION_AUX_SEGMENT_START:
         extra_type = "trailer" if _is_trailer(record) else "other"
         if identifier_mode == "numbered":
             return (
@@ -222,7 +222,7 @@ def _generated_type(
         return "trailer" if _is_trailer(record) else "aux"
     if segment == 0 and _is_trailer(record):
         return "trailer"
-    if segment >= _SHOW_AUX_SEGMENT_START:
+    if segment >= _COLLECTION_AUX_SEGMENT_START:
         return "trailer" if _is_trailer(record) else "aux"
     return None
 
@@ -248,19 +248,19 @@ def _source_slot(identifier: str) -> str | None:
     return None
 
 
-def _show_ids() -> list[int]:
+def _collection_ids() -> list[int]:
     session = get_session()
     try:
-        return list(session.scalars(select(Show.id).order_by(Show.id)))
+        return list(session.scalars(select(Collection.id).order_by(Collection.id)))
     finally:
         session.close()
 
 
-def _load_show(show_id: int) -> LocalShow | None:
+def _load_collection(collection_id: int) -> LocalCollection | None:
     session = get_session()
     try:
-        show = session.get(Show, show_id)
-        if show is None:
+        collection = session.get(Collection, collection_id)
+        if collection is None:
             return None
 
         seasons = tuple(
@@ -270,10 +270,10 @@ def _load_show(show_id: int) -> LocalShow | None:
                 season_type=season.season_type,
                 season_number=season.season_number,
             )
-            for season in sorted(show.seasons, key=lambda value: value.index)
+            for season in sorted(collection.seasons, key=lambda value: value.index)
         )
         ordered_episodes = sorted(
-            show.episodes,
+            collection.episodes,
             key=lambda value: (value.index, value.id),
         )
         previous_by_episode = {
@@ -282,7 +282,7 @@ def _load_show(show_id: int) -> LocalShow | None:
                 select(Metadata.parent_id, Metadata.value).where(
                     Metadata.parent_table == "media_items_episode",
                     Metadata.parent_id.in_(
-                        select(Episode.id).where(Episode.show_id == show_id)
+                        select(Episode.id).where(Episode.collection_id == collection_id)
                     ),
                     Metadata.key == _PREVIOUS_IDENTIFIER_KEY,
                 )
@@ -301,18 +301,18 @@ def _load_show(show_id: int) -> LocalShow | None:
         )
 
         def meta_int(key_name: str) -> int:
-            value = show.get_meta(key_name)
+            value = collection.get_meta(key_name)
             try:
                 return int(value) if value is not None else 0
             except ValueError:
                 return 0
 
-        return LocalShow(
-            id=show.id,
-            slug=show.slug,
-            sharing_url=show.sharing_url,
-            membership_level=show.membership_level,
-            identifier_mode=show.episode_identifier,
+        return LocalCollection(
+            id=collection.id,
+            slug=collection.slug,
+            sharing_url=collection.sharing_url,
+            membership_level=collection.membership_level,
+            identifier_mode=collection.episode_identifier,
             seasons=seasons,
             episodes=episodes,
             latest_aux_num=meta_int("ep_id.latest_aux_num"),
@@ -324,12 +324,12 @@ def _load_show(show_id: int) -> LocalShow | None:
 
 def _fetch_full_season(
     client: MiddlewareClient,
-    show_slug: str,
+    collection_slug: str,
     membership_plan: str,
     season_dw_id: str,
 ) -> list[DwEpisodeRecord]:
     items, next_url, has_next = client.get_episodes_paginated(
-        show_slug,
+        collection_slug,
         ByShowSeason(
             season_dw_id=season_dw_id,
             membership_plan=membership_plan,
@@ -340,7 +340,7 @@ def _fetch_full_season(
     records = list(items or [])
     while has_next and next_url:
         items, next_url, has_next = client.get_episodes_paginated(
-            show_slug,
+            collection_slug,
             ByNextPage(next_page_url=next_url),
         )
         records.extend(items or [])
@@ -353,27 +353,27 @@ def _fetch_full_season(
 
 def _fetch_remote_records(
     client: MiddlewareClient,
-    local_show: LocalShow,
+    local_collection: LocalCollection,
 ) -> dict[int, dict[str, DwEpisodeRecord]]:
-    membership_plan = _membership_plan(local_show.membership_level)
+    membership_plan = _membership_plan(local_collection.membership_level)
     require_member_exclusive = membership_plan != "FREE"
-    show_page = client.get_show_page(
-        local_show.slug,
+    collection_page = client.get_show_page(
+        local_collection.slug,
         membership_plan=membership_plan,
     )
-    remote_seasons = {season.slug: season for season in show_page.seasons}
+    remote_seasons = {season.slug: season for season in collection_page.seasons}
     local_episodes_by_season: dict[int, list[LocalEpisode]] = defaultdict(list)
-    for episode in local_show.episodes:
+    for episode in local_collection.episodes:
         local_episodes_by_season[episode.season_id].append(episode)
 
     result: dict[int, dict[str, DwEpisodeRecord]] = {}
-    for season in local_show.seasons:
+    for season in local_collection.seasons:
         remote_season = remote_seasons.get(season.slug)
         records: list[DwEpisodeRecord] = []
         if remote_season is not None:
             records = _fetch_full_season(
                 client,
-                local_show.slug,
+                local_collection.slug,
                 membership_plan,
                 remote_season.dw_id,
             )
@@ -403,18 +403,18 @@ def _fetch_remote_records(
     return result
 
 
-def _plan_show(
-    local_show: LocalShow,
+def _plan_collection(
+    local_collection: LocalCollection,
     remote_by_season: dict[int, dict[str, DwEpisodeRecord]],
-) -> ShowPlan:
-    season_by_id = {season.id: season for season in local_show.seasons}
+) -> CollectionPlan:
+    season_by_id = {season.id: season for season in local_collection.seasons}
     counters = {
-        "aux": local_show.latest_aux_num,
-        "trailer": local_show.latest_trailer_num,
+        "aux": local_collection.latest_aux_num,
+        "trailer": local_collection.latest_trailer_num,
     }
     reserved_generated: set[str] = set()
 
-    for episode in local_show.episodes:
+    for episode in local_collection.episodes:
         for identifier in (episode.identifier, episode.previous_identifier):
             if not identifier:
                 continue
@@ -426,7 +426,7 @@ def _plan_show(
 
     preplanned: dict[int, tuple[str, str | None, str | None, str | None]] = {}
     # tuple: (kind, desired_identifier, source_slot, generated_type)
-    for episode in local_show.episodes:
+    for episode in local_collection.episodes:
         season = season_by_id[episode.season_id]
         record = remote_by_season.get(season.id, {}).get(episode.slug)
         effective = (
@@ -441,13 +441,13 @@ def _plan_show(
             continue
 
         desired, source_slot = _direct_identifier(
-            local_show.identifier_mode,
+            local_collection.identifier_mode,
             season_type=season.season_type,
             season_number=season.season_number,
             record=record,
         )
         generated_type = _generated_type(
-            local_show.identifier_mode,
+            local_collection.identifier_mode,
             season_type=season.season_type,
             record=record,
         )
@@ -462,7 +462,7 @@ def _plan_show(
             )
 
     final_source_owner: dict[str, int] = {}
-    for episode in local_show.episodes:
+    for episode in local_collection.episodes:
         if episode.identifier.startswith("not-usable."):
             continue
         kind, desired, source_slot, _generated = preplanned[episode.id]
@@ -472,7 +472,7 @@ def _plan_show(
         elif kind == "direct" and source_slot is not None and current_slot == source_slot:
             final_source_owner.setdefault(source_slot, episode.id)
 
-    for episode in local_show.episodes:
+    for episode in local_collection.episodes:
         if episode.identifier.startswith("not-usable."):
             continue
         kind, _desired, source_slot, _generated = preplanned[episode.id]
@@ -482,7 +482,7 @@ def _plan_show(
 
     final_identifiers: set[str] = {
         episode.identifier
-        for episode in local_show.episodes
+        for episode in local_collection.episodes
         if episode.identifier.startswith("not-usable.")
     }
 
@@ -496,7 +496,7 @@ def _plan_show(
                 return candidate
 
     plans: list[EpisodePlan] = []
-    for episode in local_show.episodes:
+    for episode in local_collection.episodes:
         season = season_by_id[episode.season_id]
         record = remote_by_season.get(season.id, {}).get(episode.slug)
         quarantined = episode.identifier.startswith("not-usable.")
@@ -550,35 +550,35 @@ def _plan_show(
             )
         )
 
-    return ShowPlan(
-        show_id=local_show.id,
+    return CollectionPlan(
+        collection_id=local_collection.id,
         episodes=tuple(plans),
         latest_aux_num=counters["aux"],
         latest_trailer_num=counters["trailer"],
     )
 
 
-def _remove_show_meta(show: Show, key: str) -> None:
-    for item in list(show.meta_items):
+def _remove_collection_meta(collection: Collection, key: str) -> None:
+    for item in list(collection.meta_items):
         if item.key == key:
-            show.meta_items.remove(item)
+            collection.meta_items.remove(item)
 
 
-def _apply_show_plan(plan: ShowPlan) -> None:
+def _apply_collection_plan(plan: CollectionPlan) -> None:
     from task_manager.tasks.helpers.episodes.events import (
         queue_episode_identifier_changed_event,
     )
 
     session = get_session()
     try:
-        show = session.get(Show, plan.show_id)
-        if show is None:
+        collection = session.get(Collection, plan.collection_id)
+        if collection is None:
             return
 
         episodes = {
             episode.id: episode
             for episode in session.scalars(
-                select(Episode).where(Episode.show_id == plan.show_id)
+                select(Episode).where(Episode.collection_id == plan.collection_id)
             )
         }
         changed_identifiers: dict[int, str] = {}
@@ -622,13 +622,13 @@ def _apply_show_plan(plan: ShowPlan) -> None:
             "ep_id.latest_ep_num",
             "ep_id.latest_ep_extra_num",
         ):
-            _remove_show_meta(show, key_name)
-        for item in list(show.meta_items):
+            _remove_collection_meta(collection, key_name)
+        for item in list(collection.meta_items):
             if item.key.startswith("ep_id.latest_season_") and item.key.endswith("_ep"):
-                show.meta_items.remove(item)
+                collection.meta_items.remove(item)
 
-        show.set_meta("ep_id.latest_aux_num", str(plan.latest_aux_num))
-        show.set_meta("ep_id.latest_trailer_num", str(plan.latest_trailer_num))
+        collection.set_meta("ep_id.latest_aux_num", str(plan.latest_aux_num))
+        collection.set_meta("ep_id.latest_trailer_num", str(plan.latest_trailer_num))
         session.commit()
     except Exception:
         session.rollback()
@@ -637,11 +637,11 @@ def _apply_show_plan(plan: ShowPlan) -> None:
         session.close()
 
 
-def _build_client(shows: list[LocalShow]) -> MiddlewareClient:
+def _build_client(collections: list[LocalCollection]) -> MiddlewareClient:
     tokens = DeviceAuthClient().get_token()
     requires_token = any(
-        _membership_plan(show.membership_level) != "FREE"
-        for show in shows
+        _membership_plan(collection.membership_level) != "FREE"
+        for collection in collections
     )
     if requires_token and tokens is None:
         raise RuntimeError(
@@ -652,38 +652,38 @@ def _build_client(shows: list[LocalShow]) -> MiddlewareClient:
 
 
 async def migrate(context) -> None:
-    shows = [
-        show
-        for show_id in _show_ids()
-        if (show := _load_show(show_id)) is not None
-        and _is_dailywire_url(show.sharing_url)
+    collections = [
+        collection
+        for collection_id in _collection_ids()
+        if (collection := _load_collection(collection_id)) is not None
+        and _is_dailywire_url(collection.sharing_url)
     ]
-    if not shows:
+    if not collections:
         return
 
-    client = _build_client(shows)
-    total = len(shows)
+    client = _build_client(collections)
+    total = len(collections)
 
-    for index, local_show in enumerate(shows, start=1):
+    for index, local_collection in enumerate(collections, start=1):
         context.raise_if_cancelled()
         context.update_progress(
             index - 1,
             total,
-            f"Refreshing episode identifiers for {local_show.slug}",
+            f"Refreshing episode identifiers for {local_collection.slug}",
         )
 
         remote_by_season = await asyncio.to_thread(
             _fetch_remote_records,
             client,
-            local_show,
+            local_collection,
         )
         context.raise_if_cancelled()
 
-        plan = _plan_show(local_show, remote_by_season)
-        _apply_show_plan(plan)
+        plan = _plan_collection(local_collection, remote_by_season)
+        _apply_collection_plan(plan)
 
         context.update_progress(
             index,
             total,
-            f"Refreshed episode identifiers for {local_show.slug}",
+            f"Refreshed episode identifiers for {local_collection.slug}",
         )

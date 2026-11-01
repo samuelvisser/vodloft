@@ -33,7 +33,7 @@ def _record(number: int):
 
 
 def test_vacated_source_identifier_is_recognized_without_high_water_state():
-    from backend.types.show_types import EpisodeIdentifier
+    from backend.types.collection_types import EpisodeIdentifier
     from task_manager.tasks.helpers.episodes.mapper import _is_vacated_replacement
 
     replacement = _record(2500)
@@ -65,9 +65,9 @@ def test_quarantine_identifier_reservation_is_atomic_across_sessions(
 ):
     import backend.db.models  # noqa: F401
     from backend.db import Base
-    from backend.db.models import Episode, Season, Show
+    from backend.db.models import Episode, Season, Collection
     from backend.types.episode_types import EpisodePublishStatus
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
     from backend.utils.helpers import generate_uuid
     from task_manager.tasks.helpers.episodes.quarantine import quarantine_episode_identifier
 
@@ -82,31 +82,31 @@ def test_quarantine_identifier_reservation_is_atomic_across_sessions(
             connection.exec_driver_sql("PRAGMA journal_mode=WAL")
 
         with Session(engine) as session:
-            show = Show(
+            collection = Collection(
                 source_key="dailywire",
-                uuid="concurrent-show-uuid",
-                slug="concurrent-show",
+                uuid="concurrent-collection-uuid",
+                slug="concurrent-collection",
                 title="Concurrent Show",
                 description=None,
-                sharing_url="https://example.test/show",
+                sharing_url="https://example.test/collection",
                 membership_level="FREE",
-                type=ShowType.PODCAST.value,
+                type=CollectionType.PODCAST.value,
                 episode_identifier=EpisodeIdentifier.NUMBERED.value,
                 author_name="Host",
                 author_slug="host",
             )
             season = Season(
-                show=show,
+                collection=collection,
                 index=1,
                 slug="season-1",
                 name="One",
                 season_type="normal",
                 season_number=1,
             )
-            session.add_all([show, season])
+            session.add_all([collection, season])
             session.flush()
             if initial_counter is not None:
-                show.set_meta("ep_id.latest_not_usable_num", initial_counter)
+                collection.set_meta("ep_id.latest_not_usable_num", initial_counter)
 
             episode_ids = []
             for index in range(1, 5):
@@ -114,7 +114,7 @@ def test_quarantine_identifier_reservation_is_atomic_across_sessions(
                     source_key="dailywire",
                     uuid=generate_uuid(),
                     type="episode",
-                    show=show,
+                    collection=collection,
                     season=season,
                     index=index,
                     episode_identifier=f"ep-extra.other.1.{index}",
@@ -128,7 +128,7 @@ def test_quarantine_identifier_reservation_is_atomic_across_sessions(
                 session.add(episode)
                 session.flush()
                 episode_ids.append(episode.id)
-            show_id = show.id
+            collection_id = collection.id
             session.commit()
 
         barrier = Barrier(len(episode_ids))
@@ -139,8 +139,8 @@ def test_quarantine_identifier_reservation_is_atomic_across_sessions(
                 assert episode is not None
 
                 # Reproduce production: each worker has its own Session and may
-                # already have the same old show metadata snapshot in memory.
-                list(episode.show.meta_items)
+                # already have the same old collection metadata snapshot in memory.
+                list(episode.collection.meta_items)
                 barrier.wait(timeout=10)
 
                 assert quarantine_episode_identifier(session, episode) is True
@@ -155,12 +155,12 @@ def test_quarantine_identifier_reservation_is_atomic_across_sessions(
 
         with Session(engine) as session:
             stored_identifiers = set(session.scalars(
-                select(Episode.episode_identifier).where(Episode.show_id == show_id)
+                select(Episode.episode_identifier).where(Episode.collection_id == collection_id)
             ))
             assert stored_identifiers == expected_identifiers
-            stored_show = session.get(Show, show_id)
-            assert stored_show is not None
-            assert stored_show.get_meta("ep_id.latest_not_usable_num") == str(
+            stored_collection = session.get(Collection, collection_id)
+            assert stored_collection is not None
+            assert stored_collection.get_meta("ep_id.latest_not_usable_num") == str(
                 max(int(value.rsplit(".", 1)[1]) for value in expected_identifiers)
             )
     finally:

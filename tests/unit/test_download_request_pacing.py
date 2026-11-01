@@ -251,13 +251,13 @@ def test_generic_non_download_executor_persists_follower_wait(task_database, mon
     pacer.last_request, pacer.last_request_wall = monotonic(), time()
     monkeypatch.setattr(registry, '_REGISTRY', {})
     start = Event()
-    @registry.task(key='cooldown_probe', title='Cooldown probe', allowed_resource_types=('show',), default_max_retries=0)
+    @registry.task(key='cooldown_probe', title='Cooldown probe', allowed_resource_types=('collection',), default_max_retries=0)
     def worker(*, resource_id=None, progress=None):
         start.set()
         pacer.wait()
     registry.sync_registry_to_db()
     with ThreadPoolExecutor(max_workers=2) as pool:
-        futures = [pool.submit(execute_task, def_key='cooldown_probe', resource_type='show', resource_id=index) for index in [1, 2]]
+        futures = [pool.submit(execute_task, def_key='cooldown_probe', resource_type='collection', resource_id=index) for index in [1, 2]]
         deadline = monotonic() + 3
         observed = False
         while monotonic() < deadline:

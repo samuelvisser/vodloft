@@ -236,9 +236,9 @@ def test_episode_metadata_refresh_creates_operation_and_queues_worker(monkeypatc
         id=17,
         slug="test-episode",
         title="Test Episode",
-        show_id=3,
+        collection_id=3,
         metadata_is_final=True,
-        show=SimpleNamespace(slug="test-show", title="Test Show"),
+        collection=SimpleNamespace(slug="test-collection", title="Test Show"),
     )
     queued: list[tuple[str, str]] = []
     created: list[dict] = []
@@ -290,11 +290,11 @@ def test_episode_metadata_refresh_creates_operation_and_queues_worker(monkeypatc
     assert queued == [("operation-episode-refresh", target.resolved_slot_key())]
 
 
-def test_show_metadata_refresh_creates_one_operation_for_all_episode_targets(monkeypatch):
-    from backend.api.endpoints.shows import service
-    from backend.db.models import Episode, Show
+def test_collection_metadata_refresh_creates_one_operation_for_all_episode_targets(monkeypatch):
+    from backend.api.endpoints.collections import service
+    from backend.db.models import Episode, Collection
 
-    show = SimpleNamespace(id=9, slug="test-show", title="Test Show")
+    collection = SimpleNamespace(id=9, slug="test-collection", title="Test Show")
     episodes = [
         SimpleNamespace(id=1, metadata_is_final=True),
         SimpleNamespace(id=2, metadata_is_final=True),
@@ -308,15 +308,15 @@ def test_show_metadata_refresh_creates_one_operation_for_all_episode_targets(mon
             self.model = model
 
         def filter_by(self, **kwargs):
-            if self.model is Show:
-                assert kwargs == {"slug": show.slug}
+            if self.model is Collection:
+                assert kwargs == {"slug": collection.slug}
             elif self.model is Episode:
-                assert kwargs == {"show_id": show.id}
+                assert kwargs == {"collection_id": collection.id}
             return self
 
         def one_or_none(self):
-            assert self.model is Show
-            return show
+            assert self.model is Collection
+            return collection
 
         def all(self):
             assert self.model is Episode
@@ -334,7 +334,7 @@ def test_show_metadata_refresh_creates_one_operation_for_all_episode_targets(mon
 
     def fake_create_operation(_session, definition):
         created.append({"kind": definition.kind, "targets": definition.targets()})
-        return SimpleNamespace(id="operation-show-refresh")
+        return SimpleNamespace(id="operation-collection-refresh")
 
     def fake_dispatch(_session, operation_id, slot_key):
         queued.append((operation_id, slot_key))
@@ -344,21 +344,21 @@ def test_show_metadata_refresh_creates_one_operation_for_all_episode_targets(mon
     monkeypatch.setattr(service, "create_operation", fake_create_operation)
     monkeypatch.setattr(service, "queue_operation_target_dispatch", fake_dispatch)
 
-    result = service.request_show_metadata_refresh(session, show.slug)
+    result = service.request_collection_metadata_refresh(session, collection.slug)
 
     assert result == {
         "queued": True,
         "episodes_queued": 3,
-        "operation_id": "operation-show-refresh",
+        "operation_id": "operation-collection-refresh",
     }
-    assert created[0]["kind"] == "show.refresh_metadata"
+    assert created[0]["kind"] == "collection.refresh_metadata"
     assert [target.resource_id for target in created[0]["targets"]] == [1, 2, 3]
     assert all(target.task_key == "refresh_episode_metadata" for target in created[0]["targets"])
     assert all(target.task_kwargs == {"refresh": True} for target in created[0]["targets"])
     assert queued == [
-        ("operation-show-refresh", "episode:1"),
-        ("operation-show-refresh", "episode:2"),
-        ("operation-show-refresh", "episode:3"),
+        ("operation-collection-refresh", "episode:1"),
+        ("operation-collection-refresh", "episode:2"),
+        ("operation-collection-refresh", "episode:3"),
     ]
     assert all(episode.metadata_is_final is False for episode in episodes)
     assert session.flushes == 1
@@ -371,7 +371,7 @@ def test_startup_metadata_recovery_skips_live_and_active_operation_targets(monke
     import backend.db.models  # noqa: F401
     import task_manager.scheduler.db  # noqa: F401
     from backend.db import Base
-    from backend.db.models import Episode, Season, Show
+    from backend.db.models import Episode, Season, Collection
     from backend.types.episode_types import EpisodePublishStatus
     from task_manager.scheduler.db import TaskOperation, TaskOperationTarget
     from task_manager.scheduler.types import OperationSource, OperationStatus
@@ -380,18 +380,18 @@ def test_startup_metadata_recovery_skips_live_and_active_operation_targets(monke
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     with Session(engine) as session:
-        show = Show(
+        collection = Collection(
             source_key="dailywire",
-            uuid="show-uuid", slug="show", title="Show", description=None,
-            sharing_url="https://example.test/show", membership_level="FREE",
+            uuid="collection-uuid", slug="collection", title="Collection", description=None,
+            sharing_url="https://example.test/collection", membership_level="FREE",
             type="podcast", episode_identifier="numbered",
             author_name="Host", author_slug="host",
         )
-        season = Season(show=show, index=1, slug="season-1", name="Season 1")
+        season = Season(collection=collection, index=1, slug="season-1", name="Season 1")
         episodes = [
             Episode(
                 source_key="dailywire",
-                uuid=f"episode-{index}", type="episode", show=show, season=season,
+                uuid=f"episode-{index}", type="episode", collection=collection, season=season,
                 index=index, episode_identifier=f"ep.{index}", slug=f"episode-{index}",
                 title=f"Episode {index}", duration=60, publish_status=status,
                 sharing_url=f"https://example.test/episode-{index}",
@@ -403,7 +403,7 @@ def test_startup_metadata_recovery_skips_live_and_active_operation_targets(monke
                 (3, EpisodePublishStatus.LIVE.value),
             )
         ]
-        session.add_all([show, season, *episodes])
+        session.add_all([collection, season, *episodes])
         session.flush()
         final_episode, final_with_operation, _live_episode = episodes
         operation = TaskOperation(

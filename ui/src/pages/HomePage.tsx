@@ -10,7 +10,7 @@ import {
     useMediaDownloadsCollection,
     useMovies,
     useRecentlyIndexedEpisodes,
-    useShows,
+    useCollections,
     useSourceProblems,
 } from '../lib/queries'
 import {
@@ -40,12 +40,12 @@ function mediaContext(download: MediaDownloadViewRead) {
     if (download.type === 'movie_extra') {
         return `${movieExtraTypeLabel(download.movieExtraType)} • ${download.movieTitle || 'Movie'}`
     }
-    return download.movieTitle ? 'Movie' : download.showTitle || 'Episode'
+    return download.movieTitle ? 'Movie' : download.collectionTitle || 'Episode'
 }
 
 export default function HomePage() {
     const navigate = useNavigate()
-    const {data: shows} = useShows()
+    const {data: collections} = useCollections()
     const {data: movies} = useMovies()
     const {data: profiles} = useLocalMediaProfiles()
     const defaultDownloadStatuses = useMemo(
@@ -122,7 +122,7 @@ export default function HomePage() {
 
     const openDownload = (download: MediaDownloadViewRead) => {
         if (download.movieSlug) navigate(`/movie/${download.movieSlug}`)
-        else if (download.showSlug && download.episodeSlug) navigate(`/show/${download.showSlug}/episode/${download.episodeSlug}`)
+        else if (download.collectionSlug && download.episodeSlug) navigate(`/collection/${download.collectionSlug}/episode/${download.episodeSlug}`)
         else navigate('/downloads')
     }
 
@@ -152,7 +152,7 @@ export default function HomePage() {
                 <button type="button" onClick={() => navigate(downloadsUrlForStatusFilters('downloading', 'local_processing'))}><span>Active</span><strong>{IN_PROGRESS.reduce((total, status) => total + (downloadsQuery.facets[status] ?? 0), 0)}</strong></button>
                 <button type="button" onClick={() => navigate(downloadsUrlForStatusFilters('pending'))}><span>Queued</span><strong>{downloadsQuery.facets.pending ?? 0}</strong></button>
                 <button type="button" onClick={() => navigate(downloadsUrlForStatusFilters('error', 'missing', 'corrupted'))}><span>Failed</span><strong>{problemsQuery.total}</strong></button>
-                <button type="button" onClick={() => navigate('/library')}><span>Library</span><strong>{(shows?.length || 0) + (movies?.length || 0)}</strong></button>
+                <button type="button" onClick={() => navigate('/library')}><span>Library</span><strong>{(collections?.length || 0) + (movies?.length || 0)}</strong></button>
             </div>
 
             {downloadError && <div className="form-error-card" role="alert">Could not load download status: {downloadError.message}</div>}
@@ -218,9 +218,9 @@ export default function HomePage() {
                             className="recent-download recent-indexed-episode"
                             type="button"
                             key={`episode-indexed-${episode.id}`}
-                            onClick={() => navigate(`/show/${episode.showSlug}/episode/${episode.slug}`)}
+                            onClick={() => navigate(`/collection/${episode.collectionSlug}/episode/${episode.slug}`)}
                         >
-                            <FontAwesomeIcon icon={faIcon('fass', 'circle-plus')}/><span><strong>{episode.title}</strong><small>{episode.showTitle} • Indexed</small></span><time>{activity.occurredAt.toLocaleString()}</time>
+                            <FontAwesomeIcon icon={faIcon('fass', 'circle-plus')}/><span><strong>{episode.title}</strong><small>{episode.collectionTitle} • Indexed</small></span><time>{activity.occurredAt.toLocaleString()}</time>
                         </button>
                     )
                 }) : <div className="operation-empty"><span>No recent activity yet</span></div>}

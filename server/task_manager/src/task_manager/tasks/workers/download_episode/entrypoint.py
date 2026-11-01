@@ -5,7 +5,7 @@ from typing import Optional
 from controller.db_utils import db_session
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.db.models import Episode
-from backend.services.show_assets import request_show_asset_reconciliation
+from backend.services.collection_assets import request_collection_asset_reconciliation
 from task_manager.tasks.helpers.custom_index_readiness import (
     custom_index_pair_lock, pair_is_ready, request_missing_index_repair,
     wait_for_custom_index_pair,
@@ -47,7 +47,7 @@ async def download_episode(
     with db_session() as session:
         download = session.get(EpisodeMediaDownload, resource_id)
         episode = session.get(Episode, download.media_item_id) if download is not None else None
-        pair = (episode.show_id, download.local_media_profile_id) if episode is not None else None
+        pair = (episode.collection_id, download.local_media_profile_id) if episode is not None else None
     try:
         with serialize_download_attempt(resource_id, progress=progress):
             while True:
@@ -63,7 +63,7 @@ async def download_episode(
                                 prepare_existing_artifact=prepare_existing_artifact,
                                 progress=progress,
                             )
-                            request_show_asset_reconciliation(session, pair[0])
+                            request_collection_asset_reconciliation(session, pair[0])
                             session.commit()
                             return result
                 with db_session() as session:

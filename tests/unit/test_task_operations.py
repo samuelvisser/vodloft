@@ -25,7 +25,7 @@ def _definition(session: Session, key: str = "test_worker"):
         key=key,
         title="Test worker",
         description=None,
-        allowed_resource_types=["show", "episode"],
+        allowed_resource_types=["collection", "episode"],
         default_max_retries=0,
     )
     session.add(definition)
@@ -85,13 +85,13 @@ def test_operation_admission_wait_is_waiting_until_deadline():
         operation = create_operation(
             session,
             kind="test.delayed",
-            resource_type="show",
+            resource_type="collection",
             resource_id=42,
             title="Delayed work",
             targets=[
                 OperationTargetSpec(
                     task_key=definition.key,
-                    resource_type="show",
+                    resource_type="collection",
                     resource_id=42,
                 )
             ],
@@ -144,21 +144,21 @@ def test_operation_coalesces_onto_compatible_automatic_run():
         run = _run(
             session,
             definition,
-            resource_type=ResourceType.SHOW,
+            resource_type=ResourceType.COLLECTION,
             resource_id=42,
             progress=41,
         )
 
         operation = create_operation(
             session,
-            kind="show.sync",
-            resource_type="show",
+            kind="collection.sync",
+            resource_type="collection",
             resource_id=42,
             title="Test Show",
             targets=[
                 OperationTargetSpec(
                     task_key=definition.key,
-                    resource_type="show",
+                    resource_type="collection",
                     resource_id=42,
                 )
             ],
@@ -189,7 +189,7 @@ def test_single_non_progress_target_operation_is_indeterminate(monkeypatch):
     registry_module.task(
         key="opaque_worker",
         title="Opaque worker",
-        allowed_resource_types=("show",),
+        allowed_resource_types=("collection",),
         tracks_progress=False,
     )(worker)
 
@@ -199,7 +199,7 @@ def test_single_non_progress_target_operation_is_indeterminate(monkeypatch):
         run = _run(
             session,
             definition,
-            resource_type=ResourceType.SHOW,
+            resource_type=ResourceType.COLLECTION,
             resource_id=42,
             progress=None,
         )
@@ -207,13 +207,13 @@ def test_single_non_progress_target_operation_is_indeterminate(monkeypatch):
         operation = create_operation(
             session,
             kind="system.opaque",
-            resource_type="show",
+            resource_type="collection",
             resource_id=42,
             title="Opaque work",
             targets=[
                 OperationTargetSpec(
                     task_key=definition.key,
-                    resource_type="show",
+                    resource_type="collection",
                     resource_id=42,
                 )
             ],
@@ -246,19 +246,19 @@ def test_task_operation_models_expose_native_relationships():
         run = _run(
             session,
             definition,
-            resource_type=ResourceType.SHOW,
+            resource_type=ResourceType.COLLECTION,
             resource_id=42,
         )
         operation = create_operation(
             session,
-            kind="show.sync",
-            resource_type="show",
+            kind="collection.sync",
+            resource_type="collection",
             resource_id=42,
             title="Test Show",
             targets=[
                 OperationTargetSpec(
                     task_key=definition.key,
-                    resource_type="show",
+                    resource_type="collection",
                     resource_id=42,
                 )
             ],
@@ -293,21 +293,21 @@ def test_one_task_run_can_satisfy_multiple_overlapping_operations():
         definition = _definition(session)
         target = OperationTargetSpec(
             task_key=definition.key,
-            resource_type="show",
+            resource_type="collection",
             resource_id=7,
         )
         first = create_operation(
             session,
-            kind="show.index",
-            resource_type="show",
+            kind="collection.index",
+            resource_type="collection",
             resource_id=7,
             title="Test Show",
             targets=[target],
         )
         second = create_operation(
             session,
-            kind="show.sync",
-            resource_type="show",
+            kind="collection.sync",
+            resource_type="collection",
             resource_id=7,
             title="Test Show",
             targets=[target],
@@ -316,7 +316,7 @@ def test_one_task_run_can_satisfy_multiple_overlapping_operations():
         run = _run(
             session,
             definition,
-            resource_type=ResourceType.SHOW,
+            resource_type=ResourceType.COLLECTION,
             resource_id=7,
             progress=20,
         )
@@ -361,8 +361,8 @@ def test_multi_target_operation_aggregates_progress_and_structured_results():
         definition = _definition(session, "refresh_episode_metadata_worker")
         operation = create_operation(
             session,
-            kind="show.refresh_metadata",
-            resource_type="show",
+            kind="collection.refresh_metadata",
+            resource_type="collection",
             resource_id=5,
             title="Test Show",
             targets=[
@@ -459,8 +459,8 @@ def test_multi_target_operation_falls_back_to_completed_targets_without_worker_p
         definition = _definition(session, "refresh_episode_metadata_worker")
         operation = create_operation(
             session,
-            kind="show.refresh_metadata",
-            resource_type="show",
+            kind="collection.refresh_metadata",
+            resource_type="collection",
             resource_id=5,
             title="Test Show",
             targets=[
@@ -550,8 +550,8 @@ def test_multi_target_non_progress_operation_uses_completed_target_progress(monk
         definition = _definition(session, "opaque_batch_worker")
         operation = create_operation(
             session,
-            kind="show.opaque_batch",
-            resource_type="show",
+            kind="collection.opaque_batch",
+            resource_type="collection",
             resource_id=5,
             title="Opaque batch",
             targets=[
@@ -665,7 +665,7 @@ def test_operation_target_input_mismatch_does_not_coalesce():
         _run(
             session,
             definition,
-            resource_type=ResourceType.SHOW,
+            resource_type=ResourceType.COLLECTION,
             resource_id=88,
             progress=33,
             inputs={"download_profile_id": 1},
@@ -673,14 +673,14 @@ def test_operation_target_input_mismatch_does_not_coalesce():
 
         operation = create_operation(
             session,
-            kind="show.redownload_episodes",
-            resource_type="show",
+            kind="collection.redownload_episodes",
+            resource_type="collection",
             resource_id=88,
             title="Test Show",
             targets=[
                 OperationTargetSpec(
                     task_key=definition.key,
-                    resource_type="show",
+                    resource_type="collection",
                     resource_id=88,
                     task_kwargs={"download_profile_id": 2},
                 )
@@ -706,8 +706,8 @@ def test_operation_target_dispatch_fans_out_after_commit(monkeypatch):
         definition = _definition(session, "refresh_episode_metadata_worker")
         operation = create_operation(
             session,
-            kind="show.refresh_metadata",
-            resource_type="show",
+            kind="collection.refresh_metadata",
+            resource_type="collection",
             resource_id=5,
             title="Test Show",
             targets=[
@@ -760,8 +760,8 @@ def test_refresh_operation_eager_loads_target_run_graph_without_n_plus_one_queri
         definition = _definition(session, "refresh_episode_metadata_worker")
         operation = create_operation(
             session,
-            kind="show.refresh_metadata",
-            resource_type="show",
+            kind="collection.refresh_metadata",
+            resource_type="collection",
             resource_id=5,
             title="Test Show",
             targets=[
@@ -1014,7 +1014,7 @@ def test_operation_dependency_cycles_are_rejected():
         first = create_operation(
             session,
             kind="first",
-            resource_type="show",
+            resource_type="collection",
             resource_id=1,
             title="First",
             targets=[],
@@ -1022,7 +1022,7 @@ def test_operation_dependency_cycles_are_rejected():
         second = create_operation(
             session,
             kind="second",
-            resource_type="show",
+            resource_type="collection",
             resource_id=2,
             title="Second",
             targets=[],

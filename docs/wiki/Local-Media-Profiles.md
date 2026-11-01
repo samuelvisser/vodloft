@@ -2,20 +2,20 @@
 
 A Local Media Profile describes **the local file VODLoft should create**. It controls the preferred format, where the file is stored, and whether incomplete download work is written directly in the library or staged elsewhere first.
 
-Download Profiles use Local Media Profiles for automatic show downloads. Movies and single videos also use Local Media Profiles, but their downloads are started manually.
+Download Profiles use Local Media Profiles for automatic collection downloads. Movies and single videos also use Local Media Profiles, but their downloads are started manually.
 
-## Show, Movie and Video profiles
+## Collection, Movie and Video profiles
 
-### Show profiles
+### Collection profiles
 
-Show profiles can use:
+Collection profiles can use:
 
 - 4K video;
 - 1080p video;
 - 720p video;
 - audio only.
 
-A Show profile also has an **Available for** setting. This controls where VODLoft offers the profile in the interface.
+A Collection profile also has an **Available for** setting. This controls where VODLoft offers the profile in the interface.
 
 ### Movie profiles
 
@@ -23,7 +23,7 @@ Movie profiles can use 4K, 1080p, or 720p video. The same profile can be used fo
 
 ### Video profiles
 
-Video profiles store single videos that you added on their own, outside any show. They can use 4K, 1080p or 720p video, or audio only. When a site does not offer the chosen quality, VODLoft downloads the best quality below it. New installations start with a **VODLoft Videos** profile; on an existing installation, create one from **Profiles → Local Media Profiles**.
+Video profiles store single videos that you added on their own, outside any collection. They can use 4K, 1080p or 720p video, or audio only. When a site does not offer the chosen quality, VODLoft downloads the best quality below it. New installations start with a **VODLoft Videos** profile; on an existing installation, create one from **Profiles → Local Media Profiles**.
 
 ## Download behavior
 
@@ -46,9 +46,9 @@ Local Media Profiles can automatically save subtitle tracks advertised by The Da
 - **Download besides media**: save separate language-labeled SRT files next to the finished media.
 - **Both embed and download**: keep selectable embedded tracks and sidecar files.
 
-**Movies**, **Series** and Show profiles available for **Podcasts and Series** default to **Download besides media**. **Podcast-only** profiles and **Video** profiles default to **No subtitles**. There is no system-wide subtitle setting; each profile stores its own choice. When **creating** a profile, changing its type or **Available for** selection updates the suggested subtitle option until you explicitly choose a subtitle mode. When **editing an existing profile**, changing its availability does not change its saved subtitle setting.
+**Movies**, **Series** and Collection profiles available for **Podcasts and Series** default to **Download besides media**. **Podcast-only** profiles and **Video** profiles default to **No subtitles**. There is no system-wide subtitle setting; each profile stores its own choice. When **creating** a profile, changing its type or **Available for** selection updates the suggested subtitle option until you explicitly choose a subtitle mode. When **editing an existing profile**, changing its availability does not change its saved subtitle setting.
 
-Sidecars share the media filename, for example `Movie Name.mp4` and `Movie Name.en.srt` for English. Forced subtitles use names such as `Movie Name.en.forced.srt`. Plex and similar media servers can discover these files automatically. The same naming applies to movie extras and show episodes.
+Sidecars share the media filename, for example `Movie Name.mp4` and `Movie Name.en.srt` for English. Forced subtitles use names such as `Movie Name.en.forced.srt`. Plex and similar media servers can discover these files automatically. The same naming applies to movie extras and collection episodes.
 
 Subtitles are fetched for Daily Wire media only. yt-dlp and NPO Start media download without subtitles for now, whatever the profile says. Only subtitle tracks actually advertised by the source are downloaded. Missing or temporarily unavailable tracks do not prevent the primary media from downloading. HLS bundles cannot have subtitles embedded into a single file; use sidecars for that format.
 
@@ -62,16 +62,16 @@ A profile represents one local variant. If you want both audio and 1080p copies 
 
 The output template controls the folder structure and filename. VODLoft uses Jinja variables so one template can produce a unique path for every episode, movie, or extra.
 
-A simple show example is:
+A simple collection example is:
 
 ```jinja
-/downloads/{{ show_title }}/{{ episode_title }}.ext
+/downloads/{{ collection_title }}/{{ episode_title }}.ext
 ```
 
 A media-server-friendly series example is:
 
 ```jinja
-/downloads/TV Shows/{{ show_title }}/Season {{ season_number }}/{{ show_title }} - {{ episode_label }} - {{ title }}.ext
+/downloads/TV Shows/{{ collection_title }}/Season {{ season_number }}/{{ collection_title }} - {{ episode_label }} - {{ title }}.ext
 ```
 
 `.ext` is a VODLoft placeholder. It is replaced with the extension that matches the file VODLoft actually produces.
@@ -88,7 +88,7 @@ Most templates should simply begin with `/downloads/`. Advanced templates may pl
 For example:
 
 ```jinja
-{% set folder = show_title %}/downloads/{{ folder }}/{{ episode_title }}.ext
+{% set folder = collection_title %}/downloads/{{ folder }}/{{ episode_title }}.ext
 ```
 
 The `/downloads/` prefix maps to VODLoft's configured **Download root**. In a normal Docker installation that is the mounted media directory.
@@ -104,7 +104,7 @@ Some metadata, such as a release date, may not exist for every item. Missing val
 Example:
 
 ```jinja
-/downloads/{{ show_title }}/{{ episode_title }}{% if year %} ({{ year }}){% endif %}.ext
+/downloads/{{ collection_title }}/{{ episode_title }}{% if year %} ({{ year }}){% endif %}.ext
 ```
 
 ### Custom date formatting
@@ -112,17 +112,17 @@ Example:
 Most of our date variables have conveniently preformatted values, such as `date` as `YYYY-MM-DD` and the separate `year`, `month`, and `day` values. When you need another representation, use the `strftime` filter:
 
 ```jinja
-/downloads/{{ show_title }}/{{ date | strftime("%d %B %Y") }} - {{ episode_title }}.ext
+/downloads/{{ collection_title }}/{{ date | strftime("%d %B %Y") }} - {{ episode_title }}.ext
 ```
 
 For a date of September 24, 2026, that expression renders as `24 September 2026`. The filter uses Python `strftime` directives, so formats such as `%Y%m%d`, `%d-%m-%Y`, and `%H-%M` are also available. It works with VODLoft's date, time, and datetime template values; a missing value remains empty.
 
-## Show template variable reference
+## Collection template variable reference
 
 | Variable | Meaning |
 | --- | --- |
-| `show` | Show slug |
-| `show_title` | Show title |
+| `collection` | Collection slug |
+| `collection_title` | Collection title |
 | `season` | Season slug, or empty when unavailable |
 | `season_name` | Season name, or empty when unavailable |
 | `season_index` | VODLoft's internal persistent season index |
@@ -137,7 +137,7 @@ For a date of September 24, 2026, that expression renders as `24 September 2026`
 | `episode_number` | The Daily Wire main episode number for `ep`/`ep-extra`, or VODLoft's show-global counter for `aux`/`trailer` |
 | `episode_sub_number` | The Daily Wire fractional/sub-episode number for `ep-extra`; empty otherwise |
 | `episode_label` | Canonical identifier label without the type prefix |
-| `episode_identifier` | Full VODLoft episode identifier; unique within the show |
+| `episode_identifier` | Full VODLoft episode identifier; unique within the collection |
 | `episode_published_date` | Publication date as `YYYY-MM-DD` |
 | `episode_published_time` | Publication time as `HH:MM:SS` |
 | `episode_published_datetime` | Publication date and time |
@@ -151,9 +151,9 @@ For a date of September 24, 2026, that expression renders as `24 September 2026`
 | `minute` | Minute value |
 | `second` | Second value |
 
-`season_number` is the value intended for media-library season numbering. It ignores Daily Wire Extras collections and remains stable if another Extras season appears later. `season_index` is used by VODLoft to order the seasons themselves and is unique for a season within a show.
+`season_number` is the value intended for media-library season numbering. It ignores Daily Wire Extras collections and remains stable if another Extras season appears later. `season_index` is used by VODLoft to order the seasons themselves and is unique for a season within a collection.
 
-VODLoft preserves The Daily Wire's episode number for full episodes and attached episode extras. It only invents show-global numbers for auxiliary content and standalone show trailers. Extras seasons use `season_type == 'extra'` and `season_number == 0`, which is handy if you want specials to end up in a different 'Specials' directory, for example.
+VODLoft preserves The Daily Wire's episode number for full episodes and attached episode extras. It only invents show-global numbers for auxiliary content and standalone collection trailers. Extras seasons use `season_type == 'extra'` and `season_number == 0`, which is handy if you want specials to end up in a different 'Specials' directory, for example.
 
 ## Movies and extras
 
@@ -248,8 +248,8 @@ Use this only when another application or filesystem needs very simple filenames
 
 A common arrangement is:
 
-- one Show video profile for Plex/Jellyfin;
-- one Show audio profile for podcast-style storage or Audiobookshelf;
+- one Collection video profile for Plex/Jellyfin;
+- one Collection audio profile for podcast-style storage or Audiobookshelf;
 - one Movie profile with a conventional movie folder and item-specific extra names.
 
 Local Media Profiles only control files VODLoft creates. Your media server can independently scan whichever subfolders you want.

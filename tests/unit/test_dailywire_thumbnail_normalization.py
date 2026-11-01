@@ -3,11 +3,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 
-def _show_payload(*, land, port, square):
+def _collection_payload(*, land, port, square):
     return {
         "show": {
             "id": "show-1",
-            "slug": "example-show",
+            "slug": "example-collection",
             "title": "Example Show",
             "sharingURL": "https://www.dailywire.com/show/example-show",
             "images": {
@@ -56,11 +56,11 @@ def _episode_payload(*, land, port, square):
     }
 
 
-def test_show_record_keeps_portrait_and_discards_duplicate_landscape_and_square():
+def test_collection_record_keeps_portrait_and_discards_duplicate_landscape_and_square():
     from sources.dailywire.api.records import DwShowRecord
 
     record = DwShowRecord.model_validate(
-        _show_payload(
+        _collection_payload(
             land="portrait.jpg",
             port="portrait.jpg",
             square="portrait.jpg",
@@ -72,11 +72,11 @@ def test_show_record_keeps_portrait_and_discards_duplicate_landscape_and_square(
     assert record.thumbnail_square_path is None
 
 
-def test_show_record_preserves_distinct_landscape_and_square_urls():
+def test_collection_record_preserves_distinct_landscape_and_square_urls():
     from sources.dailywire.api.records import DwShowRecord
 
     record = DwShowRecord.model_validate(
-        _show_payload(
+        _collection_payload(
             land="image.jpg",
             port="image.jpg?auto=compress",
             square="square.jpg",
@@ -93,7 +93,7 @@ def test_catalog_show_record_uses_same_thumbnail_normalization():
 
     record = DwCatalogShowRecord(
         dw_id="show-1",
-        slug="example-show",
+        slug="example-collection",
         title="Example Show",
         thumbnail_landscape_path="portrait.jpg",
         thumbnail_portrait_path="portrait.jpg",

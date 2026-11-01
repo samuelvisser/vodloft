@@ -28,7 +28,7 @@ from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.download_profile_types import EpIdType, MediaDownloadArtifactStatus
 from backend.types.episode_types import EpisodeExtraType, EpisodePublishStatus
 from backend.types.local_media_profile_types import PreferredFormat
-from backend.types.show_types import EpisodeIdentifier, ShowType
+from backend.types.collection_types import EpisodeIdentifier, CollectionType
 from backend.types.stream_profile_types import (
     RSS_AUDIO_PRIMARY_OUTPUT_MODES,
     RSS_HLS_OUTPUT_MODES,
@@ -86,7 +86,7 @@ def _owner_may_use_members_only_media(profile: RssStreamProfile) -> bool:
 def get_rss_stream_profile_by_token(s: Session, token: str) -> RssStreamProfile:
     item: Optional[RssStreamProfile] = (
         s.query(RssStreamProfile)
-        .options(joinedload(RssStreamProfile.show))
+        .options(joinedload(RssStreamProfile.collection))
         .filter_by(token=token, enable_profile=True)
         .one_or_none()
     )
@@ -381,10 +381,10 @@ def _has_download_profile_for_episode(
         .where(Season.id == episode.season_id)
         .scalar_subquery()
     )
-    # Only a show identified by season filters its episodes by season.
+    # Only a collection identified by season filters its episodes by season.
     season_allows_episode = (
         true()
-        if episode.show.episode_identifier != EpisodeIdentifier.SEASONAL.value
+        if episode.collection.episode_identifier != EpisodeIdentifier.SEASONAL.value
         else or_(
             selected_season,
             and_(
@@ -404,7 +404,7 @@ def _has_download_profile_for_episode(
         )
         .join(profile_episode_type, true())
         .where(
-            DownloadProfile.show_id == episode.show_id,
+            DownloadProfile.collection_id == episode.collection_id,
             DownloadProfile.enable_profile.is_(True),
             _download_profile_format_filter(kind),
             profile_episode_type.c.value == episode_type,
@@ -531,7 +531,7 @@ def get_feed_items(
     episode_query = (
         s.query(Episode)
         .filter(
-            Episode.show_id == profile.show_id,
+            Episode.collection_id == profile.collection_id,
             episode_identifier_type_predicate(
                 Episode.episode_identifier,
                 allowed_types,
@@ -636,13 +636,13 @@ def get_feed_items(
             consider(episode, downloads_by_episode, collect=True)
 
     # Handoff durability is independent of max_items. Reconcile old handoffs that
-    # were older than the bounded scan without loading the rest of the show.
+    # were older than the bounded scan without loading the rest of the collection.
     remaining_handoff_ids = previous_handoffs - seen_episode_ids
     if remaining_handoff_ids:
         handoff_episodes = (
             s.query(Episode)
             .filter(
-                Episode.show_id == profile.show_id,
+                Episode.collection_id == profile.collection_id,
                 Episode.id.in_(remaining_handoff_ids),
             )
             .all()
@@ -671,7 +671,7 @@ def get_episode_for_feed(
         s.query(Episode)
         .filter(
             Episode.slug == episode_slug,
-            Episode.show_id == profile.show_id,
+            Episode.collection_id == profile.collection_id,
             episode_identifier_type_predicate(
                 Episode.episode_identifier,
                 allowed_types,
@@ -776,7 +776,7 @@ def get_source_stream_url(
 ) -> str:
     """Ask the episode's Source for its current stream URL."""
     source = source or get_source(episode.source_key)
-    members_only = profile.show.membership_level not in {
+    members_only = profile.collection.membership_level not in {
         DwMembershipLevel.FREE.value,
         DwMembershipLevel.HIGHEST_ALLOWED.value,
     } and _owner_may_use_members_only_media(profile)
@@ -890,7 +890,7 @@ def _append_podcast_item_metadata(
     _sub_text(item, "itunes:episodeType", episode_type)
 
     if identifier_type == EpisodeIdentifier.NUMBERED.value:
-        # Numbered identifiers represent a real show-global episode number.
+        # Numbered identifiers represent a real collection-global episode number.
         # Standalone AUX/TRAILER counters are intentionally excluded above.
         if info.season_number is None:
             _append_identifier_episode_number(item, episode)
@@ -914,7 +914,7 @@ def _append_podcast_item_metadata(
     podcast_season.text = str(season_number)
 
     # Only source-backed seasonal identifiers have a real episode number.
-    # Standalone auxiliary/trailer counters are show-global VODLoft identifiers
+    # Standalone auxiliary/trailer counters are collection-global VODLoft identifiers
     # and must not be exposed as season episode numbers.
     if info.season_number != season_number:
         return
@@ -1000,7 +1000,7 @@ def _append_item(
     _append_podcast_item_metadata(
         item,
         episode,
-        identifier_type=profile.show.episode_identifier,
+        identifier_type=profile.collection.episode_identifier,
     )
 
     if profile.preferred_format != PreferredFormat.FORMAT_AUDIO_ONLY.value:
@@ -1040,7 +1040,7 @@ def render_rss_feed(
         request: Request,
         profile: RssStreamProfile,
 ) -> bytes:
-    show = profile.show
+    collection = profile.collection
     effective_title = RssStreamProfileAPIRead.model_validate(profile).effective_title
     items = get_feed_items(s, profile)
 
@@ -1058,22 +1058,22 @@ def render_rss_feed(
     )
     channel = SubElement(rss, "channel")
     _sub_text(channel, "title", effective_title)
-    _sub_text(channel, "link", show.sharing_url)
+    _sub_text(channel, "link", collection.sharing_url)
     _sub_text(
         channel,
         "description",
-        _escape_bare_html_ampersands(show.description or effective_title),
+        _escape_bare_html_ampersands(collection.description or effective_title),
     )
     _sub_text(channel, "language", "en-us")
     _sub_text(channel, "generator", "VODLoft")
-    _sub_text(channel, "itunes:author", show.author_name)
+    _sub_text(channel, "itunes:author", collection.author_name)
     _sub_text(channel, "itunes:explicit", "false")
     _sub_text(
         channel,
         "itunes:type",
         (
             "episodic"
-            if show.type == ShowType.PODCAST.value
+            if collection.type == CollectionType.PODCAST.value
             else "serial"
         ),
     )
@@ -1095,16 +1095,16 @@ def render_rss_feed(
     )
 
     image_url = (
-        show.thumbnail_square_path
-        or show.thumbnail_landscape_path
-        or show.logo_image_path
+        collection.thumbnail_square_path
+        or collection.thumbnail_landscape_path
+        or collection.logo_image_path
     )
     if image_url:
         SubElement(channel, "itunes:image", {"href": image_url})
         image = SubElement(channel, "image")
         _sub_text(image, "url", image_url)
         _sub_text(image, "title", effective_title)
-        _sub_text(image, "link", show.sharing_url)
+        _sub_text(image, "link", collection.sharing_url)
 
     for episode, _download in items:
         _append_item(

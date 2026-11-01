@@ -7,8 +7,8 @@ from enum import StrEnum
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.db.models import CustomIndexState, Episode, ShowLocalMediaProfile
-from backend.services.custom_indexes import profile_applies_to_show
+from backend.db.models import CustomIndexState, Episode, CollectionLocalMediaProfile
+from backend.services.custom_indexes import profile_applies_to_collection
 from backend.utils.custom_index import (
     get_episode_index_assignments,
     indexing_value_definition_keys,
@@ -18,7 +18,7 @@ from backend.utils.jinja_analysis.custom_indexes import (
     compare_custom_index_reachability,
 )
 from backend.utils.output_template import (
-    SHOW_OUTPUT_TEMPLATE_FIELDS,
+    COLLECTION_OUTPUT_TEMPLATE_FIELDS,
     episode_output_template_values,
     output_template_custom_index_keys,
 )
@@ -81,11 +81,11 @@ def plan_custom_index_preview(
             "No saved episode/profile assignment state is available",
         )
 
-    profile = session.get(ShowLocalMediaProfile, local_media_profile_id)
-    if profile is None or not profile_applies_to_show(profile, episode.show):
+    profile = session.get(CollectionLocalMediaProfile, local_media_profile_id)
+    if profile is None or not profile_applies_to_collection(profile, episode.collection):
         return CustomIndexPreviewPlan(
             CustomIndexPreviewMode.SIMULATE, referenced, active, missing, {},
-            "The selected show has no reusable saved assignments for this profile",
+            "The selected collection has no reusable saved assignments for this profile",
         )
 
     saved_definitions = indexing_value_definition_keys(profile)
@@ -97,7 +97,7 @@ def plan_custom_index_preview(
         )
 
     state = session.scalar(select(CustomIndexState).where(
-        CustomIndexState.show_id == episode.show_id,
+        CustomIndexState.collection_id == episode.collection_id,
         CustomIndexState.local_media_profile_id == profile.id,
     ))
     if state is None or state.completed_generation != state.requested_generation:
@@ -137,7 +137,7 @@ def plan_custom_index_preview(
         draft_values.get(dependency, original_values.get(dependency, ""))
         != original_values.get(dependency, "")
         for dependency in comparison.dependencies
-        if dependency in SHOW_OUTPUT_TEMPLATE_FIELDS or dependency.startswith("meta_show_")
+        if dependency in COLLECTION_OUTPUT_TEMPLATE_FIELDS or dependency.startswith("meta_collection_")
     ):
         return CustomIndexPreviewPlan(
             CustomIndexPreviewMode.SIMULATE, referenced, active, missing, {},

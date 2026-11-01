@@ -7,17 +7,17 @@ from typing import Any, Optional, Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Episode, Season, Show
-from backend.services.show_assets import update_show_artwork_metadata
+from backend.db.models import Episode, Season, Collection
+from backend.services.collection_assets import update_collection_artwork_metadata
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
-from backend.types.show_types import EpisodeIdentifier
+from backend.types.collection_types import EpisodeIdentifier
 from sources.dailywire.api.dw_api.client import ByShowSeason, MiddlewareClient
 from sources.dailywire.api.records import DwEpisodeRecord, DwSeasonRecord
 from sources.dailywire.auth import DeviceAuthClient
 from sources import Feature, Source, get_source
 from task_manager.events.transactional import queue_event
-from ._helpers import get_latest_ep_index, get_season_from_list_by_id, get_shows
+from ._helpers import get_latest_ep_index, get_season_from_list_by_id, get_collections
 from ...helpers.episodes.events import queue_episode_status_events
 from ...helpers.episodes.identifier import IdentifierMaxValues, identify_episodes_in_season
 from ...helpers.episodes.mapper import (
@@ -26,7 +26,7 @@ from ...helpers.episodes.mapper import (
     fetch_episodes_until_slug,
     get_dw_episodes_since_ep,
 )
-from ...helpers.episodes.quarantine import vacated_canonical_identifiers_for_show
+from ...helpers.episodes.quarantine import vacated_canonical_identifiers_for_collection
 from ...helpers.episodes.same_episode import (
     PENDING_EPISODE_PUBLISH_STATUSES,
     reconcile_single_pending_episode_slug,
@@ -37,7 +37,7 @@ from ...helpers.episodes.save import (
     resolve_dw_episodes,
     save_resolved_episodes_per_season_asc,
 )
-from ...helpers.listed_shows import index_listed_show
+from ...helpers.listed_collections import index_listed_collection
 from ...helpers.progress import ProgressBounds, update_progress
 from ...helpers.seasons import create_season_by_dw_season
 from ...types.general import RecordOrder
@@ -46,12 +46,12 @@ from ..monitor_pending_episode.scheduling import MONITOR_REQUESTED_EVENT
 
 logger = logging.getLogger(__name__)
 
-SHOW_INDEXED_EVENT = "show.indexed"
+COLLECTION_INDEXED_EVENT = "collection.indexed"
 
 
 def _canonicalize_resolved_identifiers(
     *,
-    show: Show,
+    collection: Collection,
     resolved_by_season: dict[int, list[ResolvedEpisode]],
     previous_values: IdentifierMaxValues,
     occupied_identifiers: set[str],
@@ -65,11 +65,11 @@ def _canonicalize_resolved_identifiers(
     """
     values = dict(previous_values)
     occupied = set(occupied_identifiers)
-    identifier_type = EpisodeIdentifier(show.episode_identifier)
+    identifier_type = EpisodeIdentifier(collection.episode_identifier)
     canonical: dict[int, list[ResolvedEpisode]] = {}
 
     for season_id, resolved_episodes in resolved_by_season.items():
-        season = get_season_from_list_by_id(show.seasons, season_id)
+        season = get_season_from_list_by_id(collection.seasons, season_id)
         if season is None:
             continue
         mapped, values = identify_episodes_in_season(
@@ -92,71 +92,71 @@ def _canonicalize_resolved_identifiers(
 
 
 @dataclass(frozen=True)
-class ShowEpisodeScanResult:
-    show_id: int
-    show_slug: str
-    show_title: str
+class CollectionEpisodeScanResult:
+    collection_id: int
+    collection_slug: str
+    collection_title: str
     episodes_found: int
 
     def as_dict(self) -> dict[str, Any]:
         return {
-            "show_id": self.show_id,
-            "show_slug": self.show_slug,
-            "show_title": self.show_title,
+            "collection_id": self.collection_id,
+            "collection_slug": self.collection_slug,
+            "collection_title": self.collection_title,
             "episodes_found": self.episodes_found,
         }
 
 
 @dataclass(frozen=True)
 class FetchNewEpisodesResult:
-    shows: tuple[ShowEpisodeScanResult, ...]
+    collections: tuple[CollectionEpisodeScanResult, ...]
     dry_run: bool = False
 
     @property
     def episodes_found(self) -> int:
-        return sum(show.episodes_found for show in self.shows)
+        return sum(collection.episodes_found for collection in self.collections)
 
     @property
-    def shows_scanned(self) -> int:
-        return len(self.shows)
+    def collections_scanned(self) -> int:
+        return len(self.collections)
 
     def summary(self) -> str:
         if self.dry_run:
             return "Dry-run episode scan completed"
-        if self.shows_scanned == 1:
-            only = self.shows[0]
-            return f"Episode scan finished for {only.show_title}: {only.episodes_found} new {'episode' if only.episodes_found == 1 else 'episodes'} found"
-        return f"Episode scan finished for {self.shows_scanned} shows: {self.episodes_found} new {'episode' if self.episodes_found == 1 else 'episodes'} found"
+        if self.collections_scanned == 1:
+            only = self.collections[0]
+            return f"Episode scan finished for {only.collection_title}: {only.episodes_found} new {'episode' if only.episodes_found == 1 else 'episodes'} found"
+        return f"Episode scan finished for {self.collections_scanned} collections: {self.episodes_found} new {'episode' if self.episodes_found == 1 else 'episodes'} found"
 
     def as_data(self) -> dict[str, Any]:
         return {
             "episodes_found": self.episodes_found,
-            "shows_scanned": self.shows_scanned,
-            "shows": [show.as_dict() for show in self.shows],
+            "collections_scanned": self.collections_scanned,
+            "collections": [collection.as_dict() for collection in self.collections],
         }
 
 
 async def run_fetch_new_episodes(
     s: Session,
     *,
-    show_id: Optional[int] = None,
-    show_slug: Optional[str] = None,
+    collection_id: Optional[int] = None,
+    collection_slug: Optional[str] = None,
     dry_run: bool = False,
     initial_index: bool = False,
     quick_checked: bool | None = None,
     progress=None,
 ) -> FetchNewEpisodesResult:
-    """Scan one show, or all shows. ``quick_checked`` limits a scan of all shows to the
-    shows whose Source has quick checks (True), which get a full re-scan once a day,
-    or to the other shows (False)."""
-    shows: Sequence[Show] = get_shows(s, show_id=show_id, show_slug=show_slug)
-    if quick_checked is not None and show_id is None and not show_slug:
-        shows = [show for show in shows if get_source(show.source_key).has(Feature.QUICK_CHECK) == quick_checked]
-    show_ids = [show.id for show in shows]
-    lists_episodes = {show.id: get_source(show.source_key).has(Feature.EPISODE_LISTS) for show in shows}
+    """Scan one collection, or all collections. ``quick_checked`` limits a scan of all collections to the
+    collections whose Source has quick checks (True), which get a full re-scan once a day,
+    or to the other collections (False)."""
+    collections: Sequence[Collection] = get_collections(s, collection_id=collection_id, collection_slug=collection_slug)
+    if quick_checked is not None and collection_id is None and not collection_slug:
+        collections = [collection for collection in collections if get_source(collection.source_key).has(Feature.QUICK_CHECK) == quick_checked]
+    collection_ids = [collection.id for collection in collections]
+    lists_episodes = {collection.id: get_source(collection.source_key).has(Feature.EPISODE_LISTS) for collection in collections}
 
     # Token refresh can itself require the internet. Do not retain the SELECT
-    # transaction used to find the shows while waiting for OAuth/DNS/HTTP.
+    # transaction used to find the collections while waiting for OAuth/DNS/HTTP.
     s.rollback()
     access_token: str | None = None
     client: MiddlewareClient | None = None
@@ -164,20 +164,20 @@ async def run_fetch_new_episodes(
         tokens = DeviceAuthClient().get_token()
         access_token = tokens.access_token if tokens else None
         client = MiddlewareClient(access_token=access_token)
-    completed: list[ShowEpisodeScanResult] = []
-    for current_show_id in show_ids:
-        show = s.get(Show, current_show_id)
-        if show is None:
+    completed: list[CollectionEpisodeScanResult] = []
+    for current_collection_id in collection_ids:
+        collection = s.get(Collection, current_collection_id)
+        if collection is None:
             continue
-        if lists_episodes[current_show_id]:
-            completed.append(_index_listed_show(
-                s, show=show, source=get_source(show.source_key), dry_run=dry_run, progress=progress,
+        if lists_episodes[current_collection_id]:
+            completed.append(_index_listed_collection(
+                s, collection=collection, source=get_source(collection.source_key), dry_run=dry_run, progress=progress,
             ))
             continue
         try:
-            found = await _fetch_show(
+            found = await _fetch_collection(
                 s,
-                show=show,
+                collection=collection,
                 client=client,
                 access_token=access_token,
                 dry_run=dry_run,
@@ -187,31 +187,31 @@ async def run_fetch_new_episodes(
         except Exception:
             s.rollback()
             raise
-        completed.append(ShowEpisodeScanResult(
-            show_id=show.id,
-            show_slug=show.slug,
-            show_title=show.title,
+        completed.append(CollectionEpisodeScanResult(
+            collection_id=collection.id,
+            collection_slug=collection.slug,
+            collection_title=collection.title,
             episodes_found=0 if dry_run else found,
         ))
-    return FetchNewEpisodesResult(shows=tuple(completed), dry_run=dry_run)
+    return FetchNewEpisodesResult(collections=tuple(completed), dry_run=dry_run)
 
 
-async def _fetch_show(
+async def _fetch_collection(
     s: Session,
     *,
-    show: Show,
+    collection: Collection,
     client: MiddlewareClient,
     access_token: str | None,
     dry_run: bool,
     initial_index: bool,
     progress=None,
 ) -> int:
-    show_id = show.id
-    show_slug = show.slug
-    membership_plan = show.membership_level
+    collection_id = collection.id
+    collection_slug = collection.slug
+    membership_plan = collection.membership_level
     if membership_plan != DwMembershipLevel.FREE.value and access_token is None:
         if membership_plan != DwMembershipLevel.HIGHEST_ALLOWED.value:
-            logger.warning("No valid access token for show %s", show_slug)
+            logger.warning("No valid access token for collection %s", collection_slug)
             return 0
     if membership_plan == DwMembershipLevel.HIGHEST_ALLOWED.value:
         membership_plan = DwMembershipLevel.FREE.value
@@ -220,7 +220,7 @@ async def _fetch_show(
     latest_final_episode = s.execute(
         select(Episode)
         .where(
-            Episode.show_id == show_id,
+            Episode.collection_id == collection_id,
             Episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value,
         )
         .order_by(Episode.index.desc())
@@ -229,12 +229,12 @@ async def _fetch_show(
     latest_final_episode_id = latest_final_episode.id if latest_final_episode is not None else None
     latest_final_episode_slug = latest_final_episode.slug if latest_final_episode is not None else None
     latest_final_season_id = latest_final_episode.season_id if latest_final_episode is not None else None
-    vacated_identifiers = vacated_canonical_identifiers_for_show(s, show_id)
+    vacated_identifiers = vacated_canonical_identifiers_for_collection(s, collection_id)
 
     monitor_requests: dict[int, dict] = {
-        episode.id: _monitor_request_for_db_episode(show, episode)
+        episode.id: _monitor_request_for_db_episode(collection, episode)
         for episode in s.scalars(select(Episode).where(
-            Episode.show_id == show_id,
+            Episode.collection_id == collection_id,
             Episode.publish_status.in_(PENDING_EPISODE_PUBLISH_STATUSES),
         ))
     }
@@ -243,7 +243,7 @@ async def _fetch_show(
     # Daily Wire request so an outage cannot pin a DB connection per worker.
     s.rollback()
 
-    dw_show = client.get_show_page(show_slug, membership_plan=membership_plan)
+    dw_show = client.get_show_page(collection_slug, membership_plan=membership_plan)
     all_dw_seasons: list[DwSeasonRecord] = dw_show.seasons
 
     square_thumbnail_path: str | None = None
@@ -252,27 +252,27 @@ async def _fetch_show(
         if square_thumbnail_path is None:
             square_thumbnail_path = client.get_square_show_thumbnails(
                 membership_plan=membership_plan,
-            ).get(show_slug)
+            ).get(collection_slug)
 
-    show = s.get(Show, show_id)
-    if show is None:
-        raise ValueError(f"Show {show_id} was removed while it was being indexed")
+    collection = s.get(Collection, collection_id)
+    if collection is None:
+        raise ValueError(f"Collection {collection_id} was removed while it was being indexed")
     if not dry_run:
-        update_show_artwork_metadata(show, dw_show)
+        update_collection_artwork_metadata(collection, dw_show)
     if initial_index and not dry_run:
-        show.thumbnail_square_path = square_thumbnail_path
+        collection.thumbnail_square_path = square_thumbnail_path
     for remote_season in all_dw_seasons:
-        if not any(season.slug == remote_season.slug for season in show.seasons):
-            create_season_by_dw_season(s, show=show, dw_season=remote_season)
+        if not any(season.slug == remote_season.slug for season in collection.seasons):
+            create_season_by_dw_season(s, collection=collection, dw_season=remote_season)
             s.flush()
-            s.refresh(show, attribute_names=["seasons"])
+            s.refresh(collection, attribute_names=["seasons"])
     if not dry_run:
         # Newly discovered seasons are independent local facts and must exist before
         # the network-only prefetch phase. Committing also releases the connection.
         s.commit()
 
     dw_id_by_slug = {season.slug: season.dw_id for season in all_dw_seasons}
-    seasons_to_scan = list(show.seasons)
+    seasons_to_scan = list(collection.seasons)
     if latest_final_season_id is not None:
         cursor_position = next(
             (
@@ -312,7 +312,7 @@ async def _fetch_show(
         ):
             prefetched[season_id] = fetch_episodes_until_slug(
                 client,
-                show_slug,
+                collection_slug,
                 ByShowSeason(
                     season_dw_id=remote_id,
                     membership_plan=membership_plan,
@@ -325,7 +325,7 @@ async def _fetch_show(
 
         prefetched[season_id] = fetch_all_episodes_paginated(
             client,
-            show_slug,
+            collection_slug,
             ByShowSeason(
                 season_dw_id=remote_id,
                 membership_plan=membership_plan,
@@ -335,9 +335,9 @@ async def _fetch_show(
         )
 
     if not dry_run:
-        show = s.get(Show, show_id)
-        if show is None:
-            raise ValueError(f"Show {show_id} was removed while it was being indexed")
+        collection = s.get(Collection, collection_id)
+        if collection is None:
+            raise ValueError(f"Collection {collection_id} was removed while it was being indexed")
         latest_final_episode = (
             s.get(Episode, latest_final_episode_id)
             if latest_final_episode_id is not None
@@ -345,21 +345,21 @@ async def _fetch_show(
         )
 
     for season_id, records in prefetched.items():
-        season = get_season_from_list_by_id(show.seasons, season_id)
+        season = get_season_from_list_by_id(collection.seasons, season_id)
         if season is None:
             continue
         if reconcile_single_pending_episode_slug(
             s,
-            show=show,
+            collection=collection,
             season=season,
             remote_records=records,
         ) is not None:
             # Refresh requests with the newly adopted slug while keeping immutable id identity.
             for episode in s.scalars(select(Episode).where(
-                Episode.show_id == show_id,
+                Episode.collection_id == collection_id,
                 Episode.publish_status.in_(PENDING_EPISODE_PUBLISH_STATUSES),
             )):
-                monitor_requests[episode.id] = _monitor_request_for_db_episode(show, episode)
+                monitor_requests[episode.id] = _monitor_request_for_db_episode(collection, episode)
 
     candidate_remote_slugs = {
         record.slug
@@ -369,7 +369,7 @@ async def _fetch_show(
     known_episode_slugs = (
         set(s.scalars(
             select(Episode.slug).where(
-                Episode.show_id == show_id,
+                Episode.collection_id == collection_id,
                 Episode.slug.in_(candidate_remote_slugs),
             )
         ))
@@ -377,25 +377,25 @@ async def _fetch_show(
         else set()
     )
     occupied_identifiers = set(
-        s.scalars(select(Episode.episode_identifier).where(Episode.show_id == show_id))
+        s.scalars(select(Episode.episode_identifier).where(Episode.collection_id == collection_id))
     )
     prev_max_values: IdentifierMaxValues = {
         item.key: int(item.value)
-        for item in show.meta_items
+        for item in collection.meta_items
         if item.key in {
             "ep_id.latest_aux_num",
             "ep_id.latest_trailer_num",
             "ep_id.latest_ep_date",
         }
     }
-    season_count = max(1, min(len(show.seasons), 5))
+    season_count = max(1, min(len(collection.seasons), 5))
     upper = int(65 + (season_count - 1) * (95 - 65) / 4) if season_count > 1 else 65
 
     ep_map_asc, identifier_max_values = get_dw_episodes_since_ep(
         client,
-        show=show,
+        collection=collection,
         membership_plan=membership_plan,
-        seasons=show.seasons,
+        seasons=collection.seasons,
         dw_id_by_slug=dw_id_by_slug,
         since_episode=latest_final_episode,
         prev_max_values=prev_max_values,
@@ -409,17 +409,17 @@ async def _fetch_show(
     )
 
     if dry_run:
-        _print_dry_run_report(show, ep_map_asc, identifier_max_values)
+        _print_dry_run_report(collection, ep_map_asc, identifier_max_values)
         s.rollback()
-        update_progress(progress, 100, f"Dry run complete for '{show_slug}' (nothing saved)")
+        update_progress(progress, 100, f"Dry run complete for '{collection_slug}' (nothing saved)")
         return 0
 
     total = count_total_episodes(ep_map_asc)
     if total == 0:
         for key, value in identifier_max_values.items():
-            show.set_meta(key=key, value=str(value))
+            collection.set_meta(key=key, value=str(value))
         _queue_monitor_requests(s, monitor_requests.values())
-        _queue_show_indexed(s, show=show, indexed_count=0)
+        _queue_collection_indexed(s, collection=collection, indexed_count=0)
         s.commit()
         update_progress(progress, 100, _completion_message(0, len(monitor_requests)))
         return 0
@@ -438,60 +438,60 @@ async def _fetch_show(
             always_resolve_details=always_resolve_details,
         )
 
-    show = s.get(Show, show_id)
-    if show is None:
-        raise ValueError(f"Show {show_id} was removed while it was being indexed")
+    collection = s.get(Collection, collection_id)
+    if collection is None:
+        raise ValueError(f"Collection {collection_id} was removed while it was being indexed")
     resolved_by_season, identifier_max_values = _canonicalize_resolved_identifiers(
-        show=show,
+        collection=collection,
         resolved_by_season=resolved_by_season,
         previous_values=prev_max_values,
         occupied_identifiers=occupied_identifiers,
     )
     for key, value in identifier_max_values.items():
-        show.set_meta(key=key, value=str(value))
+        collection.set_meta(key=key, value=str(value))
 
-    latest_episode_index = get_latest_ep_index(s, show=show) or 0
+    latest_episode_index = get_latest_ep_index(s, collection=collection) or 0
     current_index = latest_episode_index + 1
     for season_id, resolved_episodes in resolved_by_season.items():
-        season = get_season_from_list_by_id(show.seasons, season_id)
+        season = get_season_from_list_by_id(collection.seasons, season_id)
         if season is None:
             continue
         current_index, saved_episodes = save_resolved_episodes_per_season_asc(
             s,
-            show=show,
+            collection=collection,
             season=season,
             episodes=resolved_episodes,
             start_index=current_index,
         )
         _announce_new_episodes(
             s,
-            show=show,
+            collection=collection,
             saved_episodes=saved_episodes,
             monitor_requests=monitor_requests,
         )
 
     _queue_monitor_requests(s, monitor_requests.values())
-    from backend.services.custom_indexes import request_show_custom_index_reconciliation
-    request_show_custom_index_reconciliation(s, show.id)
-    _queue_show_indexed(s, show=show, indexed_count=total)
+    from backend.services.custom_indexes import request_collection_custom_index_reconciliation
+    request_collection_custom_index_reconciliation(s, collection.id)
+    _queue_collection_indexed(s, collection=collection, indexed_count=total)
     s.commit()
     update_progress(progress, 100, _completion_message(total, len(monitor_requests)))
     return total
 
 
-def _index_listed_show(s: Session, *, show: Show, source: Source, dry_run: bool, progress=None) -> ShowEpisodeScanResult:
-    result = ShowEpisodeScanResult(show_id=show.id, show_slug=show.slug, show_title=show.title, episodes_found=0)
-    from backend.services.custom_indexes import request_show_custom_index_reconciliation
-    show_id = show.id
+def _index_listed_collection(s: Session, *, collection: Collection, source: Source, dry_run: bool, progress=None) -> CollectionEpisodeScanResult:
+    result = CollectionEpisodeScanResult(collection_id=collection.id, collection_slug=collection.slug, collection_title=collection.title, episodes_found=0)
+    from backend.services.custom_indexes import request_collection_custom_index_reconciliation
+    collection_id = collection.id
     try:
-        found = index_listed_show(s, show_id=show_id, source=source, progress=progress, dry_run=dry_run)
+        found = index_listed_collection(s, collection_id=collection_id, source=source, progress=progress, dry_run=dry_run)
         if dry_run:
-            update_progress(progress, 100, f"Dry run complete for '{result.show_slug}': {found} new episodes (nothing saved)")
+            update_progress(progress, 100, f"Dry run complete for '{result.collection_slug}': {found} new episodes (nothing saved)")
             return result
-        show = s.get(Show, show_id)
-        if show is not None:
-            request_show_custom_index_reconciliation(s, show_id)
-            _queue_show_indexed(s, show=show, indexed_count=found)
+        collection = s.get(Collection, collection_id)
+        if collection is not None:
+            request_collection_custom_index_reconciliation(s, collection_id)
+            _queue_collection_indexed(s, collection=collection, indexed_count=found)
         s.commit()
     except Exception:
         s.rollback()
@@ -502,7 +502,7 @@ def _index_listed_show(s: Session, *, show: Show, source: Source, dry_run: bool,
 def _announce_new_episodes(
     s: Session,
     *,
-    show: Show,
+    collection: Collection,
     saved_episodes: list[SavedEpisode],
     monitor_requests: dict[int, dict],
 ) -> None:
@@ -512,21 +512,21 @@ def _announce_new_episodes(
         queue_episode_status_events(
             s,
             episode=saved.episode,
-            show=show,
+            collection=collection,
             old_status=None,
             new_status=saved.status,
             was_created=True,
         )
         if saved.status.value in PENDING_EPISODE_PUBLISH_STATUSES:
-            monitor_requests[saved.episode.id] = _monitor_request_for_db_episode(show, saved.episode)
+            monitor_requests[saved.episode.id] = _monitor_request_for_db_episode(collection, saved.episode)
 
 
-def _monitor_request_for_db_episode(show: Show, episode: Episode) -> dict:
+def _monitor_request_for_db_episode(collection: Collection, episode: Episode) -> dict:
     return {
         "resource_id": episode.id,
         "slug": episode.slug,
-        "show_id": show.id,
-        "show_slug": show.slug,
+        "collection_id": collection.id,
+        "collection_slug": collection.slug,
         "season_id": episode.season_id,
         "episode_identifier": episode.episode_identifier,
         "episode_index": episode.index,
@@ -539,11 +539,11 @@ def _queue_monitor_requests(s: Session, requests) -> None:
         queue_event(s, MONITOR_REQUESTED_EVENT, request)
 
 
-def _queue_show_indexed(s: Session, *, show: Show, indexed_count: int) -> None:
-    queue_event(s, SHOW_INDEXED_EVENT, {
-        "resource_id": show.id,
-        "id": show.id,
-        "slug": show.slug,
+def _queue_collection_indexed(s: Session, *, collection: Collection, indexed_count: int) -> None:
+    queue_event(s, COLLECTION_INDEXED_EVENT, {
+        "resource_id": collection.id,
+        "id": collection.id,
+        "slug": collection.slug,
         "indexed_count": indexed_count,
     })
 
@@ -554,11 +554,11 @@ def _completion_message(indexed_count: int, monitor_count: int) -> str:
     return f"Indexed {indexed_count} episode(s); no pending episodes found"
 
 
-def _print_dry_run_report(show: Show, ep_map_asc, identifier_max_values: IdentifierMaxValues) -> None:
+def _print_dry_run_report(collection: Collection, ep_map_asc, identifier_max_values: IdentifierMaxValues) -> None:
     total = count_total_episodes(ep_map_asc)
-    print(f"\n=== DRY RUN: '{show.slug}' — {total} new episode(s), nothing saved ===")
+    print(f"\n=== DRY RUN: '{collection.slug}' — {total} new episode(s), nothing saved ===")
     for season_id, ep_list in ep_map_asc.items():
-        season = get_season_from_list_by_id(show.seasons, season_id)
+        season = get_season_from_list_by_id(collection.seasons, season_id)
         season_label = f"season {season.index}: {season.name}" if season is not None else f"season id {season_id}"
         for ep_id, ep in ep_list:
             print(f"  [{season_label}] {ep_id:<32} {ep.title}")

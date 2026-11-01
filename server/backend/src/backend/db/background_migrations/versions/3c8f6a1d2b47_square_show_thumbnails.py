@@ -11,7 +11,7 @@ import asyncio
 from sqlalchemy import func, select
 
 from backend.db.core import get_session
-from backend.db.models import Show
+from backend.db.models import Collection
 from sources.dailywire.api.dw_api.client import MiddlewareClient
 from sources.dailywire.auth import DeviceAuthClient
 
@@ -21,10 +21,10 @@ down_revision = "f6a1c3d8b427"
 title = "Populate show square thumbnails from The Daily Wire"
 
 
-def _show_count() -> int:
+def _collection_count() -> int:
     session = get_session()
     try:
-        return int(session.scalar(select(func.count(Show.id))) or 0)
+        return int(session.scalar(select(func.count(Collection.id))) or 0)
     finally:
         session.close()
 
@@ -34,15 +34,15 @@ def _apply_square_thumbnails(thumbnails: dict[str, str]) -> int:
     session = get_session()
     updated = 0
     try:
-        for show in session.scalars(select(Show).order_by(Show.id)):
-            if show.thumbnail_square_path is not None:
+        for collection in session.scalars(select(Collection).order_by(Collection.id)):
+            if collection.thumbnail_square_path is not None:
                 continue
 
-            square_path = thumbnails.get(show.slug)
+            square_path = thumbnails.get(collection.slug)
             if square_path is None:
                 continue
 
-            show.thumbnail_square_path = square_path
+            collection.thumbnail_square_path = square_path
             updated += 1
         session.commit()
         return updated
@@ -54,14 +54,14 @@ def _apply_square_thumbnails(thumbnails: dict[str, str]) -> int:
 
 
 async def migrate(context) -> None:
-    show_count = _show_count()
-    if show_count == 0:
+    collection_count = _collection_count()
+    if collection_count == 0:
         return
 
     context.raise_if_cancelled()
     context.update_progress(
         0,
-        show_count,
+        collection_count,
         "Fetching square show thumbnails from The Daily Wire",
     )
 
@@ -75,7 +75,7 @@ async def migrate(context) -> None:
     _apply_square_thumbnails(thumbnails)
 
     context.update_progress(
-        show_count,
-        show_count,
+        collection_count,
+        collection_count,
         "Updated square show thumbnails",
     )

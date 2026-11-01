@@ -1,13 +1,13 @@
 import type {EpisodeTagRead} from "./source";
 import {z} from 'zod'
-import {EpisodeIdentifierReg, EpisodeIdentifierValue} from "../show";
+import {EpisodeIdentifierReg, EpisodeIdentifierValue} from "../collection";
 import {ApiDateTimeSchema} from "./datetime";
 import {SeasonDetachedSchema, SeasonReadSchema} from "./season";
 
 
 // ---------- Strict request (create/update) ----------
-// The season fields only apply to a show identified by season, the other
-// filters apply to every show.
+// The season fields only apply to a collection identified by season, the other
+// filters apply to every collection.
 export const DownloadProfileSchemaRequest = z.object({
     enableProfile: z.boolean().default(true),
     epIdTypeList: z.array(z.string()).default([]),
@@ -59,7 +59,7 @@ function refineSeasonChoice(value: SeasonFields, ctx: z.RefinementCtx) {
     }
 }
 
-/** A seasonal show needs a season to download; other shows ignore the season fields. */
+/** A seasonal collection needs a season to download; other collections ignore the season fields. */
 export function forEpisodeIdentifier<Schema extends z.ZodType<SeasonFields>>(
     schema: Schema,
     episodeIdentifier: EpisodeIdentifierValue | string | undefined,
@@ -69,13 +69,13 @@ export function forEpisodeIdentifier<Schema extends z.ZodType<SeasonFields>>(
         : schema
 }
 
-/** Starting values that fit how a show identifies its episodes and the tags its Source gives them. */
+/** Starting values that fit how a collection identifies its episodes and the tags its Source gives them. */
 export function downloadProfileDefaultsFor(
     episodeIdentifier: EpisodeIdentifierValue | string | undefined,
     tags: readonly EpisodeTagRead[] | undefined,
 ) {
-    // A seasonal show downloads the chosen seasons whole, without its bonus content;
-    // other shows a recent window.
+    // A seasonal collection downloads the chosen seasons whole, without its bonus content;
+    // other collections a recent window.
     const seasonal = episodeIdentifier === EpisodeIdentifierReg.Enum.seasonal
     const epIdTypeList = (tags ?? [])
         .filter((tag) => tag.selectedByDefault && (!seasonal || tag.rssEpisodeType === 'full'))
@@ -84,7 +84,7 @@ export function downloadProfileDefaultsFor(
 }
 
 export const DownloadProfileCreateSchema = DownloadProfileSchemaRequest.extend({
-    showId: z.int(),
+    collectionId: z.int(),
     localMediaProfileId: z.int(),
 }).superRefine(refineDownloadLimit)
 export type DownloadProfileCreateIn = z.input<typeof DownloadProfileCreateSchema>
@@ -100,7 +100,7 @@ export type DownloadProfileUpdateOut = z.output<typeof DownloadProfileUpdateSche
 // ------------ Lenient response (read) ------------
 export const DownloadProfileReadSchema = z.looseObject({
     id: z.int(),
-    showId: z.int(),
+    collectionId: z.int(),
     localMediaProfileId: z.int(),
     enableProfile: z.boolean(),
     epIdTypeList: z.array(z.string()),

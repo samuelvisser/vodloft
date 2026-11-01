@@ -13,7 +13,7 @@ def test_rss_stream_profile_defaults_to_episode_and_auxiliary():
     from backend.api.models.rss_stream_profile import RssStreamProfileAPICreate
 
     profile = RssStreamProfileAPICreate(
-        show_id=1,
+        collection_id=1,
         title="Test Show",
         enable_profile=True,
         use_downloads=False,
@@ -29,7 +29,7 @@ def test_audio_only_rss_stream_profile_defaults_video_output_mode_to_null():
     from backend.api.models.rss_stream_profile import RssStreamProfileAPICreate
 
     profile = RssStreamProfileAPICreate(
-        show_id=1,
+        collection_id=1,
         title="Test Show",
         enable_profile=True,
         use_downloads=False,
@@ -46,7 +46,7 @@ def test_video_rss_stream_profile_defaults_video_output_mode_to_audio_hls():
     from backend.types.stream_profile_types import RssVideoOutputMode
 
     profile = RssStreamProfileAPICreate(
-        show_id=1,
+        collection_id=1,
         title="Test Show",
         enable_profile=True,
         use_downloads=False,
@@ -63,7 +63,7 @@ def test_audio_only_rss_stream_profile_rejects_video_output_mode():
 
     with pytest.raises(ValidationError, match="Audio-only Stream Profiles cannot have a video output mode"):
         RssStreamProfileAPICreate(
-            show_id=1,
+            collection_id=1,
             title="Test Show",
             enable_profile=True,
             use_downloads=False,
@@ -79,7 +79,7 @@ def test_video_rss_stream_profile_requires_video_output_mode():
 
     with pytest.raises(ValidationError, match="Video Stream Profiles require a video output mode"):
         RssStreamProfileAPICreate(
-            show_id=1,
+            collection_id=1,
             title="Test Show",
             enable_profile=True,
             use_downloads=False,
@@ -111,28 +111,28 @@ def db_session():
 
 def test_feed_items_respect_stream_profile_episode_types(db_session):
     from backend.api.endpoints.feeds.service import get_feed_items, get_media_for_episode
-    from backend.db.models import Episode, RssStreamProfile, Season, Show
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+    from backend.db.models import Episode, RssStreamProfile, Season, Collection
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
 
-    show = Show(
+    collection = Collection(
         source_key="dailywire",
-        uuid="show-uuid",
-        slug="show",
-        title="Show",
+        uuid="collection-uuid",
+        slug="collection",
+        title="Collection",
         description="Description",
-        sharing_url="https://example.test/show",
+        sharing_url="https://example.test/collection",
         membership_level="FREE",
-        type=ShowType.PODCAST.value,
+        type=CollectionType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Host",
         author_slug="host",
     )
-    season = Season(show=show, index=1, slug="season-1", name="Season 1")
+    season = Season(collection=collection, index=1, slug="season-1", name="Season 1")
     normal = Episode(
         source_key="dailywire",
         uuid="normal-uuid",
         type="episode",
-        show=show,
+        collection=collection,
         season=season,
         index=1,
         episode_identifier="ep.1",
@@ -148,7 +148,7 @@ def test_feed_items_respect_stream_profile_episode_types(db_session):
         source_key="dailywire",
         uuid="aux-uuid",
         type="episode",
-        show=show,
+        collection=collection,
         season=season,
         index=2,
         episode_identifier="aux.1",
@@ -161,7 +161,7 @@ def test_feed_items_respect_stream_profile_episode_types(db_session):
         published_date=datetime(2026, 8, 31, tzinfo=timezone.utc),
     )
     profile = RssStreamProfile(
-        show=show,
+        collection=collection,
         enable_profile=True,
         token="token",
         use_downloads=False,
@@ -172,7 +172,7 @@ def test_feed_items_respect_stream_profile_episode_types(db_session):
         feed_url="https://vodloft.test/feed.xml",
     )
 
-    db_session.add_all([show, season, normal, auxiliary, profile])
+    db_session.add_all([collection, season, normal, auxiliary, profile])
     db_session.flush()
 
     assert [episode.slug for episode, _ in get_feed_items(db_session, profile)] == ["normal"]

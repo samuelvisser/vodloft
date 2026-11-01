@@ -61,8 +61,8 @@ def _restart_scenario(task_database, monkeypatch):
     definition = _definition(session, "test_restart_operation_worker")
     operation = create_operation(
         session,
-        kind="show.test_restart",
-        resource_type="show",
+        kind="collection.test_restart",
+        resource_type="collection",
         resource_id=5,
         title="Test Show",
         targets=[
@@ -685,7 +685,7 @@ def test_composite_operation_restart_requires_a_new_parent(task_database):
     parent = create_operation(
         session,
         kind="parent",
-        resource_type="show",
+        resource_type="collection",
         resource_id=1,
         title="Parent",
         targets=[],
@@ -723,10 +723,10 @@ def test_cancel_intent_survives_stale_active_status(task_database, monkeypatch):
     definition = _definition(session, "test_cancel_intent_worker")
     operation = create_operation(
         session,
-        kind="show.test_cancel_intent",
-        resource_type="show",
+        kind="collection.test_cancel_intent",
+        resource_type="collection",
         resource_id=91,
-        title="Show 91",
+        title="Collection 91",
         targets=[
             OperationTargetSpec(
                 task_key=definition.key,
@@ -789,10 +789,10 @@ def test_progress_updater_honors_late_operation_cancellation(task_database):
     definition = _definition(session, "test_late_cancel_owner_worker")
     operation = create_operation(
         session,
-        kind="show.test_late_cancel_owner",
-        resource_type="show",
+        kind="collection.test_late_cancel_owner",
+        resource_type="collection",
         resource_id=92,
-        title="Show 92",
+        title="Collection 92",
         targets=[
             OperationTargetSpec(
                 task_key=definition.key,
@@ -853,10 +853,10 @@ def test_executor_rechecks_operation_ownership_after_link(task_database, monkeyp
     session = task_database()
     operation = create_operation(
         session,
-        kind="show.test_handoff_cancel",
-        resource_type="show",
+        kind="collection.test_handoff_cancel",
+        resource_type="collection",
         resource_id=93,
-        title="Show 93",
+        title="Collection 93",
         targets=[
             OperationTargetSpec(
                 task_key=task_key,
@@ -967,7 +967,7 @@ def test_stale_canceled_parent_does_not_keep_exclusive_dependency_alive(task_dat
         parent = create_operation(
             session,
             kind=kind,
-            resource_type="show",
+            resource_type="collection",
             resource_id=94,
             title=kind,
             targets=[],

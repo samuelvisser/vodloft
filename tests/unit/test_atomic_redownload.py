@@ -539,7 +539,7 @@ def test_direct_mode_uses_existing_workspace_startup_cleanup(tmp_path):
     from downloader.storage.temporary import cleanup_abandoned_destination_workspaces
 
     download_root = tmp_path / "downloads"
-    destination = download_root / "show" / "episode.mp4"
+    destination = download_root / "collection" / "episode.mp4"
     workspace = create_temporary_download_workspace(destination.parent, destination)
     part = workspace.path.with_name(workspace.path.name + ".part")
     part.write_bytes(b"interrupted direct-mode media")

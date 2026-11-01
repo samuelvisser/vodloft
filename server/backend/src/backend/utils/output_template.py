@@ -45,8 +45,8 @@ MOVIE_DATE_OUTPUT_TEMPLATE_FIELDS = frozenset({
     f"movie_{field}" for field in DATE_OUTPUT_TEMPLATE_FIELDS
 })
 
-SHOW_OUTPUT_TEMPLATE_FIELDS = frozenset({
-    "show", "show_title", "season", "season_name", "season_index", "season_type", "season_number",
+COLLECTION_OUTPUT_TEMPLATE_FIELDS = frozenset({
+    "collection", "collection_title", "season", "season_name", "season_index", "season_type", "season_number",
     "episode", "episode_title", "title", "dw_episode_number", "episode_type", "episode_extra_type",
     "episode_number", "episode_sub_number", "episode_label", "episode_identifier", "episode_published_date",
     "episode_published_time", "episode_published_datetime", "episode_index",
@@ -63,7 +63,7 @@ VIDEO_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "slug", "title", "author", "duration_seconds", "source",
 }) | DATE_OUTPUT_TEMPLATE_FIELDS
 
-SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES: frozenset[CustomMetadataScope] = frozenset({"show"})
+COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES: frozenset[CustomMetadataScope] = frozenset({"collection"})
 MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES: frozenset[CustomMetadataScope] = frozenset({"movie"})
 
 # These are values likely to be different between Movies and Movie Extra's.
@@ -81,7 +81,7 @@ def _reject_single_brace_template_variables(output_template: str) -> None:
     """Require all output-template variables to use Jinja expression syntax."""
     if _SINGLE_BRACE_TEMPLATE_VARIABLE.search(output_template):
         raise ValueError(
-            "Output template variables must use Jinja syntax such as '{{ show }}'; "
+            "Output template variables must use Jinja syntax such as '{{ collection }}'; "
             "single-brace variables are not supported"
         )
 
@@ -291,8 +291,22 @@ def validate_output_template_fields(
     )
     if unsupported:
         fields = ", ".join("{{ " + field + " }}" for field in unsupported)
-        raise ValueError(f"Unsupported output template variable(s): {fields}")
+        renamed = [
+            f"{{{{ {field} }}}} is now {{{{ {collection_field} }}}}"
+            for field in unsupported
+            if (collection_field := collection_name_for_show_variable(field)) is not None
+        ]
+        hint = f". Shows became Collections in VODLoft 0.6.0: {', '.join(renamed)}" if renamed else ""
+        raise ValueError(f"Unsupported output template variable(s): {fields}{hint}")
     return output_template
+
+
+def collection_name_for_show_variable(name: str) -> str | None:
+    """The Collection name of a variable from before Shows became Collections."""
+    for old, new in (("meta_show_", "meta_collection_"), ("show_", "collection_")):
+        if name.startswith(old):
+            return new + name[len(old):]
+    return "collection" if name == "show" else None
 
 
 def movie_template_has_media_item_field(output_template: str) -> bool:
@@ -309,13 +323,13 @@ def movie_template_uses_release_date(output_template: str) -> bool:
 
 
 def episode_output_template_values(episode: "Episode") -> dict[str, str]:
-    """Build the complete Show-profile context for an episode."""
+    """Build the complete Collection-profile context for an episode."""
     episode_identifier = episode.episode_identifier or ""
     ep_info = EpisodeIdentifierInfo.from_identifier(episode_identifier)
     published_at = episode.published_date
     values = {
-        "show": episode.show.slug,
-        "show_title": episode.show.title,
+        "collection": episode.collection.slug,
+        "collection_title": episode.collection.title,
         "season": episode.season.slug if episode.season else "",
         "season_name": episode.season.name if episode.season else "",
         "season_index": str(episode.season.index) if episode.season else "",
@@ -338,8 +352,8 @@ def episode_output_template_values(episode: "Episode") -> dict[str, str]:
         **_date_substitutions(published_at),
     }
     values.update(custom_metadata_template_values(
-        "show",
-        get_custom_metadata(episode.show),
+        "collection",
+        get_custom_metadata(episode.collection),
     ))
     return values
 
@@ -527,8 +541,8 @@ def resolve_episode_output_path_with_index_values(
     rendered = render_output_template(
         output_template,
         episode_output_template_values(episode),
-        allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
-        allowed_metadata_scopes=SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+        allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
+        allowed_metadata_scopes=COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
         custom_index_resolver=resolver,
     )
     return _finish_output_path(rendered, extension=extension)
@@ -547,8 +561,8 @@ def resolve_episode_output_path(
         rendered = render_output_template(
             output_template,
             episode_output_template_values(episode),
-            allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
-            allowed_metadata_scopes=SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+            allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
+            allowed_metadata_scopes=COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
         )
         return _finish_output_path(rendered, extension=extension)
 
@@ -574,7 +588,7 @@ def resolve_episode_output_path(
         )
     except CustomIndexNotReadyError as exc:
         raise CustomIndexNotReadyError(
-            str(exc), repair_show_id=episode.show_id,
+            str(exc), repair_collection_id=episode.collection_id,
             repair_profile_id=local_media_profile.id,
         ) from exc
 
@@ -593,7 +607,7 @@ def resolve_movie_output_path(
     compatibility. New profiles express that behavior directly in Jinja.
     """
     if output_template_custom_index_keys(output_template):
-        raise ValueError("custom_index is only available to Show Local Media Profiles")
+        raise ValueError("custom_index is only available to Collection Local Media Profiles")
     values = movie_output_template_values(movie, media_item)
     rendered = render_output_template(
         output_template,
@@ -614,7 +628,7 @@ def resolve_video_output_path(
 ) -> Path:
     """Resolve a Video Local Media Profile for a single video."""
     if output_template_custom_index_keys(output_template):
-        raise ValueError("custom_index is only available to Show Local Media Profiles")
+        raise ValueError("custom_index is only available to Collection Local Media Profiles")
     rendered = render_output_template(
         output_template,
         video_output_template_values(video),

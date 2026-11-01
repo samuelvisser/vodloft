@@ -14,7 +14,7 @@ def stream_profile_view_list(access: Access = signed_in()):
     """
     List all stream profiles with extended view information.
 
-    Returns a collection of all stream profiles with their base fields plus the show title.
+    Returns a collection of all stream profiles with their base fields plus the collection title.
     This is a denormalized view optimized for display.
     """
     with db_session() as s:
@@ -26,7 +26,7 @@ def stream_profile_view_detail(stream_profile_id: int, access: Access = signed_i
     """
     Retrieve extended view information for a specific stream profile.
 
-    Returns base fields plus related show title and concrete implementation payload.
+    Returns base fields plus related collection title and concrete implementation payload.
     """
     with db_session() as s:
         return get_stream_profile_view(s, access, stream_profile_id)

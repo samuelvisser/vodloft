@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from backend.types.download_profile_types import EpIdType
 from backend.types.episode_types import EpisodeExtraType
 from backend.types.season_types import SeasonType
-from backend.types.show_types import EpisodeIdentifier
+from backend.types.collection_types import EpisodeIdentifier
 from backend.utils.episode import EpisodeIdentifierInfo
 from sources.dailywire.api.records import DwEpisodeRecord
 from ..general import datetime_to_string
@@ -25,9 +25,9 @@ type IdentifierMaxValues = Dict[str, int]
 type EpisodeWithIdentifier = Tuple[str, DwEpisodeRecord]
 
 # The Daily Wire uses .01-.19 for content attached to an episode. Segment .20
-# and above is show-level auxiliary content and must use VODLoft's show-global
+# and above is collection-level auxiliary content and must use VODLoft's collection-global
 # AUX/TRAILER namespace instead of an episode-extra identifier.
-_SHOW_AUX_SEGMENT_START = 20
+_COLLECTION_AUX_SEGMENT_START = 20
 _OFFICIAL_TRAILER_RE = re.compile(r"\bofficial\s+trailer\b", re.IGNORECASE)
 
 
@@ -54,7 +54,7 @@ def identify_episodes_in_season(
     """Assign canonical identifiers without using episode-number high-water marks.
 
     The Daily Wire's complete episode number is authoritative for normal episodes
-    and attached episode extras. VODLoft only allocates its own show-global
+    and attached episode extras. VODLoft only allocates its own collection-global
     counters for standalone trailers and auxiliary content.
     """
     values = dict(current_values or {})
@@ -236,7 +236,7 @@ def direct_identifier_for_episode(
             season_number = _normal_season_number(season)
             return f"{EpIdType.EP}.S{season_number:02d}E{ep_num:02d}"
 
-    if 0 < segment < _SHOW_AUX_SEGMENT_START:
+    if 0 < segment < _COLLECTION_AUX_SEGMENT_START:
         extra_type = EpisodeExtraType.TRAILER if trailer else EpisodeExtraType.OTHER
         if identifier_type is EpisodeIdentifier.NUMBERED:
             return f"{EpIdType.EP_EXTRA}.{extra_type}.{ep_num}.{segment}"
@@ -286,7 +286,7 @@ def _get_episode_identifier_map_numbered(
                     occupied=occupied,
                     occupied_source_slots=occupied_source_slots,
                 )
-        elif 0 < segment < _SHOW_AUX_SEGMENT_START:
+        elif 0 < segment < _COLLECTION_AUX_SEGMENT_START:
             extra_type = (
                 EpisodeExtraType.TRAILER
                 if trailer
@@ -350,7 +350,7 @@ def _get_episode_identifier_map_seasonal(
                     occupied=occupied,
                     occupied_source_slots=occupied_source_slots,
                 )
-        elif 0 < segment < _SHOW_AUX_SEGMENT_START:
+        elif 0 < segment < _COLLECTION_AUX_SEGMENT_START:
             extra_type = (
                 EpisodeExtraType.TRAILER
                 if trailer
@@ -433,7 +433,7 @@ def _generated_type_for_record(
     if identifier_type in {EpisodeIdentifier.NUMBERED, EpisodeIdentifier.SEASONAL}:
         if segment == 0 and is_episode_trailer(dw_episode):
             return EpIdType.TRAILER
-        if segment >= _SHOW_AUX_SEGMENT_START:
+        if segment >= _COLLECTION_AUX_SEGMENT_START:
             return (
                 EpIdType.TRAILER
                 if is_episode_trailer(dw_episode)
@@ -454,7 +454,7 @@ def reconcile_episode_identifier_from_dailywire(
 
     episode.dw_episode_number = dw_episode.episode_number or None
 
-    identifier_type = EpisodeIdentifier(episode.show.episode_identifier)
+    identifier_type = EpisodeIdentifier(episode.collection.episode_identifier)
     season = episode.season
     if season is None:
         return False
@@ -462,14 +462,14 @@ def reconcile_episode_identifier_from_dailywire(
     occupied = set(
         s.scalars(
             select(Episode.episode_identifier).where(
-                Episode.show_id == episode.show_id,
+                Episode.collection_id == episode.collection_id,
                 Episode.id != episode.id,
             )
         )
     )
     values: IdentifierMaxValues = {
         item.key: int(item.value)
-        for item in episode.show.meta_items
+        for item in episode.collection.meta_items
         if item.key in {
             "ep_id.latest_aux_num",
             "ep_id.latest_trailer_num",
@@ -505,7 +505,7 @@ def reconcile_episode_identifier_from_dailywire(
         and desired_info.type == EpIdType.AUX
     ):
         # A direct Daily Wire source slot is occupied by another record. The
-        # episode was already quarantined into the show-global AUX namespace, so
+        # episode was already quarantined into the collection-global AUX namespace, so
         # keep that stable AUX identity rather than allocating a fresh counter.
         return False
 
@@ -515,7 +515,7 @@ def reconcile_episode_identifier_from_dailywire(
     collision = s.scalar(
         select(Episode.id)
         .where(
-            Episode.show_id == episode.show_id,
+            Episode.collection_id == episode.collection_id,
             Episode.episode_identifier == desired,
             Episode.id != episode.id,
         )
@@ -536,7 +536,7 @@ def reconcile_episode_identifier_from_dailywire(
     episode.episode_identifier = desired
     for key in ("ep_id.latest_aux_num", "ep_id.latest_trailer_num", "ep_id.latest_ep_date"):
         if key in updated_values:
-            episode.show.set_meta(key, str(updated_values[key]))
+            episode.collection.set_meta(key, str(updated_values[key]))
 
     s.flush()
     logger.info(

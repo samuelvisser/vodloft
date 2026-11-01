@@ -13,12 +13,12 @@ def _metadata_items(values=None):
     ]
 
 
-def _episode(*, show_metadata=None):
+def _episode(*, collection_metadata=None):
     return SimpleNamespace(
-        show=SimpleNamespace(
+        collection=SimpleNamespace(
             slug="parenting",
             title="Parenting",
-            meta_items=_metadata_items(show_metadata),
+            meta_items=_metadata_items(collection_metadata),
         ),
         season=None,
         slug="episode-one",
@@ -44,11 +44,11 @@ def _movie(*, movie_metadata=None):
     )
 
 
-def _make_show(session: Session, *, slug: str):
-    from backend.db.models import Show
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+def _make_collection(session: Session, *, slug: str):
+    from backend.db.models import Collection
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
 
-    show = Show(
+    collection = Collection(
         source_key="dailywire",
         uuid=f"{slug}-uuid",
         slug=slug,
@@ -56,14 +56,14 @@ def _make_show(session: Session, *, slug: str):
         description=None,
         sharing_url=f"https://example.test/{slug}",
         membership_level="FREE",
-        type=ShowType.PODCAST.value,
+        type=CollectionType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Host",
         author_slug="host",
     )
-    session.add(show)
+    session.add(collection)
     session.flush()
-    return show
+    return collection
 
 
 @pytest.fixture
@@ -79,41 +79,41 @@ def db_session():
     engine.dispose()
 
 
-def test_show_metadata_is_exposed_to_episode_templates() -> None:
+def test_collection_metadata_is_exposed_to_episode_templates() -> None:
     from backend.utils.output_template import (
-        SHOW_OUTPUT_TEMPLATE_FIELDS,
-        SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+        COLLECTION_OUTPUT_TEMPLATE_FIELDS,
+        COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
         episode_output_template_values,
         render_output_template,
     )
 
     values = episode_output_template_values(
-        _episode(show_metadata={"year": "2026"}),
+        _episode(collection_metadata={"year": "2026"}),
     )
 
-    assert values["meta_show_year"] == "2026"
+    assert values["meta_collection_year"] == "2026"
     assert render_output_template(
-        "/downloads/{{ show_title }} ({{ meta_show_year }})/{{ title }}.ext",
+        "/downloads/{{ collection_title }} ({{ meta_collection_year }})/{{ title }}.ext",
         values,
-        allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
-        allowed_metadata_scopes=SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+        allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
+        allowed_metadata_scopes=COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
     ) == "/downloads/Parenting (2026)/Episode One.ext"
 
 
-def test_nonexistent_show_metadata_field_renders_as_empty() -> None:
+def test_nonexistent_collection_metadata_field_renders_as_empty() -> None:
     from backend.utils.output_template import (
-        SHOW_OUTPUT_TEMPLATE_FIELDS,
-        SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+        COLLECTION_OUTPUT_TEMPLATE_FIELDS,
+        COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
         episode_output_template_values,
         render_output_template,
     )
 
     values = episode_output_template_values(_episode())
     rendered = render_output_template(
-        "/downloads/{{ show_title }}{% if meta_show_year %} ({{ meta_show_year }}){% endif %}/{{ title }}.ext",
+        "/downloads/{{ collection_title }}{% if meta_collection_year %} ({{ meta_collection_year }}){% endif %}/{{ title }}.ext",
         values,
-        allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
-        allowed_metadata_scopes=SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+        allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
+        allowed_metadata_scopes=COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
     )
 
     assert rendered == "/downloads/Parenting/Episode One.ext"
@@ -123,8 +123,8 @@ def test_movie_metadata_is_scoped_to_movie_templates() -> None:
     from backend.utils.output_template import (
         MOVIE_OUTPUT_TEMPLATE_FIELDS,
         MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
-        SHOW_OUTPUT_TEMPLATE_FIELDS,
-        SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+        COLLECTION_OUTPUT_TEMPLATE_FIELDS,
+        COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
         movie_output_template_values,
         render_output_template,
     )
@@ -142,21 +142,21 @@ def test_movie_metadata_is_scoped_to_movie_templates() -> None:
         render_output_template(
             "/downloads/{{ meta_movie_collection }}/{{ title }}.ext",
             values,
-            allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
-            allowed_metadata_scopes=SHOW_OUTPUT_TEMPLATE_METADATA_SCOPES,
+            allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
+            allowed_metadata_scopes=COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
         )
 
 
-def test_removing_shared_field_deletes_values_from_every_show(db_session: Session) -> None:
+def test_removing_shared_field_deletes_values_from_every_collection(db_session: Session) -> None:
     from backend.api.endpoints.custom_metadata.service import (
         remove_shared_custom_metadata_fields,
     )
-    from backend.db.models import Show
+    from backend.db.models import Collection
     from backend.db.models.Metadata import Metadata
     from backend.utils.custom_metadata import get_custom_metadata, replace_custom_metadata
 
-    first = _make_show(db_session, slug="first-show")
-    second = _make_show(db_session, slug="second-show")
+    first = _make_collection(db_session, slug="first-collection")
+    second = _make_collection(db_session, slug="second-collection")
 
     replace_custom_metadata(first, {"year": "2026", "library": "Plex"})
     replace_custom_metadata(second, {"year": "2025"})
@@ -165,31 +165,31 @@ def test_removing_shared_field_deletes_values_from_every_show(db_session: Sessio
     remove_shared_custom_metadata_fields(
         db_session,
         first,
-        parent_table=Show.__tablename__,
+        parent_table=Collection.__tablename__,
         fields=["year"],
     )
     db_session.expire_all()
 
     remaining = list(db_session.scalars(
         select(Metadata).where(
-            Metadata.parent_table == Show.__tablename__,
+            Metadata.parent_table == Collection.__tablename__,
             Metadata.key == "custom.year",
         )
     ))
     assert remaining == []
-    assert get_custom_metadata(db_session.get(Show, first.id)) == {"library": "Plex"}
-    assert get_custom_metadata(db_session.get(Show, second.id)) == {}
+    assert get_custom_metadata(db_session.get(Collection, first.id)) == {"library": "Plex"}
+    assert get_custom_metadata(db_session.get(Collection, second.id)) == {}
 
 
-def test_show_api_read_exposes_custom_metadata(db_session: Session) -> None:
-    from backend.api.models.show import ShowAPIRead
+def test_collection_api_read_exposes_custom_metadata(db_session: Session) -> None:
+    from backend.api.models.collection import CollectionAPIRead
     from backend.utils.custom_metadata import replace_custom_metadata
 
-    show = _make_show(db_session, slug="metadata-show")
-    replace_custom_metadata(show, {"library": "Plex"})
+    collection = _make_collection(db_session, slug="metadata-collection")
+    replace_custom_metadata(collection, {"library": "Plex"})
     db_session.flush()
 
-    assert ShowAPIRead.model_validate(show).custom_metadata == {"library": "Plex"}
+    assert CollectionAPIRead.model_validate(collection).custom_metadata == {"library": "Plex"}
 
 
 def test_custom_metadata_update_validates_removed_fields() -> None:

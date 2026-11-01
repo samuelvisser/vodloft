@@ -1,6 +1,6 @@
 # Podcast RSS Feeds
 
-VODLoft can expose a managed show as a private podcast or video RSS feed. The feed can use downloaded files, stream from Daily Wire, or combine both approaches. Feeds for YouTube, NPO Start and other yt-dlp shows use downloaded files only, because those sites' stream links expire.
+VODLoft can expose a managed collection as a private podcast or video RSS feed. The feed can use downloaded files, stream from Daily Wire, or combine both approaches. Feeds for YouTube, NPO Start and other yt-dlp collections use downloaded files only, because those sites' stream links expire.
 
 > [!CAUTION]
 > **Treat the complete RSS feed URL like a password or API key.** It contains a secret token that gives access to the feed without requiring the VODLoft administrator login. Anyone who obtains the URL can use the feed access you configured.
@@ -11,7 +11,7 @@ If a URL leaks, regenerate it from the Stream Profile. The old token stops worki
 
 You need:
 
-1. the show in your VODLoft Library;
+1. the collection in your VODLoft Library;
 2. a Daily Wire account connected if the feed needs member-exclusive Daily Wire media;
 3. suitable local downloads if you want the feed to use downloaded files;
 4. a VODLoft hostname that the podcast client can reach.
@@ -120,7 +120,7 @@ After a Stream Profile is created, VODLoft shows its private RSS URL with **Copy
 The URL looks similar to:
 
 ```text
-https://vodloft.example.com/feeds/rss/<secret-token>/<show-slug>.xml
+https://vodloft.example.com/feeds/rss/<secret-token>/<collection-slug>.xml
 ```
 
 The hostname is editable. This is useful when VODLoft sees an internal hostname but your podcast app needs a different LAN or public hostname.

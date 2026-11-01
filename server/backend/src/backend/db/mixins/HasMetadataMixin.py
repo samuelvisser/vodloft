@@ -52,6 +52,6 @@ def _on_append(parent, meta, initiator):
 
 @event.listens_for(HasMetadataMixin, "mapper_configured", propagate=True)
 def _wire_meta_events(mapper, cls):
-    # cls is now a mapped subclass (e.g., Show, Episode)
+    # cls is now a mapped subclass (e.g., Collection, Episode)
     attr = getattr(cls, "meta_items")     # InstrumentedAttribute
     event.listen(attr, "append", _on_append, propagate=True)

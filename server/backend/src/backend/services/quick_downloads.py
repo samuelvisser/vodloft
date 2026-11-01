@@ -141,8 +141,8 @@ def check_quick_downloadable(source: Source, kind: LinkKind, *, drm_protected: b
         raise QuickDownloadRefused(
             f"{source.name} only gives this video to {source.subscription_name or 'paying'} subscribers"
         )
-    if kind is LinkKind.SHOW:
-        raise QuickDownloadRefused("Quick download takes one video, episode or movie, not a whole show or channel")
+    if kind is LinkKind.COLLECTION:
+        raise QuickDownloadRefused("Quick download takes one video, episode or movie, not a whole collection such as a channel")
 
 
 def check_quick_choice(source: Source, choice: QuickChoice) -> None:
@@ -276,7 +276,7 @@ def _metadata(source: Source, request: QuickDownloadRequest, details) -> MediaSe
         title=request.title,
         description=request.description,
         source_url=request.url,
-        show_title=author,
+        collection_title=author,
         aired=published.date() if isinstance(published, datetime) else published if isinstance(published, date) else None,
         duration_seconds=details.duration if details is not None else None,
         authors=(author,) if author else (),
@@ -309,8 +309,8 @@ class _Streams:
 
 def _streams(source: Source, request: QuickDownloadRequest, tracker) -> _Streams:
     """Ask the Source where the link's media is, refusing what cannot be downloaded."""
-    if request.kind is LinkKind.SHOW:
-        raise DownloadError("Quick download takes one video, episode or movie, not a whole show")
+    if request.kind is LinkKind.COLLECTION:
+        raise DownloadError("Quick download takes one video, episode or movie, not a whole collection")
     if request.kind is LinkKind.MOVIE:
         if source.has(Feature.MEMBERSHIP_LEVELS) and not request.members_only:
             raise SubscriptionRequiredError(_NOT_A_MEMBER.format(source=source.name))
