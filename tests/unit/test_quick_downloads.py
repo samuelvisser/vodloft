@@ -739,6 +739,13 @@ def test_the_history_follows_each_quick_download_to_its_end(api, temporary_root,
     assert rows[expired["quickDownloadId"]]["choice"]["kind"] == "audio"
     assert rows[canceled["quickDownloadId"]]["outcome"] == "canceled"
 
+    # A ready file that disappears, such as when the temporary folder is cleared, is no longer ready.
+    gone = _start(api, "https://clips.example/v/gone").json()
+    history.record_outcome(gone["quickDownloadId"], history.READY, size_bytes=10)
+    rows = {row["quickDownloadId"]: row for row in api.client.get("/api/quick-downloads/history").json()}
+    assert rows[gone["quickDownloadId"]]["outcome"] == "expired"
+    assert rows[gone["quickDownloadId"]]["message"] == "The file was removed before it was downloaded"
+
     # Clearing keeps what is still going on; old entries are forgotten after the retention period.
     working = _start(api, "https://clips.example/v/jkl").json()
     assert api.client.delete("/api/quick-downloads/history").status_code == 204

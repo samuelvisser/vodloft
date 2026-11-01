@@ -31,6 +31,7 @@ FAILED = "failed"
 REFUSED = "refused"
 FINISHED = frozenset({DOWNLOADED, EXPIRED, DISCARDED, CANCELED, FAILED, REFUSED})
 INTERRUPTED_MESSAGE = "Stopped before it finished"
+GONE_MESSAGE = "The file was removed before it was downloaded"
 
 
 def history_enabled() -> bool:
@@ -101,9 +102,17 @@ def record_outcome(
 
 
 def reconcile_history(session: Session) -> None:
-    """End rows still marked working whose quick download is no longer running."""
+    """End rows still marked working whose quick download is no longer running, and
+    rows marked ready whose file is gone, such as after the temporary folder was cleared."""
+    from backend.services.quick_downloads import ready_quick_download
     from task_manager.scheduler.types import OperationStatus
     from task_manager.tasks.quick_download_operations import quick_download_operation
+
+    for row in session.scalars(select(QuickDownloadHistory).where(QuickDownloadHistory.outcome == READY)).all():
+        if ready_quick_download(row.quick_download_id) is None:
+            row.outcome = EXPIRED
+            row.message = GONE_MESSAGE
+            row.finished_at = datetime.now(timezone.utc)
 
     working = session.scalars(select(QuickDownloadHistory).where(QuickDownloadHistory.outcome == WORKING)).all()
     for row in working:
