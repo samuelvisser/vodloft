@@ -291,22 +291,8 @@ def validate_output_template_fields(
     )
     if unsupported:
         fields = ", ".join("{{ " + field + " }}" for field in unsupported)
-        renamed = [
-            f"{{{{ {field} }}}} is now {{{{ {collection_field} }}}}"
-            for field in unsupported
-            if (collection_field := collection_name_for_show_variable(field)) is not None
-        ]
-        hint = f". Shows became Collections in VODLoft 0.6.0: {', '.join(renamed)}" if renamed else ""
-        raise ValueError(f"Unsupported output template variable(s): {fields}{hint}")
+        raise ValueError(f"Unsupported output template variable(s): {fields}")
     return output_template
-
-
-def collection_name_for_show_variable(name: str) -> str | None:
-    """The Collection name of a variable from before Shows became Collections."""
-    for old, new in (("meta_show_", "meta_collection_"), ("show_", "collection_")):
-        if name.startswith(old):
-            return new + name[len(old):]
-    return "collection" if name == "show" else None
 
 
 def movie_template_has_media_item_field(output_template: str) -> bool:

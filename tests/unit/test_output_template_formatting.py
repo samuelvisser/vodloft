@@ -31,13 +31,3 @@ def test_output_template_spacing_normalizer_preserves_non_print_jinja() -> None:
         "/downloads/{{ collection_title }}/{{- episode_title -}}.ext"
     )
 
-
-def test_old_show_variables_point_to_their_collection_names():
-    import pytest
-    from backend.utils.output_template import validate_output_template_fields
-
-    with pytest.raises(ValueError, match=r"\{\{ show_title \}\} is now \{\{ collection_title \}\}"):
-        validate_output_template_fields(
-            "/downloads/{{ show_title }}/{{ title }}.ext",
-            allowed_fields=frozenset({"collection_title", "title"}),
-        )
