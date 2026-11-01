@@ -97,7 +97,9 @@ export default function QuickFormatPanel({
 
                 {!options.formatChoices && (
                     <p className="quick-panel-note">
-                        {sourceName} downloads as Best MP4 video or M4A audio. Other formats are not offered for it yet.
+                        {options.qualityChoices
+                            ? `${sourceName} downloads as MP4 video in the qualities its stream has, or M4A audio. Other formats and codecs are not offered for it yet.`
+                            : `${sourceName} downloads as Best MP4 video or M4A audio. Other formats are not offered for it yet.`}
                     </p>
                 )}
 

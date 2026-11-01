@@ -109,7 +109,7 @@ export default function QuickOptionList({options, choice, recommended, rules, on
                 const rowSize = size(row)
                 const reason = blocked(row)
                 const isRecommended = row.kind === 'video' && (row.video.quality ?? null) === recommended && recommended != null
-                const heldTo = row.kind === 'video' && row.video.quality == null && rules.maxQuality != null && options.formatChoices
+                const heldTo = row.kind === 'video' && row.video.quality == null && rules.maxQuality != null && (options.formatChoices || options.qualityChoices)
                 return (
                     <div
                         key={row.key}

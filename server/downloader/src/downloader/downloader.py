@@ -5,7 +5,14 @@ import time
 from typing import Optional
 
 from .errors import DownloadCancelled, DownloadError
-from .hls import is_master_playlist, is_playlist, parse_master_playlist, parse_media_playlist, parse_subtitle_renditions
+from .hls import (
+    is_master_playlist,
+    is_playlist,
+    media_playlist_duration,
+    parse_master_playlist,
+    parse_media_playlist,
+    parse_subtitle_renditions,
+)
 from .http import http_get
 from .models import (
     CancelCheck,
@@ -181,6 +188,11 @@ def download_file(
         raise
 
     return DownloadResult(path=dest_path, bytes_downloaded=bytes_downloaded)
+
+
+def playlist_duration(rendition_url: str) -> Optional[float]:
+    """How long an HLS rendition plays, in seconds, from its media playlist."""
+    return media_playlist_duration(http_get_text_checked(rendition_url))
 
 
 def http_get_text_checked(url: str) -> str:

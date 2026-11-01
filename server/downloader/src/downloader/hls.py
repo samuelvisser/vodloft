@@ -114,6 +114,22 @@ def parse_master_playlist(text: str, base_url: str) -> list[VideoRendition]:
     return renditions
 
 
+def media_playlist_duration(text: str) -> Optional[float]:
+    """The length of a media playlist in seconds, from its segment durations, or None when it lists none."""
+    total = 0.0
+    found = False
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line.startswith("#EXTINF:"):
+            continue
+        try:
+            total += float(line[len("#EXTINF:"):].split(",", 1)[0])
+            found = True
+        except ValueError:
+            continue
+    return total if found else None
+
+
 @dataclass(frozen=True)
 class MediaPlaylist:
     """The downloadable contents of a media (rendition) playlist."""

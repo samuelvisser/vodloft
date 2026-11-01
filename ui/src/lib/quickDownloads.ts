@@ -234,7 +234,8 @@ export function settingsFromChoice(choice: QuickChoice): Partial<QuickDownloadSe
  */
 export function fitChoice(choice: QuickChoice, options: QuickDownloadOptions): QuickChoice {
     if (!options.formatChoices) {
-        return {...choice, quality: null, container: 'mp4', codec: null, audioFormat: 'm4a', audioBitrate: null}
+        choice = {...choice, container: 'mp4', codec: null, audioFormat: 'm4a', audioBitrate: null}
+        if (!options.qualityChoices) return {...choice, quality: null}
     }
     const qualities = options.videos.map((video) => video.quality ?? null).filter((q): q is number => q != null)
     let quality = choice.quality
@@ -335,8 +336,8 @@ export function fitRules(choice: QuickChoice, options: QuickDownloadOptions, rul
     let next = {...choice}
     if (!rules.allowed.has(next.container)) next.container = next.container === 'mp4' ? 'mkv' : 'mp4'
     if (!rules.allowed.has(next.audioFormat)) next.audioFormat = next.audioFormat === 'm4a' ? 'mp3' : 'm4a'
-    if (options.formatChoices) {
-        if (rules.fixedCodec) next.codec = rules.fixedCodec
+    if (options.formatChoices && rules.fixedCodec) next.codec = rules.fixedCodec
+    if (options.formatChoices || options.qualityChoices) {
         if (rules.maxQuality != null && (next.quality == null || next.quality > rules.maxQuality)) {
             const capped = options.videos.map((v) => v.quality ?? null).filter((q): q is number => q != null && q <= rules.maxQuality!)
             next.quality = (next.quality == null ? null : capped[0] ?? null) as QuickQuality | null

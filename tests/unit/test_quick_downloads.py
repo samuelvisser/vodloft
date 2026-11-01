@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
+from downloader.models import MediaInfo, MediaKind, VideoRendition
 from sources import (
     EpisodeMedia, Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, Source, VideoDetails, VideoFormat, VideoFormats,
     registry,
@@ -74,7 +75,8 @@ class WireSource(ClipSource):
         self.media_requests.append(members_only)
         if slug == "members" and not members_only:
             return EpisodeMedia(video_url=None, audio_url=None)
-        return EpisodeMedia(video_url="https://cdn.wire.example/v.m3u8", audio_url=None)
+        audio = "https://cdn.wire.example/a.m4a" if slug == "with-audio" else None
+        return EpisodeMedia(video_url="https://cdn.wire.example/v.m3u8", audio_url=audio)
 
 
 @pytest.fixture
@@ -193,19 +195,22 @@ def test_ytdlp_takes_the_chosen_quality_codec_and_audio_format(quick_sources, te
     assert plan.requested_destination.endswith(f".{extension}")
 
 
-def test_sources_without_format_choices_take_only_best_mp4_and_m4a(quick_sources, temporary_root, monkeypatch):
+def test_sources_without_format_choices_take_mp4_in_a_quality_or_m4a(quick_sources, temporary_root, monkeypatch):
     from backend.services.quick_downloads import QuickChoice, QuickDownloadRefused, prepare_quick_download_plan, quick_folder
     from downloader.lifecycle import DownloadTracker
 
-    _probe(monkeypatch)
+    probed = _probe(monkeypatch)
     assert QuickChoice().label == "Video · Best MP4"
     assert QuickChoice(quality=1080, container="mkv", codec="vp9").label == "Video · 1080p MKV · VP9"
     assert QuickChoice(kind="audio", audio_format="mp3").label == "Audio · MP3 320 kbps"
     with pytest.raises(ValueError):
         QuickChoice(quality=900)
-    for choice in ({"quality": 1080}, {"container": "mkv"}, {"kind": "audio", "audio_format": "mp3"}):
+    request = _request(quality=720)
+    prepare_quick_download_plan(request, quick_folder(request.id), DownloadTracker())
+    assert probed["quality"] == 720
+    for choice in ({"container": "mkv"}, {"codec": "h264"}, {"kind": "audio", "audio_format": "mp3"}):
         request = _request(**choice)
-        with pytest.raises(QuickDownloadRefused, match="only as Best MP4 video or M4A audio"):
+        with pytest.raises(QuickDownloadRefused, match="only as MP4 video or M4A audio"):
             prepare_quick_download_plan(request, quick_folder(request.id), DownloadTracker())
 
 
@@ -233,6 +238,77 @@ def test_the_option_list_has_each_quality_codec_and_size(quick_sources):
     basic = quick_options(quick_sources.clips, "https://clips.example/v/abc")
     assert not basic.format_choices and basic.containers == ("mp4",)
     assert basic.videos == (VideoOption(None),) and basic.audio == (AudioOption("m4a"),)
+
+
+_MASTER = (
+    VideoRendition("https://cdn.wire.example/1080.m3u8", 1920, 1080, 6_000_000, "avc1.640028,mp4a.40.2"),
+    VideoRendition("https://cdn.wire.example/1088.m3u8", 1920, 1088, 5_000_000, "avc1.640028,mp4a.40.2"),
+    VideoRendition("https://cdn.wire.example/720.m3u8", 1280, 720, 3_000_000, "avc1.4d401f,mp4a.40.2"),
+    VideoRendition("https://cdn.wire.example/360.m3u8", 640, 360, 800_000, "avc1.4d401e,mp4a.40.2"),
+)
+
+
+def _stream(monkeypatch, renditions=_MASTER, *, fail=False):
+    """The HLS stream a Wire episode has, as probing it would report."""
+    from backend.services import quick_downloads
+
+    def probe(url):
+        if fail:
+            raise OSError("unreachable")
+        if url.endswith(".m4a"):
+            return MediaInfo(url=url, kind=MediaKind.DIRECT_FILE, content_length=4_000_000)
+        return MediaInfo(url=url, kind=MediaKind.HLS_MASTER, renditions=renditions)
+
+    monkeypatch.setattr(quick_downloads, "probe", probe)
+    monkeypatch.setattr(quick_downloads, "playlist_duration", lambda url: 100.0)
+
+
+def test_an_hls_stream_lists_its_qualities_without_format_choices(quick_sources, monkeypatch):
+    from backend.services.quick_downloads import AudioOption, CodecOption, VideoOption, quick_options
+
+    _stream(monkeypatch)
+    request = _request("wire", link_kind=LinkKind.EPISODE)
+    options = quick_options(quick_sources.wire, request.url, request)
+    assert options.quality_choices and not options.format_choices and options.containers == ("mp4",)
+    # Sizes come from each rendition's bitrate, which includes its audio, over the playlist's length.
+    assert options.videos == (
+        # Best is the tallest, as the download takes it.
+        VideoOption(None, 62_500_000, "h264", (CodecOption("h264", 62_500_000),)),
+        # 1088 lines count as 1080p; the taller of the two is taken.
+        VideoOption(1080, 62_500_000, "h264", (CodecOption("h264", 62_500_000),)),
+        VideoOption(720, 37_500_000, "h264", (CodecOption("h264", 37_500_000),)),
+        VideoOption(480, 10_000_000, "h264", (CodecOption("h264", 10_000_000),)),
+    )
+    assert options.audio == (AudioOption("m4a"),) and options.duration == 100.0
+    with_audio = _request("wire", slug="with-audio", link_kind=LinkKind.EPISODE)
+    assert quick_options(quick_sources.wire, with_audio.url, with_audio).audio == (AudioOption("m4a", size_bytes=4_000_000),)
+    # Without the link to look its stream up, or when the lookup fails, only Best and M4A.
+    assert quick_options(quick_sources.wire, request.url).videos == (VideoOption(None),)
+    _stream(monkeypatch, fail=True)
+    failed = quick_options(quick_sources.wire, request.url, request)
+    assert not failed.quality_choices and failed.videos == (VideoOption(None),)
+
+
+def test_a_stream_with_one_quality_offers_only_best(quick_sources, monkeypatch):
+    from backend.services.quick_downloads import quick_options
+
+    _stream(monkeypatch, renditions=_MASTER[2:3])
+    request = _request("wire", link_kind=LinkKind.EPISODE)
+    options = quick_options(quick_sources.wire, request.url, request)
+    assert not options.quality_choices and [video.quality for video in options.videos] == [None]
+    assert options.videos[0].size_bytes == 37_500_000
+
+
+def test_hls_renditions_are_picked_by_quality():
+    from downloader.hls import media_playlist_duration
+    from downloader.source import select_quality
+
+    assert select_quality(_MASTER, 1080).height == 1088
+    assert select_quality(_MASTER, 720).height == 720
+    assert select_quality(_MASTER, 480).height == 360
+    assert select_quality(_MASTER[:2], 480).height == 1080
+    assert media_playlist_duration("#EXTM3U\n#EXTINF:6.0,\na.ts\n#EXTINF:4.5,\nb.ts\n#EXT-X-ENDLIST") == 10.5
+    assert media_playlist_duration("#EXTM3U\n") is None
 
 
 def test_ytdlp_info_becomes_video_formats():
@@ -455,9 +531,9 @@ def test_options_list_formats_or_say_why_not(api):
 
 def test_choices_a_source_does_not_offer_are_refused(api):
     response = api.client.post("/api/quick-downloads", json={
-        "url": "https://clips.example/v/abc", "choice": {"quality": 1080},
+        "url": "https://clips.example/v/abc", "choice": {"container": "mkv"},
     })
-    assert response.status_code == 422 and "only as Best MP4" in response.json()["detail"]
+    assert response.status_code == 422 and "only as MP4 video or M4A audio" in response.json()["detail"]
     response = api.client.post("/api/quick-downloads", json={
         "url": "https://tube.example/v/abc", "choice": {"quality": 900},
     })

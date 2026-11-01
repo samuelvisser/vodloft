@@ -17,11 +17,14 @@ from backend.services import quick_download_history
 from backend.utils.output_template import sanitize_path_component
 from config import get_settings
 from config.settings.submodels import FilenameRestrictionMode
-from downloader import DownloadError, EncryptedMediaError, MediaUnavailableError, SubscriptionRequiredError
+from downloader import (
+    DownloadError, EncryptedMediaError, MediaUnavailableError, SubscriptionRequiredError, playlist_duration, probe,
+)
 from downloader.lifecycle import DownloadTracker
 from downloader.metadata import MediaServerMetadata
 from downloader.plan import DownloadPlan, ResolvedDownloadSource, SidecarSpec, build_download_plan
-from downloader.source import FORMAT_HEIGHTS, resolve_download_source
+from downloader.models import MediaKind, VideoRendition
+from downloader.source import FORMAT_HEIGHTS, resolve_download_source, select_quality, select_rendition
 from downloader.storage.quick import (
     QuickFolder,
     QuickManifest,
@@ -34,7 +37,7 @@ from downloader.storage.quick import (
     write_manifest,
 )
 from downloader.ytdlp import resolve_ytdlp_quick_source, resolve_ytdlp_source
-from sources import Feature, LinkKind, PlaybackKind, Source, VideoFormat, VideoFormats, get_source
+from sources import Feature, LinkKind, Playback, PlaybackKind, Source, VideoFormat, VideoFormats, get_source
 
 logger = logging.getLogger(__name__)
 
@@ -142,9 +145,16 @@ def check_quick_downloadable(source: Source, kind: LinkKind, *, drm_protected: b
 
 
 def check_quick_choice(source: Source, choice: QuickChoice) -> None:
-    """Refuse a format the Source does not offer."""
-    if not choice.is_basic and not source.has(Feature.FORMAT_CHOICES):
-        raise QuickDownloadRefused(f"{source.name} downloads only as Best MP4 video or M4A audio")
+    """Refuse a format the Source does not offer.
+
+    Without Feature.FORMAT_CHOICES a Source gives MP4 video in the qualities its
+    stream has, or M4A audio. A quality the stream lacks takes the closest lower one.
+    """
+    if source.has(Feature.FORMAT_CHOICES):
+        return
+    offered = choice.audio_format == "m4a" if choice.kind == "audio" else choice.container == "mp4" and choice.codec is None
+    if not offered:
+        raise QuickDownloadRefused(f"{source.name} downloads only as MP4 video or M4A audio")
 
 
 @dataclass(frozen=True)
@@ -198,7 +208,7 @@ def apply_quick_rules(source: Source, choice: QuickChoice, rules: QuickRules) ->
     if rules.lock_to_defaults:
         choice = default_choice()
         if not source.has(Feature.FORMAT_CHOICES):
-            choice = replace(choice, quality=None, container="mp4", codec=None, audio_format="m4a")
+            choice = replace(choice, container="mp4", codec=None, audio_format="m4a")
     if rules.fixed_codec and choice.kind == "video" and source.has(Feature.FORMAT_CHOICES):
         choice = replace(choice, codec=rules.fixed_codec)
     return choice
@@ -277,15 +287,27 @@ def _metadata(source: Source, request: QuickDownloadRequest, details) -> MediaSe
 _NOT_A_MEMBER = "Your VODLoft account may not use members-only {source} media"
 
 
-def _resolve_source(
-    source: Source, request: QuickDownloadRequest, tracker: DownloadTracker, rules: QuickRules,
-) -> ResolvedDownloadSource:
-    settings = get_settings().download_settings
-    choice = request.choice
-    check_quick_choice(source, choice)
-    check_quick_rules(source, choice, rules)
-    best = _best_format(rules)
-    audio_only = choice.kind == "audio"
+class _NoTracker:
+    """Stands in for a download's tracker when a link is only looked up."""
+
+    def preparing(self, *_args, **_kwargs) -> None:
+        pass
+
+    def ensure_active(self) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class _Streams:
+    """Where a link's media is: a video stream and maybe a separate audio file, or a yt-dlp playback."""
+
+    video_url: str | None = None
+    audio_url: str | None = None
+    ytdlp: Playback | None = None
+
+
+def _streams(source: Source, request: QuickDownloadRequest, tracker) -> _Streams:
+    """Ask the Source where the link's media is, refusing what cannot be downloaded."""
     if request.kind is LinkKind.SHOW:
         raise DownloadError("Quick download takes one video, episode or movie, not a whole show")
     if request.kind is LinkKind.MOVIE:
@@ -294,11 +316,7 @@ def _resolve_source(
         tracker.preparing("resolve_playback")
         playback = source.movie_playback(movie_slug=request.slug, title=request.title, duration=None)
         tracker.ensure_active()
-        tracker.preparing("inspect_stream")
-        return resolve_download_source(
-            playback.url, preferred_format=best, audio_only=audio_only, remux_video_to_mp4=True,
-            video_fallback_for_audio=audio_only, cancellation=tracker.is_canceled,
-        )
+        return _Streams(video_url=playback.url)
     if request.kind is LinkKind.VIDEO or source.has(Feature.EPISODE_LISTS):
         tracker.preparing("resolve_playback")
         playback = source.video_playback(slug=request.slug, url=request.url)
@@ -310,24 +328,8 @@ def _resolve_source(
                 f"{source.name} only gives '{request.title}' to {source.subscription_name or 'paying'} subscribers"
             )
         if playback.kind is PlaybackKind.YTDLP:
-            if source.has(Feature.FORMAT_CHOICES):
-                return resolve_ytdlp_quick_source(
-                    playback.url, command=playback.command, audio_only=audio_only,
-                    container=choice.container, height=choice.quality or rules.max_quality, codec=choice.codec,
-                    audio_format=choice.audio_format,
-                    audio_bitrate=choice.mp3_bitrate if choice.audio_format == "mp3" else None,
-                    strict_codec=choice.kind == "video" and rules.fixed_codec is not None,
-                    max_bytes=rules.max_bytes, ffmpeg_path=settings.ffmpeg_path,
-                )
-            return resolve_ytdlp_source(
-                playback.url, command=playback.command, preferred_format=best,
-                audio_only=audio_only, ffmpeg_path=settings.ffmpeg_path,
-            )
-        tracker.preparing("inspect_stream")
-        return resolve_download_source(
-            playback.url, preferred_format=best, audio_only=audio_only, remux_video_to_mp4=True,
-            video_fallback_for_audio=audio_only, cancellation=tracker.is_canceled,
-        )
+            return _Streams(ytdlp=playback)
+        return _Streams(video_url=playback.url)
 
     # An episode of a show the Source does not list, such as The Daily Wire's.
     # Free episodes play without an account; members-only ones need the
@@ -342,13 +344,43 @@ def _resolve_source(
     tracker.ensure_active()
     if media.drm_protected:
         raise EncryptedMediaError(f"{source.name} protects '{request.title}' with DRM")
-    url = media.audio_url if audio_only and media.audio_url else media.video_url
+    return _Streams(video_url=media.video_url, audio_url=media.audio_url)
+
+
+def _resolve_source(
+    source: Source, request: QuickDownloadRequest, tracker: DownloadTracker, rules: QuickRules,
+) -> ResolvedDownloadSource:
+    settings = get_settings().download_settings
+    choice = request.choice
+    check_quick_choice(source, choice)
+    check_quick_rules(source, choice, rules)
+    best = _best_format(rules)
+    audio_only = choice.kind == "audio"
+    streams = _streams(source, request, tracker)
+    if streams.ytdlp is not None:
+        playback = streams.ytdlp
+        if source.has(Feature.FORMAT_CHOICES):
+            return resolve_ytdlp_quick_source(
+                playback.url, command=playback.command, audio_only=audio_only,
+                container=choice.container, height=choice.quality or rules.max_quality, codec=choice.codec,
+                audio_format=choice.audio_format,
+                audio_bitrate=choice.mp3_bitrate if choice.audio_format == "mp3" else None,
+                strict_codec=choice.kind == "video" and rules.fixed_codec is not None,
+                max_bytes=rules.max_bytes, ffmpeg_path=settings.ffmpeg_path,
+            )
+        return resolve_ytdlp_source(
+            playback.url, command=playback.command, preferred_format=best,
+            audio_only=audio_only, ffmpeg_path=settings.ffmpeg_path,
+        )
+    url = streams.audio_url if audio_only and streams.audio_url else streams.video_url
     if not url:
         raise MediaUnavailableError(f"{source.name} provides no playable media for '{request.title}'")
     tracker.preparing("inspect_stream")
     return resolve_download_source(
         url, preferred_format=best, audio_only=audio_only, remux_video_to_mp4=True,
-        video_fallback_for_audio=audio_only and url == media.video_url, cancellation=tracker.is_canceled,
+        video_fallback_for_audio=audio_only and url == streams.video_url,
+        quality=None if audio_only else choice.quality or rules.max_quality,
+        cancellation=tracker.is_canceled,
     )
 
 
@@ -420,6 +452,8 @@ class QuickOptions:
     videos: tuple[VideoOption, ...]
     audio: tuple[AudioOption, ...]
     duration: float | None = None
+    quality_choices: bool = False
+    """Video can be had in more than one quality: always with format choices, otherwise when the stream lists them."""
 
 
 def _step(height: int) -> int:
@@ -445,13 +479,81 @@ def _plus(size: int | None, audio: int | None) -> int | None:
     return size + (audio or 0) if size else None
 
 
-def quick_options(source: Source, url: str) -> QuickOptions:
-    """The choices for a link: every quality and codec for a Source with Feature.FORMAT_CHOICES, Best and M4A otherwise."""
+_BASIC_OPTIONS = QuickOptions(
+    format_choices=False, containers=("mp4",), videos=(VideoOption(quality=None),), audio=(AudioOption("m4a"),),
+)
+
+_HLS_CODECS = (("avc", "h264"), ("hvc", "h265"), ("hev", "h265"), ("vp09", "vp9"), ("vp9", "vp9"), ("av01", "av1"))
+
+
+def _hls_codec(codecs: str | None) -> str | None:
+    """The video codec of an HLS rendition, from its CODECS attribute such as ``avc1.640028,mp4a.40.2``."""
+    for entry in (codecs or "").lower().split(","):
+        for prefix, name in _HLS_CODECS:
+            if entry.strip().startswith(prefix):
+                return name
+    return None
+
+
+def _rendition_size(rendition: VideoRendition, duration: float | None) -> int | None:
+    """An HLS rendition's size from its bitrate, which includes its audio."""
+    if not rendition.bandwidth or not duration:
+        return None
+    return int(rendition.bandwidth * duration / 8)
+
+
+def _stream_options(source: Source, link: QuickDownloadRequest) -> QuickOptions | None:
+    """The qualities in a link's HLS stream, for a Source without Feature.FORMAT_CHOICES, or None without any."""
+    streams = _streams(source, link, _NoTracker())
+    if streams.ytdlp is not None or not streams.video_url:
+        return None
+    info = probe(streams.video_url)
+    renditions = [rendition for rendition in info.renditions if rendition.height]
+    if info.kind is not MediaKind.HLS_MASTER or not renditions:
+        return None
+    best = select_rendition(renditions, FORMAT_HEIGHTS[_BEST_VIDEO])
+    try:
+        duration = playlist_duration(best.url)
+    except Exception:  # noqa: BLE001 - sizes are a nicety; the qualities still count.
+        logger.info("Could not read the length of %s", best.url, exc_info=True)
+        duration = None
+    audio_size = None
+    if streams.audio_url:
+        try:
+            audio = probe(streams.audio_url)
+            audio_size = audio.content_length if audio.kind is MediaKind.DIRECT_FILE else None
+        except Exception:  # noqa: BLE001
+            logger.info("Could not read the size of %s", streams.audio_url, exc_info=True)
+
+    def option(quality: int | None, rendition: VideoRendition) -> VideoOption:
+        codec = _hls_codec(rendition.codecs)
+        size = _rendition_size(rendition, duration)
+        return VideoOption(quality, size, codec, (CodecOption(codec, size),) if codec else ())
+
+    steps = sorted({_step(rendition.height) for rendition in renditions}, reverse=True)
+    videos = [option(None, best)]
+    if len(steps) > 1:
+        videos += [option(step, select_quality(renditions, step)) for step in steps]
+    return QuickOptions(
+        format_choices=False, containers=("mp4",), videos=tuple(videos),
+        audio=(AudioOption("m4a", size_bytes=audio_size),), duration=duration, quality_choices=len(steps) > 1,
+    )
+
+
+def quick_options(source: Source, url: str, link: QuickDownloadRequest | None = None) -> QuickOptions:
+    """The choices for a link: every quality and codec for a Source with Feature.FORMAT_CHOICES.
+
+    Otherwise MP4 video in each quality the link's HLS stream lists, looked up
+    with ``link``, and M4A audio; only Best and M4A without such a stream.
+    """
     if not source.has(Feature.FORMAT_CHOICES):
-        return QuickOptions(
-            format_choices=False, containers=("mp4",),
-            videos=(VideoOption(quality=None),), audio=(AudioOption("m4a"),),
-        )
+        if link is None:
+            return _BASIC_OPTIONS
+        try:
+            return _stream_options(source, link) or _BASIC_OPTIONS
+        except Exception:  # noqa: BLE001 - the download itself reports what is wrong with the link.
+            logger.info("Could not list the qualities of %s", link.url, exc_info=True)
+            return _BASIC_OPTIONS
     formats: VideoFormats = source.video_formats(url)
     audio_size = formats.audio_size_bytes
     by_step: dict[int, list[VideoFormat]] = {}
@@ -477,7 +579,7 @@ def quick_options(source: Source, url: str) -> QuickOptions:
     )
     return QuickOptions(
         format_choices=True, containers=("mp4", "mkv"), videos=tuple(videos),
-        audio=(AudioOption("m4a", size_bytes=audio_size), *mp3), duration=formats.duration,
+        audio=(AudioOption("m4a", size_bytes=audio_size), *mp3), duration=formats.duration, quality_choices=True,
     )
 
 
