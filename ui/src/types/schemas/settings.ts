@@ -130,7 +130,7 @@ const FileWatcherSettingsSchema = z.object({
     verifyFileSize: z.boolean(),
 })
 
-const QuickDownloadSettingsSchema = z.object({
+export const QuickDownloadSettingsSchema = z.object({
     defaultKind: z.enum(['video', 'audio']),
     defaultQuality: z.enum(['best', '2160p', '1440p', '1080p', '720p', '480p']),
     defaultContainer: z.enum(['mp4', 'mkv']),

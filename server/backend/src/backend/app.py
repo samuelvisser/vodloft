@@ -153,19 +153,6 @@ def create_app() -> FastAPI:
 
     # Allow the React dev server to call the API during development (with credentials)
     # Configure allowed origins via VL_CORS_ORIGINS (comma-separated). Defaults include common Vite dev hosts.
-    import os
-    origins_env = os.environ.get("VL_CORS_ORIGINS", "").strip()
-    if origins_env:
-        allow_origins = [o.strip() for o in origins_env.split(",") if o.strip()]
-    else:
-        allow_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=allow_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
 
     # Exception handlers
     app.add_exception_handler(IntegrityError, integrity_error_handler)
@@ -201,6 +188,8 @@ def create_app() -> FastAPI:
     # in itself and the public config the login page reads. Who it is, and what
     # they may do, travels on request.state.access to the routes' requires(...).
     @app.middleware("http")
+
+
     async def _auth_guard(request: Request, call_next):
         try:
             # Allow CORS preflight requests to pass through without auth
@@ -229,6 +218,21 @@ def create_app() -> FastAPI:
                 {"detail": NO_INTERNET_CONNECTION_MESSAGE},
                 status_code=503,
             )
+
+    # Added after the auth guard so it wraps it: its 401 and 403 answers get CORS headers too.
+    import os
+    origins_env = os.environ.get("VL_CORS_ORIGINS", "").strip()
+    if origins_env:
+        allow_origins = [o.strip() for o in origins_env.split(",") if o.strip()]
+    else:
+        allow_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allow_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     # Import routers lazily to avoid circular imports during app module import
     from backend.api.endpoints import (

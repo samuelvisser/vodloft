@@ -1,4 +1,5 @@
 import {useQuery} from '@tanstack/react-query'
+import {QuickDownloadSettingsSchema} from '../types/schemas/settings'
 import {z} from 'zod'
 import {
     MP3_BITRATES,
@@ -113,6 +114,19 @@ export function choiceFromHistory(stored: Record<string, unknown>, defaults: Qui
         embedMetadata: typeof stored.embed_metadata === 'boolean' ? stored.embed_metadata : defaults.embedMetadata,
         embedArtwork: typeof stored.embed_artwork === 'boolean' ? stored.embed_artwork : defaults.embedArtwork,
     }
+}
+
+/** Settings › Quick download, readable by everyone who may quick download. */
+export function useQuickDownloadSettings() {
+    return useQuery({
+        queryKey: ['quickDownloadSettings'],
+        queryFn: async ({signal}) => {
+            const response = await fetch(`${apiBase()}/quick-downloads/settings`, {signal, credentials: 'include'})
+            if (!response.ok) throw await responseError(response)
+            return QuickDownloadSettingsSchema.parse(await response.json())
+        },
+        staleTime: 60_000,
+    })
 }
 
 export function useQuickDownloads() {

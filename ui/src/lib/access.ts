@@ -54,6 +54,7 @@ export const AuthMeSchema = z.object({
 export type AuthMe = z.infer<typeof AuthMeSchema>
 
 let current: AuthMe | null = null
+let checked = false
 
 /** Ask the API who is signed in. ``null`` when nobody is (401). */
 export async function loadAccess(): Promise<AuthMe | null> {
@@ -61,15 +62,22 @@ export async function loadAccess(): Promise<AuthMe | null> {
   const response = await fetch(`${base}/auth/me`, { credentials: 'include' })
   if (response.status === 401) {
     current = null
+    checked = true
     return null
   }
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
   current = AuthMeSchema.parse(await response.json())
+  checked = true
   return current
 }
 
 export function getAccess(): AuthMe | null {
   return current
+}
+
+/** Whether the API has answered who is signed in, even if nobody is. */
+export function accessChecked(): boolean {
+  return checked
 }
 
 /** For tests. */
@@ -82,6 +90,8 @@ export function levelOf(access: AuthMe | null, area: Area): Level {
 }
 
 export function allows(access: AuthMe | null, area: Area, level: Level = 'view'): boolean {
+  // Until a one-time password is replaced, the API refuses everything else.
+  if (access?.user?.mustChangePassword) return false
   return LEVEL_RANK[levelOf(access, area)] >= LEVEL_RANK[level]
 }
 

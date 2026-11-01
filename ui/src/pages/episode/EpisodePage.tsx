@@ -5,7 +5,7 @@ import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useShow, useEpisode, useEpisodeDownloads, useLocalMediaProfiles, useSourceLookup} from '../../lib/queries'
-import {useSettings} from '../../lib/settings'
+import {useLibraryDefaults} from '../../lib/settings'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
 import {isShowLocalMediaProfileAvailableFor} from '../../types/local_media_profile'
 import {EpisodePublishStatus, PUBLISH_STATUS_LABELS} from '../../types/episode'
@@ -75,7 +75,7 @@ export default function EpisodePage() {
         error: downloadsError,
         hasDomainData: hasDownloadState,
     } = useEpisodeDownloads(episodeId)
-    const settingsQuery = useSettings()
+    const settingsQuery = useLibraryDefaults()
     const showProfiles = profiles?.filter((profile) => isShowLocalMediaProfileAvailableFor(profile, show?.type))
     const metadataRefreshOperation = useActiveOperation(
         'episode.refresh_metadata',
@@ -148,7 +148,7 @@ export default function EpisodePage() {
     const downloadStateError = (profiles === undefined ? profilesError : null)
         ?? (!hasDownloadState ? downloadsError : null)
 
-    const earlyDeleteAfterMinutes = settingsQuery.data?.values.episodeStatusTiming.noUsableMediaDeleteAfterMinutes
+    const earlyDeleteAfterMinutes = settingsQuery.data?.noUsableMediaDeleteAfterMinutes
     const earlyDeleteDisabledReason = earlyDeleteStarting
         ? OPERATION_STARTING_MESSAGE
         : earlyDeleteOperation

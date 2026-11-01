@@ -19,7 +19,7 @@ type QuickFormatPanelProps = {
     rules: QuickRules
     saveAsDefaults: boolean
     onChange: (choice: QuickChoice) => void
-    onSaveAsDefaultsChange: (value: boolean) => void
+    onSaveAsDefaultsChange?: (value: boolean) => void
     onClose: () => void
 }
 
@@ -179,11 +179,13 @@ export default function QuickFormatPanel({
                     </label>
                 </fieldset>
 
-                <label className="quick-check quick-panel-defaults">
-                    <input type="checkbox" checked={saveAsDefaults}
-                           onChange={(event) => onSaveAsDefaultsChange(event.target.checked)}/>
-                    Use these as my defaults next time
-                </label>
+                {onSaveAsDefaultsChange && (
+                    <label className="quick-check quick-panel-defaults">
+                        <input type="checkbox" checked={saveAsDefaults}
+                               onChange={(event) => onSaveAsDefaultsChange(event.target.checked)}/>
+                        Use these as my defaults next time
+                    </label>
+                )}
 
                 <div className="quick-panel-actions">
                     <button type="button" className="btn" onClick={() => onChange(initial)}>Reset</button>

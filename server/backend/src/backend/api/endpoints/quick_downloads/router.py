@@ -9,7 +9,9 @@ from backend.api.models.quick_download import (
     QuickDownloadOptionsAPIRequest,
     QuickDownloadsAPIRead,
 )
+from backend.api.models.settings import QuickDownloadSettingsValue
 from backend.app import db_session
+from config import get_settings
 from backend.services.quick_downloads import QuickDownloadRefused
 
 from .service import (
@@ -57,6 +59,12 @@ def quick_download_option_list(body: QuickDownloadOptionsAPIRequest, access: Acc
             return quick_download_options(s, access, body)
         except LinkNotRecognisedError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/settings", dependencies=[requires(Area.QUICK_DOWNLOADS, Level.VIEW)], response_model=QuickDownloadSettingsValue)
+def quick_download_settings():
+    """The defaults and rules in Settings › Quick download, for everyone who may quick download."""
+    return QuickDownloadSettingsValue.model_validate(get_settings().quick_download)
 
 
 @router.get("", dependencies=[requires(Area.QUICK_DOWNLOADS, Level.VIEW)], response_model=QuickDownloadsAPIRead)

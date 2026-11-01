@@ -33,3 +33,9 @@ test('source limits decide which Sources show', () => {
     assert.equal(canUseSource('dailywire'), true)
     setAccess(null)
 })
+
+test('nothing is allowed until a one-time password is replaced', () => {
+    const access = me({library: 'manage'})
+    access.user!.mustChangePassword = true
+    assert.equal(allows(access, 'library'), false)
+})

@@ -12,6 +12,7 @@ import DownloadsSettingsTab from '../components/Settings/DownloadsSettingsTab'
 import GeneralSettingsTab from '../components/Settings/GeneralSettingsTab'
 import QuickDownloadSettingsTab from '../components/Settings/QuickDownloadSettingsTab'
 import SourcesSettingsTab from '../components/Settings/SourcesSettingsTab'
+import UsersSettingsTab from '../components/Users/UsersSettingsTab'
 import {SettingsLoading} from '../components/Settings/SettingsControls'
 import {saveSettingsRequest, useSettings} from '../lib/settings'
 import {
@@ -28,7 +29,7 @@ import './SettingsPage.css'
 import './SettingsEnvironmentOverrides.css'
 
 
-type SettingsTab = 'general' | 'downloads' | 'quick-download' | 'automation' | 'sources' | 'advanced'
+type SettingsTab = 'general' | 'downloads' | 'quick-download' | 'automation' | 'sources' | 'users' | 'advanced'
 
 type SettingsTabDefinition = {
     id: SettingsTab
@@ -44,6 +45,7 @@ const SETTINGS_TABS: SettingsTabDefinition[] = [
     {id: 'quick-download', label: 'Quick download', description: 'Defaults, housekeeping and rules for quick downloads'},
     {id: 'automation', label: 'Automation', description: 'Scheduler and episode monitoring'},
     {id: 'sources', label: 'Sources', description: 'Services, sign-ins and their settings', area: 'sources'},
+    {id: 'users', label: 'Users', description: 'Who may sign in, and what they may do', area: 'users'},
     {id: 'advanced', label: 'Advanced', description: 'Encryption files and configuration details'},
 ]
 
@@ -287,6 +289,7 @@ export default function SettingsPage() {
                     {activeTab === 'quick-download' ? <QuickDownloadSettingsTab {...tabProps} /> : null}
                     {activeTab === 'automation' ? <AutomationSettingsTab {...tabProps} /> : null}
                     {activeTab === 'sources' ? <SourcesSettingsTab {...tabProps} /> : null}
+                    {activeTab === 'users' ? <UsersSettingsTab /> : null}
                     {activeTab === 'advanced' ? <AdvancedSettingsTab {...tabProps} /> : null}
                 </div>
 

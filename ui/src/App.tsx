@@ -10,7 +10,7 @@ import OperationNotifier from './components/OperationNotifier/OperationNotifier'
 import {operationNotificationDefinitions} from './components/OperationNotifier/OperationNotificationDefinitions'
 import FrontendPuller from './lib/puller'
 import ForcedPasswordChangePage from './pages/ForcedPasswordChangePage'
-import { getAccess, loadAccess } from './lib/access'
+import { accessChecked, getAccess, loadAccess } from './lib/access'
 
 type OnboardingStatus = {
   completed: boolean
@@ -21,7 +21,7 @@ export default function App() {
   const navigate = useNavigate()
 
   // main.tsx asked who is signed in before rendering; ask again only if that failed.
-  const [authState, setAuthState] = useState<'checking' | 'ok' | 'no'>(getAccess() ? 'ok' : 'checking')
+  const [authState, setAuthState] = useState<'checking' | 'ok' | 'no'>(getAccess() ? 'ok' : accessChecked() ? 'no' : 'checking')
   const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus | null>(null)
   const [onboardingError, setOnboardingError] = useState<string | null>(null)
 
