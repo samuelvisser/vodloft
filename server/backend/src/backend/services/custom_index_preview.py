@@ -13,7 +13,7 @@ from backend.utils.custom_index import (
     get_episode_index_assignments,
     indexing_value_definition_keys,
 )
-from backend.utils.jinja_analysis.custom_indexes import (
+from jinja_analysis.custom_indexes import (
     CustomIndexReachabilityStatus,
     compare_custom_index_reachability,
 )

@@ -7,10 +7,10 @@ from jinja2 import StrictUndefined, nodes
 from jinja2.sandbox import ImmutableSandboxedEnvironment
 import pytest
 
-from backend.utils.jinja_analysis import UnknownOutput, analyze_template, expression_dependencies
-from backend.utils.jinja_analysis.comparison import OutputOverlap, compare_outputs
-from backend.utils.jinja_analysis.expressions import analysis_environment
-from backend.utils.jinja_analysis.paths import INPUT_PREFIX
+from jinja_analysis import UnknownOutput, analyze_template, expression_dependencies
+from jinja_analysis.comparison import OutputOverlap, compare_outputs
+from jinja_analysis.expressions import analysis_environment
+from jinja_analysis.paths import INPUT_PREFIX
 
 
 def _emit(value):
@@ -203,7 +203,7 @@ def test_large_constant_operations_are_bounded_before_evaluation(environment):
 
 
 def test_custom_index_reachability_ignores_unrelated_output_changes(environment):
-    from backend.utils.jinja_analysis import (
+    from jinja_analysis import (
         CustomIndexReachabilityStatus,
         compare_custom_index_reachability,
     )
@@ -225,7 +225,7 @@ def test_custom_index_reachability_ignores_unrelated_output_changes(environment)
 
 
 def test_custom_index_reachability_detects_assignment_condition_change(environment):
-    from backend.utils.jinja_analysis import (
+    from jinja_analysis import (
         CustomIndexReachabilityStatus,
         compare_custom_index_reachability,
     )
@@ -245,7 +245,7 @@ def test_custom_index_reachability_detects_assignment_condition_change(environme
 
 
 def test_custom_index_reachability_is_unknown_for_short_circuit_effects(environment):
-    from backend.utils.jinja_analysis import (
+    from jinja_analysis import (
         CustomIndexReachabilityStatus,
         compare_custom_index_reachability,
     )

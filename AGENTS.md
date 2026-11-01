@@ -132,7 +132,15 @@ live in the `sources` package (`server/sources`), one subpackage each, and regis
   `sources.dailywire` directly. Do not add to that list; move code behind the contract instead.
 - Add to the contract only what has a caller. A Source never imports the application, and the
   `downloader` package knows nothing about Sources.
-- Shows and media items store their Source's id in `source_key`.
+- Collections and media items store their Source's id in `source_key`.
+
+## Jinja analysis
+Output template analysis lives in the `jinja_analysis` package (`server/jinja_analysis`), which only depends on
+jinja2 and never imports VODLoft code; its tests use jinja2 and the package alone.
+- Print expressions with `expression_source` and change templates with `TemplateEdits`, which edits only whole
+  tags and verifies the result by parsing it again. Do not add another printer.
+- What the analysis knows about a filter (pure, result type) lives in the one `FILTERS` table in
+  `jinja_analysis.filters`.
 
 ## The Daily Wire
 When referring to The Daily Wire, in most cases, use the full name, "The Daily Wire". 

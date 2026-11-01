@@ -6,8 +6,8 @@ from dataclasses import dataclass
 
 from jinja2 import Environment, nodes
 
-from .jinja_analysis import TemplateAnalysis, analyze_template
-from .jinja_analysis.comparison import OutputComparison, OutputOverlap, compare_outputs
+from jinja_analysis import TemplateAnalysis, analyze_template
+from jinja_analysis.comparison import OutputComparison, OutputOverlap, compare_outputs
 
 
 # Only aliases guaranteed by episode_output_template_values are equivalent.

@@ -8,9 +8,9 @@ from jinja2 import Environment, nodes
 from jinja2.runtime import EvalContext, Undefined
 from jinja2.visitor import NodeTransformer
 
+from .filters import VOLATILE_FILTERS
 
-# Context-dependent calls must stay symbolic, including literal custom-index keys.
-VOLATILE_FILTERS = frozenset({"random", "custom_index"})
+
 EMIT_FILTER = "__vodloft_analysis_emit"
 JINJA_UNDEFINED_FILTER = "__vodloft_analysis_undefined"
 INTERNAL_FILTERS = frozenset({EMIT_FILTER, JINJA_UNDEFINED_FILTER})

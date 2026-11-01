@@ -5,7 +5,7 @@ import pytest
 from jinja2 import StrictUndefined, pass_context
 from jinja2.sandbox import ImmutableSandboxedEnvironment
 
-from backend.utils.jinja_analysis.custom_index_advisory import get_custom_index_advisories
+from jinja_analysis.custom_index_advisory import get_custom_index_advisories
 
 
 @pytest.fixture
@@ -58,7 +58,7 @@ def test_reversed_inline_condition_still_gets_a_safe_set_block_suggestion(enviro
     suggestion = item.suggestion
     assert suggestion is not None
     assert "'extra' | custom_index" in suggestion.after
-    assert "if not (is_extra)" in suggestion.after
+    assert "if not is_extra" in suggestion.after
     assert "{% set extra_num=" not in suggestion.output_template
 
     for is_extra in (False, True):

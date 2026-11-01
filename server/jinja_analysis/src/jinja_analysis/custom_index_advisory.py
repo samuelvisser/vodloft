@@ -17,7 +17,9 @@ from typing import Iterable, Literal
 from jinja2 import Environment, TemplateError, nodes
 from jinja2.visitor import NodeTransformer
 
-from .custom_index_refactors import CustomIndexSuggestion, suggest_guarded_index
+from .custom_index_refactors import suggest_guarded_index
+from .filters import PURE_FILTERS, STRING_FILTERS
+from .source import TemplateEdit, UnsafeEdit, all_nodes, expression_source
 from .expressions import expression_key
 
 
@@ -28,7 +30,7 @@ CustomIndexAdvisoryKind = Literal["all_episodes", "episode_index"]
 class CustomIndexAdvisory:
     key: str
     kind: CustomIndexAdvisoryKind = "all_episodes"
-    suggestion: CustomIndexSuggestion | None = None
+    suggestion: TemplateEdit | None = None
 
 
 @dataclass(frozen=True)
@@ -185,50 +187,25 @@ def _assignment_sources(source: str, environment: Environment) -> dict[str, _Sta
     return {name: span for name, span in result.items() if name not in duplicates}
 
 
-# Only expressions whose original value and evaluation count can be retained by
-# the small suggested refactor. This list is NOT a template-language restriction.
-_SAFE_FILTERS = frozenset({
-    "abs", "capitalize", "float", "format", "int", "length", "lower", "replace",
-    "round", "string", "title", "trim", "upper", "regex_replace", "regex_search",
-})
+# The small expression subset the suggestions keep. Only pure filters keep an
+# expression's original value and evaluation count when it is moved.
+_SUGGESTED_NODES = (nodes.Const, nodes.Name, nodes.Concat, nodes.Filter, nodes.Compare, nodes.And, nodes.Or, nodes.Not, nodes.Operand)
 
 
 def _expression_source(node: nodes.Expr) -> str:
     """Print the small expression subset used by suggestions, never runtime code."""
-    if isinstance(node, nodes.Const):
-        if node.value is None:
-            return "none"
-        if isinstance(node.value, bool):
-            return "true" if node.value else "false"
-        if isinstance(node.value, (str, int, float)):
-            return repr(node.value)
-    if isinstance(node, nodes.Name):
-        return node.name
-    if isinstance(node, nodes.Concat):
-        return " ~ ".join(f"({_expression_source(item)})" for item in node.nodes)
-    if isinstance(node, nodes.Filter):
-        if node.name not in _SAFE_FILTERS and _index_key(node) is None:
-            raise _Uncertain("The expression may have side effects")
-        if node.dyn_args or node.dyn_kwargs:
-            raise _Uncertain("Dynamic arguments")
-        args = [_expression_source(item) for item in node.args]
-        args.extend(f"{item.key}={_expression_source(item.value)}" for item in node.kwargs)
-        call = f"({', '.join(args)})" if args else ""
-        operand = _expression_source(node.node)
-        if not isinstance(node.node, (nodes.Const, nodes.Name, nodes.Filter)):
-            operand = f"({operand})"
-        return f"{operand} | {node.name}{call}"
-    if isinstance(node, nodes.Compare):
-        operators = {"eq": "==", "ne": "!=", "lt": "<", "lteq": "<=", "gt": ">", "gteq": ">=", "in": "in", "notin": "not in"}
-        return " ".join([f"({_expression_source(node.expr)})", *(
-            f"{operators[item.op]} ({_expression_source(item.expr)})" for item in node.ops
-        )])
-    if isinstance(node, (nodes.And, nodes.Or)):
-        op = "and" if isinstance(node, nodes.And) else "or"
-        return f"({_expression_source(node.left)}) {op} ({_expression_source(node.right)})"
-    if isinstance(node, nodes.Not):
-        return f"not ({_expression_source(node.node)})"
-    raise _Uncertain(f"No safe suggested source for {type(node).__name__}")
+    for item in all_nodes(node, nodes.Node):
+        if not isinstance(item, _SUGGESTED_NODES):
+            raise _Uncertain(f"No safe suggested source for {type(item).__name__}")
+        if isinstance(item, nodes.Filter):
+            if item.name not in PURE_FILTERS and _index_key(item) is None:
+                raise _Uncertain("The expression may have side effects")
+            if item.dyn_args or item.dyn_kwargs:
+                raise _Uncertain("Dynamic arguments")
+    try:
+        return expression_source(node)
+    except UnsafeEdit as exc:
+        raise _Uncertain("No safe suggested source") from exc
 
 
 def _string_expression(node: nodes.Expr, strings: set[str] | frozenset[str] = frozenset()) -> bool:
@@ -236,9 +213,7 @@ def _string_expression(node: nodes.Expr, strings: set[str] | frozenset[str] = fr
         isinstance(node, nodes.Concat)
         or isinstance(node, nodes.Const) and isinstance(node.value, str)
         or isinstance(node, nodes.Name) and node.name in strings
-        or isinstance(node, nodes.Filter) and node.name in {
-            "capitalize", "format", "lower", "replace", "string", "title", "trim", "upper", "regex_replace",
-        }
+        or isinstance(node, nodes.Filter) and node.name in STRING_FILTERS
     )
 
 
@@ -297,7 +272,7 @@ def _stable_guard(expression: nodes.Expr, declarations: list[nodes.Assign], writ
         node = pending.pop()
         if isinstance(node, nodes.Call):
             return False
-        if isinstance(node, nodes.Filter) and node.name not in _SAFE_FILTERS:
+        if isinstance(node, nodes.Filter) and node.name not in PURE_FILTERS:
             return False
         if isinstance(node, nodes.Name):
             if writes[node.name] > 1:
@@ -310,7 +285,7 @@ def _stable_guard(expression: nodes.Expr, declarations: list[nodes.Assign], writ
     return True
 
 
-def _suggest(source: str, tree: nodes.Template, key: str, environment: Environment) -> CustomIndexSuggestion | None:
+def _suggest(source: str, tree: nodes.Template, key: str, environment: Environment) -> TemplateEdit | None:
     """Keep the existing readable set-block suggestion for simple string branches."""
     sources = _assignment_sources(source, environment)
     writes = Counter(item.name for item in tree.find_all(nodes.Name) if item.ctx in {"store", "param"})
@@ -394,7 +369,7 @@ def _suggest(source: str, tree: nodes.Template, key: str, environment: Environme
             parsed = environment.parse(revised)
             if key in _MustRun(parsed).body(parsed.body):
                 return None
-            return CustomIndexSuggestion(
+            return TemplateEdit(
                 before="\n".join(sources[item.target.name].source for item in [*removed, consumer]),
                 after=body,
                 output_template=revised,
@@ -464,7 +439,7 @@ def _unconditional_output_keys(tree: nodes.Template) -> set[str]:
 
 def _suggest_episode_index(
     source: str, tree: nodes.Template, key: str, environment: Environment,
-) -> CustomIndexSuggestion | None:
+) -> TemplateEdit | None:
     """Replace literal calls, preserving unrelated source and integer semantics."""
     shadowed = _names(tree, "store") | _names(tree, "param")
     shadowed.update(item.name for item in tree.find_all(nodes.Macro))
@@ -513,7 +488,7 @@ def _suggest_episode_index(
         return None
     environment.parse(revised)
     changed = [(a, b) for a, b in tags if any(a <= x < y <= b for x, y in edits)]
-    return CustomIndexSuggestion(
+    return TemplateEdit(
         before="\n".join(source[a:b] for a, b in changed),
         after="\n".join(replace(a, b) for a, b in changed),
         output_template=revised,

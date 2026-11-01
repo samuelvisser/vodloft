@@ -6,7 +6,7 @@ from jinja2 import StrictUndefined
 from jinja2.sandbox import ImmutableSandboxedEnvironment
 import pytest
 
-from backend.utils.jinja_analysis.comparison import OutputOverlap
+from jinja_analysis.comparison import OutputOverlap
 from backend.utils.output_template_analysis import analyze_profile_outputs, compare_profile_outputs
 
 

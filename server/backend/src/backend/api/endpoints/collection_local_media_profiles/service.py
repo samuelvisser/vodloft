@@ -25,7 +25,7 @@ from backend.services.custom_indexes import (
     request_custom_index_reconciliation,
 )
 from backend.utils.custom_index import indexing_value_definition_keys, replace_indexing_value_definitions
-from backend.utils.jinja_analysis import CustomIndexReachabilityStatus
+from jinja_analysis import CustomIndexReachabilityStatus
 from backend.utils.output_template import output_template_custom_index_keys
 from task_manager.scheduler.operations import (
     OperationTargetSpec,

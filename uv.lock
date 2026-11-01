@@ -8,6 +8,7 @@ members = [
     "config",
     "controller",
     "downloader",
+    "jinja-analysis",
     "sources",
     "task-manager",
     "vodloft",
@@ -80,6 +81,7 @@ dependencies = [
     { name = "cryptography" },
     { name = "downloader" },
     { name = "fastapi" },
+    { name = "jinja-analysis" },
     { name = "jinja2" },
     { name = "psutil" },
     { name = "pydantic" },
@@ -99,6 +101,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=43.0.1" },
     { name = "downloader", editable = "server/downloader" },
     { name = "fastapi", specifier = ">=0.118.0" },
+    { name = "jinja-analysis", editable = "server/jinja_analysis" },
     { name = "jinja2", specifier = ">=3.1,<4" },
     { name = "psutil", specifier = ">=6.1.1" },
     { name = "pydantic", specifier = ">=2.11.9" },
@@ -447,6 +450,17 @@ sdist = { url = "https://files.pythonhosted.org/packages/7b/6f/357efd7602486741a
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b2/a3/e137168c9c44d18eff0376253da9f1e9234d0239e0ee230d2fee6cea8e55/jeepney-0.9.0-py3-none-any.whl", hash = "sha256:97e5714520c16fc0a45695e5365a2e11b81ea79bba796e26f9f1d178cb182683", size = 49010, upload-time = "2025-02-27T18:51:00.104Z" },
 ]
+
+[[package]]
+name = "jinja-analysis"
+version = "0.6.0"
+source = { editable = "server/jinja_analysis" }
+dependencies = [
+    { name = "jinja2" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "jinja2", specifier = ">=3.1,<4" }]
 
 [[package]]
 name = "jinja2"
@@ -948,6 +962,7 @@ dependencies = [
     { name = "config" },
     { name = "controller" },
     { name = "downloader" },
+    { name = "jinja-analysis" },
     { name = "sources" },
     { name = "task-manager" },
 ]
@@ -965,6 +980,7 @@ requires-dist = [
     { name = "config", editable = "server/config" },
     { name = "controller", editable = "server/controller" },
     { name = "downloader", editable = "server/downloader" },
+    { name = "jinja-analysis", editable = "server/jinja_analysis" },
     { name = "sources", editable = "server/sources" },
     { name = "task-manager", editable = "server/task_manager" },
 ]

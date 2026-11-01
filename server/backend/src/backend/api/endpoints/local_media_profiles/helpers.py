@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from backend.api.models.local_media_profile import LocalMediaProfileAPIBaseIn
 from backend.db.models import LocalMediaProfileBase
-from backend.utils.jinja_analysis.comparison import OutputOverlap
+from jinja_analysis.comparison import OutputOverlap
 from backend.utils.output_template import _sanitize_emitted_output_value, finalize_output_path
 from backend.utils.output_template_analysis import analyze_profile_outputs, compare_profile_outputs
 from backend.utils.output_template_jinja import create_output_template_environment

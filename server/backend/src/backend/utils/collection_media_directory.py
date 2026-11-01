@@ -7,8 +7,8 @@ from typing import Callable, Mapping
 
 from jinja2 import Environment, TemplateError, nodes
 
-from .jinja_analysis import UnknownOutput, analyze_template, expression_dependencies
-from .jinja_analysis.expressions import analysis_environment
+from jinja_analysis import UnknownOutput, analyze_template, expression_dependencies
+from jinja_analysis.expressions import analysis_environment
 
 _ITEM_MARK, _COLLECTION_START, _COLLECTION_END = "\x01", "\x02", "\x03"
 _SEASON_FOLDER = re.compile(r"^(?:s(?:eason)?[\W_]?\d+|specials|extras|trailers|featurettes)$", re.I)

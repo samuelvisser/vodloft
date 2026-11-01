@@ -18,7 +18,7 @@ from backend.utils.custom_index import (
     indexing_value_definition_keys,
     set_episode_index_assignment,
 )
-from backend.utils.jinja_analysis import (
+from jinja_analysis import (
     CustomIndexReachabilityComparison,
     CustomIndexReachabilityStatus,
     compare_custom_index_reachability,
