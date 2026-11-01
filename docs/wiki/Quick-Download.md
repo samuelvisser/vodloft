@@ -38,7 +38,7 @@ A quick download does not start when it would leave less free space in the tempo
 
 ## History
 
-The **History** list shows what was downloaded, from where, as what and how it ended: downloaded, deleted before anyone downloaded it, discarded, canceled, failed, or not downloaded because of DRM or a rule. No files or paths are kept.
+The **History** list shows finished quick downloads: what was downloaded, from where, as what and how it ended: downloaded, deleted before anyone downloaded it, discarded, canceled, failed, or not downloaded because of DRM or a rule. No files or paths are kept. Downloads still in progress or ready to download show only in their own lists above it.
 
 **Download again** looks the link up once more with the same choices. **Clear history** forgets every finished entry. Entries are forgotten on their own after 90 days. Turn the history off with **Keep a history** in Settings.
 

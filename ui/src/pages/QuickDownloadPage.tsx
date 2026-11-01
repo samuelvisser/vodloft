@@ -207,6 +207,12 @@ export default function QuickDownloadPage() {
 
     const active = operations.filter((operation) => operation.kind === QUICK_DOWNLOAD_OPERATION_KIND && ACTIVE.has(operation.status))
     const ready = quickDownloads?.ready ?? []
+    // The history lists what is finished; what is still working or ready to fetch shows above it.
+    const shownAbove = new Set([
+        ...ready.map((file) => file.id),
+        ...active.map((operation) => String(operation.context?.quick_download_id ?? '')),
+    ])
+    const finished = (history ?? []).filter((entry) => !shownAbove.has(entry.quickDownloadId))
     const link = options?.link
     const image = toImageUrl(link?.preview.imageUrl)
     const size = options ? choiceSize(options, choice) : null
@@ -318,7 +324,7 @@ export default function QuickDownloadPage() {
 
             <QuickInProgressList operations={active}/>
             <QuickReadyList ready={ready}/>
-            {keepHistory && <QuickHistoryList entries={history ?? []} onDownloadAgain={downloadAgain}/>}
+            {keepHistory && <QuickHistoryList entries={finished} onDownloadAgain={downloadAgain}/>}
 
             {options && !rules.locked && (
                 <QuickFormatPanel
