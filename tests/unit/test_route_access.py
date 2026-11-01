@@ -238,3 +238,44 @@ def test_operations_remember_who_asked(app):
             assert operation.requested_by_user_id == 42
     finally:
         current_requester.reset(token)
+
+
+def test_a_limited_user_is_refused_other_links_with_the_reason(app):
+    admin = _client_for(app, "administrator")
+    password = derive_admin_password_client_value("tim-password")
+    from backend.security.access import TEMPLATES
+
+    levels = {area.value: level.value for area, level in TEMPLATES["downloader"].levels.items()}
+    created = admin.post("/api/users", json={
+        "username": "tim", "passwordHash": password,
+        "access": {
+            "templateKey": "downloader", "levels": levels,
+            "sources": [{"sourceKey": "ytdlp", "domains": ["https://www.YouTube.com/", "youtu.be"]}],
+        },
+    })
+    assert created.status_code == 201, created.text
+    assert created.json()["sources"] == [{"sourceKey": "ytdlp", "domains": ["youtu.be", "youtube.com"]}]
+
+    tim = TestClient(app)
+    tim.post("/api/auth/login", json={"username": "tim", "passwordHash": password})
+    tim.post("/api/auth/password", json={
+        "currentPasswordHash": password, "newPasswordHash": derive_admin_password_client_value("tim-own-password"),
+    })
+    for path, body in (
+        ("/api/resolve", {"url": "https://vimeo.com/1"}),
+        ("/api/quick-downloads/options", {"url": "https://vimeo.com/1"}),
+        ("/api/quick-downloads", {"url": "https://vimeo.com/1", "choice": {}}),
+    ):
+        response = tim.post(path, json=body)
+        assert response.status_code == 403, (path, response.text)
+        assert "links on vimeo.com" in response.json()["detail"]
+    assert "youtube.com" in tim.post("/api/resolve", json={"url": "https://vimeo.com/1"}).json()["detail"]
+
+
+def test_unknown_sources_cannot_be_given_to_a_user(app):
+    admin = _client_for(app, "administrator")
+    response = admin.post("/api/users", json={
+        "username": "tim", "passwordHash": derive_admin_password_client_value("tim-password"),
+        "access": {"levels": {"quick_downloads": "view"}, "sources": [{"sourceKey": "nope", "domains": None}]},
+    })
+    assert response.status_code == 422

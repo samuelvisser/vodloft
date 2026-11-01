@@ -33,8 +33,8 @@ from ...models.show import (
     ShowRedownloadEpisodesAPIRequest,
 )
 from backend.app import db_session
-from backend.security.access import Area, Level
-from backend.security.deps import may_delete_files, requires
+from backend.security.access import Access, Area, Level
+from backend.security.deps import may_delete_files, requires, signed_in
 
 router = APIRouter(prefix="/shows", tags=["Shows"])
 
@@ -53,13 +53,14 @@ def show_list():
 
 
 @router.post("", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=ShowAPIRead, status_code=status.HTTP_201_CREATED)
-def show_create(body: ShowAPICreate) -> ShowAPIRead:
+def show_create(body: ShowAPICreate, access: Access = signed_in()) -> ShowAPIRead:
     """
     Create a new show entry.
 
     Adds a new show to the system with the provided metadata.
     Returns the created show with a generated slug identifier.
     """
+    access.check_link_at(body.source_key, body.sharing_url)
     with db_session() as s:
         try:
             result = create_show(s, body)

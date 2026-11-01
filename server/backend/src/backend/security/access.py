@@ -18,6 +18,9 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Mapping, Optional
 
+from sources import Source, UnknownSourceError, get_source
+from sources.contract import link_host, on_domain
+
 
 class Area(StrEnum):
     LIBRARY = "library"
@@ -137,6 +140,10 @@ class SourceLimit:
     domains: Optional[tuple[str, ...]] = None
 
 
+class LinkNotAllowed(PermissionError):
+    """The user may not use this Source or link; the message says what they may use."""
+
+
 @dataclass(frozen=True)
 class Access:
     """The resolved access of whoever is behind one request."""
@@ -218,3 +225,53 @@ class Access:
             return None
         limit = self.source_limits.get(source_key)
         return None if limit is None else limit.domains
+
+    def allows_link(self, source_key: str, url: str) -> bool:
+        """The user may use this Source, and the link is on one of their domains for it.
+
+        Domains match the way ``Source.handles()`` does: the domain or any subdomain.
+        """
+        if not self.allows_source(source_key):
+            return False
+        domains = self.allowed_domains(source_key)
+        if domains is None:
+            return True
+        host = link_host(url)
+        return any(on_domain(host, domain) for domain in domains)
+
+    def check_source(self, source: Source) -> None:
+        if not self.allows_source(source.id):
+            raise LinkNotAllowed(f"Your account may not use {source.name}. {self.what_you_may_use()}")
+
+    def check_link_at(self, source_key: str, url: str | None) -> None:
+        """``check_link`` for a Source named by its key; an unknown key is left to the caller to refuse."""
+        try:
+            source = get_source(source_key)
+        except UnknownSourceError:
+            return
+        if url:
+            self.check_link(source, url)
+        else:
+            self.check_source(source)
+
+    def check_link(self, source: Source, url: str) -> None:
+        self.check_source(source)
+        if not self.allows_link(source.id, url):
+            host = link_host(url) or url
+            raise LinkNotAllowed(
+                f"Your account may not use links on {host} with {source.name}. {self.what_you_may_use()}"
+            )
+
+    def what_you_may_use(self) -> str:
+        if self.source_limits is None:
+            return "You may use every Source."
+        if not self.source_limits:
+            return "Your account may not use any Source."
+        parts = []
+        for key, limit in sorted(self.source_limits.items()):
+            try:
+                name = get_source(key).name
+            except UnknownSourceError:
+                continue
+            parts.append(f"{name} ({', '.join(limit.domains)})" if limit.domains else name)
+        return "You may use: " + "; ".join(parts) + "." if parts else "Your account may not use any Source."

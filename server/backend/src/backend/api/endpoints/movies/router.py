@@ -19,15 +19,16 @@ from task_manager.tasks.media_download_operations import (
     create_media_download_operation,
     dispatch_queued_media_download_operations,
 )
-from backend.security.access import Area, Level
-from backend.security.deps import requires
+from backend.security.access import Access, Area, Level
+from backend.security.deps import requires, signed_in
 
 router = APIRouter(prefix="/movies", tags=["Movies"])
 
 
 @router.post("/{movie_slug}/index", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=MovieAPIRead, status_code=status.HTTP_201_CREATED)
-def movie_index(movie_slug: str):
+def movie_index(movie_slug: str, access: Access = signed_in()):
     """Index a browsed Daily Wire movie and its extras without downloading anything."""
+    access.check_link_at("dailywire", None)
     try:
         movie_data = get_dailywire_movie(movie_slug)
     except Exception as exc:
@@ -155,7 +156,8 @@ def movie_list():
 
 
 @router.post("", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=MovieAPIRead, status_code=status.HTTP_201_CREATED)
-def movie_create(body: MovieAPICreate):
+def movie_create(body: MovieAPICreate, access: Access = signed_in()):
+    access.check_link_at(body.source_key, body.sharing_url)
     with db_session() as s:
         try:
             result = create_movie(s, body)

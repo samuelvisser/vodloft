@@ -22,21 +22,21 @@ from .service import (
     remove_quick_download,
     start_quick_download,
 )
-from backend.security.access import Area, Level
-from backend.security.deps import requires
+from backend.security.access import Access, Area, Level
+from backend.security.deps import requires, signed_in
 
 
 router = APIRouter(prefix="/quick-downloads", tags=["Quick downloads"])
 
 
 @router.post("", dependencies=[requires(Area.QUICK_DOWNLOADS, Level.VIEW)], response_model=QuickDownloadOperationAccepted, status_code=status.HTTP_202_ACCEPTED)
-def quick_download_create(body: QuickDownloadAPICreate):
+def quick_download_create(body: QuickDownloadAPICreate, access: Access = signed_in()):
     """Fetch one video, episode or movie as a file to download, without adding it to the library."""
     from backend.api.endpoints.sources.service import LinkNotRecognisedError
 
     with db_session() as s:
         try:
-            result = start_quick_download(s, body)
+            result = start_quick_download(s, access, body)
             s.commit()
             return result
         except (LinkNotRecognisedError, QuickDownloadRefused) as exc:
@@ -48,13 +48,13 @@ def quick_download_create(body: QuickDownloadAPICreate):
 
 
 @router.post("/options", dependencies=[requires(Area.QUICK_DOWNLOADS, Level.VIEW)], response_model=QuickDownloadOptionsAPIRead)
-def quick_download_option_list(body: QuickDownloadOptionsAPIRequest):
+def quick_download_option_list(body: QuickDownloadOptionsAPIRequest, access: Access = signed_in()):
     """What a link can be quick downloaded as, with sizes where its Source reports them."""
     from backend.api.endpoints.sources.service import LinkNotRecognisedError
 
     with db_session() as s:
         try:
-            return quick_download_options(s, body)
+            return quick_download_options(s, access, body)
         except LinkNotRecognisedError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 

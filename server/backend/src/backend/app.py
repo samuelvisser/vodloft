@@ -20,6 +20,7 @@ from backend.services.source_requests import SourceRequestError
 from backend.utils.custom_index import CustomIndexNotReadyError
 from backend.db import get_session
 from backend.security.auth import resolve_access
+from backend.security.access import LinkNotAllowed
 from backend.services.users import UserError
 from task_manager.scheduler.requester import current_requester
 from config import get_settings
@@ -182,6 +183,10 @@ def create_app() -> FastAPI:
                 )
                 session.commit()
         return JSONResponse({"detail": str(error)}, status_code=409)
+
+    @app.exception_handler(LinkNotAllowed)
+    async def _link_not_allowed(_request: Request, error: LinkNotAllowed):
+        return JSONResponse({"detail": str(error)}, status_code=403)
 
     @app.exception_handler(UserError)
     async def _user_error(_request: Request, error: UserError):

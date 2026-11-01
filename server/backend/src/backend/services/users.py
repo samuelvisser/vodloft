@@ -27,6 +27,8 @@ from backend.security.access import (
     is_administrator_levels,
 )
 from config.security.passwords import hash_password_scrypt, verify_scrypt
+from sources import all_sources
+from sources.contract import link_host
 
 
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{1,63}$")
@@ -232,10 +234,13 @@ def _apply_access(user: User, access: AccessList) -> None:
     else:
         user.all_sources = False
         wanted = {key: domains for key, domains in access.sources.items()}
+        known_sources = {source.id for source in all_sources()}
         user.source_access[:] = [row for row in user.source_access if row.source_key in wanted]
         by_source = {row.source_key: row for row in user.source_access}
         for key, domains in wanted.items():
-            stored = None if domains is None else sorted({d.strip().lower().lstrip(".") for d in domains if d.strip()})
+            if key not in known_sources:
+                raise UserError(f"No Source is called '{key}'.", field="sources")
+            stored = None if domains is None else sorted({clean_domain(d) for d in domains if clean_domain(d)})
             if stored == []:
                 raise UserError("List at least one domain, or allow all of the Source's domains.", field="sources")
             row = by_source.get(key)
@@ -245,6 +250,16 @@ def _apply_access(user: User, access: AccessList) -> None:
                 row.domains = stored
     user.members_only = administrator or access.members_only
     user.delete_files = administrator or access.delete_files
+
+
+def clean_domain(value: str) -> str:
+    """The bare domain from what someone typed, such as ``https://www.YouTube.com/watch`` -> ``youtube.com``."""
+    value = value.strip().lower()
+    if not value:
+        return ""
+    host = link_host(value if "://" in value else f"https://{value}")
+    host = host.lstrip(".")
+    return host[4:] if host.startswith("www.") else host
 
 
 def create_user(

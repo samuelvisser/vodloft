@@ -13,7 +13,7 @@ from .service import (
     list_sources, lookup_show_details, resolve_link, search_source, set_domain_preference, source_with,
     update_source_program,
 )
-from backend.security.access import Area, Level
+from backend.security.access import Access, Area, Level
 from backend.security.deps import requires, requires_any, signed_in
 
 
@@ -59,11 +59,11 @@ def update_source_domain(domain: str, body: SourceDomainAPIUpdate):
 
 
 @router.post("/resolve", dependencies=[requires_any((Area.ADD_MEDIA, Level.VIEW), (Area.QUICK_DOWNLOADS, Level.VIEW))], response_model=ResolvedLinkAPIRead)
-def resolve(body: ResolveAPIRequest):
+def resolve(body: ResolveAPIRequest, access: Access = signed_in()):
     """Find the Source that recognises a link, and what the link points to."""
     with db_session() as s:
         try:
-            return resolve_link(s, body.url, body.source_key)
+            return resolve_link(s, access, body.url, body.source_key)
         except LinkNotRecognisedError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -79,15 +79,15 @@ def episode_tags(source_id: str, url: str | None = Query(default=None, max_lengt
 
 
 @router.get("/sources/{source_id}/show", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=ShowDetailsAPIRead)
-def show_details(source_id: str, url: str = Query(min_length=1, max_length=2048)):
+def show_details(source_id: str, url: str = Query(min_length=1, max_length=2048), access: Access = signed_in()):
     """Look up a show to add, at a Source that lists its episodes."""
-    return lookup_show_details(_source(source_id, Feature.EPISODE_LISTS), url)
+    return lookup_show_details(access, _source(source_id, Feature.EPISODE_LISTS), url)
 
 
 @router.get("/sources/{source_id}/search", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=SearchResultsAPIRead)
-def search(source_id: str, q: str = Query(min_length=1, max_length=200)):
+def search(source_id: str, q: str = Query(min_length=1, max_length=200), access: Access = signed_in()):
     """Find shows and videos at a Source by name."""
-    return search_source(_source(source_id, Feature.SEARCH), q)
+    return search_source(access, _source(source_id, Feature.SEARCH), q)
 
 
 @router.get("/sources/{source_id}/program", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=ProgramStatusAPIRead)

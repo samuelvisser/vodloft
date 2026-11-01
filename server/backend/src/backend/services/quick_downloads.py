@@ -112,6 +112,8 @@ class QuickDownloadRequest:
     description: str | None = None
     image_url: str | None = None
     author_name: str | None = None
+    members_only: bool = True
+    """The user who asked may use members-only media with the account signed in under Sources."""
 
     def task_input(self) -> dict[str, Any]:
         return {**asdict(self), "kind": self.kind.value}
@@ -270,6 +272,9 @@ def _metadata(source: Source, request: QuickDownloadRequest, details) -> MediaSe
     )
 
 
+_NOT_A_MEMBER = "Your VODLoft account may not use members-only {source} media"
+
+
 def _resolve_source(
     source: Source, request: QuickDownloadRequest, tracker: DownloadTracker, rules: QuickRules,
 ) -> ResolvedDownloadSource:
@@ -282,6 +287,8 @@ def _resolve_source(
     if request.kind is LinkKind.SHOW:
         raise DownloadError("Quick download takes one video, episode or movie, not a whole show")
     if request.kind is LinkKind.MOVIE:
+        if source.has(Feature.MEMBERSHIP_LEVELS) and not request.members_only:
+            raise SubscriptionRequiredError(_NOT_A_MEMBER.format(source=source.name))
         tracker.preparing("resolve_playback")
         playback = source.movie_playback(movie_slug=request.slug, title=request.title, duration=None)
         tracker.ensure_active()
@@ -326,6 +333,8 @@ def _resolve_source(
     tracker.preparing("resolve_playback")
     media = source.episode_media(slug=request.slug, members_only=False, interactive=True)
     if not (media.video_url or media.audio_url):
+        if not request.members_only:
+            raise SubscriptionRequiredError(_NOT_A_MEMBER.format(source=source.name))
         tracker.ensure_active()
         media = source.episode_media(slug=request.slug, members_only=True, interactive=True)
     tracker.ensure_active()

@@ -36,6 +36,7 @@ from backend.services.quick_downloads import (
     quick_options,
     ready_quick_download,
 )
+from backend.security.access import Access
 from backend.services import quick_download_history as history
 from backend.services.source_requests import asking_source
 from config import get_settings
@@ -54,9 +55,9 @@ _CHUNK = 1024 * 1024
 _RANGE = re.compile(r"^bytes=(\d*)-(\d*)$")
 
 
-def start_quick_download(s: Session, body: QuickDownloadAPICreate) -> dict:
+def start_quick_download(s: Session, access: Access, body: QuickDownloadAPICreate) -> dict:
     """Look up the link, refuse what cannot be downloaded or what the rules do not allow, and queue it."""
-    link = resolve_link(s, body.url, body.source_key)
+    link = resolve_link(s, access, body.url, body.source_key)
     source = get_source(link.source.id)
     kind = LinkKind(link.kind)
     try:
@@ -101,6 +102,7 @@ def start_quick_download(s: Session, body: QuickDownloadAPICreate) -> dict:
         image_url=link.preview.image_url,
         author_name=link.preview.author_name,
         choice=choice,
+        members_only=access.members_only,
     )
     operation = create_quick_download_operation(s, request)
     history.record_started(request, source_name=source.name, session=s)
@@ -115,9 +117,9 @@ class _OptionsSource:
     options: QuickOptions | None = None
 
 
-def quick_download_options(s: Session, body: QuickDownloadOptionsAPIRequest) -> QuickDownloadOptionsAPIRead:
+def quick_download_options(s: Session, access: Access, body: QuickDownloadOptionsAPIRequest) -> QuickDownloadOptionsAPIRead:
     """Look up the link and what it can be downloaded as, or why it cannot be."""
-    link = resolve_link(s, body.url, body.source_key)
+    link = resolve_link(s, access, body.url, body.source_key)
     source = get_source(link.source.id)
     try:
         check_quick_downloadable(

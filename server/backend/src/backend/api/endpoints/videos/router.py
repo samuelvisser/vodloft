@@ -20,8 +20,8 @@ from .service import (
     get_videos_list,
     video_source,
 )
-from backend.security.access import Area, Level
-from backend.security.deps import requires
+from backend.security.access import Access, Area, Level
+from backend.security.deps import requires, signed_in
 
 router = APIRouter(prefix="/videos", tags=["Videos"])
 
@@ -33,9 +33,10 @@ def video_list():
 
 
 @router.post("", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=VideoAPIRead, status_code=status.HTTP_201_CREATED)
-def video_create(body: VideoAPICreate):
+def video_create(body: VideoAPICreate, access: Access = signed_in()):
     """Add a single video by its link, or refresh it when it is already added."""
     source = video_source(body.source_key)
+    access.check_link(source, body.url)
     details = fetch_video_details(source, body.url)
     with db_session() as s:
         try:
