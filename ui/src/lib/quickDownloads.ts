@@ -58,6 +58,37 @@ export async function fetchQuickDownloadOptions(url: string, signal?: AbortSigna
     return QuickDownloadOptionsSchema.parse(await response.json())
 }
 
+export const QuickDownloadPreviewSchema = z.object({
+    sourceKey: z.string(),
+    title: z.string(),
+    imageUrl: z.string().nullable().optional(),
+    authorName: z.string().nullable().optional(),
+    site: z.string().nullable().optional(),
+})
+export type QuickDownloadPreview = z.infer<typeof QuickDownloadPreviewSchema>
+
+/**
+ * A link's title and thumbnail from a faster lookup than the options, to show
+ * while they load. Null when there is none or anything goes wrong: the options
+ * lookup reports problems.
+ */
+export async function fetchQuickDownloadPreview(url: string, signal?: AbortSignal, sourceKey?: string): Promise<QuickDownloadPreview | null> {
+    try {
+        const response = await fetch(`${apiBase()}/quick-downloads/preview`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(sourceKey ? {url, sourceKey} : {url}),
+            signal,
+        })
+        if (!response.ok) return null
+        const body = await response.json()
+        return body == null ? null : QuickDownloadPreviewSchema.parse(body)
+    } catch {
+        return null
+    }
+}
+
 export async function startQuickDownload(url: string, sourceKey: string, choice: QuickChoice) {
     const response = await fetch(`${apiBase()}/quick-downloads`, {
         method: 'POST',

@@ -28,6 +28,16 @@ class QuickDownloadOptionsAPIRequest(RequestBase):
     source_key: Optional[str] = None
 
 
+class QuickDownloadPreviewAPIRead(ResponseBase):
+    """A first look at a link while the full lookup runs: its title and thumbnail."""
+
+    source_key: str
+    title: str
+    image_url: Optional[str] = None
+    author_name: Optional[str] = None
+    site: Optional[str] = None
+
+
 class QuickDownloadCodecAPIRead(ResponseBase):
     codec: str
     size_bytes: Optional[int] = None

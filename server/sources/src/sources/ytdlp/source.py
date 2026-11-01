@@ -4,6 +4,8 @@ import logging
 import re
 import threading
 import time
+
+import requests
 from collections.abc import Iterator, Sequence
 from datetime import datetime, timezone
 from urllib.parse import urlsplit, urlunsplit
@@ -12,7 +14,7 @@ from config import get_settings
 from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
-    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, Feature, LinkKind, Playback, PlaybackKind, ProgramStatus,
+    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, Feature, LinkKind, LinkPreview, Playback, PlaybackKind, ProgramStatus,
     ResolvedLink, SearchResults, ShowDetails, Source, SourceProblem, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
 )
@@ -98,6 +100,10 @@ def _published_at(info: dict) -> datetime | None:
         if isinstance(value, str) and len(value) == 8 and value.isdigit():
             return datetime.strptime(value, "%Y%m%d").replace(tzinfo=timezone.utc)
     return None
+
+
+_OEMBED_URL = "https://www.youtube.com/oembed"
+_OEMBED_TIMEOUT_SECONDS = 5
 
 
 def _is_youtube(url: str) -> bool:
@@ -276,6 +282,39 @@ class YtDlpSource(Source):
         except (YouTubeApiError, runner.YtDlpError) as exc:
             logger.info("Looking %s up with yt-dlp, because the YouTube API could not: %s", url, exc)
             return None
+
+    def preview(self, url: str) -> LinkPreview | None:
+        """The title and thumbnail of a YouTube video from YouTube's oEmbed, in well under a second.
+
+        yt-dlp's full lookup takes several seconds; this shows the video while it
+        runs. A link already looked up is answered from that lookup.
+        """
+        url = show_url(url)
+        with self._cache_lock:
+            cached = self._cache.get(url)
+        if cached is not None and cached[1].get("_type") != "playlist":
+            info = cached[1]
+            return LinkPreview(
+                title=info.get("title") or url, image_url=_thumbnail(info),
+                author_name=info.get("uploader") or info.get("channel"), site=_site(info),
+            )
+        if not _is_youtube(url) or mapping.youtube_ref(url) is not None:
+            return None
+        try:
+            response = requests.get(
+                _OEMBED_URL, params={"url": url, "format": "json"}, timeout=_OEMBED_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+            data = response.json()
+        except (requests.RequestException, ValueError) as exc:
+            logger.debug("No quick preview for %s: %s", url, exc)
+            return None
+        title = data.get("title") if isinstance(data, dict) else None
+        if not title:
+            return None
+        return LinkPreview(
+            title=str(title), image_url=data.get("thumbnail_url"), author_name=data.get("author_name"), site="YouTube",
+        )
 
     def resolve(self, url: str) -> ResolvedLink | None:
         url = show_url(url)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import mimetypes
 import re
 from collections.abc import Iterator
@@ -8,7 +9,7 @@ from urllib.parse import quote
 
 from sqlalchemy.orm import Session
 
-from backend.api.endpoints.sources.service import resolve_link
+from backend.api.endpoints.sources.service import preferred_sources, resolve_link
 from backend.api.models.operations import TaskOperationRead
 from backend.api.models.source import ResolvedLinkAPIRead
 from backend.api.models.quick_download import (
@@ -17,6 +18,7 @@ from backend.api.models.quick_download import (
     QuickDownloadHistoryAPIRead,
     QuickDownloadOptionsAPIRead,
     QuickDownloadOptionsAPIRequest,
+    QuickDownloadPreviewAPIRead,
     QuickDownloadsAPIRead,
 )
 from backend.services.quick_downloads import (
@@ -43,7 +45,7 @@ from backend.services import quick_download_history as history
 from backend.services.source_requests import asking_source
 from config import get_settings
 from downloader.storage.quick import QuickFolder, list_quick_folders, new_quick_download_id
-from sources import Feature, LinkKind, get_source
+from sources import Feature, LinkKind, get_source, sources_for
 from task_manager.scheduler.operation_control import cancel_operation
 from task_manager.scheduler.operations import get_operation
 from task_manager.tasks.media_download_operations import dispatch_queued_media_download_operations
@@ -55,6 +57,8 @@ from task_manager.tasks.quick_download_operations import (
 
 _CHUNK = 1024 * 1024
 _RANGE = re.compile(r"^bytes=(\d*)-(\d*)$")
+
+logger = logging.getLogger(__name__)
 
 
 def start_quick_download(s: Session, access: Access, body: QuickDownloadAPICreate) -> dict:
@@ -119,6 +123,35 @@ class _OptionsSource:
     link: ResolvedLinkAPIRead
     refused: str | None = None
     options: QuickOptions | None = None
+
+
+def quick_download_preview(s: Session, access: Access, body: QuickDownloadOptionsAPIRequest) -> QuickDownloadPreviewAPIRead | None:
+    """The title and thumbnail of a link from a faster lookup than the full one, or None.
+
+    Only Sources and domains the user may use are asked; anything else, and any
+    failure, gives None, and the full lookup says why.
+    """
+    url = body.url.strip()
+    if "://" not in url:
+        url = f"https://{url}"
+    candidates = [
+        source for source in sources_for(url, preferred_sources(s))
+        if access.allows_link(source.id, url) and (body.source_key is None or source.id == body.source_key)
+    ]
+    for source in candidates:
+        try:
+            preview = source.preview(url)
+        except Exception:  # noqa: BLE001 - a preview is a nicety; the full lookup reports problems.
+            logger.debug("No quick preview from %s for %s", source.id, url, exc_info=True)
+            return None
+        if preview is not None:
+            return QuickDownloadPreviewAPIRead(
+                source_key=source.id, title=preview.title, image_url=preview.image_url,
+                author_name=preview.author_name, site=preview.site,
+            )
+        # The first Source asked is the one the full lookup asks first too.
+        return None
+    return None
 
 
 def quick_download_options(s: Session, access: Access, body: QuickDownloadOptionsAPIRequest) -> QuickDownloadOptionsAPIRead:
