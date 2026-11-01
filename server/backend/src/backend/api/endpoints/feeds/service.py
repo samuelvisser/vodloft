@@ -8,12 +8,13 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 
 from fastapi import HTTPException, Request
 from sqlalchemy import and_, exists, false, func, or_, select, true
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import object_session, Session, joinedload
 
 from backend.api.models.rss_stream_profile import RssStreamProfileAPIRead
 from backend.db.datetime_types import utc_datetime
 from backend.utils.episode import episode_identifier_type_predicate
 from backend.db.models.user import User
+from backend.services import users
 from backend.db.models import (
     DownloadProfile,
     Episode,
@@ -71,6 +72,15 @@ def _owner_may_stream(s: Session, profile: RssStreamProfile) -> bool:
         return True
     owner = s.get(User, profile.owner_user_id)
     return owner is None or owner.is_enabled
+
+
+def _owner_may_use_members_only_media(profile: RssStreamProfile) -> bool:
+    """A feed streams what its owner may use: without the members-only switch, only what a free account gets."""
+    if profile.owner_user_id is None:
+        return True
+    session = object_session(profile)
+    owner = session.get(User, profile.owner_user_id) if session is not None else None
+    return owner is None or users.access_of(owner).members_only
 
 
 def get_rss_stream_profile_by_token(s: Session, token: str) -> RssStreamProfile:
@@ -769,7 +779,7 @@ def get_source_stream_url(
     members_only = profile.show.membership_level not in {
         DwMembershipLevel.FREE.value,
         DwMembershipLevel.HIGHEST_ALLOWED.value,
-    }
+    } and _owner_may_use_members_only_media(profile)
     try:
         media = source.episode_media(slug=episode.slug, members_only=members_only, interactive=True)
     except Exception as exc:

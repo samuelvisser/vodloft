@@ -228,3 +228,28 @@ def test_shows_remember_who_added_them(session):
     ))
     session.flush()
     assert session.query(Show).filter_by(slug="other").one().created_by_user_id is None
+
+
+def test_a_feed_streams_only_what_its_owner_may_use(session, monkeypatch):
+    from backend.api.endpoints.feeds import service as feeds
+    from backend.api.endpoints.rss_stream_profiles import service as rss
+    from backend.db.models import RssStreamProfile, User
+
+    monkeypatch.setattr(rss, "ensure_source_can_stream", lambda show, use_dw_stream: None)
+    _add_users(session, 1)
+    profile = session.get(RssStreamProfile, _profile(session, _user(1, "viewer"), _show(session)).id)
+    profile.show.membership_level = "PREMIUM"
+    asked: list[bool] = []
+
+    class Source:
+        name = "Fake"
+
+        def episode_media(self, *, slug, members_only, interactive=False):
+            asked.append(members_only)
+            return SimpleNamespace(audio_url="https://cdn/a.m4a", video_url="https://cdn/v.mp4")
+
+    episode = SimpleNamespace(slug="ep", source_key="dailywire")
+    feeds.get_source_stream_url(profile, episode, media_kind="audio", source=Source())
+    session.get(User, 1).members_only = True
+    feeds.get_source_stream_url(profile, episode, media_kind="audio", source=Source())
+    assert asked == [False, True]
