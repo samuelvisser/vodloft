@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from backend.security.access import Access
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -687,7 +688,7 @@ def test_create_stream_profile_generates_plain_stable_feed_url(db_session):
         video_output_mode="audio_hls",
     )
 
-    created = create_stream_profile_rss(db_session, _FakeRequest(), body)
+    created = create_stream_profile_rss(db_session, _FakeRequest(), body, Access.full())
 
     from backend.db.models import RssStreamProfile
 
@@ -728,6 +729,7 @@ def test_stream_profile_custom_title_is_persisted_used_and_can_be_cleared(db_ses
             prefer_exact_match=False,
             video_output_mode="audio_hls",
         ),
+        Access.full(),
     )
 
     stored = db_session.get(RssStreamProfile, created.id)
@@ -742,6 +744,7 @@ def test_stream_profile_custom_title_is_persisted_used_and_can_be_cleared(db_ses
 
     updated = update_stream_profile_rss(
         db_session,
+        Access.full(),
         created.id,
         RssStreamProfileAPIUpdate(
             title=show.title,

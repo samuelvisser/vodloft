@@ -19,6 +19,7 @@ from backend.db.models.download_profile import DownloadProfile
 from backend.db.models.stream_profile import RssStreamProfile
 from backend.utils.feed_urls import build_rss_feed_url
 from backend.utils.helpers import generate_stream_profile_token
+from task_manager.scheduler.requester import current_requester
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.season_types import SeasonType
 from sources import Feature, UnknownSourceError, get_source
@@ -126,6 +127,7 @@ def create_show_bundle(s: Session, request: Request, payload: ShowAPICreateBundl
             or build_rss_feed_url(request, token=token, show_slug=show.slug)
         )
         stream_profile.show = show
+        stream_profile.owner_user_id = current_requester.get()
         s.add(stream_profile)
 
     s.flush()

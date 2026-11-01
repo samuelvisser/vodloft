@@ -61,14 +61,14 @@ def record_started(request, *, source_name: str, session: Session | None = None)
         s.add(QuickDownloadHistory(
             quick_download_id=request.id, title=request.title, source_key=request.source_key,
             source_name=source_name, url=request.url, format=request.choice.label,
-            choice=asdict(request.choice), outcome=WORKING,
+            choice=asdict(request.choice), outcome=WORKING, owner=request.owner,
         ))
     _write(session, work)
 
 
 def record_refused(
     *, quick_id: str, title: str, source_key: str, source_name: str, url: str, choice, message: str,
-    session: Session | None = None,
+    owner: str | None = None, session: Session | None = None,
 ) -> None:
     """A link that VODLoft would not download, such as one protected by DRM."""
     def work(s: Session) -> None:
@@ -76,7 +76,7 @@ def record_refused(
         s.add(QuickDownloadHistory(
             quick_download_id=quick_id, title=title, source_key=source_key, source_name=source_name, url=url,
             format=choice.label, choice=asdict(choice), outcome=REFUSED, message=message,
-            started_at=now, finished_at=now,
+            started_at=now, finished_at=now, owner=owner,
         ))
     _write(session, work)
 
@@ -120,19 +120,26 @@ def reconcile_history(session: Session) -> None:
         row.finished_at = (operation.finished_at if operation is not None else None) or datetime.now(timezone.utc)
 
 
-def list_history(session: Session, *, limit: int = 500) -> list[QuickDownloadHistory]:
+def list_history(session: Session, *, owner: str | None = None, everyone: bool = True, limit: int = 500) -> list[QuickDownloadHistory]:
+    """Newest first; without ``everyone``, only the rows of ``owner``."""
     reconcile_history(session)
     session.commit()
+    query = select(QuickDownloadHistory)
+    if not everyone:
+        query = query.where(QuickDownloadHistory.owner == owner)
     return list(session.scalars(
-        select(QuickDownloadHistory)
+        query
         .order_by(QuickDownloadHistory.started_at.desc(), QuickDownloadHistory.id.desc())
         .limit(limit)
     ))
 
 
-def clear_history(session: Session) -> int:
-    """Forget every finished quick download; ones still working or ready stay."""
-    result = session.execute(delete(QuickDownloadHistory).where(QuickDownloadHistory.outcome.in_(FINISHED)))
+def clear_history(session: Session, *, owner: str | None = None, everyone: bool = True) -> int:
+    """Forget every finished quick download (of ``owner`` only, without ``everyone``); ones still working or ready stay."""
+    query = delete(QuickDownloadHistory).where(QuickDownloadHistory.outcome.in_(FINISHED))
+    if not everyone:
+        query = query.where(QuickDownloadHistory.owner == owner)
+    result = session.execute(query)
     return result.rowcount or 0
 
 

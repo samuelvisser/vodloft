@@ -91,8 +91,8 @@ export const router = createBrowserRouter(
       <Route path="add-download-profile" element={g('download_profiles', <AddDownloadProfilePage />, 'manage')} />
       <Route path="edit-download-profile/:id" element={g('download_profiles', <EditDownloadProfilePage />, 'manage')} />
       <Route path="stream-profiles" element={g('stream_profiles', <StreamProfilesPage />)} />
-      <Route path="add-stream-profile" element={g('stream_profiles', <AddStreamProfilePage />, 'manage')} />
-      <Route path="edit-stream-profile/:type/:id" element={g('stream_profiles', <EditStreamProfilePage />, 'manage')} />
+      <Route path="add-stream-profile" element={g('stream_profiles', <AddStreamProfilePage />)} />
+      <Route path="edit-stream-profile/:type/:id" element={g('stream_profiles', <EditStreamProfilePage />)} />
       <Route path="show/:id" element={g('library', <ShowPage />)} />
       <Route path="movie/:slug" element={g('library', <MoviePage />)} />
       <Route path="edit-movie/:slug" element={g('library', <EditMoviePage />, 'manage')} />

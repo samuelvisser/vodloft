@@ -329,11 +329,32 @@ def sign_out_everywhere(user: User) -> None:
     user.session_version += 1
 
 
-def delete_user(session: Session, user: User) -> None:
+def delete_user(session: Session, user: User, *, stream_profiles: str, heir_id: Optional[int]) -> None:
+    """Delete a user. Their Stream Profiles go to ``heir_id`` with ``stream_profiles="transfer"``, or are deleted."""
     if user.is_enabled and is_administrator(user) and _would_leave_no_administrator(session, user):
         raise LastAdministratorError()
+    from backend.db.models import StreamProfileBase
+
+    owned = session.scalars(select(StreamProfileBase).where(StreamProfileBase.owner_user_id == user.id)).all()
+    for profile in owned:
+        if stream_profiles == "transfer":
+            profile.owner_user_id = heir_id
+        else:
+            session.delete(profile)
     session.delete(user)
     session.flush()
+
+
+def _adopt_ownerless_stream_profiles(session: Session, administrator: User) -> None:
+    """Stream Profiles made before user accounts belong to the first administrator."""
+    from sqlalchemy import update
+    from backend.db.models import StreamProfileBase
+
+    session.execute(
+        update(StreamProfileBase)
+        .where(StreamProfileBase.owner_user_id.is_(None))
+        .values(owner_user_id=administrator.id)
+    )
 
 
 def set_accounts_enabled(
@@ -366,4 +387,8 @@ def set_accounts_enabled(
             )
     row.user_accounts_enabled = enabled
     session.flush()
+    if enabled:
+        administrators = created and [created] or sorted(enabled_administrators(session), key=lambda user: user.id)
+        if administrators:
+            _adopt_ownerless_stream_profiles(session, administrators[0])
     return created

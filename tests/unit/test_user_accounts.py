@@ -186,7 +186,7 @@ def test_the_last_administrator_cannot_be_disabled_demoted_or_deleted(app):
 
     assert admin.patch(f"/api/users/{me}", json={"enabled": False}).status_code == 409
     assert admin.patch(f"/api/users/{me}", json={"access": DOWNLOADER}).status_code == 409
-    assert admin.delete(f"/api/users/{me}").status_code == 409
+    assert admin.delete(f"/api/users/{me}?streamProfiles=transfer").status_code == 409
 
     second = admin.post("/api/users", json={
         "username": "marieke", "passwordHash": pw("first-pw"),

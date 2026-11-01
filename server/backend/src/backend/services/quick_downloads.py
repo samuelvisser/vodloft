@@ -114,6 +114,8 @@ class QuickDownloadRequest:
     author_name: str | None = None
     members_only: bool = True
     """The user who asked may use members-only media with the account signed in under Sources."""
+    owner: str | None = None
+    """Id of the user who asked, who alone may see and fetch the file; None without user accounts."""
 
     def task_input(self) -> dict[str, Any]:
         return {**asdict(self), "kind": self.kind.value}
@@ -510,6 +512,7 @@ def ready_manifest(request: QuickDownloadRequest, path: Path, size_bytes: int, *
         id=request.id, title=request.title, file_name=path.name, size_bytes=size_bytes,
         format=request.choice.label, created_at=now,
         expires_at=now + timedelta(hours=get_settings().quick_download.keep_unclaimed_hours),
+        owner=request.owner,
         details={"source_key": source.id, "source_name": source.name, "url": request.url, "kind": request.choice.kind},
     )
 

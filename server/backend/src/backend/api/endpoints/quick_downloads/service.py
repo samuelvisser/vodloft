@@ -36,7 +36,7 @@ from backend.services.quick_downloads import (
     quick_options,
     ready_quick_download,
 )
-from backend.security.access import Access
+from backend.security.access import Access, Area, Level
 from backend.services import quick_download_history as history
 from backend.services.source_requests import asking_source
 from config import get_settings
@@ -77,6 +77,7 @@ def start_quick_download(s: Session, access: Access, body: QuickDownloadAPICreat
             history.record_refused(
                 quick_id=quick_id, title=link.preview.title, source_key=source.id, source_name=source.name,
                 url=link.url, choice=choice, message="Protected by DRM" if link.drm_protected else "Needs a subscription",
+                owner=owner_of(access),
             )
         raise
     check_quick_choice(source, choice)
@@ -103,6 +104,7 @@ def start_quick_download(s: Session, access: Access, body: QuickDownloadAPICreat
         author_name=link.preview.author_name,
         choice=choice,
         members_only=access.members_only,
+        owner=owner_of(access),
     )
     operation = create_quick_download_operation(s, request)
     history.record_started(request, source_name=source.name, session=s)
@@ -132,26 +134,53 @@ def quick_download_options(s: Session, access: Access, body: QuickDownloadOption
     return QuickDownloadOptionsAPIRead.model_validate(_OptionsSource(link, options=options))
 
 
+def owner_of(access: Access) -> str | None:
+    """How a quick download remembers who asked: the user's id, or None without user accounts."""
+    return None if access.user_id is None else str(access.user_id)
+
+
+def sees_everyones(access: Access) -> bool:
+    return access.allows(Area.QUICK_DOWNLOADS, Level.MANAGE)
+
+
+def _mine(access: Access, owner: str | None) -> bool:
+    return sees_everyones(access) or (owner is not None and owner == owner_of(access))
+
+
+def _my_operations(s: Session, access: Access):
+    return [
+        operation for operation in active_quick_download_operations(s)
+        if sees_everyones(access) or (access.user_id is not None and operation.requested_by_user_id == access.user_id)
+    ]
+
+
 def _ready() -> list[QuickFolder]:
     folders = list_quick_folders(get_settings().download_settings.temporary_download_root)
     return sorted((f for f in folders if f.manifest is not None), key=lambda f: f.manifest.created_at, reverse=True)
 
 
-def list_quick_downloads(s: Session) -> QuickDownloadsAPIRead:
-    active = [get_operation(operation.id) for operation in active_quick_download_operations(s)]
+def list_quick_downloads(s: Session, access: Access) -> QuickDownloadsAPIRead:
+    """The user's own quick downloads, or everyone's for those who manage Quick downloads."""
+    active = [get_operation(operation.id) for operation in _my_operations(s, access)]
     return QuickDownloadsAPIRead(
         active=[TaskOperationRead.model_validate(snapshot) for snapshot in active if snapshot is not None],
-        ready=[QuickDownloadAPIRead.model_validate(folder.manifest) for folder in _ready()],
+        ready=[
+            QuickDownloadAPIRead.model_validate(folder.manifest)
+            for folder in _ready() if _mine(access, folder.manifest.owner)
+        ],
     )
 
 
-def remove_quick_download(s: Session, quick_id: str) -> bool:
+def remove_quick_download(s: Session, access: Access, quick_id: str) -> bool:
     """Cancel a quick download that is still working, or delete its ready file."""
     found = False
-    for operation in active_quick_download_operations(s):
+    for operation in _my_operations(s, access):
         if (operation.context or {}).get("quick_download_id") == quick_id:
             cancel_operation(operation.id, reason="Canceled by user")
             found = True
+    ready = ready_quick_download(quick_id)
+    if ready is not None and ready.manifest is not None and not _mine(access, ready.manifest.owner):
+        return found
     return discard_quick_download(quick_id) or found
 
 
@@ -209,9 +238,11 @@ class FileDelivery:
                 position += len(chunk)
 
 
-def file_delivery(quick_id: str, range_header: str | None) -> FileDelivery | None:
+def file_delivery(access: Access, quick_id: str, range_header: str | None) -> FileDelivery | None:
     found = ready_quick_download(quick_id)
     if found is None or found.manifest is None or found.file is None:
+        return None
+    if not _mine(access, found.manifest.owner):
         return None
     size = found.file.stat().st_size
     start, end, partial = 0, size, False
@@ -233,11 +264,12 @@ def file_delivery(quick_id: str, range_header: str | None) -> FileDelivery | Non
     return FileDelivery(quick_id, str(found.file), found.manifest.file_name, size, start, end, partial)
 
 
-def quick_download_history(s: Session) -> list[QuickDownloadHistoryAPIRead]:
-    return [QuickDownloadHistoryAPIRead.model_validate(row) for row in history.list_history(s)]
+def quick_download_history(s: Session, access: Access) -> list[QuickDownloadHistoryAPIRead]:
+    rows = history.list_history(s, owner=owner_of(access), everyone=sees_everyones(access))
+    return [QuickDownloadHistoryAPIRead.model_validate(row) for row in rows]
 
 
-def clear_quick_download_history(s: Session) -> int:
-    removed = history.clear_history(s)
+def clear_quick_download_history(s: Session, access: Access) -> int:
+    removed = history.clear_history(s, owner=owner_of(access), everyone=sees_everyones(access))
     s.commit()
     return removed

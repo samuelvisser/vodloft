@@ -10,6 +10,7 @@ from backend.db.datetime_types import UTCDateTime
 from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.db.mixins.MediaContentMetadataMixin import MediaContentMetadataMixin
+from backend.db.mixins.CreatedByMixin import CreatedByMixin
 from backend.types.media_types import MediaType
 
 from .MediaItemBase import MediaItemBase
@@ -18,7 +19,7 @@ if TYPE_CHECKING:
     from .MovieExtra import MovieExtra
 
 
-class Movie(MediaItemBase, MediaContentMetadataMixin, HasMetadataMixin, HasTaskResourcesMixin):
+class Movie(MediaItemBase, MediaContentMetadataMixin, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     __tablename__ = "media_items_movie"
     __mapper_args__ = {"polymorphic_identity": MediaType.MOVIE.value, "polymorphic_load": "selectin"}
     __task_resource_types__ = ("movie",)

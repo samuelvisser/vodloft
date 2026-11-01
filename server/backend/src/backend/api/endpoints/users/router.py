@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from typing import Literal
+
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 
 from backend.api.models.user import (
     AccessOptionsRead,
@@ -86,7 +88,12 @@ def user_sign_out_everywhere(user_id: int, response: Response, acting: Access = 
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def user_delete(user_id: int):
+def user_delete(
+    user_id: int,
+    stream_profiles: Literal["transfer", "delete"] = Query(alias="streamProfiles"),
+    acting: Access = Depends(administrator),
+):
+    """Delete a user, giving their Stream Profiles to the administrator deleting them, or deleting those too."""
     with db_session() as s:
-        service.delete_user(s, user_id)
+        service.delete_user(s, user_id, stream_profiles, acting)
     return Response(status_code=204)

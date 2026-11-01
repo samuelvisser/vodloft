@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, joinedload
 from backend.api.models.rss_stream_profile import RssStreamProfileAPIRead
 from backend.db.datetime_types import utc_datetime
 from backend.utils.episode import episode_identifier_type_predicate
+from backend.db.models.user import User
 from backend.db.models import (
     DownloadProfile,
     Episode,
@@ -64,6 +65,14 @@ _BARE_HTML_AMPERSAND_RE = re.compile(
 )
 
 
+def _owner_may_stream(s: Session, profile: RssStreamProfile) -> bool:
+    """A disabled user's feeds stop answering until they are enabled again."""
+    if profile.owner_user_id is None:
+        return True
+    owner = s.get(User, profile.owner_user_id)
+    return owner is None or owner.is_enabled
+
+
 def get_rss_stream_profile_by_token(s: Session, token: str) -> RssStreamProfile:
     item: Optional[RssStreamProfile] = (
         s.query(RssStreamProfile)
@@ -71,7 +80,7 @@ def get_rss_stream_profile_by_token(s: Session, token: str) -> RssStreamProfile:
         .filter_by(token=token, enable_profile=True)
         .one_or_none()
     )
-    if item is None:
+    if item is None or not _owner_may_stream(s, item):
         raise HTTPException(status_code=404, detail="Feed not found")
     return item
 

@@ -8,6 +8,7 @@ import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
+import {SegmentedOptions} from '../SegmentedOptions'
 import {SettingsLoading, SettingsSection} from '../Settings/SettingsControls'
 import UserEditor from './UserEditor'
 import {getAccess} from '../../lib/access'
@@ -202,6 +203,7 @@ function UserRow({user, options, onEdit}: {user: UserRead, options: AccessOption
     const queryClient = useQueryClient()
     const [dialog, setDialog] = useState<'password' | 'delete' | null>(null)
     const [oneTime, setOneTime] = useState('')
+    const [profiles, setProfiles] = useState<'transfer' | 'delete'>('transfer')
     const [busy, setBusy] = useState(false)
     const me = getAccess()?.user?.id === user.id
 
@@ -286,10 +288,21 @@ function UserRow({user, options, onEdit}: {user: UserRead, options: AccessOption
                     label: 'Delete user',
                     className: 'btn btn-danger',
                     disabled: busy,
-                    onClick: () => run(() => usersRequest(`/${user.id}`, 'DELETE'), `${user.username} is deleted`),
+                    onClick: () => run(() => usersRequest(`/${user.id}?streamProfiles=${profiles}`, 'DELETE'), `${user.username} is deleted`),
                 }}
             >
                 <p>They can no longer sign in. Disabling them instead keeps their account for later.</p>
+                <p>Their Stream Profiles, and the feeds apps follow through them:</p>
+                <SegmentedOptions<string>
+                    name={`delete-profiles-${user.id}`}
+                    ariaLabel="Their Stream Profiles"
+                    value={profiles}
+                    onChange={(value) => setProfiles(value as 'transfer' | 'delete')}
+                    options={[
+                        {value: 'transfer', label: 'Give them to me', description: 'The feeds keep working.'},
+                        {value: 'delete', label: 'Delete them', description: 'The feeds stop working.'},
+                    ]}
+                />
             </ConfirmDialog>
         </li>
     )

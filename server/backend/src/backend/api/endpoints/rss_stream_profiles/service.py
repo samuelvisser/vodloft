@@ -16,6 +16,8 @@ from backend.db.models.stream_profile import RssStreamProfile
 from backend.types.local_media_profile_types import PreferredFormat
 from backend.types.stream_profile_types import RSS_HLS_OUTPUT_MODES
 from backend.utils.feed_urls import build_rss_feed_url
+from backend.security.access import Access
+from backend.services.stream_profile_owners import check_owner, owned_by
 from backend.utils.helpers import generate_stream_profile_token
 from sources import Feature, get_source
 
@@ -47,9 +49,9 @@ def _keeps_live_episode_handoff(profile: RssStreamProfile) -> bool:
     )
 
 
-def get_rss_stream_profiles_list(s: Session) -> list[RssStreamProfileAPIRead]:
+def get_rss_stream_profiles_list(s: Session, access: Access) -> list[RssStreamProfileAPIRead]:
     items = (
-        s.query(RssStreamProfile)
+        owned_by(s.query(RssStreamProfile), RssStreamProfile.owner_user_id, access)
         .order_by(RssStreamProfile.id)
         .all()
     )
@@ -58,6 +60,7 @@ def get_rss_stream_profiles_list(s: Session) -> list[RssStreamProfileAPIRead]:
 
 def get_stream_profile_rss(
         s: Session,
+        access: Access,
         stream_profile_id: int,
 ) -> RssStreamProfileAPIRead:
     item = (
@@ -67,6 +70,7 @@ def get_stream_profile_rss(
     )
     if item is None:
         raise HTTPException(status_code=404, detail="Stream profile not found")
+    check_owner(item, access)
     return RssStreamProfileAPIRead.model_validate(item)
 
 
@@ -74,6 +78,7 @@ def create_stream_profile_rss(
         s: Session,
         request: Request,
         body: RssStreamProfileAPICreate,
+        access: Access,
 ) -> RssStreamProfileAPIRead:
     show: Optional[Show] = s.get(Show, body.show_id)
     if show is None:
@@ -96,6 +101,7 @@ def create_stream_profile_rss(
     item.show = show
     item.token = token
     item.feed_url = feed_url
+    item.owner_user_id = access.user_id
     s.add(item)
     s.flush()
     return RssStreamProfileAPIRead.model_validate(item)
@@ -103,6 +109,7 @@ def create_stream_profile_rss(
 
 def update_stream_profile_rss(
         s: Session,
+        access: Access,
         stream_profile_id: int,
         body: RssStreamProfileAPIUpdate,
 ) -> RssStreamProfileAPIRead:
@@ -113,6 +120,7 @@ def update_stream_profile_rss(
     )
     if item is None:
         raise HTTPException(status_code=404, detail="Stream profile not found")
+    check_owner(item, access)
     ensure_source_can_stream(item.show, body.use_dw_stream)
 
     feed_url = body.feed_url.strip()
@@ -128,6 +136,7 @@ def update_stream_profile_rss(
 
 def regenerate_stream_profile_rss_token(
         s: Session,
+        access: Access,
         request: Request,
         stream_profile_id: int,
 ) -> RssStreamProfileAPIRead:
@@ -139,6 +148,7 @@ def regenerate_stream_profile_rss_token(
     )
     if item is None:
         raise HTTPException(status_code=404, detail="Stream profile not found")
+    check_owner(item, access)
 
     old_token = item.token
     item.token = generate_stream_profile_token()
@@ -157,6 +167,7 @@ def regenerate_stream_profile_rss_token(
 
 def delete_stream_profile_rss(
         s: Session,
+        access: Access,
         stream_profile_id: int,
 ) -> RssStreamProfileAPIRead:
     item = (
@@ -166,6 +177,7 @@ def delete_stream_profile_rss(
     )
     if item is None:
         raise HTTPException(status_code=404, detail="Stream profile not found")
+    check_owner(item, access)
 
     payload = RssStreamProfileAPIRead.model_validate(item)
     s.delete(item)

@@ -121,8 +121,8 @@ def sign_out_everywhere(session: Session, user_id: int, acting: Access, response
         clear_session_cookie(response)
 
 
-def delete_user(session: Session, user_id: int) -> None:
-    users.delete_user(session, _user(session, user_id))
+def delete_user(session: Session, user_id: int, stream_profiles: str, acting: Access) -> None:
+    users.delete_user(session, _user(session, user_id), stream_profiles=stream_profiles, heir_id=acting.user_id)
     session.commit()
 
 

@@ -7,6 +7,7 @@ from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
 from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
+from backend.db.mixins.CreatedByMixin import CreatedByMixin
 
 if TYPE_CHECKING:
     from backend.db.models.media_item import Episode
@@ -15,7 +16,7 @@ if TYPE_CHECKING:
     from backend.db.models import CustomIndexState
 
 
-class Show(Base, HasMetadataMixin, HasTaskResourcesMixin):
+class Show(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     __tablename__ = "shows"
     __task_resource_types__ = ("show",)
 

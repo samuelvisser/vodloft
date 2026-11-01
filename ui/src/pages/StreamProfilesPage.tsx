@@ -103,7 +103,7 @@ export default function StreamProfilesPage() {
                     <p>Use multiple profiles per show to fit different listening or
                         viewing needs.</p>
                 </PageSubtitle>
-                {can('stream_profiles', 'manage') && <button className="btn btn-primary" onClick={onAdd}>Add stream profile</button>}
+                {can('stream_profiles') && <button className="btn btn-primary" onClick={onAdd}>Add stream profile</button>}
             </div>
 
             <div className="form-row">
