@@ -45,6 +45,20 @@ def select_rendition(
     )
 
 
+def select_quality(renditions: Sequence[VideoRendition], quality: int) -> VideoRendition:
+    """The best rendition at most a quality step high (a few lines over counts, such as 1088 for 1080p),
+    or the lowest one when every rendition is higher."""
+    with_height = [rendition for rendition in renditions if rendition.height]
+    if not with_height:
+        raise MediaUnavailableError(
+            "Master playlist offers no video renditions with a resolution"
+        )
+    fitting = [rendition for rendition in with_height if rendition.height <= quality * 1.05]
+    if not fitting:
+        return min(with_height, key=lambda rendition: (rendition.height, rendition.bandwidth or 0))
+    return max(fitting, key=lambda rendition: (rendition.height, rendition.bandwidth or 0))
+
+
 def resolve_download_source(
     url: str,
     *,
@@ -52,9 +66,13 @@ def resolve_download_source(
     audio_only: bool,
     remux_video_to_mp4: bool,
     video_fallback_for_audio: bool = False,
+    quality: int | None = None,
     cancellation=None,
 ) -> ResolvedDownloadSource:
-    """Probe a source and reduce it to the exact URL and format to download."""
+    """Probe a source and reduce it to the exact URL and format to download.
+
+    ``quality`` picks a video rendition at most that high in place of ``preferred_format``.
+    """
     ensure_not_cancelled(cancellation)
     info = probe(url)
     ensure_not_cancelled(cancellation)
@@ -93,10 +111,13 @@ def resolve_download_source(
             use_hls = info.kind is MediaKind.HLS_MEDIA
         format_downloaded = "audio"
     elif info.kind is MediaKind.HLS_MASTER:
-        requested_height = FORMAT_HEIGHTS.get(preferred_format)
-        if requested_height is None:
-            raise DownloadError(f"Unsupported preferred format '{preferred_format}'")
-        rendition = select_rendition(info.renditions, requested_height)
+        if quality is not None:
+            rendition = select_quality(info.renditions, quality)
+        else:
+            requested_height = FORMAT_HEIGHTS.get(preferred_format)
+            if requested_height is None:
+                raise DownloadError(f"Unsupported preferred format '{preferred_format}'")
+            rendition = select_rendition(info.renditions, requested_height)
         source_url = rendition.url
         format_downloaded = rendition.resolution or "video"
         use_hls = True

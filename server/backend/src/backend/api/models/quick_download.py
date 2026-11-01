@@ -65,6 +65,8 @@ class QuickDownloadOptionsAPIRead(ResponseBase):
     refused: Optional[str] = None
     format_choices: bool = False
     """The Source offers qualities, containers and codecs, not only Best MP4 and M4A."""
+    quality_choices: bool = False
+    """Video comes in more than one quality: always with format choices, otherwise when the link's stream lists them."""
     containers: list[str] = Field(default_factory=list)
     videos: list[QuickDownloadVideoOptionAPIRead] = Field(default_factory=list)
     audio: list[QuickDownloadAudioOptionAPIRead] = Field(default_factory=list)

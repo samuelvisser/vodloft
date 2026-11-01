@@ -48,6 +48,8 @@ export const QuickDownloadOptionsSchema = z.object({
     link: ResolvedLinkReadSchema,
     refused: z.string().nullable().optional(),
     formatChoices: z.boolean(),
+    /** Video comes in more than one quality: always with format choices, otherwise when the link's stream lists them. */
+    qualityChoices: z.boolean().optional().default(false),
     containers: z.array(z.string()),
     videos: z.array(QuickVideoOptionSchema),
     audio: z.array(QuickAudioOptionSchema),

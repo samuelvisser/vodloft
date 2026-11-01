@@ -87,21 +87,29 @@ def start_quick_download(s: Session, access: Access, body: QuickDownloadAPICreat
             )
         raise
     check_quick_choice(source, choice)
+    request = _request(access, link, quick_id, choice)
     estimate = None
     duration = None
-    if source.has(Feature.FORMAT_CHOICES) and (rules.max_bytes or rules.max_duration or rules.fixed_codec):
+    if rules.max_bytes or rules.max_duration or (rules.fixed_codec and source.has(Feature.FORMAT_CHOICES)):
         with asking_source(f"{source.name} could not list the formats of this video"):
-            options = quick_options(source, link.url)
+            options = quick_options(source, link.url, request)
         estimate = estimate_choice(options, choice)
         duration = options.duration
     check_quick_rules(
         source, choice, rules, size_bytes=estimate.size_bytes if estimate else None, duration=duration,
         codecs=estimate.codecs if estimate else None,
     )
-    request = QuickDownloadRequest(
+    operation = create_quick_download_operation(s, request)
+    history.record_started(request, source_name=source.name, session=s)
+    dispatch_queued_media_download_operations(s)
+    return {"queued": True, "operation_id": operation.id, "quick_download_id": request.id}
+
+
+def _request(access: Access, link: ResolvedLinkAPIRead, quick_id: str, choice: QuickChoice) -> QuickDownloadRequest:
+    return QuickDownloadRequest(
         id=quick_id,
-        source_key=source.id,
-        kind=kind,
+        source_key=link.source.id,
+        kind=LinkKind(link.kind),
         slug=link.slug,
         url=link.url,
         title=link.preview.title,
@@ -112,10 +120,6 @@ def start_quick_download(s: Session, access: Access, body: QuickDownloadAPICreat
         members_only=access.members_only,
         owner=owner_of(access),
     )
-    operation = create_quick_download_operation(s, request)
-    history.record_started(request, source_name=source.name, session=s)
-    dispatch_queued_media_download_operations(s)
-    return {"queued": True, "operation_id": operation.id, "quick_download_id": request.id}
 
 
 @dataclass(frozen=True)
@@ -165,7 +169,7 @@ def quick_download_options(s: Session, access: Access, body: QuickDownloadOption
     except QuickDownloadRefused as exc:
         return QuickDownloadOptionsAPIRead.model_validate(_OptionsSource(link, refused=str(exc)))
     with asking_source(f"{source.name} could not list the formats of this video"):
-        options = quick_options(source, link.url)
+        options = quick_options(source, link.url, _request(access, link, "", QuickChoice()))
     return QuickDownloadOptionsAPIRead.model_validate(_OptionsSource(link, options=options))
 
 
