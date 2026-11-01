@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import asdict, dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -18,7 +19,7 @@ from backend.utils.output_template import sanitize_path_component
 from config import get_settings
 from config.settings.submodels import FilenameRestrictionMode
 from downloader import (
-    DownloadError, EncryptedMediaError, MediaUnavailableError, SubscriptionRequiredError, playlist_duration, probe,
+    DownloadError, EncryptedMediaError, MediaUnavailableError, SubscriptionRequiredError, measure_rendition, probe,
 )
 from downloader.lifecycle import DownloadTracker
 from downloader.metadata import MediaServerMetadata
@@ -502,6 +503,36 @@ def _rendition_size(rendition: VideoRendition, duration: float | None) -> int | 
     return int(rendition.bandwidth * duration / 8)
 
 
+_MEASURE_TIMEOUT_S = 8.0
+
+
+def _measure_streams(
+    renditions: set[VideoRendition], audio_url: str | None,
+) -> tuple[dict[VideoRendition, tuple[float, int | None]], int | None]:
+    """Each rendition's length and size, and the audio file's size, asked all at once.
+
+    What fails or takes too long is left out; the caller falls back to the bitrates.
+    """
+    pool = ThreadPoolExecutor(max_workers=len(renditions) + 1, thread_name_prefix="quick-measure")
+    try:
+        jobs = {pool.submit(measure_rendition, rendition.url): rendition for rendition in renditions}
+        audio_job = pool.submit(probe, audio_url) if audio_url else None
+        done, _late = wait([*jobs, *([audio_job] if audio_job else [])], timeout=_MEASURE_TIMEOUT_S)
+        measured = {}
+        for job, rendition in jobs.items():
+            if job in done and job.exception() is None:
+                measured[rendition] = job.result()
+            elif job in done:
+                logger.info("Could not measure %s: %s", rendition.url, job.exception())
+        audio_size = None
+        if audio_job in done and audio_job.exception() is None:
+            audio = audio_job.result()
+            audio_size = audio.content_length if audio.kind is MediaKind.DIRECT_FILE else None
+        return measured, audio_size
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+
+
 def _stream_options(source: Source, link: QuickDownloadRequest) -> QuickOptions | None:
     """The qualities in a link's HLS stream, for a Source without Feature.FORMAT_CHOICES, or None without any."""
     streams = _streams(source, link, _NoTracker())
@@ -512,28 +543,21 @@ def _stream_options(source: Source, link: QuickDownloadRequest) -> QuickOptions 
     if info.kind is not MediaKind.HLS_MASTER or not renditions:
         return None
     best = select_rendition(renditions, FORMAT_HEIGHTS[_BEST_VIDEO])
-    try:
-        duration = playlist_duration(best.url)
-    except Exception:  # noqa: BLE001 - sizes are a nicety; the qualities still count.
-        logger.info("Could not read the length of %s", best.url, exc_info=True)
-        duration = None
-    audio_size = None
-    if streams.audio_url:
-        try:
-            audio = probe(streams.audio_url)
-            audio_size = audio.content_length if audio.kind is MediaKind.DIRECT_FILE else None
-        except Exception:  # noqa: BLE001
-            logger.info("Could not read the size of %s", streams.audio_url, exc_info=True)
+    steps = sorted({_step(rendition.height) for rendition in renditions}, reverse=True)
+    rows = [(None, best)]
+    if len(steps) > 1:
+        rows += [(step, select_quality(renditions, step)) for step in steps]
+    measured, audio_size = _measure_streams({rendition for _quality, rendition in rows}, streams.audio_url)
+    duration = next((length for length, _size in measured.values()), None)
+    if best in measured:
+        duration = measured[best][0]
 
     def option(quality: int | None, rendition: VideoRendition) -> VideoOption:
         codec = _hls_codec(rendition.codecs)
-        size = _rendition_size(rendition, duration)
+        size = measured.get(rendition, (None, None))[1] or _rendition_size(rendition, duration)
         return VideoOption(quality, size, codec, (CodecOption(codec, size),) if codec else ())
 
-    steps = sorted({_step(rendition.height) for rendition in renditions}, reverse=True)
-    videos = [option(None, best)]
-    if len(steps) > 1:
-        videos += [option(step, select_quality(renditions, step)) for step in steps]
+    videos = [option(quality, rendition) for quality, rendition in rows]
     return QuickOptions(
         format_choices=False, containers=("mp4",), videos=tuple(videos),
         audio=(AudioOption("m4a", size_bytes=audio_size),), duration=duration, quality_choices=len(steps) > 1,

@@ -248,7 +248,7 @@ _MASTER = (
 )
 
 
-def _stream(monkeypatch, renditions=_MASTER, *, fail=False):
+def _stream(monkeypatch, renditions=_MASTER, *, fail=False, measured=None):
     """The HLS stream a Wire episode has, as probing it would report."""
     from backend.services import quick_downloads
 
@@ -260,7 +260,12 @@ def _stream(monkeypatch, renditions=_MASTER, *, fail=False):
         return MediaInfo(url=url, kind=MediaKind.HLS_MASTER, renditions=renditions)
 
     monkeypatch.setattr(quick_downloads, "probe", probe)
-    monkeypatch.setattr(quick_downloads, "playlist_duration", lambda url: 100.0)
+    def measure_rendition(url):
+        if measured is not None and url not in measured:
+            raise OSError("too slow")
+        return 100.0, (measured or {}).get(url)
+
+    monkeypatch.setattr(quick_downloads, "measure_rendition", measure_rendition)
 
 
 def test_an_hls_stream_lists_its_qualities_without_format_choices(quick_sources, monkeypatch):
@@ -289,6 +294,44 @@ def test_an_hls_stream_lists_its_qualities_without_format_choices(quick_sources,
     assert not failed.quality_choices and failed.videos == (VideoOption(None),)
 
 
+def test_measured_sizes_win_over_bitrates(quick_sources, monkeypatch):
+    from backend.services.quick_downloads import quick_options
+
+    # 1088 is measured, 720 is not; 360 fails, so it falls back to its bitrate.
+    _stream(monkeypatch, measured={
+        "https://cdn.wire.example/1088.m3u8": 40_000_000, "https://cdn.wire.example/720.m3u8": None,
+    })
+    request = _request("wire", link_kind=LinkKind.EPISODE)
+    options = quick_options(quick_sources.wire, request.url, request)
+    assert [video.size_bytes for video in options.videos] == [40_000_000, 40_000_000, 37_500_000, 10_000_000]
+    assert options.duration == 100.0
+
+
+def test_a_rendition_is_measured_from_a_few_segments(monkeypatch):
+    from contextlib import nullcontext
+
+    from downloader import downloader
+
+    playlist = "#EXTM3U\n" + "".join(f"#EXTINF:6.0,\nseg{i}.ts\n" for i in range(10)) + "#EXTINF:4.0,\nlast.ts\n#EXT-X-ENDLIST\n"
+    asked = []
+    monkeypatch.setattr(downloader, "http_get_text", lambda url, **_k: playlist)
+
+    def http_get(url, **_k):
+        asked.append(url.rsplit("/", 1)[-1])
+        ranged = url.endswith("seg5.ts")
+        headers = {"Content-Range": "bytes 0-0/600", "Content-Length": "1"} if ranged else {"Content-Length": "600"}
+        return nullcontext(SimpleNamespace(headers=headers))
+
+    monkeypatch.setattr(downloader, "http_get", http_get)
+    assert downloader.measure_rendition("https://cdn.example/v/720.m3u8", samples=3) == (64.0, 6400)
+    assert sorted(asked) == ["seg1.ts", "seg5.ts", "seg9.ts"]
+
+    ranged = "#EXTM3U\n#EXTINF:6.0,\n#EXT-X-BYTERANGE:1000@0\nall.ts\n#EXTINF:6.0,\n#EXT-X-BYTERANGE:1500@1000\nall.ts\n"
+    monkeypatch.setattr(downloader, "http_get_text", lambda url, **_k: ranged)
+    asked.clear()
+    assert downloader.measure_rendition("https://cdn.example/v/720.m3u8") == (12.0, 2500) and asked == []
+
+
 def test_a_stream_with_one_quality_offers_only_best(quick_sources, monkeypatch):
     from backend.services.quick_downloads import quick_options
 
@@ -300,15 +343,12 @@ def test_a_stream_with_one_quality_offers_only_best(quick_sources, monkeypatch):
 
 
 def test_hls_renditions_are_picked_by_quality():
-    from downloader.hls import media_playlist_duration
     from downloader.source import select_quality
 
     assert select_quality(_MASTER, 1080).height == 1088
     assert select_quality(_MASTER, 720).height == 720
     assert select_quality(_MASTER, 480).height == 360
     assert select_quality(_MASTER[:2], 480).height == 1080
-    assert media_playlist_duration("#EXTM3U\n#EXTINF:6.0,\na.ts\n#EXTINF:4.5,\nb.ts\n#EXT-X-ENDLIST") == 10.5
-    assert media_playlist_duration("#EXTM3U\n") is None
 
 
 def test_ytdlp_info_becomes_video_formats():

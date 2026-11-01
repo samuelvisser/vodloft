@@ -2,18 +2,19 @@ from __future__ import annotations
 
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 from .errors import DownloadCancelled, DownloadError
 from .hls import (
     is_master_playlist,
     is_playlist,
-    media_playlist_duration,
+    media_playlist_segments,
     parse_master_playlist,
     parse_media_playlist,
     parse_subtitle_renditions,
 )
-from .http import http_get
+from .http import http_get, http_get_text
 from .models import (
     CancelCheck,
     DownloadProgress,
@@ -190,9 +191,52 @@ def download_file(
     return DownloadResult(path=dest_path, bytes_downloaded=bytes_downloaded)
 
 
-def playlist_duration(rendition_url: str) -> Optional[float]:
-    """How long an HLS rendition plays, in seconds, from its media playlist."""
-    return media_playlist_duration(http_get_text_checked(rendition_url))
+_SIZE_SAMPLES = 48
+"""Segments read per rendition. On a 46-minute Daily Wire episode, 48 came within about 3% of
+the real size, where 12 were 15-20% low; the Content-Length of each costs one small request."""
+_SIZE_PARALLEL = 8
+_SIZE_TIMEOUT_S = 5.0
+
+
+def measure_rendition(rendition_url: str, *, samples: int = _SIZE_SAMPLES) -> tuple[float, Optional[int]]:
+    """How long an HLS rendition plays and about how many bytes it has.
+
+    The size is exact when the playlist states each segment's byte range.
+    Otherwise it is the bytes per second of segments spread evenly over the
+    video, read from their headers without fetching them, times the length;
+    None when no sample reports a length.
+    """
+    text = http_get_text(rendition_url, timeout=_SIZE_TIMEOUT_S, retries=0)
+    segments = media_playlist_segments(text, base_url=rendition_url)
+    if not segments:
+        raise DownloadError("Media playlist contains no segments")
+    total = sum(segment.duration for segment in segments)
+    if all(segment.length is not None for segment in segments):
+        return total, sum(segment.length for segment in segments)
+    count = len(segments)
+    picks = sorted({min(count - 1, int(count * (2 * i + 1) / (2 * samples))) for i in range(samples)})
+    with ThreadPoolExecutor(max_workers=min(_SIZE_PARALLEL, len(picks))) as pool:
+        lengths = list(pool.map(_segment_length, (segments[index].url for index in picks)))
+    sampled_bytes = 0
+    sampled_seconds = 0.0
+    for index, length in zip(picks, lengths):
+        if length is not None and segments[index].duration > 0:
+            sampled_bytes += length
+            sampled_seconds += segments[index].duration
+    if not sampled_seconds:
+        return total, None
+    return total, int(sampled_bytes / sampled_seconds * total)
+
+
+def _segment_length(url: str) -> Optional[int]:
+    """A segment's size from its headers, or None. One byte is asked for; the total comes back
+    in Content-Range, or in Content-Length from a server that ignores ranges."""
+    try:
+        with http_get(url, headers={"Range": "bytes=0-0"}, timeout=_SIZE_TIMEOUT_S, retries=0) as resp:
+            length = resp.headers.get("Content-Range", "").rpartition("/")[2] or resp.headers.get("Content-Length")
+    except DownloadError:
+        return None
+    return int(length) if length and length.isdigit() else None
 
 
 def http_get_text_checked(url: str) -> str:

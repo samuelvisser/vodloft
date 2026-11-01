@@ -22,7 +22,7 @@ The chips on each row choose the format: **MP4** or **MKV** for video, **M4A** o
 - **MP3 quality**: 320, 192 or 128 kbps. M4A keeps the original audio; MP3 converts it, for older players and car stereos.
 - **Inside the file**: the title, show or channel and date, and the cover art.
 
-Format and codec choices are offered for links that list their formats, such as yt-dlp links. Other Sources, such as The Daily Wire, offer each quality their stream has, with an estimated size, as MP4 video, or M4A audio. A link whose stream has one quality downloads as Best MP4 video or M4A audio.
+Format and codec choices are offered for links that list their formats, such as yt-dlp links. Other Sources, such as The Daily Wire, offer each quality their stream has, with a size measured from a few segments, as MP4 video, or M4A audio. A link whose stream has one quality downloads as Best MP4 video or M4A audio.
 
 Tick **Use these as my defaults next time** to keep your choices for the next link. The defaults are also under **Settings › Quick download**.
 

@@ -114,20 +114,41 @@ def parse_master_playlist(text: str, base_url: str) -> list[VideoRendition]:
     return renditions
 
 
-def media_playlist_duration(text: str) -> Optional[float]:
-    """The length of a media playlist in seconds, from its segment durations, or None when it lists none."""
-    total = 0.0
-    found = False
+@dataclass(frozen=True)
+class TimedSegment:
+    """One segment of a media playlist with its length, and its byte count when the playlist states it."""
+
+    url: str
+    duration: float
+    length: Optional[int] = None
+
+
+def media_playlist_segments(text: str, base_url: str) -> list[TimedSegment]:
+    """The segments of a media playlist with their lengths, for estimating its size."""
+    segments: list[TimedSegment] = []
+    duration: Optional[float] = None
+    length: Optional[int] = None
     for raw_line in text.splitlines():
         line = raw_line.strip()
-        if not line.startswith("#EXTINF:"):
+        if not line:
             continue
-        try:
-            total += float(line[len("#EXTINF:"):].split(",", 1)[0])
-            found = True
-        except ValueError:
+        if line.startswith("#EXTINF:"):
+            try:
+                duration = float(line[len("#EXTINF:"):].split(",", 1)[0])
+            except ValueError:
+                duration = None
             continue
-    return total if found else None
+        if line.startswith("#EXT-X-BYTERANGE:"):
+            value = line[len("#EXT-X-BYTERANGE:"):].split("@", 1)[0]
+            length = int(value) if value.isdigit() else None
+            continue
+        if line.startswith("#"):
+            continue
+        if duration is not None:
+            segments.append(TimedSegment(urljoin(base_url, line), duration, length))
+        duration = None
+        length = None
+    return segments
 
 
 @dataclass(frozen=True)

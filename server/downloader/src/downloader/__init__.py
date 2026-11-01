@@ -5,7 +5,7 @@ Task Manager, or frontend. Callers prepare immutable plans and consume lifecycle
 snapshots; filesystem ownership and optional download behavior live here.
 """
 
-from .downloader import download_file, download_hls, playlist_duration, probe
+from .downloader import download_file, download_hls, measure_rendition, probe
 from .errors import (
     DownloadCancelled,
     DownloadError,
@@ -33,7 +33,7 @@ from .models import (
 __version__ = "0.3.0"
 
 __all__ = [
-    "playlist_duration",
+    "measure_rendition",
     "probe",
     "download_hls",
     "download_file",
