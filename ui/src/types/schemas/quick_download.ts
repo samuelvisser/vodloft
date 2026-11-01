@@ -69,6 +69,8 @@ export const QuickDownloadReadySchema = z.object({
     sourceName: z.string().nullable().optional(),
     url: z.string().nullable().optional(),
     kind: z.string().nullable().optional(),
+    /** Who asked for it; only for those who see everyone's quick downloads. */
+    ownerName: z.string().nullable().optional(),
 })
 export type QuickDownloadReady = z.infer<typeof QuickDownloadReadySchema>
 
@@ -100,5 +102,7 @@ export const QuickDownloadHistoryEntrySchema = z.object({
     finishedAt: ApiDateTimeSchema.nullable().optional(),
     outcome: z.enum(QUICK_HISTORY_OUTCOMES),
     message: z.string().nullable().optional(),
+    /** Who asked for it; only for those who see everyone's quick downloads. */
+    ownerName: z.string().nullable().optional(),
 })
 export type QuickDownloadHistoryEntry = z.infer<typeof QuickDownloadHistoryEntrySchema>

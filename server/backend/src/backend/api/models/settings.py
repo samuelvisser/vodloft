@@ -392,7 +392,9 @@ class FileWatcherSettingsValue(_SettingsValueModel):
 
 
 
-class QuickDownloadSettingsValue(_SettingsValueModel):
+class QuickDownloadPreferencesValue(_SettingsValueModel):
+    """What the Quick download page starts from: the install's defaults, or a user's own."""
+
     default_kind: QuickDownloadKind
     default_quality: QuickDownloadQuality
     default_container: QuickDownloadContainer
@@ -401,6 +403,16 @@ class QuickDownloadSettingsValue(_SettingsValueModel):
     default_mp3_bitrate: int
     embed_metadata: bool
     embed_artwork: bool
+
+    @field_validator("default_mp3_bitrate")
+    @classmethod
+    def _known_mp3_bitrate(cls, value: int) -> int:
+        if value not in QUICK_DOWNLOAD_MP3_BITRATES:
+            raise ValueError("Choose 320, 192 or 128 kbps")
+        return value
+
+
+class QuickDownloadSettingsValue(QuickDownloadPreferencesValue):
     keep_downloaded_minutes: int = Field(ge=0)
     keep_unclaimed_hours: int = Field(ge=1)
     keep_free_gigabytes: float = Field(ge=0)
@@ -418,12 +430,12 @@ class QuickDownloadSettingsValue(_SettingsValueModel):
     allowed_sources: str
     lock_to_defaults: bool
 
-    @field_validator("default_mp3_bitrate")
-    @classmethod
-    def _known_mp3_bitrate(cls, value: int) -> int:
-        if value not in QUICK_DOWNLOAD_MP3_BITRATES:
-            raise ValueError("Choose 320, 192 or 128 kbps")
-        return value
+
+class QuickDownloadSettingsForUser(QuickDownloadSettingsValue):
+    """Settings › Quick download as one user sees it: their own defaults, where they saved them."""
+
+    own_defaults: bool = False
+    """The defaults are the user's own, not the install's."""
 
 
 class SettingsValues(_SettingsValueModel):

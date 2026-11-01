@@ -253,3 +253,83 @@ def test_a_feed_streams_only_what_its_owner_may_use(session, monkeypatch):
     session.get(User, 1).members_only = True
     feeds.get_source_stream_url(profile, episode, media_kind="audio", source=Source())
     assert asked == [False, True]
+
+
+# Each user's own Quick download defaults -------------------------------------
+
+
+_OWN = {
+    "default_kind": "audio", "default_quality": "720p", "default_container": "mkv", "default_codec": "auto",
+    "default_audio_format": "mp3", "default_mp3_bitrate": 128, "embed_metadata": False, "embed_artwork": True,
+}
+
+
+def _quick_settings(monkeypatch, **changes):
+    from backend.api.endpoints.quick_downloads import service
+    from config import get_settings
+
+    quick = get_settings().quick_download.model_copy(update=changes)
+    monkeypatch.setattr(service, "get_settings", lambda: SimpleNamespace(quick_download=quick))
+    return quick
+
+
+def test_users_keep_their_own_quick_download_defaults(session, monkeypatch):
+    from backend.api.endpoints.quick_downloads.service import quick_download_settings_for, save_quick_download_preferences
+    from backend.api.models.settings import QuickDownloadPreferencesValue
+
+    install = _quick_settings(monkeypatch, lock_to_defaults=False, max_quality="1080p")
+    _add_users(session, 1, 2)
+    saved = save_quick_download_preferences(session, _user(1), QuickDownloadPreferencesValue.model_validate(_OWN))
+    assert saved.own_defaults and saved.default_kind == "audio" and saved.default_mp3_bitrate == 128
+    # The install's rules still apply to them.
+    assert saved.max_quality == "1080p"
+    # Someone else, and the install without accounts, keep the install's defaults.
+    assert not quick_download_settings_for(session, _user(2)).own_defaults
+    assert quick_download_settings_for(session, Access.full()).default_kind == install.default_kind
+
+    forgotten = save_quick_download_preferences(session, _user(1), None)
+    assert not forgotten.own_defaults and forgotten.default_kind == install.default_kind
+
+
+def test_locked_defaults_win_over_a_users_own(session, monkeypatch):
+    from backend.api.endpoints.quick_downloads.service import quick_download_settings_for, save_quick_download_preferences
+    from backend.api.models.settings import QuickDownloadPreferencesValue
+
+    _quick_settings(monkeypatch, lock_to_defaults=False)
+    _add_users(session, 1)
+    save_quick_download_preferences(session, _user(1), QuickDownloadPreferencesValue.model_validate(_OWN))
+    install = _quick_settings(monkeypatch, lock_to_defaults=True)
+    locked = quick_download_settings_for(session, _user(1))
+    assert not locked.own_defaults and locked.default_kind == install.default_kind
+
+
+def test_own_defaults_need_an_account(session):
+    from backend.api.endpoints.quick_downloads.service import PreferencesNeedAnAccount, save_quick_download_preferences
+
+    with pytest.raises(PreferencesNeedAnAccount):
+        save_quick_download_preferences(session, Access.full(), None)
+
+
+def test_everyones_quick_downloads_say_who_asked(session, ready_files):
+    from backend.api.endpoints.quick_downloads.service import list_quick_downloads
+
+    _add_users(session, 1, 2)
+    everyone = _user(9, **{Area.QUICK_DOWNLOADS: Level.MANAGE})
+    names = {f.id: f.owner_name for f in list_quick_downloads(session, everyone).ready}
+    assert names == {"mine": "user1", "theirs": "user2", "before-accounts": None}
+    assert [f.owner_name for f in list_quick_downloads(session, _user(1)).ready] == [None]
+
+
+def test_shows_say_who_added_them(session):
+    from backend.api.models.show import ShowAPIRead
+    from backend.db.models import Show
+    from task_manager.scheduler.requester import current_requester
+
+    _add_users(session, 5)
+    token = current_requester.set(5)
+    try:
+        show_id = _show(session).id
+    finally:
+        current_requester.reset(token)
+    session.expire_all()
+    assert ShowAPIRead.model_validate(session.get(Show, show_id)).added_by == "user5"

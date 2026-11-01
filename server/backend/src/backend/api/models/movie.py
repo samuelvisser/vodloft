@@ -126,3 +126,5 @@ class MovieAPIRead(_MovieAPIBaseOut):
 
     created_at: datetime
     updated_at: datetime
+    added_by: Optional[str] = None
+    """Who added it, with user accounts on."""

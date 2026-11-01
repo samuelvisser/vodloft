@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import ForeignKey, String, false, func, true
+from sqlalchemy import JSON, ForeignKey, String, false, func, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
@@ -54,6 +54,9 @@ class User(Base):
     delete_files: Mapped[bool] = mapped_column(
         default=False, server_default=false(),
         comment="May delete downloaded files from disk",
+    )
+    quick_download_preferences: Mapped[Optional[dict]] = mapped_column(
+        JSON, comment="The user's own Quick download defaults; null: the install's defaults",
     )
     created_by_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"),

@@ -27,6 +27,8 @@ environment:
 
 Restart the container after changing it.
 
+To share VODLoft with other people, each with their own username and password and only the parts they need, turn on user accounts later in **Settings › Users**. See [[User-Accounts]].
+
 Private RSS feeds do not use this administrator login. Each feed has its own secret URL. See [[Security-and-Remote-Access]].
 
 ## 3. Add your first show, movie or video

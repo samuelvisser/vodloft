@@ -130,6 +130,8 @@ export const ShowReadSchema = z.looseObject({
 
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
+    /** Who added it, with user accounts on. */
+    addedBy: z.string().nullable().optional(),
 })
 export type ShowRead = z.infer<typeof ShowReadSchema>;
 

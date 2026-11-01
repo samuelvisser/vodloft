@@ -1,3 +1,4 @@
+import {addedByLabel} from '../../lib/access'
 import {useState} from 'react'
 import {Link, useNavigate, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
@@ -182,6 +183,15 @@ export default function VideoPage() {
                                 <span className="episode-summary-item">
                                     <FontAwesomeIcon icon={faIcon('fass', 'clock')} aria-hidden="true"/>
                                     <span>{duration}</span>
+                                </span>
+                            </>
+                        )}
+                        {addedByLabel(video.addedBy) && (
+                            <>
+                                <span className="episode-summary-separator" aria-hidden="true"/>
+                                <span className="episode-summary-item">
+                                    <FontAwesomeIcon icon={faIcon('fass', 'user')} aria-hidden="true"/>
+                                    <span>{addedByLabel(video.addedBy)}</span>
                                 </span>
                             </>
                         )}

@@ -36,6 +36,8 @@ from backend.services.quick_downloads import (
     quick_options,
     ready_quick_download,
 )
+from backend.api.models.settings import QuickDownloadPreferencesValue, QuickDownloadSettingsForUser
+from backend.db.models import User
 from backend.security.access import Access, Area, Level
 from backend.services import quick_download_history as history
 from backend.services.source_requests import asking_source
@@ -162,13 +164,25 @@ def _ready() -> list[QuickFolder]:
 def list_quick_downloads(s: Session, access: Access) -> QuickDownloadsAPIRead:
     """The user's own quick downloads, or everyone's for those who manage Quick downloads."""
     active = [get_operation(operation.id) for operation in _my_operations(s, access)]
+    manifests = [folder.manifest for folder in _ready() if _mine(access, folder.manifest.owner)]
+    names = _owner_names(s, access, (manifest.owner for manifest in manifests))
     return QuickDownloadsAPIRead(
         active=[TaskOperationRead.model_validate(snapshot) for snapshot in active if snapshot is not None],
         ready=[
-            QuickDownloadAPIRead.model_validate(folder.manifest)
-            for folder in _ready() if _mine(access, folder.manifest.owner)
+            QuickDownloadAPIRead.model_validate(manifest).model_copy(update={"owner_name": names.get(manifest.owner)})
+            for manifest in manifests
         ],
     )
+
+
+def _owner_names(s: Session, access: Access, owners) -> dict[str | None, str]:
+    """Usernames by owner, for those who see everyone's quick downloads with user accounts on."""
+    if access.user_id is None or not sees_everyones(access):
+        return {}
+    ids = {int(owner) for owner in owners if owner and owner.isdigit()}
+    if not ids:
+        return {}
+    return {str(user.id): user.username for user in s.query(User).filter(User.id.in_(ids))}
 
 
 def remove_quick_download(s: Session, access: Access, quick_id: str) -> bool:
@@ -266,10 +280,59 @@ def file_delivery(access: Access, quick_id: str, range_header: str | None) -> Fi
 
 def quick_download_history(s: Session, access: Access) -> list[QuickDownloadHistoryAPIRead]:
     rows = history.list_history(s, owner=owner_of(access), everyone=sees_everyones(access))
-    return [QuickDownloadHistoryAPIRead.model_validate(row) for row in rows]
+    names = _owner_names(s, access, (row.owner for row in rows))
+    return [
+        QuickDownloadHistoryAPIRead.model_validate(row).model_copy(update={"owner_name": names.get(row.owner)})
+        for row in rows
+    ]
 
 
 def clear_quick_download_history(s: Session, access: Access) -> int:
     removed = history.clear_history(s, owner=owner_of(access), everyone=sees_everyones(access))
     s.commit()
     return removed
+
+
+# Each user's own defaults -----------------------------------------------------
+
+
+def quick_download_settings_for(s: Session, access: Access) -> QuickDownloadSettingsForUser:
+    """Settings › Quick download as this user sees it.
+
+    The rules are the install's for everyone. A user who saved their own
+    defaults starts from those, unless the install locks everyone to its own.
+    """
+    quick = get_settings().quick_download
+    result = QuickDownloadSettingsForUser.model_validate(quick)
+    if access.user_id is None or quick.lock_to_defaults:
+        return result
+    user = s.get(User, access.user_id)
+    saved = user.quick_download_preferences if user is not None else None
+    if not saved:
+        return result
+    try:
+        own = QuickDownloadPreferencesValue.model_validate(saved)
+    except ValueError:
+        # Saved before a choice was taken away; the install's defaults stand.
+        return result
+    return result.model_copy(update={**own.model_dump(), "own_defaults": True})
+
+
+def save_quick_download_preferences(
+    s: Session, access: Access, preferences: QuickDownloadPreferencesValue | None,
+) -> QuickDownloadSettingsForUser:
+    """Keep (or with None, forget) the user's own Quick download defaults."""
+    if access.user_id is None:
+        raise PreferencesNeedAnAccount(
+            "Without user accounts, VODLoft keeps one set of defaults: change them in Settings › Quick download."
+        )
+    user = s.get(User, access.user_id)
+    if user is None:
+        raise PreferencesNeedAnAccount("Your account no longer exists.")
+    user.quick_download_preferences = None if preferences is None else preferences.model_dump(by_alias=False)
+    s.flush()
+    return quick_download_settings_for(s, access)
+
+
+class PreferencesNeedAnAccount(Exception):
+    """Own defaults belong to a user account."""

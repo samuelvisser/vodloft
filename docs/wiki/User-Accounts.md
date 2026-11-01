@@ -46,7 +46,9 @@ Deleting downloaded files from disk is a separate switch, on top of the user's l
 - **Quick downloads** belong to whoever asked for them. Users see, fetch and cancel only their own, and only see their own history. Those with **Quick downloads: Everyone's** see everyone's.
 - **Stream Profiles** belong to whoever made them. Users see and change only their own feeds; **Stream Profiles: Everyone's** sees all of them. Profiles made before user accounts were turned on belong to the first administrator.
 - **Operations** (the progress notifications) show only what the user asked for, unless they may see **Tasks**.
-- Shows, movies and videos remember who added them.
+- Shows, movies and videos remember who added them. Administrators see **Added by** on their pages.
+- **Quick download preferences.** The rules in **Settings › Quick download** (highest quality, formats, codec, largest file, longest video, Sources) apply to everyone. Within them, each user can tick **Use these as my defaults next time** in the format panel to save their own choice of kind, quality, format, codec and audio to their account. **Use this VODLoft's defaults instead of mine** goes back. With **Lock to defaults** on, everyone gets the install's defaults.
+- In **Quick downloads: Everyone's**, ready files and history show who asked for them.
 
 When a user is **disabled**, they are signed out everywhere and their feeds stop answering until they are enabled again. When a user is **deleted**, you choose whether their Stream Profiles go to you (the feeds keep working) or are deleted too.
 

@@ -116,17 +116,37 @@ export function choiceFromHistory(stored: Record<string, unknown>, defaults: Qui
     }
 }
 
-/** Settings › Quick download, readable by everyone who may quick download. */
+const QuickDownloadSettingsForUserSchema = QuickDownloadSettingsSchema.extend({
+    /** The defaults are the user's own, saved to their account, not the install's. */
+    ownDefaults: z.boolean().default(false),
+})
+export type QuickDownloadSettingsForUser = z.infer<typeof QuickDownloadSettingsForUserSchema>
+
+export const quickDownloadSettingsQueryKey = ['quickDownloadSettings'] as const
+
+/** Settings › Quick download, readable by everyone who may quick download, with the user's own defaults. */
 export function useQuickDownloadSettings() {
     return useQuery({
-        queryKey: ['quickDownloadSettings'],
+        queryKey: quickDownloadSettingsQueryKey,
         queryFn: async ({signal}) => {
             const response = await fetch(`${apiBase()}/quick-downloads/settings`, {signal, credentials: 'include'})
             if (!response.ok) throw await responseError(response)
-            return QuickDownloadSettingsSchema.parse(await response.json())
+            return QuickDownloadSettingsForUserSchema.parse(await response.json())
         },
         staleTime: 60_000,
     })
+}
+
+/** Save a choice as the user's own defaults, or with ``null`` go back to the install's. */
+export async function saveQuickDownloadPreferences(choice: QuickChoice | null): Promise<QuickDownloadSettingsForUser> {
+    const response = await fetch(`${apiBase()}/quick-downloads/preferences`, {
+        method: choice ? 'PUT' : 'DELETE',
+        credentials: 'include',
+        headers: choice ? {'Content-Type': 'application/json'} : undefined,
+        body: choice ? JSON.stringify(settingsFromChoice(choice)) : undefined,
+    })
+    if (!response.ok) throw await responseError(response)
+    return QuickDownloadSettingsForUserSchema.parse(await response.json())
 }
 
 export function useQuickDownloads() {
