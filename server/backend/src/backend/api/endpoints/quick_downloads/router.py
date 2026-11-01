@@ -9,14 +9,16 @@ from backend.api.models.quick_download import (
     QuickDownloadOptionsAPIRequest,
     QuickDownloadsAPIRead,
 )
-from backend.api.models.settings import QuickDownloadSettingsValue
+from backend.api.models.settings import QuickDownloadPreferencesValue, QuickDownloadSettingsForUser
 from backend.app import db_session
-from config import get_settings
 from backend.services.quick_downloads import QuickDownloadRefused
 
 from .service import (
+    PreferencesNeedAnAccount,
     RangeNotSatisfiable,
     clear_quick_download_history,
+    quick_download_settings_for,
+    save_quick_download_preferences,
     quick_download_history,
     file_delivery,
     list_quick_downloads,
@@ -61,10 +63,35 @@ def quick_download_option_list(body: QuickDownloadOptionsAPIRequest, access: Acc
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@router.get("/settings", dependencies=[requires(Area.QUICK_DOWNLOADS, Level.VIEW)], response_model=QuickDownloadSettingsValue)
-def quick_download_settings():
-    """The defaults and rules in Settings › Quick download, for everyone who may quick download."""
-    return QuickDownloadSettingsValue.model_validate(get_settings().quick_download)
+@router.get("/settings", dependencies=[requires(Area.QUICK_DOWNLOADS, Level.VIEW)], response_model=QuickDownloadSettingsForUser)
+def quick_download_settings(access: Access = signed_in()):
+    """The rules in Settings › Quick download, with the user's own defaults where they saved them."""
+    with db_session() as s:
+        return quick_download_settings_for(s, access)
+
+
+@router.put("/preferences", dependencies=[requires(Area.QUICK_DOWNLOADS, Level.VIEW)], response_model=QuickDownloadSettingsForUser)
+def quick_download_preferences_save(body: QuickDownloadPreferencesValue, access: Access = signed_in()):
+    """Save the user's own Quick download defaults, to start from next time."""
+    with db_session() as s:
+        try:
+            result = save_quick_download_preferences(s, access, body)
+        except PreferencesNeedAnAccount as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        s.commit()
+        return result
+
+
+@router.delete("/preferences", dependencies=[requires(Area.QUICK_DOWNLOADS, Level.VIEW)], response_model=QuickDownloadSettingsForUser)
+def quick_download_preferences_forget(access: Access = signed_in()):
+    """Go back to the install's Quick download defaults."""
+    with db_session() as s:
+        try:
+            result = save_quick_download_preferences(s, access, None)
+        except PreferencesNeedAnAccount as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        s.commit()
+        return result
 
 
 @router.get("", dependencies=[requires(Area.QUICK_DOWNLOADS, Level.VIEW)], response_model=QuickDownloadsAPIRead)

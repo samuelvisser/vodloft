@@ -112,7 +112,9 @@ export function QuickReadyList({ready}: {ready: QuickDownloadReady[]}) {
                         <span className="quick-list-what">
                             <SourceBadge sourceKey={item.sourceKey}/>
                             <span className="quick-list-title">{item.title}</span>
-                            <small className="quick-muted">{item.format} · {formatBytes(item.sizeBytes)}</small>
+                            <small className="quick-muted">
+                                {[item.ownerName && `For ${item.ownerName}`, item.format, formatBytes(item.sizeBytes)].filter(Boolean).join(' · ')}
+                            </small>
                         </span>
                         <span className="quick-list-progress">
                             <small className={item.state === 'delivered' ? 'quick-ok' : 'quick-warn'}>
@@ -204,7 +206,7 @@ export function QuickHistoryList({entries, onDownloadAgain}: {
                             <SourceBadge sourceKey={entry.sourceKey}/>
                             <span className="quick-list-title">{entry.title}</span>
                             <small className="quick-muted">
-                                {[entry.format, entry.sizeBytes ? formatBytes(entry.sizeBytes) : null].filter(Boolean).join(' · ')}
+                                {[entry.ownerName && `For ${entry.ownerName}`, entry.format, entry.sizeBytes ? formatBytes(entry.sizeBytes) : null].filter(Boolean).join(' · ')}
                             </small>
                         </span>
                         <span className="quick-list-progress">

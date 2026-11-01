@@ -20,6 +20,8 @@ type QuickFormatPanelProps = {
     saveAsDefaults: boolean
     onChange: (choice: QuickChoice) => void
     onSaveAsDefaultsChange?: (value: boolean) => void
+    /** Shown while the user's own defaults are in use: go back to the install's. */
+    onForgetOwnDefaults?: () => void
     onClose: () => void
 }
 
@@ -48,7 +50,7 @@ function Choice({selected, disabled, onPick, label, note, size}: {
  * greyed out with the reason.
  */
 export default function QuickFormatPanel({
-    open, options, sourceName, choice, initial, rules, saveAsDefaults, onChange, onSaveAsDefaultsChange, onClose,
+    open, options, sourceName, choice, initial, rules, saveAsDefaults, onChange, onSaveAsDefaultsChange, onForgetOwnDefaults, onClose,
 }: QuickFormatPanelProps) {
     const titleId = useId()
 
@@ -185,6 +187,11 @@ export default function QuickFormatPanel({
                                onChange={(event) => onSaveAsDefaultsChange(event.target.checked)}/>
                         Use these as my defaults next time
                     </label>
+                )}
+                {onForgetOwnDefaults && (
+                    <button type="button" className="btn btn-link quick-panel-forget" onClick={onForgetOwnDefaults}>
+                        Use this VODLoft's defaults instead of mine
+                    </button>
                 )}
 
                 <div className="quick-panel-actions">

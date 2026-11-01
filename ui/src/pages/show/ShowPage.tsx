@@ -1,5 +1,5 @@
 import {sourceControls} from '../../lib/sourceControls'
-import {can} from '../../lib/access'
+import {addedByLabel, can} from '../../lib/access'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
@@ -410,7 +410,7 @@ export default function ShowPage() {
           <div className="show-page-heading">
             <SourceBadge sourceKey={show.sourceKey}/>
             <div className="show-author">{show.authorName}</div>
-            <div className="show-meta">{total} episodes{show.years ? ` • ${show.years}` : ''}</div>
+            <div className="show-meta">{[`${total} episodes`, show.years, addedByLabel(show.addedBy)].filter(Boolean).join(' • ')}</div>
           </div>
 
           <div className="show-page-actions">

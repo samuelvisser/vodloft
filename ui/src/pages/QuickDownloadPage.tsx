@@ -23,9 +23,11 @@ import {
     fetchQuickDownloadOptions,
     fitChoice,
     fitRules,
+    quickDownloadSettingsQueryKey,
     quickDownloadsQueryKey,
     ruleProblem,
     rulesFromSettings,
+    saveQuickDownloadPreferences,
     settingsFromChoice,
     sizeLabel,
     startQuickDownload,
@@ -34,7 +36,7 @@ import {
     useQuickDownloads,
 } from '../lib/quickDownloads'
 import {saveSettingsRequest, useSettings} from '../lib/settings'
-import {can} from '../lib/access'
+import {can, getAccess} from '../lib/access'
 import type {QuickChoice, QuickDownloadHistoryEntry, QuickDownloadOptions} from '../types/schemas/quick_download'
 import type {SettingsFieldPath} from '../types/schemas/settings'
 import type {SourceRead} from '../types/schemas/source'
@@ -54,9 +56,12 @@ export default function QuickDownloadPage() {
     const [params] = useSearchParams()
     const queryClient = useQueryClient()
     const {data: quickSettings} = useQuickDownloadSettings()
-    // Saving the choice as everyone's defaults changes Settings, so only those who manage it may.
-    const mayChangeDefaults = can('settings', 'manage')
-    const {data: settings} = useSettings(mayChangeDefaults)
+    // With user accounts, everyone saves their own defaults to their account, unless the
+    // install locks everyone to its defaults. Without accounts there is one set of defaults,
+    // in Settings, so only those who manage Settings may change it from here.
+    const ownDefaults = getAccess()?.user != null
+    const mayChangeDefaults = ownDefaults ? quickSettings?.lockToDefaults === false : can('settings', 'manage')
+    const {data: settings} = useSettings(!ownDefaults && mayChangeDefaults)
     const {operations} = useOperations()
     const {data: quickDownloads} = useQuickDownloads()
     const keepHistory = quickSettings?.keepHistory ?? false
@@ -136,6 +141,10 @@ export default function QuickDownloadPage() {
     }
 
     const saveDefaults = async () => {
+        if (ownDefaults) {
+            queryClient.setQueryData(quickDownloadSettingsQueryKey, await saveQuickDownloadPreferences(choice))
+            return
+        }
         if (!settings) return
         const changes = settingsFromChoice(choice)
         const changedFields = Object.keys(changes).map((key) => `quickDownload.${key}`) as SettingsFieldPath[]
@@ -143,6 +152,22 @@ export default function QuickDownloadPage() {
         const response = await saveSettingsRequest({values, changedFields})
         if (!response.ok) throw new Error('VODLoft could not save your defaults')
         await queryClient.invalidateQueries({queryKey: ['settings']})
+        await queryClient.invalidateQueries({queryKey: quickDownloadSettingsQueryKey})
+    }
+
+    const forgetOwnDefaults = async () => {
+        try {
+            const updated = await saveQuickDownloadPreferences(null)
+            queryClient.setQueryData(quickDownloadSettingsQueryKey, updated)
+            const installDefaults = choiceFromSettings(updated)
+            const fitted = options ? fitRules(fitChoice(installDefaults, options), options, rules) : installDefaults
+            setChoice(fitted)
+            setInitialChoice(fitted)
+            setSaveAsDefaults(false)
+            toast.success("Back to this VODLoft's defaults.")
+        } catch (exc) {
+            toast.error(exc instanceof Error ? exc.message : String(exc))
+        }
     }
 
     const download = async () => {
@@ -293,6 +318,7 @@ export default function QuickDownloadPage() {
                     saveAsDefaults={saveAsDefaults}
                     onChange={setChoice}
                     onSaveAsDefaultsChange={mayChangeDefaults ? setSaveAsDefaults : undefined}
+                    onForgetOwnDefaults={mayChangeDefaults && quickSettings?.ownDefaults ? forgetOwnDefaults : undefined}
                     onClose={() => setPanelOpen(false)}
                 />
             )}

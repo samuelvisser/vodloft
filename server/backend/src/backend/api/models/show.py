@@ -150,6 +150,8 @@ class ShowAPIRead(_ShowAPIBaseOut):
     """Response body for a show."""
     created_at: datetime
     updated_at: datetime
+    added_by: Optional[str] = None
+    """Who added it, with user accounts on."""
 
 
 class ShowAPIReadView(ShowAPIRead):

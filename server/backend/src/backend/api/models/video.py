@@ -28,6 +28,8 @@ class VideoAPIRead(SourcedResponse):
     duration: float
     drm_protected: bool = False
     needs_subscription: bool = False
+    added_by: Optional[str] = None
+    """Who added it, with user accounts on."""
     sharing_url: str
     author_name: Optional[str]
     author_url: Optional[str]

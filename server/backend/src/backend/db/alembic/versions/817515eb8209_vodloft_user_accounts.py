@@ -59,6 +59,10 @@ def upgrade() -> None:
             "delete_files", sa.Boolean(), server_default=sa.text("0"), nullable=False,
             comment="May delete downloaded files from disk",
         ),
+        sa.Column(
+            "quick_download_preferences", sa.JSON(), nullable=True,
+            comment="The user's own Quick download defaults; null: the install's defaults",
+        ),
         sa.Column("created_by_id", sa.Integer(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("(CURRENT_TIMESTAMP)"), nullable=False),
         sa.Column("last_login_at", sa.DateTime(timezone=True), nullable=True),

@@ -88,6 +88,8 @@ class QuickDownloadAPIRead(ResponseBase):
     source_name: Optional[str] = Field(default=None, validation_alias=AliasPath("details", "source_name"))
     url: Optional[str] = Field(default=None, validation_alias=AliasPath("details", "url"))
     kind: Optional[str] = Field(default=None, validation_alias=AliasPath("details", "kind"))
+    owner_name: Optional[str] = None
+    """Who asked for it; only for those who see everyone's quick downloads."""
 
 
 class QuickDownloadsAPIRead(ResponseBase):
@@ -111,3 +113,5 @@ class QuickDownloadHistoryAPIRead(ResponseBase):
     finished_at: Optional[datetime] = None
     outcome: Literal["working", "ready", "downloaded", "expired", "discarded", "canceled", "failed", "refused"]
     message: Optional[str] = None
+    owner_name: Optional[str] = None
+    """Who asked for it; only for those who see everyone's quick downloads."""

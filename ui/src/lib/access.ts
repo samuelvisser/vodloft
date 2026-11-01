@@ -136,3 +136,8 @@ export function useAccess() {
     signedInUser: access?.user ?? null,
   }
 }
+
+/** "Added by tim", for administrators only; nothing without user accounts. */
+export function addedByLabel(username: string | null | undefined, access: AuthMe | null = current): string | null {
+  return username && access?.administrator && access.accountsEnabled ? `Added by ${username}` : null
+}

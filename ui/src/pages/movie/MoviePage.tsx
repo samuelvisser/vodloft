@@ -1,5 +1,5 @@
 import {useEffect, useMemo, useRef, useState} from 'react'
-import {can} from '../../lib/access'
+import {addedByLabel, can} from '../../lib/access'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link, useNavigate, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
@@ -476,7 +476,7 @@ export default function MoviePage() {
                         {drmProtected && <DrmBadge/>}
                     </div>
                     <h1 id="movie-title">{movie.title}</h1>
-                    <p>{[movie.authorName, duration, movie.matureRating].filter(Boolean).join(' • ')}</p>
+                    <p>{[movie.authorName, duration, movie.matureRating, addedByLabel(localMovie?.addedBy)].filter(Boolean).join(' • ')}</p>
                     {isUpcoming && expectedReleaseDate && (
                         <p className="movie-expected-release">Expected release {expectedReleaseDate}</p>
                     )}

@@ -139,5 +139,7 @@ export const MovieReadSchema = z.looseObject({
     customMetadata: z.record(z.string(), z.string()).default({}),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
+    /** Who added it, with user accounts on. */
+    addedBy: z.string().nullable().optional(),
 })
 export type MovieRead = z.infer<typeof MovieReadSchema>;
