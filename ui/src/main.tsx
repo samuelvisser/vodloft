@@ -19,6 +19,7 @@ import {
 import { loadAppConfig } from './general_utils.js'
 import { loadPublicConfig } from './lib/publicConfig'
 import { router } from './router'
+import { can, loadAccess } from './lib/access'
 
 async function bootstrap() {
   // Load app config before anything renders
@@ -32,22 +33,30 @@ async function bootstrap() {
     console.error('[publicConfig] Failed to load public config during bootstrap', error)
   }
 
+  // Who is signed in decides what to load; App shows the sign-in page when nobody is.
+  try {
+    await loadAccess()
+  } catch (error) {
+    console.error('[access] Failed to load who is signed in during bootstrap', error)
+  }
+  const library = can('library')
+
   // Restore cached data synchronously before initial render to prevent flashes.
-  const cachedShows = loadShowsFromStorage()
+  const cachedShows = library ? loadShowsFromStorage() : null
   if (cachedShows) {
     queryClient.setQueryData(['shows'], cachedShows)
     // Season lists are small and seasonal show pages need them before rendering episode cards.
     // Hydrating them now avoids a skeleton gate without parsing every potentially-large episode list.
     hydrateCachedSeasonQueries(queryClient, cachedShows)
   }
-  const cachedProfiles = loadProfilesFromStorage()
+  const cachedProfiles = can('local_media_profiles') ? loadProfilesFromStorage() : null
   if (cachedProfiles) {
     queryClient.setQueryData(['localMediaProfiles'], cachedProfiles)
   }
 
   // A direct reload of a seasonal show should get its small cached season list before React mounts.
   // Episode previews are read lazily by ShowPage so startup never parses unrelated episode data.
-  hydrateCurrentShowRouteCache(queryClient)
+  if (library) hydrateCurrentShowRouteCache(queryClient)
 
   // Persist small season-query results produced by normal foreground refreshes.
   installShowDataQueryPersistence(queryClient)
@@ -66,6 +75,6 @@ async function bootstrap() {
   )
 
   // Warm only the bounded recent-episode preview per stale show after first paint.
-  scheduleShowDataCacheWarm(queryClient)
+  if (library) scheduleShowDataCacheWarm(queryClient)
 }
 void bootstrap()

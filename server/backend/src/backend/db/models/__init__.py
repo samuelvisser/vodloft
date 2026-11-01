@@ -14,6 +14,7 @@ from .Season import Season
 from .Settings import Settings
 from .SourceDomainPreference import SourceDomainPreference
 from .QuickDownloadHistory import QuickDownloadHistory
+from .user import User, UserAccess, UserSourceAccess
 from .Show import Show
 from .ShowLocalAsset import ShowLocalAsset
 from .Metadata import Metadata

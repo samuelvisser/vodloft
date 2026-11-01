@@ -13,6 +13,8 @@ from .service import (
     list_sources, lookup_show_details, resolve_link, search_source, set_domain_preference, source_with,
     update_source_program,
 )
+from backend.security.access import Access, Area, Level
+from backend.security.deps import requires, requires_any, signed_in
 
 
 router = APIRouter(tags=["Sources"])
@@ -25,26 +27,26 @@ def _source(source_id: str, feature: Feature) -> Source:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@router.get("/sources", response_model=list[SourceAPIRead])
+@router.get("/sources", dependencies=[signed_in()], response_model=list[SourceAPIRead])
 def source_list():
     """List every Source with the Features it supports."""
     return list_sources()
 
 
-@router.get("/sources/problems", response_model=list[SourceProblemAPIRead])
+@router.get("/sources/problems", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=list[SourceProblemAPIRead])
 def source_problems():
     """What the user should fix about any Source, such as an API key that stopped working."""
     return list_source_problems()
 
 
-@router.get("/sources/domains", response_model=list[SourceDomainAPIRead])
+@router.get("/sources/domains", dependencies=[signed_in()], response_model=list[SourceDomainAPIRead])
 def source_domains():
     """Every domain a Source names, with the Sources that can handle its links."""
     with db_session() as s:
         return list_source_domains(s)
 
 
-@router.put("/sources/domains/{domain}", response_model=SourceDomainAPIRead)
+@router.put("/sources/domains/{domain}", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SourceDomainAPIRead)
 def update_source_domain(domain: str, body: SourceDomainAPIUpdate):
     """Choose the Source to ask first for links on a domain."""
     with db_session() as s:
@@ -56,17 +58,17 @@ def update_source_domain(domain: str, body: SourceDomainAPIUpdate):
         return result
 
 
-@router.post("/resolve", response_model=ResolvedLinkAPIRead)
-def resolve(body: ResolveAPIRequest):
+@router.post("/resolve", dependencies=[requires_any((Area.ADD_MEDIA, Level.VIEW), (Area.QUICK_DOWNLOADS, Level.VIEW))], response_model=ResolvedLinkAPIRead)
+def resolve(body: ResolveAPIRequest, access: Access = signed_in()):
     """Find the Source that recognises a link, and what the link points to."""
     with db_session() as s:
         try:
-            return resolve_link(s, body.url, body.source_key)
+            return resolve_link(s, access, body.url, body.source_key)
         except LinkNotRecognisedError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@router.get("/sources/{source_id}/episode-tags", response_model=list[EpisodeTagAPIRead])
+@router.get("/sources/{source_id}/episode-tags", dependencies=[requires_any((Area.LIBRARY, Level.VIEW), (Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW))], response_model=list[EpisodeTagAPIRead])
 def episode_tags(source_id: str, url: str | None = Query(default=None, max_length=2048)):
     """The tags a Source gives episodes, such as Video, Short and Livestream, for the show at ``url`` or for any show."""
     try:
@@ -76,36 +78,36 @@ def episode_tags(source_id: str, url: str | None = Query(default=None, max_lengt
     return [EpisodeTagAPIRead.model_validate(tag) for tag in source.episode_tags_for(url)]
 
 
-@router.get("/sources/{source_id}/show", response_model=ShowDetailsAPIRead)
-def show_details(source_id: str, url: str = Query(min_length=1, max_length=2048)):
+@router.get("/sources/{source_id}/show", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=ShowDetailsAPIRead)
+def show_details(source_id: str, url: str = Query(min_length=1, max_length=2048), access: Access = signed_in()):
     """Look up a show to add, at a Source that lists its episodes."""
-    return lookup_show_details(_source(source_id, Feature.EPISODE_LISTS), url)
+    return lookup_show_details(access, _source(source_id, Feature.EPISODE_LISTS), url)
 
 
-@router.get("/sources/{source_id}/search", response_model=SearchResultsAPIRead)
-def search(source_id: str, q: str = Query(min_length=1, max_length=200)):
+@router.get("/sources/{source_id}/search", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=SearchResultsAPIRead)
+def search(source_id: str, q: str = Query(min_length=1, max_length=200), access: Access = signed_in()):
     """Find shows and videos at a Source by name."""
-    return search_source(_source(source_id, Feature.SEARCH), q)
+    return search_source(access, _source(source_id, Feature.SEARCH), q)
 
 
-@router.get("/sources/{source_id}/program", response_model=ProgramStatusAPIRead)
+@router.get("/sources/{source_id}/program", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=ProgramStatusAPIRead)
 def program_status(source_id: str):
     """The program a Source runs, such as yt-dlp, and when it was last updated."""
     return get_program_status(_source(source_id, Feature.PROGRAM_UPDATES))
 
 
-@router.post("/sources/{source_id}/program/update", response_model=ProgramStatusAPIRead)
+@router.post("/sources/{source_id}/program/update", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=ProgramStatusAPIRead)
 def update_program(source_id: str):
     """Fetch the latest version of a Source's program now."""
     return update_source_program(_source(source_id, Feature.PROGRAM_UPDATES))
 
 
-@router.get("/sources/{source_id}/cookies", response_model=CookiesAPIRead)
+@router.get("/sources/{source_id}/cookies", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=CookiesAPIRead)
 def cookies(source_id: str):
     return _cookies(_source(source_id, Feature.COOKIES))
 
 
-@router.put("/sources/{source_id}/cookies", response_model=CookiesAPIRead)
+@router.put("/sources/{source_id}/cookies", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=CookiesAPIRead)
 def save_cookies(source_id: str, body: CookiesAPIUpdate):
     """Store a cookies.txt file that the Source uses for every lookup and download."""
     source = _source(source_id, Feature.COOKIES)
@@ -116,7 +118,7 @@ def save_cookies(source_id: str, body: CookiesAPIUpdate):
     return _cookies(source)
 
 
-@router.delete("/sources/{source_id}/cookies", response_model=CookiesAPIRead)
+@router.delete("/sources/{source_id}/cookies", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=CookiesAPIRead)
 def remove_cookies(source_id: str):
     source = _source(source_id, Feature.COOKIES)
     source.remove_cookies()
@@ -132,7 +134,7 @@ def _api_key_rejected(exc: ApiKeyRejected) -> HTTPException:
     return HTTPException(status_code=422, detail={"message": str(exc), "fixUrl": exc.fix_url})
 
 
-@router.get("/sources/{source_id}/api", response_model=ApiStatusAPIRead)
+@router.get("/sources/{source_id}/api", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=ApiStatusAPIRead)
 def api_status(source_id: str):
     """The Source's API key and how much of today's quota it spent."""
     source = _source(source_id, Feature.API_KEY)
@@ -140,7 +142,7 @@ def api_status(source_id: str):
         return get_api_status(s, source)
 
 
-@router.put("/sources/{source_id}/api/key", response_model=ApiStatusAPIRead)
+@router.put("/sources/{source_id}/api/key", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=ApiStatusAPIRead)
 def save_api_key(source_id: str, body: ApiKeyAPIUpdate):
     """Test an API key with one call, and store it when the service accepts it."""
     source = _source(source_id, Feature.API_KEY)
@@ -152,7 +154,7 @@ def save_api_key(source_id: str, body: ApiKeyAPIUpdate):
         return get_api_status(s, source)
 
 
-@router.post("/sources/{source_id}/api/key/test", response_model=ApiStatusAPIRead)
+@router.post("/sources/{source_id}/api/key/test", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=ApiStatusAPIRead)
 def test_api_key(source_id: str):
     source = _source(source_id, Feature.API_KEY)
     try:
@@ -163,7 +165,7 @@ def test_api_key(source_id: str):
         return get_api_status(s, source)
 
 
-@router.delete("/sources/{source_id}/api/key", response_model=ApiStatusAPIRead)
+@router.delete("/sources/{source_id}/api/key", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=ApiStatusAPIRead)
 def remove_api_key(source_id: str):
     source = _source(source_id, Feature.API_KEY)
     source.remove_api_key()

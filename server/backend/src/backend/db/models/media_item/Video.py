@@ -8,12 +8,13 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.db.datetime_types import UTCDateTime
 from backend.db.mixins.MediaContentMetadataMixin import MediaContentMetadataMixin
+from backend.db.mixins.CreatedByMixin import CreatedByMixin
 from backend.types.media_types import MediaType
 
 from .MediaItemBase import MediaItemBase
 
 
-class Video(MediaItemBase, MediaContentMetadataMixin):
+class Video(MediaItemBase, MediaContentMetadataMixin, CreatedByMixin):
     """A single video added on its own, outside any show."""
 
     __tablename__ = "media_items_video"

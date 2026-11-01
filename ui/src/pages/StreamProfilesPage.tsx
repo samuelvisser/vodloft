@@ -1,4 +1,5 @@
 import {useCallback, useRef} from 'react'
+import {can} from '../lib/access'
 import {useNavigate} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
@@ -102,7 +103,7 @@ export default function StreamProfilesPage() {
                     <p>Use multiple profiles per show to fit different listening or
                         viewing needs.</p>
                 </PageSubtitle>
-                <button className="btn btn-primary" onClick={onAdd}>Add stream profile</button>
+                {can('stream_profiles') && <button className="btn btn-primary" onClick={onAdd}>Add stream profile</button>}
             </div>
 
             <div className="form-row">

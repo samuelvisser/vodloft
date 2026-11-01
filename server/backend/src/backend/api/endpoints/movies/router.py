@@ -19,13 +19,16 @@ from task_manager.tasks.media_download_operations import (
     create_media_download_operation,
     dispatch_queued_media_download_operations,
 )
+from backend.security.access import Access, Area, Level
+from backend.security.deps import requires, signed_in
 
 router = APIRouter(prefix="/movies", tags=["Movies"])
 
 
-@router.post("/{movie_slug}/index", response_model=MovieAPIRead, status_code=status.HTTP_201_CREATED)
-def movie_index(movie_slug: str):
+@router.post("/{movie_slug}/index", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=MovieAPIRead, status_code=status.HTTP_201_CREATED)
+def movie_index(movie_slug: str, access: Access = signed_in()):
     """Index a browsed Daily Wire movie and its extras without downloading anything."""
+    access.check_link_at("dailywire", None)
     try:
         movie_data = get_dailywire_movie(movie_slug)
     except Exception as exc:
@@ -44,6 +47,7 @@ def movie_index(movie_slug: str):
 
 @router.post(
     "/{movie_slug}/downloads",
+    dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE)],
     response_model=MediaDownloadOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
@@ -77,6 +81,7 @@ def movie_download_create(movie_slug: str, body: MediaDownloadAPICreate):
 
 @router.post(
     "/{movie_slug}/extras/{movie_extra_slug}/downloads",
+    dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE)],
     response_model=MediaDownloadOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
@@ -110,6 +115,7 @@ def movie_extra_download_create(movie_slug: str, movie_extra_slug: str, body: Me
 
 @router.post(
     "/{movie_slug}/extras/refresh",
+    dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
     response_model=TaskOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
@@ -127,6 +133,7 @@ def movie_extras_refresh(movie_slug: str):
 
 @router.post(
     "/{movie_slug}/redownload-media",
+    dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE)],
     response_model=MovieRedownloadOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
@@ -142,14 +149,15 @@ def movie_redownload_media(movie_slug: str):
             raise
 
 
-@router.get("", response_model=list[MovieAPIRead])
+@router.get("", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[MovieAPIRead])
 def movie_list():
     with db_session() as s:
         return get_movies_list(s)
 
 
-@router.post("", response_model=MovieAPIRead, status_code=status.HTTP_201_CREATED)
-def movie_create(body: MovieAPICreate):
+@router.post("", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=MovieAPIRead, status_code=status.HTTP_201_CREATED)
+def movie_create(body: MovieAPICreate, access: Access = signed_in()):
+    access.check_link_at(body.source_key, body.sharing_url)
     with db_session() as s:
         try:
             result = create_movie(s, body)
@@ -160,7 +168,7 @@ def movie_create(body: MovieAPICreate):
             raise
 
 
-@router.post("/{movie_slug}/release-metadata/retry", response_model=MovieAPIRead)
+@router.post("/{movie_slug}/release-metadata/retry", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=MovieAPIRead)
 def movie_release_metadata_retry(movie_slug: str):
     with db_session() as s:
         try:
@@ -172,7 +180,7 @@ def movie_release_metadata_retry(movie_slug: str):
             raise
 
 
-@router.post("/{movie_slug}/refresh", response_model=MovieAPIRead)
+@router.post("/{movie_slug}/refresh", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=MovieAPIRead)
 def movie_refresh(movie_slug: str):
     """Refresh an indexed movie from Daily Wire while callers keep rendering local data."""
     try:
@@ -190,13 +198,13 @@ def movie_refresh(movie_slug: str):
             raise
 
 
-@router.get("/{movie_slug}", response_model=MovieAPIRead)
+@router.get("/{movie_slug}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=MovieAPIRead)
 def movie_detail(movie_slug: str):
     with db_session() as s:
         return get_movie(s, movie_slug)
 
 
-@router.patch("/{movie_slug}", response_model=MovieAPIRead)
+@router.patch("/{movie_slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=MovieAPIRead)
 def movie_update(movie_slug: str, body: MovieAPIUpdate):
     with db_session() as s:
         try:
@@ -208,7 +216,7 @@ def movie_update(movie_slug: str, body: MovieAPIUpdate):
             raise
 
 
-@router.delete("/{movie_slug}", response_model=MovieAPIRead)
+@router.delete("/{movie_slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=MovieAPIRead)
 def movie_delete(movie_slug: str):
     with db_session() as s:
         try:

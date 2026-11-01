@@ -609,3 +609,12 @@ class SettingsAPIRead(ResponseBase):
     download_storage: DownloadStorageInspectionValue
     validation_issues: list[SettingsValidationIssueValue] = Field(default_factory=list)
     updated_at: datetime | None = None
+
+
+class LibraryDefaultsAPIRead(ResponseBase):
+    """The few settings library pages show next to their own choices, for people without Settings."""
+
+    download_mode: DownloadMode
+    thumbnail_mode: ThumbnailMode
+    metadata_mode: MetadataMode
+    no_usable_media_delete_after_minutes: int

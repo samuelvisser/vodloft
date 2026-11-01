@@ -10,6 +10,8 @@ from .service import (
     mark_operation_seen,
     restart_operation,
 )
+from backend.security.access import Access, Area, Level
+from backend.security.deps import requires, signed_in
 
 
 router = APIRouter(prefix="/operations", tags=["Operations"])
@@ -17,6 +19,7 @@ router = APIRouter(prefix="/operations", tags=["Operations"])
 
 @router.get("", response_model=list[TaskOperationRead])
 def operations(
+        access: Access = signed_in(),
         source: str | None = None,
         resource_type: str | None = None,
         resource_id: int | None = None,
@@ -24,8 +27,12 @@ def operations(
         relevant: bool = False,
         limit: int = 100,
 ):
-    """List durable high-level task operations, optionally filtered by resource."""
+    """List durable high-level task operations, optionally filtered by resource.
+
+    Without access to Tasks, a user only sees the operations they asked for.
+    """
     return list_operations(
+        access,
         source=source,
         resource_type=resource_type,
         resource_id=resource_id,
@@ -36,23 +43,23 @@ def operations(
 
 
 @router.get("/{operation_id}", response_model=TaskOperationRead)
-def operation(operation_id: str):
-    result = get_operation(operation_id)
+def operation(operation_id: str, access: Access = signed_in()):
+    result = get_operation(access, operation_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Operation not found")
     return result
 
 
 @router.post("/{operation_id}/seen", response_model=TaskOperationRead)
-def operation_seen(operation_id: str):
+def operation_seen(operation_id: str, access: Access = signed_in()):
     """Acknowledge a terminal UI operation after its notification was presented."""
-    result = mark_operation_seen(operation_id)
+    result = mark_operation_seen(access, operation_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Operation not found")
     return result
 
 
-@router.post("/{operation_id}/cancel", response_model=TaskOperationRead)
+@router.post("/{operation_id}/cancel", dependencies=[requires(Area.TASKS, Level.MANAGE)], response_model=TaskOperationRead)
 def operation_cancel(operation_id: str):
     """Cancel a queued/running operation and stop recoverable work."""
     try:
@@ -64,7 +71,7 @@ def operation_cancel(operation_id: str):
     return result
 
 
-@router.post("/{operation_id}/restart", response_model=TaskOperationRead)
+@router.post("/{operation_id}/restart", dependencies=[requires(Area.TASKS, Level.MANAGE)], response_model=TaskOperationRead)
 def operation_restart(operation_id: str):
     """Restart unfinished logical targets without repeating completed work."""
     try:

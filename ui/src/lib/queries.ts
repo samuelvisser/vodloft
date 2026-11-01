@@ -1,4 +1,5 @@
 import {presentDownloadProgress} from './downloadProgress'
+import {can, type Area} from './access'
 import {
     type InfiniteData,
     keepPreviousData,
@@ -86,9 +87,15 @@ async function fetchParsed<T>(
     return schema.parse(await fetchJSON<unknown>(url, signal))
 }
 
+/** Profile lists are also read by the Add pages and by library managers picking a profile. */
+function profileListsReadable(area: Area): boolean {
+    return can(area) || can('add_media') || can('library', 'manage')
+}
+
 export function useLocalMediaProfiles() {
     const result = useQuery<LocalMediaProfileRead[], Error, LocalMediaProfileRead[], readonly ['localMediaProfiles']>({
         queryKey: ['localMediaProfiles'] as const,
+        enabled: profileListsReadable('local_media_profiles'),
         queryFn: ({signal}) => fetchParsed(
             `${(window as any).appConfig.API_URL}/local-media-profiles`,
             LocalMediaProfileReadSchema.array(),
@@ -105,6 +112,7 @@ export function useLocalMediaProfiles() {
 export function useLocalMediaProfilesView() {
     return useQuery<LocalMediaProfileViewRead[], Error, LocalMediaProfileViewRead[], readonly ['localMediaProfilesView']>({
         queryKey: ['localMediaProfilesView'] as const,
+        enabled: profileListsReadable('local_media_profiles'),
         queryFn: ({signal}) => fetchParsed(
             `${(window as any).appConfig.API_URL}/local-media-profiles/as-view`,
             LocalMediaProfileViewReadSchema.array(),
@@ -130,6 +138,7 @@ export function useLocalMediaProfileView(slug?: string) {
 export function useDownloadProfilesView() {
     return useQuery<DownloadProfileReadView[], Error, DownloadProfileReadView[], readonly ['downloadProfilesView']>({
         queryKey: ['downloadProfilesView'] as const,
+        enabled: profileListsReadable('download_profiles'),
         queryFn: ({signal}) => fetchParsed(
             `${(window as any).appConfig.API_URL}/download-profiles/as-view`,
             DownloadProfileReadViewSchema.array(),
@@ -142,6 +151,7 @@ export function useDownloadProfilesView() {
 export function useRssStreamProfiles() {
     return useQuery<RssStreamProfileRead[], Error, RssStreamProfileRead[], readonly ['rssStreamProfiles']>({
         queryKey: ['rssStreamProfiles'] as const,
+        enabled: can('stream_profiles') || can('library', 'manage'),
         queryFn: ({signal}) => fetchParsed(
             `${(window as any).appConfig.API_URL}/rss-stream-profiles`,
             RssStreamProfileReadSchema.array(),
@@ -154,6 +164,7 @@ export function useRssStreamProfiles() {
 export function useStreamProfilesView() {
     return useQuery<StreamProfileReadView[], Error, StreamProfileReadView[], readonly ['streamProfilesView']>({
         queryKey: ['streamProfilesView'] as const,
+        enabled: can('stream_profiles') || can('library', 'manage'),
         queryFn: ({signal}) => fetchParsed(
             `${(window as any).appConfig.API_URL}/stream-profiles/as-view`,
             StreamProfileReadViewSchema.array(),
@@ -164,7 +175,7 @@ export function useStreamProfilesView() {
 }
 
 export function useShows() {
-    const result = useQuery(showsQueryOptions())
+    const result = useQuery({...showsQueryOptions(), enabled: can('library')})
     useEffect(() => {
         if (result.data) saveShowsToStorage(result.data)
     }, [result.data])
@@ -174,6 +185,7 @@ export function useShows() {
 export function useShowsView() {
     return useQuery<ShowReadView[], Error, ShowReadView[], readonly ['showsView']>({
         queryKey: ['showsView'] as const,
+        enabled: can('library'),
         queryFn: ({signal}) => fetchParsed(
             `${(window as any).appConfig.API_URL}/shows/as-view`,
             ShowReadViewSchema.array(),
@@ -186,6 +198,7 @@ export function useShowsView() {
 export function useMovies() {
     return useQuery<MovieRead[], Error, MovieRead[], readonly ['movies']>({
         queryKey: ['movies'] as const,
+        enabled: can('library'),
         queryFn: ({signal}) => fetchParsed(
             `${(window as any).appConfig.API_URL}/movies`,
             MovieReadSchema.array(),
@@ -198,6 +211,7 @@ export function useMovies() {
 export function useVideos() {
     return useQuery<VideoRead[], Error, VideoRead[], readonly ['videos']>({
         queryKey: ['videos'] as const,
+        enabled: can('library'),
         queryFn: ({signal}) => fetchParsed(
             `${(window as any).appConfig.API_URL}/videos`,
             VideoReadSchema.array(),
@@ -384,6 +398,7 @@ export async function changeSourceApiKey(
 export function useSourceProblems() {
     return useQuery<SourceProblemRead[], Error, SourceProblemRead[], readonly ['sourceProblems']>({
         queryKey: ['sourceProblems'] as const,
+        enabled: can('sources', 'manage'),
         queryFn: ({signal}) => fetchParsed(
             `${(window as any).appConfig.API_URL}/sources/problems`,
             SourceProblemReadSchema.array(),
@@ -629,6 +644,7 @@ export function useRecentlyIndexedEpisodes(limit = 7) {
         readonly ['recentlyIndexedEpisodes', number]
     >({
         queryKey: ['recentlyIndexedEpisodes', limit] as const,
+        enabled: can('library'),
         queryFn: ({signal}) => fetchParsed(
             `${(window as any).appConfig.API_URL}/episodes/as-view/recently-indexed?limit=${limit}`,
             EpisodeIndexedActivityReadSchema.array(),
@@ -1193,8 +1209,9 @@ export function useMediaDownloadsCollection({
     order = 'workflow',
     initialCount = 50,
     batchSize = 50,
-    enabled = true,
+    enabled: wanted = true,
 }: MediaDownloadCollectionQuery = {}) {
+    const enabled = wanted && can('managed_downloads')
     const normalizedStatuses = useMemo(
         () => downloadStatusesForApi(statuses),
         [statuses],
@@ -1325,14 +1342,16 @@ export function applyMediaDownloadQueuePositions(
 }
 
 // Prefetch core data to warm the cache on app start
+/** Warm the lists the pages share, only the ones the signed-in person may read. */
 export function prefetchCoreData(qc: QueryClient) {
-    void qc
+    const library = can('library')
+    if (library) void qc
         .prefetchQuery(showsQueryOptions())
         .then(() => {
             const shows = qc.getQueryData<ShowRead[]>(showsQueryOptions().queryKey)
             if (shows) saveShowsToStorage(shows)
         })
-    void qc.prefetchQuery({
+    if (library) void qc.prefetchQuery({
         queryKey: ['movies'],
         queryFn: ({signal}) => fetchParsed(
             `${(window as any).appConfig.API_URL}/movies`,
@@ -1340,7 +1359,7 @@ export function prefetchCoreData(qc: QueryClient) {
             signal,
         ),
     })
-    void qc
+    if (profileListsReadable('local_media_profiles')) void qc
         .prefetchQuery({
             queryKey: ['localMediaProfiles'],
             queryFn: ({signal}) => fetchParsed(
@@ -1353,7 +1372,7 @@ export function prefetchCoreData(qc: QueryClient) {
             const profiles = qc.getQueryData<LocalMediaProfileRead[]>(['localMediaProfiles'])
             if (profiles) saveProfilesToStorage(profiles)
         })
-    void qc.prefetchQuery({
+    if (profileListsReadable('download_profiles')) void qc.prefetchQuery({
         queryKey: ['downloadProfilesView'],
         queryFn: ({signal}) => fetchParsed(
             `${(window as any).appConfig.API_URL}/download-profiles/as-view`,
@@ -1361,7 +1380,8 @@ export function prefetchCoreData(qc: QueryClient) {
             signal,
         ),
     })
-    void qc.prefetchQuery({
+    const streamProfiles = can('stream_profiles') || can('library', 'manage')
+    if (streamProfiles) void qc.prefetchQuery({
         queryKey: ['rssStreamProfiles'],
         queryFn: ({signal}) => fetchParsed(
             `${(window as any).appConfig.API_URL}/rss-stream-profiles`,
@@ -1369,7 +1389,7 @@ export function prefetchCoreData(qc: QueryClient) {
             signal,
         ),
     })
-    void qc.prefetchQuery({
+    if (streamProfiles) void qc.prefetchQuery({
         queryKey: ['streamProfilesView'],
         queryFn: ({signal}) => fetchParsed(
             `${(window as any).appConfig.API_URL}/stream-profiles/as-view`,

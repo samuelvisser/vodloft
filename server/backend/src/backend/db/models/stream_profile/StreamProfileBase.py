@@ -51,6 +51,11 @@ class StreamProfileBase(Base):
         nullable=False,
     )
 
+    owner_user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True, default=None,
+        comment="The user whose feed this is; only they and those who manage every Stream Profile see it",
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()
     )

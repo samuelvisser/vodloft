@@ -9,7 +9,10 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "e6a2c9d4f817"
+HEAD_REVISION = "38b1bb1c658d"
+VODLOFT_OPERATION_REQUESTERS_REVISION = "c0844e0acfe7"
+VODLOFT_USER_ACCOUNTS_REVISION = "6719db3d610f"
+VODLOFT_0_4_0_REVISION = "e6a2c9d4f817"
 VODLOFT_NEEDS_SUBSCRIPTION_REVISION = "c41e7a9d3f58"
 VODLOFT_REMOVED_FROM_SOURCE_REVISION = "a7e4c2d91b35"
 VODLOFT_STORED_NAMES_REVISION = "f4abb559e3ab"
@@ -250,7 +253,10 @@ def test_migration_history_has_one_head(migration_database):
     )
 
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == VODLOFT_NEEDS_SUBSCRIPTION_REVISION
+    assert script.get_revision(HEAD_REVISION).down_revision == VODLOFT_OPERATION_REQUESTERS_REVISION
+    assert script.get_revision(VODLOFT_OPERATION_REQUESTERS_REVISION).down_revision == VODLOFT_USER_ACCOUNTS_REVISION
+    assert script.get_revision(VODLOFT_USER_ACCOUNTS_REVISION).down_revision == VODLOFT_0_4_0_REVISION
+    assert script.get_revision(VODLOFT_0_4_0_REVISION).down_revision == VODLOFT_NEEDS_SUBSCRIPTION_REVISION
     assert script.get_revision(VODLOFT_NEEDS_SUBSCRIPTION_REVISION).down_revision == VODLOFT_REMOVED_FROM_SOURCE_REVISION
     assert script.get_revision(VODLOFT_REMOVED_FROM_SOURCE_REVISION).down_revision == VODLOFT_STORED_NAMES_REVISION
     assert script.get_revision(VODLOFT_STORED_NAMES_REVISION).down_revision == VODLOFT_SOURCE_IDENTITY_REVISION

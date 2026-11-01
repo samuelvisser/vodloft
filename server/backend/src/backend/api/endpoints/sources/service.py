@@ -10,6 +10,7 @@ from backend.api.models.source import (
     SourceAPIRead, SourceDomainAPIRead,
 )
 from backend.db.models import Episode, Show, SourceDomainPreference
+from backend.security.access import Access
 from backend.services.source_requests import asking_source
 from backend.utils.helpers import slugify
 from sources import (
@@ -42,8 +43,9 @@ def source_with(source_id: str, feature: Feature) -> Source:
     return source
 
 
-def lookup_show_details(source: Source, url: str) -> ShowDetailsAPIRead:
+def lookup_show_details(access: Access, source: Source, url: str) -> ShowDetailsAPIRead:
     """Look up a show to add, shaped like the fields of a new show."""
+    access.check_link(source, url)
     with asking_source(f"{source.name} could not look up this show"):
         details = source.show_details(url)
     author = details.author_name or details.title
@@ -60,10 +62,15 @@ def lookup_show_details(source: Source, url: str) -> ShowDetailsAPIRead:
     )
 
 
-def search_source(source: Source, query: str) -> SearchResultsAPIRead:
+def search_source(access: Access, source: Source, query: str) -> SearchResultsAPIRead:
+    """Search a Source, leaving out results on domains the user may not use."""
+    access.check_source(source)
     with asking_source(f"{source.name} could not be searched"):
         answer = source.search(query)
-    return SearchResultsAPIRead.model_validate(answer)
+    results = SearchResultsAPIRead.model_validate(answer)
+    return results.model_copy(update={
+        "results": [result for result in results.results if access.allows_link(source.id, result.url)],
+    })
 
 
 def get_program_status(source: Source) -> ProgramStatusAPIRead:
@@ -130,25 +137,35 @@ def preferred_sources(s: Session) -> dict[str, str]:
     return {row.domain: row.source_key for row in s.query(SourceDomainPreference)}
 
 
-def resolve_link(s: Session, url: str, source_key: str | None = None) -> ResolvedLinkAPIRead:
+def resolve_link(s: Session, access: Access, url: str, source_key: str | None = None) -> ResolvedLinkAPIRead:
     """Ask each Source that claims the link, preferred first, until one recognises it.
 
-    With ``source_key`` only that Source is asked.
+    With ``source_key`` only that Source is asked. Only Sources and domains the
+    user may use are asked, and the link the Source resolves to must be one the
+    user may use too, so a link cannot redirect them somewhere else.
     """
     url = url.strip()
     if "://" not in url:
         url = f"https://{url}"
     candidates = sources_for(url, preferred_sources(s))
-    asked = candidates
+    allowed = [source for source in candidates if access.allows_link(source.id, url)]
     if source_key is not None:
         asked = [source for source in candidates if source.id == source_key]
         if not asked:
             raise LinkNotRecognisedError(f"Source '{source_key}' does not handle links on this site")
+        access.check_link(asked[0], url)
+    else:
+        if candidates and not allowed:
+            # Name the domain when the user may use one of the Sources, otherwise the Source.
+            usable = [source for source in candidates if access.allows_source(source.id)]
+            access.check_link((usable or candidates)[0], url)
+        asked = allowed
     for source in asked:
         with asking_source(f"{source.name} could not look up this link"):
             link = source.resolve(url)
         if link is not None:
-            return _to_read(s, source, link, candidates)
+            access.check_link(source, link.url)
+            return _to_read(s, source, link, allowed)
     if source_key is not None:
         raise LinkNotRecognisedError(f"{asked[0].name} does not recognise this link")
     raise LinkNotRecognisedError("No Source recognises this link")

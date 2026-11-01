@@ -1,4 +1,5 @@
 import {useCallback, useRef} from 'react'
+import {can} from '../lib/access'
 import {useNavigate} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
@@ -94,7 +95,7 @@ export default function DownloadProfilesPage() {
                     <p>Download Profiles are always connected to a Local Media Profile, which defines where your
                         downloads will be stored and what their file name should be.</p>
                 </PageSubtitle>
-                <button className="btn btn-primary" onClick={onAdd}>Add download profile</button>
+                {can('download_profiles', 'manage') && <button className="btn btn-primary" onClick={onAdd}>Add download profile</button>}
             </div>
 
             <div className="form-row">

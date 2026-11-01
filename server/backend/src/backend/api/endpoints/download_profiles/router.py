@@ -4,6 +4,8 @@ from .service import *
 from .as_view import download_profile_view_router
 from ...models.download_profile import *
 from backend.app import db_session
+from backend.security.access import Area, Level
+from backend.security.deps import requires, requires_any
 
 router = APIRouter(prefix="/download-profiles", tags=["Download Profiles"])
 
@@ -11,7 +13,7 @@ router = APIRouter(prefix="/download-profiles", tags=["Download Profiles"])
 router.include_router(download_profile_view_router)
 
 
-@router.get("", response_model=list[DownloadProfileAPIRead])
+@router.get("", dependencies=[requires_any((Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=list[DownloadProfileAPIRead])
 def download_profiles_list():
     """
     List all download profiles.
@@ -20,7 +22,7 @@ def download_profiles_list():
         return get_download_profiles_list(s)
 
 
-@router.get("/by-show-slug/{show_slug}", response_model=list[DownloadProfileAPIRead])
+@router.get("/by-show-slug/{show_slug}", dependencies=[requires_any((Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=list[DownloadProfileAPIRead])
 def download_profiles_by_show_slug_list(show_slug: str):
     """
     List all download profiles in any show.
@@ -29,7 +31,7 @@ def download_profiles_by_show_slug_list(show_slug: str):
         return get_download_profiles_list(s, show_slug)
 
 
-@router.get("/{download_profile_id}", response_model=DownloadProfileAPIRead)
+@router.get("/{download_profile_id}", dependencies=[requires_any((Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=DownloadProfileAPIRead)
 def download_profile_detail(download_profile_id: int):
     """
     Retrieve a single download profile.
@@ -38,7 +40,7 @@ def download_profile_detail(download_profile_id: int):
         return get_download_profile(s, download_profile_id)
 
 
-@router.post("", response_model=DownloadProfileAPIRead, status_code=status.HTTP_201_CREATED)
+@router.post("", dependencies=[requires(Area.DOWNLOAD_PROFILES, Level.MANAGE)], response_model=DownloadProfileAPIRead, status_code=status.HTTP_201_CREATED)
 def download_profiles_create(body: DownloadProfileAPICreate):
     """
     Create a new download profile.
@@ -56,7 +58,7 @@ def download_profiles_create(body: DownloadProfileAPICreate):
             raise
 
 
-@router.patch("/{download_profile_id}", response_model=DownloadProfileAPIRead)
+@router.patch("/{download_profile_id}", dependencies=[requires(Area.DOWNLOAD_PROFILES, Level.MANAGE)], response_model=DownloadProfileAPIRead)
 def download_profiles_update(download_profile_id: int, body: DownloadProfileAPIUpdate):
     """
     Update an existing download profile.
@@ -71,7 +73,7 @@ def download_profiles_update(download_profile_id: int, body: DownloadProfileAPIU
             raise
 
 
-@router.delete("/{download_profile_id}", response_model=DownloadProfileAPIRead)
+@router.delete("/{download_profile_id}", dependencies=[requires(Area.DOWNLOAD_PROFILES, Level.MANAGE)], response_model=DownloadProfileAPIRead)
 def download_profiles_delete(download_profile_id: int):
     """
     Delete a download profile.

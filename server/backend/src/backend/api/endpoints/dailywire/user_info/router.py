@@ -5,12 +5,13 @@ from fastapi import APIRouter, HTTPException
 from backend.api.datetime import api_timezone_payload
 from sources.dailywire.api.records import DwUserInfo
 from .service import get_user_info
+from backend.security.deps import signed_in
 
 
 router = APIRouter(prefix="/user-info", tags=["DailyWire User"])
 
 
-@router.get("", response_model=DwUserInfo)
+@router.get("", dependencies=[signed_in()], response_model=DwUserInfo)
 def user_info():
     """
     Return the current user's DailyWire account info.

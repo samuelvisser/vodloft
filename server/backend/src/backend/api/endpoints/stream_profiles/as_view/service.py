@@ -1,4 +1,6 @@
 from __future__ import annotations
+from backend.security.access import Access
+from backend.services.stream_profile_owners import check_owner, owned_by
 
 from dataclasses import dataclass
 from fastapi import HTTPException
@@ -20,10 +22,10 @@ def _to_view(item: AliasedClass[StreamProfileBase]) -> StreamProfileAPIReadView:
     )
 
 
-def get_stream_profile_views_list(s: Session) -> list[StreamProfileAPIReadView]:
+def get_stream_profile_views_list(s: Session, access: Access) -> list[StreamProfileAPIReadView]:
     profile = with_polymorphic(StreamProfileBase, [RssStreamProfile])
     items = (
-        s.query(profile)
+        owned_by(s.query(profile), profile.owner_user_id, access)
         .options(joinedload(profile.show))
         .join(Show, Show.id == profile.show_id)
         .order_by(Show.title.asc(), profile.id.asc())
@@ -34,6 +36,7 @@ def get_stream_profile_views_list(s: Session) -> list[StreamProfileAPIReadView]:
 
 def get_stream_profile_view(
     s: Session,
+    access: Access,
     stream_profile_id: int,
 ) -> StreamProfileAPIReadView:
     profile = with_polymorphic(StreamProfileBase, [RssStreamProfile])
@@ -45,4 +48,5 @@ def get_stream_profile_view(
     )
     if item is None:
         raise HTTPException(status_code=404, detail="Stream profile not found")
+    check_owner(item, access)
     return _to_view(item)

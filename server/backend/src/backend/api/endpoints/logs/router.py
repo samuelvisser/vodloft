@@ -4,12 +4,14 @@ from fastapi import APIRouter, Query
 
 from backend.api.models.logs import ApplicationLogEntryRead, ApplicationLogPageRead
 from backend.logging_buffer import get_application_logs, max_application_log_entries
+from backend.security.access import Area, Level
+from backend.security.deps import requires
 
 
 router = APIRouter(prefix="/logs", tags=["Logs"])
 
 
-@router.get("", response_model=ApplicationLogPageRead)
+@router.get("", dependencies=[requires(Area.LOGS, Level.VIEW)], response_model=ApplicationLogPageRead)
 def application_logs(
     level: str | None = None,
     search: str | None = None,

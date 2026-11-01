@@ -9,6 +9,8 @@ import LoginPage from './pages/LoginPage'
 import OperationNotifier from './components/OperationNotifier/OperationNotifier'
 import {operationNotificationDefinitions} from './components/OperationNotifier/OperationNotificationDefinitions'
 import FrontendPuller from './lib/puller'
+import ForcedPasswordChangePage from './pages/ForcedPasswordChangePage'
+import { accessChecked, getAccess, loadAccess } from './lib/access'
 
 type OnboardingStatus = {
   completed: boolean
@@ -18,26 +20,25 @@ type OnboardingStatus = {
 export default function App() {
   const navigate = useNavigate()
 
-  const [authState, setAuthState] = useState<'checking' | 'ok' | 'no'>('checking')
+  // main.tsx asked who is signed in before rendering; ask again only if that failed.
+  const [authState, setAuthState] = useState<'checking' | 'ok' | 'no'>(getAccess() ? 'ok' : accessChecked() ? 'no' : 'checking')
   const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus | null>(null)
   const [onboardingError, setOnboardingError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (authState !== 'checking') return
     let cancelled = false
-    const base = (window as any).appConfig?.API_URL || '/api'
-    fetch(`${base}/auth/status`, { credentials: 'include' })
-      .then((r) => {
-        if (cancelled) return
-        setAuthState(r.ok ? 'ok' : 'no')
+    loadAccess()
+      .then((access) => {
+        if (!cancelled) setAuthState(access ? 'ok' : 'no')
       })
       .catch(() => {
-        if (cancelled) return
-        setAuthState('no')
+        if (!cancelled) setAuthState('no')
       })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [authState])
 
   const loadOnboardingStatus = useCallback(async () => {
     setOnboardingError(null)
@@ -55,10 +56,12 @@ export default function App() {
     }
   }, [])
 
+  const mustChangePassword = Boolean(getAccess()?.user?.mustChangePassword)
+
   useEffect(() => {
-    if (authState !== 'ok') return
+    if (authState !== 'ok' || mustChangePassword) return
     void loadOnboardingStatus()
-  }, [authState, loadOnboardingStatus])
+  }, [authState, mustChangePassword, loadOnboardingStatus])
 
   if (authState === 'checking') {
     return null
@@ -66,6 +69,10 @@ export default function App() {
 
   if (authState === 'no') {
     return <LoginPage />
+  }
+
+  if (mustChangePassword) {
+    return <ForcedPasswordChangePage />
   }
 
   if (!onboardingStatus) {

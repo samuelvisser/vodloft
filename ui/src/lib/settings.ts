@@ -1,5 +1,9 @@
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query'
+import {z} from 'zod'
 import {
+    DownloadModeSchema,
+    MetadataModeSchema,
+    ThumbnailModeSchema,
     SettingsFieldPath,
     SettingsRead,
     SettingsReadSchema,
@@ -44,9 +48,10 @@ export async function saveSettingsRequest({
     })
 }
 
-export function useSettings() {
+export function useSettings(enabled = true) {
     return useQuery({
         queryKey: ['settings'] as const,
+        enabled,
         queryFn: async ({signal}) => {
             const response = await fetch(settingsUrl(), {
                 signal,
@@ -74,5 +79,27 @@ export function useSaveSettings() {
         onSuccess: (settings) => {
             queryClient.setQueryData(['settings'], settings)
         },
+    })
+}
+
+
+export const LibraryDefaultsSchema = z.object({
+    downloadMode: DownloadModeSchema,
+    thumbnailMode: ThumbnailModeSchema,
+    metadataMode: MetadataModeSchema,
+    noUsableMediaDeleteAfterMinutes: z.number(),
+})
+export type LibraryDefaults = z.infer<typeof LibraryDefaultsSchema>
+
+/** The few settings library pages show, readable without access to Settings. */
+export function useLibraryDefaults() {
+    return useQuery({
+        queryKey: ['libraryDefaults'] as const,
+        queryFn: async ({signal}) => {
+            const response = await fetch(`${settingsUrl()}/library-defaults`, {signal, credentials: 'include'})
+            if (!response.ok) throw await errorFromResponse(response, 'Failed to load settings')
+            return LibraryDefaultsSchema.parse(await response.json())
+        },
+        staleTime: 60_000,
     })
 }

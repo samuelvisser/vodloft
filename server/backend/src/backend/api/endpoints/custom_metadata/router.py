@@ -19,13 +19,15 @@ from .service import (
     get_custom_metadata_fields,
     remove_shared_custom_metadata_fields,
 )
+from backend.security.access import Area, Level
+from backend.security.deps import requires
 
 
 router = APIRouter(tags=["Custom Metadata"])
 
 
 
-@router.get("/custom-metadata/fields", response_model=list[str])
+@router.get("/custom-metadata/fields", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[str])
 def custom_metadata_fields(
     scope: CustomMetadataScope = Query(...),
 ) -> list[str]:
@@ -34,7 +36,7 @@ def custom_metadata_fields(
         return get_custom_metadata_fields(session, scope)
 
 
-@router.put("/shows/{show_slug}/metadata", response_model=ShowAPIRead)
+@router.put("/shows/{show_slug}/metadata", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=ShowAPIRead)
 def show_custom_metadata_update(show_slug: str, body: CustomMetadataAPIUpdate) -> ShowAPIRead:
     with db_session() as session:
         show = session.query(Show).filter_by(slug=show_slug).one_or_none()
@@ -58,7 +60,7 @@ def show_custom_metadata_update(show_slug: str, body: CustomMetadataAPIUpdate) -
             raise
 
 
-@router.put("/movies/{movie_slug}/metadata", response_model=MovieAPIRead)
+@router.put("/movies/{movie_slug}/metadata", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=MovieAPIRead)
 def movie_custom_metadata_update(movie_slug: str, body: CustomMetadataAPIUpdate) -> MovieAPIRead:
     with db_session() as session:
         movie = session.query(Movie).filter_by(slug=movie_slug).one_or_none()

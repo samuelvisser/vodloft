@@ -31,6 +31,7 @@ def _operation(*, status: str, targets: list[object]):
         status=status,
         progress=25,
         completion_progress=25,
+        requested_by_user_id=None,
         message="Running",
         result=None,
         context=None,

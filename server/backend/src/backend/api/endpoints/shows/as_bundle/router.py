@@ -1,18 +1,23 @@
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, HTTPException, Request, status
 
 from .service import *
 from ....models.show import ShowAPIRead
 from ....models.show_as_bundle import ShowAPICreateBundle
 from backend.app import db_session
+from backend.security.access import Access, Area, Level
+from backend.security.deps import requires, signed_in
 
 router = APIRouter(prefix = "/as-bundle")
 
 
-@router.post("", response_model=ShowAPIRead, status_code=status.HTTP_201_CREATED)
-def show_create_as_bundle(body: ShowAPICreateBundle, request: Request):
+@router.post("", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=ShowAPIRead, status_code=status.HTTP_201_CREATED)
+def show_create_as_bundle(body: ShowAPICreateBundle, request: Request, access: Access = signed_in()):
     """
     Create a new show, optionally with media, download, and stream profiles in a single operation.
     """
+    access.check_link_at(body.show.source_key, body.show.sharing_url)
+    if body.stream_profile is not None and not access.allows(Area.STREAM_PROFILES):
+        raise HTTPException(status_code=403, detail="You may not create Stream Profiles.")
     with db_session() as s:
         try:
             result = create_show_bundle(s, request, body)

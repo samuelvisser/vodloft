@@ -5,11 +5,13 @@ from fastapi import APIRouter, Query, HTTPException
 from backend.api.datetime import api_timezone_payload
 from sources.dailywire.api.records import DwShowRecord
 from .service import get_show
+from backend.security.access import Area, Level
+from backend.security.deps import requires_any
 
 router = APIRouter(prefix="/shows", tags=["DailyWire Shows"])
 
 
-@router.get("/{show_slug}", response_model=DwShowRecord)
+@router.get("/{show_slug}", dependencies=[requires_any((Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.VIEW))], response_model=DwShowRecord)
 def show_detail(
     show_slug: str,
     membership_plan: str | None = Query(default=None, description="Optional membership plan (e.g., ALL_ACCESS)"),

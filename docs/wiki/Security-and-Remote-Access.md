@@ -2,7 +2,7 @@
 
 VODLoft has two separate kinds of access control:
 
-1. **Administrator authentication** protects the VODLoft web interface and its protected API.
+1. **Signing in** protects the VODLoft web interface and its protected API: with one administrator password, or with [[User Accounts|User-Accounts]] that give each person their own sign-in and only the parts they need.
 2. **RSS feed tokens** protect private podcast/video feeds without requiring a podcast app to sign in to the web interface.
 
 A password on the VODLoft UI does not replace the RSS token, and an RSS token does not let someone sign in to the VODLoft UI.
@@ -21,6 +21,8 @@ Restart/recreate the container after changing deployment environment variables.
 If no administrator password is configured, anyone who can reach the VODLoft interface can control the application. That can include starting downloads, changing configuration, and using the Daily Wire account connected to the instance.
 
 A password is therefore strongly recommended whenever VODLoft is reachable outside a fully trusted network.
+
+To share VODLoft with other people, turn on [[User Accounts|User-Accounts]] under **Settings → Users** instead of handing out the administrator password. Each person then gets only what they need, such as just Quick download for a few sites.
 
 ### Session lifetime
 

@@ -19,6 +19,24 @@ def no_real_ytdlp(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def full_access_without_auth_guard(monkeypatch):
+    """Most API tests mount a router on a bare FastAPI app, without the auth guard.
+
+    The guard is what puts the signed-in person's access on the request; a
+    bare app stands for an install without user accounts, where that access is
+    everything. Tests of access itself use the real app, whose guard always
+    sets it.
+    """
+    from backend.security import deps
+    from backend.security.access import Access
+
+    def request_access(request):
+        return getattr(request.state, "access", None) or Access.full()
+
+    monkeypatch.setattr(deps, "request_access", request_access)
+
+
+@pytest.fixture(autouse=True)
 def clean_event_bus():
     from task_manager.events.registry import (
         VodloftEventLinker,

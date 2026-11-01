@@ -1,4 +1,5 @@
 import {useEffect, useMemo, useState} from 'react'
+import {can} from '../lib/access'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link, useNavigate, useSearchParams} from 'react-router-dom'
 import {faIcon} from '../icons/faIcon'
@@ -153,10 +154,12 @@ export default function LibraryPage() {
                     <h1 id="library-title">Library</h1>
                     <p className="view-description">Shows, movies and videos indexed by VODLoft.</p>
                 </div>
-                <button className="btn btn-primary" onClick={() => navigate('/add')}>
-                    <FontAwesomeIcon icon={faIcon('fass', 'plus')}/>
-                    Add media
-                </button>
+                {can('add_media') && (
+                    <button className="btn btn-primary" onClick={() => navigate('/add')}>
+                        <FontAwesomeIcon icon={faIcon('fass', 'plus')}/>
+                        Add media
+                    </button>
+                )}
             </div>
 
             {showTabs && (
@@ -195,7 +198,7 @@ export default function LibraryPage() {
                     <FontAwesomeIcon icon={faIcon('fass', 'book-open')}/>
                     <h2>Your library is empty</h2>
                     <p>Paste a link to a show, a movie or a video to add it.</p>
-                    <button className="btn btn-primary" onClick={() => navigate('/add')}>Add media</button>
+                    {can('add_media') && <button className="btn btn-primary" onClick={() => navigate('/add')}>Add media</button>}
                 </div>
             ) : activeType === 'shows' && hasShows ? (
                 filteredShows.length > 0 ? (

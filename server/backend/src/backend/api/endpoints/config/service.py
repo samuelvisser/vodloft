@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from config import get_settings
 
+from backend.db import get_session
+from backend.services.users import accounts_enabled
+
 from backend.api.models.config_public import *
 
 
@@ -17,6 +20,11 @@ def get_public_config() -> ConfigPublicRead:
         admin_auth=PublicAdminAuth(
             enabled=s.admin_auth.enabled
         ),
+        user_accounts=PublicUserAccounts(enabled=_accounts_enabled()),
     )
 
     return config
+
+def _accounts_enabled() -> bool:
+    with get_session() as session:
+        return accounts_enabled(session)

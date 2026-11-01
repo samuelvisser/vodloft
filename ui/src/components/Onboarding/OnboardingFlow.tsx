@@ -224,6 +224,11 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                         administrator login before loading the application.
                     </p>
 
+                    <p className="onboarding-security-note">
+                        Sharing VODLoft with others? Later, turn on user accounts in Settings › Users to give each
+                        person their own sign-in with only the parts they need, such as just Quick download.
+                    </p>
+
                     <div className="onboarding-stage-actions">
                         <button className="btn" type="button" onClick={() => setStep('sources')}>Back</button>
                         <button className="btn btn-primary" type="button" onClick={() => setStep('add')}>

@@ -5,7 +5,7 @@ import type {LocalMediaProfileSubtitleMode} from '../../types/schemas/local_medi
 import ShowLocalMediaProfileScopeField from './ShowLocalMediaProfileScopeField'
 import {useSubtitleModeDefaults} from './useSubtitleModeDefaults'
 
-import {useSettings} from '../../lib/settings'
+import {useLibraryDefaults} from '../../lib/settings'
 import ReadMore from '../../utils/ReadMore'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import SimpleSelect from '../common/SimpleSelect'
@@ -33,18 +33,18 @@ export default function LocalMediaProfileCommonFields({
 }) {
     const {control, register, formState: {errors}} = form
     const {onSubtitleModeChange, onScopeChange} = useSubtitleModeDefaults(form, mode, isCreating)
-    const {data: settings} = useSettings()
-    const systemDownloadModeLabel = !settings
+    const {data: defaults} = useLibraryDefaults()
+    const systemDownloadModeLabel = !defaults
         ? 'Loading system setting…'
-        : settings.values.downloadSettings.downloadMode === 'temporary'
+        : defaults.downloadMode === 'temporary'
             ? 'Save to temporary folder first'
             : 'Save directly to downloads'
-    const systemThumbnailModeLabel = !settings
+    const systemThumbnailModeLabel = !defaults
         ? 'Loading system setting…'
-        : THUMBNAIL_MODE_LABELS[settings.values.downloadSettings.thumbnailMode]
-    const systemMetadataModeLabel = !settings
+        : THUMBNAIL_MODE_LABELS[defaults.thumbnailMode]
+    const systemMetadataModeLabel = !defaults
         ? 'Loading system setting…'
-        : METADATA_MODE_LABELS[settings.values.downloadSettings.metadataMode]
+        : METADATA_MODE_LABELS[defaults.metadataMode]
 
     const downloadModeReg = createSelectRegistry('LocalMediaProfileDownloadMode', {
         system: {label: `System (${systemDownloadModeLabel})`},

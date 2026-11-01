@@ -1,4 +1,6 @@
 from __future__ import annotations
+from backend.security.access import Access
+from backend.services.stream_profile_owners import check_owner, owned_by
 
 from typing import Optional
 
@@ -11,11 +13,11 @@ from backend.types.stream_profile_types import StreamProfileType
 from backend.db.models import StreamProfileBase, RssStreamProfile
 
 
-def get_stream_profiles_list(s: Session, show_slug: Optional[str] = None) -> list[StreamProfileAPIRead]:
+def get_stream_profiles_list(s: Session, access: Access, show_slug: Optional[str] = None) -> list[StreamProfileAPIRead]:
     SP = with_polymorphic(StreamProfileBase, [RssStreamProfile])
     if show_slug is not None:
         items = (
-            s.query(SP)
+            owned_by(s.query(SP), SP.owner_user_id, access)
             .filter(
                 SP.show.has(slug=show_slug)
             )
@@ -24,14 +26,14 @@ def get_stream_profiles_list(s: Session, show_slug: Optional[str] = None) -> lis
         )
     else:
         items = (
-            s.query(SP)
+            owned_by(s.query(SP), SP.owner_user_id, access)
             .order_by(SP.id.asc())
             .all()
         )
     return [StreamProfileAPIRead.model_validate(it) for it in items]
 
 
-def get_stream_profile(s: Session, stream_profile_id: int) -> StreamProfileAPIRead:
+def get_stream_profile(s: Session, access: Access, stream_profile_id: int) -> StreamProfileAPIRead:
     SP = with_polymorphic(StreamProfileBase, [RssStreamProfile])
     item: Optional[SP] = (
         s.query(SP)
@@ -41,5 +43,6 @@ def get_stream_profile(s: Session, stream_profile_id: int) -> StreamProfileAPIRe
 
     if item is None:
         raise HTTPException(status_code=404, detail="Stream profile not found")
+    check_owner(item, access)
 
     return StreamProfileAPIRead.model_validate(item)

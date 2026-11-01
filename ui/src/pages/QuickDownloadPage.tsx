@@ -30,9 +30,11 @@ import {
     sizeLabel,
     startQuickDownload,
     useQuickDownloadHistory,
+    useQuickDownloadSettings,
     useQuickDownloads,
 } from '../lib/quickDownloads'
 import {saveSettingsRequest, useSettings} from '../lib/settings'
+import {can} from '../lib/access'
 import type {QuickChoice, QuickDownloadHistoryEntry, QuickDownloadOptions} from '../types/schemas/quick_download'
 import type {SettingsFieldPath} from '../types/schemas/settings'
 import type {SourceRead} from '../types/schemas/source'
@@ -51,13 +53,16 @@ function duration(seconds: number | null | undefined): string | null {
 export default function QuickDownloadPage() {
     const [params] = useSearchParams()
     const queryClient = useQueryClient()
-    const {data: settings} = useSettings()
+    const {data: quickSettings} = useQuickDownloadSettings()
+    // Saving the choice as everyone's defaults changes Settings, so only those who manage it may.
+    const mayChangeDefaults = can('settings', 'manage')
+    const {data: settings} = useSettings(mayChangeDefaults)
     const {operations} = useOperations()
     const {data: quickDownloads} = useQuickDownloads()
-    const keepHistory = settings?.values.quickDownload.keepHistory ?? false
+    const keepHistory = quickSettings?.keepHistory ?? false
     const {data: history} = useQuickDownloadHistory(keepHistory)
-    const defaults = useMemo(() => choiceFromSettings(settings?.values.quickDownload), [settings])
-    const rules = useMemo(() => rulesFromSettings(settings?.values.quickDownload), [settings])
+    const defaults = useMemo(() => choiceFromSettings(quickSettings), [quickSettings])
+    const rules = useMemo(() => rulesFromSettings(quickSettings), [quickSettings])
 
     const [url, setUrl] = useState(params.get('url') ?? '')
     const [options, setOptions] = useState<QuickDownloadOptions | null>(null)
@@ -105,7 +110,7 @@ export default function QuickDownloadPage() {
         return () => requestRef.current?.abort()
         // Only look up the link the page was opened with, once the defaults are known.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [settings !== undefined])
+    }, [quickSettings !== undefined])
 
     const clear = () => {
         requestRef.current?.abort()
@@ -145,7 +150,7 @@ export default function QuickDownloadPage() {
         setStarting(true)
         try {
             await startQuickDownload(options.link.url, options.link.source.id, choice)
-            if (saveAsDefaults) {
+            if (saveAsDefaults && mayChangeDefaults) {
                 try {
                     await saveDefaults()
                     setSaveAsDefaults(false)
@@ -181,7 +186,7 @@ export default function QuickDownloadPage() {
                     <h1 id="quick-download-title">Quick download</h1>
                     <p className="view-description">
                         Paste a link, choose a format, download the file. Nothing is kept: files don't go into your library,
-                        and VODLoft deletes each one {settings ? `${settings.values.quickDownload.keepDownloadedMinutes} minutes` : 'a few minutes'} after you've downloaded it.
+                        and VODLoft deletes each one {quickSettings ? `${quickSettings.keepDownloadedMinutes} minutes` : 'a few minutes'} after you've downloaded it.
                     </p>
                 </div>
             </div>
@@ -287,7 +292,7 @@ export default function QuickDownloadPage() {
                     rules={rules}
                     saveAsDefaults={saveAsDefaults}
                     onChange={setChoice}
-                    onSaveAsDefaultsChange={setSaveAsDefaults}
+                    onSaveAsDefaultsChange={mayChangeDefaults ? setSaveAsDefaults : undefined}
                     onClose={() => setPanelOpen(false)}
                 />
             )}

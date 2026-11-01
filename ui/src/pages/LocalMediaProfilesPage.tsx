@@ -1,4 +1,5 @@
 import {useCallback, useRef} from 'react'
+import {can} from '../lib/access'
 import {useNavigate} from 'react-router-dom'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 import {useLocalMediaProfilesView} from '../lib/queries'
@@ -107,7 +108,7 @@ export default function LocalMediaProfilesPage() {
                         across shows and movies. You can create multiple profiles (e.g., “Podcasts to ABS”, “Videos to NAS”) and
                         reuse them.</p>
                 </PageSubtitle>
-                <button className="btn btn-primary" onClick={onAdd}>Add media profile</button>
+                {can('local_media_profiles', 'manage') && <button className="btn btn-primary" onClick={onAdd}>Add media profile</button>}
             </div>
 
             <div className="form-row">

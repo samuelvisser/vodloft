@@ -20,20 +20,23 @@ from .service import (
     get_videos_list,
     video_source,
 )
+from backend.security.access import Access, Area, Level
+from backend.security.deps import requires, signed_in
 
 router = APIRouter(prefix="/videos", tags=["Videos"])
 
 
-@router.get("", response_model=list[VideoAPIRead])
+@router.get("", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[VideoAPIRead])
 def video_list():
     with db_session() as s:
         return get_videos_list(s)
 
 
-@router.post("", response_model=VideoAPIRead, status_code=status.HTTP_201_CREATED)
-def video_create(body: VideoAPICreate):
+@router.post("", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=VideoAPIRead, status_code=status.HTTP_201_CREATED)
+def video_create(body: VideoAPICreate, access: Access = signed_in()):
     """Add a single video by its link, or refresh it when it is already added."""
     source = video_source(body.source_key)
+    access.check_link(source, body.url)
     details = fetch_video_details(source, body.url)
     with db_session() as s:
         try:
@@ -46,13 +49,13 @@ def video_create(body: VideoAPICreate):
             raise
 
 
-@router.get("/{video_id}", response_model=VideoAPIRead)
+@router.get("/{video_id}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=VideoAPIRead)
 def video_detail(video_id: int):
     with db_session() as s:
         return get_video(s, video_id)
 
 
-@router.post("/{video_id}/refresh", response_model=VideoAPIRead)
+@router.post("/{video_id}/refresh", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=VideoAPIRead)
 def video_refresh(video_id: int):
     """Look the video up again at its Source and store what changed."""
     with db_session() as s:
@@ -74,6 +77,7 @@ def video_refresh(video_id: int):
 
 @router.post(
     "/{video_id}/downloads",
+    dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE)],
     response_model=MediaDownloadOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
@@ -96,7 +100,7 @@ def video_download_create(video_id: int, body: MediaDownloadAPICreate):
             raise
 
 
-@router.delete("/{video_id}", response_model=VideoAPIRead)
+@router.delete("/{video_id}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=VideoAPIRead)
 def video_delete(video_id: int):
     with db_session() as s:
         try:

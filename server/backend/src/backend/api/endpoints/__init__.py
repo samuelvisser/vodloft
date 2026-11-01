@@ -23,5 +23,6 @@ from .stream_profiles import stream_profile_router
 from .feeds import feeds_router
 from .custom_metadata import custom_metadata_router
 from .logs import logs_router
+from .users import user_router
 
 from .meta_router import router as meta_router

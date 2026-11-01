@@ -1,8 +1,11 @@
 import type { IconProp } from '@fortawesome/fontawesome-svg-core'
+import type { Area, Level } from '../../lib/access'
 
 export type BaseNav = {
   label: string
   icon: IconProp
+  /** Shown only to people with at least this level; a submenu also hides when none of its items show. */
+  access?: [Area, Level?] | (() => boolean)
 }
 
 export type NavLinkItem = BaseNav & {
