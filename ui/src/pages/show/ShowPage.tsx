@@ -1,4 +1,5 @@
 import {sourceControls} from '../../lib/sourceControls'
+import {can} from '../../lib/access'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
@@ -419,6 +420,8 @@ export default function ShowPage() {
                 <span>Open on {sources.get(show.sourceKey)?.domains.includes('*') ? siteName(show.sharingUrl) ?? sources.name(show.sourceKey) : sources.name(show.sourceKey)}</span>
               </a>
             )}
+            {can('library', 'manage') && (
+              <>
             <button type="button" className="btn" title="Edit show" onClick={onEdit}>
               <FontAwesomeIcon icon={faIcon('fass', 'pen-to-square')} aria-hidden="true"/>
               <span>Edit</span>
@@ -503,6 +506,8 @@ export default function ShowPage() {
                 },
               ]}
             />
+              </>
+            )}
           </div>
 
           <ShowIndexingProgress

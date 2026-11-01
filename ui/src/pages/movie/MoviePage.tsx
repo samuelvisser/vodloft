@@ -1,4 +1,5 @@
 import {useEffect, useMemo, useRef, useState} from 'react'
+import {can} from '../../lib/access'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link, useNavigate, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
@@ -493,13 +494,13 @@ export default function MoviePage() {
                         <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')}/> Open on {sourceName}
                     </a>
                 )}
-                {localMovies && !localMovie && (
+                {localMovies && !localMovie && can('library', 'manage') && (
                     <button type="button" className="btn btn-primary" onClick={() => void addMovie()} disabled={addingMovie || submitting !== null}>
                         <FontAwesomeIcon icon={faIcon('fass', 'plus')}/>
                         {addingMovie ? 'Adding to VODLoft…' : 'Add to VODLoft'}
                     </button>
                 )}
-                {localMovie && slug && (
+                {localMovie && slug && can('library', 'manage') && (
                     <Link className="btn" to={`/edit-movie/${encodeURIComponent(slug)}`}>
                         <FontAwesomeIcon icon={faIcon('fass', 'pen-to-square')} />
                         <span>Edit</span>

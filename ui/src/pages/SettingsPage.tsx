@@ -1,4 +1,5 @@
 import {zodResolver} from '@hookform/resolvers/zod'
+import {can, type Area} from '../lib/access'
 import {useQueryClient} from '@tanstack/react-query'
 import {useCallback, useEffect, useMemo, useState} from 'react'
 import {useSearchParams} from 'react-router-dom'
@@ -33,6 +34,8 @@ type SettingsTabDefinition = {
     id: SettingsTab
     label: string
     description: string
+    /** Only shown to people who may also manage this area. */
+    area?: Area
 }
 
 const SETTINGS_TABS: SettingsTabDefinition[] = [
@@ -40,7 +43,7 @@ const SETTINGS_TABS: SettingsTabDefinition[] = [
     {id: 'downloads', label: 'Downloads', description: 'Storage, naming, processing and verification'},
     {id: 'quick-download', label: 'Quick download', description: 'Defaults, housekeeping and rules for quick downloads'},
     {id: 'automation', label: 'Automation', description: 'Scheduler and episode monitoring'},
-    {id: 'sources', label: 'Sources', description: 'Services, sign-ins and their settings'},
+    {id: 'sources', label: 'Sources', description: 'Services, sign-ins and their settings', area: 'sources'},
     {id: 'advanced', label: 'Advanced', description: 'Encryption files and configuration details'},
 ]
 
@@ -78,7 +81,8 @@ export default function SettingsPage() {
     const queryClient = useQueryClient()
     const [params, setParams] = useSearchParams()
     const [baseline, setBaseline] = useState<SettingsValues | null>(null)
-    const activeTab = SETTINGS_TABS.find((tab) => tab.id === params.get('tab'))?.id ?? 'general'
+    const tabs = SETTINGS_TABS.filter((tab) => !tab.area || can(tab.area, 'manage'))
+    const activeTab = tabs.find((tab) => tab.id === params.get('tab'))?.id ?? 'general'
 
     const chooseTab = (tab: SettingsTab) => {
         setParams({tab}, {replace: true})
@@ -255,7 +259,7 @@ export default function SettingsPage() {
                 ) : null}
 
                 <div className="settings-tabs" role="tablist" aria-label="Settings categories">
-                    {SETTINGS_TABS.map((tab) => (
+                    {tabs.map((tab) => (
                         <button
                             key={tab.id}
                             id={`settings-tab-${tab.id}`}

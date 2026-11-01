@@ -1,4 +1,5 @@
 import {FormEvent, useEffect, useRef, useState} from 'react'
+import {canUseSource} from '../lib/access'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useNavigate, useSearchParams} from 'react-router-dom'
 import {faIcon} from '../icons/faIcon'
@@ -147,7 +148,7 @@ export default function AddMediaPage({onboarding = false, onShow, onMovie, onBro
     }
 
     // A Source with a catalogue is browsed; one without is searched. Onboarding only browses.
-    const browseSources = (sources ?? []).filter((source) => sourceHas(source, SourceFeature.BROWSE) || (!onboarding && sourceHas(source, SourceFeature.SEARCH)))
+    const browseSources = (sources ?? []).filter((source) => canUseSource(source.id) && (sourceHas(source, SourceFeature.BROWSE) || (!onboarding && sourceHas(source, SourceFeature.SEARCH))))
     const browse = (source: SourceRead) => {
         if (!sourceHas(source, SourceFeature.BROWSE)) navigate(`/browse/${encodeURIComponent(source.id)}`)
         else if (onBrowse) onBrowse(source.id)

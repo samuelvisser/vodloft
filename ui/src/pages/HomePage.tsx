@@ -1,4 +1,5 @@
 import {useMemo} from 'react'
+import {can} from '../lib/access'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useNavigate} from 'react-router-dom'
 import {faIcon} from '../icons/faIcon'
@@ -132,9 +133,11 @@ export default function HomePage() {
                     <h1 id="home-title">Home</h1>
                     <p className="view-description">What VODLoft is doing now and anything that needs your attention.</p>
                 </div>
-                <button className="btn btn-primary" onClick={() => navigate('/add')}>
-                    <FontAwesomeIcon icon={faIcon('fass', 'plus')}/> Add media
-                </button>
+                {can('add_media') && (
+                    <button className="btn btn-primary" onClick={() => navigate('/add')}>
+                        <FontAwesomeIcon icon={faIcon('fass', 'plus')}/> Add media
+                    </button>
+                )}
             </div>
 
             <div className={`system-health ${hasAttention ? 'needs-attention' : 'is-healthy'}`}>

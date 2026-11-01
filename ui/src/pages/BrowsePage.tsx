@@ -1,4 +1,5 @@
 import {useEffect, useMemo, useRef, useState} from 'react'
+import {canUseSource} from '../lib/access'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useNavigate, useSearchParams} from 'react-router-dom'
 import {faIcon} from '../icons/faIcon'
@@ -41,7 +42,8 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
     const sources = useSourceLookup()
     const catalogSource = sources.get(DAILYWIRE_SOURCE_KEY)
     const sourceName = catalogSource?.name ?? 'the catalogue'
-    const canBrowse = !catalogSource || sourceHas(catalogSource, SourceFeature.BROWSE)
+    const mayUse = canUseSource(DAILYWIRE_SOURCE_KEY)
+    const canBrowse = mayUse && (!catalogSource || sourceHas(catalogSource, SourceFeature.BROWSE))
     const initialType = params.get('type') === 'movies' ? 'movies' : 'shows'
     const [activeType, setActiveType] = useState<MediaType>(initialType)
     const [grouping, setGrouping] = useState<ShowGrouping>('host')
@@ -119,7 +121,7 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
         return (
             <section className="view browse-view" aria-labelledby="browse-title">
                 <h1 id="browse-title">Browse</h1>
-                <p>{sourceName} cannot be browsed. Paste a link on the Add media page instead.</p>
+                <p>{mayUse ? `${sourceName} cannot be browsed.` : `Your account may not use ${sourceName}.`} Paste a link on the Add media page instead.</p>
                 <button className="btn btn-primary" type="button" onClick={() => navigate('/add')}>Add media</button>
             </section>
         )

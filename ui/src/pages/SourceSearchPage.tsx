@@ -1,4 +1,5 @@
 import {useEffect, useState} from 'react'
+import {canUseSource} from '../lib/access'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link, useNavigate, useParams, useSearchParams} from 'react-router-dom'
 import {faIcon} from '../icons/faIcon'
@@ -35,7 +36,7 @@ export default function SourceSearchPage() {
     const {sourceId} = useParams()
     const [params, setParams] = useSearchParams()
     const source = useSourceLookup().get(sourceId ?? '')
-    const canSearch = sourceHas(source, SourceFeature.SEARCH)
+    const canSearch = sourceHas(source, SourceFeature.SEARCH) && canUseSource(source?.id ?? '')
     // Each search costs something at such a Source, so it searches on Enter instead of while typing.
     const onEnter = sourceHas(source, SourceFeature.COSTLY_SEARCH)
     const [search, setSearch] = useState(params.get('q') ?? '')
