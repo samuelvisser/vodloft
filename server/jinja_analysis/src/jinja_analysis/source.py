@@ -99,7 +99,15 @@ def _printed(node: nodes.Node) -> tuple[str, int]:
     if isinstance(node, nodes.Getattr):
         return f"{_operand(node.node, _PRIMARY)}.{node.attr}", _PRIMARY
     if isinstance(node, nodes.Getitem):
-        return f"{_operand(node.node, _PRIMARY)}[{expression_source(node.arg)}]", _PRIMARY
+        if isinstance(node.arg, nodes.Slice):
+            parts = [
+                "" if item is None else expression_source(item)
+                for item in (node.arg.start, node.arg.stop, node.arg.step)
+            ]
+            index = ":".join(parts if node.arg.step is not None else parts[:2])
+        else:
+            index = expression_source(node.arg)
+        return f"{_operand(node.node, _PRIMARY)}[{index}]", _PRIMARY
     if isinstance(node, nodes.Call):
         return f"{_operand(node.node, _PRIMARY)}({_arguments(node)})", _PRIMARY
     if isinstance(node, nodes.List):

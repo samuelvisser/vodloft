@@ -142,6 +142,13 @@ jinja2 and never imports VODLoft code; its tests use jinja2 and the package alon
 - What the analysis knows about a filter (pure, result type) lives in the one `FILTERS` table in
   `jinja_analysis.filters`.
 
+## Importers
+Importers live in the `importer` package (`server/importer`). An importer reads another program's data and returns
+the neutral plans in `importer.contract`; it never imports VODLoft code (`test_ytdlp_template_conversion.py` checks
+this), and the backend applies the plans.
+- yt-dlp and Pinchflat templates go through `importer.ytdlp_templates`, which reports every part it could not
+  convert exactly. Do not drop a part without a report entry.
+
 ## The Daily Wire
 When referring to The Daily Wire, in most cases, use the full name, "The Daily Wire". 
 However, in some contexts, it may read better to use "Daily Wire" instead. This is not the 'correct'

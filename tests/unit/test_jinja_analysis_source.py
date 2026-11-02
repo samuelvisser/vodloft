@@ -53,9 +53,12 @@ def test_printed_expressions_parse_back_to_the_same_tree_with_only_needed_bracke
     assert expression_key(_expression(printed)) == expression_key(expression)
 
 
+def test_printer_prints_slices():
+    for source in ("title[:80]", "items[1:2]", "items[::2]", "items[1:]"):
+        assert expression_source(_expression(source)) == source
+
+
 def test_printer_refuses_what_is_not_a_plain_expression():
-    with pytest.raises(UnsafeEdit):
-        expression_source(_expression("items[1:2]"))
     with pytest.raises(UnsafeEdit):
         expression_source(_expression("f(*args)"))
 

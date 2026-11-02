@@ -7,6 +7,7 @@ dependencies = [
     "config",
     "controller",
     "downloader",
+    "importer",
     "jinja-analysis",
     "sources",
     "task-manager"
@@ -20,6 +21,7 @@ backend = { workspace = true }
 config = { workspace = true }
 controller = { workspace = true }
 downloader = { workspace = true }
+importer = { workspace = true }
 jinja-analysis = { workspace = true }
 sources = { workspace = true }
 task-manager = { workspace = true }
