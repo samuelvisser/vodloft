@@ -11,6 +11,7 @@ def _final_episode(*, episode_id: int = 71):
 
     return SimpleNamespace(
         id=episode_id,
+        source_key="dailywire",
         collection_id=5,
         slug="test-episode",
         metadata_is_final=False,

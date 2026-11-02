@@ -8,6 +8,10 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode
 from backend.services.custom_indexes import request_collection_custom_index_reconciliation
+from backend.services.episode_metadata_refresh import (
+    episode_metadata_refresh_source_keys,
+    refreshes_episode_metadata,
+)
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode_publication_timing import (
@@ -53,6 +57,13 @@ async def run_refresh_episode_metadata(
 
     episode = s.get(Episode, episode_id)
     if episode is None:
+        return False
+    if not refreshes_episode_metadata(episode.source_key):
+        # The daily catalogue refresh keeps listed episodes up to date.
+        if not episode.metadata_is_final:
+            episode.metadata_is_final = True
+            s.commit()
+        remove_episode_metadata_jobs(episode.id)
         return False
     if episode.metadata_is_final:
         remove_episode_metadata_jobs(episode.id)
@@ -140,6 +151,7 @@ def _queue_startup_recovery(s: Session) -> None:
         select(Episode.id).where(
             Episode.metadata_is_final.is_(False),
             Episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value,
+            Episode.source_key.in_(episode_metadata_refresh_source_keys()),
             ~active_target,
         )
     )
