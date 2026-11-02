@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import date, datetime, time
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
@@ -22,7 +25,7 @@ from .custom_index import (
 )
 from .episode import EpisodeIdentifierInfo
 from .filenames import clean_component, clean_value
-from .output_template_jinja import create_output_template_environment
+from .output_template_jinja import TypedText, create_output_template_environment
 from config import get_settings
 from config.settings.submodels import FilenameRestrictionMode
 
@@ -278,13 +281,27 @@ def sanitize_path_component(
     return clean_component(value, FilenameRestrictionMode(mode), extension=extension)
 
 
+_FILENAME_MODE: ContextVar[FilenameRestrictionMode | None] = ContextVar("vodloft_filename_mode", default=None)
+
+
+@contextmanager
+def rendering_with_filename_mode(mode: FilenameRestrictionMode) -> Iterator[None]:
+    """Render values with ``mode`` instead of the configured one, such as for an import's path proof."""
+    token = _FILENAME_MODE.set(FilenameRestrictionMode(mode))
+    try:
+        yield
+    finally:
+        _FILENAME_MODE.reset(token)
+
+
 def _sanitize_emitted_output_value(value: object) -> str:
     """Clean each value a template fills in, as yt-dlp does, so it never creates path structure."""
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         # Numbers are not text: a Custom Index of -1 stays -1.
         return str(value)
-    mode = FilenameRestrictionMode(get_settings().download_settings.filename_restriction_mode)
-    text = clean_value(value, mode)
+    mode = _FILENAME_MODE.get() or FilenameRestrictionMode(get_settings().download_settings.filename_restriction_mode)
+    # A value marked with as_typed is cleaned with the template's own text, by the name pass.
+    text = str(value) if isinstance(value, TypedText) else clean_value(value, mode)
     # Whatever the mode, a value can never add a path level or a line.
     text = text.replace("/", "\u29f8").replace("\x00", "")
     return "".join(char for char in text if char == "\t" or ord(char) >= 32)

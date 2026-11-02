@@ -111,7 +111,7 @@ The modes follow yt-dlp, so new files are named as yt-dlp and Pinchflat name the
 
 - `unrestricted` — like yt-dlp's `--no-windows-filenames`: only a `/` in a value changes, to `⧸`.
 - `windows` — like yt-dlp's default: characters Windows does not allow become look-alikes such as `：` and `？`, and reserved names are protected. This is the default.
-- `restricted` — like yt-dlp's `--restrict-filenames`: ASCII letters, numbers, `.`, `_` and `-` only.
+- `restricted` — like yt-dlp's `--restrict-filenames`: values such as titles use ASCII letters, numbers, `.`, `_` and `-` only. Text typed in the template keeps its spaces, as in yt-dlp, and is made ASCII.
 
 ---
 

@@ -405,11 +405,18 @@ class _Applier:
 
 
 def _rename_hls_marker(master: Path) -> None:
-    """A local HLS bundle WireLoft made carries WireLoft's marker; VODLoft recognises its own."""
+    """A local HLS bundle WireLoft made carries WireLoft's marker; VODLoft recognises its own.
+
+    Only the hidden marker is renamed, never a media file. In a folder VODLoft may not write to the
+    bundle stays WireLoft's: it plays the same, and VODLoft just won't replace it by itself.
+    """
     assets = Path(f"{master}.assets")
     old, new = assets / _WIRELOFT_HLS_MARKER, assets / _VODLOFT_HLS_MARKER
     if old.is_file() and not new.exists():
-        old.rename(new)
+        try:
+            old.rename(new)
+        except OSError:
+            pass
 
 
 def apply_records(

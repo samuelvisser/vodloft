@@ -15,8 +15,10 @@ import {
     type Importer,
 } from '../types/schemas/imports'
 
-/** Chunks stay well under any reverse proxy's body limit. */
+/** The server takes chunks of up to 8 MiB. */
 export const CHUNK_SIZE = 8 * 1024 * 1024
+/** A reverse proxy that refuses large bodies (nginx allows 1 MB by default) gets chunks of this size instead. */
+export const SMALL_CHUNK_SIZE = 512 * 1024
 const ARCHIVE_SUFFIXES = ['.zip', '.tar.gz', '.tgz', '.tar']
 
 function base(): string {
@@ -112,15 +114,21 @@ export async function uploadFiles(
     const sending = begun.send.map((item) => ({...item, file: bySource.get(item.source)!})).filter((item) => item.file)
     const total = sending.reduce((sum, item) => sum + item.file.size, 0)
     let done = 0
+    let chunkSize = CHUNK_SIZE
     for (const item of sending) {
         let offset = 0
         while (offset < item.file.size || (offset === 0 && item.file.size === 0)) {
             signal?.throwIfAborted()
-            const chunk = item.file.slice(offset, offset + CHUNK_SIZE)
+            const chunk = item.file.slice(offset, offset + chunkSize)
             const response = await fetch(
                 `${base()}/imports/${key}/upload/chunk?path=${encodeURIComponent(item.path)}&offset=${offset}`,
                 {method: 'PUT', credentials: 'include', body: chunk, signal},
             )
+            if (response.status === 413 && chunkSize > SMALL_CHUNK_SIZE) {
+                // Too large for a proxy in between: send the rest in small chunks.
+                chunkSize = SMALL_CHUNK_SIZE
+                continue
+            }
             if (response.status === 409) {
                 const payload = await response.json().catch(() => null)
                 const received = payload?.detail?.received

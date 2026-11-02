@@ -162,7 +162,7 @@ def test_pinchflat_values_become_collection_values_and_custom_indexes():
     )
 
     assert report.output_template == (
-        "/downloads/shows/{{ collection_title }}/Season {{ year }}/s{{ year }}e{{ date | strftime('%m%d') }}"
+        "/downloads/shows/{{ collection_title | as_typed }}/Season {{ year }}/s{{ year }}e{{ date | strftime('%m%d') }}"
         "{{ '%02d' | format('day' | custom_index(per=date, start=99, step=-1)) }} - {{ title }}.ext"
     )
     assert [(index.key, index.keep_numbers) for index in report.custom_indexes] == [("day", True)]

@@ -212,3 +212,24 @@ def test_a_file_vodloft_cannot_reach_is_kept_and_not_downloaded_again(installati
     rerun = _run(session, imports.ImportOptions())
     session.refresh(download)
     assert download.artifact_status == "available" and rerun.counts["adopted"] == 1
+
+
+def test_an_import_from_a_read_only_media_folder_changes_no_file(installation, tmp_path, monkeypatch):
+    from backend.db.models import MediaDownloadBase
+    from backend.services import imports
+    from conftest import folder_snapshot, read_only_folder
+
+    session, _applied = installation
+    downloads = tmp_path / "downloads"
+    # The upload is WireLoft's copy: VODLoft's own import folder is the only place it may write to.
+    outside = {path: folder_snapshot(tmp_path / path) for path in ("downloads", "wireloft-config")}
+    refused = read_only_folder(monkeypatch, downloads)
+    read_only_folder(monkeypatch, tmp_path / "wireloft-config")
+
+    for _ in range(2):
+        run = _run(session, imports.ImportOptions(enable_download_profiles=True))
+        assert run.status == "finished", run.report
+
+    assert session.scalar(select(MediaDownloadBase)).artifact_status == "available"
+    assert {path: folder_snapshot(tmp_path / path) for path in outside} == outside
+    assert refused == []

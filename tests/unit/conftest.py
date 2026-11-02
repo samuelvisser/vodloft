@@ -162,3 +162,81 @@ def schema_of(engine) -> dict[str, dict[str, object]]:
             ),
         }
     return schema
+
+
+def read_only_folder(monkeypatch, folder):
+    """Refuse every write under ``folder`` the way a read-only mount would, even for root.
+
+    Returns the list of refused attempts, so a test can also see what was tried.
+    """
+    import builtins
+    import errno
+    import io
+    import os
+    import shutil
+    from pathlib import Path
+
+    root = Path(folder).resolve()
+    refused: list[str] = []
+
+    def inside(path) -> bool:
+        try:
+            return Path(os.fsdecode(path)).resolve().is_relative_to(root)
+        except (TypeError, ValueError):
+            return False
+
+    def refuse(name, *paths):
+        if any(inside(path) for path in paths):
+            refused.append(f"{name} {paths[0]}")
+            raise OSError(errno.EROFS, "Read-only file system", os.fsdecode(paths[0]))
+
+    def guard(module, name, count=1):
+        original = getattr(module, name)
+
+        def guarded(*args, **kwargs):
+            refuse(name, *args[:count])
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(module, name, guarded)
+
+    for name, count in (("rename", 2), ("replace", 2), ("remove", 1), ("unlink", 1), ("rmdir", 1),
+                        ("mkdir", 1), ("makedirs", 1), ("utime", 1), ("chmod", 1), ("truncate", 1),
+                        ("link", 2), ("symlink", 2)):
+        guard(os, name, count)
+    guard(shutil, "rmtree")
+    guard(shutil, "move", 2)
+
+    original_open = builtins.open
+
+    def guarded_open(file, mode="r", *args, **kwargs):
+        if isinstance(file, (str, bytes, os.PathLike)) and any(flag in mode for flag in "wax+"):
+            refuse("open", file)
+        return original_open(file, mode, *args, **kwargs)
+
+    # pathlib opens through io.open, which is the same function under another name.
+    monkeypatch.setattr(builtins, "open", guarded_open)
+    monkeypatch.setattr(io, "open", guarded_open)
+
+    original_os_open = os.open
+    writing = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND
+
+    def guarded_os_open(path, flags, *args, **kwargs):
+        if flags & writing:
+            refuse("open", path)
+        return original_os_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", guarded_os_open)
+    return refused
+
+
+def folder_snapshot(folder):
+    """Every file and folder under ``folder`` with its size, time and content hash."""
+    import hashlib
+    from pathlib import Path
+
+    snapshot = {}
+    for path in sorted(Path(folder).rglob("*")):
+        stat = path.lstat()
+        digest = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+        snapshot[str(path.relative_to(folder))] = (stat.st_size if path.is_file() else None, stat.st_mtime_ns, digest)
+    return snapshot

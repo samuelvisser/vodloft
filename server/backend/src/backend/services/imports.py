@@ -50,7 +50,7 @@ from backend.utils.custom_index import (
 )
 from backend.utils.output_template import (
     COLLECTION_OUTPUT_TEMPLATE_FIELDS, COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES, _date_substitutions,
-    _sanitize_rendered_path, prepare_output_template, replace_output_extension,
+    _sanitize_rendered_path, prepare_output_template, rendering_with_filename_mode, replace_output_extension,
 )
 from task_manager.events.transactional import queue_event
 
@@ -347,6 +347,7 @@ def _published(value: str | None) -> datetime | None:
 
 def path_proof(
     profile: ProfilePlan, files: Sequence[FilePlan], titles: Mapping[str, str], mode: FilenameRestrictionMode,
+    authors: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """How many of the files' real paths the converted template renders exactly."""
     adopted = [file for file in files if file.kind == "file" and file.path]
@@ -365,15 +366,16 @@ def path_proof(
         published = _published(file.published)
         values: dict[str, object] = {
             "title": file.title or "", "episode_title": file.title or "", "episode_site_id": file.media_site_id,
-            "collection_title": titles.get(file.collection_external_id, ""), "collection_author": "",
+            "collection_title": titles.get(file.collection_external_id, ""), "collection_author": (authors or {}).get(file.collection_external_id, ""),
             "episode_published_date": published.strftime("%Y-%m-%d") if published else "",
             **_date_substitutions(published),
         }
         extension = PurePosixPath(file.path).suffix.removeprefix(".")
         try:
-            rendered = prepared.render(
-                values, custom_index_resolver=lambda key, _group=(), file=file: file.custom_index_values.get(key, 1),
-            )
+            with rendering_with_filename_mode(mode):
+                rendered = prepared.render(
+                    values, custom_index_resolver=lambda key, _group=(), file=file: file.custom_index_values.get(key, 1),
+                )
             rendered = _sanitize_rendered_path(replace_output_extension(rendered, extension), mode=mode, extension=extension)
         except ValueError as exc:
             rendered = f"(could not render: {exc})"
@@ -424,6 +426,8 @@ def preview(session: Session, importer: Importer, options: ImportOptions) -> dic
     for file in plan.files:
         files_by_collection[file.collection_external_id].append(file)
     titles = {collection.external_id: collection.title for collection in plan.collections}
+    authors = {collection.external_id: str(collection.settings["author"])
+               for collection in plan.collections if collection.settings.get("author")}
     profiles = {profile.external_id: profile for profile in plan.profiles}
     mode = _filename_mode(plan)
 
@@ -486,7 +490,7 @@ def preview(session: Session, importer: Importer, options: ImportOptions) -> dic
             "settings": dict(profile.settings),
             "custom_indexes": [asdict(index) for index in profile.custom_indexes],
             "warnings": [_warning(warning) for warning in profile.warnings],
-            "path_proof": path_proof(profile, profile_files.get(profile.external_id, []), titles, mode),
+            "path_proof": path_proof(profile, profile_files.get(profile.external_id, []), titles, mode, authors),
             "changes": changes,
         })
 

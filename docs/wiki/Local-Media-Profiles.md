@@ -132,6 +132,8 @@ For example, to keep only the part of a title before ` | `, and leave the title 
 /downloads/{{ collection_title }}/{{ title }}.ext
 ```
 
+`as_typed` names a value as if you typed it into the template, so the filename mode cleans it like typed text; see [Filename restrictions](#filename-restrictions). Use it as the last filter.
+
 ## Collection template variable reference
 
 | Variable | Meaning |
@@ -272,7 +274,7 @@ Titles are not unique, so include `{{ slug }}` in the filename. Sites do not alw
 
 ## Filename restrictions
 
-The global **Filename restrictions** setting controls how file and folder names are made safe. The three modes follow yt-dlp, so files are named like yt-dlp and Pinchflat name them. Each value a template fills in, such as a title, is cleaned the way yt-dlp cleans it. Text you type in the template itself follows the same rules, and the editor says when typed text has a character the mode will replace. The preview shows the result.
+The global **Filename restrictions** setting controls how file and folder names are made safe. The three modes follow yt-dlp, so files are named like yt-dlp and Pinchflat name them. Each value a template fills in, such as a title, is cleaned the way yt-dlp cleans it. Text you type in the template itself is made safe too, and the editor says when typed text has a character the mode will replace. The preview shows the result.
 
 The examples show `Q&A: Is AI "conscious"? | Ep. 12/13` in each mode.
 
@@ -287,6 +289,8 @@ Like yt-dlp's default, which Pinchflat uses. `: " * < > ? | / \` become the look
 ### Restricted filenames (`restricted`)
 
 Like yt-dlp's `--restrict-filenames`: ASCII letters, numbers, `.`, `_` and `-` only. Letters are spelled out in ASCII first, such as `ß` as `ss`, `Æ` as `AE` and `Ł` as `L`, curly quotes become straight ones and `…` becomes `...`; accents are then dropped. A colon becomes `_-`, and anything else becomes `_`. `Q_A_-_Is_AI_conscious_Ep._12_13`
+
+Text you type in the template keeps its spaces and punctuation, as in yt-dlp and Pinchflat, and is only made ASCII: `Season 01/{{ title }}` gives `Season 01/Q_A_-_Is_AI_conscious_Ep._12_13`. A typed `: ` becomes ` - `, and `? " * < > | \` are removed or become `_`. To name a value like typed text, end it with `as_typed`: `{{ collection_title | as_typed }}` keeps `Mike Winger` as it is, where `{{ collection_title }}` gives `Mike_Winger`. A Pinchflat import uses it for a source's custom name, which Pinchflat doesn't restrict either.
 
 A file name with nothing ASCII left, such as a Japanese title, becomes `no_ascii_file_name`. A second one in the same folder becomes `no_ascii_file_name_2`, and so on. The number stays with the file.
 

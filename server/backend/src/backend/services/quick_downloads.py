@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Iterable, Literal
 
 from backend.services import quick_download_history
+from backend.utils.filenames import clean_value
 from backend.utils.output_template import sanitize_path_component
 from config import get_settings
 from config.settings.submodels import FilenameRestrictionMode
@@ -254,7 +255,8 @@ def quick_file_name(title: str, extension: str) -> str:
     """The title as a file name, made safe by the same rules as library files."""
     mode = FilenameRestrictionMode(get_settings().download_settings.filename_restriction_mode)
     stem = (title.strip() or "Quick download")[:_MAX_FILE_STEM]
-    return sanitize_path_component(f"{stem}.{extension}", mode=mode, extension=extension)
+    # The title is a value, as in a template: cleaned like yt-dlp cleans a field, then as a name.
+    return sanitize_path_component(f"{clean_value(stem, mode)}.{extension}", mode=mode, extension=extension)
 
 
 def _video_details(source: Source, request: QuickDownloadRequest):

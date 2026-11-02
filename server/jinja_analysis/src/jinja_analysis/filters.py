@@ -29,6 +29,7 @@ _INT = frozenset({"int"})
 
 FILTERS: dict[str, FilterRule] = {
     "abs": FilterRule(result="same", total_for=_INT),
+    "as_typed": FilterRule(result="str", total_for=frozenset({"str", "int"})),
     "capitalize": FilterRule(result="str", total_for=_STR),
     "float": FilterRule(result="float"),
     "format": FilterRule(result="str"),

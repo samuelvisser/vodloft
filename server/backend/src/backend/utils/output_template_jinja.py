@@ -104,6 +104,19 @@ def custom_index_group(per: object) -> CustomIndexGroup:
     return str(per)
 
 
+class TypedText(str):
+    """A value to name files with as if it were typed into the template (see ``as_typed``)."""
+
+
+def as_typed(value: object) -> TypedText:
+    """Use a value as typed text: the filename mode cleans it like the template's own text.
+
+    In Restricted mode that keeps its spaces and punctuation, as Pinchflat does for a
+    source's custom name. It still can't add a folder level. Use it as the last filter.
+    """
+    return TypedText("" if value is None else value)
+
+
 def create_output_template_environment(
     *,
     custom_index_resolver: CustomIndexResolver | None = None,
@@ -147,5 +160,6 @@ def create_output_template_environment(
         "regex_groups": regex_groups,
         "strftime": strftime,
         "custom_index": custom_index,
+        "as_typed": as_typed,
     })
     return environment

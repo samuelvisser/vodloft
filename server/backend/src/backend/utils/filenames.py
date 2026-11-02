@@ -3,8 +3,10 @@
 Each value a template fills in is cleaned like yt-dlp's ``sanitize_filename``
 (:func:`clean_value`), so a converted Pinchflat template names new downloads
 like the old ones. Each finished folder and file name is then cleaned again
-with the same rules (:func:`clean_component`), so text typed in the template
-follows them too, and VODLoft's own guards apply.
+(:func:`clean_component`), so text typed in the template follows the mode too,
+and VODLoft's own guards apply. Like yt-dlp, Restricted mode doesn't turn
+typed spaces and punctuation into ``_``: ``Season 01/{{ title }}`` keeps its
+space, as it does in yt-dlp and Pinchflat. Typed text is only made ASCII.
 
 The rules follow yt-dlp (Unlicense), with VODLoft's three modes:
 
@@ -34,7 +36,6 @@ _WINDOWS_LOOKALIKES = {
 _TIMESTAMP = re.compile(r"[0-9]+(?::[0-9]+)+")
 _WINDOWS_RESERVED = re.compile(r"^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?$", re.IGNORECASE)
 _RESTRICTED_PUNCTUATION = set("!&'()[]{}$;`^,#")
-_RESTRICTED_OUTSIDE = re.compile(r"[^A-Za-z0-9._-]")
 
 # Starts from yt-dlp's ACCENT_CHARS; letters without a decomposition and
 # common punctuation are added so they keep their meaning in ASCII.
@@ -140,13 +141,26 @@ def clean_value(value: object, mode: FilenameRestrictionMode) -> str:
     return cleaned
 
 
+def _restricted_typed_character(char: str) -> str:
+    """One character of a finished name in Restricted mode; values were already restricted."""
+    if char == "?" or char == '"' or (_is_control(char) and char != "\t"):
+        return ""
+    if char in "\\|*<>\t":
+        return "_"
+    if char.isascii():
+        return char
+    ascii_ = _ascii(char)
+    return ascii_ if ascii_ and ascii_.isascii() else "_"
+
+
 def _restricted_component(value: str) -> str:
-    cleaned = "".join(_ascii(char) for char in _timestamps(value))
-    cleaned = cleaned.replace(":", "_-")
-    cleaned = _RESTRICTED_OUTSIDE.sub("_", cleaned)
-    cleaned = re.sub(r"_+", "_", cleaned).strip(" _")
+    cleaned = "".join(_restricted_typed_character(char) for char in _timestamps(value))
+    # "Season 1: Specials" reads as "Season 1 - Specials"; a colon inside a word as "_-".
+    cleaned = cleaned.replace(": ", " - ").replace(":", "_-")
+    # Leading spaces are typed, as in Pinchflat's " {{ upload_yyyy_mm_dd }}"; only replaced characters go.
+    cleaned = re.sub(r"_+", "_", cleaned).lstrip("_").rstrip(" _.")
     # Replaced punctuation right before an extension ("Test?.mp4") is not part of the name.
-    return re.sub(r"_+(?=\.[A-Za-z0-9]+$)", "", cleaned)
+    return re.sub(r"[_ ]+(?=\.[A-Za-z0-9]+$)", "", cleaned)
 
 
 def _has_letters(value: str) -> bool:
@@ -192,7 +206,7 @@ def replaced_typed_characters(text: str, mode: FilenameRestrictionMode) -> list[
         elif mode == FilenameRestrictionMode.WINDOWS:
             changed = char in _WINDOWS_LOOKALIKES or _is_control(char)
         else:
-            changed = _RESTRICTED_OUTSIDE.fullmatch(char) is not None
+            changed = _restricted_typed_character(char) != char or char == ":"
         if changed:
             found.append(char)
     return found

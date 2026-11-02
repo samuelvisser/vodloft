@@ -45,3 +45,44 @@ test('the run report lists counts, entries and problems', () => {
     assert.match(text, /\[linked\] Morning Show: joined/)
     assert.match(text, /\/downloads\/a\.mp4: not found/)
 })
+
+test('an upload behind a proxy with a 1 MB limit continues in small chunks and resumes where the server is', async () => {
+    const {uploadFiles, SMALL_CHUNK_SIZE} = await import('../src/lib/imports')
+    const size = 3 * 1024 * 1024 + 5
+    const file = picked('config/wireloft.db', size)
+    let stored = 0
+    let refusedOnce = false
+    const chunkSizes: number[] = []
+    const original = globalThis.fetch
+    ;(globalThis as any).window ??= {appConfig: {API_URL: '/api'}}
+    globalThis.fetch = (async (input: string, init?: RequestInit) => {
+        const url = new URL(input, 'http://vodloft.test')
+        const ok = (body: unknown) => new Response(JSON.stringify(body), {status: 200})
+        if (url.pathname.endsWith('/upload') && init?.method === 'POST') {
+            return ok({skipped: [], send: [{source: 'config/wireloft.db', path: 'wireloft.db'}]})
+        }
+        if (url.pathname.endsWith('/upload/finish')) return ok({skipped: [], send: []})
+        const body = init!.body as Blob
+        if (body.size > 1024 * 1024) return new Response('Request Entity Too Large', {status: 413})
+        const offset = Number(url.searchParams.get('offset'))
+        if (offset === SMALL_CHUNK_SIZE && !refusedOnce) {
+            // The connection dropped after the server stored this chunk: it says where to go on.
+            refusedOnce = true
+            stored += body.size
+            return new Response(JSON.stringify({detail: {message: 'offset', received: stored}}), {status: 409})
+        }
+        if (offset !== stored) {
+            return new Response(JSON.stringify({detail: {message: 'offset', received: stored}}), {status: 409})
+        }
+        stored += body.size
+        chunkSizes.push(body.size)
+        return ok({received: stored})
+    }) as typeof fetch
+    try {
+        await uploadFiles('wireloft', [file], false, () => undefined)
+    } finally {
+        globalThis.fetch = original
+    }
+    assert.equal(stored, size)
+    assert.ok(chunkSizes.every((chunk) => chunk <= SMALL_CHUNK_SIZE))
+})

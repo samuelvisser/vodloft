@@ -111,6 +111,11 @@ const vodloftFilterCompletionOptions: Completion[] = [
         'Return the groups of the first regex match as a list, or an empty list when nothing matches.',
     ),
     filterCompletion(
+        'as_typed',
+        'as_typed',
+        'Name the value as if it were typed into the template: in Restricted mode it keeps its spaces. Use it last.',
+    ),
+    filterCompletion(
         'custom_index',
         "'key' | custom_index(per=None, start=1, step=1)",
         'Use this episode\'s number from a defined Indexing Value. per counts separately for each value, ' +

@@ -264,7 +264,10 @@ def _collection_plan(source: PinchflatSource, profile: PinchflatProfile, profile
         title=source.name,
         profile_external_id=profile_external_id,
         settings={"type": "podcast" if audio else "series", "episode_identifier": "date_based",
-                  "collection_type": source.collection_type},
+                  "collection_type": source.collection_type,
+                  # A channel's name is its author; the path proof fills {{ channel }} with it.
+                  **({"author": source.collection_name}
+                     if source.collection_type == "channel" and source.collection_name else {})},
         download_profile={
             "enable_profile": source.enabled and source.download_media,
             "ep_id_type_list": _episode_types(profile),

@@ -111,7 +111,7 @@ def test_the_plan_converts_profiles_and_maps_sources_and_items(tmp_path):
 
     channel, playlist = plan.profiles
     assert channel.output_template == (
-        "/downloads/YouTube/{{ collection_title }}/s{{ year }}e{{ date | strftime('%m%d') }}"
+        "/downloads/YouTube/{{ collection_title | as_typed }}/s{{ year }}e{{ date | strftime('%m%d') }}"
         "{{ '%02d' | format('day' | custom_index(per=date, start=99, step=-1)) }} - {{ title }} [{{ episode_site_id }}].ext"
     )
     assert channel.custom_indexes == (CustomIndexPlan("day", "Upload date index", True, start=99, step=-1),)
@@ -420,3 +420,26 @@ def test_a_change_made_in_vodloft_is_kept_and_a_newly_mapped_setting_comes_over(
     kinds = {(entry["kind"], entry["subject"]) for entry in run.report}
     assert ("newly_mapped", "Lists") in kinds and ("kept", "Media server") in kinds
     assert len(list(session.scalars(select(CollectionLocalMediaProfile)))) == 2
+
+
+def test_an_import_from_a_read_only_media_folder_changes_no_file(installation, tmp_path, monkeypatch):
+    from backend.db.models import Collection, EpisodeMediaDownload
+    from backend.services import imports
+    from conftest import folder_snapshot, read_only_folder
+
+    session, _applied = installation
+    downloads = tmp_path / "downloads"
+    before = folder_snapshot(downloads)
+    refused = read_only_folder(monkeypatch, downloads)
+
+    for _ in range(2):
+        _run(session, imports.ImportOptions(enable_download_profiles=True))
+        for collection in session.scalars(select(Collection)):
+            if not collection.episodes:
+                _index(session, collection, ["vid-aaaaaaa", "vid-bbbbbbb"] if collection.title == "Veritasium" else ["vid-eeeeeee"])
+        _adopt_waiting(session)
+
+    downloads_made = list(session.scalars(select(EpisodeMediaDownload)))
+    assert sum(download.artifact_status == "available" for download in downloads_made) == 3
+    assert folder_snapshot(downloads) == before
+    assert refused == []

@@ -134,8 +134,9 @@ _FORMAT_FIELDS = frozenset({
 })
 # Pinchflat's per-download values, as fields the expansion made of them.
 _PINCHFLAT_VALUES: dict[str, FieldValue] = {
-    "source_custom_name": FieldValue("collection_title", always=True, support="close", reason="The import names the Collection after the Pinchflat source's custom name"),
-    "source_collection_name": FieldValue("collection_title", always=True, support="close", reason="VODLoft uses the Collection's title, which is the channel or playlist name"),
+    # Pinchflat writes these into the template before yt-dlp sees it, so restrict_filenames leaves them alone.
+    "source_custom_name": FieldValue("collection_title | as_typed", always=True, support="close", reason="The import names the Collection after the Pinchflat source's custom name"),
+    "source_collection_name": FieldValue("collection_title | as_typed", always=True, support="close", reason="VODLoft uses the Collection's title, which is the channel or playlist name"),
     "source_collection_id": FieldValue("collection_site_id", always=True),
     "media_playlist_index": FieldValue("'%02d' | format('playlist' | custom_index)", always=True, support="close", reason="Imported numbers are kept; new videos continue from the highest"),
     "media_upload_date_index": FieldValue(
