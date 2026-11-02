@@ -85,6 +85,17 @@ function DownloadStatusIcons({downloads}: { downloads: MediaDownloadViewRead[] }
     )
 }
 
+const DATE_LABEL = /^(\d{4})-(\d{2})-(\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/
+
+/** "#12" for a numbered episode; a short date such as "18 Jan 2013" for one a Source numbers by its publish date. */
+function episodeBadgeText(label: string): string {
+    const date = DATE_LABEL.exec(label)
+    if (!date) return `#${label}`
+    const [, year, month, day] = date
+    return new Date(Number(year), Number(month) - 1, Number(day))
+        .toLocaleDateString(undefined, {day: 'numeric', month: 'short', year: 'numeric'})
+}
+
 type Props = {
     ep: EpisodeReadView
     collectionSlug: string
@@ -114,7 +125,7 @@ export default function EpisodeCard({ep, collectionSlug, downloads}: Props) {
     // Every tag other than the main one is badged with its Source's label, such as Short or Livestream.
     const mainTag = tags?.find((tag) => tag.main)?.key ?? 'ep'
     const typeBadgeLabel = type && type !== mainTag && type !== 'ep-extra' ? episodeTagLabel(tags, type) : undefined
-    const cornerBadgeText = showNumberBadge ? `#${ep.episodeLabel}` : typeBadgeLabel
+    const cornerBadgeText = showNumberBadge ? episodeBadgeText(ep.episodeLabel) : typeBadgeLabel
 
     const navigate = useNavigate()
     const goToEpisode = () => navigate(`/collection/${collectionSlug}/episode/${ep.slug}`)
