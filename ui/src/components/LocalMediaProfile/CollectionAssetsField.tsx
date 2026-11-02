@@ -45,7 +45,7 @@ export default function CollectionAssetsField({form, preview}: {
                         onChange={(value) => field.onChange(value === 'enabled' ? true : value === 'disabled' ? false : null)}
                         onBlur={field.onBlur}
                         aria-invalid={!!fieldError}
-                        aria-describedby={`mp-collection-assets-help${fieldError ? ' mp-show-assets-error' : ''}`}
+                        aria-describedby={`mp-collection-assets-help${fieldError ? ' mp-collection-assets-error' : ''}`}
                     />
                 )}
             />

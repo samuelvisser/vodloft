@@ -108,13 +108,13 @@ export default function CollectionSyncLogModal({collectionSlug, collectionTitle,
   return (
     <div className="modal-overlay" role="presentation" onClick={onClose}>
       <div
-        className="modal show-sync-log-modal"
+        className="modal collection-sync-log-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="collection-sync-log-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="modal-header show-sync-log-header">
+        <div className="modal-header collection-sync-log-header">
           <div className="modal-icon" aria-hidden>
             <FontAwesomeIcon icon={faIcon('fass', 'arrows-rotate')} />
           </div>
@@ -133,7 +133,7 @@ export default function CollectionSyncLogModal({collectionSlug, collectionTitle,
             <p className="modal-text">No syncs have been recorded yet.</p>
           ) : (
             <div className="collection-sync-log-table" role="table" aria-label="Recent syncs">
-              <div className="show-sync-log-row show-sync-log-row-header" role="row">
+              <div className="collection-sync-log-row collection-sync-log-row-header" role="row">
                 <span role="columnheader">Ran</span>
                 <span role="columnheader">Episodes found</span>
               </div>
@@ -175,7 +175,7 @@ export default function CollectionSyncLogModal({collectionSlug, collectionTitle,
             </button>
           </nav>
 
-          <div className="modal-actions show-sync-log-actions">
+          <div className="modal-actions collection-sync-log-actions">
             <button type="button" className="btn" onClick={onClose}>Close</button>
             <button type="button" className="btn btn-primary" onClick={() => void onSyncNow()} disabled={syncing}>
               <FontAwesomeIcon icon={faIcon('fass', syncing ? 'spinner' : 'arrows-rotate')} spin={syncing} aria-hidden="true" />

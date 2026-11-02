@@ -180,7 +180,7 @@ export default function BrowsePage({onboarding = false, onCollectionSelect, onMo
                                     const image = toImageUrl(collection.thumbnailPortraitPath || collection.thumbnailLandscapePath || collection.backgroundImagePath)
                                     const added = localCollectionsBySlug.has(collection.slug)
                                     return (
-                                        <button className="show-summary-card catalog-show-card" type="button" key={collection.slug} onClick={() => chooseCollection(collection)}>
+                                        <button className="collection-summary-card catalog-collection-card" type="button" key={collection.slug} onClick={() => chooseCollection(collection)}>
                                             <span className="collection-summary-art">
                                                 {image ? <img src={image} alt="" loading="lazy" decoding="async"/> : <span className="collection-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', 'tv')}/></span>}
                                             </span>
