@@ -119,7 +119,7 @@ export default function SourceSearchPage() {
                         const image = toImageUrl(result.imageUrl)
                         const added = result.kind === 'collection' && localCollections?.some((collection) => collection.sourceKey === sourceId && collection.slug === result.slug)
                         return (
-                            <button className="show-summary-card catalog-show-card" type="button" role="listitem" key={`${result.kind}-${result.slug}`} onClick={() => choose(result)}>
+                            <button className="collection-summary-card catalog-collection-card" type="button" role="listitem" key={`${result.kind}-${result.slug}`} onClick={() => choose(result)}>
                                 <span className="collection-summary-art">
                                     {image ? <img src={image} alt="" loading="lazy" decoding="async"/> : <span className="collection-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', 'tv')}/></span>}
                                 </span>

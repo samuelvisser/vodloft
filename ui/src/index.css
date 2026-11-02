@@ -1763,7 +1763,7 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 
 .media-type-tabs button span { margin-left: 5px; color: var(--muted); font-size: 12px; }
 
-.library-collection-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(390px, 1fr)); gap: 12px; }
+.library-collection-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(390px, 1fr)); align-items: start; gap: 12px; }
 .collection-summary-card {
   position: relative;
   appearance: none;
@@ -1807,6 +1807,9 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
   -webkit-line-clamp: 3;
 }
 .collection-summary-card > svg { color: var(--muted); }
+/* Collections whose only artwork is a 16:9 thumbnail (YouTube, NPO) show it full width on top */
+.collection-summary-card.is-landscape { grid-template-columns: minmax(0, 1fr) auto; row-gap: 12px; }
+.collection-summary-card.is-landscape .collection-summary-art { grid-column: 1 / -1; width: 100%; aspect-ratio: 16 / 9; }
 
 .library-empty {
   min-height: 360px;

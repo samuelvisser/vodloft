@@ -245,7 +245,7 @@ export default function CollectionPage() {
 
   if (!id) {
     return (
-      <section className="view show-view">
+      <section className="view collection-view">
         <div className="view-header"><h1>Show</h1></div>
         <p>Collection not found.</p>
       </section>
@@ -254,7 +254,7 @@ export default function CollectionPage() {
 
   if (isLoading && !collection) {
     return (
-      <section className="view show-view">
+      <section className="view collection-view">
         <div className="view-header"><h1>Show</h1></div>
         <p>Loading show...</p>
       </section>
@@ -263,7 +263,7 @@ export default function CollectionPage() {
 
   if (!collection) {
     return (
-      <section className="view show-view">
+      <section className="view collection-view">
         <div className="view-header"><h1>Show</h1></div>
         <p>{(error as any)?.message ?? 'Collection not found.'}</p>
       </section>
@@ -433,7 +433,7 @@ export default function CollectionPage() {
   }
 
   return (
-    <section className="view show-view" aria-labelledby="collection-title">
+    <section className="view collection-view" aria-labelledby="collection-title">
       <div className="view-header"><h1 id="collection-title">{collection.title}</h1></div>
 
       <article className="collection-details" aria-label="Show details">
@@ -603,7 +603,7 @@ export default function CollectionPage() {
                         <div key={`${profile.type}-${profile.id}`} className="collection-profile-chip-group">
                           <button
                             type="button"
-                            className="show-profile-chip show-profile-chip-main"
+                            className="collection-profile-chip collection-profile-chip-main"
                             onClick={() => navigate(`/edit-stream-profile/${profile.type}/${profile.id}`, {state: profile})}
                             title={`Open ${label}`}
                           >
