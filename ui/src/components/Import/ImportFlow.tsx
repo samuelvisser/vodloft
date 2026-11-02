@@ -235,13 +235,15 @@ function UploadStep({importer, onUploaded}: {importer: Importer, onUploaded: () 
 
             <details className="import-folder">
                 <summary>Use a folder VODLoft can already see</summary>
-                <p className="settings-field__help">
-                    If {importer.name}'s config folder is mounted into VODLoft, pick it here instead of uploading it.
-                </p>
-                <FolderField label="Config folder" value={folder} onChange={setFolder} disabled={busy}/>
-                <button type="button" className="btn" disabled={busy || !folder} onClick={() => void takeFolder()}>
-                    Use this folder
-                </button>
+                <div className="import-folder__body">
+                    <p className="settings-field__help">
+                        If {importer.name}'s config folder is mounted into VODLoft, pick it here instead of uploading it.
+                    </p>
+                    <FolderField label="Config folder" value={folder} onChange={setFolder} disabled={busy}/>
+                    <button type="button" className="btn" disabled={busy || !folder} onClick={() => void takeFolder()}>
+                        Use this folder
+                    </button>
+                </div>
             </details>
 
             {skipped.length > 0 && <p className="settings-field__help">Left out: {skipped.join(', ')}</p>}
