@@ -358,3 +358,74 @@ def test_unavailable_optional_subtitles_do_not_fail_media_download(tmp_path, mon
         assert execution.assets == ()
         assert not (tmp_path / "library" / "Movie.en.srt").exists()
         execution.cleanup_workspace()
+
+
+@pytest.mark.parametrize(("subtitles", "embed"), [
+    ((("en", "Hello"), ("nl", "Hallo")), False),
+    ((("en", "Hello"), ("nl", "Hallo")), True),
+    ((), True),
+])
+def test_ytdlp_subtitles_publish_one_sidecar_per_language(tmp_path, monkeypatch, subtitles, embed):
+    from pathlib import Path
+
+    from downloader import coordinator
+    from downloader.capacity import DownloadResources
+    from downloader.lifecycle import DownloadTracker
+    from downloader.models import DownloadProgress, DownloadResult
+
+    embedding_calls = []
+    monkeypatch.setattr(coordinator, "embed_media", lambda *args, **kwargs: embedding_calls.append(kwargs))
+
+    def transfer(_url, destination, *, command, subtitles_dir, progress, should_cancel):
+        assert subtitles_dir is not None
+        Path(destination).write_bytes(b"media")
+        written = []
+        for language, text in subtitles:
+            path = subtitles_dir / f"ytdlp-subtitle.{language}.srt"
+            path.write_text(f"1\n00:00:01,000 --> 00:00:02,000\n{text}\n\n")
+            written.append((language, str(path)))
+        progress(DownloadProgress(5, 5))
+        return DownloadResult(destination, 5, subtitles=tuple(written))
+
+    monkeypatch.setattr(coordinator, "download_ytdlp", transfer)
+    asset = SidecarSpec(
+        "subtitles", "subtitle", url="https://www.youtube.com/watch?v=x", extension="srt",
+        source_format="ytdlp", publish=True, required=False,
+    )
+    with DownloadTracker() as tracker:
+        plan = build_download_plan(
+            source=ResolvedDownloadSource(
+                "https://www.youtube.com/watch?v=x", "up to 1080p", False, False, "mp4", False,
+                ytdlp_command=("yt-dlp",),
+            ),
+            requested_destination=tmp_path / "library" / "Video.mp4",
+            temporary_root=tmp_path / "temp", download_mode="temporary",
+            assets=(asset,), subtitle_asset_ids=("subtitles",) if embed else (),
+            attempt_id=tracker.attempt_id,
+        )
+        execution = coordinator.execute_download_plan(plan, tracker=tracker, resources=DownloadResources())
+        library = tmp_path / "library"
+        assert sorted(path.name for path in library.iterdir()) == sorted(
+            ["Video.mp4", *(f"Video.{language}.srt" for language, _ in subtitles)]
+        )
+        assert sorted(item.id for item in execution.assets) == sorted(f"subtitles-{language}" for language, _ in subtitles)
+        assert {item.kind for item in execution.assets} <= {"subtitle"}
+        if embed and subtitles:
+            assert [item[0] for item in embedding_calls[0]["subtitles"]] == ["en", "nl"]
+        elif embed:
+            assert embedding_calls == [] or embedding_calls[0]["subtitles"] == ()
+        assert not tracker.snapshot().warnings
+        execution.cleanup_workspace()
+
+
+def test_ytdlp_subtitles_need_a_ytdlp_download(tmp_path):
+    asset = SidecarSpec(
+        "subtitles", "subtitle", url="https://www.youtube.com/watch?v=x", extension="srt",
+        source_format="ytdlp", required=False,
+    )
+    with pytest.raises(ValueError, match="yt-dlp download"):
+        build_download_plan(
+            source=ResolvedDownloadSource("https://cdn.example/a.mp4", "1080p", False, False, "mp4", False),
+            requested_destination=tmp_path / "a.mp4", temporary_root=tmp_path / "t",
+            download_mode="temporary", assets=(asset,),
+        )

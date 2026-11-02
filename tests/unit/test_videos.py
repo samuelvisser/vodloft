@@ -296,3 +296,32 @@ def test_a_ytdlp_playback_plans_a_ytdlp_download(video_sources, session, monkeyp
     assert plan.source.ytdlp_command[:3] == ("yt-dlp", "--cookies", "c.txt")
     assert "res:720,vcodec:h264,acodec:m4a" in plan.source.ytdlp_command
     assert str(plan.requested_destination).endswith("/videos/A Channel/2026-03-04 - Clip abc [abc].mp4")
+
+
+@pytest.mark.parametrize(("mode", "publish", "embedded"), [
+    ("no_subtitles", None, ()),
+    ("sidecar", True, ()),
+    ("embed", False, ("subtitles",)),
+    ("embed_and_sidecar", True, ("subtitles",)),
+])
+def test_a_ytdlp_download_asks_ytdlp_for_subtitles_as_the_profile_says(video_sources, session, monkeypatch, mode, publish, embedded):
+    from backend.api.endpoints.media_downloads.service import create_video_download
+    from backend.api.models.media_download import MediaDownloadAPICreate
+    from backend.services import download_plans
+    from backend.services.videos import index_video
+    from downloader.lifecycle import DownloadTracker
+    from sources import PlaybackKind
+
+    monkeypatch.setattr(video_sources, "video_playback", lambda *, slug, url: Playback(url=url, kind=PlaybackKind.YTDLP, command=("yt-dlp",)))
+    profile = _video_profile(session, subtitle_mode=mode)
+    video, _ = index_video(session, "clips", video_sources.video_details("https://clips.example/v/abc"))
+    download = create_video_download(session, video, MediaDownloadAPICreate(local_media_profile_id=profile.id))
+    session.commit()
+
+    plan = download_plans.prepare_download_plan(session, download.id, DownloadTracker())
+    subtitles = [asset for asset in plan.assets if asset.kind == "subtitle"]
+    if publish is None:
+        assert subtitles == []
+    else:
+        assert [(asset.source_format, asset.publish) for asset in subtitles] == [("ytdlp", publish)]
+    assert plan.subtitle_asset_ids == embedded

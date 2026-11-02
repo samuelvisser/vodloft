@@ -219,6 +219,11 @@ FAKE_YTDLP = textwrap.dedent('''
         print(template.replace("%(progress.downloaded_bytes)s", str(done)).replace("%(progress.total_bytes)s", "20").replace("%(progress.total_bytes_estimate)s", "NA"))
     print("[Merger] Merging formats")
     (work / "media.mp4").write_bytes(b"x" * 120)
+    if "--write-subs" in args and "subs" in url:
+        (work / "media.en.vtt").write_text("WEBVTT\\n\\n00:00:01.000 --> 00:00:02.000\\nHello\\n")
+        (work / "media.nl.srt").write_text("1\\n00:00:01,000 --> 00:00:02,000\\nHallo\\n\\n")
+        (work / "media.live_chat.json").write_text("{}")
+        (work / "media.de.vtt").write_text("not a subtitle")
     print("[vodloft-file] " + str(work / "media.mp4"))
 ''')
 
@@ -358,3 +363,22 @@ def test_the_weekly_update_only_updates_sources_that_are_due(tool_sources):
     tool.due, tool.fails = True, True
     with pytest.raises(RuntimeError, match="Could not update Tool"):
         run_update_source_programs()
+
+
+def test_ytdlp_writes_each_uploaded_subtitle_as_srt(fake_ytdlp, tmp_path):
+    from downloader.ytdlp import download_ytdlp
+
+    keep = tmp_path / "keep"
+    keep.mkdir()
+    result = download_ytdlp("https://x/subs", str(tmp_path / "out.mp4"), command=fake_ytdlp, subtitles_dir=keep)
+    languages = dict(result.subtitles)
+    assert sorted(languages) == ["en", "nl"]
+    assert open(languages["en"], encoding="utf-8").read() == "1\n00:00:01,000 --> 00:00:02,000\nHello\n\n"
+    assert "Hallo" in open(languages["nl"], encoding="utf-8").read()
+
+
+def test_ytdlp_without_a_subtitle_folder_asks_for_no_subtitles(fake_ytdlp, tmp_path):
+    from downloader.ytdlp import download_ytdlp
+
+    result = download_ytdlp("https://x/subs", str(tmp_path / "out.mp4"), command=fake_ytdlp)
+    assert result.subtitles == ()

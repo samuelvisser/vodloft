@@ -211,7 +211,15 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         and source.extension in {"mp4", "m4v", "mkv"}
     )
     embedded_subtitle_ids: list[str] = []
-    if publish_subtitles or embed_subtitles:
+    if (publish_subtitles or embed_subtitles) and source.ytdlp_command:
+        # yt-dlp writes the subtitles itself while it downloads the media.
+        assets.append(SidecarSpec(
+            "subtitles", "subtitle", url=source.url, extension="srt", source_format="ytdlp",
+            publish=publish_subtitles, required=False,
+        ))
+        if embed_subtitles:
+            embedded_subtitle_ids.append("subtitles")
+    elif publish_subtitles or embed_subtitles:
         for index, track in enumerate(source.subtitles):
             asset_id = f"subtitle_{index}"
             assets.append(SidecarSpec(

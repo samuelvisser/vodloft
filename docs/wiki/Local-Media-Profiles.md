@@ -39,7 +39,7 @@ The temporary folder may be on different storage from the final library. Configu
 
 ## Subtitles
 
-Local Media Profiles can automatically save subtitle tracks advertised by The Daily Wire's HLS streams.
+Local Media Profiles can automatically save the subtitle tracks a video has, from The Daily Wire and from every site yt-dlp downloads from, such as YouTube.
 
 - **No subtitles**: do not retrieve subtitle tracks.
 - **Embed in media**: add available subtitles as selectable tracks inside the downloaded MP4 or MKV.
@@ -50,7 +50,7 @@ Local Media Profiles can automatically save subtitle tracks advertised by The Da
 
 Sidecars share the media filename, for example `Movie Name.mp4` and `Movie Name.en.srt` for English. Forced subtitles use names such as `Movie Name.en.forced.srt`. Plex and similar media servers can discover these files automatically. The same naming applies to movie extras and collection episodes.
 
-Subtitles are fetched for Daily Wire media only. yt-dlp and NPO Start media download without subtitles for now, whatever the profile says. Only subtitle tracks actually advertised by the source are downloaded. Missing or temporarily unavailable tracks do not prevent the primary media from downloading. HLS bundles cannot have subtitles embedded into a single file; use sidecars for that format.
+For yt-dlp sites, only subtitles a person uploaded are fetched, in every language the video has; automatically generated subtitles and YouTube's live chat are not. NPO Start media downloads without subtitles for now, whatever the profile says. Only subtitle tracks actually advertised by the source are downloaded. A video without subtitles downloads as before, and missing or temporarily unavailable tracks do not prevent the primary media from downloading. Audio-only downloads never embed subtitles. HLS bundles cannot have subtitles embedded into a single file; use sidecars for that format.
 
 ## Preferred format
 

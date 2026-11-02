@@ -83,6 +83,21 @@ def _cues(document: str) -> list[tuple[int, int, str]]:
     return result
 
 
+def _srt(entries: list[tuple[int, int, str]]) -> bytes:
+    return "".join(
+        f"{index}\n{_format_timestamp(start)} --> {_format_timestamp(end)}\n{body}\n\n"
+        for index, (start, end, body) in enumerate(entries, 1)
+    ).encode("utf-8")
+
+
+def webvtt_to_srt(document: str) -> bytes:
+    """One whole WebVTT document, such as a subtitle yt-dlp wrote, as UTF-8 SRT."""
+    entries = sorted(set(_cues(document)), key=lambda item: (item[0], item[1]))
+    if not entries:
+        raise DownloadError("The subtitle has no usable cues")
+    return _srt(entries)
+
+
 def _fetch_limited(
     url: str, remaining_bytes: int, should_cancel: Callable[[], bool],
 ) -> bytes:
@@ -173,10 +188,7 @@ def download_hls_webvtt(
     entries.sort(key=lambda item: (item[0], item[1]))
     if not entries:
         raise DownloadError("HLS subtitle playlist contains no usable cues")
-    content = "".join(
-        f"{index}\n{_format_timestamp(start)} --> {_format_timestamp(end)}\n{body}\n\n"
-        for index, (start, end, body) in enumerate(entries, 1)
-    ).encode("utf-8")
+    content = _srt(entries)
     if len(content) > maximum_bytes:
         raise DownloadError("Converted HLS subtitles exceed the configured size limit")
     return content
