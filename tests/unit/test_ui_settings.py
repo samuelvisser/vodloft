@@ -222,8 +222,7 @@ def test_download_root_change_recomputes_unset_storage_defaults(tmp_path, monkey
     _point_settings_at(config_path, monkeypatch)
 
     current = get_ui_settings()
-    original_temporary_root = current.values.download_settings.temporary_download_root
-    assert original_temporary_root.name == "vodloft-downloads"
+    assert current.values.download_settings.temporary_download_root.as_posix() == "/media-one/.vodloft-temp"
     assert current.values.download_settings.rss_cache_root.as_posix() == "/media-one/.vodloft-rss-cache"
 
     values = current.values.model_copy(deep=True)
@@ -233,7 +232,7 @@ def test_download_root_change_recomputes_unset_storage_defaults(tmp_path, monkey
         changed_fields=["downloadSettings.downloadRoot"],
     ))
 
-    assert result.values.download_settings.temporary_download_root == original_temporary_root
+    assert result.values.download_settings.temporary_download_root.as_posix() == "/media-two/.vodloft-temp"
     assert result.values.download_settings.rss_cache_root.as_posix() == "/media-two/.vodloft-rss-cache"
 
     document = yaml.safe_load(config_path.read_text(encoding="utf-8"))
