@@ -102,7 +102,7 @@ def get_catalog_shows(
     *, offset: int, limit: int, search: str | None, grouping: str,
 ) -> DwCatalogShowPageRecord:
     shows = [
-        show for show in get_catalog().shows
+        show for show in get_catalog().collections
         if _matches_search(show.title, show.author_name, search)
     ]
     if grouping == 'host':
