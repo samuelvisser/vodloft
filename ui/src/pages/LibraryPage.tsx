@@ -173,20 +173,21 @@ export default function LibraryPage() {
             )}
 
             {hasAny && (
-                <SourceFilter
-                    sourceKeys={sourceKeys}
-                    selected={sourceFilter}
-                    onChange={setSourceFilter}
-                    ariaLabel="Filter library by source"
-                />
-            )}
-
-            {activeType === 'collections' && hasCollections && (
-                <CollectionTypeFilter
-                    selectedTypes={collectionTypeFilter}
-                    onChange={setCollectionTypeFilter}
-                    ariaLabel="Filter library collections by type"
-                />
+                <div className="library-filter-row">
+                    <SourceFilter
+                        sourceKeys={sourceKeys}
+                        selected={sourceFilter}
+                        onChange={setSourceFilter}
+                        ariaLabel="Filter library by source"
+                    />
+                    {activeType === 'collections' && hasCollections && (
+                        <CollectionTypeFilter
+                            selectedTypes={collectionTypeFilter}
+                            onChange={setCollectionTypeFilter}
+                            ariaLabel="Filter library collections by type"
+                        />
+                    )}
+                </div>
             )}
 
             {loading && !hasAny ? (

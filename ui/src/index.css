@@ -1807,6 +1807,21 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 }
 .collection-summary-card > svg { color: var(--muted); }
 
+/* Library filters: the source and Collection type chips share one line and
+   scroll sideways when they do not fit, instead of wrapping onto a second row. */
+.library-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.library-filter-row::-webkit-scrollbar { display: none; }
+.library-filter-row .filter-chip-group { flex: 0 0 auto; flex-wrap: nowrap; margin-bottom: 0; }
+.library-filter-row .filter-chip-group + .filter-chip-group { padding-left: 8px; border-left: 1px solid rgba(100, 116, 139, .35); }
+.library-filter-row .filter-chip, .library-filter-row .filter-chip-reset { white-space: nowrap; }
+
 /* Library Collections: equal tiles with one 16:9 art frame. A poster stands upright
    in the frame over a blurred copy of itself; a 16:9 thumbnail fills it. */
 .library-collection-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; }
@@ -2066,6 +2081,10 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
   .media-type-tabs { display: grid; width: 100%; grid-auto-columns: minmax(0,1fr); }
   .catalog-collection-grid { grid-template-columns: 1fr; }
   .library-collection-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .library-filter-row { gap: 5px; }
+  .library-filter-row .filter-chip-group { gap: 5px; }
+  .library-filter-row .filter-chip-group + .filter-chip-group { padding-left: 5px; }
+  .library-filter-row .filter-chip { padding: 3px 8px; font-size: 12px; }
   .library-tile-art .library-tile-source { left: 6px; bottom: 6px; font-size: 10px; }
   .library-tile-copy { gap: 3px; padding: 9px 10px 11px; }
   .library-tile-title { font-size: 14px; }
