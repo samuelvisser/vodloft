@@ -1755,6 +1755,7 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
   color: var(--muted);
   font: inherit;
   font-weight: 650;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -1934,7 +1935,7 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .movie-state.is-error { background: #dc4f57; }
 
 
-.browse-type-tabs { display: grid; width: min(100%, 360px); }
+.browse-type-tabs { max-width: 100%; box-sizing: border-box; }
 .browse-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 24px; }
 .browse-search { flex: 1; max-width: 480px; min-height: 44px; display: flex; align-items: center; gap: 9px; padding: 0 12px; border: 1px solid rgba(100,116,139,.4); border-radius: 10px; background: rgba(148,163,184,.07); color: var(--muted); }
 .browse-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; }
