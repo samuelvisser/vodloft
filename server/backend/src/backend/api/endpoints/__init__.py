@@ -27,5 +27,6 @@ from .users import user_router
 from .imports import import_router
 from .assets import assets_router
 from .health import health_router
+from .regex import regex_router
 
 from .meta_router import router as meta_router
