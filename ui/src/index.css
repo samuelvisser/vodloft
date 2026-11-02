@@ -2058,7 +2058,9 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 }
 
 @media (max-width: 480px) {
-  .media-type-tabs { display: grid; width: 100%; grid-auto-columns: minmax(0,1fr); }
+  /* Size each tab to its label so three tabs still fit on one line */
+  .media-type-tabs { display: flex; width: 100%; box-sizing: border-box; }
+  .media-type-tabs button { flex: 1 1 auto; padding: 8px 6px; white-space: nowrap; }
   .catalog-collection-grid { grid-template-columns: 1fr; }
   .library-collection-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .library-tile-art .library-tile-source { left: 6px; bottom: 6px; font-size: 10px; }
