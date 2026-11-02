@@ -28,7 +28,7 @@ Tick **Use these as my defaults next time** to keep your choices for the next li
 
 ## Where the file waits
 
-Each file is prepared in its own folder under `.vodloft-quick` inside the temporary folder (`downloadSettings.temporaryDownloadRoot`), never in your library. VODLoft deletes it:
+Each file is prepared in its own folder inside the quick download folder (`downloadSettings.quickDownloadRoot`, by default `.vodloft-quick-downloads` in the download root), never in your library. Because that folder is on the download volume, ready files survive a container update. VODLoft deletes it:
 
 - a few minutes after your browser has received every byte (10 minutes by default, so a failed save can be retried);
 - when nobody downloads it in time (24 hours by default);

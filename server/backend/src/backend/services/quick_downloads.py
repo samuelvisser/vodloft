@@ -395,7 +395,7 @@ def prepare_quick_download_plan(request: QuickDownloadRequest, folder: Path, tra
     tracker.ensure_active()
     check_quick_rules(source, request.choice, rules, size_bytes=resolved.expected_bytes)
     ensure_free_space(
-        download_settings.temporary_download_root, expected_bytes=resolved.expected_bytes,
+        download_settings.quick_download_root, expected_bytes=resolved.expected_bytes,
         keep_free_bytes=int(quick_settings.keep_free_gigabytes * _GIGABYTE),
     )
     tracker.preparing("plan_outputs")
@@ -412,7 +412,7 @@ def prepare_quick_download_plan(request: QuickDownloadRequest, folder: Path, tra
     tags = tuple(_metadata(source, request, details).ffmpeg_tags().items()) if request.choice.embed_metadata else ()
     return build_download_plan(
         source=resolved, requested_destination=folder / quick_file_name(request.title, resolved.extension),
-        download_mode="temporary", temporary_root=download_settings.temporary_download_root,
+        download_mode="temporary", temporary_root=download_settings.quick_download_root,
         ffmpeg_path=download_settings.ffmpeg_path, assets=assets, metadata_tags=tags,
         artwork_asset_id=artwork_id, attempt_id=tracker.attempt_id,
         media_lane=(f"source:{source.id}", streams) if (streams := source.download_streams) else None,
@@ -644,17 +644,17 @@ def ready_manifest(request: QuickDownloadRequest, path: Path, size_bytes: int, *
 
 
 def quick_folder(quick_id: str) -> Path:
-    return quick_folder_path(get_settings().download_settings.temporary_download_root, quick_id)
+    return quick_folder_path(get_settings().download_settings.quick_download_root, quick_id)
 
 
 def ready_quick_download(quick_id: str) -> QuickFolder | None:
     """A quick download whose file is ready, or None."""
-    found = open_quick_folder(get_settings().download_settings.temporary_download_root, quick_id)
+    found = open_quick_folder(get_settings().download_settings.quick_download_root, quick_id)
     return found if found is not None and found.manifest is not None else None
 
 
 def discard_quick_download(quick_id: str) -> bool:
-    found = open_quick_folder(get_settings().download_settings.temporary_download_root, quick_id)
+    found = open_quick_folder(get_settings().download_settings.quick_download_root, quick_id)
     if found is None:
         return False
     if found.manifest is not None and found.manifest.state == "ready":
@@ -720,7 +720,7 @@ def mark_delivered(quick_id: str, *, now: datetime | None = None) -> QuickManife
 
 
 def sweep_quick_downloads(
-    temporary_root: str | Path | None = None, *, remove_unfinished: bool = False, now: datetime | None = None,
+    quick_root: str | Path | None = None, *, remove_unfinished: bool = False, now: datetime | None = None,
 ) -> QuickSweep:
     """Delete quick download files whose time is up.
 
@@ -728,7 +728,7 @@ def sweep_quick_downloads(
     quick download can still be running then.
     """
     sweep = sweep_quick_folders(
-        temporary_root or get_settings().download_settings.temporary_download_root,
+        quick_root or get_settings().download_settings.quick_download_root,
         now=now or datetime.now(timezone.utc), remove_unfinished=remove_unfinished,
     )
     for manifest in sweep.expired:

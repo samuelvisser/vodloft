@@ -69,6 +69,7 @@ def test_download_filesystem_recovery_cleans_expired_rss_cache(monkeypatch, tmp_
     download_settings = SimpleNamespace(
         download_root=tmp_path / "downloads",
         temporary_download_root=tmp_path / "temporary",
+        quick_download_root=tmp_path / "quick",
     )
 
     backend_app._recover_download_filesystem(download_settings, pause)

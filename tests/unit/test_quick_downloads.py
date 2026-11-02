@@ -93,7 +93,8 @@ def temporary_root(tmp_path, monkeypatch):
     from config import get_settings
 
     settings = get_settings()
-    monkeypatch.setattr(settings.download_settings, "temporary_download_root", tmp_path / "temporary")
+    monkeypatch.setattr(settings.download_settings, "temporary_download_root", tmp_path / "staging")
+    monkeypatch.setattr(settings.download_settings, "quick_download_root", tmp_path / "temporary")
     monkeypatch.setattr(settings.quick_download, "keep_free_gigabytes", 0)
     # The history has its own tests, with its table.
     monkeypatch.setattr(settings.quick_download, "keep_history", False)
