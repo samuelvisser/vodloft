@@ -15,6 +15,7 @@ import SourceBadge from '../components/Source/SourceBadge'
 import {DrmBadge} from '../components/common/DrmProtected'
 import {SubscriptionBadge} from '../components/common/NeedsSubscription'
 import SourceFilter, {matchesSourceFilter} from '../components/Source/SourceFilter'
+import DownloadStatusBadge from '../components/DownloadProgress/DownloadStatusBadge'
 import {useMediaDownloadsView, useMovies, useCollectionsView, useVideos} from '../lib/queries'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {CollectionTypeReg, CollectionTypeValue} from '../types/collection'
@@ -273,24 +274,24 @@ export default function LibraryPage() {
                 </div>
             ) : activeType === 'videos' && hasVideos ? (
                 filteredVideos.length > 0 ? (
-                    <div className="video-card-grid" role="list" aria-label="Videos">
+                    <div className="episodes-grid" role="list" aria-label="Videos">
                         {filteredVideos.map((video) => {
                             const image = toImageUrl(video.thumbnailLandscapePath || video.backgroundImagePath)
                             const duration = formatVideoDuration(video.duration)
+                            const download = latestVideoDownload(downloads, video.id)
                             return (
-                                <Link className="video-card" to={`/video/${video.id}`} key={video.id} role="listitem">
-                                    <span className="movie-poster-art">
-                                        {image
-                                            ? <img src={image} alt="" loading="lazy" decoding="async"/>
-                                            : <FontAwesomeIcon icon={faIcon('fass', 'film')}/>
-                                        }
-                                        {duration && <span className="video-card-duration">{duration}</span>}
-                                        <DownloadStateBadge download={latestVideoDownload(downloads, video.id)}/>
+                                <Link className="episode-card" to={`/video/${video.id}`} key={video.id} role="listitem" aria-label={video.title}>
+                                    <span className="cover" style={image ? {backgroundImage: `url(${image})`} : undefined}>
+                                        {download && download.presentation.status !== 'not_downloaded' && (
+                                            <span className="status-group" role="list" aria-label="Download status">
+                                                <DownloadStatusBadge download={download}/>
+                                            </span>
+                                        )}
                                         {video.drmProtected ? <DrmBadge onCover/> : video.needsSubscription && <SubscriptionBadge sourceKey={video.sourceKey} onCover/>}
+                                        {!image && <FontAwesomeIcon icon={faIcon('fass', 'film')}/>}
+                                        {duration && <span className="badge">{duration}</span>}
                                     </span>
-                                    <span className="movie-poster-title">{video.title}</span>
-                                    {video.authorName && <span className="movie-poster-meta">{video.authorName}</span>}
-                                    <SourceBadge sourceKey={video.sourceKey}/>
+                                    <span className="episode-title" title={video.title}>{video.title}</span>
                                 </Link>
                             )
                         })}
