@@ -204,7 +204,7 @@ def recover_download_filesystem(download_settings) -> DownloadFilesystemRecovery
 
     # Unfinished quick downloads cannot resume, so their folders go; ready
     # files stay until they expire.
-    quick = sweep_quick_downloads(download_settings.temporary_download_root, remove_unfinished=True)
+    quick = sweep_quick_downloads(download_settings.quick_download_root, remove_unfinished=True)
     # Finish or roll back interrupted re-download swaps before cleaning any
     # workspace, so a replacement that was mid-publish is not thrown away.
     replacements = recover_abandoned_download_replacements(download_settings.download_root)
@@ -214,6 +214,10 @@ def recover_download_filesystem(download_settings) -> DownloadFilesystemRecovery
         temporary_workspaces=cleanup_abandoned_temporary_downloads(
             download_settings.temporary_download_root,
             download_settings.download_root,
+        ) + temporary.cleanup_abandoned_temporary_downloads(
+            # Quick downloads are prepared in their own folder; only their workspaces are there.
+            download_settings.quick_download_root, download_settings.download_root,
+            is_committed=_is_committed_download_artifact,
         ),
         rss_cache_files=cleanup_expired_rss_cache(),
         quick_downloads=len(quick.unfinished) + len(quick.expired),

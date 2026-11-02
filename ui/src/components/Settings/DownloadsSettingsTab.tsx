@@ -118,6 +118,12 @@ export default function DownloadsSettingsTab({
     )
         ? childPath(draft.downloadSettings.downloadRoot, '.vodloft-rss-cache')
         : draft.downloadSettings.rssCacheRoot
+    const quickDownloadRoot = (
+        !isFieldExplicit('downloadSettings.quickDownloadRoot')
+        && !isFieldDirty('downloadSettings.quickDownloadRoot')
+    )
+        ? childPath(draft.downloadSettings.downloadRoot, '.vodloft-quick-downloads')
+        : draft.downloadSettings.quickDownloadRoot
 
     const storageInspectionIsCurrent = ![
         'downloadSettings.downloadRoot',
@@ -202,6 +208,18 @@ export default function DownloadsSettingsTab({
                         </ReadMore>
                     }
 
+                />
+                <TextField
+                    id="settings-quick-download-root"
+                    label="Quick download folder"
+                    value={quickDownloadRoot}
+                    error={errorFor('downloadSettings.quickDownloadRoot')}
+                    environmentVariable={environmentVariableFor('downloadSettings.quickDownloadRoot')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.downloadSettings.quickDownloadRoot = value
+                    })}
+                    help="Where quick downloads are prepared and kept until they are fetched. By default it is .vodloft-quick-downloads inside the download root, so ready files survive a container update. Container-local storage loses them when the container is recreated."
+                    wide
                 />
                 <DurationField
                     id="settings-rss-cache-retention"

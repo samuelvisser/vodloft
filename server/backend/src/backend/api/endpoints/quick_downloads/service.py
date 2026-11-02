@@ -194,7 +194,7 @@ def _my_operations(s: Session, access: Access):
 
 
 def _ready() -> list[QuickFolder]:
-    folders = list_quick_folders(get_settings().download_settings.temporary_download_root)
+    folders = list_quick_folders(get_settings().download_settings.quick_download_root)
     return sorted((f for f in folders if f.manifest is not None), key=lambda f: f.manifest.created_at, reverse=True)
 
 

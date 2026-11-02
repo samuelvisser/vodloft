@@ -52,6 +52,8 @@ def test_cache_default_follows_download_root_but_temporary_storage_does_not():
     assert settings.temporary_download_root.name == "vodloft-downloads"
     assert settings.temporary_download_root.as_posix() != "/media/.vodloft-temp"
     assert settings.rss_cache_root.as_posix() == "/media/.vodloft-rss-cache"
+    # Ready quick downloads stay on the download volume, so they survive a container update.
+    assert settings.quick_download_root.as_posix() == "/media/.vodloft-quick-downloads"
 
 
 def test_explicit_download_storage_paths_override_default_factories():

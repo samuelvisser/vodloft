@@ -42,7 +42,7 @@ def _own_folder(quick_id: str, tracker: DownloadTracker) -> Iterator[Path]:
     try:
         folder = quick_folder(quick_id)
         remove_quick_folder(folder)
-        reserve_quick_folder(get_settings().download_settings.temporary_download_root, quick_id)
+        reserve_quick_folder(get_settings().download_settings.quick_download_root, quick_id)
         yield folder
     finally:
         lock.release()

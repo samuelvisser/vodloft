@@ -93,7 +93,8 @@ def temporary_root(tmp_path, monkeypatch):
     from config import get_settings
 
     settings = get_settings()
-    monkeypatch.setattr(settings.download_settings, "temporary_download_root", tmp_path / "temporary")
+    monkeypatch.setattr(settings.download_settings, "temporary_download_root", tmp_path / "staging")
+    monkeypatch.setattr(settings.download_settings, "quick_download_root", tmp_path / "temporary")
     monkeypatch.setattr(settings.quick_download, "keep_free_gigabytes", 0)
     # The history has its own tests, with its table.
     monkeypatch.setattr(settings.quick_download, "keep_history", False)
@@ -738,6 +739,13 @@ def test_the_history_follows_each_quick_download_to_its_end(api, temporary_root,
     assert rows[expired["quickDownloadId"]]["format"] == "Audio · M4A"
     assert rows[expired["quickDownloadId"]]["choice"]["kind"] == "audio"
     assert rows[canceled["quickDownloadId"]]["outcome"] == "canceled"
+
+    # A ready file that disappears, such as when the temporary folder is cleared, is no longer ready.
+    gone = _start(api, "https://clips.example/v/gone").json()
+    history.record_outcome(gone["quickDownloadId"], history.READY, size_bytes=10)
+    rows = {row["quickDownloadId"]: row for row in api.client.get("/api/quick-downloads/history").json()}
+    assert rows[gone["quickDownloadId"]]["outcome"] == "expired"
+    assert rows[gone["quickDownloadId"]]["message"] == "The file was removed before it was downloaded"
 
     # Clearing keeps what is still going on; old entries are forgotten after the retention period.
     working = _start(api, "https://clips.example/v/jkl").json()

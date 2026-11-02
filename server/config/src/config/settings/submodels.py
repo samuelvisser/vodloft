@@ -461,6 +461,11 @@ class DownloadSettings(SubmodelBase):
         default_factory=lambda data: data["download_root"] / ".vodloft-rss-cache",
         description="Directory used as the root for media cached while fulfilling RSS requests",
     )
+    quick_download_root: Path = Field(
+        default_factory=lambda data: data["download_root"] / ".vodloft-quick-downloads",
+        description="Directory where quick downloads are prepared and kept until they are fetched. "
+                    "Inside the download root by default, so ready files survive a container update",
+    )
     rss_cache_retention_seconds: int = Field(
         default=7 * 24 * 60 * 60,
         ge=1,
@@ -490,6 +495,9 @@ class DownloadSettings(SubmodelBase):
     )(_validate_non_empty_path)
     _validate_rss_cache_root = field_validator(
         "rss_cache_root", mode="before"
+    )(_validate_non_empty_path)
+    _validate_quick_download_root = field_validator(
+        "quick_download_root", mode="before"
     )(_validate_non_empty_path)
 
 

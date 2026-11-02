@@ -201,11 +201,12 @@ def test_startup_recovery_and_the_scheduled_sweep_use_the_quick_folder(tmp_path,
     monkeypatch.setattr(get_settings().quick_download, "keep_history", False)
 
     recovery = download_recovery.recover_download_filesystem(SimpleNamespace(
-        download_root=tmp_path / "downloads", temporary_download_root=temporary_root,
+        download_root=tmp_path / "downloads", temporary_download_root=tmp_path / "staging",
+        quick_download_root=temporary_root,
     ))
     assert recovery.quick_downloads == 1
     assert [found.id for found in list_quick_folders(temporary_root)] == [ready]
 
-    monkeypatch.setattr(get_settings().download_settings, "temporary_download_root", temporary_root)
+    monkeypatch.setattr(get_settings().download_settings, "quick_download_root", temporary_root)
     assert sweep_quick_downloads().expired == ()
     assert [m.id for m in sweep_quick_downloads(now=expires_at).expired] == [ready]
