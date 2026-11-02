@@ -569,7 +569,8 @@ class YtDlpSource(Source):
     def _refresh_from_listing(self, url: str, wanted: frozenset[str]) -> dict[str, VideoDetails]:
         """Titles from the collection's flat listing, which takes one request a page instead of one a video.
 
-        The listing has no reliable description or picture, so those are kept.
+        The listing has no reliable description or picture, so those are kept. It
+        has the length of most YouTube videos, and the uploader when the site says.
         """
         details: dict[str, VideoDetails] = {}
         for listing_url in _listing_urls(url):
@@ -584,8 +585,11 @@ class YtDlpSource(Source):
                 slug = video_slug(entry)
                 entry_url = entry.get("url") or entry.get("webpage_url")
                 if slug in wanted and entry_url and entry["title"] not in _UNAVAILABLE_TITLES:
+                    duration = entry.get("duration")
                     details.setdefault(slug, VideoDetails(
                         slug=slug, url=entry_url, title=entry["title"], description=entry.get("description") or None,
+                        duration=float(duration) if isinstance(duration, (int, float)) and duration > 0 else None,
+                        author_name=entry.get("uploader") or entry.get("channel") or None,
                     ))
         return details
 

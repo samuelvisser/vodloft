@@ -127,4 +127,9 @@ VOLUME ["/config", "/downloads"]
 
 EXPOSE 80
 
+# Healthy while the database answers and the scheduler runs (see /api/health).
+# Database migrations run before the API starts, so the first start may take a while.
+HEALTHCHECK --interval=1m --timeout=10s --start-period=5m --start-interval=10s --retries=3 \
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1/api/health', timeout=8).status == 200 else 1)"
+
 ENTRYPOINT ["/entrypoint.sh"]
