@@ -145,16 +145,12 @@ def test_fresh_database_upgrades_to_the_head(migration_database):
             "SELECT type, slug, output_template, preferred_format "
             "FROM local_media_profiles ORDER BY slug"
         )).mappings().all()
-        assert [profile["slug"] for profile in profiles] == [
-            "vodloft-collections-audio",
-            "vodloft-collections-video",
-            "vodloft-movies",
-            "vodloft-videos",
-        ]
-        assert {profile["type"] for profile in profiles} == {"movie", "collection", "video"}
+        # The Collection profiles are only for a fresh start: onboarding adds them.
+        assert [profile["slug"] for profile in profiles] == ["vodloft-movies", "vodloft-videos"]
+        assert {profile["type"] for profile in profiles} == {"movie", "video"}
         assert connection.execute(text(
             "SELECT COUNT(*) FROM local_media_profiles_collection"
-        )).scalar_one() == 2
+        )).scalar_one() == 0
         assert connection.execute(text(
             "SELECT COUNT(*) FROM local_media_profiles_movie"
         )).scalar_one() == 1
@@ -168,7 +164,7 @@ def test_fresh_database_upgrades_to_the_head(migration_database):
     with engine.connect() as connection:
         assert connection.execute(text(
             "SELECT COUNT(*) FROM local_media_profiles"
-        )).scalar_one() == 4
+        )).scalar_one() == 2
 
 
 def test_existing_database_upgrade_does_not_run_initial_seed(migration_database):

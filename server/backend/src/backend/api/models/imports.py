@@ -42,10 +42,16 @@ class ImportIncomingAPIRead(ResponseBase):
     files: list[ImportUploadedFileAPIRead]
 
 
+class ImportSendAPIRead(ResponseBase):
+    source: str = Field(description="The path the browser picked")
+    path: str = Field(description="Where the server keeps it: the path to send its chunks to")
+
+
 class ImportUploadStatusAPIRead(ResponseBase):
     upload: Optional[ImportUploadInfoAPIRead] = None
     incoming: Optional[ImportIncomingAPIRead] = None
     skipped: list[str] = Field(default_factory=list)
+    send: list[ImportSendAPIRead] = Field(default_factory=list)
 
 
 class ImportChunkAPIRead(ResponseBase):
@@ -221,5 +227,7 @@ class ImportRunAPIRead(ImportRunSummaryAPIRead):
 class ImporterAPIRead(ResponseBase):
     key: str
     name: str
+    files: list[str] = Field(description="The files an upload of the config folder takes, as patterns")
+    secret_files: list[str] = Field(description="Sign-ins and keys among them, only sent when asked for")
     upload: ImportUploadStatusAPIRead
     last_run: Optional[ImportRunSummaryAPIRead] = None

@@ -67,6 +67,23 @@ episodes that still have no file.
 Adopted files keep their names. To give them the profile's names, choose **Rename to this profile's template**,
 which runs the collection's file rename for that profile.
 
+## The Import screen
+
+Administrators find the importers under **Settings → Import**, and in the **Your media** step of the first-run setup.
+Each importer has its own card:
+
+1. **Upload.** Choose the other program's config folder, or an archive of it (zip or tar). Only the files the importer
+   needs are sent, in small pieces, so a large database also works behind a reverse proxy; an interrupted upload
+   continues where it stopped. If the folder is already mounted into VODLoft, choose **Use a folder VODLoft can
+   already see** instead. Sign-ins are only taken when you turn on **Also bring sign-ins**.
+2. **Preview.** Check the folder mapping (change it and choose **Check again** if VODLoft looks in the wrong place),
+   untick collections you don't want, edit a profile's template and see whether existing files keep their paths, and
+   tick the settings to bring over. Download Profiles stay off unless you turn on **Turn on Download Profiles**.
+3. **Import.** The card follows the run per collection. **Download report** saves what was created, linked, kept and
+   refused as a text file. Earlier imports stay listed with their reports.
+
+**Upload again** replaces the upload with a newer one, for example to run the import again later.
+
 ## Importing from Pinchflat
 
 Administrators can import a Pinchflat installation from **Settings → Import**. Upload Pinchflat's config folder

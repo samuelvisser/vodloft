@@ -57,6 +57,8 @@ def importers_list():
                             .order_by(ImportRun.id.desc()).limit(1))
             out.append(ImporterAPIRead.model_validate({
                 "key": importer.key, "name": importer.name, "upload": upload_status(importer),
+                "files": [rule.pattern for rule in importer.upload_files if not rule.secret],
+                "secret_files": [rule.pattern for rule in importer.upload_files if rule.secret],
                 "last_run": run_summary(last) if last else None,
             }))
         return out

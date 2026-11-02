@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from backend.api.models.onboarding import OnboardingStatusAPIRead
 from backend.app import db_session
 
-from .service import complete_onboarding, get_onboarding_status
+from .service import complete_onboarding, get_onboarding_status, start_fresh
 from backend.security.access import Area, Level
 from backend.security.deps import requires, signed_in
 
@@ -32,6 +32,18 @@ def onboarding_complete():
             result = complete_onboarding(s)
             s.commit()
             return result
+        except Exception:
+            s.rollback()
+            raise
+
+
+@router.post("/start-fresh", dependencies=[requires(Area.SETTINGS, Level.MANAGE)], status_code=204)
+def onboarding_start_fresh():
+    """Start a library from scratch rather than importing one: adds the default Collection profiles."""
+    with db_session() as s:
+        try:
+            start_fresh(s)
+            s.commit()
         except Exception:
             s.rollback()
             raise

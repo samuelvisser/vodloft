@@ -511,3 +511,31 @@
 }
 .onboarding-source summary small { opacity: 0.75; }
 .onboarding-source[open] summary { margin-bottom: 12px; }
+
+.onboarding-media-choices {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+    gap: 0.75rem;
+}
+
+.onboarding-media-choice {
+    display: grid;
+    justify-items: start;
+    gap: 0.35rem;
+    padding: 1rem;
+    border: 1px solid var(--border-color, rgba(127, 127, 127, 0.35));
+    border-radius: 12px;
+    background: var(--surface-color, transparent);
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.onboarding-media-choice:hover:not(:disabled),
+.onboarding-media-choice:focus-visible {
+    border-color: var(--accent-color, #3b82f6);
+}
+
+.onboarding-media-choice small {
+    opacity: 0.75;
+}

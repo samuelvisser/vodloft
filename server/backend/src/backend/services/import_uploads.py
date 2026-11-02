@@ -85,18 +85,21 @@ def _is_archive(name: str) -> bool:
 def begin_upload(importer: Importer, files: Iterable[tuple[str, int]], *, include_secrets: bool) -> dict[str, Any]:
     """Start an upload of these files (path in the picked folder, size); returns what will be taken."""
     accepted: dict[str, AcceptedFile] = {}
+    sources: dict[str, str] = {}
     skipped: list[str] = []
     for path, size in files:
         if size < 0 or size > FILE_LIMIT:
             raise UploadError(f"{path} is too large to upload")
         if _is_archive(path) and not accepted and _ARCHIVE not in accepted:
             accepted[_ARCHIVE] = AcceptedFile(_ARCHIVE + _archive_suffix(path), size)
+            sources[accepted[_ARCHIVE].path] = path
             continue
         found = normalise_upload_path(path, importer.upload_files)
         if found is None or (found[1].secret and not include_secrets):
             skipped.append(path)
             continue
         accepted[found[0]] = AcceptedFile(found[0], size, found[1].secret)
+        sources[found[0]] = path
     if _ARCHIVE in accepted and len(accepted) > 1:
         raise UploadError("Upload an archive on its own, or the folder's files without one")
     if _ARCHIVE not in accepted and not any(
@@ -111,7 +114,8 @@ def begin_upload(importer: Importer, files: Iterable[tuple[str, int]], *, includ
         "started_at": _now(), "include_secrets": include_secrets,
         "files": [{"path": item.path, "size": item.size, "secret": item.secret} for item in accepted.values()],
     })
-    return upload_status(importer) | {"skipped": skipped}
+    send = [{"source": sources[item.path], "path": item.path} for item in accepted.values()]
+    return upload_status(importer) | {"skipped": skipped, "send": send}
 
 
 def _archive_suffix(name: str) -> str:

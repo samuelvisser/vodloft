@@ -13,11 +13,12 @@ import {SourceFeature, sourceHas} from '../../types/schemas/source'
 import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {CollectionRead} from '../../types/schemas/collection'
 import OnboardingMovieProfileStep from './OnboardingMovieProfileStep'
+import OnboardingMediaStep from './OnboardingMediaStep'
 import './Onboarding.css'
 import {faIcon} from '../../icons/faIcon'
 
 
-type OnboardingStep = 'welcome' | 'sources' | 'security' | 'add' | 'browse' | 'collection' | 'movie-profile' | 'movie'
+type OnboardingStep = 'welcome' | 'sources' | 'security' | 'media' | 'import' | 'add' | 'browse' | 'collection' | 'movie-profile' | 'movie'
 
 /** The collection or movie picked as the first media, from a link or from browsing. */
 type SelectedMedia = {slug: string; title: string; url: string}
@@ -27,7 +28,7 @@ type Props = {
     onComplete: () => void
 }
 
-const STEP_LABELS = ['Welcome', 'Sources', 'Security', 'First media']
+const STEP_LABELS = ['Welcome', 'Sources', 'Security', 'Your media']
 
 function visibleStepIndex(step: OnboardingStep) {
     if (step === 'welcome') return 0
@@ -231,10 +232,23 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
 
                     <div className="onboarding-stage-actions">
                         <button className="btn" type="button" onClick={() => setStep('sources')}>Back</button>
-                        <button className="btn btn-primary" type="button" onClick={() => setStep('add')}>
+                        <button className="btn btn-primary" type="button" onClick={() => setStep('media')}>
                             Continue to library setup
                         </button>
                     </div>
+                </main>
+            )}
+
+            {(step === 'media' || step === 'import') && (
+                <main className="onboarding-stage onboarding-stage-narrow">
+                    <OnboardingMediaStep
+                        importing={step === 'import'}
+                        onBack={() => setStep(step === 'import' ? 'media' : 'security')}
+                        onImport={() => setStep('import')}
+                        onStartFresh={() => setStep('add')}
+                        onImported={() => void completeOnboarding()}
+                    />
+                    {isCompleting && <div className="onboarding-completing" role="status">Finishing setup…</div>}
                 </main>
             )}
 

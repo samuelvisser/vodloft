@@ -35,15 +35,51 @@ _VIDEO_TEMPLATE = (
 )
 
 
-def _seed_local_media_profiles(session: Session) -> None:
-    from backend.db.models import (
-        LocalMediaProfileBase,
-        MovieLocalMediaProfile,
-        CollectionLocalMediaProfile,
-        VideoLocalMediaProfile,
+def _add_missing_profiles(session: Session, profiles) -> None:
+    from backend.db.models import LocalMediaProfileBase
+
+    slugs = tuple(profile.slug for profile in profiles)
+    existing_slugs = set(session.scalars(
+        select(LocalMediaProfileBase.slug).where(
+            LocalMediaProfileBase.slug.in_(slugs)
+        )
+    ))
+    session.add_all(
+        profile
+        for profile in profiles
+        if profile.slug not in existing_slugs
     )
 
-    profiles = (
+
+def _seed_local_media_profiles(session: Session) -> None:
+    from backend.db.models import MovieLocalMediaProfile, VideoLocalMediaProfile
+
+    _add_missing_profiles(session, (
+        MovieLocalMediaProfile(
+            slug="vodloft-movies",
+            name="VODLoft Movies",
+            subtitle_mode="sidecar",
+            output_template=_MOVIE_TEMPLATE,
+            preferred_format="format_1080p",
+        ),
+        VideoLocalMediaProfile(
+            slug="vodloft-videos",
+            name="VODLoft Videos",
+            output_template=_VIDEO_TEMPLATE,
+            preferred_format="format_1080p",
+        ),
+    ))
+
+
+def seed_fresh_start_profiles(session: Session) -> None:
+    """The default Collection profiles, for a library that starts fresh instead of importing one.
+
+    Onboarding adds them on "Start fresh", or when it finishes without an import, so a library
+    imported during onboarding only holds the imported profiles (plus Movies and Videos).
+    """
+    from backend.db.models import CollectionLocalMediaProfile
+
+    _add_missing_profiles(session, (
         CollectionLocalMediaProfile(
             slug="vodloft-collections-video",
             name="VODLoft Collections (Video)",
@@ -58,31 +94,7 @@ def _seed_local_media_profiles(session: Session) -> None:
             output_template=_COLLECTION_AUDIO_TEMPLATE,
             preferred_format="format_audio_only",
         ),
-        MovieLocalMediaProfile(
-            slug="vodloft-movies",
-            name="VODLoft Movies",
-            subtitle_mode="sidecar",
-            output_template=_MOVIE_TEMPLATE,
-            preferred_format="format_1080p",
-        ),
-        VideoLocalMediaProfile(
-            slug="vodloft-videos",
-            name="VODLoft Videos",
-            output_template=_VIDEO_TEMPLATE,
-            preferred_format="format_1080p",
-        ),
-    )
-    slugs = tuple(profile.slug for profile in profiles)
-    existing_slugs = set(session.scalars(
-        select(LocalMediaProfileBase.slug).where(
-            LocalMediaProfileBase.slug.in_(slugs)
-        )
     ))
-    session.add_all(
-        profile
-        for profile in profiles
-        if profile.slug not in existing_slugs
-    )
 
 
 _INITIAL_SEED_STEPS: tuple[Callable[[Session], None], ...] = (
