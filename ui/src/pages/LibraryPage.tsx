@@ -207,8 +207,9 @@ export default function LibraryPage() {
                             const image = toImageUrl(
                                 collection.thumbnailPortraitPath || collection.thumbnailLandscapePath || collection.logoImagePath || collection.authorHeadshotPath,
                             )
+                            const landscape = !collection.thumbnailPortraitPath && !!collection.thumbnailLandscapePath
                             return (
-                                <Link className="collection-summary-card library-collection-card" to={`/collection/${collection.slug}`} key={collection.slug} role="listitem">
+                                <Link className={`collection-summary-card library-collection-card${landscape ? ' is-landscape' : ''}`} to={`/collection/${collection.slug}`} key={collection.slug} role="listitem">
                                     <span className="collection-summary-art">
                                         {image ? <img src={image} alt="" loading="lazy" decoding="async"/> : <span className="collection-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', 'podcast')}/></span>}
                                     </span>
