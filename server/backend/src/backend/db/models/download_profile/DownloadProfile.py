@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Column, Date, ForeignKey, JSON, Table, func
+from sqlalchemy import Column, Date, ForeignKey, JSON, String, Table, func
 from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
@@ -11,6 +11,7 @@ from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 
 if TYPE_CHECKING:
     from backend.db.models import EpisodeMediaDownload, LocalMediaProfileBase, Season, Collection
+    from .DownloadProfileRule import DownloadProfileRule
 
 
 download_profile_seasons = Table(
@@ -50,6 +51,10 @@ class DownloadProfile(Base, HasTaskResourcesMixin):
     download_episode_count: Mapped[int] = mapped_column(default=0)
     download_starting_from: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     delete_older_episodes: Mapped[bool] = mapped_column(default=True)
+    retention_from: Mapped[str] = mapped_column(
+        String(16), default="published", server_default="published",
+        comment="Whether a date window deletes episodes N days after publication or after downloading",
+    )
 
     # Season filter, used only when the collection is identified by season
     include_upcoming_seasons: Mapped[bool] = mapped_column(default=True)
@@ -66,6 +71,11 @@ class DownloadProfile(Base, HasTaskResourcesMixin):
     local_media_profile: Mapped["LocalMediaProfileBase"] = relationship(back_populates="download_profiles")
     seasons: Mapped[list["Season"]] = relationship(secondary=download_profile_seasons)
 
+    rules: Mapped[list["DownloadProfileRule"]] = relationship(
+        back_populates="download_profile",
+        cascade="all, delete-orphan",
+        order_by="DownloadProfileRule.position",
+    )
     episode_downloads: Mapped[list["EpisodeMediaDownload"]] = relationship(
         back_populates="download_profile"
     )

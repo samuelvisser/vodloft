@@ -20,6 +20,9 @@ class EpisodeMediaDownload(MediaDownloadBase):
     downloaded_publish_status: Mapped[Optional[str]]
     redownload_when_final: Mapped[bool] = mapped_column(default=False)
     redownload_when_delay_passed: Mapped[bool] = mapped_column(default=False)
+    kept: Mapped[bool] = mapped_column(
+        default=False, server_default="0", comment="Kept by hand: retention never deletes this download"
+    )
 
     # Relationships
     download_profile: Mapped[Optional["DownloadProfile"]] = relationship(back_populates="episode_downloads")

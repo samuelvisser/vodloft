@@ -11,10 +11,57 @@ Movies do not use Download Profiles; movie downloads are started manually from t
 Every Download Profile lets you choose:
 
 - whether the profile is enabled;
-- which episode types it applies to. The types come from the show's Source: The Daily Wire has Episode, Ep. Extra, Trailer and Auxiliary, and YouTube has Video, Short and Livestream;
-- which Local Media Profile should be used for the resulting files.
+- which Local Media Profile should be used for the resulting files;
+- **Which episodes** it downloads (see below).
 
 Disabling a profile keeps its configuration but stops it from automatically selecting new downloads.
+
+## Which episodes
+
+Everything that decides which episodes a profile downloads sits in one section, written as sentences you can read
+from top to bottom:
+
+> Download **Video** and **Livestream** episodes
+> published in the **last 90 days**, and delete them once they are older
+> Skip if the **title** contains the word “trailer” or “teaser”
+> Skip if the **duration** is shorter than **2 minutes**
+
+Each line narrows the one above it. The number next to a line says how many of the collection's indexed episodes that
+line leaves out, and the bottom line says how many are left, for example **37 of 412 indexed episodes will be
+downloaded**. **Show which** lists every episode, and for each one that won't be downloaded, the line that left it out.
+
+The first lines are built in and can't be removed:
+
+- the **episode types**. The types come from the show's Source: The Daily Wire has Episode, Ep. Extra, Trailer and
+  Auxiliary, and YouTube has Video, Short and Livestream;
+- the **seasons**, for a seasonal collection;
+- the **date window** (see Date options below).
+
+Click the pencil on a line to change it, and **Done** to fold it back into its sentence. When you create a profile,
+the built-in lines start open so you see them the first time.
+
+### Your own filters
+
+**Add filter** adds a line of your own. Every filter has an action and something it looks at:
+
+- **Skip** leaves out the episodes that match.
+- **Only download** leaves out the episodes that *don't* match.
+- **Keep** never stops a download. It protects the downloads it matches from being deleted by the date window, so you
+  can, for example, keep every episode with “interview” in its title forever while the rest rotate out.
+
+A filter can look at the episode's **title** or **description**, using the regular expression editor (you don't need to
+know regular expressions: the Contains and Any of these tabs write one for you, and the tester shows which of the
+collection's episodes match), or at its **duration**: shorter or longer than a length you choose. An episode whose
+length isn't known yet is never left out by a duration filter.
+
+Changing filters later only affects episodes that aren't downloaded yet; it never deletes a download. An episode a
+filter skips says **Skipped by filter** on the collection page and on its own page, where **Download anyway** downloads it
+once by hand.
+
+### Keeping a download
+
+The pin button next to a download on an episode's page keeps that one download: the date window never deletes it. Click
+it again to let the date window delete it as usual. Kept downloads are still listed and can still be deleted by hand.
 
 ## Which options a profile shows
 
@@ -60,6 +107,14 @@ This is useful when you want to begin archiving a collection from a particular d
 ### Delete older episodes
 
 When a rolling Date or Number of episodes limit is active, **Delete older episodes** can also remove downloaded files that fall outside that window. When retention removes an episode, its download record and download history are removed as well, so it no longer appears on the Downloads page.
+
+With a Date limit you also choose when the clock starts:
+
+- **After publication** deletes an episode once it was published longer ago than the window.
+- **After downloading** keeps every download for the full number of days, counted from the day it was downloaded,
+  however old the episode already was. This is how Pinchflat's retention works.
+
+Downloads you keep, and downloads a Keep filter matches, are never deleted.
 
 Leave it disabled if you only want the limit to control which new episodes are selected while keeping older files already on disk. Planned downloads that never produced a file are still discarded once they fall outside the active Number of episodes window.
 

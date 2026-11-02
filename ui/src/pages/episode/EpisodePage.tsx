@@ -4,7 +4,7 @@ import {Link, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {useCollection, useEpisode, useEpisodeDownloads, useLocalMediaProfiles, useSourceLookup} from '../../lib/queries'
+import {useCollection, useEpisode, useEpisodeDownloads, useLocalMediaProfiles, useSkippedByFilter, useSourceLookup} from '../../lib/queries'
 import {useLibraryDefaults} from '../../lib/settings'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
 import {isCollectionLocalMediaProfileAvailableFor} from '../../types/local_media_profile'
@@ -62,6 +62,7 @@ export default function EpisodePage() {
     const [earlyDeleteStarting, setEarlyDeleteStarting] = useState(false)
 
     const {data: collection, isPending: isCollectionPending, isFetching: isCollectionFetching, error} = useCollection(collectionId)
+    const {data: skipped} = useSkippedByFilter(collection?.id)
     const {
         data: episode,
         isPending: isEpisodePending,
@@ -318,6 +319,9 @@ export default function EpisodePage() {
                             <div role="list" aria-label="Available downloads per Local Media Profile">
                                 {collectionProfiles.map((profile) => {
                                     const download = downloadByProfileId.get(profile.id)
+                                    const skippedBy = skipped?.find((item) => (
+                                        item.episodeId === episode.id && item.localMediaProfileId === profile.id
+                                    ))?.rule
                                     return (
                                         <EpisodeDownloadRow
                                             key={profile.id}
@@ -328,6 +332,7 @@ export default function EpisodePage() {
                                             confirmCountdownDownload={containsCountdown}
                                             confirmSafeDelayDownload={!containsCountdown && !episode.downloadDelayPassed}
                                             safeDelayReadyAt={episode.downloadDelayReadyAt}
+                                            skippedBy={skippedBy}
                                         />
                                     )
                                 })}

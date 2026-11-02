@@ -4,6 +4,9 @@ import {isPublicationDelayWait} from '../../lib/downloadProgress'
 import type {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import type {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {faIcon} from '../../icons/faIcon'
+import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
+import type {EpisodeRule} from '../../types/schemas/download_profile'
+import {plainText, ruleSentence} from '../DownloadProfile/whichEpisodesText'
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import {DownloadRow, useDownloadRowRequest} from '../MediaDownload/DownloadRow'
 import {
@@ -27,6 +30,7 @@ export function EpisodeDownloadRow({
     confirmCountdownDownload,
     confirmSafeDelayDownload,
     safeDelayReadyAt,
+    skippedBy,
 }: {
     profile: LocalMediaProfileRead
     download?: MediaDownloadViewRead
@@ -35,6 +39,8 @@ export function EpisodeDownloadRow({
     confirmCountdownDownload: boolean
     confirmSafeDelayDownload: boolean
     safeDelayReadyAt: Date | null
+    /** The Which episodes filter that keeps this episode from downloading automatically. */
+    skippedBy?: EpisodeRule
 }) {
     const {busy, request, cancel} = useDownloadRowRequest(['episodeDownloads', episodeSlug])
     const [countdownConfirm, setCountdownConfirm] = useState(false)
@@ -180,6 +186,28 @@ export function EpisodeDownloadRow({
     )
 
     const succeeded = download?.presentation.outcome === 'success'
+    const kept = !!download?.kept
+    // Keep matters once a download exists; retention never deletes a kept download.
+    const keepButton = download && download.type === 'episode' ? (
+        <button
+            type="button"
+            className={`icon-btn${kept ? ' is-active' : ''}`}
+            disabled={busy}
+            aria-pressed={kept}
+            title={kept ? 'Kept: never deleted by the date window. Click to stop keeping it' : 'Keep: never delete this download automatically'}
+            aria-label={kept ? `Stop keeping ${profile.name}` : `Keep ${profile.name}`}
+            onClick={() => void request(
+                `/media-downloads/${download.id}/kept`,
+                {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({kept: !kept})},
+                'Could not change Keep',
+            )}
+        >
+            <FontAwesomeIcon icon={faIcon('fass', 'thumbtack')}/>
+        </button>
+    ) : null
+    const skippedNote = skippedBy && !download ? (
+        <span title="Which episodes on its Download Profile">Skipped by filter: {plainText(ruleSentence(skippedBy)).replace(/^\w/, (c) => c.toLowerCase())}</span>
+    ) : kept ? <span>Kept</span> : null
     return (
         <DownloadRow
             profile={profile}
@@ -199,6 +227,9 @@ export function EpisodeDownloadRow({
                 : null}
             onDownload={requestDownload}
             onCancel={() => download && void cancel(download)}
+            note={skippedNote}
+            downloadLabel={skippedBy && !download ? 'Download anyway' : 'Download'}
+            actions={keepButton}
         >
             <ConfirmDialog
                 open={countdownConfirm}
