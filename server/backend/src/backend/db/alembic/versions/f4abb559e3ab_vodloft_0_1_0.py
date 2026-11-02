@@ -1,26 +1,30 @@
-"""Create the schema VODLoft started from, the one WireLoft 1.2.3 left.
+"""Create the VODLoft 0.1.0 schema.
 
-VODLoft was forked from WireLoft. This baseline replaces WireLoft's own
-migrations (1.0 to 1.2.3), which now live in the importer and only run on an
-uploaded copy of a WireLoft database. It creates the final 1.2.3 schema in one
-step and keeps the revision id of WireLoft's last migration, so every VODLoft
-database, which is already past it, upgrades exactly as before.
+The single release migration for 0.1.0. VODLoft 0.1.0 shipped a baseline that
+created the schema WireLoft 1.2.3 left, followed by eight migrations that turned
+it into VODLoft's: every show and media item names its Source, single videos
+with their downloads and Local Media Profiles, DRM marks, preferred Sources per
+domain, one table for every Download Profile, constraint and index names in line
+with the models, Source slugs in their own column and the WireLoft names stored
+in the database renamed. Those steps only ever changed a WireLoft database in
+place, which VODLoft no longer does (the WireLoft importer reads one instead), so
+this migration creates the schema 0.1.0 ended with in one step.
 
-The statements are the schema SQLite holds after the old migrations ran,
-statement for statement, so a fresh database gets the same tables, columns,
-defaults, constraints and indexes. tests/unit/test_db_baseline.py compares the
-two.
+It keeps the revision of the last 0.1.0 migration, so every database that
+VODLoft 0.1.0 or later created is already past it and upgrades as before. The
+statements are the schema SQLite holds after the old 0.1.0 migrations ran,
+statement for statement.
 
-Revision ID: a4e7c19b2d53
+Revision ID: f4abb559e3ab
 Revises:
-Create Date: 2026-11-02
+Create Date: 2026-10-26
 """
 from __future__ import annotations
 
 from alembic import op
 
 
-revision = "a4e7c19b2d53"
+revision = "f4abb559e3ab"
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -47,50 +51,6 @@ CREATE INDEX ix_metadata_parent_id ON metadata (parent_id)
 CREATE INDEX ix_metadata_parent ON metadata (parent_table, parent_id)
 """,
     """
-CREATE TABLE shows (
-    id INTEGER NOT NULL,
-    uuid VARCHAR NOT NULL,
-    slug VARCHAR NOT NULL,
-    title VARCHAR NOT NULL,
-    description VARCHAR,
-    sharing_url VARCHAR NOT NULL,
-    membership_level VARCHAR NOT NULL,
-    type VARCHAR NOT NULL,
-    episode_identifier VARCHAR NOT NULL,
-    author_name VARCHAR NOT NULL,
-    author_slug VARCHAR NOT NULL,
-    author_headshot_path VARCHAR,
-    background_image_path VARCHAR,
-    logo_image_path VARCHAR,
-    thumbnail_landscape_path VARCHAR,
-    thumbnail_portrait_path VARCHAR,
-    thumbnail_square_path VARCHAR,
-    created_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL,
-    updated_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL,
-    CONSTRAINT pk_shows PRIMARY KEY (id),
-    CONSTRAINT uq_shows_sharing_url UNIQUE (sharing_url)
-)
-""",
-    """
-CREATE UNIQUE INDEX ix_shows_slug ON shows (slug)
-""",
-    """
-CREATE UNIQUE INDEX ix_shows_uuid ON shows (uuid)
-""",
-    """
-CREATE TABLE media_items (
-    id INTEGER NOT NULL,
-    uuid VARCHAR NOT NULL,
-    type VARCHAR NOT NULL,
-    created_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL,
-    updated_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL,
-    CONSTRAINT pk_media_items PRIMARY KEY (id)
-)
-""",
-    """
-CREATE UNIQUE INDEX ix_media_items_uuid ON media_items (uuid)
-""",
-    """
 CREATE TABLE task_definitions (
     id INTEGER NOT NULL,
     "key" VARCHAR NOT NULL,
@@ -103,65 +63,6 @@ CREATE TABLE task_definitions (
 """,
     """
 CREATE UNIQUE INDEX ix_task_definitions_key ON task_definitions ("key")
-""",
-    """
-CREATE TABLE download_profiles_podcast (
-    id INTEGER NOT NULL,
-    download_with_countdown BOOLEAN NOT NULL,
-    redownload_final BOOLEAN NOT NULL,
-    download_days_in_past INTEGER NOT NULL,
-    delete_older_episodes BOOLEAN NOT NULL, download_episode_count INTEGER DEFAULT '0' NOT NULL, download_starting_from DATE,
-    CONSTRAINT pk_download_profiles_podcast PRIMARY KEY (id),
-    CONSTRAINT fk_download_profiles_podcast_id_download_profiles FOREIGN KEY(id) REFERENCES download_profiles (id) ON DELETE CASCADE
-)
-""",
-    """
-CREATE TABLE download_profiles_series (
-    id INTEGER NOT NULL,
-    include_upcoming_seasons BOOLEAN NOT NULL,
-    CONSTRAINT pk_download_profiles_series PRIMARY KEY (id),
-    CONSTRAINT fk_download_profiles_series_id_download_profiles FOREIGN KEY(id) REFERENCES download_profiles (id) ON DELETE CASCADE
-)
-""",
-    """
-CREATE TABLE task_runs (
-    id INTEGER NOT NULL,
-    schedule_id INTEGER,
-    definition_id INTEGER NOT NULL,
-    resource_type VARCHAR(23) NOT NULL,
-    resource_id INTEGER,
-    status VARCHAR(15) NOT NULL,
-    progress INTEGER,
-    message VARCHAR,
-    meta JSON,
-    attempt_count INTEGER NOT NULL,
-    max_retries INTEGER NOT NULL,
-    last_error VARCHAR,
-    next_retry_at DATETIME,
-    started_at DATETIME,
-    finished_at DATETIME,
-    runtime_ms INTEGER,
-    created_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL,
-    updated_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL, result JSON,
-    CONSTRAINT pk_task_runs PRIMARY KEY (id),
-    CONSTRAINT fk_task_runs_definition_id_task_definitions FOREIGN KEY(definition_id) REFERENCES task_definitions (id) ON DELETE CASCADE,
-    CONSTRAINT fk_task_runs_schedule_id_task_schedules FOREIGN KEY(schedule_id) REFERENCES task_schedules (id) ON DELETE SET NULL
-)
-""",
-    """
-CREATE INDEX ix_task_runs_definition_id ON task_runs (definition_id)
-""",
-    """
-CREATE INDEX ix_task_runs_resource_id ON task_runs (resource_id)
-""",
-    """
-CREATE INDEX ix_task_runs_resource_type ON task_runs (resource_type)
-""",
-    """
-CREATE INDEX ix_task_runs_schedule_id ON task_runs (schedule_id)
-""",
-    """
-CREATE INDEX ix_task_runs_status ON task_runs (status)
 """,
     """
 CREATE TABLE media_downloads_movie (
@@ -220,21 +121,6 @@ CREATE UNIQUE INDEX ix_local_media_profiles_slug ON local_media_profiles (slug)
 """,
     """
 CREATE UNIQUE INDEX uq_local_media_profiles_type_output_template_preferred_format ON local_media_profiles (type, output_template, preferred_format)
-""",
-    """
-CREATE TABLE "download_profiles" (
-    id INTEGER NOT NULL,
-    show_id INTEGER NOT NULL,
-    local_media_profile_id INTEGER NOT NULL,
-    type VARCHAR NOT NULL,
-    enable_profile BOOLEAN NOT NULL,
-    ep_id_type_list JSON NOT NULL,
-    created_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL,
-    updated_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL,
-    CONSTRAINT pk_download_profiles PRIMARY KEY (id),
-    CONSTRAINT fk_download_profiles_local_media_profile_id_local_media_profiles FOREIGN KEY(local_media_profile_id) REFERENCES local_media_profiles (id),
-    CONSTRAINT fk_download_profiles_show_id_shows FOREIGN KEY(show_id) REFERENCES shows (id)
-)
 """,
     """
 CREATE TABLE task_operations (
@@ -331,141 +217,11 @@ CREATE TABLE "media_downloads_episode" (
 )
 """,
     """
-CREATE TABLE "task_schedules" (
-    id INTEGER NOT NULL,
-    definition_id INTEGER NOT NULL,
-    scheduler_job_id VARCHAR,
-    resource_id INTEGER NOT NULL,
-    resource_type VARCHAR(23) NOT NULL,
-    "trigger" VARCHAR(20) NOT NULL,
-    trigger_args JSON NOT NULL,
-    next_run_time DATETIME,
-    active BOOLEAN NOT NULL,
-    max_retries INTEGER,
-    created_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL,
-    updated_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL,
-    CONSTRAINT pk_task_schedules PRIMARY KEY (id),
-    CONSTRAINT fk_task_schedules_definition_id_task_definitions FOREIGN KEY(definition_id) REFERENCES task_definitions (id) ON DELETE CASCADE
-)
-""",
-    """
-CREATE INDEX ix_task_schedules_definition_id ON task_schedules (definition_id)
-""",
-    """
-CREATE INDEX ix_task_schedules_scheduler_job_id ON task_schedules (scheduler_job_id)
-""",
-    """
-CREATE INDEX ix_task_schedules_active ON task_schedules (active)
-""",
-    """
-CREATE INDEX ix_task_schedules_resource_type ON task_schedules (resource_type)
-""",
-    """
-CREATE INDEX ix_task_schedules_resource_id ON task_schedules (resource_id)
-""",
-    """
-CREATE TABLE "media_items_episode" (
-    id INTEGER NOT NULL,
-    show_id INTEGER NOT NULL,
-    season_id INTEGER NOT NULL,
-    "index" INTEGER NOT NULL,
-    episode_identifier VARCHAR NOT NULL,
-    slug VARCHAR NOT NULL,
-    publish_status VARCHAR NOT NULL,
-    video_url VARCHAR,
-    audio_url VARCHAR,
-    sharing_url VARCHAR NOT NULL,
-    went_live_date DATETIME,
-    published_date DATETIME,
-    scheduled_date DATETIME,
-    metadata_is_final BOOLEAN DEFAULT 1 NOT NULL, title VARCHAR DEFAULT '' NOT NULL, description VARCHAR, duration FLOAT DEFAULT '0' NOT NULL, background_image_path VARCHAR, thumbnail_landscape_path VARCHAR, thumbnail_portrait_path VARCHAR, thumbnail_square_path VARCHAR, dw_episode_number VARCHAR,
-    CONSTRAINT pk_episodes PRIMARY KEY (id, show_id),
-    CONSTRAINT fk_episodes_show_id_shows FOREIGN KEY(show_id) REFERENCES shows (id),
-    CONSTRAINT fk_episodes_season_id_seasons FOREIGN KEY(season_id) REFERENCES seasons (id),
-    CONSTRAINT fk_episodes_id_media_items FOREIGN KEY(id) REFERENCES media_items (id) ON DELETE CASCADE,
-    CONSTRAINT uq_unique_episode_identifier_per_show UNIQUE (show_id, episode_identifier),
-    CONSTRAINT uq_episode_show_index UNIQUE (show_id, "index")
-)
-""",
-    """
-CREATE UNIQUE INDEX ix_episodes_slug ON "media_items_episode" (slug)
-""",
-    """
-CREATE TABLE "media_items_movie" (
-    id INTEGER NOT NULL,
-    slug VARCHAR NOT NULL,
-    extended_title VARCHAR,
-    sharing_url VARCHAR,
-    author_name VARCHAR,
-    author_slug VARCHAR,
-    logo_image_path VARCHAR,
-    mature_rating VARCHAR,
-    is_downloadable BOOLEAN,
-    available_for JSON DEFAULT '[]' NOT NULL,
-    release_date DATE,
-    release_date_source VARCHAR,
-    release_date_source_id VARCHAR,
-    release_date_lookup_status VARCHAR DEFAULT 'pending' NOT NULL,
-    release_date_lookup_attempted_at DATETIME,
-    release_date_lookup_error VARCHAR,
-    official_trailer_id INTEGER,
-    has_video BOOLEAN DEFAULT 0 NOT NULL,
-    status VARCHAR,
-    published_at DATETIME,
-    background VARCHAR,
-    byline VARCHAR,
-    language VARCHAR,
-    origin_country VARCHAR,
-    images JSON DEFAULT '{}' NOT NULL,
-    cast_and_crew JSON DEFAULT '[]' NOT NULL,
-    directed_by JSON DEFAULT '[]' NOT NULL,
-    genres JSON DEFAULT '[]' NOT NULL,
-    hosts JSON DEFAULT '[]' NOT NULL,
-    production_companies JSON DEFAULT '[]' NOT NULL,
-    starring JSON DEFAULT '[]' NOT NULL,
-    written_by JSON DEFAULT '[]' NOT NULL, title VARCHAR DEFAULT '' NOT NULL, description VARCHAR, duration FLOAT DEFAULT '0' NOT NULL, background_image_path VARCHAR, thumbnail_landscape_path VARCHAR, thumbnail_portrait_path VARCHAR, thumbnail_square_path VARCHAR,
-    CONSTRAINT pk_movies PRIMARY KEY (id),
-    CONSTRAINT fk_movies_id_media_items FOREIGN KEY(id) REFERENCES media_items (id) ON DELETE CASCADE,
-    CONSTRAINT uq_movies_official_trailer_id UNIQUE (official_trailer_id),
-    CONSTRAINT fk_movies_official_trailer_id_movie_extras FOREIGN KEY(official_trailer_id) REFERENCES "media_items_movie_extra" (id) ON DELETE SET NULL
-)
-""",
-    """
-CREATE UNIQUE INDEX ix_movies_slug ON "media_items_movie" (slug)
-""",
-    """
 CREATE TABLE movie_extra_sources (
     id INTEGER NOT NULL,
     slug VARCHAR NOT NULL, title VARCHAR DEFAULT '' NOT NULL, description VARCHAR, duration FLOAT DEFAULT '0' NOT NULL, background_image_path VARCHAR, thumbnail_landscape_path VARCHAR, thumbnail_portrait_path VARCHAR, thumbnail_square_path VARCHAR, sharing_url VARCHAR, published_date DATETIME, available_for JSON DEFAULT '[]' NOT NULL,
     CONSTRAINT pk_movie_extra_sources PRIMARY KEY (id),
     CONSTRAINT uq_movie_extra_sources_slug UNIQUE (slug)
-)
-""",
-    """
-CREATE TABLE "media_items_movie_extra" (
-    id INTEGER NOT NULL,
-    movie_id INTEGER NOT NULL,
-    movie_extra_type VARCHAR DEFAULT 'other' NOT NULL,
-    source_id INTEGER NOT NULL,
-    CONSTRAINT pk_movie_extras PRIMARY KEY (id),
-    CONSTRAINT fk_movie_extras_source_id_movie_extra_sources FOREIGN KEY(source_id) REFERENCES movie_extra_sources (id) ON DELETE RESTRICT,
-    CONSTRAINT fk_movie_extras_id_media_items FOREIGN KEY(id) REFERENCES media_items (id) ON DELETE CASCADE,
-    CONSTRAINT uq_movie_extras_movie_id_source_id UNIQUE (movie_id, source_id),
-    CONSTRAINT fk_movie_extras_movie_id_movies FOREIGN KEY(movie_id) REFERENCES "media_items_movie" (id) ON DELETE CASCADE
-)
-""",
-    """
-CREATE INDEX ix_movie_extras_source_id ON "media_items_movie_extra" (source_id)
-""",
-    """
-CREATE INDEX ix_movie_extras_movie_id ON "media_items_movie_extra" (movie_id)
-""",
-    """
-CREATE TABLE "download_profile_series_seasons" (
-    download_profiles_series_id INTEGER,
-    season_id INTEGER,
-    CONSTRAINT fk_download_profile_series_seasons_series_download_profile_id_download_profiles_series FOREIGN KEY(download_profiles_series_id) REFERENCES download_profiles_series (id),
-    CONSTRAINT fk_download_profile_series_seasons_season_id_seasons FOREIGN KEY(season_id) REFERENCES seasons (id)
 )
 """,
     """
@@ -630,42 +386,295 @@ CREATE TABLE media_download_assets (
 CREATE INDEX ix_media_download_assets_media_download_id ON media_download_assets (media_download_id)
 """,
     """
+CREATE INDEX ix_media_download_history_download_occurred_id ON media_download_history (media_download_id, occurred_at, id)
+""",
+    """
+CREATE TABLE media_items_video (
+	id INTEGER NOT NULL, 
+	slug VARCHAR NOT NULL, 
+	sharing_url VARCHAR NOT NULL, 
+	author_name VARCHAR, 
+	author_url VARCHAR, 
+	published_at DATETIME, 
+	title VARCHAR DEFAULT '' NOT NULL, 
+	description VARCHAR, 
+	duration FLOAT DEFAULT '0' NOT NULL, 
+	background_image_path VARCHAR, 
+	thumbnail_landscape_path VARCHAR, 
+	thumbnail_portrait_path VARCHAR, 
+	thumbnail_square_path VARCHAR, 
+	CONSTRAINT pk_media_items_video PRIMARY KEY (id), 
+	CONSTRAINT fk_media_items_video_id_media_items FOREIGN KEY(id) REFERENCES media_items (id) ON DELETE CASCADE
+)
+""",
+    """
+CREATE INDEX ix_media_items_video_slug ON media_items_video (slug)
+""",
+    """
+CREATE TABLE media_downloads_video (
+	id INTEGER NOT NULL, 
+	CONSTRAINT pk_media_downloads_video PRIMARY KEY (id), 
+	CONSTRAINT fk_media_downloads_video_id_media_downloads FOREIGN KEY(id) REFERENCES media_downloads (id) ON DELETE CASCADE
+)
+""",
+    """
+CREATE TABLE local_media_profiles_video (
+	id INTEGER NOT NULL, 
+	CONSTRAINT pk_local_media_profiles_video PRIMARY KEY (id), 
+	CONSTRAINT fk_local_media_profiles_video_id_local_media_profiles FOREIGN KEY(id) REFERENCES local_media_profiles (id) ON DELETE CASCADE
+)
+""",
+    """
+CREATE TABLE source_domain_preferences (
+	domain VARCHAR NOT NULL, 
+	source_key VARCHAR NOT NULL, 
+	CONSTRAINT pk_source_domain_preferences PRIMARY KEY (domain)
+)
+""",
+    """
+CREATE TABLE download_profile_seasons (
+	download_profile_id INTEGER NOT NULL, 
+	season_id INTEGER NOT NULL, 
+	CONSTRAINT pk_download_profile_seasons PRIMARY KEY (download_profile_id, season_id), 
+	CONSTRAINT fk_download_profile_seasons_download_profile_id_download_profiles FOREIGN KEY(download_profile_id) REFERENCES download_profiles (id) ON DELETE CASCADE, 
+	CONSTRAINT fk_download_profile_seasons_season_id_seasons FOREIGN KEY(season_id) REFERENCES seasons (id) ON DELETE CASCADE
+)
+""",
+    """
+CREATE TABLE "download_profiles" (
+	id INTEGER NOT NULL, 
+	show_id INTEGER NOT NULL, 
+	local_media_profile_id INTEGER NOT NULL, 
+	enable_profile BOOLEAN NOT NULL, 
+	ep_id_type_list JSON NOT NULL, 
+	created_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	download_with_countdown BOOLEAN DEFAULT 0 NOT NULL, 
+	redownload_final BOOLEAN DEFAULT 0 NOT NULL, 
+	download_days_in_past INTEGER DEFAULT '0' NOT NULL, 
+	download_episode_count INTEGER DEFAULT '0' NOT NULL, 
+	download_starting_from DATE, 
+	delete_older_episodes BOOLEAN DEFAULT 1 NOT NULL, 
+	include_upcoming_seasons BOOLEAN DEFAULT 1 NOT NULL, 
+	CONSTRAINT pk_download_profiles PRIMARY KEY (id), 
+	CONSTRAINT fk_download_profiles_local_media_profile_id_local_media_profiles FOREIGN KEY(local_media_profile_id) REFERENCES local_media_profiles (id), 
+	CONSTRAINT fk_download_profiles_show_id_shows FOREIGN KEY(show_id) REFERENCES shows (id)
+)
+""",
+    """
+CREATE TABLE "media_items_movie" (
+	id INTEGER NOT NULL, 
+	slug VARCHAR NOT NULL, 
+	extended_title VARCHAR, 
+	sharing_url VARCHAR, 
+	author_name VARCHAR, 
+	author_slug VARCHAR, 
+	logo_image_path VARCHAR, 
+	mature_rating VARCHAR, 
+	is_downloadable BOOLEAN, 
+	available_for JSON DEFAULT '[]' NOT NULL, 
+	release_date DATE, 
+	release_date_source VARCHAR, 
+	release_date_source_id VARCHAR, 
+	release_date_lookup_status VARCHAR DEFAULT 'pending' NOT NULL, 
+	release_date_lookup_attempted_at DATETIME, 
+	release_date_lookup_error VARCHAR, 
+	official_trailer_id INTEGER, 
+	has_video BOOLEAN DEFAULT 0 NOT NULL, 
+	status VARCHAR, 
+	published_at DATETIME, 
+	background VARCHAR, 
+	byline VARCHAR, 
+	language VARCHAR, 
+	origin_country VARCHAR, 
+	images JSON DEFAULT '{}' NOT NULL, 
+	cast_and_crew JSON DEFAULT '[]' NOT NULL, 
+	directed_by JSON DEFAULT '[]' NOT NULL, 
+	genres JSON DEFAULT '[]' NOT NULL, 
+	hosts JSON DEFAULT '[]' NOT NULL, 
+	production_companies JSON DEFAULT '[]' NOT NULL, 
+	starring JSON DEFAULT '[]' NOT NULL, 
+	written_by JSON DEFAULT '[]' NOT NULL, 
+	title VARCHAR DEFAULT ('') NOT NULL, 
+	description VARCHAR, 
+	duration FLOAT DEFAULT '0' NOT NULL, 
+	background_image_path VARCHAR, 
+	thumbnail_landscape_path VARCHAR, 
+	thumbnail_portrait_path VARCHAR, 
+	thumbnail_square_path VARCHAR, 
+	CONSTRAINT pk_movies PRIMARY KEY (id), 
+	CONSTRAINT fk_movies_id_media_items FOREIGN KEY(id) REFERENCES media_items (id) ON DELETE CASCADE, 
+	CONSTRAINT fk_movies_official_trailer_id_movie_extras FOREIGN KEY(official_trailer_id) REFERENCES media_items_movie_extra (id) ON DELETE SET NULL, 
+	CONSTRAINT uq_media_items_movie_official_trailer_id UNIQUE (official_trailer_id)
+)
+""",
+    """
+CREATE UNIQUE INDEX ix_media_items_movie_slug ON media_items_movie (slug)
+""",
+    """
+CREATE TABLE "media_items_movie_extra" (
+	id INTEGER NOT NULL, 
+	movie_id INTEGER NOT NULL, 
+	movie_extra_type VARCHAR DEFAULT 'other' NOT NULL, 
+	source_id INTEGER NOT NULL, 
+	CONSTRAINT pk_movie_extras PRIMARY KEY (id), 
+	CONSTRAINT fk_movie_extras_movie_id_movies FOREIGN KEY(movie_id) REFERENCES media_items_movie (id) ON DELETE CASCADE, 
+	CONSTRAINT fk_movie_extras_id_media_items FOREIGN KEY(id) REFERENCES media_items (id) ON DELETE CASCADE, 
+	CONSTRAINT fk_movie_extras_source_id_movie_extra_sources FOREIGN KEY(source_id) REFERENCES movie_extra_sources (id) ON DELETE RESTRICT, 
+	CONSTRAINT uq_media_items_movie_extra_movie_id UNIQUE (movie_id, source_id)
+)
+""",
+    """
+CREATE INDEX ix_media_items_movie_extra_movie_id ON media_items_movie_extra (movie_id)
+""",
+    """
+CREATE INDEX ix_media_items_movie_extra_source_id ON media_items_movie_extra (source_id)
+""",
+    """
 CREATE TABLE "media_downloads" (
-    id INTEGER NOT NULL,
-    type VARCHAR NOT NULL,
-    media_item_id INTEGER NOT NULL,
-    local_media_profile_id INTEGER NOT NULL,
-    file_path VARCHAR NOT NULL,
-    downloaded_bytes INTEGER,
-    format_downloaded VARCHAR,
-    created_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL,
-    updated_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL,
-    artifact_status VARCHAR(24) DEFAULT 'absent' NOT NULL,
-    artifact_error TEXT,
-    automatic_retry_suppressed BOOLEAN DEFAULT 0 NOT NULL,
-    downloaded_at DATETIME,
-    artifact_stat_dev VARCHAR(32),
-    artifact_stat_ino VARCHAR(32),
-    artifact_size_bytes BIGINT,
-    artifact_fingerprint VARCHAR(64),
-    CONSTRAINT pk_media_downloads PRIMARY KEY (id),
-    CONSTRAINT fk_media_downloads_media_item_id_media_items FOREIGN KEY(media_item_id) REFERENCES media_items (id),
-    CONSTRAINT fk_media_downloads_local_media_profile_id_local_media_profiles FOREIGN KEY(local_media_profile_id) REFERENCES local_media_profiles (id),
-    CONSTRAINT uq_download_per_media_profile UNIQUE (media_item_id, local_media_profile_id),
-    CONSTRAINT ck_media_downloads_ck_media_downloads_artifact_identity_complete CHECK (artifact_status IN ('absent', 'missing') OR (artifact_stat_dev IS NOT NULL AND length(artifact_stat_dev) > 0 AND artifact_stat_ino IS NOT NULL AND length(artifact_stat_ino) > 0 AND artifact_size_bytes IS NOT NULL AND artifact_size_bytes >= 0 AND artifact_fingerprint IS NOT NULL AND length(artifact_fingerprint) = 64))
+	id INTEGER NOT NULL, 
+	type VARCHAR NOT NULL, 
+	media_item_id INTEGER NOT NULL, 
+	local_media_profile_id INTEGER NOT NULL, 
+	file_path VARCHAR NOT NULL, 
+	downloaded_bytes INTEGER, 
+	format_downloaded VARCHAR, 
+	created_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	artifact_status VARCHAR(24) DEFAULT 'absent' NOT NULL, 
+	artifact_error TEXT, 
+	automatic_retry_suppressed BOOLEAN DEFAULT 0 NOT NULL, 
+	downloaded_at DATETIME, 
+	artifact_stat_dev VARCHAR(32), 
+	artifact_stat_ino VARCHAR(32), 
+	artifact_size_bytes BIGINT, 
+	artifact_fingerprint VARCHAR(64), 
+	CONSTRAINT pk_media_downloads PRIMARY KEY (id), 
+	CONSTRAINT fk_media_downloads_media_item_id_media_items FOREIGN KEY(media_item_id) REFERENCES media_items (id), 
+	CONSTRAINT uq_download_per_media_profile UNIQUE (media_item_id, local_media_profile_id), 
+	CONSTRAINT fk_media_downloads_local_media_profile_id_local_media_profiles FOREIGN KEY(local_media_profile_id) REFERENCES local_media_profiles (id), 
+	CONSTRAINT ck_media_downloads_artifact_identity_complete CHECK (artifact_status IN ('absent', 'missing') OR (artifact_stat_dev IS NOT NULL AND length(artifact_stat_dev) > 0 AND artifact_stat_ino IS NOT NULL AND length(artifact_stat_ino) > 0 AND artifact_size_bytes IS NOT NULL AND artifact_size_bytes >= 0 AND artifact_fingerprint IS NOT NULL AND length(artifact_fingerprint) = 64))
 )
 """,
     """
 CREATE INDEX ix_media_downloads_artifact_status ON media_downloads (artifact_status)
 """,
     """
-CREATE INDEX ix_media_items_episode_show_published_id ON media_items_episode (show_id, published_date, id)
+CREATE INDEX ix_media_downloads_local_profile_id ON media_downloads (local_media_profile_id, id)
+""",
+    """
+CREATE TABLE "task_runs" (
+	id INTEGER NOT NULL, 
+	schedule_id INTEGER, 
+	definition_id INTEGER NOT NULL, 
+	resource_type VARCHAR(19) NOT NULL, 
+	resource_id INTEGER, 
+	status VARCHAR(15) NOT NULL, 
+	progress INTEGER, 
+	message VARCHAR, 
+	meta JSON, 
+	attempt_count INTEGER NOT NULL, 
+	max_retries INTEGER NOT NULL, 
+	last_error VARCHAR, 
+	next_retry_at DATETIME, 
+	started_at DATETIME, 
+	finished_at DATETIME, 
+	runtime_ms INTEGER, 
+	created_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	result JSON, 
+	CONSTRAINT pk_task_runs PRIMARY KEY (id), 
+	CONSTRAINT fk_task_runs_schedule_id_task_schedules FOREIGN KEY(schedule_id) REFERENCES task_schedules (id) ON DELETE SET NULL, 
+	CONSTRAINT fk_task_runs_definition_id_task_definitions FOREIGN KEY(definition_id) REFERENCES task_definitions (id) ON DELETE CASCADE
+)
+""",
+    """
+CREATE INDEX ix_task_runs_schedule_id ON task_runs (schedule_id)
+""",
+    """
+CREATE INDEX ix_task_runs_resource_id ON task_runs (resource_id)
+""",
+    """
+CREATE INDEX ix_task_runs_definition_id ON task_runs (definition_id)
+""",
+    """
+CREATE INDEX ix_task_runs_resource_type ON task_runs (resource_type)
 """,
     """
 CREATE INDEX ix_task_runs_definition_status_resource_started_id ON task_runs (definition_id, status, resource_type, resource_id, started_at, id)
 """,
     """
-CREATE INDEX ix_media_items_episode_show_publish_status ON media_items_episode (show_id, publish_status)
+CREATE INDEX ix_task_runs_status ON task_runs (status)
+""",
+    """
+CREATE TABLE "task_schedules" (
+	id INTEGER NOT NULL, 
+	definition_id INTEGER NOT NULL, 
+	scheduler_job_id VARCHAR, 
+	resource_id INTEGER NOT NULL, 
+	resource_type VARCHAR(19) NOT NULL, 
+	"trigger" VARCHAR(20) NOT NULL, 
+	trigger_args JSON NOT NULL, 
+	next_run_time DATETIME, 
+	active BOOLEAN NOT NULL, 
+	max_retries INTEGER, 
+	created_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	CONSTRAINT pk_task_schedules PRIMARY KEY (id), 
+	CONSTRAINT fk_task_schedules_definition_id_task_definitions FOREIGN KEY(definition_id) REFERENCES task_definitions (id) ON DELETE CASCADE
+)
+""",
+    """
+CREATE INDEX ix_task_schedules_resource_type ON task_schedules (resource_type)
+""",
+    """
+CREATE INDEX ix_task_schedules_resource_id ON task_schedules (resource_id)
+""",
+    """
+CREATE INDEX ix_task_schedules_definition_id ON task_schedules (definition_id)
+""",
+    """
+CREATE INDEX ix_task_schedules_scheduler_job_id ON task_schedules (scheduler_job_id)
+""",
+    """
+CREATE INDEX ix_task_schedules_active ON task_schedules (active)
+""",
+    """
+CREATE TABLE "media_items_episode" (
+	id INTEGER NOT NULL, 
+	show_id INTEGER NOT NULL, 
+	season_id INTEGER NOT NULL, 
+	"index" INTEGER NOT NULL, 
+	episode_identifier VARCHAR NOT NULL, 
+	slug VARCHAR NOT NULL, 
+	publish_status VARCHAR NOT NULL, 
+	video_url VARCHAR, 
+	audio_url VARCHAR, 
+	sharing_url VARCHAR NOT NULL, 
+	went_live_date DATETIME, 
+	published_date DATETIME, 
+	scheduled_date DATETIME, 
+	metadata_is_final BOOLEAN DEFAULT 1 NOT NULL, 
+	title VARCHAR DEFAULT ('') NOT NULL, 
+	description VARCHAR, 
+	duration FLOAT DEFAULT '0' NOT NULL, 
+	background_image_path VARCHAR, 
+	thumbnail_landscape_path VARCHAR, 
+	thumbnail_portrait_path VARCHAR, 
+	thumbnail_square_path VARCHAR, 
+	dw_episode_number VARCHAR, 
+	source_slug VARCHAR NOT NULL, 
+	CONSTRAINT pk_episodes PRIMARY KEY (id, show_id), 
+	CONSTRAINT fk_episodes_id_media_items FOREIGN KEY(id) REFERENCES media_items (id) ON DELETE CASCADE, 
+	CONSTRAINT fk_episodes_season_id_seasons FOREIGN KEY(season_id) REFERENCES seasons (id), 
+	CONSTRAINT fk_episodes_show_id_shows FOREIGN KEY(show_id) REFERENCES shows (id), 
+	CONSTRAINT uq_episode_show_index UNIQUE (show_id, "index"), 
+	CONSTRAINT uq_unique_episode_identifier_per_show UNIQUE (show_id, episode_identifier), 
+	CONSTRAINT uq_episode_show_source_slug UNIQUE (show_id, source_slug)
+)
+""",
+    """
+CREATE INDEX ix_media_items_episode_show_published_id ON media_items_episode (show_id, published_date, id)
 """,
     """
 CREATE INDEX ix_media_items_episode_season_index_id ON media_items_episode (season_id, "index", id)
@@ -674,38 +683,80 @@ CREATE INDEX ix_media_items_episode_season_index_id ON media_items_episode (seas
 CREATE INDEX ix_media_items_episode_unfinished_metadata_status ON media_items_episode (publish_status) WHERE metadata_is_final = 0
 """,
     """
-CREATE INDEX ix_media_download_history_download_occurred_id ON media_download_history (media_download_id, occurred_at, id)
+CREATE UNIQUE INDEX ix_media_items_episode_slug ON media_items_episode (slug)
 """,
     """
-CREATE INDEX ix_media_downloads_local_profile_id ON media_downloads (local_media_profile_id, id)
+CREATE INDEX ix_media_items_episode_show_publish_status ON media_items_episode (show_id, publish_status)
+""",
+    """
+CREATE TABLE "shows" (
+	id INTEGER NOT NULL, 
+	uuid VARCHAR NOT NULL, 
+	slug VARCHAR NOT NULL, 
+	title VARCHAR NOT NULL, 
+	description VARCHAR, 
+	sharing_url VARCHAR NOT NULL, 
+	membership_level VARCHAR NOT NULL, 
+	type VARCHAR NOT NULL, 
+	episode_identifier VARCHAR NOT NULL, 
+	author_name VARCHAR NOT NULL, 
+	author_slug VARCHAR NOT NULL, 
+	author_headshot_path VARCHAR, 
+	background_image_path VARCHAR, 
+	logo_image_path VARCHAR, 
+	thumbnail_landscape_path VARCHAR, 
+	thumbnail_portrait_path VARCHAR, 
+	thumbnail_square_path VARCHAR, 
+	created_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	source_key VARCHAR NOT NULL, 
+	CONSTRAINT pk_shows PRIMARY KEY (id), 
+	CONSTRAINT uq_shows_sharing_url UNIQUE (sharing_url)
+)
+""",
+    """
+CREATE INDEX ix_shows_source_key ON shows (source_key)
+""",
+    """
+CREATE UNIQUE INDEX ix_shows_uuid ON shows (uuid)
+""",
+    """
+CREATE UNIQUE INDEX ix_shows_slug ON shows (slug)
+""",
+    """
+CREATE TABLE "media_items" (
+	id INTEGER NOT NULL, 
+	uuid VARCHAR NOT NULL, 
+	type VARCHAR NOT NULL, 
+	created_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	source_key VARCHAR NOT NULL, 
+	drm_protected BOOLEAN DEFAULT 0 NOT NULL, 
+	CONSTRAINT pk_media_items PRIMARY KEY (id)
+)
+""",
+    """
+CREATE UNIQUE INDEX ix_media_items_uuid ON media_items (uuid)
+""",
+    """
+CREATE INDEX ix_media_items_source_key ON media_items (source_key)
 """,
 )
 
 _TABLES = (
     "metadata",
-    "shows",
-    "media_items",
     "task_definitions",
-    "download_profiles_podcast",
-    "download_profiles_series",
-    "task_runs",
     "media_downloads_movie",
     "local_media_profiles_movie",
     "local_media_profiles_show",
     "media_downloads_movie_extra",
     "settings",
     "local_media_profiles",
-    "download_profiles",
     "task_operations",
     "task_operation_targets",
     "task_operation_runs",
     "media_downloads_episode",
-    "task_schedules",
-    "media_items_episode",
-    "media_items_movie",
     "movie_extra_sources",
-    "media_items_movie_extra",
-    "download_profile_series_seasons",
     "seasons",
     "stream_profiles_rss",
     "stream_profiles",
@@ -714,9 +765,21 @@ _TABLES = (
     "show_local_assets",
     "task_operation_dependencies",
     "media_download_assets",
+    "media_items_video",
+    "media_downloads_video",
+    "local_media_profiles_video",
+    "source_domain_preferences",
+    "download_profile_seasons",
+    "download_profiles",
+    "media_items_movie",
+    "media_items_movie_extra",
     "media_downloads",
+    "task_runs",
+    "task_schedules",
+    "media_items_episode",
+    "shows",
+    "media_items",
 )
-
 
 
 def upgrade() -> None:

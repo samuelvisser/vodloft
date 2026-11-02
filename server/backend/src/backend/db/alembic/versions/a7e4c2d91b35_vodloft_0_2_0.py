@@ -1,4 +1,7 @@
-"""Mark media that its Source no longer has, such as a video deleted from YouTube.
+"""Upgrade the VODLoft 0.1.0 schema to 0.2.0.
+
+The single release migration for 0.2.0. It marks media that its Source no
+longer has, such as a video deleted from YouTube.
 
 Revision ID: a7e4c2d91b35
 Revises: f4abb559e3ab

@@ -21,7 +21,7 @@ def _has_settings_version_table(context: MigrationContext) -> bool:
     )
 
 
-def _settings_table_is_created_by_the_baseline(_context: MigrationContext, purge: bool = False) -> None:
+def _settings_table_is_created_by_the_first_migration(_context: MigrationContext, purge: bool = False) -> None:
     return None
 
 
@@ -49,9 +49,9 @@ def apply_settings_version_table(context: MigrationContext) -> None:
         _has_settings_version_table,
         context,
     )
-    # The baseline migration creates Settings itself; Alembic must not create a
+    # The first migration creates Settings itself; Alembic must not create a
     # bare version table under that name first.
     context._ensure_version_table = MethodType(  # type: ignore[method-assign]  # noqa: SLF001
-        _settings_table_is_created_by_the_baseline,
+        _settings_table_is_created_by_the_first_migration,
         context,
     )
