@@ -67,8 +67,8 @@ reader detects the release (from `alembic_version`, or
 `settings.alembic_version_num` from 1.1 on) and runs the later ones on the
 private copy, so the mapping reads one schema. A new WireLoft release means
 adding its migration file and a line to `RELEASES`. VODLoft's own history starts
-at a baseline that creates the schema these migrations ended with (WireLoft
-1.2.3), under the same revision id.
+at its 0.1.0 migration, which creates VODLoft's first schema in one step and
+never upgrades a WireLoft database.
 
 Because WireLoft's model is VODLoft's from before VODLoft's changes, the plan
 hands over `RecordPlan`s instead of files to match: Collections, seasons,

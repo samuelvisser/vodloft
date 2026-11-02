@@ -1,4 +1,6 @@
-"""VODLoft 0.5.0: optional user accounts.
+"""Upgrade the VODLoft 0.4.0 schema to 0.5.0: optional user accounts.
+
+The single release migration for 0.5.0 (0.5.1 changed no schema).
 
 Revision ID: 817515eb8209
 Revises: e6a2c9d4f817

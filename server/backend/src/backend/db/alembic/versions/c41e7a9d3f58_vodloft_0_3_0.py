@@ -1,4 +1,7 @@
-"""Mark media that its Source only gives to a paying account, such as NPO Plus.
+"""Upgrade the VODLoft 0.2.0 schema to 0.3.0.
+
+The single release migration for 0.3.0 (0.3.1 changed no schema). It marks
+media that its Source only gives to a paying account, such as NPO Plus.
 
 Revision ID: c41e7a9d3f58
 Revises: a7e4c2d91b35

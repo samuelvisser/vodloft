@@ -189,14 +189,18 @@ For the remaining branches, tell me what changed in them compared to develop, an
 do with those.
 
 ### Migration squashing
-When releasing a new version of VODLoft, I will often ask you to merge all migrations after the last
-migration in the previous official release into one, making it one big migration from the previous
-VODLoft version into the next. When I ask you to do this, please make sure the new merged migration 
-file uses the same version number as the last pre-merge migration did. In this way, my testing 
-environments that have been upgrading through these smaller upgrades, will know they are already 
-up-to-date and do not require an update even if the migration file merged everything together.
+The Alembic history holds exactly one migration per VODLoft release, named
+`<revision>_vodloft_<major>_<minor>_<patch>.py`. A patch release without schema changes has no migration of its own.
+Between releases, new work adds ordinary migrations after the last release migration. When preparing a release,
+always merge every Alembic migration added since the previous release into one, without asking: one big migration
+from the previous VODLoft version into the next.
 
-I often like to merge Alembic migrations for updates, but keep background migrations separate. Though
-I might change how I do this for any particular release, if I ask you to prepare for a new release
-and did not ask you to merge migrations, please always ask me whether I want that. I might just simply
-have forgotten to ask you.
+The merged migration keeps the revision id of the last migration it replaces, so testing environments that have been
+upgrading through the smaller migrations know they are already up to date. Never change the revision id or the
+`down_revision` of a migration that shipped in a release: installed databases store those ids. Add the new release
+to `RELEASE_REVISIONS` in `tests/unit/test_db_migration.py`, which checks that the history is one migration per
+release. Tests of data changes made by a replaced migration move to the merged one, starting from the previous
+release's revision.
+
+Background migrations stay separate and are not merged per release, unless I ask for it. If I ask you to prepare
+for a new release and did not say anything about background migrations, ask me whether I want those merged too.

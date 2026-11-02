@@ -18,8 +18,8 @@ from .core import get_db_path, get_engine
 ALEMBIC_DIR = Path(__file__).with_name("alembic")
 _UNMANAGED_TABLES = {"apscheduler_jobs"}
 
-# WireLoft's own releases. VODLoft's history starts at the baseline, which keeps
-# the id of WireLoft 1.2.3's migration; no VODLoft release ever stopped there.
+# WireLoft's own releases. VODLoft's history starts at its 0.1.0 migration, and
+# no VODLoft release ever stopped at one of these.
 WIRELOFT_REVISIONS = frozenset({
     "0001", "c8d4e2f1a7b9", "d8b4a1f6c203", "6d4a8c1f2b90", "f2a6c93d8b14", "a4e7c19b2d53", "c4e93f1a2b6d",
 })
