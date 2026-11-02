@@ -67,7 +67,8 @@ export function groupDownloadsByEpisodeSlug(
     return map
 }
 
-function DownloadStatusIcons({downloads}: { downloads: MediaDownloadViewRead[] }) {
+/** The download status icons shown on an episode or video thumbnail. */
+export function DownloadStatusIcons({downloads}: { downloads: MediaDownloadViewRead[] }) {
     const visibleDownloads = downloads.filter(download => download.presentation.status !== 'not_downloaded')
     if (visibleDownloads.length === 0) return null
 
