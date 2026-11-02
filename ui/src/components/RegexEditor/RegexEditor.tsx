@@ -335,7 +335,10 @@ export default function RegexEditor({id, value, onChange, field = 'title', colle
     const blocks = useMemo(() => parseBlocks(pattern), [pattern])
     const result = check.result
     const serverError = result && !result.valid ? result.error ?? 'This pattern is not valid' : null
-    const errorAt = serverError ? result?.errorPosition ?? null : null
+    // Like other VODLoft fields, the expression only shows its error once you have left it.
+    const [touched, setTouched] = useState(false)
+    const shownError = touched ? serverError : null
+    const errorAt = shownError ? result?.errorPosition ?? null : null
 
     const set = (next: Partial<RegexValue>) => {
         let nextPattern = next.pattern ?? pattern
@@ -779,7 +782,7 @@ export default function RegexEditor({id, value, onChange, field = 'title', colle
                         {preset === 'pattern' ? 'Hover a block to highlight its part' : 'Python syntax, as VODLoft uses it'}
                     </span>
                 </div>
-                <div className={`regex-editor__expression${serverError ? ' is-invalid' : ''}`}>
+                <div className={`regex-editor__expression${shownError ? ' is-invalid' : ''}`}>
                     <div className="regex-editor__code">
                         <pre aria-hidden="true">
                             <HighlightedRegex pattern={pattern} highlight={hovered} errorAt={errorAt}/>
@@ -792,7 +795,7 @@ export default function RegexEditor({id, value, onChange, field = 'title', colle
                             autoCapitalize="off"
                             autoCorrect="off"
                             disabled={disabled}
-                            aria-invalid={Boolean(serverError)}
+                            aria-invalid={Boolean(shownError)}
                             aria-describedby={`${id}-description`}
                             onChange={(event) => {
                                 const next = event.currentTarget.value.replace(/\r?\n/g, '')
@@ -800,6 +803,7 @@ export default function RegexEditor({id, value, onChange, field = 'title', colle
                                 setPreset(inferPreset(next.replace(/^\(\?i\)/, '')))
                                 setSelected(null)
                             }}
+                            onBlur={() => setTouched(true)}
                         />
                     </div>
                     <button
@@ -812,10 +816,10 @@ export default function RegexEditor({id, value, onChange, field = 'title', colle
                         Aa Ignore case
                     </button>
                 </div>
-                {serverError ? (
+                {shownError ? (
                     <div className="regex-editor__error" role="alert">
                         <FontAwesomeIcon icon={faIcon('fass', 'circle-exclamation')}/>
-                        {serverError}
+                        {shownError}
                         {errorAt !== null ? ` (at character ${errorAt + 1})` : ''}
                     </div>
                 ) : null}
