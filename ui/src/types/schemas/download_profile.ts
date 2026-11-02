@@ -3,6 +3,58 @@ import {z} from 'zod'
 import {EpisodeIdentifierReg, EpisodeIdentifierValue} from "../collection";
 import {ApiDateTimeSchema} from "./datetime";
 import {SeasonDetachedSchema, SeasonReadSchema} from "./season";
+import {createSelectRegistry} from "../../utils/selectRegistry";
+
+
+// ---------- Which episodes: your own rules ----------
+export const EpisodeRuleActionReg = createSelectRegistry('EpisodeRuleAction', {
+    skip: {label: 'Skip'},
+    only: {label: 'Only download'},
+    keep: {label: 'Keep'},
+})
+export type EpisodeRuleAction = (typeof EpisodeRuleActionReg)['values'][number]
+
+export const EpisodeRuleFieldReg = createSelectRegistry('EpisodeRuleField', {
+    title: {label: 'title'},
+    description: {label: 'description'},
+    duration: {label: 'duration'},
+})
+export type EpisodeRuleField = (typeof EpisodeRuleFieldReg)['values'][number]
+
+export const DurationOperatorReg = createSelectRegistry('DurationOperator', {
+    shorter: {label: 'is shorter than'},
+    longer: {label: 'is longer than'},
+})
+export type DurationOperator = (typeof DurationOperatorReg)['values'][number]
+
+export const RetentionFromReg = createSelectRegistry('RetentionFrom', {
+    published: {label: 'After publication'},
+    downloaded: {label: 'After downloading'},
+})
+
+export const EpisodeRuleSchema = z.object({
+    action: z.enum(['skip', 'only', 'keep']).default('skip'),
+    field: z.enum(['title', 'description', 'duration']).default('title'),
+    pattern: z.string().nullable().default(null),
+    ignoreCase: z.boolean().default(false),
+    durationOperator: z.enum(['shorter', 'longer']).nullable().default(null),
+    durationSeconds: z.int().min(1).nullable().default(null),
+}).superRefine((rule, ctx) => {
+    if (rule.field === 'duration') {
+        if (!rule.durationOperator || !rule.durationSeconds) {
+            ctx.addIssue({code: 'custom', path: ['durationSeconds'], message: 'Choose a duration'})
+        }
+    } else if (!rule.pattern) {
+        ctx.addIssue({code: 'custom', path: ['pattern'], message: 'Type what to look for'})
+    }
+})
+export type EpisodeRuleIn = z.input<typeof EpisodeRuleSchema>
+export type EpisodeRule = z.output<typeof EpisodeRuleSchema>
+
+/** A new filter line: skip titles containing a whole word, in any capitalisation. */
+export function newEpisodeRule(): EpisodeRule {
+    return {action: 'skip', field: 'title', pattern: '', ignoreCase: true, durationOperator: null, durationSeconds: null}
+}
 
 
 // ---------- Strict request (create/update) ----------
@@ -17,8 +69,10 @@ export const DownloadProfileSchemaRequest = z.object({
     downloadEpisodeCount: z.int().min(0).default(0),
     downloadStartingFrom: z.iso.date().nullable().default(null),
     deleteOlderEpisodes: z.boolean().default(true),
+    retentionFrom: z.enum(['published', 'downloaded']).default('published'),
     seasons: z.array(SeasonDetachedSchema).default([]),
     includeUpcomingSeasons: z.boolean().default(true),
+    rules: z.array(EpisodeRuleSchema).default([]),
 })
 
 type DownloadLimitFields = {
@@ -110,9 +164,47 @@ export const DownloadProfileReadSchema = z.looseObject({
     downloadEpisodeCount: z.int(),
     downloadStartingFrom: z.iso.date().nullable(),
     deleteOlderEpisodes: z.boolean(),
+    retentionFrom: z.string(),
     seasons: z.array(SeasonReadSchema),
     includeUpcomingSeasons: z.boolean(),
+    rules: z.array(z.looseObject({
+        id: z.int(),
+        action: z.string(),
+        field: z.string(),
+        pattern: z.string().nullable(),
+        ignoreCase: z.boolean(),
+        durationOperator: z.string().nullable(),
+        durationSeconds: z.int().nullable(),
+    })),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
 })
 export type DownloadProfileRead = z.infer<typeof DownloadProfileReadSchema>
+
+
+// ------------ Which episodes counts ------------
+export const WhichEpisodesSchema = z.object({
+    total: z.int(),
+    unavailable: z.int(),
+    types: z.int(),
+    seasons: z.int(),
+    dates: z.int(),
+    rules: z.array(z.int()),
+    downloaded: z.int(),
+    episodes: z.array(z.object({
+        id: z.int(),
+        slug: z.string(),
+        title: z.string(),
+        publishedAt: z.string().nullable(),
+        leftOutBy: z.string().nullable(),
+    })).nullable().optional(),
+})
+export type WhichEpisodes = z.infer<typeof WhichEpisodesSchema>
+
+export const SkippedByFilterSchema = z.object({
+    episodeId: z.int(),
+    downloadProfileId: z.int(),
+    localMediaProfileId: z.int(),
+    rule: EpisodeRuleSchema,
+})
+export type SkippedByFilter = z.infer<typeof SkippedByFilterSchema>

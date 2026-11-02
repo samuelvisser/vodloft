@@ -140,6 +140,30 @@ def test_the_plan_converts_profiles_and_maps_sources_and_items(tmp_path):
     assert settings["apprise_server"].support == "unsupported"
 
 
+def test_filters_retention_and_prevent_culling_become_which_episodes(tmp_path):
+    path = _pinchflat_db(tmp_path / "pinchflat.db")
+    connection = sqlite3.connect(path)
+    connection.execute("UPDATE sources SET title_filter_regex = 'Part \\d+', min_duration_seconds = 120, "
+                       "max_duration_seconds = 3600 WHERE id = 1")
+    connection.execute("ALTER TABLE media_items ADD COLUMN prevent_culling INTEGER")
+    connection.execute("UPDATE media_items SET prevent_culling = 1 WHERE id = 1")
+    connection.commit()
+    connection.close()
+
+    plan = plan_import(read_pinchflat(path), option_directory=None)
+
+    veritasium, lofi = plan.collections
+    assert veritasium.download_profile["rules"] == [
+        {"action": "only", "field": "title", "pattern": "Part \\d+", "ignore_case": False},
+        {"action": "skip", "field": "duration", "duration_operator": "shorter", "duration_seconds": 120},
+        {"action": "skip", "field": "duration", "duration_operator": "longer", "duration_seconds": 3600},
+    ]
+    assert not {warning.subject for warning in veritasium.warnings} & {"title_filter_regex", "duration"}
+    assert lofi.download_profile["retention_from"] == "downloaded"
+    by_id = {file.media_site_id: file for file in plan.files}
+    assert by_id["vid-aaaaaaa"].kept and not by_id["vid-bbbbbbb"].kept
+
+
 def test_paths_map_onto_the_folder_vodloft_sees():
     samples = ["/downloads/Video/a.mp4", "/downloads/Video/b.mp4"]
     on_disk = {"/downloads/pinchflat/Video/a.mp4", "/downloads/pinchflat/Video/b.mp4"}

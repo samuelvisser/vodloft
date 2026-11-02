@@ -46,3 +46,31 @@ class EpIdType(StrEnum):
     EP_EXTRA = "ep-extra"
     TRAILER = "trailer"
     AUX = "aux"
+
+
+class EpisodeRuleAction(StrEnum):
+    """What a Which episodes rule does with the episodes it matches."""
+
+    SKIP = "skip"
+    ONLY = "only"
+    """Only download matching episodes: an episode that does not match is skipped."""
+    KEEP = "keep"
+    """Never stops a download; protects matching downloads from retention."""
+
+
+class EpisodeRuleField(StrEnum):
+    TITLE = "title"
+    DESCRIPTION = "description"
+    DURATION = "duration"
+
+
+class DurationOperator(StrEnum):
+    SHORTER = "shorter"
+    LONGER = "longer"
+
+
+class RetentionFrom(StrEnum):
+    """What the date window's retention counts from."""
+
+    PUBLISHED = "published"
+    DOWNLOADED = "downloaded"

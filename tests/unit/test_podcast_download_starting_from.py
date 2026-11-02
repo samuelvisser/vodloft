@@ -105,13 +105,13 @@ def db_session(tmp_path, monkeypatch):
     import backend.db.models  # noqa: F401
     from backend.db import Base
     from config import get_settings
-    from task_manager.tasks.workers.download_profile_worker import _helpers
+    from backend.services import which_episodes
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     session = Session(engine)
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
-    monkeypatch.setattr(_helpers, "get_settings", lambda: SimpleNamespace(timezone="UTC"))
+    monkeypatch.setattr(which_episodes, "get_settings", lambda: SimpleNamespace(timezone="UTC"))
     yield session
     session.close()
     engine.dispose()

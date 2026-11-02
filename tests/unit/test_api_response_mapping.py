@@ -66,8 +66,10 @@ def test_download_profile_view_uses_relationship_aliases():
         download_episode_count=25,
         download_starting_from=None,
         delete_older_episodes=True,
+        retention_from="published",
         seasons=[],
         include_upcoming_seasons=True,
+        rules=[],
     )
 
     view = DownloadProfileAPIReadView.model_validate(

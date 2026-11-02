@@ -69,6 +69,9 @@ export function DownloadRow({
     retry,
     onDownload,
     onCancel,
+    note,
+    downloadLabel = 'Download',
+    actions,
     children,
 }: {
     profile: LocalMediaProfileRead
@@ -79,6 +82,11 @@ export function DownloadRow({
     retry: {title: string, label: string, onClick: () => void} | null
     onDownload: () => void
     onCancel: () => void
+    /** A line under the profile name, such as why the episode was skipped. */
+    note?: ReactNode
+    downloadLabel?: string
+    /** Extra buttons before the log button. */
+    actions?: ReactNode
     /** Dialogs that belong to the row. */
     children?: ReactNode
 }) {
@@ -89,6 +97,7 @@ export function DownloadRow({
             <div className="download-row-info">
                 <div className="download-row-name">{profile.name}</div>
                 <div className="download-row-format">{PreferredFormatReg.getLabelLoose(profile.preferredFormat)}</div>
+                {note && <div className="download-row-note">{note}</div>}
             </div>
             <div className="download-row-state">
                 {!downloadStateKnown
@@ -111,7 +120,7 @@ export function DownloadRow({
                             aria-label={`Download ${profile.name}`}
                         >
                             <FontAwesomeIcon icon={faIcon('fass', 'download')}/>
-                            Download
+                            {downloadLabel}
                         </button>}
             </div>
             {downloadStateKnown && download && (
@@ -145,6 +154,7 @@ export function DownloadRow({
                             <FontAwesomeIcon icon={faIcon('fass', 'rotate-right')}/>
                         </button>
                     )}
+                    {actions}
                     <button
                         type="button"
                         className="icon-btn"

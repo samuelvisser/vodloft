@@ -34,7 +34,7 @@ import {
     LocalMediaProfileViewRead,
     LocalMediaProfileViewReadSchema,
 } from "../types/schemas/local_media_profile";
-import {DownloadProfileRead, DownloadProfileReadSchema} from "../types/schemas/download_profile";
+import {DownloadProfileRead, DownloadProfileReadSchema, SkippedByFilterSchema} from "../types/schemas/download_profile";
 import {DownloadProfileReadView, DownloadProfileReadViewSchema} from "../types/schemas/download_profile_view";
 import {StreamProfileRead, StreamProfileReadSchema, StreamProfileReadView, StreamProfileReadViewSchema} from "../types/schemas/stream_profile_base";
 import {CollectionRead, CollectionReadView, CollectionReadViewSchema} from "../types/schemas/collection";
@@ -712,6 +712,19 @@ export function useCollectionSeasons(collectionSlug?: string) {
     return useQuery({
         ...seasonsQueryOptions(collectionSlug),
         enabled: !!collectionSlug,
+    })
+}
+
+/** Episodes of a Collection that its Download Profiles' own filters skip, with the filter. */
+export function useSkippedByFilter(collectionId?: number) {
+    return useQuery({
+        queryKey: ['skippedByFilter', collectionId] as const,
+        enabled: collectionId !== undefined,
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/download-profiles/skipped-by-filter/${collectionId}`,
+            SkippedByFilterSchema.array(),
+            signal,
+        ),
     })
 }
 

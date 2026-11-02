@@ -84,6 +84,7 @@ export default function DownloadProfileStep({value, onChange, onSubmit: onSubmit
                         seasons={seasons}
                         sourceKey={collection?.sourceKey}
                         collectionUrl={collection?.sharingUrl}
+                        startOpen
                     />
 
                     <div className="actions">

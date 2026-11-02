@@ -489,3 +489,13 @@
   background: linear-gradient(145deg, rgba(100,116,139,.4), rgba(15,23,42,.85));
 }
 .video-view .episode-summary a { color: inherit; }
+
+.episode-view .download-row-note {
+    color: var(--muted, #777);
+    font-size: 0.85rem;
+    max-width: 340px;
+}
+
+.episode-view .download-row-actions .icon-btn.is-active {
+    color: #0ea5e9;
+}

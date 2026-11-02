@@ -255,3 +255,16 @@ def media_downloads_update(media_download_id: int, body: MediaDownloadAPIUpdate)
             raise
 
 
+
+
+@router.put("/{media_download_id}/kept", dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE)], response_model=MediaDownloadAPIRead)
+def media_downloads_set_kept(media_download_id: int, body: MediaDownloadKeptAPIRequest):
+    """Keep an episode's download from retention, or let retention delete it again."""
+    with db_session() as s:
+        try:
+            result = set_media_download_kept(s, media_download_id, body)
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise

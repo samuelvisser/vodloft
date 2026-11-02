@@ -277,6 +277,7 @@ export default function AddDownloadProfilePage() {
                     seasons={seasonsForForm}
                     collectionRoot={false}
                     disabledEpisodeTypes={disabledEpisodeTypes}
+                    startOpen
                 />
 
                 <div className="actions">

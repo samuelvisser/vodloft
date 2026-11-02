@@ -108,6 +108,8 @@ class FilePlan:
     """VODLoft's numbers (1 and up) for the profile's Custom Indexes."""
     title: str | None = None
     published: str | None = None
+    kept: bool = False
+    """The other program was told never to delete this file."""
     """When the item was published, as an ISO date or time."""
 
 
