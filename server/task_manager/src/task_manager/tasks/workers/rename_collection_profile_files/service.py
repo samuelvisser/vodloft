@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 
+from backend.services.no_ascii_names import settle_no_ascii_name
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
@@ -94,6 +95,7 @@ def run_rename_collection_profile_files(
             media_download=download,
             extension=extension,
         )
+        destination = settle_no_ascii_name(download, destination, session=session)
         if source == destination:
             unchanged += 1
             continue

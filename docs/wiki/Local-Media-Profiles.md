@@ -117,12 +117,29 @@ Most of our date variables have conveniently preformatted values, such as `date`
 
 For a date of September 24, 2026, that expression renders as `24 September 2026`. The filter uses Python `strftime` directives, so formats such as `%Y%m%d`, `%d-%m-%Y`, and `%H-%M` are also available. It works with VODLoft's date, time, and datetime template values; a missing value remains empty.
 
+### Text filters
+
+Three filters work with Python regular expressions:
+
+- `regex_replace(pattern, replacement)` replaces every match. Add a count, such as `regex_replace(' +', ' ', 1)`, to replace only the first matches.
+- `regex_search(pattern)` is true when the pattern matches anywhere, for use in a condition.
+- `regex_groups(pattern)` gives the groups of the first match as a list, or an empty list when nothing matches. A group that took no part in the match is empty.
+
+For example, to keep only the part of a title before ` | `, and leave the title as it is when there is no ` | `:
+
+```jinja
+{% set parts = title | regex_groups('^(.+?) \| ') %}{% set title = parts[0] if parts else title %}
+/downloads/{{ collection_title }}/{{ title }}.ext
+```
+
 ## Collection template variable reference
 
 | Variable | Meaning |
 | --- | --- |
 | `collection` | Collection slug |
 | `collection_title` | Collection title |
+| `collection_author` | Collection author, host or channel name |
+| `collection_site_id` | The id the site gives the collection, such as a YouTube channel or playlist id |
 | `season` | Season slug, or empty when unavailable |
 | `season_name` | Season name, or empty when unavailable |
 | `season_index` | VODLoft's internal persistent season index |
@@ -131,10 +148,13 @@ For a date of September 24, 2026, that expression renders as `24 September 2026`
 | `episode` | Episode slug |
 | `episode_title` | Episode title |
 | `title` | Episode title |
+| `episode_site_id` | The id the site gives the episode, such as a YouTube video id |
+| `episode_uploader` | Who uploaded the episode, when the site says; empty otherwise |
+| `duration_seconds` | Episode duration in whole seconds |
 | `dw_episode_number` | Raw episode number exactly as returned by The Daily Wire |
 | `episode_type` | `ep`, `ep-extra`, `aux`, or `trailer` |
 | `episode_extra_type` | `other` or `trailer` for attached episode extras; empty otherwise |
-| `episode_number` | The Daily Wire main episode number for `ep`/`ep-extra`, or VODLoft's show-global counter for `aux`/`trailer` |
+| `episode_number` | The Daily Wire main episode number for `ep`/`ep-extra`, or VODLoft's collection-wide counter for `aux`/`trailer` |
 | `episode_sub_number` | The Daily Wire fractional/sub-episode number for `ep-extra`; empty otherwise |
 | `episode_label` | Canonical identifier label without the type prefix |
 | `episode_identifier` | Full VODLoft episode identifier; unique within the collection |
@@ -153,7 +173,31 @@ For a date of September 24, 2026, that expression renders as `24 September 2026`
 
 `season_number` is the value intended for media-library season numbering. It ignores Daily Wire Extras collections and remains stable if another Extras season appears later. `season_index` is used by VODLoft to order the seasons themselves and is unique for a season within a collection.
 
-VODLoft preserves The Daily Wire's episode number for full episodes and attached episode extras. It only invents show-global numbers for auxiliary content and standalone collection trailers. Extras seasons use `season_type == 'extra'` and `season_number == 0`, which is handy if you want specials to end up in a different 'Specials' directory, for example.
+VODLoft preserves The Daily Wire's episode number for full episodes and attached episode extras. It only invents collection-wide numbers for auxiliary content and standalone collection trailers. Extras seasons use `season_type == 'extra'` and `season_number == 0`, which is handy if you want specials to end up in a different 'Specials' directory, for example.
+
+## Custom Indexes
+
+A Custom Index numbers the episodes a template picks out, such as the featurettes of a collection, so they can have their own running number. Add it with **Indexing values** in a Collection profile: give it a name and a key, such as `featurettes`. Then use the key in the template:
+
+```jinja
+{% if episode_type == 'aux' %}{% set n = 'featurettes' | custom_index %}/downloads/{{ collection_title }}/Featurettes/Featurette {{ n }}.ext{% else %}/downloads/{{ collection_title }}/{{ title }}.ext{% endif %}
+```
+
+Every episode that reaches the key gets the next number, in episode order, starting at 1. An episode that doesn't reach it gets none. VODLoft works the numbers out again whenever the template or the episodes change, and can rename the files.
+
+Three options change the numbering:
+
+| Option | Effect | Example |
+| --- | --- | --- |
+| `per=` | Counts each group on its own. A list groups by all its values together. | `custom_index(per=season_number)` starts again at 1 in every season |
+| `start=` | The first number, instead of 1. | `custom_index(start=0)` gives 0, 1, 2 |
+| `step=` | How far each number is from the last, instead of 1. | `custom_index(start=10, step=10)` gives 10, 20, 30 |
+
+`start=` and `step=` must be whole numbers, and `step=` can't be 0. `per=` takes the episode's own values, such as variables and pure filters like `lower`, but not another Custom Index.
+
+### Keep numbers
+
+Normally the numbers follow episode order, so an older episode found later moves the numbers after it up by one, and those files get renamed. Turn on **Keep numbers once given out** for an index to keep every number it gives. A newly found episode then takes the next number after the highest one in its group, wherever it falls in episode order. Turning the option off numbers everything in order again.
 
 ## Movies and extras
 
@@ -228,21 +272,27 @@ Titles are not unique, so include `{{ slug }}` in the filename. Sites do not alw
 
 ## Filename restrictions
 
-The global **Filename restrictions** setting controls how template text and substituted values are made safe for filesystems.
+The global **Filename restrictions** setting controls how file and folder names are made safe. The three modes follow yt-dlp, so files are named like yt-dlp and Pinchflat name them. Each value a template fills in, such as a title, is cleaned the way yt-dlp cleans it. Text you type in the template itself follows the same rules, and the editor says when typed text has a character the mode will replace. The preview shows the result.
+
+The examples show `Q&A: Is AI "conscious"? | Ep. 12/13` in each mode.
 
 ### Minimal restrictions (`unrestricted`)
 
-Preserves most Unicode and punctuation while still preventing characters that would accidentally create a new path or invalid filename.
+Like yt-dlp's `--no-windows-filenames`. Only a `/` in a value changes, to the look-alike `⧸`, so a value can never add a folder. Control characters are dropped. `Q&A: Is AI "conscious"? | Ep. 12⧸13`
 
 ### Windows-compatible filenames (`windows`) — default
 
-Keeps Unicode while replacing characters Windows does not allow and protecting reserved Windows names. This is a good cross-platform default.
+Like yt-dlp's default, which Pinchflat uses. `: " * < > ? | / \` become the look-alikes `： ＂ ＊ ＜ ＞ ？ ｜ ⧸ ⧹`, and a time such as `10:30` becomes `10_30`. Reserved Windows names such as `CON` and `NUL` get a `_` in front, trailing dots and spaces are removed, and control characters become `_`. `Q&A： Is AI ＂conscious＂？ ｜ Ep. 12⧸13`
 
 ### Restricted filenames (`restricted`)
 
-Produces conservative ASCII-style filenames using letters, numbers, `.`, `_`, and `-`.
+Like yt-dlp's `--restrict-filenames`: ASCII letters, numbers, `.`, `_` and `-` only. Letters are spelled out in ASCII first, such as `ß` as `ss`, `Æ` as `AE` and `Ł` as `L`, curly quotes become straight ones and `…` becomes `...`; accents are then dropped. A colon becomes `_-`, and anything else becomes `_`. `Q_A_-_Is_AI_conscious_Ep._12_13`
+
+A file name with nothing ASCII left, such as a Japanese title, becomes `no_ascii_file_name`. A second one in the same folder becomes `no_ascii_file_name_2`, and so on. The number stays with the file.
 
 Use this only when another application or filesystem needs very simple filenames.
+
+Files you already have keep their names until you rename a profile's files.
 
 ## Suggested layouts
 

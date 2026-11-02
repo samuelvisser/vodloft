@@ -107,9 +107,11 @@ Temporary mode is useful when a media server watches the destination and should 
 
 ### Filename modes
 
-- `unrestricted` — preserves most Unicode and punctuation while preventing path-breaking values.
-- `windows` — keeps Unicode but removes Windows-incompatible characters and names. This is the default.
-- `restricted` — conservative ASCII-style filenames.
+The modes follow yt-dlp, so new files are named as yt-dlp and Pinchflat name them. See [[Local-Media-Profiles#filename-restrictions]] for examples.
+
+- `unrestricted` — like yt-dlp's `--no-windows-filenames`: only a `/` in a value changes, to `⧸`.
+- `windows` — like yt-dlp's default: characters Windows does not allow become look-alikes such as `：` and `？`, and reserved names are protected. This is the default.
+- `restricted` — like yt-dlp's `--restrict-filenames`: ASCII letters, numbers, `.`, `_` and `-` only.
 
 ---
 

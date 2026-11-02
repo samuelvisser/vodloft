@@ -345,15 +345,21 @@ export default function DownloadsSettingsTab({
                     help={
                         <ReadMore summary={<span>Choose filename restriction mode to ensure filesystem compatibility.</span>}>
                             <p>
-                                <strong>Minimal restrictions</strong> preserves Unicode and ordinary punctuation while preventing path-breaking
-                                characters
+                                The modes follow yt-dlp, so new files are named as yt-dlp and Pinchflat name them.
+                                Files you already have keep their names until you rename a profile's files.
                             </p>
                             <p>
-                                <strong>Windows-compatible</strong> removes characters Windows does not allow in filenames, plus ensures reserved
-                                filenames are not used. Most unicode characters are preserved.
+                                <strong>Minimal restrictions</strong> preserves Unicode and punctuation. Only a <code>/</code> in
+                                a value changes, to <code>⧸</code>.
                             </p>
                             <p>
-                                <strong>Restricted</strong> uses ASCII-only names without spaces or ampersands.
+                                <strong>Windows-compatible</strong> turns characters Windows does not allow into look-alikes,
+                                such as <code>：</code> for <code>:</code>, and keeps reserved names from being used.
+                                Unicode is preserved.
+                            </p>
+                            <p>
+                                <strong>Restricted</strong> uses ASCII-only names without spaces or ampersands. A name with
+                                nothing ASCII left becomes <code>no_ascii_file_name</code>.
                             </p>
                         </ReadMore>
                     }

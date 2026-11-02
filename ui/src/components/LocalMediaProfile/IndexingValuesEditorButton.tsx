@@ -20,7 +20,7 @@ type IndexingValuesDialogValues = z.infer<typeof IndexingValuesDialogSchema>
 
 
 function cloneIndexingValues(values: IndexingValueEntry[] | undefined): IndexingValueEntry[] {
-    return (values ?? []).map(({key, name}) => ({key, name}))
+    return (values ?? []).map(({key, name, keepNumbers}) => ({key, name, keepNumbers: !!keepNumbers}))
 }
 
 
@@ -106,6 +106,17 @@ export default function IndexingValuesEditorButton({
                             <p>
                                 You can now create episode files like <code>[name]-featurette5</code> fully dynamically.
                             </p>
+                            <p>
+                                <code>per=</code> counts each group on its own, for example
+                                {' '}<code>{"{{ 'clips' | custom_index(per=season_index) }}"}</code> starts again at 1 in
+                                every season. <code>start=</code> and <code>step=</code> change how the numbers read:
+                                {' '}<code>custom_index(start=0, step=10)</code> gives 0, 10, 20.
+                            </p>
+                            <p>
+                                Normally the numbers follow episode order, so an episode found later can shift the
+                                numbers after it. Turn on <strong>Keep numbers</strong> to keep every number once it
+                                is given out; a newly found episode then takes the next free number.
+                            </p>
                         </ReadMore>
                         <p className="custom-metadata-note">
                             Applying changes here only updates the Local Media Profile form. Nothing is saved to
@@ -122,6 +133,7 @@ export default function IndexingValuesEditorButton({
                                 const keyPath = `indexingValues.${index}.key` as const
                                 const nameError = errors.indexingValues?.[index]?.name
                                 const keyError = errors.indexingValues?.[index]?.key
+                                const keepPath = `indexingValues.${index}.keepNumbers` as const
                                 const key = editorForm.watch(keyPath)
 
                                 return (
@@ -164,6 +176,11 @@ export default function IndexingValuesEditorButton({
                                             Remove
                                         </button>
 
+                                        <label className="custom-metadata-keep">
+                                            <input type="checkbox" {...editorForm.register(keepPath)}/>
+                                            Keep numbers once given out
+                                        </label>
+
                                         <code className="custom-metadata-variable">
                                             {key
                                                 ? `{{ '${key}' | custom_index }}`
@@ -177,7 +194,7 @@ export default function IndexingValuesEditorButton({
                         <button
                             className="btn custom-metadata-add"
                             type="button"
-                            onClick={() => append({key: '', name: ''})}
+                            onClick={() => append({key: '', name: '', keepNumbers: false})}
                             disabled={fields.length >= COLLECTION_LOCAL_MEDIA_PROFILE_INDEXING_VALUES_MAX_ITEMS}
                         >
                             Add indexing value

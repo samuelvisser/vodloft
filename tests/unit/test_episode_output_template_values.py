@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 def _episode(identifier: str, *, dw_episode_number: str | None = None):
     return SimpleNamespace(
-        collection=SimpleNamespace(slug="chip-chilla", title="Chip Chilla", meta_items=[]),
+        collection=SimpleNamespace(slug="chip-chilla", title="Chip Chilla", author_name="Daily Wire", meta_items=[]),
         season=SimpleNamespace(
             slug="season-1",
             name="Season 1",
@@ -12,6 +12,9 @@ def _episode(identifier: str, *, dw_episode_number: str | None = None):
             season_number=1,
         ),
         slug="chips-odyssey",
+        source_slug="chips-odyssey",
+        author_name=None,
+        duration=1290.4,
         title="Chip's Odyssey",
         episode_identifier=identifier,
         dw_episode_number=dw_episode_number,
@@ -150,3 +153,26 @@ def test_episode_index_is_available_in_real_and_fallback_preview_sources() -> No
         ))
         assert result.output_path == f"/downloads/{expected}.mp4"
         assert result.used_variables == ["episode_index"]
+
+
+def test_site_ids_uploader_author_and_duration_are_template_values() -> None:
+    from backend.utils.output_template import COLLECTION_OUTPUT_TEMPLATE_FIELDS, episode_output_template_values
+
+    episode = _episode("ep.1")
+    episode.source_slug = "dQw4w9WgXcQ"
+    episode.author_name = "Uploader"
+    episode.collection.slug = "UC1234"
+
+    values = episode_output_template_values(episode)
+
+    assert {
+        name: values[name]
+        for name in ("episode_site_id", "episode_uploader", "collection_author", "collection_site_id", "duration_seconds")
+    } == {
+        "episode_site_id": "dQw4w9WgXcQ",
+        "episode_uploader": "Uploader",
+        "collection_author": "Daily Wire",
+        "collection_site_id": "UC1234",
+        "duration_seconds": "1290",
+    }
+    assert {"episode_site_id", "episode_uploader", "collection_author", "collection_site_id", "duration_seconds"} <= COLLECTION_OUTPUT_TEMPLATE_FIELDS

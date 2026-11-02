@@ -13,7 +13,7 @@ type PreviewRequest = {
     sourceId: string
     values: Record<string, string>
     localMediaProfileId: number | null
-    indexingValues: {key: string}[] | null
+    indexingValues: {key: string, keepNumbers?: boolean}[] | null
 }
 
 export type LocalMediaProfilePreviewState = {

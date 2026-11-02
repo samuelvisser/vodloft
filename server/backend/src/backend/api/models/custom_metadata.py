@@ -34,6 +34,8 @@ class CustomMetadataResponseBase(ResponseBase):
 class IndexingValueDefinitionAPI(RequestBase):
     key: str = Field(min_length=1, max_length=INDEXING_VALUE_KEY_MAX_LENGTH)
     name: str = Field(min_length=1, max_length=120)
+    # Numbers already given out stay; new episodes take the next free number.
+    keep_numbers: bool = False
 
     @field_validator("name", mode="before")
     @classmethod

@@ -133,7 +133,7 @@ Check the actual file and storage health. If the storage is healthy and you want
 Check **Settings → Downloads → Filename restrictions**:
 
 - **Minimal restrictions** preserves most punctuation and Unicode;
-- **Windows-compatible filenames** removes characters Windows cannot safely use;
+- **Windows-compatible filenames** turns characters Windows cannot use into look-alikes, such as `：` for `:`, as yt-dlp does;
 - **Restricted filenames** creates conservative ASCII-style names.
 
 See [[Local-Media-Profiles#filename-restrictions]].

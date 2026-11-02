@@ -16,6 +16,7 @@ from backend.utils.custom_index import (
     INDEX_ASSIGNMENT_PREFIX,
     get_episode_index_assignments,
     indexing_value_definition_keys,
+    kept_index_keys,
     set_episode_index_assignment,
 )
 from jinja_analysis import (
@@ -27,6 +28,7 @@ from backend.utils.output_template import (
     COLLECTION_OUTPUT_TEMPLATE_FIELDS,
     COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
     episode_output_template_values,
+    output_template_custom_index_calls,
     output_template_custom_index_keys,
     prepare_output_template,
     resolve_episode_output_path_with_index_values,
@@ -83,6 +85,8 @@ def compare_custom_index_assignments(
     *,
     previous_definition_keys: frozenset[str],
     current_definition_keys: frozenset[str],
+    previous_kept_keys: frozenset[str] = frozenset(),
+    current_kept_keys: frozenset[str] = frozenset(),
 ) -> CustomIndexReachabilityComparison:
     """Compare whole-profile Custom Index assignment semantics across a save.
 
@@ -104,10 +108,24 @@ def compare_custom_index_assignments(
             CustomIndexReachabilityStatus.CHANGED,
             reason="The set of active Custom Index keys changed",
         )
+    if previous_kept_keys & previous_active != current_kept_keys & current_active:
+        return CustomIndexReachabilityComparison(
+            CustomIndexReachabilityStatus.CHANGED,
+            reason="A Custom Index started or stopped keeping its numbers",
+        )
     if not current_active or previous_template == current_template:
         return CustomIndexReachabilityComparison(
             CustomIndexReachabilityStatus.UNCHANGED,
         )
+    previous_calls = output_template_custom_index_calls(previous_template)
+    current_calls = output_template_custom_index_calls(current_template)
+    for key in sorted(current_active):
+        if previous_calls.get(key) != current_calls.get(key):
+            # start= and step= only change how a number reads; per= changes the numbers.
+            return CustomIndexReachabilityComparison(
+                CustomIndexReachabilityStatus.CHANGED,
+                reason=f"Custom Index '{key}' is grouped differently",
+            )
 
     return compare_custom_index_reachability(
         previous_template,
@@ -219,30 +237,62 @@ def ensure_episode_custom_indexes_ready(
 def simulate_episode_indexes(
     episodes: list[Episode], *, template: str, definitions: frozenset[str],
     values_overrides: dict[int, dict[str, str]] | None = None,
+    kept: dict[int, dict[str, int]] | None = None,
+    keep_keys: frozenset[str] = frozenset(),
 ) -> dict[int, dict[str, int]]:
-    """Evaluate Jinja branches in canonical order without persisting anything."""
-    counters: dict[str, int] = defaultdict(int)
-    desired: dict[int, dict[str, int]] = {}
+    """Evaluate Jinja branches in canonical order without persisting anything.
+
+    Each key counts once per group (its per= value). A key in ``keep_keys``
+    keeps the numbers in ``kept`` for the episodes that still reach it; an
+    episode it has not numbered yet takes the next number after the highest
+    one its group already holds.
+    """
     prepared = prepare_output_template(
         template,
         allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
         allowed_metadata_scopes=COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
     )
-    for episode in sorted(episodes, key=lambda item: (item.index, item.id)):
+    ordered = sorted(episodes, key=lambda item: (item.index, item.id))
+    kept = kept or {}
+
+    def values_for(episode: Episode) -> dict[str, object]:
+        return (values_overrides or {}).get(episode.id) or episode_output_template_values(episode)
+
+    def kept_number(episode: Episode, key: str) -> int | None:
+        return kept.get(episode.id, {}).get(key) if key in keep_keys else None
+
+    counters: dict[tuple[str, object], int] = defaultdict(int)
+    if keep_keys and kept:
+        # First pass: learn which group each kept number sits in, so new
+        # numbers start after the highest kept number of their own group.
+        for episode in ordered:
+            def seed(key: str, group: object, episode=episode) -> object:
+                if key not in definitions:
+                    return ""
+                number = kept_number(episode, key)
+                if number is None:
+                    return 1
+                counters[(key, group)] = max(counters[(key, group)], number)
+                return number
+
+            prepared.render(values_for(episode), custom_index_resolver=seed)
+
+    desired: dict[int, dict[str, int]] = {}
+    for episode in ordered:
         selected: dict[str, int] = {}
 
-        def resolve(key: str) -> object:
+        def resolve(key: str, group: object, episode=episode) -> object:
             if key not in definitions:
                 return ""
             if key not in selected:
-                counters[key] += 1
-                selected[key] = counters[key]
+                number = kept_number(episode, key)
+                if number is None:
+                    counters[(key, group)] += 1
+                    number = counters[(key, group)]
+                selected[key] = number
             return selected[key]
 
-        prepared.render(
-            (values_overrides or {}).get(episode.id) or episode_output_template_values(episode),
-            custom_index_resolver=resolve,
-        )
+        prepared.render(values_for(episode), custom_index_resolver=resolve)
         desired[episode.id] = selected
     return desired
 
@@ -300,11 +350,12 @@ def reconcile_collection_profile_custom_indexes(
     episodes = list(session.scalars(select(Episode).where(Episode.collection_id == collection_id)
         .order_by(Episode.index.asc(), Episode.id.asc())))
     applicable = profile_applies_to_collection(profile, collection)
+    old = {ep.id: get_episode_index_assignments(ep, profile.id) for ep in episodes}
     desired = simulate_episode_indexes(
         episodes, template=profile.output_template,
         definitions=indexing_value_definition_keys(profile),
+        kept=old, keep_keys=kept_index_keys(profile),
     ) if applicable and profile_uses_custom_indexes(profile) else {ep.id: {} for ep in episodes}
-    old = {ep.id: get_episode_index_assignments(ep, profile.id) for ep in episodes}
     synced = _synced_downloads_before_reindex(session, profile, episodes) if auto_rename and applicable else {}
 
     # Compare-and-swap and metadata edits belong to the same transaction.

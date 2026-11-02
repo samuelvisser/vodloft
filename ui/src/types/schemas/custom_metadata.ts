@@ -33,6 +33,8 @@ const IndexingValueKeySchema = z.string()
 export const IndexingValueEntrySchema = z.object({
     key: IndexingValueKeySchema,
     name: z.string().trim().min(1, 'Name is required').max(120, 'Name may be at most 120 characters'),
+    // Numbers already given out stay; new episodes take the next free number.
+    keepNumbers: z.boolean().optional(),
 })
 
 export const CustomMetadataFormSchema = z.object({

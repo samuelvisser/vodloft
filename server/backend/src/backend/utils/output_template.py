@@ -21,6 +21,7 @@ from .custom_index import (
     indexing_value_definition_keys,
 )
 from .episode import EpisodeIdentifierInfo
+from .filenames import clean_component, clean_value
 from .output_template_jinja import create_output_template_environment
 from config import get_settings
 from config.settings.submodels import FilenameRestrictionMode
@@ -31,9 +32,6 @@ if TYPE_CHECKING:
 
 _DOWNLOADS_PREFIX = "/downloads/"
 _MAX_RENDERED_PATH_LENGTH = 4096
-_WINDOWS_UNSAFE_COMPONENT_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f\x7f]')
-_WINDOWS_RESERVED_COMPONENT = re.compile(r"^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?$", re.IGNORECASE)
-_RESTRICTED_UNSAFE_COMPONENT_CHARS = re.compile(r"[^A-Za-z0-9._-]+")
 _SINGLE_BRACE_TEMPLATE_VARIABLE = re.compile(
     r"(?<!\{)\{[A-Za-z_][A-Za-z0-9_]*\}(?!\})"
 )
@@ -50,6 +48,7 @@ COLLECTION_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "episode", "episode_title", "title", "dw_episode_number", "episode_type", "episode_extra_type",
     "episode_number", "episode_sub_number", "episode_label", "episode_identifier", "episode_published_date",
     "episode_published_time", "episode_published_datetime", "episode_index",
+    "collection_author", "collection_site_id", "episode_site_id", "episode_uploader", "duration_seconds",
 }) | DATE_OUTPUT_TEMPLATE_FIELDS
 
 MOVIE_OUTPUT_TEMPLATE_FIELDS = frozenset({
@@ -109,15 +108,46 @@ def output_template_fields(output_template: str) -> frozenset[str]:
     return frozenset(meta.find_undeclared_variables(parsed) - assigned)
 
 
-def output_template_custom_index_keys(output_template: str) -> frozenset[str]:
-    """Return literal custom-index keys referenced by one output template."""
+_CUSTOM_INDEX_ARGUMENTS = frozenset({"per", "start", "step"})
+
+
+def _integer_literal(node: nodes.Expr) -> int | None:
+    if isinstance(node, nodes.Neg):
+        value = _integer_literal(node.node)
+        return None if value is None else -value
+    if isinstance(node, nodes.Const) and type(node.value) is int:
+        return node.value
+    return None
+
+
+def _check_custom_index_group(node: nodes.Expr) -> None:
+    """A Custom Index group must be a plain value of the episode being numbered."""
+    from jinja_analysis import PURE_FILTERS
+    for candidate in (node, *node.find_all(nodes.Expr)):
+        if isinstance(candidate, nodes.Filter):
+            if candidate.name == "custom_index":
+                raise ValueError("custom_index cannot be grouped by another Custom Index")
+            if candidate.name not in PURE_FILTERS:
+                raise ValueError(f"custom_index cannot be grouped by the {candidate.name} filter")
+        elif isinstance(candidate, nodes.Call):
+            raise ValueError("custom_index can only be grouped by values, not by calls")
+
+
+def output_template_custom_index_calls(output_template: str) -> dict[str, frozenset[str]]:
+    """Every literal custom-index key, with how each place that uses it groups it.
+
+    The grouping of a key is the source of its per= expression, or "" without one.
+    """
+    from jinja_analysis import UnsafeEdit, expression_source
+    from .custom_index import is_valid_custom_index_key
+
     parsed = _parse_output_template(output_template)
-    keys: set[str] = set()
+    calls: dict[str, set[str]] = {}
     for filter_node in parsed.find_all(nodes.Filter):
         if filter_node.name != "custom_index":
             continue
-        if filter_node.args or filter_node.kwargs or filter_node.dyn_args or filter_node.dyn_kwargs:
-            raise ValueError("custom_index does not accept arguments")
+        if filter_node.args or filter_node.dyn_args or filter_node.dyn_kwargs:
+            raise ValueError("custom_index only takes per=, start= and step=")
         source = filter_node.node
         if not isinstance(source, nodes.Const) or not isinstance(source.value, str):
             raise ValueError(
@@ -125,11 +155,46 @@ def output_template_custom_index_keys(output_template: str) -> frozenset[str]:
                 "{{ 'featurettes' | custom_index }}"
             )
         key = source.value
-        from .custom_index import is_valid_custom_index_key
         if not is_valid_custom_index_key(key):
             raise ValueError(f"Invalid custom index key: {key}")
-        keys.add(key)
-    return frozenset(keys)
+        arguments = {}
+        for item in filter_node.kwargs:
+            if item.key not in _CUSTOM_INDEX_ARGUMENTS:
+                raise ValueError(f"custom_index has no {item.key}= argument; use per=, start= or step=")
+            if item.key in arguments:
+                raise ValueError(f"custom_index was given {item.key}= twice")
+            arguments[item.key] = item.value
+        for name in ("start", "step"):
+            if name in arguments and _integer_literal(arguments[name]) is None:
+                raise ValueError(f"custom_index {name}= must be a whole number, for example {name}=1")
+        if "step" in arguments and _integer_literal(arguments["step"]) == 0:
+            raise ValueError("custom_index step= cannot be 0")
+        grouping = ""
+        if "per" in arguments:
+            _check_custom_index_group(arguments["per"])
+            try:
+                grouping = expression_source(arguments["per"])
+            except UnsafeEdit:
+                grouping = repr(arguments["per"])
+        calls.setdefault(key, set()).add(grouping)
+    return {key: frozenset(groupings) for key, groupings in calls.items()}
+
+
+def typed_characters_the_mode_replaces(output_template: str, mode: FilenameRestrictionMode) -> list[str]:
+    """Characters typed in the template itself that the filename mode will change.
+
+    Values a template fills in are not counted: they are cleaned as yt-dlp
+    cleans them, which is expected. Saving is never refused for these.
+    """
+    from .filenames import replaced_typed_characters
+    parsed = _parse_output_template(output_template)
+    typed = "".join(node.data for node in parsed.find_all(nodes.TemplateData))
+    return replaced_typed_characters(typed, FilenameRestrictionMode(mode))
+
+
+def output_template_custom_index_keys(output_template: str) -> frozenset[str]:
+    """Return literal custom-index keys referenced by one output template."""
+    return frozenset(output_template_custom_index_calls(output_template))
 
 
 def _statement_may_emit_output(statement: nodes.Stmt) -> bool:
@@ -200,58 +265,28 @@ def validate_output_template_path_requirements(
     return output_template
 
 
-def _to_ascii(value: str) -> str:
-    """Transliterate decomposable Unicode characters and drop remaining non-ASCII characters."""
-    normalized = unicodedata.normalize("NFKD", value)
-    return normalized.encode("ascii", "ignore").decode("ascii")
-
-
-def _sanitize_unrestricted_component(value: str) -> str:
-    # A substituted slash must never be allowed to create another path level.
-    # Other punctuation and Unicode are intentionally preserved in this mode.
-    value = value.replace("/", "_").replace("\\", "_").replace("\x00", "")
-    value = "".join(char for char in value if char in "\t" or ord(char) >= 32)
-    return value
-
-
-def _sanitize_windows_component(value: str) -> str:
-    cleaned = _WINDOWS_UNSAFE_COMPONENT_CHARS.sub("_", value).rstrip(" .")
-    if _WINDOWS_RESERVED_COMPONENT.match(cleaned):
-        cleaned = f"_{cleaned}"
-    return cleaned
-
-
-def _sanitize_restricted_component(value: str) -> str:
-    cleaned = _to_ascii(value)
-    cleaned = _RESTRICTED_UNSAFE_COMPONENT_CHARS.sub("_", cleaned)
-    cleaned = re.sub(r"_+", "_", cleaned).strip(" _")
-    # Replaced punctuation right before an extension ("Test?.mp4") is not part of the name.
-    cleaned = re.sub(r"_+(?=\.[A-Za-z0-9]+$)", "", cleaned)
-    return cleaned
-
-
 def sanitize_path_component(
     value: str,
     *,
     mode: FilenameRestrictionMode = FilenameRestrictionMode.WINDOWS,
+    extension: str | None = None,
 ) -> str:
-    """Make one output path component safe according to the configured mode."""
-    if mode == FilenameRestrictionMode.RESTRICTED:
-        cleaned = _sanitize_restricted_component(value)
-    elif mode == FilenameRestrictionMode.WINDOWS:
-        cleaned = _sanitize_windows_component(value)
-    else:
-        cleaned = _sanitize_unrestricted_component(value)
+    """Make one output path component safe according to the configured mode.
 
-    if cleaned in {"", ".", ".."}:
-        return "_"
-    return cleaned
+    ``extension`` marks the file name, so its extension is kept apart.
+    """
+    return clean_component(value, FilenameRestrictionMode(mode), extension=extension)
 
 
 def _sanitize_emitted_output_value(value: object) -> str:
-    """Keep emitted Jinja values from creating path structure."""
-    text = "" if value is None else str(value)
-    text = text.replace("/", "_").replace("\\", "_").replace("\x00", "")
+    """Clean each value a template fills in, as yt-dlp does, so it never creates path structure."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        # Numbers are not text: a Custom Index of -1 stays -1.
+        return str(value)
+    mode = FilenameRestrictionMode(get_settings().download_settings.filename_restriction_mode)
+    text = clean_value(value, mode)
+    # Whatever the mode, a value can never add a path level or a line.
+    text = text.replace("/", "\u29f8").replace("\x00", "")
     return "".join(char for char in text if char == "\t" or ord(char) >= 32)
 
 
@@ -259,15 +294,17 @@ def _sanitize_rendered_path(
     rendered: str,
     *,
     mode: FilenameRestrictionMode,
+    extension: str | None = None,
 ) -> str:
     """Apply filename restrictions after the complete output path is known."""
     relative = rendered[len(_DOWNLOADS_PREFIX):]
     parts = relative.split("/")
+    last = len(parts) - 1
     sanitized = [
-        sanitize_path_component(part, mode=mode)
+        sanitize_path_component(part, mode=mode, extension=extension if index == last else None)
         if part
         else ""
-        for part in parts
+        for index, part in enumerate(parts)
     ]
     return _DOWNLOADS_PREFIX + "/".join(sanitized)
 
@@ -316,6 +353,8 @@ def episode_output_template_values(episode: "Episode") -> dict[str, str]:
     values = {
         "collection": episode.collection.slug,
         "collection_title": episode.collection.title,
+        "collection_author": episode.collection.author_name or "",
+        "collection_site_id": episode.collection.slug,
         "season": episode.season.slug if episode.season else "",
         "season_name": episode.season.name if episode.season else "",
         "season_index": str(episode.season.index) if episode.season else "",
@@ -323,6 +362,9 @@ def episode_output_template_values(episode: "Episode") -> dict[str, str]:
         "season_number": str(episode.season.season_number) if episode.season else "",
         "episode": episode.slug,
         "episode_index": str(episode.index),
+        "episode_site_id": episode.source_slug or "",
+        "episode_uploader": episode.author_name or "",
+        "duration_seconds": str(round(episode.duration or 0)),
         "episode_title": episode.title,
         "title": episode.title,
         "dw_episode_number": episode.dw_episode_number or "",
@@ -515,7 +557,7 @@ def resolve_episode_output_path_with_index_values(
     index_values: dict[str, int],
     extension: Optional[str] = None,
 ) -> Path:
-    def resolver(key: str) -> object:
+    def resolver(key: str, _group: object = ()) -> object:
         if key not in index_definitions:
             return ""
         if key not in index_values:
@@ -664,7 +706,7 @@ def finalize_output_path(resolved: str, extension: Optional[str]) -> str:
         return resolved
 
     mode = get_settings().download_settings.filename_restriction_mode
-    return _sanitize_rendered_path(resolved, mode=mode)
+    return _sanitize_rendered_path(resolved, mode=mode, extension=extension.lstrip("."))
 
 
 def _finish_output_path(resolved: str, *, extension: Optional[str]) -> Path:

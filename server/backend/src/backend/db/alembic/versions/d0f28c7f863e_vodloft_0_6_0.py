@@ -9,6 +9,8 @@ columns, constraints and indexes are renamed, and every stored value that
 named a show (profile type, metadata owner, task keys, operation kinds,
 resource types, task arguments and output template variables) is rewritten to
 its Collection name.
+
+Episodes also store who uploaded them, for the episode_uploader template value.
 """
 from __future__ import annotations
 
@@ -314,11 +316,27 @@ def _rename_values(*, reverse: bool) -> None:
                 ).bindparams(value=json.dumps(renamed), id=row_id))
 
 
+# Template additions -----------------------------------------------------------
+
+def _add_episode_uploader() -> None:
+    with op.batch_alter_table("media_items_episode") as batch:
+        batch.add_column(sa.Column(
+            "author_name", sa.String(), nullable=True, comment="Who uploaded the episode, as the Source names them",
+        ))
+
+
+def _drop_episode_uploader() -> None:
+    with op.batch_alter_table("media_items_episode") as batch:
+        batch.drop_column("author_name")
+
+
 def upgrade() -> None:
     _rename_schema(reverse=False)
     _rename_values(reverse=False)
+    _add_episode_uploader()
 
 
 def downgrade() -> None:
+    _drop_episode_uploader()
     _rename_values(reverse=True)
     _rename_schema(reverse=True)

@@ -283,7 +283,7 @@ def test_movie_output_template_uses_movie_metadata(tmp_path: Path, monkeypatch) 
     assert result == (
         tmp_path
         / "A Director"
-        / "A Movie _ A Daily Wire Original [PG-13]"
+        / "A Movie ｜ A Daily Wire Original [PG-13]"
         / "a-movie.mp4"
     ).resolve()
 

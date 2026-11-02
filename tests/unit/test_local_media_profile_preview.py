@@ -118,8 +118,8 @@ def test_both_paths_use_identical_filename_sanitization(examples):
     result = preview.get_local_media_profile_preview(examples.session, _body(
         values={"collection_title": "My/Show: Why?", "title": "A/B?"},
     ))
-    assert result.collection_root.path == str(examples.root / "TV/My_Show_ Why_")
-    assert result.output.output_path == str(examples.root / "TV/My_Show_ Why_/Season 1/A_B_.mp4")
+    assert result.collection_root.path == str(examples.root / "TV/My⧸Show： Why？")
+    assert result.output.output_path == str(examples.root / "TV/My⧸Show： Why？/Season 1/A⧸B？.mp4")
 
 
 def test_edited_season_name_is_a_static_boundary(examples):

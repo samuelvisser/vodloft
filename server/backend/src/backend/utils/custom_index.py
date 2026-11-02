@@ -6,6 +6,8 @@ from typing import Iterable, Mapping, Protocol
 
 
 INDEX_DEFINITION_PREFIX = "custom_index.definition."
+# A Custom Index that keeps its numbers never renumbers an episode it numbered once.
+INDEX_KEEP_NUMBERS_PREFIX = "custom_index.keep_numbers."
 INDEX_ASSIGNMENT_PREFIX = "custom_index."
 INDEXING_VALUE_KEY_MAX_LENGTH = 64
 INDEXING_VALUE_KEY_PATTERN = re.compile(r"^[a-z_][a-z0-9_-]*$")
@@ -35,6 +37,7 @@ class _MetadataResource(Protocol):
 class IndexingValueDefinition:
     key: str
     name: str
+    keep_numbers: bool = False
 
 
 class CustomIndexNotReadyError(RuntimeError):
@@ -49,7 +52,7 @@ class CustomIndexNotReadyError(RuntimeError):
         self.repair_profile_id = repair_profile_id
 
 
-def _validate_definition(key: str, name: str) -> IndexingValueDefinition:
+def _validate_definition(key: str, name: str, keep_numbers: bool = False) -> IndexingValueDefinition:
     if not is_valid_custom_index_key(key):
         raise ValueError(
             "Indexing Value keys must use lowercase letters, numbers, underscores, and dashes, "
@@ -60,7 +63,7 @@ def _validate_definition(key: str, name: str) -> IndexingValueDefinition:
         raise ValueError("Indexing Value names cannot be empty")
     if len(clean_name) > 120:
         raise ValueError("Indexing Value names cannot be longer than 120 characters")
-    return IndexingValueDefinition(key=key, name=clean_name)
+    return IndexingValueDefinition(key=key, name=clean_name, keep_numbers=bool(keep_numbers))
 
 
 def index_definition_storage_key(key: str) -> str:
@@ -71,13 +74,18 @@ def index_definition_storage_key(key: str) -> str:
 
 def get_indexing_value_definitions(resource: _MetadataResource) -> list[IndexingValueDefinition]:
     definitions: list[IndexingValueDefinition] = []
+    kept = {
+        item.key[len(INDEX_KEEP_NUMBERS_PREFIX):]
+        for item in resource.meta_items
+        if item.key.startswith(INDEX_KEEP_NUMBERS_PREFIX)
+    }
     for item in resource.meta_items:
         if not item.key.startswith(INDEX_DEFINITION_PREFIX):
             continue
         key = item.key[len(INDEX_DEFINITION_PREFIX):]
         if not is_valid_custom_index_key(key):
             continue
-        definitions.append(IndexingValueDefinition(key=key, name=item.value))
+        definitions.append(IndexingValueDefinition(key=key, name=item.value, keep_numbers=key in kept))
     return sorted(definitions, key=lambda item: item.key)
 
 
@@ -85,21 +93,30 @@ def indexing_value_definition_keys(resource: _MetadataResource) -> frozenset[str
     return frozenset(item.key for item in get_indexing_value_definitions(resource))
 
 
+def kept_index_keys(resource: _MetadataResource) -> frozenset[str]:
+    """The Custom Indexes that keep the numbers they gave out."""
+    return frozenset(
+        item.key for item in get_indexing_value_definitions(resource) if item.keep_numbers
+    )
+
+
 def replace_indexing_value_definitions(
     resource: _MetadataResource,
-    definitions: Iterable[IndexingValueDefinition | Mapping[str, str]],
+    definitions: Iterable[IndexingValueDefinition | Mapping[str, object]],
 ) -> None:
     normalized: list[IndexingValueDefinition] = []
     seen: set[str] = set()
     for definition in definitions:
-        if isinstance(definition, IndexingValueDefinition):
-            item = _validate_definition(definition.key, definition.name)
-        elif isinstance(definition, Mapping):
-            item = _validate_definition(str(definition["key"]), str(definition["name"]))
+        if isinstance(definition, Mapping):
+            item = _validate_definition(
+                str(definition["key"]), str(definition["name"]),
+                bool(definition.get("keep_numbers", False)),
+            )
         else:
             item = _validate_definition(
                 str(getattr(definition, "key")),
                 str(getattr(definition, "name")),
+                bool(getattr(definition, "keep_numbers", False)),
             )
         if item.key in seen:
             raise ValueError(f"Duplicate Indexing Value key: {item.key}")
@@ -110,10 +127,15 @@ def replace_indexing_value_definitions(
         index_definition_storage_key(item.key): item.name
         for item in normalized
     }
+    desired.update({
+        f"{INDEX_KEEP_NUMBERS_PREFIX}{item.key}": "true"
+        for item in normalized
+        if item.keep_numbers
+    })
     current = {
         item.key: item
         for item in resource.meta_items
-        if item.key.startswith(INDEX_DEFINITION_PREFIX)
+        if item.key.startswith((INDEX_DEFINITION_PREFIX, INDEX_KEEP_NUMBERS_PREFIX))
     }
 
     for storage_key, item in list(current.items()):

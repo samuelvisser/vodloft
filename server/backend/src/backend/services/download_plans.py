@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from backend.services.no_ascii_names import settle_no_ascii_name
 from backend.db.models import Episode, Movie, MovieExtra, Video
 from backend.db.models.media_download import MediaDownloadBase
 from backend.services.download_metadata import build_episode_metadata, build_movie_metadata, build_video_metadata, select_thumbnail_url
@@ -182,6 +183,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         movie = media.movie if isinstance(media, MovieExtra) else media
         destination = resolve_movie_output_path(output_template, movie=movie, media_item=media, extension=source.extension)
         metadata = build_movie_metadata(movie, media)
+    destination = settle_no_ascii_name(download, destination, session=session)
     session.rollback()
 
     assets: list[SidecarSpec] = []

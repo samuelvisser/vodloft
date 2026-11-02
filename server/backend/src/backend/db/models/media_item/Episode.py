@@ -80,6 +80,7 @@ class Episode(
         default=lambda context: context.get_current_parameters()["slug"],
         comment="The episode's own slug at its Source. It is the slug, unless another collection's episode already had that",
     )
+    author_name: Mapped[Optional[str]] = mapped_column(comment="Who uploaded the episode, as the Source names them")
     publish_status: Mapped[str]
     metadata_is_final: Mapped[bool] = mapped_column(
         Boolean,

@@ -190,8 +190,8 @@ export default function EditLocalMediaProfilePage() {
             && form.getValues('outputTemplate') !== profile.outputTemplate
         )
         const indexKeysChanged = profile.type === 'collection' &&
-            JSON.stringify((form.getValues('indexingValues') ?? []).map((value: {key: string}) => value.key).sort()) !==
-            JSON.stringify(profile.indexingValues.map(({key}) => key).sort())
+            JSON.stringify((form.getValues('indexingValues') ?? []).map((value: {key: string, keepNumbers?: boolean}) => `${value.key}:${!!value.keepNumbers}`).sort()) !==
+            JSON.stringify(profile.indexingValues.map(({key, keepNumbers}) => `${key}:${!!keepNumbers}`).sort())
         if ((outputTemplateChanged || indexKeysChanged) && renameDecisionRef.current === null) {
             void form.handleSubmit(() => setRenameTemplateConfirm(true))(event)
             return

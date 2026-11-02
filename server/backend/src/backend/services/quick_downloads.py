@@ -254,7 +254,7 @@ def quick_file_name(title: str, extension: str) -> str:
     """The title as a file name, made safe by the same rules as library files."""
     mode = FilenameRestrictionMode(get_settings().download_settings.filename_restriction_mode)
     stem = (title.strip() or "Quick download")[:_MAX_FILE_STEM]
-    return sanitize_path_component(f"{stem}.{extension}", mode=mode)
+    return sanitize_path_component(f"{stem}.{extension}", mode=mode, extension=extension)
 
 
 def _video_details(source: Source, request: QuickDownloadRequest):

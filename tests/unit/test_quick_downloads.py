@@ -142,7 +142,7 @@ def test_best_video_plans_the_highest_rendition_into_the_quick_folder(quick_sour
 
     assert probed["url"] == "https://cdn.clips.example/abc.m3u8"
     assert probed["preferred_format"] == "format_4k" and probed["remux_video_to_mp4"] is True
-    assert Path(plan.requested_destination) == folder / "Clip_ abc_.mp4"
+    assert Path(plan.requested_destination) == folder / "Clip： abc？.mp4"
     assert plan.download_mode == "temporary" and not plan.publication_requires_copy
     tags = dict(plan.metadata_tags)
     assert tags["title"] == "Clip: abc?" and tags["artist"] == "A Channel"

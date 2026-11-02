@@ -1032,3 +1032,155 @@ def test_profile_save_unused_definition_change_does_not_queue_index_management(d
         operation.kind == "local_media_profile.manage_custom_indexes"
         for operation in db_session.query(TaskOperation)
     )
+
+
+def _keep(profile, *definitions: tuple[str, str]):
+    from backend.utils.custom_index import IndexingValueDefinition, replace_indexing_value_definitions
+
+    replace_indexing_value_definitions(
+        profile,
+        [IndexingValueDefinition(key=key, name=name, keep_numbers=True) for key, name in definitions],
+    )
+
+
+def test_per_start_and_step_number_each_group_on_its_own(db_session):
+    from backend.db.models import Season
+    from backend.services.custom_indexes import reconcile_collection_profile_custom_indexes
+    from backend.utils.custom_index import get_episode_index_assignments
+    from backend.utils.output_template import (
+        resolve_episode_output_path_with_index_values,
+    )
+
+    collection = _make_collection(db_session)
+    one = _make_season(db_session, collection)
+    two = Season(collection=collection, index=2, slug="season-2", name="Two")
+    db_session.add(two)
+    db_session.flush()
+    template = "/downloads/{{ 'clips' | custom_index(per=season_index, start=0, step=10) }}-{{ episode }}.ext"
+    profile = _make_profile(db_session, template=template)
+    _define(profile, ("clips", "Clips"))
+    a = _make_episode(db_session, collection, one, index=100, slug="a", identifier="ep.1")
+    b = _make_episode(db_session, collection, two, index=200, slug="b", identifier="ep.2")
+    c = _make_episode(db_session, collection, one, index=300, slug="c", identifier="ep.3")
+    _request(db_session, collection, profile)
+    reconcile_collection_profile_custom_indexes(db_session, collection_id=collection.id, local_media_profile_id=profile.id)
+
+    assert [get_episode_index_assignments(item, profile.id) for item in (a, b, c)] == [
+        {"clips": 1}, {"clips": 1}, {"clips": 2},
+    ]
+    path = resolve_episode_output_path_with_index_values(
+        template, episode=c, index_definitions=frozenset({"clips"}),
+        index_values=get_episode_index_assignments(c, profile.id),
+    )
+    assert path.name.startswith("10-")
+
+
+@pytest.mark.parametrize(("template", "message"), [
+    ("{{ 'clips' | custom_index(2) }}", "only takes"),
+    ("{{ 'clips' | custom_index(every=2) }}", "no every= argument"),
+    ("{{ 'clips' | custom_index(start='1') }}", "whole number"),
+    ("{{ 'clips' | custom_index(step=season_index) }}", "whole number"),
+    ("{{ 'clips' | custom_index(step=0) }}", "cannot be 0"),
+    ("{{ 'clips' | custom_index(per='x' | custom_index) }}", "another Custom Index"),
+    ("{{ 'clips' | custom_index(per=title | random) }}", "random filter"),
+    ("{{ 'clips' | custom_index(per=title.upper()) }}", "not by calls"),
+])
+def test_custom_index_arguments_are_checked(template, message):
+    from backend.utils.output_template import output_template_custom_index_keys
+
+    with pytest.raises(ValueError, match=message):
+        output_template_custom_index_keys(f"/downloads/{template}.ext")
+
+
+def test_custom_index_accepts_negative_start_and_list_groups():
+    from backend.utils.output_template import output_template_custom_index_calls
+
+    calls = output_template_custom_index_calls(
+        "/downloads/{{ 'clips' | custom_index(per=[season_index, episode_type], start=-1, step=-1) }}.ext"
+    )
+    assert calls == {"clips": frozenset({"[season_index, episode_type]"})}
+
+
+def test_kept_numbers_stay_and_new_episodes_take_the_next_number(db_session):
+    from backend.services.custom_indexes import reconcile_collection_profile_custom_indexes
+    from backend.utils.custom_index import get_episode_index_assignments, kept_index_keys
+
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
+    profile = _make_profile(db_session, template="/downloads/{{ 'clips' | custom_index }}-{{ episode }}.ext")
+    _keep(profile, ("clips", "Clips"))
+    assert kept_index_keys(profile) == {"clips"}
+    first = _make_episode(db_session, collection, season, index=100, slug="first", identifier="ep.1")
+    last = _make_episode(db_session, collection, season, index=300, slug="last", identifier="ep.3")
+    _request(db_session, collection, profile)
+    reconcile_collection_profile_custom_indexes(db_session, collection_id=collection.id, local_media_profile_id=profile.id)
+
+    middle = _make_episode(db_session, collection, season, index=200, slug="middle", identifier="ep.2")
+    _request(db_session, collection, profile)
+    reconcile_collection_profile_custom_indexes(db_session, collection_id=collection.id, local_media_profile_id=profile.id)
+    assert [get_episode_index_assignments(item, profile.id) for item in (first, middle, last)] == [
+        {"clips": 1}, {"clips": 3}, {"clips": 2},
+    ]
+
+    # Without keep, the numbers follow episode order again.
+    _define(profile, ("clips", "Clips"))
+    _request(db_session, collection, profile)
+    reconcile_collection_profile_custom_indexes(db_session, collection_id=collection.id, local_media_profile_id=profile.id)
+    assert [get_episode_index_assignments(item, profile.id) for item in (first, middle, last)] == [
+        {"clips": 1}, {"clips": 2}, {"clips": 3},
+    ]
+
+
+def test_kept_numbers_continue_within_their_own_group(db_session):
+    from backend.db.models import Season
+    from backend.services.custom_indexes import simulate_episode_indexes
+
+    collection = _make_collection(db_session)
+    one = _make_season(db_session, collection)
+    two = Season(collection=collection, index=2, slug="season-2", name="Two")
+    db_session.add(two)
+    db_session.flush()
+    a = _make_episode(db_session, collection, one, index=100, slug="a", identifier="ep.1")
+    b = _make_episode(db_session, collection, two, index=200, slug="b", identifier="ep.2")
+    c = _make_episode(db_session, collection, one, index=300, slug="c", identifier="ep.3")
+    desired = simulate_episode_indexes(
+        [a, b, c],
+        template="/downloads/{{ 'clips' | custom_index(per=season_index) }}-{{ episode }}.ext",
+        definitions=frozenset({"clips"}),
+        kept={a.id: {"clips": 5}},
+        keep_keys=frozenset({"clips"}),
+    )
+    assert desired == {a.id: {"clips": 5}, b.id: {"clips": 1}, c.id: {"clips": 6}}
+
+
+@pytest.mark.parametrize(("change", "status"), [
+    ("start", "unchanged"),
+    ("per", "changed"),
+    ("keep", "changed"),
+])
+def test_grouping_and_keeping_change_assignments_but_start_does_not(change, status):
+    from backend.services.custom_indexes import compare_custom_index_assignments
+
+    saved = "/downloads/{{ 'clips' | custom_index }}.ext"
+    template = {
+        "start": "/downloads/{{ 'clips' | custom_index(start=0) }}.ext",
+        "per": "/downloads/{{ 'clips' | custom_index(per=season_index) }}.ext",
+        "keep": saved,
+    }[change]
+    result = compare_custom_index_assignments(
+        saved, template,
+        previous_definition_keys=frozenset({"clips"}),
+        current_definition_keys=frozenset({"clips"}),
+        current_kept_keys=frozenset({"clips"}) if change == "keep" else frozenset(),
+    )
+    assert result.status.value == status
+
+
+def test_keep_numbers_round_trips_through_the_api(db_session):
+    from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPIRead
+
+    profile = _make_profile(db_session, template="/downloads/{{ 'clips' | custom_index }}.ext")
+    _keep(profile, ("clips", "Clips"))
+    db_session.flush()
+    read = CollectionLocalMediaProfileAPIRead.model_validate(profile)
+    assert [(item.key, item.keep_numbers) for item in read.indexing_values] == [("clips", True)]

@@ -26,6 +26,8 @@ const DATE_VARIABLES: readonly OutputTemplateVariable[] = [
 const COLLECTION_VARIABLES: readonly OutputTemplateVariable[] = [
     {name: 'collection', description: 'Collection URL slug'},
     {name: 'collection_title', description: 'Collection title'},
+    {name: 'collection_author', description: 'Collection author, host or channel name'},
+    {name: 'collection_site_id', description: 'The id the site gives the collection, such as a YouTube channel or playlist id'},
     {name: 'season', description: 'Season URL slug'},
     {name: 'season_name', description: 'Season name'},
     {name: 'season_index', description: 'VODLoft internal season index'},
@@ -54,6 +56,9 @@ const COLLECTION_VARIABLES: readonly OutputTemplateVariable[] = [
     {name: 'episode', description: 'Episode URL slug'},
     {name: 'episode_title', description: 'Episode title'},
     {name: 'title', description: 'Episode title'},
+    {name: 'episode_site_id', description: 'The id the site gives the episode, such as a YouTube video id'},
+    {name: 'episode_uploader', description: 'Who uploaded the episode, when the site says; empty otherwise'},
+    {name: 'duration_seconds', description: 'Episode duration in whole seconds'},
     {name: 'dw_episode_number', description: 'Raw episode number exactly as returned by the source'},
     {name: 'episode_type', description: 'Episode type: ep, ep-extra, aux, or trailer'},
     {name: 'episode_extra_type', description: 'Episode-extra subtype: other or trailer; empty otherwise'},

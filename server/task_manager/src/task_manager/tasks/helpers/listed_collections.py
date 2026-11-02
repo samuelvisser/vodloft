@@ -220,6 +220,7 @@ def add_listed_episodes(s: Session, *, collection_id: int, found: list[VideoDeta
             title=details.title,
             description=details.description,
             duration=details.duration or 0.0,
+            author_name=details.author_name,
             thumbnail_landscape_path=details.image_url,
             background_image_path=details.image_url,
             drm_protected=details.drm_protected,
@@ -280,7 +281,7 @@ def refresh_listed_collection(s: Session, *, collection_id: int, source: Source)
         if episode.removed_from_source:
             episode.removed_from_source = False
             returned += 1
-        changes = {"title": details.title, "description": details.description}
+        changes = {"title": details.title, "description": details.description, "author_name": details.author_name}
         if details.image_url:
             changes |= {"thumbnail_landscape_path": details.image_url, "background_image_path": details.image_url}
         changed = False

@@ -106,9 +106,15 @@ const vodloftFilterCompletionOptions: Completion[] = [
         'Return true when the regex matches anywhere in the value.',
     ),
     filterCompletion(
+        'regex_groups',
+        'regex_groups(pattern)',
+        'Return the groups of the first regex match as a list, or an empty list when nothing matches.',
+    ),
+    filterCompletion(
         'custom_index',
-        "'key' | custom_index",
-        'Use the current episode number from a defined Indexing Value.',
+        "'key' | custom_index(per=None, start=1, step=1)",
+        'Use this episode\'s number from a defined Indexing Value. per counts separately for each value, ' +
+        'start and step set the first number and how it changes.',
     ),
 ]
 
@@ -483,6 +489,18 @@ function PreviewPath({path}: { path: string }) {
     )
 }
 
+const FILENAME_MODE_NAMES: Record<string, string> = {
+    unrestricted: 'Unrestricted',
+    windows: 'Windows',
+    restricted: 'Restricted',
+}
+
+function describeTypedCharacter(char: string): string {
+    if (char === ' ') return 'space'
+    if (char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127) return 'control character'
+    return char
+}
+
 export default function OutputTemplateEditor({form, mode, placeholder, help, renderPreviewFields}: Props) {
     const {control, formState: {errors}} = form
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
@@ -529,6 +547,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
     )
     const [usedVariableNames, setUsedVariableNames] = useState<string[]>([])
     const [provisionalIndexingValueNames, setProvisionalIndexingValueNames] = useState<string[]>([])
+    const [replacedTyped, setReplacedTyped] = useState<{mode: string, characters: string[]}>({mode: '', characters: []})
     const usedVariables = useMemo(
         () => {
             const used = new Set(usedVariableNames)
@@ -779,6 +798,10 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
         const output = preview.result?.output
         setUsedVariableNames(output?.usedVariables ?? [])
         setProvisionalIndexingValueNames(output?.provisionalIndexingValues ?? [])
+        setReplacedTyped(output?.outputPath ? {
+            mode: output.filenameMode,
+            characters: output.replacedTypedCharacters,
+        } : {mode: '', characters: []})
     }, [preview.loading, preview.result])
 
     function chooseSource(source: LocalMediaProfileTemplateSource) {
@@ -860,6 +883,15 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
                             ))}
                             {provisionalIndexingValueNames.length === 1 ? ' is' : ' are'} simulated from the current draft. Previewing does not save
                             an assignment.
+                        </div>
+                    )}
+                    {replacedTyped.characters.length > 0 && (
+                        <div className="template-metadata-warning" role="status">
+                            In {FILENAME_MODE_NAMES[replacedTyped.mode] ?? replacedTyped.mode} file name mode, the typed
+                            {' '}{replacedTyped.characters.map((char, index) => (
+                                <span key={char}>{index > 0 ? ' ' : ''}<code>{describeTypedCharacter(char)}</code></span>
+                            ))}
+                            {' '}will be replaced in file names. The preview shows the result.
                         </div>
                     )}
                     {pathHasLeadingSpace && (

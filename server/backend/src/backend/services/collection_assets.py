@@ -121,7 +121,7 @@ def resolve_collection_media_directory(
         values.update(collection=collection.slug, collection_title=collection.title)
         values.update(custom_metadata_template_values("collection", get_custom_metadata(collection)))
     values.update(values_overrides or {})
-    environment = create_output_template_environment(custom_index_resolver=lambda _key: "")
+    environment = create_output_template_environment(custom_index_resolver=lambda _key, _group: "")
     environment.finalize = _sanitize_emitted_output_value
     settings = get_settings().download_settings
     names = tuple(

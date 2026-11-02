@@ -31,7 +31,7 @@ from backend.types.local_media_profile_types import (
     CollectionLocalMediaProfileScope,
 )
 from backend.types.collection_types import CollectionType
-from backend.utils.custom_index import indexing_value_definition_keys
+from backend.utils.custom_index import get_episode_index_assignments, indexing_value_definition_keys, kept_index_keys
 from backend.utils.custom_metadata import (
     CustomMetadataScope,
     custom_metadata_template_variable,
@@ -49,8 +49,11 @@ from backend.utils.output_template import (
     output_template_fields,
     replace_output_extension,
     render_output_template,
+    typed_characters_the_mode_replaces,
 )
 from backend.utils.search import search_all_terms, search_relevance_score
+from config import get_settings
+from config.settings.submodels import FilenameRestrictionMode
 
 from ..custom_metadata.service import get_custom_metadata_fields
 
@@ -58,6 +61,8 @@ from ..custom_metadata.service import get_custom_metadata_fields
 _EXAMPLE_COLLECTION_VALUES = {
     "collection": "example-collection",
     "collection_title": "Example Show",
+    "collection_author": "Example Host",
+    "collection_site_id": "example-collection",
     "season": "season-1",
     "season_name": "Season 1",
     "season_index": "1",
@@ -71,6 +76,9 @@ _EXAMPLE_COLLECTION_VALUES = {
     "episode_extra_type": "",
     "episode_number": "1",
     "episode_index": "1",
+    "episode_site_id": "the-first-episode",
+    "episode_uploader": "Example Host",
+    "duration_seconds": "3600",
     "episode_sub_number": "",
     "episode_label": "1",
     "episode_identifier": "ep.1",
@@ -861,11 +869,25 @@ def _simulate_collection_preview_assignments(
         )
         .order_by(Episode.index.asc(), Episode.id.asc())
     ).unique().all())
+    profile = (
+        session.get(CollectionLocalMediaProfile, body.local_media_profile_id)
+        if body.local_media_profile_id is not None else None
+    )
+    keep_keys = (
+        frozenset(item.key for item in body.indexing_values if item.keep_numbers)
+        if body.indexing_values is not None
+        else kept_index_keys(profile) if profile is not None else frozenset()
+    )
+    kept = {
+        item.id: get_episode_index_assignments(item, profile.id) for item in episodes
+    } if keep_keys and profile is not None else None
     return simulate_episode_indexes(
         episodes,
         template=body.output_template,
         definitions=definitions,
         values_overrides={episode.id: body.values},
+        kept=kept,
+        keep_keys=keep_keys,
     )[episode.id]
 
 
@@ -908,7 +930,7 @@ def _render_collection_preview(
                 body.values,
                 allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
                 allowed_metadata_scopes=COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
-                custom_index_resolver=lambda _key: "",
+                custom_index_resolver=lambda _key, _group: "",
             ),
             definitions,
             frozenset(),
@@ -937,7 +959,7 @@ def _render_collection_preview(
     )
     provisional: dict[str, int] = {}
 
-    def resolve_index(key: str) -> object:
+    def resolve_index(key: str, _group: object = ()) -> object:
         if key not in definitions:
             return ""
         if plan.mode == CustomIndexPreviewMode.USE_PERSISTED and key not in assignments:
@@ -1003,6 +1025,7 @@ def get_output_template_preview(
     else:
         raise ValueError("Template previews are only available for Collection, Movie and Video profiles")
 
+    filename_mode = FilenameRestrictionMode(get_settings().download_settings.filename_restriction_mode)
     if body.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY:
         extension = "m4a"
     elif body.preferred_format == PreferredFormat.FORMAT_HLS:
@@ -1015,4 +1038,6 @@ def get_output_template_preview(
         used_indexing_values=sorted(index_keys),
         missing_indexing_values=sorted(index_keys - definition_keys),
         provisional_indexing_values=sorted(provisional_keys),
+        filename_mode=str(filename_mode),
+        replaced_typed_characters=typed_characters_the_mode_replaces(body.output_template, filename_mode),
     )

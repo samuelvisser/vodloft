@@ -24,7 +24,7 @@ from backend.services.custom_indexes import (
     remove_profile_custom_index_state,
     request_custom_index_reconciliation,
 )
-from backend.utils.custom_index import indexing_value_definition_keys, replace_indexing_value_definitions
+from backend.utils.custom_index import indexing_value_definition_keys, kept_index_keys, replace_indexing_value_definitions
 from jinja_analysis import CustomIndexReachabilityStatus
 from backend.utils.output_template import output_template_custom_index_keys
 from task_manager.scheduler.operations import (
@@ -138,6 +138,7 @@ def update_collection_local_media_profile(
     previous_template = item.output_template
     previous_index_keys = output_template_custom_index_keys(previous_template)
     previous_definition_keys = indexing_value_definition_keys(item)
+    previous_kept_keys = kept_index_keys(item)
     previous_scope = item.collection_scope
 
     ensure_unique_profile_settings(
@@ -166,6 +167,8 @@ def update_collection_local_media_profile(
         item.output_template,
         previous_definition_keys=previous_definition_keys,
         current_definition_keys=current_definition_keys,
+        previous_kept_keys=previous_kept_keys,
+        current_kept_keys=kept_index_keys(item),
     )
     has_active_indexes = bool(
         previous_index_keys & previous_definition_keys

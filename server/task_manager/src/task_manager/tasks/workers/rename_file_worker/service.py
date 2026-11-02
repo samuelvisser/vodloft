@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from backend.services.no_ascii_names import settle_no_ascii_name
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -120,6 +121,7 @@ async def run_rename_file_worker(
                 media_download=download,
                 extension=extension,
             )
+            destination = settle_no_ascii_name(download, destination, session=s)
 
             if resolved_source is not None and source == destination:
                 unchanged += 1
