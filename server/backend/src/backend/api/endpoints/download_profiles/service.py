@@ -6,11 +6,20 @@ from sqlalchemy import func, select, true
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
-from backend.api.models.download_profile import DownloadProfileAPICreate, DownloadProfileAPIRead, DownloadProfileAPIUpdate
+from backend.api.models.download_profile import (
+    DownloadProfileAPICreate,
+    DownloadProfileAPIRead,
+    DownloadProfileAPIUpdate,
+    SkippedByFilterAPIRead,
+    WhichEpisodesAPIRead,
+    WhichEpisodesAPIRequest,
+)
 from backend.api.models.season import SeasonAPIRequestDetached
 from backend.db.model_mapping import create_database_fields, update_database_fields
-from backend.db.models import Season
+from backend.db.models import Collection, Episode, Season
 from backend.db.models.download_profile import DownloadProfile
+from backend.services.episode_rules import first_rule_leaving_out, set_profile_rules
+from backend.services.which_episodes import EpisodeSelection, episodes_in_window, which_episodes
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.types.season_types import SeasonType
 from backend.utils.local_media_profiles import require_local_media_profile_type
@@ -135,8 +144,9 @@ def create_download_profile(s: Session, body: DownloadProfileAPICreate) -> Downl
         local_media_profile_id=body.local_media_profile_id,
         episode_types=body.ep_id_type_list,
     )
-    item = create_database_fields(DownloadProfile, body, exclude_fields={"seasons"})
+    item = create_database_fields(DownloadProfile, body, exclude_fields={"seasons", "rules"})
     s.add(item)
+    set_profile_rules(item, body.rules)
     item.seasons = _resolve_or_create_seasons_for_collection(s, collection_id=item.collection_id, seasons_req=body.seasons)
     s.flush()
 
@@ -158,7 +168,8 @@ def update_download_profile(s: Session, download_profile_id: int, body: Download
         episode_types=body.ep_id_type_list,
         exclude_profile_id=item.id,
     )
-    update_database_fields(item, body, exclude_fields={"seasons"})
+    update_database_fields(item, body, exclude_fields={"seasons", "rules"})
+    set_profile_rules(item, body.rules)
     item.seasons = _resolve_or_create_seasons_for_collection(s, collection_id=item.collection_id, seasons_req=body.seasons)
     s.flush()
 
@@ -219,3 +230,57 @@ def require_unique_download_profile_episode_types(
                 + ", ".join(conflicts)
             ),
         )
+
+
+def count_which_episodes(s: Session, collection: Collection, body: WhichEpisodesAPIRequest) -> WhichEpisodesAPIRead:
+    """How many of the Collection's indexed episodes each line of the form leaves out."""
+    season_ids = list(s.scalars(
+        select(Season.id).where(Season.collection_id == collection.id, Season.slug.in_(body.season_slugs))
+    )) if body.season_slugs else []
+    selection = EpisodeSelection(
+        collection=collection,
+        ep_id_type_list=body.ep_id_type_list,
+        download_with_countdown=body.download_with_countdown,
+        download_days_in_past=body.download_days_in_past,
+        download_episode_count=body.download_episode_count,
+        download_starting_from=body.download_starting_from,
+        season_ids=season_ids,
+        include_upcoming_seasons=body.include_upcoming_seasons,
+        rules=body.rules,
+    )
+    result = which_episodes(s, selection)
+    episodes = None
+    if body.include_episodes:
+        published_at = func.coalesce(Episode.published_date, Episode.went_live_date)
+        episodes = [
+            {"id": episode_id, "slug": slug, "title": title, "published_at": published,
+             "left_out_by": result.left_out_by.get(episode_id)}
+            for episode_id, slug, title, published in s.execute(
+                select(Episode.id, Episode.slug, Episode.title, published_at)
+                .where(Episode.collection_id == collection.id)
+                .order_by(published_at.desc().nulls_last(), Episode.id.desc())
+            )
+        ]
+    return WhichEpisodesAPIRead.model_validate({**vars(result), "episodes": episodes})
+
+
+def skipped_by_filter(s: Session, collection_id: int) -> list[SkippedByFilterAPIRead]:
+    """Episodes of the Collection that its enabled Download Profiles' own rules leave out."""
+    skipped: list[SkippedByFilterAPIRead] = []
+    profiles = s.scalars(select(DownloadProfile).where(
+        DownloadProfile.collection_id == collection_id,
+        DownloadProfile.enable_profile.is_(True),
+    ))
+    for profile in profiles:
+        if not profile.rules:
+            continue
+        for episode in episodes_in_window(s, EpisodeSelection.of_profile(profile)):
+            index = first_rule_leaving_out(profile.rules, episode)
+            if index is not None:
+                skipped.append(SkippedByFilterAPIRead.model_validate({
+                    "episode_id": episode.id,
+                    "download_profile_id": profile.id,
+                    "local_media_profile_id": profile.local_media_profile_id,
+                    "rule": profile.rules[index],
+                }))
+    return skipped

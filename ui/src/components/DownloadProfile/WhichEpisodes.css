@@ -1,0 +1,222 @@
+.which-episodes {
+    --we-border: rgba(100, 116, 139, 0.24);
+    --we-soft: rgba(148, 163, 184, 0.06);
+    --we-badge: rgba(100, 116, 139, 0.14);
+    --we-accent: #0284c7;
+    --we-accent-soft: rgba(14, 165, 233, 0.12);
+    --we-code: #b45309;
+    --we-ok: #15803d;
+    min-width: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+    .which-episodes {
+        --we-border: rgba(148, 163, 184, 0.22);
+        --we-badge: rgba(148, 163, 184, 0.16);
+        --we-accent: #7dd3fc;
+        --we-accent-soft: rgba(56, 189, 248, 0.16);
+        --we-code: #f2c27b;
+        --we-ok: #4ade80;
+    }
+}
+
+.which-episodes-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.which-episodes-lines {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--we-border);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.which-episodes-line {
+    border-bottom: 1px solid var(--we-border);
+    min-width: 0;
+}
+
+.which-episodes-line.is-open {
+    background: var(--we-soft);
+}
+
+.which-episodes-sentence {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 14px;
+    min-width: 0;
+}
+
+.which-episodes-text {
+    flex: 1;
+    min-width: 0;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.which-episodes-rule-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.which-episodes-rule-head > div {
+    min-width: 150px;
+}
+
+.which-episodes-code {
+    margin-left: 8px;
+    padding: 1px 6px;
+    border-radius: 5px;
+    background: var(--we-badge);
+    color: var(--we-code);
+    font-size: 0.86em;
+}
+
+.which-episodes-count {
+    flex: none;
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: var(--we-badge);
+    font-size: 0.82rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.which-episodes-count.is-zero {
+    opacity: 0.6;
+}
+
+.which-episodes-count.is-keep {
+    color: var(--we-ok);
+}
+
+.which-episodes-icon {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+}
+
+.which-episodes-icon:hover,
+.which-episodes-icon.is-active {
+    background: var(--we-accent-soft);
+    color: var(--we-accent);
+}
+
+.which-episodes-icon.is-placeholder {
+    cursor: default;
+    background: transparent;
+    color: var(--muted);
+    opacity: 0.6;
+}
+
+.which-episodes-editor {
+    display: grid;
+    gap: 12px;
+    margin: 0 14px 14px;
+    padding: 14px;
+    border: 1px solid var(--we-border);
+    border-radius: 12px;
+    min-width: 0;
+}
+
+.which-episodes-editor .form-row:last-of-type {
+    margin-bottom: 0;
+}
+
+.which-episodes-editor-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.which-episodes-duration {
+    display: grid;
+    gap: 10px;
+    max-width: 520px;
+}
+
+.which-episodes-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 14px;
+}
+
+.which-episodes-muted {
+    color: var(--muted);
+}
+
+.which-episodes-list {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+    max-height: 420px;
+    overflow-y: auto;
+    border: 1px solid var(--we-border);
+    border-radius: 12px;
+}
+
+.which-episodes-list li {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--we-border);
+    font-size: 0.92rem;
+}
+
+.which-episodes-list li:last-child {
+    border-bottom: 0;
+}
+
+.which-episodes-list li.is-downloaded svg {
+    color: var(--we-ok);
+}
+
+.which-episodes-list li.is-left-out .which-episodes-list-title {
+    color: var(--muted);
+}
+
+.which-episodes-list-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+    .which-episodes-sentence {
+        flex-wrap: wrap;
+    }
+
+    .which-episodes-text {
+        flex-basis: 100%;
+    }
+
+    .which-episodes-list li {
+        grid-template-columns: 16px minmax(0, 1fr);
+    }
+
+    .which-episodes-list li > :nth-child(n + 3) {
+        grid-column: 2;
+    }
+}

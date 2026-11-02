@@ -9,6 +9,8 @@ real one when a title or template changed since.
 """
 from __future__ import annotations
 
+import re
+
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -229,13 +231,15 @@ def _episode_types(profile: PinchflatProfile) -> list[str]:
 def _collection_plan(source: PinchflatSource, profile: PinchflatProfile, profile_external_id: str, path_map: PathMap) -> CollectionPlan:
     warnings: list[ImportWarning] = []
     limits: dict[str, object] = {"download_days_in_past": 0, "download_episode_count": 0,
-                                 "download_starting_from": None, "delete_older_episodes": False}
+                                 "download_starting_from": None, "delete_older_episodes": False,
+                                 "retention_from": "published"}
     if source.retention_period_days:
-        limits.update(download_days_in_past=source.retention_period_days, delete_older_episodes=True)
+        limits.update(download_days_in_past=source.retention_period_days, delete_older_episodes=True,
+                      retention_from="downloaded")
         warnings.append(ImportWarning(
             "retention_period_days",
-            f"New downloads older than {source.retention_period_days} days are deleted, like Pinchflat did. "
-            "Imported files are never deleted by it", "close",
+            f"Downloads are deleted {source.retention_period_days} days after downloading, like Pinchflat did, and "
+            f"only videos from the last {source.retention_period_days} days are downloaded", "close",
         ))
         if source.download_cutoff_date:
             warnings.append(ImportWarning(
@@ -245,10 +249,21 @@ def _collection_plan(source: PinchflatSource, profile: PinchflatProfile, profile
             ))
     elif source.download_cutoff_date:
         limits["download_starting_from"] = source.download_cutoff_date[:10]
+    rules: list[dict[str, object]] = []
     if source.title_filter_regex:
-        warnings.append(ImportWarning("title_filter_regex", "VODLoft does not filter videos by title yet"))
-    if source.min_duration_seconds or source.max_duration_seconds:
-        warnings.append(ImportWarning("duration", "VODLoft does not filter videos by length yet"))
+        # Pinchflat downloads only the videos whose title matches, ignoring case, anywhere in the title.
+        try:
+            re.compile(source.title_filter_regex)
+        except re.error as exc:
+            warnings.append(ImportWarning("title_filter_regex", f"The title filter is not a pattern VODLoft can read ({exc})"))
+        else:
+            rules.append({"action": "only", "field": "title", "pattern": source.title_filter_regex, "ignore_case": False})
+    if source.min_duration_seconds:
+        rules.append({"action": "skip", "field": "duration", "duration_operator": "shorter",
+                      "duration_seconds": source.min_duration_seconds})
+    if source.max_duration_seconds:
+        rules.append({"action": "skip", "field": "duration", "duration_operator": "longer",
+                      "duration_seconds": source.max_duration_seconds})
     if source.cookie_behaviour not in (None, "", "disabled"):
         warnings.append(ImportWarning("cookie_behaviour", "VODLoft uses its cookies for every video or none, not per Collection yet"))
     audio = profile.preferred_resolution == "audio"
@@ -273,6 +288,7 @@ def _collection_plan(source: PinchflatSource, profile: PinchflatProfile, profile
             "ep_id_type_list": _episode_types(profile),
             "download_with_countdown": False, "redownload_final": False,
             "seasons": [], "include_upcoming_seasons": True,
+            "rules": rules,
             **limits,
         },
         warnings=tuple(warnings),
@@ -295,7 +311,8 @@ def _file_plan(item: PinchflatItem, source: PinchflatSource, indexes: Sequence[C
             ordinal = index.ordinal(value)
             if ordinal is not None:
                 values[index.key] = ordinal
-        return FilePlan(external_id, item.media_id, path, "file", values, item.title, item.uploaded_at)
+        return FilePlan(external_id, item.media_id, path, "file", values, item.title, item.uploaded_at,
+                        kept=item.prevent_culling)
     if item.prevent_download:
         return FilePlan(external_id, item.media_id, None, "suppressed", title=item.title, published=item.uploaded_at)
     return None

@@ -6,6 +6,7 @@ import DateInput from '../common/DateInput'
 import SimpleSelect from '../common/SimpleSelect'
 import {useCollections, useSourceLookup} from '../../lib/queries'
 import {sourceControls} from '../../lib/sourceControls'
+import {RetentionFromReg} from '../../types/schemas/download_profile'
 
 type Props = {
     form: UseFormReturn<any>
@@ -274,10 +275,27 @@ export default function DownloadProfileDateFilters({form, collectionId, sourceKe
                     )}
                     <div className="help" id="delete-older-help">
                         <ReadMore summary={<span>Whether to delete episodes outside the selected limit</span>}>
+                            {'Downloads you keep, and downloads a Keep filter matches, are never deleted. '}
                             {limitMode === 'date'
                                 ? 'If enabled, downloaded episodes older than the date shown above will be automatically removed from disk.'
                                 : `If enabled, downloaded episodes outside the latest ${watchedEpisodeCount || 'selected number of'} eligible episodes will be automatically removed from disk.`}
                         </ReadMore>
+                    </div>
+                </div>
+            )}
+
+            {limitMode === 'date' && watch('deleteOlderEpisodes') && (
+                <div className="form-row">
+                    <label htmlFor="retention-from">Delete them {watchedDays || 'N'} days</label>
+                    <SimpleSelect
+                        inputId="retention-from"
+                        registry={RetentionFromReg}
+                        value={watch('retentionFrom') ?? 'published'}
+                        onChange={(value) => setValue('retentionFrom', value, {shouldDirty: true, shouldValidate: true})}
+                    />
+                    <div className="help">
+                        After publication deletes an episode once it is older than the window. After downloading keeps each
+                        download for the full {watchedDays || 'N'} days, however old the episode was when it was downloaded.
                     </div>
                 </div>
             )}

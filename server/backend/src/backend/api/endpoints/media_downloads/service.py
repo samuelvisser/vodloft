@@ -27,6 +27,7 @@ from backend.api.models.media_download import (
     EpisodeDownloadAPICreate,
     MediaDownloadAPIRead,
     MediaDownloadAPIReadView,
+    MediaDownloadKeptAPIRequest,
     MediaDownloadAPIUpdate,
     MediaDownloadPageRead,
     MediaDownloadAPICreate,
@@ -867,5 +868,14 @@ def update_media_download(s: Session, media_download_id: int, body: MediaDownloa
     if item is None:
         raise HTTPException(status_code=404, detail="Media download not found")
     update_database_fields(item, body)
+    s.flush()
+    return MediaDownloadAPIRead.model_validate(item)
+
+
+def set_media_download_kept(s: Session, media_download_id: int, body: MediaDownloadKeptAPIRequest) -> MediaDownloadAPIRead:
+    item = s.get(EpisodeMediaDownload, media_download_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Episode download not found")
+    item.kept = body.kept
     s.flush()
     return MediaDownloadAPIRead.model_validate(item)

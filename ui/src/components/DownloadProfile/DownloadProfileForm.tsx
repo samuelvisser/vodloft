@@ -7,7 +7,7 @@ import Select from "react-select";
 import {useCollectionEpisodeTags} from "../../lib/queries";
 import {episodeTagLabel} from "../../types/schemas/source";
 import {useEffect, useMemo} from "react";
-import {EpisodeIdentifierReg} from "../../types/collection";
+import WhichEpisodes from "./WhichEpisodes";
 
 type Props = {
     form: UseFormReturn<any>
@@ -22,6 +22,8 @@ type Props = {
     sourceKey?: string
     /** The link of a collection that is not saved yet, which decides the tags its episodes can get. */
     collectionUrl?: string
+    /** Creating a profile opens the built-in Which episodes lines. */
+    startOpen?: boolean
 }
 
 // Simple option model for react-select
@@ -29,7 +31,7 @@ type UIOption = { value: string; label: string }
 
 const NO_DISABLED_EPISODE_TYPES = new Set<string>()
 
-export default function DownloadProfileForm({form, episodeIdentifier, seasons, collectionRoot, disabledEpisodeTypes, collectionId, sourceKey, collectionUrl}: Props) {
+export default function DownloadProfileForm({form, episodeIdentifier, seasons, collectionRoot, disabledEpisodeTypes, collectionId, sourceKey, collectionUrl, startOpen}: Props) {
     const {control, watch, setValue, formState: {errors}} = form
     collectionRoot ??= true
 
@@ -102,59 +104,62 @@ export default function DownloadProfileForm({form, episodeIdentifier, seasons, c
                 </div>
             </div>
 
-            {/* Episode types to download */}
-            <div className="form-row">
-                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                    <label htmlFor="ep-id-type-select">Episode types</label>
-                    <div>
-                        <button type="button" className="btn btn-link" onClick={handleSelectAll}>
-                            Select all
-                        </button>
-                    </div>
-                </div>
-                <Controller
-                    control={control}
-                    name="epIdTypeList"
-                    render={() => (
-                        <Select
-                            inputId="ep-id-type-select"
-                            isMulti
-                            options={tagOptions}
-                            value={selectValue}
-                            onChange={handleSelectChange as any}
-                            closeMenuOnSelect={false}
-                            getOptionValue={(o: UIOption) => o.value}
-                            getOptionLabel={(o: UIOption) => o.label}
-                            isOptionDisabled={(option: UIOption) => unavailableEpisodeTypes.has(option.value)}
-                            aria-invalid={!!errors.epIdTypeList}
-                            aria-describedby={errors.epIdTypeList ? 'ep-id-type-errors' : 'ep-id-type-help'}
+            <WhichEpisodes
+                form={form}
+                episodeIdentifier={episodeIdentifier}
+                tags={tags}
+                seasons={seasons ?? []}
+                collectionId={collectionId}
+                startOpen={startOpen}
+                typesField={(
+                    <div className="form-row">
+                        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                            <label htmlFor="ep-id-type-select">Episode types</label>
+                            <div>
+                                <button type="button" className="btn btn-link" onClick={handleSelectAll}>
+                                    Select all
+                                </button>
+                            </div>
+                        </div>
+                        <Controller
+                            control={control}
+                            name="epIdTypeList"
+                            render={() => (
+                                <Select
+                                    inputId="ep-id-type-select"
+                                    isMulti
+                                    options={tagOptions}
+                                    value={selectValue}
+                                    onChange={handleSelectChange as any}
+                                    closeMenuOnSelect={false}
+                                    getOptionValue={(o: UIOption) => o.value}
+                                    getOptionLabel={(o: UIOption) => o.label}
+                                    isOptionDisabled={(option: UIOption) => unavailableEpisodeTypes.has(option.value)}
+                                    aria-invalid={!!errors.epIdTypeList}
+                                    aria-describedby={errors.epIdTypeList ? 'ep-id-type-errors' : 'ep-id-type-help'}
+                                />
+                            )}
                         />
-                    )}
-                />
 
-                {errors.epIdTypeList && (
-                    <div id="ep-id-type-errors" className="error" role="alert" aria-live="polite">
-                        {errors.epIdTypeList.message as string}
+                        {errors.epIdTypeList && (
+                            <div id="ep-id-type-errors" className="error" role="alert" aria-live="polite">
+                                {errors.epIdTypeList.message as string}
+                            </div>
+                        )}
+                        <div className="help" id="ep-id-type-help">
+                            <ReadMore summary={<span>What episode types to download</span>}>
+                                <p>Select all episode types you want to download.</p>
+                                {(tags ?? []).map((tag) => <p key={tag.key}><b>{tag.label}</b>: {tag.help}.</p>)}
+                                {unavailableEpisodeTypes.size > 0 && (
+                                    <p>Episode types already used by another Download Profile with this Local Media Profile cannot be selected.</p>
+                                )}
+                            </ReadMore>
+                        </div>
                     </div>
                 )}
-                <div className="help" id="ep-id-type-help">
-                    <ReadMore summary={<span>What episode types to download</span>}>
-                        <p>Select all episode types you want to download.</p>
-                        {(tags ?? []).map((tag) => <p key={tag.key}><b>{tag.label}</b>: {tag.help}.</p>)}
-                        {unavailableEpisodeTypes.size > 0 && (
-                            <p>Episode types already used by another Download Profile with this Local Media Profile cannot be selected.</p>
-                        )}
-                    </ReadMore>
-                </div>
-            </div>
-
-            {/* A seasonal collection filters on season first, and on date on top of that */}
-            {episodeIdentifier === EpisodeIdentifierReg.Enum.seasonal && (
-                <DownloadProfileSeasonFilter form={form} seasons={seasons ?? []}/>
-            )}
-            {episodeIdentifier !== undefined && (
-                <DownloadProfileDateFilters form={form} collectionId={collectionId} sourceKey={sourceKey}/>
-            )}
+                seasonsField={<DownloadProfileSeasonFilter form={form} seasons={seasons ?? []}/>}
+                datesField={<DownloadProfileDateFilters form={form} collectionId={collectionId} sourceKey={sourceKey}/>}
+            />
         </>
     )
 }

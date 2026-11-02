@@ -1,11 +1,13 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, HTTPException, Request, status
 
 from .service import *
 from .as_view import download_profile_view_router
 from ...models.download_profile import *
 from backend.app import db_session
 from backend.security.access import Area, Level
+from backend.security import deps
 from backend.security.deps import requires, requires_any
+from backend.db.models import Collection
 
 router = APIRouter(prefix="/download-profiles", tags=["Download Profiles"])
 
@@ -29,6 +31,26 @@ def download_profiles_by_collection_slug_list(collection_slug: str):
     """
     with db_session() as s:
         return get_download_profiles_list(s, collection_slug)
+
+
+@router.post("/which-episodes", dependencies=[requires_any((Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW))], response_model=WhichEpisodesAPIRead)
+def download_profiles_which_episodes(body: WhichEpisodesAPIRequest, request: Request):
+    """How many of the Collection's indexed episodes each Which episodes line leaves out, and optionally which."""
+    with db_session() as s:
+        collection = s.get(Collection, body.collection_id)
+        if collection is None or not deps.request_access(request).allows_source(collection.source_key):
+            raise HTTPException(status_code=404, detail="Collection not found")
+        return count_which_episodes(s, collection, body)
+
+
+@router.get("/skipped-by-filter/{collection_id}", dependencies=[requires_any((Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.LIBRARY, Level.VIEW))], response_model=list[SkippedByFilterAPIRead])
+def download_profiles_skipped_by_filter(collection_id: int, request: Request):
+    """Episodes of the Collection that a Download Profile's own rules leave out, with the rule."""
+    with db_session() as s:
+        collection = s.get(Collection, collection_id)
+        if collection is None or not deps.request_access(request).allows_source(collection.source_key):
+            raise HTTPException(status_code=404, detail="Collection not found")
+        return skipped_by_filter(s, collection_id)
 
 
 @router.get("/{download_profile_id}", dependencies=[requires_any((Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=DownloadProfileAPIRead)

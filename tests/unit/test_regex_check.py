@@ -105,6 +105,7 @@ def client(monkeypatch):
 def test_the_check_tests_your_own_titles_and_the_collection_newest_first(client):
     response = client.post("/api/regex/check", json={
         "pattern": r"\bhighlights\b", "ignoreCase": True, "samples": ["My highlights", "  "], "collectionId": 1,
+        "field": "title",
     })
 
     assert response.status_code == 200

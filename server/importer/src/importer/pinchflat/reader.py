@@ -95,6 +95,7 @@ class PinchflatItem:
     playlist_index: int | None = None
     upload_date_index: int | None = None
     prevent_download: bool = False
+    prevent_culling: bool = False
     culled_at: str | None = None
     livestream: bool = False
     short_form_content: bool = False
@@ -264,6 +265,7 @@ def _item(row: dict[str, Any]) -> PinchflatItem:
         media_filepath=row.get("media_filepath") or None, uploaded_at=row.get("uploaded_at"),
         playlist_index=_int(row.get("playlist_index")), upload_date_index=_int(row.get("upload_date_index")),
         prevent_download=_bool(row.get("prevent_download")), culled_at=row.get("culled_at"),
+        prevent_culling=_bool(row.get("prevent_culling")),
         livestream=_bool(row.get("livestream")), short_form_content=_bool(row.get("short_form_content")),
         subtitle_filepaths=_subtitles(row.get("subtitle_filepaths")),
         thumbnail_filepath=row.get("thumbnail_filepath"), metadata_filepath=row.get("metadata_filepath"),

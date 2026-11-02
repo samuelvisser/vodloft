@@ -22,7 +22,7 @@ from .CustomIndexState import CustomIndexState
 from .ExistingFileScan import ExistingFileScan
 from .ImportRun import ImportLink, ImportRun, ImportStep
 
-from .download_profile import DownloadProfile
+from .download_profile import DownloadProfile, DownloadProfileRule
 from .media_download import MediaDownloadBase
 from .media_download import MediaDownloadHistory
 from .media_item import MediaItemBase

@@ -460,24 +460,43 @@ function describeBlock(block: Block): string {
     }
 }
 
-/** One sentence that says what the regex matches, when it is made of blocks. */
-export function describeBlocks(blocks: Block[], ignoreCase: boolean, noun: string = 'title'): string | null {
-    const plural = `${noun[0].toUpperCase()}${noun.slice(1)}s`
-    const caseNote = ignoreCase ? ', in any capitalisation' : ', with the capitals exactly as typed'
+/** What texts the blocks match, as a plural verb ("contain") and its object; null when there is nothing to say. */
+function verbAndWhat(blocks: Block[]): [string, string] | null {
     if (!blocks.length) return null
     const shortcut = shortcutOf(blocks)
     if (shortcut) {
         const {where, block} = shortcut
         const empty = block.kind === 'text' ? !block.text : !block.items.length
         if (empty) return null
-        const what = describeBlock(block)
         const verb = {anywhere: 'contain', start: 'start with', end: 'end with', whole: 'are exactly'}[where]
-        return `${plural} that ${verb} ${what}${caseNote}.`
+        return [verb, describeBlock(block)]
     }
     const inner = blocks.filter((block) => block.kind !== 'position')
     const starts = blocks[0]?.kind === 'position'
     const ends = blocks[blocks.length - 1]?.kind === 'position' && blocks.length > 1
     const parts = inner.map(describeBlock).filter(Boolean)
     const verb = starts && ends ? 'are exactly' : starts ? 'start with' : 'contain'
-    return `${plural} that ${verb} ${parts.join(', then ')}${ends && !starts ? ' at the end' : ''}${caseNote}.`
+    return [verb, `${parts.join(', then ')}${ends && !starts ? ' at the end' : ''}`]
+}
+
+/** One sentence that says what the regex matches, when it is made of blocks. */
+export function describeBlocks(blocks: Block[], ignoreCase: boolean, noun: string = 'title'): string | null {
+    const plural = `${noun[0].toUpperCase()}${noun.slice(1)}s`
+    const caseNote = ignoreCase ? ', in any capitalisation' : ', with the capitals exactly as typed'
+    const described = verbAndWhat(blocks)
+    return described ? `${plural} that ${described[0]} ${described[1]}${caseNote}.` : null
+}
+
+const SINGULAR_VERBS: Record<string, string> = {
+    contain: 'contains',
+    'start with': 'starts with',
+    'end with': 'ends with',
+    'are exactly': 'is exactly',
+}
+
+/** What one text must do to match, such as "contains the word “trailer”"; null when no block can show the regex. */
+export function describeMatch(pattern: string): string | null {
+    const blocks = parseBlocks(pattern)
+    const described = blocks ? verbAndWhat(blocks) : null
+    return described ? `${SINGULAR_VERBS[described[0]]} ${described[1]}` : null
 }

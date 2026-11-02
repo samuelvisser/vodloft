@@ -8,6 +8,8 @@ import {SubscriptionBadge} from '../common/NeedsSubscription'
 import {RemovedBadge} from '../common/RemovedFromSource'
 import {useEpisodeTags} from '../../lib/queries'
 import {episodeTagLabel} from '../../types/schemas/source'
+import type {EpisodeRule} from '../../types/schemas/download_profile'
+import {plainText, ruleSentence} from '../DownloadProfile/whichEpisodesText'
 
 // Beyond this many downloads for one episode, collapse the rest into a "+N" pill
 // instead of letting icons overflow the thumbnail.
@@ -100,10 +102,12 @@ type Props = {
     ep: EpisodeReadView
     collectionSlug: string
     downloads?: MediaDownloadViewRead[]
+    /** The Which episodes filter that keeps this episode from downloading automatically. */
+    skippedBy?: EpisodeRule
 }
 
 /** The episode thumbnail card used on a show's episode list. */
-export default function EpisodeCard({ep, collectionSlug, downloads}: Props) {
+export default function EpisodeCard({ep, collectionSlug, downloads, skippedBy}: Props) {
     const initials = ep.title
         .split(' ')
         .map((w) => w[0])
@@ -160,6 +164,11 @@ export default function EpisodeCard({ep, collectionSlug, downloads}: Props) {
                 )}
             </div>
             <div className="episode-title" title={ep.title}>{ep.title}</div>
+            {skippedBy && !(downloads ?? []).some((download) => download.presentation.status !== 'not_downloaded') && (
+                <div className="episode-skipped" title="Open the episode to download it anyway">
+                    Skipped by filter: {plainText(ruleSentence(skippedBy)).replace(/^\w/, (c) => c.toLowerCase())}
+                </div>
+            )}
         </div>
     )
 }

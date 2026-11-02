@@ -40,6 +40,12 @@ class MediaDownloadAPIUpdate(RequestBase):
     file_path: str
 
 
+class MediaDownloadKeptAPIRequest(RequestBase):
+    """Keep an episode's download from retention, or let retention delete it again."""
+
+    kept: bool
+
+
 class MediaDownloadBulkActionAPIRequest(RequestBase):
     """Exact download rows selected by a Downloads-page bulk action."""
 
@@ -75,6 +81,8 @@ class _MediaDownloadAPIBaseOut(ResponseBase):
     format_downloaded: Optional[str]
     downloaded_at: Optional[datetime]
     redownload_when_final: Optional[bool] = None
+    kept: Optional[bool] = None
+    """Kept by hand: retention never deletes it. Only episodes have it."""
 
 
 class MediaDownloadAPIRead(_MediaDownloadAPIBaseOut):

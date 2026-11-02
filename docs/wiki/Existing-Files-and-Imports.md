@@ -98,6 +98,10 @@ The import creates the collections and profiles, then adopts every downloaded fi
 as soon as the collection has its episodes. Videos you told Pinchflat not to download stay skipped. Download
 Profiles stay off until all files are adopted; they then turn on if you asked for that and the source was enabled.
 
+A source's title filter becomes an **Only download** filter on the title, and its minimum and maximum length become
+**Skip** filters on the duration (see [[Download-Profiles#which-episodes]]). Its retention period deletes downloads that
+many days after downloading, as Pinchflat did, and videos you told Pinchflat never to delete are kept.
+
 You can run the import again. Anything you changed in VODLoft since the last run is kept, and settings a newer
 VODLoft can map, which it reported as unsupported before, are brought over.
 

@@ -3,7 +3,7 @@ import {addedByLabel, can} from '../../lib/access'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { useDownloadProfilesView, useEpisodePages, useCollection, useLocalMediaProfiles, useCollectionDownloads, useCollectionSeasons, useSourceLookup, useStreamProfilesView } from '../../lib/queries'
+import { useDownloadProfilesView, useEpisodePages, useCollection, useLocalMediaProfiles, useCollectionDownloads, useCollectionSeasons, useSkippedByFilter, useSourceLookup, useStreamProfilesView } from '../../lib/queries'
 import SourceBadge from '../../components/Source/SourceBadge'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'react-hot-toast'
@@ -48,6 +48,11 @@ export default function CollectionPage() {
   const PAGE_SIZE = 36
 
   const { data: collection, isLoading, error } = useCollection(id)
+  const { data: skipped } = useSkippedByFilter(collection?.id)
+  const skippedByEpisode = useMemo(
+    () => new Map((skipped ?? []).map((item) => [item.episodeId, item.rule])),
+    [skipped],
+  )
   const sources = useSourceLookup()
   const isSeasonal = collection?.episodeIdentifier === 'seasonal'
 
@@ -665,7 +670,10 @@ export default function CollectionPage() {
         ) : (
           <div className="episodes-grid" role="list" aria-label={`${collection.title} episodes`}>
             {visibleItems.map((ep: any) => (
-              <EpisodeCard key={ep.id} ep={ep} collectionSlug={id} downloads={downloadsBySlug.get(ep.slug)}/>
+              <EpisodeCard
+                key={ep.id} ep={ep} collectionSlug={id} downloads={downloadsBySlug.get(ep.slug)}
+                skippedBy={skippedByEpisode.get(ep.id)}
+              />
             ))}
           </div>
         )}

@@ -29,7 +29,7 @@ def check(body: RegexCheckRequest, request: Request):
             collection = session.get(Collection, body.collection_id)
             if collection is None or not deps.request_access(request).allows_source(collection.source_key):
                 raise HTTPException(status_code=404, detail="Collection not found")
-            column = Episode.title if body.field is RegexSampleField.TITLE else Episode.description
+            column = Episode.title if body.field == RegexSampleField.TITLE else Episode.description
             episodes = [
                 (text or "", published)
                 for text, published in session.execute(
