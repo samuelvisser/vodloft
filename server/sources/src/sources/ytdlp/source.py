@@ -19,7 +19,7 @@ from ..contract import (
     link_host, on_domain,
 )
 from .. import pacing, ytdlp_runner as runner
-from . import youtube_rss, youtube_search
+from . import thumbnails, youtube_rss, youtube_search
 from .youtube_api import ApiKeyError, QuotaExceededError, Share, YouTubeApiClient, YouTubeApiError, key as api_key, mapping, quota
 from .youtube_api.catalogue import Catalogue
 from .youtube_api.client import MAX_RESULTS
@@ -192,9 +192,9 @@ def _lookup(*args: str) -> dict:
 
 def _thumbnail(info: dict) -> str | None:
     if info.get("thumbnail"):
-        return info["thumbnail"]
-    thumbnails = [t for t in info.get("thumbnails") or [] if isinstance(t, dict) and t.get("url")]
-    return thumbnails[-1]["url"] if thumbnails else None
+        return thumbnails.widest_still(info["thumbnail"])
+    candidates = [t for t in info.get("thumbnails") or [] if isinstance(t, dict) and t.get("url")]
+    return thumbnails.widest_still(candidates[-1]["url"]) if candidates else None
 
 
 class YtDlpSource(Source):

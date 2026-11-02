@@ -382,3 +382,46 @@ def test_ytdlp_without_a_subtitle_folder_asks_for_no_subtitles(fake_ytdlp, tmp_p
 
     result = download_ytdlp("https://x/subs", str(tmp_path / "out.mp4"), command=fake_ytdlp)
     assert result.subtitles == ()
+
+
+class _Head:
+    def __init__(self, status: int):
+        self.status = status
+        self.urls: list[str] = []
+
+    def __call__(self, url, **_kwargs):
+        self.urls.append(url)
+        return type("Response", (), {"status_code": self.status})()
+
+
+@pytest.mark.parametrize("still", ["hqdefault.jpg", "sddefault.jpg", "mqdefault.jpg", "hqdefault.jpg?sqp=abc"])
+def test_widest_still_uses_maxresdefault_when_youtube_has_it(monkeypatch, still):
+    from sources.ytdlp import thumbnails
+    head = _Head(200)
+    monkeypatch.setattr(thumbnails.requests, "head", head)
+    assert thumbnails.widest_still(f"https://i.ytimg.com/vi/dQw4w9WgXcQ/{still}") == "https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg"
+
+
+def test_widest_still_keeps_the_still_when_youtube_has_no_maxresdefault(monkeypatch):
+    from sources.ytdlp import thumbnails
+    monkeypatch.setattr(thumbnails.requests, "head", _Head(404))
+    assert thumbnails.widest_still("https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg") == "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
+
+
+def test_widest_still_keeps_the_still_when_youtube_is_unreachable(monkeypatch):
+    from sources.ytdlp import thumbnails
+
+    def offline(*_args, **_kwargs):
+        raise thumbnails.requests.ConnectionError("offline")
+
+    monkeypatch.setattr(thumbnails.requests, "head", offline)
+    assert thumbnails.widest_still("https://i.ytimg.com/vi_webp/dQw4w9WgXcQ/sddefault.webp") == "https://i.ytimg.com/vi_webp/dQw4w9WgXcQ/sddefault.webp"
+
+
+@pytest.mark.parametrize("url", [None, "https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg", "https://yt3.ggpht.com/avatar=s900", "https://example.com/hqdefault.jpg"])
+def test_widest_still_leaves_other_urls_alone(monkeypatch, url):
+    from sources.ytdlp import thumbnails
+    head = _Head(200)
+    monkeypatch.setattr(thumbnails.requests, "head", head)
+    assert thumbnails.widest_still(url) == url
+    assert head.urls == []
