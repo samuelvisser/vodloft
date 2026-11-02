@@ -19,3 +19,17 @@ because they would rename files all the time.
 Pinchflat's per-download values become Collection values or Custom Indexes that
 keep the imported numbers, such as `media_upload_date_index`, which becomes
 `'day' | custom_index(per=date, start=99, step=-1)`.
+
+## Option files
+
+`importer.ytdlp_templates.options` reads yt-dlp option files with yt-dlp's own
+parser, in the order Pinchflat passes them (`base-config.txt` first, then the
+media profile's, the source's and the media item's file), after Pinchflat's
+own options. yt-dlp reads them back to front, so for an option set twice the
+command line wins, then `base-config.txt`, then the more specific files.
+
+Every option written in a file gets a handling (converted, close, not needed,
+unsupported or overridden) and one sentence. `--parse-metadata` and
+`--replace-in-metadata` become `{% set %}` lines at the top of the converted
+template, in yt-dlp's order; actions whose result the template never reads
+are left out and reported as such.

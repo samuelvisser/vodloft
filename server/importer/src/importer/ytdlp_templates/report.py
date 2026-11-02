@@ -30,20 +30,22 @@ class ConversionReport:
     parts: tuple[PartReport, ...] = ()
     custom_indexes: tuple[CustomIndexPlan, ...] = ()
     errors: tuple[str, ...] = ()
+    actions: tuple[PartReport, ...] = ()
+    """What became of each metadata action of the option files."""
 
     @property
     def support(self) -> Support:
         """The weakest support of any part: the template is only as exact as its least exact part."""
         if self.output_template is None:
             return "unsupported"
-        return max((part.support for part in self.parts), key=_ORDER.__getitem__, default="exact")
+        return max((part.support for part in (*self.parts, *self.actions)), key=_ORDER.__getitem__, default="exact")
 
     def lines(self) -> list[str]:
         """The report as text, one line per part that is not exact."""
         lines = [f"{self.original!r} becomes {self.output_template!r}" if self.output_template
                  else f"{self.original!r} could not be converted"]
         lines.extend(self.errors)
-        for part in self.parts:
+        for part in (*self.actions, *self.parts):
             if part.support == "exact":
                 continue
             result = f"{part.result!r}" if part.result else "nothing"

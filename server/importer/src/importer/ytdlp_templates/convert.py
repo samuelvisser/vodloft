@@ -12,17 +12,20 @@ variables. The values it relies on are those of a YouTube video.
 """
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Literal
 
 from jinja2 import Environment, TemplateSyntaxError as JinjaSyntaxError, nodes
 from jinja_analysis import UnsafeEdit, expression_source
+from yt_dlp.postprocessor.metadataparser import MetadataParserPP
 
 from ..contract import CustomIndexPlan, Support
 from .grammar import Candidate, Field, Template, TemplateSyntaxError, Text, parse
+from .options import MetadataAction, OptionSet
 from .pinchflat import PSEUDO_FIELD_PREFIX, expand
-from .report import ConversionReport, ReportBuilder
+from .report import ConversionReport, PartReport, ReportBuilder
 
 ValueType = Literal["str", "int", "index", "date", "datetime"]
 _ORDER = {"exact": 0, "close": 1, "unsupported": 2}
@@ -41,7 +44,22 @@ class ConversionOptions:
     collection_type: str | None = None
     """Pinchflat's source collection type, such as ``channel`` or ``playlist``."""
     extra_fields: Mapping[str, FieldValue] = field(default_factory=dict)
-    """Fields an option file makes, such as one ``--parse-metadata`` fills."""
+    """Fields the importer knows a value for, by yt-dlp name."""
+    metadata_actions: tuple[MetadataAction, ...] = ()
+    """``--parse-metadata`` and ``--replace-in-metadata``, in the order yt-dlp runs them."""
+
+
+def options_from(option_set: OptionSet, **overrides: object) -> ConversionOptions:
+    """Conversion options for what yt-dlp's options say: placeholder, numbering and metadata actions."""
+    placeholder = option_set.effective("outtmpl_na_placeholder", "NA")
+    start = option_set.effective("autonumber_start", 1)
+    values: dict[str, object] = {
+        "na_placeholder": "NA" if placeholder is None else str(placeholder),
+        "autonumber_start": 1 if start is None else int(start),
+        "metadata_actions": option_set.actions,
+    }
+    values.update(overrides)
+    return ConversionOptions(**values)  # type: ignore[arg-type]
 
 
 class _Unsupported(Exception):
@@ -125,6 +143,19 @@ _PINCHFLAT_VALUES: dict[str, FieldValue] = {
 }
 _PINCHFLAT_IDS = frozenset({"media_item_id", "source_id", "media_profile_id"})
 
+# VODLoft's Collection template variables. A metadata action that changes a
+# yt-dlp field of another name writes to a variable of its own, so it never
+# changes a VODLoft variable that other fields read.
+VODLOFT_VARIABLES = frozenset({
+    "collection", "collection_title", "season", "season_name", "season_index", "season_type", "season_number",
+    "episode", "episode_title", "title", "dw_episode_number", "episode_type", "episode_extra_type",
+    "episode_number", "episode_sub_number", "episode_label", "episode_identifier", "episode_published_date",
+    "episode_published_time", "episode_published_datetime", "episode_index",
+    "collection_author", "collection_site_id", "episode_site_id", "episode_uploader", "duration_seconds",
+    "date", "time", "datetime", "year", "month", "day", "hour", "minute", "second",
+})
+_MATCH = "ytdlp_match"
+
 # strftime formats that a VODLoft variable already gives.
 _DATE_VARIABLES = {"%Y": "year", "%m": "month", "%d": "day", "%Y-%m-%d": "date"}
 _TIME_VARIABLES = {"%H": "hour", "%M": "minute", "%S": "second", "%H:%M:%S": "time"}
@@ -162,6 +193,10 @@ class _Converter:
     def __init__(self, options: ConversionOptions) -> None:
         self.options = options
         self.indexes: dict[str, CustomIndexPlan] = {}
+        self.bindings: dict[str, FieldValue] = {}
+        """yt-dlp fields a metadata action changed, as the variable that now holds them."""
+        self.shadowed: dict[str, str] = {}
+        """VODLoft variables a metadata action changed, with the yt-dlp field that changed them."""
 
     # One alternative.
     def candidate(self, candidate: Candidate) -> _Built | None:
@@ -174,6 +209,17 @@ class _Converter:
         value = self.value(name)
         if value is None:
             return None
+        if name not in self.bindings:
+            expression = _expression(value.expression)
+            changed = {
+                node.name for node in (expression, *expression.find_all(nodes.Name)) if isinstance(node, nodes.Name)
+            } & set(self.shadowed)
+            if changed:
+                variable = sorted(changed)[0]
+                value = FieldValue(
+                    value.expression, value.type, value.always, "close",
+                    f"{name} reads {variable}, which an option file changed for {self.shadowed[variable]}",
+                )
         if "custom_index" in value.expression:
             for key in _INDEXES:
                 if f"'{key}' | custom_index" in value.expression:
@@ -198,6 +244,8 @@ class _Converter:
             if item in _PINCHFLAT_VALUES:
                 return _PINCHFLAT_VALUES[item]
             raise _Unsupported(f"Pinchflat has no value called {item}")
+        if name in self.bindings:
+            return self.bindings[name]
         if name in self.options.extra_fields:
             return self.options.extra_fields[name]
         if name in _FIELDS:
@@ -304,6 +352,102 @@ class _Converter:
         report.add(field_.source, "{{ " + printed + " }}", support, "; ".join(reasons) or None)
         return node
 
+    # Metadata actions.
+    def inline(self, template: str) -> tuple[nodes.Expr, bool, Support, list[str]]:
+        """A yt-dlp template as one Jinja expression, as yt-dlp fills it in for a metadata action."""
+        scratch = ReportBuilder()
+        pieces: list[nodes.Expr] = []
+        always = False
+        for part in parse(template).parts:
+            if isinstance(part, Text):
+                if part.text:
+                    pieces.append(_const(part.text))
+                    always = True
+                continue
+            node = self.field(part, scratch, last=False)
+            if node is not None:
+                pieces.append(node)
+                always = always or not isinstance(node, nodes.CondExpr)
+        support: Support = "exact"
+        reasons: list[str] = []
+        for entry in scratch.parts:
+            if _ORDER[entry.support] > _ORDER[support]:
+                support = entry.support
+            if entry.reason:
+                reasons.append(entry.reason)
+        if not pieces:
+            return _const(""), False, support, reasons
+        node = pieces[0] if len(pieces) == 1 else nodes.Concat(pieces)
+        return node, always, support, reasons
+
+    def variable(self, name: str, current: FieldValue | None) -> str:
+        """The variable that holds a changed yt-dlp field."""
+        if name not in VODLOFT_VARIABLES or (current is not None and current.expression == name):
+            if current is not None and current.expression == name and name in VODLOFT_VARIABLES:
+                self.shadowed[name] = name
+            return name
+        return f"ytdlp_{name}"
+
+    def action(self, action: MetadataAction) -> tuple[list[nodes.Assign], Support, str | None]:
+        if action.kind == "replace":
+            return self.replace_action(*action.arguments)
+        return self.interpret_action(*action.arguments)
+
+    def replace_action(self, name: str, search: str, replace: str) -> tuple[list[nodes.Assign], Support, str | None]:
+        try:
+            current = self.value(name)
+        except _Unsupported as exc:
+            raise _Unsupported(f"{name} is not converted, because {exc.reason}") from None
+        if current is None:
+            return [], "exact", f"YouTube never fills {name}, so yt-dlp changes nothing"
+        if current.type in ("int", "index"):
+            return [], "exact", f"{name} is a number, which yt-dlp does not change"
+        if current.type != "str":
+            raise _Unsupported(f"VODLoft can't change the text of {name}")
+        old = _expression(current.expression)
+        new: nodes.Expr = _filter(old, "regex_replace", _const(search), _const(replace))
+        if not current.always:
+            new = nodes.CondExpr(old, new, old)
+        target = self.variable(name, current)
+        self.bindings[name] = FieldValue(target, "str", current.always, current.support, current.reason)
+        return [nodes.Assign(nodes.Name(target, "store"), new)], current.support, current.reason
+
+    def interpret_action(self, source: str, out: str) -> tuple[list[nodes.Assign], Support, str | None]:
+        template = MetadataParserPP.field_to_template(source)
+        pattern = MetadataParserPP.format_to_regex(out)
+        compiled = re.compile(pattern)
+        data, data_always, support, reasons = self.inline(template)
+        names = list(compiled.groupindex)
+        if not names:
+            return [], "exact", "The pattern names no field, so yt-dlp changes nothing"
+        statements: list[nodes.Assign] = []
+        # A pattern that takes the whole value; without (?s) it takes the first line,
+        # which is the whole value for every field VODLoft has.
+        whole = pattern in (rf"(?s)(?P<{names[0]}>.+)", rf"(?P<{names[0]}>.+)")
+        if not whole:
+            statements.append(nodes.Assign(nodes.Name(_MATCH, "store"), _filter(data, "regex_groups", _const(pattern))))
+            if _optional_groups(compiled):
+                support = "close" if support == "exact" else support
+                reasons.append("A part of the pattern that does not match leaves the field empty, where yt-dlp keeps it")
+        for name in names:
+            try:
+                current = self.value(name)
+            except _Unsupported:
+                current = None
+            old = _expression(current.expression) if current is not None else _const("")
+            old_always = current is not None and current.always
+            if whole:
+                value: nodes.Expr = data if data_always else nodes.CondExpr(data, data, old)
+                always = data_always or old_always
+            else:
+                group = nodes.Getitem(nodes.Name(_MATCH, "load"), _const(compiled.groupindex[name] - 1), "load")
+                value = nodes.CondExpr(nodes.Name(_MATCH, "load"), group, old)
+                always = old_always
+            target = self.variable(name, current)
+            statements.append(nodes.Assign(nodes.Name(target, "store"), value))
+            self.bindings[name] = FieldValue(target, "str", always, support, "; ".join(reasons) or None)
+        return statements, support, "; ".join(reasons) or None
+
     def replacement(self, replacement: str, value: nodes.Expr) -> nodes.Expr:
         pieces: list[nodes.Expr] = []
         text = ""
@@ -366,6 +510,41 @@ class _Converter:
         raise _Unsupported(f"the %{conversion} conversion has no VODLoft equivalent")
 
 
+def _optional_groups(pattern: re.Pattern[str]) -> bool:
+    """Whether a named group of the pattern can be left out of a match."""
+    try:
+        from re import _parser as sre_parse  # type: ignore[attr-defined]
+    except ImportError:  # pragma: no cover
+        import sre_parse  # type: ignore[no-redef]
+    named = set(pattern.groupindex.values())
+
+    def walk(items, optional: bool) -> bool:
+        for op, av in items:
+            name = str(op)
+            if name == "SUBPATTERN":
+                group, _add, _del, sub = av
+                if group in named and optional:
+                    return True
+                if walk(sub, optional):
+                    return True
+            elif name in ("MAX_REPEAT", "MIN_REPEAT", "POSSESSIVE_REPEAT"):
+                low, _high, sub = av
+                if walk(sub, optional or low == 0):
+                    return True
+            elif name == "BRANCH":
+                if any(walk(branch, True) for branch in av[1]):
+                    return True
+            elif name in ("ASSERT", "ASSERT_NOT"):
+                if walk(av[1], True):
+                    return True
+            elif name == "GROUPREF_EXISTS":
+                if walk(av[1], True) or (av[2] is not None and walk(av[2], True)):
+                    return True
+        return False
+
+    return walk(sre_parse.parse(pattern.pattern), False)
+
+
 def _literal(text: str) -> str:
     """Literal text that Jinja reads as text, even right before an expression."""
     out = []
@@ -377,9 +556,12 @@ def _literal(text: str) -> str:
     return "".join(out)
 
 
-def _check(output_template: str, expressions: list[nodes.Expr]) -> None:
-    """Parse the template again and make sure each expression reads as built."""
+def _check(output_template: str, expressions: list[nodes.Expr], assignments: list[nodes.Assign] = ()) -> None:
+    """Parse the template again and make sure each expression and {% set %} reads as built."""
     parsed = _ENVIRONMENT.parse(output_template)
+    found_sets = [(node.target.name, expression_source(node.node)) for node in parsed.find_all(nodes.Assign)]
+    if found_sets != [(node.target.name, expression_source(node.node)) for node in assignments]:
+        raise UnsafeEdit()
     # Literal braces are written as {{ '{' }}; they are text, not expressions.
     found = [node for output in parsed.find_all(nodes.Output) for node in output.nodes
              if not isinstance(node, nodes.TemplateData) and not (isinstance(node, nodes.Const) and node.value == "{")]
@@ -414,7 +596,8 @@ def convert_ytdlp(template: str, options: ConversionOptions | None = None, *, or
         parts = parts[:-1]
         parts[-1] = Text(parts[-1].text[:-1], parts[-1].start)
 
-    output: list[str] = ["/downloads/"]
+    prelude, assignments, action_reports = _prelude(converter, options.metadata_actions, parsed)
+    output: list[str] = [*prelude, "/downloads/"]
     expressions: list[nodes.Expr] = []
     for index, part in enumerate(parts):
         if isinstance(part, Text):
@@ -445,17 +628,77 @@ def convert_ytdlp(template: str, options: ConversionOptions | None = None, *, or
 
     output_template = "".join(output)
     try:
-        _check(output_template, expressions)
+        _check(output_template, expressions, assignments)
     except (JinjaSyntaxError, UnsafeEdit):
-        return ConversionReport(original, template, None, tuple(report.parts),
+        return ConversionReport(original, template, None, tuple(report.parts), actions=action_reports,
                                 errors=("The converted template does not read back as it was written",))
-    if output_template == "/downloads/.ext":
-        return ConversionReport(original, template, None, tuple(report.parts),
+    if output_template.endswith("/downloads/.ext"):
+        return ConversionReport(original, template, None, tuple(report.parts), actions=action_reports,
                                 errors=("Nothing of the file name is left after conversion",))
     return ConversionReport(
         original, template, output_template, tuple(report.parts),
         tuple(converter.indexes[key] for key in sorted(converter.indexes)),
+        actions=action_reports,
     )
+
+
+def _action_source(action: MetadataAction) -> str:
+    if action.kind == "interpret":
+        return f"--parse-metadata {':'.join(action.arguments)!r}"
+    field_, search, replace = action.arguments
+    return f"--replace-in-metadata {field_} {search!r} {replace!r}"
+
+
+def _template_fields(template: str) -> set[str]:
+    try:
+        return {candidate.name for part in parse(template).fields for candidate in part.candidates}
+    except TemplateSyntaxError:
+        return set()
+
+
+def _prelude(
+    converter: _Converter, actions: tuple[MetadataAction, ...], parsed: Template,
+) -> tuple[list[str], list[nodes.Assign], tuple[PartReport, ...]]:
+    """The {% set %} lines for the metadata actions that change the file name."""
+    if not actions:
+        return [], [], ()
+    # Walk back from the template: an action counts when a field it sets is read later.
+    needed = {candidate.name for part in parsed.fields for candidate in part.candidates}
+    live = [False] * len(actions)
+    for index in range(len(actions) - 1, -1, -1):
+        action = actions[index]
+        if action.kind == "replace":
+            sets = {action.arguments[0]}
+        else:
+            try:
+                sets = set(re.compile(MetadataParserPP.format_to_regex(action.arguments[1])).groupindex)
+            except re.error:
+                sets = set()
+        if sets & needed:
+            live[index] = True
+            if action.kind == "interpret":
+                needed |= _template_fields(MetadataParserPP.field_to_template(action.arguments[0]))
+
+    lines: list[str] = []
+    assignments: list[nodes.Assign] = []
+    reports: list[PartReport] = []
+    for action, used in zip(actions, live, strict=True):
+        source = _action_source(action)
+        if not used:
+            reports.append(PartReport(source, "", "exact", f"From {action.origin}. The template doesn't use what it changes"))
+            continue
+        try:
+            statements, support, reason = converter.action(action)
+            printed = [f"{{% set {node.target.name} = {expression_source(node.node)} -%}}\n" for node in statements]
+        except (_Unsupported, UnsafeEdit, re.error, ValueError) as exc:
+            reason = getattr(exc, "reason", None) or str(exc) or "it could not be written as Jinja"
+            reports.append(PartReport(source, "", "unsupported", f"From {action.origin}. Not converted: {reason}"))
+            continue
+        lines.extend(printed)
+        assignments.extend(statements)
+        detail = f"From {action.origin}." + (f" {reason}" if reason else "")
+        reports.append(PartReport(source, "".join(printed).rstrip("\n"), support, detail))
+    return lines, assignments, tuple(reports)
 
 
 def convert_pinchflat(template: str, options: ConversionOptions | None = None) -> ConversionReport:
