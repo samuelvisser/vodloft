@@ -30,6 +30,7 @@ import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {getZodDefaults} from '../../utils/defaultZod'
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import SimpleSelect from '../common/SimpleSelect'
+import NumberInput from '../common/NumberInput'
 import ServiceTile from './ServiceTile'
 import {DEFAULT_CHOICE, KIND_LABELS, MethodReg, RefreshScopeReg, fieldRegistry, scriptRegistry} from './registries'
 
@@ -490,8 +491,8 @@ export default function DestinationDialog({destination, onDismiss}: Props) {
                         </div>
                         <div className="form-row">
                             <label htmlFor="notif-timeout">Time limit in seconds</label>
-                            <input id="notif-timeout" className="input" type="number" min={1} max={3600}
-                                   aria-invalid={errors.timeoutSeconds ? 'true' : undefined} {...register('timeoutSeconds')}/>
+                            <NumberInput id="notif-timeout" min={1} max={3600}
+                                         aria-invalid={errors.timeoutSeconds ? 'true' : undefined} {...register('timeoutSeconds')}/>
                             {errors.timeoutSeconds ? <span className="error">{errors.timeoutSeconds.message}</span> : null}
                         </div>
                         {scripts.data ? (

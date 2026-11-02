@@ -1,4 +1,5 @@
-.settings-field.is-environment-managed .settings-input:disabled {
+.settings-field.is-environment-managed .settings-input:disabled,
+.settings-field.is-environment-managed .number-input[data-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.72;
   background: rgba(148, 163, 184, 0.12);
@@ -25,7 +26,8 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  .settings-field.is-environment-managed .settings-input:disabled {
+  .settings-field.is-environment-managed .settings-input:disabled,
+  .settings-field.is-environment-managed .number-input[data-disabled="true"] {
     background: rgba(148, 163, 184, 0.08);
   }
 

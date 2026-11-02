@@ -6,6 +6,7 @@ import {createSelectRegistry} from '../../utils/selectRegistry'
 import SimpleSelect from '../common/SimpleSelect'
 import {useCollections, useLocalMediaProfiles, useSiteOptions, useSourceLookup} from '../../lib/queries'
 import {sourceControls} from '../../lib/sourceControls'
+import NumberInput from '../common/NumberInput'
 import './UpgradeCheckCard.css'
 
 type Props = {
@@ -119,8 +120,8 @@ export default function UpgradeCheckCard({form, collectionId, sourceKey, collect
                         <div className="upgrade-check-fields">
                             <div className="upgrade-check-field">
                                 <label htmlFor="upgrade-after-days">Check after … days</label>
-                                <input
-                                    id="upgrade-after-days" className="input" type="number" inputMode="numeric" min={1} max={365} step={1}
+                                <NumberInput
+                                    id="upgrade-after-days" inputMode="numeric" min={1} max={365} step={1}
                                     {...register('upgradeAfterDays', {valueAsNumber: true})}
                                     aria-invalid={!!errors.upgradeAfterDays}
                                 />

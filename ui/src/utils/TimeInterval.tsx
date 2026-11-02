@@ -1,4 +1,5 @@
 import {useEffect, useId, useMemo, useRef, useState} from 'react'
+import NumberInput from '../components/common/NumberInput'
 import type {CSSProperties, ChangeEventHandler, FocusEventHandler, MouseEventHandler} from 'react'
 
 
@@ -292,15 +293,13 @@ export default function TimeInterval({
                     >
                         {index > 0 ? <span className="time-interval-sep" aria-hidden="true">:</span> : null}
                         <div className="time-interval-field">
-                            <input
+                            <NumberInput
                                 id={`${baseId}-${unit}`}
-                                className="input"
-                                type="number"
                                 inputMode={unit === backendUnit && !Number.isInteger(step) ? 'decimal' : 'numeric'}
                                 min={0}
                                 step={unit === backendUnit ? step : 1}
                                 value={draftParts[unit]}
-                                style={{textAlign: 'left'}}
+                                suffix={UNIT_LABELS[unit]}
                                 onChange={onUnitChange(unit)}
                                 onFocus={onFocus(unit)}
                                 onClick={onClick(unit)}
@@ -309,7 +308,6 @@ export default function TimeInterval({
                                 aria-invalid={ariaInvalid || undefined}
                                 aria-describedby={ariaDescribedBy}
                             />
-                            <span className="time-interval-unit" aria-hidden="true">{UNIT_LABELS[unit]}</span>
                             {isCoarsestUnit && canRemoveCoarsestUnit ? (
                                 <button
                                     type="button"
@@ -321,7 +319,7 @@ export default function TimeInterval({
                                     style={{
                                         position: 'absolute',
                                         top: 3,
-                                        right: 3,
+                                        right: 'calc(var(--number-input-stepper-width) + 3px)',
                                         zIndex: 1,
                                         display: 'grid',
                                         width: 16,

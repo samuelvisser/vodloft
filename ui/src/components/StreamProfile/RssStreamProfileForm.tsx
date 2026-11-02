@@ -6,6 +6,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import ReadMore from '../../utils/ReadMore'
 import {RssHlsOutputModes, RssVideoOutputModeReg} from '../../types/stream_profile'
 import {faIcon} from '../../icons/faIcon'
+import NumberInput from '../common/NumberInput'
 
 
 const VIDEO_FORMATS = new Set(['format_4k', 'format_1080p', 'format_720p', 'format_hls'])
@@ -83,10 +84,8 @@ export default function RssStreamProfileForm({
         <>
             <div className="form-row">
                 <label htmlFor="rss-max-items">Maximum episodes in RSS feed</label>
-                <input
+                <NumberInput
                     id="rss-max-items"
-                    className="input"
-                    type="number"
                     inputMode="numeric"
                     min={0}
                     step={1}
