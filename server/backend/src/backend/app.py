@@ -264,6 +264,7 @@ def create_app() -> FastAPI:
         logs_router,
         user_router,
         import_router,
+        assets_router,
     )
     from backend.api.endpoints.auth.router import router as auth_router
 
@@ -301,5 +302,6 @@ def create_app() -> FastAPI:
     app.include_router(task_router, prefix="/api")
     app.include_router(logs_router, prefix="/api")
     app.include_router(user_router, prefix="/api")
+    app.include_router(assets_router, prefix="/api")
 
     return app

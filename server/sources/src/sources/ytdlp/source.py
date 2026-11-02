@@ -356,6 +356,11 @@ class YtDlpSource(Source):
             raise runner.YtDlpError("This link is a playlist or channel, not a single video")
         return self._video(info, url)
 
+    def first_frame(self, url: str, image_url: str | None) -> bytes | None:
+        if not thumbnails.still_missing(image_url):
+            return None
+        return thumbnails.first_frame(url)
+
     def video_formats(self, url: str) -> VideoFormats:
         info = self._info(url)
         if info.get("_type") == "playlist":

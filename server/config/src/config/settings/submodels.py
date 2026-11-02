@@ -466,6 +466,11 @@ class DownloadSettings(SubmodelBase):
         description="Directory where quick downloads are prepared and kept until they are fetched. "
                     "Inside the download root by default, so ready files survive a container update",
     )
+    thumbnail_root: Path = Field(
+        default_factory=lambda data: data["download_root"] / ".vodloft-thumbnails",
+        description="Directory where VODLoft keeps the thumbnails it makes itself, such as a video's first frame "
+                    "when the video has no thumbnail of its own",
+    )
     rss_cache_retention_seconds: int = Field(
         default=7 * 24 * 60 * 60,
         ge=1,
@@ -498,6 +503,9 @@ class DownloadSettings(SubmodelBase):
     )(_validate_non_empty_path)
     _validate_quick_download_root = field_validator(
         "quick_download_root", mode="before"
+    )(_validate_non_empty_path)
+    _validate_thumbnail_root = field_validator(
+        "thumbnail_root", mode="before"
     )(_validate_non_empty_path)
 
 

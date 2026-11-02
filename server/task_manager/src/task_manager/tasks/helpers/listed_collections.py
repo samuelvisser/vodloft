@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Season, Collection
 from backend.services.seasons import create_season_record
+from backend.services.thumbnails import is_own_thumbnail
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
 from backend.types.collection_types import EpisodeIdentifier
@@ -282,7 +283,8 @@ def refresh_listed_collection(s: Session, *, collection_id: int, source: Source)
             episode.removed_from_source = False
             returned += 1
         changes = {"title": details.title, "description": details.description, "author_name": details.author_name}
-        if details.image_url:
+        # A frame VODLoft took stays until the Source has a picture again; refreshes do not say which.
+        if details.image_url and not is_own_thumbnail(episode.thumbnail_landscape_path):
             changes |= {"thumbnail_landscape_path": details.image_url, "background_image_path": details.image_url}
         changed = False
         for name, value in changes.items():

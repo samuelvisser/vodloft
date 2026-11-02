@@ -6,6 +6,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from backend.db.models import Video
+from backend.services.thumbnails import is_own_thumbnail
 from backend.types.media_types import MediaType
 from backend.utils.helpers import generate_uuid
 from sources import VideoDetails
@@ -29,9 +30,10 @@ def apply_video_details(video: Video, details: VideoDetails) -> None:
     video.published_at = details.published_at
     video.drm_protected = details.drm_protected
     video.needs_subscription = details.needs_subscription
-    # Video thumbnails are landscape; they double as the page background.
-    video.thumbnail_landscape_path = details.image_url
-    video.background_image_path = details.image_url
+    # Video thumbnails are landscape; they double as the page background. A frame VODLoft took stays.
+    if not is_own_thumbnail(video.thumbnail_landscape_path):
+        video.thumbnail_landscape_path = details.image_url
+        video.background_image_path = details.image_url
 
 
 def index_video(s: Session, source_key: str, details: VideoDetails) -> tuple[Video, bool]:

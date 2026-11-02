@@ -10,6 +10,7 @@ from fastapi import HTTPException, Request
 from sqlalchemy import and_, exists, false, func, or_, select, true
 from sqlalchemy.orm import object_session, Session, joinedload
 
+from backend.services.thumbnails import is_own_thumbnail
 from backend.api.models.rss_stream_profile import RssStreamProfileAPIRead
 from backend.db.datetime_types import utc_datetime
 from backend.utils.episode import episode_identifier_type_predicate
@@ -1031,7 +1032,8 @@ def _append_item(
         or episode.thumbnail_landscape_path
         or episode.thumbnail_portrait_path
     )
-    if image_url:
+    # A thumbnail VODLoft made needs a signed-in browser, which a podcast app is not.
+    if image_url and not is_own_thumbnail(image_url):
         SubElement(item, "itunes:image", {"href": image_url})
 
 

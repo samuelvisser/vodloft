@@ -91,6 +91,7 @@ SettingFieldPath = Literal[
     "downloadSettings.temporaryDownloadRoot",
     "downloadSettings.rssCacheRoot",
     "downloadSettings.quickDownloadRoot",
+    "downloadSettings.thumbnailRoot",
     "downloadSettings.rssCacheRetentionSeconds",
     "downloadSettings.filenameRestrictionMode",
     "downloadSettings.remuxVideoToMp4",
@@ -182,6 +183,7 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "downloadSettings.temporaryDownloadRoot",
     "downloadSettings.rssCacheRoot",
     "downloadSettings.quickDownloadRoot",
+    "downloadSettings.thumbnailRoot",
     "downloadSettings.rssCacheRetentionSeconds",
     "downloadSettings.filenameRestrictionMode",
     "downloadSettings.remuxVideoToMp4",
@@ -356,6 +358,7 @@ class DownloadSettingsValue(_SettingsValueModel):
     temporary_download_root: Path
     rss_cache_root: Path
     quick_download_root: Path
+    thumbnail_root: Path
     rss_cache_retention_seconds: int = Field(ge=1)
     filename_restriction_mode: FilenameRestrictionMode
     remux_video_to_mp4: bool
@@ -372,6 +375,9 @@ class DownloadSettingsValue(_SettingsValueModel):
     )(_validate_non_empty_path)
     _validate_quick_download_root = field_validator(
         "quick_download_root", mode="before"
+    )(_validate_non_empty_path)
+    _validate_thumbnail_root = field_validator(
+        "thumbnail_root", mode="before"
     )(_validate_non_empty_path)
 
 
