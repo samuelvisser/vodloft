@@ -409,6 +409,13 @@ class Source(ABC):
         """A title and image for a link, faster than ``resolve``, or None when this Source has no faster way."""
         return None
 
+    def first_frame(self, url: str, image_url: str | None) -> bytes | None:
+        """A JPEG from the start of a video whose own picture, ``image_url``, is missing.
+
+        None when the picture is there, or when this Source cannot take a frame.
+        """
+        return None
+
     def episode_media(
         self, *, slug: str, members_only: bool, interactive: bool = False,
     ) -> EpisodeMedia:

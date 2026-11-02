@@ -4,6 +4,7 @@ from backend.api.models.media_download import MediaDownloadAPICreate
 from backend.api.models.operations import MediaDownloadOperationAccepted
 from backend.api.models.video import VideoAPICreate, VideoAPIRead
 from backend.app import db_session
+from backend.services.thumbnails import take_first_frames
 from backend.services.videos import apply_video_details, index_video
 from task_manager.scheduler.types import OperationSource
 from task_manager.tasks.media_download_operations import (
@@ -41,12 +42,13 @@ def video_create(body: VideoAPICreate, access: Access = signed_in()):
     with db_session() as s:
         try:
             video, _ = index_video(s, source.id, details)
-            payload = VideoAPIRead.model_validate(video)
+            video_id = video.id
             s.commit()
-            return payload
         except Exception:
             s.rollback()
             raise
+        take_first_frames(s, [video_id])
+        return VideoAPIRead.model_validate(get_video_record(s, video_id))
 
 
 @router.get("/{video_id}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=VideoAPIRead)
@@ -66,13 +68,12 @@ def video_refresh(video_id: int):
         try:
             video = get_video_record(s, video_id)
             apply_video_details(video, details)
-            s.flush()
-            payload = VideoAPIRead.model_validate(video)
             s.commit()
-            return payload
         except Exception:
             s.rollback()
             raise
+        take_first_frames(s, [video_id])
+        return VideoAPIRead.model_validate(get_video_record(s, video_id))
 
 
 @router.post(

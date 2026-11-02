@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Season, Collection
 from backend.services.collection_assets import update_collection_artwork_metadata
+from backend.services.thumbnails import newest_media_item_id, take_first_frames
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.collection_types import EpisodeIdentifier
@@ -483,6 +484,7 @@ def _index_listed_collection(s: Session, *, collection: Collection, source: Sour
     result = CollectionEpisodeScanResult(collection_id=collection.id, collection_slug=collection.slug, collection_title=collection.title, episodes_found=0)
     from backend.services.custom_indexes import request_collection_custom_index_reconciliation
     collection_id = collection.id
+    newest = newest_media_item_id(s)
     try:
         found = index_listed_collection(s, collection_id=collection_id, source=source, progress=progress, dry_run=dry_run)
         if dry_run:
@@ -496,7 +498,14 @@ def _index_listed_collection(s: Session, *, collection: Collection, source: Sour
     except Exception:
         s.rollback()
         raise
+    if found:
+        take_first_frames(s, _episodes_after(s, collection_id, newest))
     return replace(result, episodes_found=found)
+
+
+def _episodes_after(s: Session, collection_id: int, newest: int) -> list[int]:
+    """The collection's episodes added after the media item ``newest``."""
+    return list(s.scalars(select(Episode.id).where(Episode.collection_id == collection_id, Episode.id > newest)))
 
 
 def _announce_new_episodes(

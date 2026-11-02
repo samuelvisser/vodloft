@@ -18,7 +18,8 @@ from backend.db.models import Episode, Collection
 from config.network import is_no_internet_error
 from sources import Feature, Source, get_source
 from ...helpers.listed_collections import add_listed_episodes, known_episode_slugs
-from .service import _index_listed_collection, _queue_collection_indexed
+from backend.services.thumbnails import newest_media_item_id, take_first_frames
+from .service import _episodes_after, _index_listed_collection, _queue_collection_indexed
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,7 @@ def _check_collection(s: Session, *, collection: Collection, source: Source) -> 
     if not new:
         return 0
     found = [details for details in source.item_details(new).values() if details is not None]
+    newest = newest_media_item_id(s)
     added = add_listed_episodes(s, collection_id=collection_id, found=found)
     if added:
         from backend.services.custom_indexes import request_collection_custom_index_reconciliation
@@ -76,6 +78,8 @@ def _check_collection(s: Session, *, collection: Collection, source: Source) -> 
         request_collection_custom_index_reconciliation(s, collection_id)
         _queue_collection_indexed(s, collection=s.get(Collection, collection_id), indexed_count=added)
     s.commit()
+    if added:
+        take_first_frames(s, _episodes_after(s, collection_id, newest))
     return added
 
 

@@ -95,6 +95,7 @@ const DownloadSettingsSchema = z.object({
     temporaryDownloadRoot: z.string(),
     rssCacheRoot: z.string(),
     quickDownloadRoot: z.string(),
+    thumbnailRoot: z.string(),
     rssCacheRetentionSeconds: z.number(),
     filenameRestrictionMode: FilenameRestrictionModeSchema,
     remuxVideoToMp4: z.boolean(),
@@ -245,6 +246,7 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
         temporaryDownloadRoot: z.string().trim().min(1, 'A temporary download folder is required.'),
         rssCacheRoot: z.string().trim().min(1, 'An RSS cache folder is required.'),
         quickDownloadRoot: z.string().trim().min(1, 'A quick download folder is required.'),
+        thumbnailRoot: z.string().trim().min(1, 'A thumbnail folder is required.'),
         rssCacheRetentionSeconds: requiredNumber().int().min(1, 'Must be at least 1 second.'),
     }),
     youtubeApi: YouTubeApiSettingsSchema.extend({
@@ -342,6 +344,7 @@ export const SETTINGS_FIELD_PATHS = [
     'downloadSettings.temporaryDownloadRoot',
     'downloadSettings.rssCacheRoot',
     'downloadSettings.quickDownloadRoot',
+    'downloadSettings.thumbnailRoot',
     'downloadSettings.rssCacheRetentionSeconds',
     'downloadSettings.filenameRestrictionMode',
     'downloadSettings.remuxVideoToMp4',
