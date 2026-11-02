@@ -145,6 +145,11 @@ def scheduled_work_is_paused_by(owner_key: str) -> bool:
         return owner_key in _scheduled_work_pause_owners
 
 
+def scheduler_running() -> bool:
+    """Whether the scheduler that runs VODLoft's tasks has started and not stopped. A pause still counts as running."""
+    return _scheduler is not None and _scheduler.running
+
+
 def _reset_scheduled_work_pauses() -> None:
     global _resume_scheduled_work_when_clear
 

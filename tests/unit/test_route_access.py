@@ -51,10 +51,12 @@ def test_every_api_route_declares_the_access_it_needs():
     assert undeclared == [], "Add requires(...) or signed_in() to: " + ", ".join(undeclared)
 
 
-def test_public_api_paths_are_only_signing_in_and_public_config():
+def test_public_api_paths_are_only_signing_in_public_config_and_health():
     from backend.app import PUBLIC_API_PATHS
 
-    assert PUBLIC_API_PATHS == {"/api/auth/status", "/api/auth/login", "/api/auth/logout", "/api/config/public"}
+    assert PUBLIC_API_PATHS == {
+        "/api/auth/status", "/api/auth/login", "/api/auth/logout", "/api/config/public", "/api/health", "/api/metrics",
+    }
 
 
 # Per template, through the real app ------------------------------------------

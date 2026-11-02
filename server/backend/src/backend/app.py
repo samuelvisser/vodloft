@@ -35,6 +35,9 @@ PUBLIC_API_PATHS = frozenset({
     "/api/auth/login",
     "/api/auth/logout",
     "/api/config/public",
+    # For Docker's health check and Prometheus; they only report health and counts.
+    "/api/health",
+    "/api/metrics",
 })
 
 
@@ -265,6 +268,7 @@ def create_app() -> FastAPI:
         user_router,
         import_router,
         assets_router,
+        health_router,
     )
     from backend.api.endpoints.auth.router import router as auth_router
 
@@ -273,6 +277,7 @@ def create_app() -> FastAPI:
 
     # Keep podcast feed endpoints outside of /api to prevent authentication
     app.include_router(feeds_router)
+    app.include_router(health_router, prefix="/api")
 
     # Protected API endpoints (shielded by middleware above)
     app.include_router(dailywire_router, prefix="/api")

@@ -282,7 +282,11 @@ def refresh_listed_collection(s: Session, *, collection_id: int, source: Source)
         if episode.removed_from_source:
             episode.removed_from_source = False
             returned += 1
-        changes = {"title": details.title, "description": details.description, "author_name": details.author_name}
+        changes = {
+            "title": details.title, "description": details.description, "author_name": details.author_name,
+            # A length of zero means the Source did not say.
+            "duration": details.duration or None,
+        }
         # A frame VODLoft took stays until the Source has a picture again; refreshes do not say which.
         if details.image_url and not is_own_thumbnail(episode.thumbnail_landscape_path):
             changes |= {"thumbnail_landscape_path": details.image_url, "background_image_path": details.image_url}

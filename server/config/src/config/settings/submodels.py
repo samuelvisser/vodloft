@@ -224,6 +224,20 @@ class AdminAuthSettings(SubmodelBase):
         return self
 
 
+class HealthSettings(SubmodelBase):
+    """The health check at /api/health and the optional Prometheus metrics at /api/metrics."""
+
+    metrics_enabled: bool = Field(
+        default=False,
+        description="Serve Prometheus metrics at /api/metrics, without signing in",
+    )
+    min_free_disk_mb: int = Field(
+        default=1024,
+        ge=0,
+        description="The health check warns when the download folder has less free space than this, in MB",
+    )
+
+
 class YouTubeApiSettings(SubmodelBase):
     """How VODLoft spends the daily quota of an optional YouTube Data API key.
 
