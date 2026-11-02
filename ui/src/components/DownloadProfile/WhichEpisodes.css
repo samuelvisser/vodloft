@@ -51,6 +51,7 @@
     gap: 8px;
     padding: 12px 14px;
     min-width: 0;
+    cursor: pointer;
 }
 
 .which-episodes-text {
@@ -204,8 +205,10 @@
 }
 
 @media (max-width: 640px) {
+    /* The sentence takes the whole row; its count and icons go under it, on the right. */
     .which-episodes-sentence {
         flex-wrap: wrap;
+        justify-content: flex-end;
     }
 
     .which-episodes-text {

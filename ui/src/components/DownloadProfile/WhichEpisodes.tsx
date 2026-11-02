@@ -1,4 +1,4 @@
-import {Fragment, useMemo, useRef, useState, type ReactNode} from 'react'
+import {Fragment, useMemo, useRef, useState, type MouseEvent, type ReactNode} from 'react'
 import {useFieldArray, useWatch, type UseFormReturn} from 'react-hook-form'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 
@@ -59,6 +59,12 @@ function Sentence({parts}: {parts: Part[]}) {
                 : part.strong ? <b key={index}>{part.text}</b> : <Fragment key={index}>{part.text}</Fragment>)}
         </>
     )
+}
+
+/** Clicking a line's sentence opens or closes it, unless the click was on one of its controls. */
+function toggleFromSentence(event: MouseEvent<HTMLDivElement>, toggle: () => void) {
+    if ((event.target as HTMLElement).closest('button, a, input, select, textarea, [class*="select__"]')) return
+    toggle()
 }
 
 function CountBadge({count, label}: {count: number | undefined; label?: string}) {
@@ -155,7 +161,7 @@ export default function WhichEpisodes({
         const names = BUILT_IN_FIELDS[key]
         return (
             <li key={key} className={`which-episodes-line${isOpen ? ' is-open' : ''}`}>
-                <div className="which-episodes-sentence">
+                <div className="which-episodes-sentence" onClick={(event) => toggleFromSentence(event, () => isOpen ? closeLine(key) : openLine(key, names))}>
                     <span className="which-episodes-text"><Sentence parts={parts}/></span>
                     <CountBadge count={count} label={countLabel}/>
                     <button
@@ -225,7 +231,7 @@ export default function WhichEpisodes({
                     const parts = ruleSentence(rule)
                     return (
                         <li key={item.id} className={`which-episodes-line${isOpen ? ' is-open' : ''}`}>
-                            <div className="which-episodes-sentence">
+                            <div className="which-episodes-sentence" onClick={(event) => toggleFromSentence(event, () => isOpen ? closeLine(key) : openLine(key, [name]))}>
                                 {isOpen ? (
                                     <span className="which-episodes-text which-episodes-rule-head">
                                         <SimpleSelect
