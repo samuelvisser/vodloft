@@ -121,6 +121,7 @@ def test_metadata_refresh_timing_explicitly_prefers_safe_final(monkeypatch, has_
     safe_final = datetime(2026, 10, 2, 9, 3, tzinfo=timezone.utc)
     episode = SimpleNamespace(
         id=42,
+        source_key="dailywire",
         metadata_is_final=False,
         publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
         safe_published_final=safe_final if has_safe_final else None,
@@ -171,6 +172,7 @@ def test_metadata_refresh_timing_ignores_ensure_safe_delay_setting(monkeypatch):
     last_known_pending = datetime(2026, 10, 2, 9, tzinfo=timezone.utc)
     episode = SimpleNamespace(
         id=42,
+        source_key="dailywire",
         metadata_is_final=False,
         publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
         safe_published_final=None,
@@ -234,6 +236,7 @@ def test_episode_metadata_refresh_creates_operation_and_queues_worker(monkeypatc
 
     episode = SimpleNamespace(
         id=17,
+        source_key="dailywire",
         slug="test-episode",
         title="Test Episode",
         collection_id=3,
@@ -294,7 +297,7 @@ def test_collection_metadata_refresh_creates_one_operation_for_all_episode_targe
     from backend.api.endpoints.collections import service
     from backend.db.models import Episode, Collection
 
-    collection = SimpleNamespace(id=9, slug="test-collection", title="Test Show")
+    collection = SimpleNamespace(id=9, source_key="dailywire", slug="test-collection", title="Test Show")
     episodes = [
         SimpleNamespace(id=1, metadata_is_final=True),
         SimpleNamespace(id=2, metadata_is_final=True),
@@ -442,6 +445,7 @@ def test_explicit_metadata_refresh_does_not_take_ownership_of_non_final_episode(
 
     episode = SimpleNamespace(
         id=21,
+        source_key="dailywire",
         metadata_is_final=False,
         publish_status=EpisodePublishStatus.LIVE.value,
     )

@@ -21,6 +21,7 @@ from backend.api.endpoints.media_downloads.service import create_new_episode_dow
 from config import get_settings
 from sources import UnknownSourceError, get_source
 from backend.services.custom_indexes import request_collection_custom_index_reconciliation
+from backend.services.episode_metadata_refresh import refreshes_episode_metadata
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.episode import episode_identifier_type_predicate
 from backend.utils.episode_download_scope import EpisodeDownloadScope
@@ -275,6 +276,11 @@ def request_collection_metadata_refresh(
     )
     if collection is None:
         raise HTTPException(status_code=404, detail="Collection not found")
+    if not refreshes_episode_metadata(collection.source_key):
+        raise HTTPException(
+            status_code=409,
+            detail=f"The episodes of {collection.title} are kept up to date by the daily catalogue refresh",
+        )
 
     episodes = (
         s.query(Episode)

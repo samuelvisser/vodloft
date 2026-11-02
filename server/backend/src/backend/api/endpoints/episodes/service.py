@@ -4,6 +4,7 @@ from typing import Optional, Sequence
 
 from sqlalchemy.orm import Session
 from backend.services.custom_indexes import request_collection_custom_index_reconciliation
+from backend.services.episode_metadata_refresh import refreshes_episode_metadata
 from sqlalchemy import and_, case, func, or_, select
 
 from fastapi import HTTPException
@@ -311,6 +312,11 @@ def request_episode_metadata_refresh(
     )
     if episode is None:
         raise HTTPException(status_code=404, detail="Episode not found")
+    if not refreshes_episode_metadata(episode.source_key):
+        raise HTTPException(
+            status_code=409,
+            detail="This episode is kept up to date by the daily catalogue refresh",
+        )
 
     target = OperationTargetSpec(
         task_key=_METADATA_REFRESH_TASK_KEY,
