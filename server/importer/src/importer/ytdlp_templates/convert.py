@@ -47,6 +47,8 @@ class ConversionOptions:
     """Fields the importer knows a value for, by yt-dlp name."""
     metadata_actions: tuple[MetadataAction, ...] = ()
     """``--parse-metadata`` and ``--replace-in-metadata``, in the order yt-dlp runs them."""
+    root: str = "/downloads/"
+    """The VODLoft folder that is the download folder of the template, ending in ``/``."""
 
 
 def options_from(option_set: OptionSet, **overrides: object) -> ConversionOptions:
@@ -141,6 +143,11 @@ _PINCHFLAT_VALUES: dict[str, FieldValue] = {
         reason="Imported numbers are kept; new days start at 99 like Pinchflat, and a second upload that day gets 98",
     ),
 }
+# Pinchflat counts a playlist's uploads of one day up from 0, and a channel's down from 99.
+_PLAYLIST_UPLOAD_DATE_INDEX = FieldValue(
+    "'%02d' | format('day' | custom_index(per=date, start=0))", always=True, support="close",
+    reason="Imported numbers are kept; a playlist's uploads of one day count up from 0 like Pinchflat",
+)
 _PINCHFLAT_IDS = frozenset({"media_item_id", "source_id", "media_profile_id"})
 
 # VODLoft's Collection template variables. A metadata action that changes a
@@ -159,6 +166,19 @@ _MATCH = "ytdlp_match"
 # strftime formats that a VODLoft variable already gives.
 _DATE_VARIABLES = {"%Y": "year", "%m": "month", "%d": "day", "%Y-%m-%d": "date"}
 _TIME_VARIABLES = {"%H": "hour", "%M": "minute", "%S": "second", "%H:%M:%S": "time"}
+
+
+def _index_plan(key: str, expression: str) -> CustomIndexPlan:
+    """The Custom Index ``expression`` uses for ``key``, with its start= and step=."""
+    plan = _INDEXES[key]
+    call = re.search(rf"'{key}' \| custom_index(?:\((?P<args>[^)]*)\))?", expression)
+    args = call.group("args") or "" if call else ""
+    start = re.search(r"\bstart=(-?\d+)", args)
+    step = re.search(r"\bstep=(-?\d+)", args)
+    return CustomIndexPlan(
+        plan.key, plan.name, plan.keep_numbers,
+        start=int(start.group(1)) if start else 1, step=int(step.group(1)) if step else 1,
+    )
 
 
 def _expression(source: str) -> nodes.Expr:
@@ -223,7 +243,7 @@ class _Converter:
         if "custom_index" in value.expression:
             for key in _INDEXES:
                 if f"'{key}' | custom_index" in value.expression:
-                    self.indexes[key] = _INDEXES[key]
+                    self.indexes[key] = _index_plan(key, value.expression)
         built = _Built(_expression(value.expression), value.type, value.always, value.support,
                        [value.reason] if value.reason else [])
         if candidate.maths:
@@ -241,6 +261,8 @@ class _Converter:
                 if self.options.collection_type is None:
                     raise _Unsupported("the collection type is only known per Pinchflat source")
                 return FieldValue(repr(self.options.collection_type), always=True)
+            if item == "media_upload_date_index" and self.options.collection_type == "playlist":
+                return _PLAYLIST_UPLOAD_DATE_INDEX
             if item in _PINCHFLAT_VALUES:
                 return _PINCHFLAT_VALUES[item]
             raise _Unsupported(f"Pinchflat has no value called {item}")
@@ -597,7 +619,8 @@ def convert_ytdlp(template: str, options: ConversionOptions | None = None, *, or
         parts[-1] = Text(parts[-1].text[:-1], parts[-1].start)
 
     prelude, assignments, action_reports = _prelude(converter, options.metadata_actions, parsed)
-    output: list[str] = [*prelude, "/downloads/"]
+    root = options.root if options.root.endswith("/") else options.root + "/"
+    output: list[str] = [*prelude, root]
     expressions: list[nodes.Expr] = []
     for index, part in enumerate(parts):
         if isinstance(part, Text):
@@ -632,7 +655,7 @@ def convert_ytdlp(template: str, options: ConversionOptions | None = None, *, or
     except (JinjaSyntaxError, UnsafeEdit):
         return ConversionReport(original, template, None, tuple(report.parts), actions=action_reports,
                                 errors=("The converted template does not read back as it was written",))
-    if output_template.endswith("/downloads/.ext"):
+    if output_template.endswith(root + ".ext"):
         return ConversionReport(original, template, None, tuple(report.parts), actions=action_reports,
                                 errors=("Nothing of the file name is left after conversion",))
     return ConversionReport(

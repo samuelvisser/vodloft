@@ -27,6 +27,8 @@ _WORKER_EXPORTS = {
     "fetch_new_episodes": ".workers.fetch_new_episodes",
     "monitor_no_usable_media_episode": ".workers.monitor_no_usable_media_episode",
     "scan_existing_files": ".workers.scan_existing_files",
+    "import_run": ".workers.import_run",
+    "import_adopt_files": ".workers.import_run",
     "manage_custom_indexes": ".workers.manage_custom_indexes",
     "file_watcher": ".workers.file_watcher",
     "trigger_task_worker": ".workers.trigger_task_worker",

@@ -66,3 +66,20 @@ episodes that still have no file.
 
 Adopted files keep their names. To give them the profile's names, choose **Rename to this profile's template**,
 which runs the collection's file rename for that profile.
+
+## Importing from Pinchflat
+
+Administrators can import a Pinchflat installation from **Settings → Import**. Upload Pinchflat's config folder
+(or a zip of it); VODLoft keeps only `db/pinchflat.db` and the yt-dlp option files, and skips `cookies.txt` and
+your YouTube API key unless you choose to bring them.
+
+The preview shows which folder VODLoft found Pinchflat's downloads under, each source as a new or existing
+collection, each media profile as a profile with the template it becomes, and whether rendering that template gives
+the same paths Pinchflat recorded. Nothing changes until you start the import.
+
+The import creates the collections and profiles, then adopts every downloaded file at the path Pinchflat recorded,
+as soon as the collection has its episodes. Videos you told Pinchflat not to download stay skipped. Download
+Profiles stay off until all files are adopted; they then turn on if you asked for that and the source was enabled.
+
+You can run the import again. Anything you changed in VODLoft since the last run is kept, and settings a newer
+VODLoft can map, which it reported as unsupported before, are brought over.

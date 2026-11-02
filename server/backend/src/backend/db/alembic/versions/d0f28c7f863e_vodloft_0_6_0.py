@@ -11,7 +11,8 @@ resource types, task arguments and output template variables) is rewritten to
 its Collection name.
 
 Episodes also store who uploaded them, for the episode_uploader template value,
-and existing_file_scans keeps the files found on disk for a Collection.
+existing_file_scans keeps the files found on disk for a Collection, and
+import_runs, import_links and import_steps record what each import did.
 """
 from __future__ import annotations
 
@@ -359,14 +360,77 @@ def _create_existing_file_scans() -> None:
     op.create_index("ix_existing_file_scans_local_media_profile_id", "existing_file_scans", ["local_media_profile_id"])
 
 
+def _create_imports() -> None:
+    op.create_table(
+        "import_runs",
+        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+        sa.Column("importer", sa.String(32), nullable=False, comment="The importer's key, such as pinchflat"),
+        sa.Column("status", sa.String(16), nullable=False, comment="running, waiting, finished or failed"),
+        sa.Column("options", sa.JSON(), nullable=False, comment="What the person chose in the preview"),
+        sa.Column("uploaded_at", sa.DateTime(), nullable=True, comment="When the imported upload was taken"),
+        sa.Column("version", sa.String(64), nullable=True, comment="The other program's database version"),
+        sa.Column("report", sa.JSON(), nullable=False, comment="One entry per change and warning"),
+        sa.Column("counts", sa.JSON(), nullable=False),
+        sa.Column("error", sa.Text(), nullable=True),
+        sa.Column("created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+        sa.Column("finished_at", sa.DateTime(), nullable=True),
+    )
+    op.create_index("ix_import_runs_importer", "import_runs", ["importer"])
+    op.create_table(
+        "import_links",
+        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+        sa.Column("importer", sa.String(32), nullable=False),
+        sa.Column("kind", sa.String(32), nullable=False, comment="profile, collection, download_profile or setting"),
+        sa.Column("external_id", sa.String(255), nullable=False, comment="The other program's own id"),
+        sa.Column("entity_id", sa.Integer(), nullable=True, comment="The VODLoft row, by its id in the kind's table"),
+        sa.Column("written", sa.JSON(), nullable=False, comment="Field to hash of the value written"),
+        sa.Column("unsupported", sa.JSON(), nullable=False, comment="Settings reported as not supported yet"),
+        sa.Column("run_id", sa.Integer(), sa.ForeignKey("import_runs.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+        sa.UniqueConstraint("importer", "kind", "external_id", name="uq_import_link_external"),
+    )
+    op.create_table(
+        "import_steps",
+        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+        sa.Column("run_id", sa.Integer(), sa.ForeignKey("import_runs.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("collection_id", sa.Integer(), sa.ForeignKey("collections.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "local_media_profile_id", sa.Integer(),
+            sa.ForeignKey("local_media_profiles.id", ondelete="CASCADE"), nullable=False,
+        ),
+        sa.Column(
+            "download_profile_id", sa.Integer(),
+            sa.ForeignKey("download_profiles.id", ondelete="SET NULL"), nullable=True,
+        ),
+        sa.Column(
+            "enable_download_profile", sa.Boolean(), nullable=False,
+            comment="Switch the Download Profile on once the files are adopted",
+        ),
+        sa.Column("status", sa.String(16), nullable=False, comment="waiting, done or failed"),
+        sa.Column("files", sa.JSON(), nullable=False, comment="The planned files, as the plan has them"),
+        sa.Column("result", sa.JSON(), nullable=False),
+        sa.Column("created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+        sa.UniqueConstraint("run_id", "collection_id", "local_media_profile_id", name="uq_import_step_scope"),
+    )
+    op.create_index("ix_import_steps_run_id", "import_steps", ["run_id"])
+    op.create_index("ix_import_steps_collection_id", "import_steps", ["collection_id"])
+
+
 def upgrade() -> None:
     _rename_schema(reverse=False)
     _rename_values(reverse=False)
     _add_episode_uploader()
     _create_existing_file_scans()
+    _create_imports()
 
 
 def downgrade() -> None:
+    op.drop_table("import_steps")
+    op.drop_table("import_links")
+    op.drop_table("import_runs")
     op.drop_table("existing_file_scans")
     _drop_episode_uploader()
     _rename_values(reverse=True)

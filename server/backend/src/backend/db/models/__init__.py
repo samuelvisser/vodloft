@@ -20,6 +20,7 @@ from .CollectionLocalAsset import CollectionLocalAsset
 from .Metadata import Metadata
 from .CustomIndexState import CustomIndexState
 from .ExistingFileScan import ExistingFileScan
+from .ImportRun import ImportLink, ImportRun, ImportStep
 
 from .download_profile import DownloadProfile
 from .media_download import MediaDownloadBase
