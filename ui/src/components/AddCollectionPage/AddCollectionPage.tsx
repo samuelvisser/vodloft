@@ -5,6 +5,9 @@ import CollectionActionStep, {CollectionAction} from './CollectionActionStep'
 import LocalMediaProfileStep from './LocalMediaProfileStep'
 import DownloadProfileStep from './DownloadProfileStep'
 import StreamProfileStep from './StreamProfileStep'
+import ExistingFilesStep, {defaultExistingFilesFolder, type ExistingFilesChoice} from './ExistingFilesStep'
+import {layoutTemplate} from '../ExistingFiles/ExistingFilesSetup'
+import {useNavigate} from 'react-router-dom'
 
 import type {Versioned} from '../../types/data'
 import {CollectionCreatePayloadOut, CollectionCreatePayloadIn, CollectionCreatePayloadSchema} from "../../types/schemas/collection";
@@ -28,11 +31,11 @@ export type Props = {
     initialUrl?: string
 }
 
-const STORAGE_KEY = 'addCollectionWizardV10'
+const STORAGE_KEY = 'addCollectionWizardV11'
 
 type WizardType = 'ERROR' | 'INFO'
 type WizardMessage = { text: string; type: WizardType }
-type WizardStep = 1 | 2 | 3 | 4 | 5
+type WizardStep = 1 | 2 | 3 | 4 | 5 | 6
 
 type WizardState = {
     step: WizardStep
@@ -55,6 +58,7 @@ type WizardState = {
         episodeTypesManuallyChanged?: boolean,
     }
     seasons: SeasonDetachedOut[] | undefined,
+    existingFiles?: ExistingFilesChoice,
     globalMessage?: WizardMessage | null
 }
 
@@ -121,6 +125,7 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
     const setWizardMessage = (message: string, type: WizardType) => setGlobalMessage({text: message, type})
     const clearWizardMessage = () => setGlobalMessage(null)
     const qc = useQueryClient()
+    const navigate = useNavigate()
     const sources = useSourceLookup()
 
     const [step, setStep] = useState<WizardStep>(() => persisted?.step ?? 1)
@@ -151,6 +156,9 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
     )
 
     const [seasonsSubmit, setSeasonsSubmit] = useState<SeasonDetachedOut[] | undefined>(() => persisted?.seasons ?? [])
+    const [existingFiles, setExistingFiles] = useState<ExistingFilesChoice>(
+        () => persisted?.existingFiles ?? {enabled: false, folder: '', template: ''},
+    )
 
     // The episode tags to download by default come from the show's Source once the show is chosen.
     const {data: collectionEpisodeTags} = useEpisodeTags(collectionSubmit?.sourceKey, collectionSubmit?.sharingUrl)
@@ -198,9 +206,10 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
                 episodeTypesManuallyChanged: streamEpisodeTypesManuallyChanged,
             },
             seasons: seasonsSubmit,
+            existingFiles,
             globalMessage,
         })
-    }, [step, collectionAction, collectionInput, collectionSubmit, localMediaProfileInput, localMediaProfileSubmit,
+    }, [existingFiles, step, collectionAction, collectionInput, collectionSubmit, localMediaProfileInput, localMediaProfileSubmit,
         downloadProfileInput, downloadProfileSubmit, streamProfileInput, streamProfileSubmit, streamEpisodeTypesManuallyChanged,
         seasonsSubmit, globalMessage])
 
@@ -253,6 +262,12 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
             ...(localMediaProfile ? {localMediaProfile} : {}),
             ...(downloadProfile ? {downloadProfile} : {}),
             ...(streamProfile ? {streamProfile} : {}),
+            ...(downloadProfile && existingFiles.enabled ? {
+                existingFiles: {
+                    folder: existingFiles.folder.trim(),
+                    template: layoutTemplate(existingFiles.folder.trim(), existingFiles.template),
+                },
+            } : {}),
         }
 
         try {
@@ -286,6 +301,11 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
             qc.invalidateQueries({queryKey: ['seasons']}),
         ])
         clearWizardState()
+        if (downloadProfile && existingFiles.enabled) {
+            // The scan waits for the episodes; its review opens on the collection's page.
+            navigate(`/collection/${encodeURIComponent(collection.slug)}?existingFiles=open`)
+            return
+        }
         onCancel()
     }
 
@@ -304,12 +324,13 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
         setStep(3)
     }
 
-    const totalSteps = collectionAction === 'download-stream' ? 5 : collectionAction === 'download' ? 4 : collectionAction === 'stream' ? 3 : 2
+    const totalSteps = collectionAction === 'download-stream' ? 6 : collectionAction === 'download' ? 5 : collectionAction === 'stream' ? 3 : 2
     const stepTitle = step === 1 ? 'Choose collection'
         : step === 2 ? 'Choose what VODLoft should do'
         : collectionAction === 'stream' ? 'Stream Profile'
         : step === 3 ? 'Media Profile'
-        : step === 4 ? 'Download Profile'
+        : step === 4 ? 'Existing files'
+        : step === 5 ? 'Download Profile'
         : 'Stream Profile'
 
     return (
@@ -400,7 +421,13 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
                         }
                     }}
                     onBack={() => setStep(2)}
-                    onContinue={() => setStep(4)}
+                    onContinue={() => {
+                        setExistingFiles((current) => current.folder ? current : {
+                            ...current,
+                            folder: defaultExistingFilesFolder((localMediaProfileSubmit as {outputTemplate?: string} | undefined)?.outputTemplate),
+                        })
+                        setStep(4)
+                    }}
                     onCancel={handleCancel}
                     collectionSlug={collectionSubmit.slug}
                     collection={collectionSubmit}
@@ -409,6 +436,16 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
             )}
 
             {step === 4 && (collectionAction === 'download' || collectionAction === 'download-stream') && (
+                <ExistingFilesStep
+                    value={existingFiles}
+                    onChange={setExistingFiles}
+                    onBack={() => setStep(3)}
+                    onContinue={() => setStep(5)}
+                    onCancel={handleCancel}
+                />
+            )}
+
+            {step === 5 && (collectionAction === 'download' || collectionAction === 'download-stream') && (
                 <DownloadProfileStep
                     value={downloadProfileInput}
                     onChange={setDownloadProfileInput}
@@ -416,13 +453,13 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
                         setDownloadProfileSubmit(value)
                         downloadProfileSubmitRef.current = value
                     }}
-                    onBack={() => setStep(3)}
+                    onBack={() => setStep(4)}
                     onContinue={() => {
                         if (collectionAction === 'download') {
                             void handleFinish('download')
                             return
                         }
-                        setStep(5)
+                        setStep(6)
                     }}
                     onCancel={handleCancel}
                     collection={collectionSubmit}
@@ -431,7 +468,7 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
                 />
             )}
 
-            {step === 5 && collectionAction === 'download-stream' && (
+            {step === 6 && collectionAction === 'download-stream' && (
                 <StreamProfileStep
                     value={streamProfileInput}
                     onChange={setStreamProfileInput}
@@ -439,7 +476,7 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
                         setStreamProfileSubmit(value)
                         streamProfileSubmitRef.current = value
                     }}
-                    onBack={() => setStep(4)}
+                    onBack={() => setStep(5)}
                     onFinish={() => handleFinish('download-stream')}
                     onCancel={handleCancel}
                     collectionSlug={collectionSubmit?.slug}

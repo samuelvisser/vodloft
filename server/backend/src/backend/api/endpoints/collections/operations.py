@@ -11,6 +11,7 @@ _FETCH_EPISODES_TASK_KEY = "fetch_new_episodes"
 _REFRESH_METADATA_TASK_KEY = "refresh_episode_metadata"
 _RENAME_FILE_TASK_KEY = "rename_collection_profile_files"
 _DELETE_DOWNLOADS_TASK_KEY = "delete_collection_downloads_worker"
+_SCAN_EXISTING_FILES_TASK_KEY = "scan_existing_files"
 
 
 class _CollectionOperation(OperationDefinition[Collection]):
@@ -193,3 +194,18 @@ class CollectionRedownloadOperation(_CollectionDownloadMaintenanceOperation):
             **super().context(),
             "downloads_requested": self.download_count,
         }
+
+
+class CollectionExistingFilesScanOperation(_CollectionOperation):
+    kind = "collection.scan_existing_files"
+    task = _SCAN_EXISTING_FILES_TASK_KEY
+
+    def __init__(self, collection: Collection, *, local_media_profile_id: int) -> None:
+        super().__init__(collection)
+        self.local_media_profile_id = int(local_media_profile_id)
+
+    def task_kwargs(self) -> dict[str, object]:
+        return {"local_media_profile_id": self.local_media_profile_id}
+
+    def context(self) -> dict[str, object]:
+        return {**super().context(), "local_media_profile_id": self.local_media_profile_id}

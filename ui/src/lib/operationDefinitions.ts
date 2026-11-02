@@ -545,6 +545,22 @@ export const frontendOperationDefinitions = {
       return fileRenameSuccessMessage(operation, collectionTitle)
     },
   },
+  'collection.scan_existing_files': {
+    kind: 'collection.scan_existing_files',
+    resourceType: 'collection',
+    label: 'Existing files scan',
+    invalidate: (queryClient, operation, invalidations) => {
+      const collectionSlug = contextString(operation, 'collection_slug')
+      invalidations.push(
+        queryClient.invalidateQueries({queryKey: ['existingFiles', collectionSlug]}),
+        queryClient.invalidateQueries({queryKey: ['existingFilesScans', collectionSlug]}),
+      )
+    },
+    success: (operation) => {
+      const collectionTitle = contextString(operation, 'collection_title') || operation.title
+      return `Existing files for ${collectionTitle} are ready to review`
+    },
+  },
   'local_media_profile.manage_custom_indexes': {
     kind: 'local_media_profile.manage_custom_indexes',
     resourceType: 'local_media_profile',

@@ -19,6 +19,7 @@ from .Collection import Collection
 from .CollectionLocalAsset import CollectionLocalAsset
 from .Metadata import Metadata
 from .CustomIndexState import CustomIndexState
+from .ExistingFileScan import ExistingFileScan
 
 from .download_profile import DownloadProfile
 from .media_download import MediaDownloadBase

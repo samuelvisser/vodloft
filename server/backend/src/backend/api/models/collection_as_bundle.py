@@ -9,6 +9,7 @@ from backend.api.models.collection_local_media_profile import (
     CollectionLocalMediaProfileAPIUpdate,
 )
 from backend.api.models.rss_stream_profile import RssStreamProfileAPICreate
+from backend.api.models.existing_files import ExistingFilesSetup
 from backend.api.models.season import SeasonAPIRequestDetached
 from backend.api.models.collection import CollectionAPICreate
 
@@ -38,3 +39,5 @@ class CollectionAPICreateBundle(RequestBase):
     local_media_profile: Optional[CollectionLocalMediaProfileAPIUpsert] = Field(default=None, discriminator="op")
     download_profile: Optional[DownloadProfileAPICreateBundle] = None
     stream_profile: Optional[RssStreamProfileCreateInBundle] = None
+    existing_files: Optional[ExistingFilesSetup] = None
+    """Match the files in this folder once the episodes are indexed; the Download Profile waits for it."""

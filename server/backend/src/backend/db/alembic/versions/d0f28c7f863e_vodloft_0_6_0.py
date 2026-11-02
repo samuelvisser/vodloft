@@ -10,7 +10,8 @@ named a show (profile type, metadata owner, task keys, operation kinds,
 resource types, task arguments and output template variables) is rewritten to
 its Collection name.
 
-Episodes also store who uploaded them, for the episode_uploader template value.
+Episodes also store who uploaded them, for the episode_uploader template value,
+and existing_file_scans keeps the files found on disk for a Collection.
 """
 from __future__ import annotations
 
@@ -330,13 +331,43 @@ def _drop_episode_uploader() -> None:
         batch.drop_column("author_name")
 
 
+# Existing files -------------------------------------------------------------
+
+def _create_existing_file_scans() -> None:
+    op.create_table(
+        "existing_file_scans",
+        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+        sa.Column("collection_id", sa.Integer(), sa.ForeignKey("collections.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "local_media_profile_id", sa.Integer(),
+            sa.ForeignKey("local_media_profiles.id", ondelete="CASCADE"), nullable=False,
+        ),
+        sa.Column("folder", sa.Text(), nullable=False, comment="The scanned folder, as a /downloads/ path"),
+        sa.Column("template", sa.Text(), nullable=True, comment="The old layout's template, to read names with"),
+        sa.Column("status", sa.String(16), nullable=False, comment="waiting, scanning, ready, failed or finished"),
+        sa.Column("error", sa.Text(), nullable=True),
+        sa.Column("results", sa.JSON(), nullable=False),
+        sa.Column(
+            "held_download_profile_ids", sa.JSON(), nullable=False,
+            comment="Download Profiles switched on again when the scan is finished",
+        ),
+        sa.Column("created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+        sa.UniqueConstraint("collection_id", "local_media_profile_id", name="uq_existing_file_scan_scope"),
+    )
+    op.create_index("ix_existing_file_scans_collection_id", "existing_file_scans", ["collection_id"])
+    op.create_index("ix_existing_file_scans_local_media_profile_id", "existing_file_scans", ["local_media_profile_id"])
+
+
 def upgrade() -> None:
     _rename_schema(reverse=False)
     _rename_values(reverse=False)
     _add_episode_uploader()
+    _create_existing_file_scans()
 
 
 def downgrade() -> None:
+    op.drop_table("existing_file_scans")
     _drop_episode_uploader()
     _rename_values(reverse=True)
     _rename_schema(reverse=True)

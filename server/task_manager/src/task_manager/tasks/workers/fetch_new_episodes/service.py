@@ -546,6 +546,10 @@ def _queue_collection_indexed(s: Session, *, collection: Collection, indexed_cou
         "slug": collection.slug,
         "indexed_count": indexed_count,
     })
+    # A folder of existing files waited for these episodes before it could be matched.
+    from backend.services.existing_files import start_waiting_scans
+
+    start_waiting_scans(s, collection)
 
 
 def _completion_message(indexed_count: int, monitor_count: int) -> str:

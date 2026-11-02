@@ -17,6 +17,8 @@ from backend.api.models.collection_as_bundle import (
 from backend.db.models import Season, Collection, CollectionLocalMediaProfile
 from backend.db.models.download_profile import DownloadProfile
 from backend.db.models.stream_profile import RssStreamProfile
+from backend.services.adoption import AdoptionError
+from backend.services.existing_files import ExistingFilesError, request_scan
 from backend.utils.feed_urls import build_rss_feed_url
 from backend.utils.helpers import generate_stream_profile_token
 from task_manager.scheduler.requester import current_requester
@@ -89,6 +91,7 @@ def create_collection_bundle(s: Session, request: Request, payload: CollectionAP
     if payload.local_media_profile is not None:
         local_media_profile = upsert_collection_local_media_profile(s, payload.local_media_profile)
 
+    download_profile: Optional[DownloadProfile] = None
     if payload.download_profile is not None:
         if local_media_profile is None:
             raise ValueError("A local media profile is required when creating a download profile")
@@ -131,6 +134,17 @@ def create_collection_bundle(s: Session, request: Request, payload: CollectionAP
         s.add(stream_profile)
 
     s.flush()
+    if payload.existing_files is not None:
+        if local_media_profile is None:
+            raise HTTPException(status_code=422, detail="Matching existing files needs a Local Media Profile")
+        try:
+            request_scan(
+                s, collection, local_media_profile,
+                folder=payload.existing_files.folder, template=payload.existing_files.template,
+                hold=[download_profile] if download_profile is not None else [], wait_for_index=True,
+            )
+        except (ExistingFilesError, AdoptionError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     create_operation(s, CollectionIndexOperation(collection))
     queue_event(s, "collection.added", CollectionAdded(collection))
     return CollectionAPIRead.model_validate(collection)

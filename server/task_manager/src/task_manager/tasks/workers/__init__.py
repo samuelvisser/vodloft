@@ -22,6 +22,7 @@ _WORKER_EXPORTS = {
     "fetch_new_episodes": ".fetch_new_episodes",
     "monitor_no_usable_media_episode": ".monitor_no_usable_media_episode",
     "refresh_episode_metadata": ".refresh_episode_metadata",
+    "scan_existing_files": ".scan_existing_files",
     "manage_custom_indexes": ".manage_custom_indexes",
     "rename_collection_profile_files": ".rename_collection_profile_files",
     "rename_movie_profile_files": ".rename_movie_profile_files",

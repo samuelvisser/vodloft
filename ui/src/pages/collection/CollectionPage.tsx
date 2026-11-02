@@ -1,7 +1,7 @@
 import {sourceControls} from '../../lib/sourceControls'
 import {addedByLabel, can} from '../../lib/access'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useDownloadProfilesView, useEpisodePages, useCollection, useLocalMediaProfiles, useCollectionDownloads, useCollectionSeasons, useSourceLookup, useStreamProfilesView } from '../../lib/queries'
 import SourceBadge from '../../components/Source/SourceBadge'
@@ -25,6 +25,9 @@ import {createSelectRegistry} from '../../utils/selectRegistry'
 import './CollectionPage.css'
 import {faIcon} from '../../icons/faIcon'
 import {siteName} from '../../lib/siteName'
+import ExistingFilesDialog from '../../components/ExistingFiles/ExistingFilesDialog'
+import ExistingFilesBanner from '../../components/ExistingFiles/ExistingFilesBanner'
+import {useExistingFilesScans} from '../../components/ExistingFiles/api'
 
 
 function preferredFormatLabel(value?: string | null) {
@@ -52,6 +55,12 @@ export default function CollectionPage() {
   const [syncStarting, setSyncStarting] = useState(false)
   const [metadataRefreshConfirm, setMetadataRefreshConfirm] = useState(false)
   const [fileRenameConfirm, setFileRenameConfirm] = useState(false)
+  const [fileRenameProfileId, setFileRenameProfileId] = useState<number | undefined>(undefined)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const existingFilesParam = Number(searchParams.get('existingFiles'))
+  const [existingFilesProfileId, setExistingFilesProfileId] = useState<number | null>(
+    Number.isInteger(existingFilesParam) && existingFilesParam > 0 ? existingFilesParam : null,
+  )
   const [deleteDownloadsConfirm, setDeleteDownloadsConfirm] = useState(false)
   const [redownloadConfirm, setRedownloadConfirm] = useState(false)
   const [downloadAllConfirm, setDownloadAllConfirm] = useState(false)
@@ -186,6 +195,28 @@ export default function CollectionPage() {
     })),
     [downloadLocalMediaProfiles],
   )
+  const existingFilesProfiles = useMemo(() => {
+    const attached = new Set(attachedDownloadProfiles.map((profile) => profile.localMediaProfileId))
+    return [...(localMediaProfiles ?? [])]
+      .sort((left, right) => Number(attached.has(right.id)) - Number(attached.has(left.id)) || left.name.localeCompare(right.name))
+      .map((profile) => ({id: profile.id, name: profile.name}))
+  }, [localMediaProfiles, attachedDownloadProfiles])
+  // "?existingFiles=open" comes from the add wizard: open the scan it started once it shows up.
+  const openFirstScan = searchParams.get('existingFiles') === 'open'
+  const {data: existingFilesScans} = useExistingFilesScans(id, openFirstScan && can('library', 'manage'))
+  useEffect(() => {
+    if (!openFirstScan || existingFilesProfileId !== null) return
+    const scan = existingFilesScans?.find((candidate) => candidate.status !== 'finished')
+    if (scan) setExistingFilesProfileId(scan.localMediaProfileId)
+  }, [openFirstScan, existingFilesScans, existingFilesProfileId])
+  const closeExistingFiles = () => {
+    setExistingFilesProfileId(null)
+    if (searchParams.has('existingFiles')) {
+      const next = new URLSearchParams(searchParams)
+      next.delete('existingFiles')
+      setSearchParams(next, {replace: true})
+    }
+  }
   const displayedEpisodes = episodes
   const seasonViewLoading = Boolean(
     isSeasonal && (
@@ -474,6 +505,13 @@ export default function CollectionPage() {
                   onSelect: () => setFileRenameConfirm(true),
                 },
                 {
+                  label: 'Match existing files',
+                  icon: faIcon('fass', 'file-import'),
+                  disabled: existingFilesProfiles.length === 0,
+                  disabledReason: existingFilesProfiles.length === 0 ? 'Add a Local Media Profile first.' : undefined,
+                  onSelect: () => setExistingFilesProfileId(existingFilesProfiles[0]?.id ?? null),
+                },
+                {
                   label: 'Bulk delete downloads',
                   icon: faIcon('fass', 'trash'),
                   tone: 'danger',
@@ -509,6 +547,14 @@ export default function CollectionPage() {
               </>
             )}
           </div>
+
+          {can('library', 'manage') && (
+            <ExistingFilesBanner
+              collectionSlug={id}
+              profileName={(profileId) => localMediaProfiles?.find((profile) => profile.id === profileId)?.name ?? `Local Media Profile #${profileId}`}
+              onOpen={setExistingFilesProfileId}
+            />
+          )}
 
           <CollectionIndexingProgress
             collectionId={collection.id}
@@ -638,6 +684,21 @@ export default function CollectionPage() {
         onSyncNow={syncNow}
       />
 
+      {existingFilesProfileId !== null && can('library', 'manage') && (
+        <ExistingFilesDialog
+          collectionSlug={id}
+          collectionTitle={collection.title}
+          profiles={existingFilesProfiles}
+          initialProfileId={existingFilesProfileId}
+          onClose={closeExistingFiles}
+          onRename={(profileId) => {
+            closeExistingFiles()
+            setFileRenameProfileId(profileId)
+            setFileRenameConfirm(true)
+          }}
+        />
+      )}
+
       {downloadAllConfirm && (
         <CollectionDownloadAllDialog
           collectionSlug={id}
@@ -669,12 +730,13 @@ export default function CollectionPage() {
         requestPath={`/collections/${encodeURIComponent(id)}/rename-files`}
         resourceLabel={collection.title}
         title="Rename existing episode files"
-        onDismiss={() => setFileRenameConfirm(false)}
+        onDismiss={() => { setFileRenameConfirm(false); setFileRenameProfileId(undefined) }}
         icon={faIcon('fass', 'file-pen')}
         confirmLabel="Rename files"
         disabled={fileRenameBusy}
         scope_by_local_media_profile
         localMediaProfiles={actionLocalMediaProfiles}
+        initialLocalMediaProfileId={fileRenameProfileId}
       >
         <p>
           Rename existing episode files in "{collection.title}" so their paths match the current Local Media Profile output templates.

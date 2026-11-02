@@ -440,3 +440,40 @@ def test_a_collection_bundle_can_use_an_existing_profile(listed, session):
     created = create_collection_bundle(session, None, CollectionAPICreateBundle.model_validate({"collection": collection, "seasons": [], "localMediaProfile": profile}))
     assert session.get(Collection, created.id) is not None
     assert session.query(CollectionLocalMediaProfile).count() == 1
+
+
+def test_a_bundle_that_matches_existing_files_holds_its_download_profile(listed, session, tmp_path, monkeypatch):
+    from sqlalchemy import select
+
+    from backend.api.endpoints.collections.as_bundle.service import create_collection_bundle
+    from backend.api.models.collection_as_bundle import CollectionAPICreateBundle
+    from backend.db.models import DownloadProfile, ExistingFileScan
+    from config import get_settings
+
+    monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
+    (tmp_path / "YouTube").mkdir()
+    payload = {
+        "collection": {
+            "slug": "PL1", "sourceKey": "listed", "title": "A playlist", "sharingUrl": "https://listed.example/PL1",
+            "membershipLevel": "HIGHEST_ALLOWED", "type": "series", "episodeIdentifier": "numbered",
+            "authorName": "A Channel", "authorSlug": "a-channel",
+        },
+        "seasons": [],
+        "localMediaProfile": {
+            "op": "create_new", "name": "YouTube", "preferredFormat": "format_1080p",
+            "outputTemplate": "/downloads/YouTube/{{ collection_title }}/{{ title }}.ext",
+        },
+        "downloadProfile": {
+            "enableProfile": True, "epIdTypeList": ["ep"], "downloadWithCountdown": False, "redownloadFinal": False,
+            "downloadDaysInPast": 0, "downloadEpisodeCount": 0, "downloadStartingFrom": None,
+            "deleteOlderEpisodes": False, "seasons": [], "includeUpcomingSeasons": True,
+        },
+        "existingFiles": {"folder": "/downloads/YouTube"},
+    }
+
+    create_collection_bundle(session, None, CollectionAPICreateBundle.model_validate(payload))
+
+    profile = session.scalar(select(DownloadProfile))
+    scan = session.scalar(select(ExistingFileScan))
+    assert profile.enable_profile is False
+    assert (scan.status, scan.folder, scan.held_download_profile_ids) == ("waiting", "/downloads/YouTube", [profile.id])

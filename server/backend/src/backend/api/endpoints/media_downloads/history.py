@@ -125,6 +125,11 @@ def _presentation(entry: MediaDownloadHistory) -> tuple[str, str, str | None]:
         new_path = metadata.get("new_path")
         detail = f"{old_path} → {new_path}" if old_path and new_path else None
         return "File renamed", "downloaded", detail
+    if action == MediaDownloadHistoryAction.IMPORTED:
+        path = metadata.get("file_path")
+        matched_by = metadata.get("matched_by")
+        detail = " · ".join(str(value) for value in (path, matched_by) if value)
+        return "Imported", "downloaded", detail or None
 
     return action.replace("_", " ").title(), "pending", None
 

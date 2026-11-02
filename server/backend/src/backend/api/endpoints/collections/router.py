@@ -2,6 +2,7 @@ from fastapi import APIRouter, status
 
 from .as_bundle import collection_as_bundle_router
 from .as_view import collection_view_router
+from .existing_files.router import router as existing_files_router
 from .service import (
     get_collections_list,
     create_collection,
@@ -40,6 +41,7 @@ router = APIRouter(prefix="/collections", tags=["Collections"])
 
 router.include_router(collection_view_router)
 router.include_router(collection_as_bundle_router)
+router.include_router(existing_files_router)
 
 @router.get("", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[CollectionAPIRead])
 def collection_list():

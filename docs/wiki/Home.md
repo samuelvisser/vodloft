@@ -61,6 +61,7 @@ The Settings page covers normal application, download, automation, Sources, and 
 - [[Local-Media-Profiles]] — choose formats, download behavior, and output paths.
 - [[Download-Profiles]] — configure automatic collection downloads and retention.
 - [[Downloads-and-File-Integrity]] — use the download queue and understand missing/corrupted file handling.
+- [[Existing-Files-and-Imports]] — adopt files you already have, so VODLoft does not download them again.
 - [[Quick-Download]] — download one file from a link, without adding it to your library.
 - [[Podcast-RSS-Feeds]] — create private podcast/video feeds.
 - [[Automation-and-Background-Tasks]] — understand what VODLoft keeps updated automatically.

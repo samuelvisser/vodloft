@@ -26,6 +26,7 @@ _WORKER_EXPORTS = {
     "media_download_bulk_action_worker": ".workers.media_download_bulk_action_worker",
     "fetch_new_episodes": ".workers.fetch_new_episodes",
     "monitor_no_usable_media_episode": ".workers.monitor_no_usable_media_episode",
+    "scan_existing_files": ".workers.scan_existing_files",
     "manage_custom_indexes": ".workers.manage_custom_indexes",
     "file_watcher": ".workers.file_watcher",
     "trigger_task_worker": ".workers.trigger_task_worker",
