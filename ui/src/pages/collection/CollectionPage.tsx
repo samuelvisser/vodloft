@@ -603,7 +603,7 @@ export default function CollectionPage() {
                         <div key={`${profile.type}-${profile.id}`} className="collection-profile-chip-group">
                           <button
                             type="button"
-                            className="show-profile-chip show-profile-chip-main"
+                            className="collection-profile-chip collection-profile-chip-main"
                             onClick={() => navigate(`/edit-stream-profile/${profile.type}/${profile.id}`, {state: profile})}
                             title={`Open ${label}`}
                           >
