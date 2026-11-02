@@ -1763,7 +1763,6 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 
 .media-type-tabs button span { margin-left: 5px; color: var(--muted); font-size: 12px; }
 
-.library-collection-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(390px, 1fr)); align-items: start; gap: 12px; }
 .collection-summary-card {
   position: relative;
   appearance: none;
@@ -1807,9 +1806,73 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
   -webkit-line-clamp: 3;
 }
 .collection-summary-card > svg { color: var(--muted); }
-/* Collections whose only artwork is a 16:9 thumbnail (YouTube, NPO) show it full width on top */
-.collection-summary-card.is-landscape { grid-template-columns: minmax(0, 1fr) auto; row-gap: 12px; }
-.collection-summary-card.is-landscape .collection-summary-art { grid-column: 1 / -1; width: 100%; aspect-ratio: 16 / 9; }
+
+/* Library Collections: equal tiles with one 16:9 art frame. A poster stands upright
+   in the frame over a blurred copy of itself; a 16:9 thumbnail fills it. */
+.library-collection-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; }
+.library-tile {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(100, 116, 139, .3);
+  border-radius: 14px;
+  background: rgba(148, 163, 184, .035);
+  color: inherit;
+  text-decoration: none;
+}
+.library-tile:hover { background: rgba(148, 163, 184, .09); }
+.library-tile-art {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #1e293b;
+}
+.library-tile-image { width: 100%; height: 100%; object-fit: cover; }
+.library-tile-backdrop {
+  position: absolute;
+  inset: -16px;
+  width: calc(100% + 32px);
+  height: calc(100% + 32px);
+  object-fit: cover;
+  filter: blur(16px) brightness(.65);
+}
+.library-tile-poster {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  height: 100%;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  box-shadow: 0 0 16px rgba(0, 0, 0, .45);
+}
+.library-tile-art .collection-art-placeholder { font-size: 28px; }
+.library-tile-art .library-tile-source {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  max-width: calc(100% - 16px);
+  border-color: transparent;
+  background: rgba(15, 23, 42, .8);
+  color: #fff;
+}
+.library-tile-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 12px 14px 14px; }
+.library-tile-title {
+  display: -webkit-box;
+  min-height: 2.6em;
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.library-tile-author { overflow: hidden; color: var(--muted); font-size: 13px; white-space: nowrap; text-overflow: ellipsis; }
+.library-tile-meta { color: var(--muted); font-size: 12px; }
 
 .library-empty {
   min-height: 360px;
@@ -2001,7 +2064,13 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 
 @media (max-width: 480px) {
   .media-type-tabs { display: grid; width: 100%; grid-auto-columns: minmax(0,1fr); }
-  .library-collection-list, .catalog-collection-grid { grid-template-columns: 1fr; }
+  .catalog-collection-grid { grid-template-columns: 1fr; }
+  .library-collection-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .library-tile-art .library-tile-source { left: 6px; bottom: 6px; font-size: 10px; }
+  .library-tile-copy { gap: 3px; padding: 9px 10px 11px; }
+  .library-tile-title { font-size: 14px; }
+  .library-tile-author { font-size: 12px; }
+  .library-tile-meta { font-size: 11px; }
   .collection-summary-card { grid-template-columns: 74px minmax(0,1fr) auto; gap: 11px; padding: 10px; }
   .catalog-collection-card { grid-template-columns: 74px minmax(0,1fr); }
   .collection-summary-art { width: 74px; }
