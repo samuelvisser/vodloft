@@ -48,9 +48,19 @@
     font-weight: 600;
 }
 
-.import-folder[open] {
+/* Safari ignores display: grid on <details>, so the open content gets its own grid. */
+.import-folder__body {
     display: grid;
     gap: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+.import-folder__body > p {
+    margin: 0;
+}
+
+.import-folder__body > .btn {
+    justify-self: start;
 }
 
 .import-preview__header {
