@@ -207,26 +207,30 @@ export default function LibraryPage() {
                             const image = toImageUrl(
                                 collection.thumbnailPortraitPath || collection.thumbnailLandscapePath || collection.logoImagePath || collection.authorHeadshotPath,
                             )
-                            const landscape = !collection.thumbnailPortraitPath && !!collection.thumbnailLandscapePath
+                            // Only a 16:9 thumbnail fills the frame; posters and other art stand in it over a blurred copy.
+                            const fills = !collection.thumbnailPortraitPath && !!collection.thumbnailLandscapePath
                             return (
-                                <Link className={`collection-summary-card library-collection-card${landscape ? ' is-landscape' : ''}`} to={`/collection/${collection.slug}`} key={collection.slug} role="listitem">
-                                    <span className="collection-summary-art">
-                                        {image ? <img src={image} alt="" loading="lazy" decoding="async"/> : <span className="collection-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', 'podcast')}/></span>}
+                                <Link className="collection-tile" to={`/collection/${collection.slug}`} key={collection.slug} role="listitem">
+                                    <span className="collection-tile-art">
+                                        {image ? (
+                                            fills ? <img src={image} alt="" loading="lazy" decoding="async"/> : <>
+                                                <img className="collection-tile-backdrop" src={image} alt="" loading="lazy" decoding="async"/>
+                                                <img className="collection-tile-poster" src={image} alt="" loading="lazy" decoding="async"/>
+                                            </>
+                                        ) : <span className="collection-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', 'podcast')}/></span>}
+                                        <SourceBadge sourceKey={collection.sourceKey} className="collection-tile-source"/>
                                     </span>
-                                    <div className="collection-summary-copy">
-                                        <span className="collection-summary-title">{collection.title}</span>
-                                        <span className="collection-summary-author">{collection.authorName}</span>
-                                        <SourceBadge sourceKey={collection.sourceKey}/>
-                                        <span className="collection-summary-meta">{collection.episodeCount} episodes{collection.years ? ` • ${collection.years}` : ''}</span>
-                                        {collection.description && <span className="collection-summary-description">{collection.description}</span>}
+                                    <span className="collection-tile-copy">
+                                        <span className="collection-tile-title">{collection.title}</span>
+                                        {collection.authorName && <span className="collection-tile-author">{collection.authorName}</span>}
+                                        <span className="collection-tile-meta">{collection.episodeCount} episodes{collection.years ? ` • ${collection.years}` : ''}</span>
                                         <CollectionIndexingProgress
                                             collectionId={collection.id}
                                             collectionSlug={collection.slug}
                                             pollForStart={collection.episodeCount === 0}
                                             className="library-collection-indexing"
                                         />
-                                    </div>
-                                    <FontAwesomeIcon icon={faIcon('fass', 'chevron-right')} aria-hidden="true"/>
+                                    </span>
                                 </Link>
                             )
                         })}
