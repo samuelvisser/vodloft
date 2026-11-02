@@ -8,7 +8,6 @@ from sqlalchemy import Column, MetaData, String, Table, inspect
 
 SETTINGS_VERSION_TABLE = "settings"
 SETTINGS_VERSION_COLUMN = "alembic_version_num"
-VERSION_STORAGE_MIGRATION_ATTRIBUTE = "vodloft_version_storage_migration"
 
 
 def _has_settings_version_table(context: MigrationContext) -> bool:
@@ -20,6 +19,10 @@ def _has_settings_version_table(context: MigrationContext) -> bool:
         SETTINGS_VERSION_TABLE,
         schema=context.version_table_schema,
     )
+
+
+def _settings_table_is_created_by_the_baseline(_context: MigrationContext, purge: bool = False) -> None:
+    return None
 
 
 def apply_settings_version_table(context: MigrationContext) -> None:
@@ -44,5 +47,11 @@ def apply_settings_version_table(context: MigrationContext) -> None:
     )
     context._has_version_table = MethodType(  # type: ignore[method-assign]  # noqa: SLF001
         _has_settings_version_table,
+        context,
+    )
+    # The baseline migration creates Settings itself; Alembic must not create a
+    # bare version table under that name first.
+    context._ensure_version_table = MethodType(  # type: ignore[method-assign]  # noqa: SLF001
+        _settings_table_is_created_by_the_baseline,
         context,
     )

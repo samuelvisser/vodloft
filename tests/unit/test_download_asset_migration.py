@@ -7,7 +7,7 @@ from sqlalchemy import create_engine, inspect, text
 
 def test_auxiliary_asset_migration_preserves_thumbnail_without_filesystem_access():
     migration = import_module(
-        "backend.db.alembic.versions.f2a6c93d8b14_wireloft_1_2_1"
+        "importer.wireloft.migrations.f2a6c93d8b14_wireloft_1_2_1"
     )
     engine = create_engine("sqlite://")
     with engine.begin() as connection:

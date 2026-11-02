@@ -83,3 +83,22 @@ Profiles stay off until all files are adopted; they then turn on if you asked fo
 
 You can run the import again. Anything you changed in VODLoft since the last run is kept, and settings a newer
 VODLoft can map, which it reported as unsupported before, are brought over.
+
+## Importing from WireLoft
+
+VODLoft grew out of WireLoft, and imports a WireLoft installation of any release from 1.0 on. Start VODLoft with
+its own, empty config folder and upload WireLoft's config folder from **Settings → Import**. VODLoft keeps only
+`wireloft.db` and `config.yml`, plus WireLoft's keyring file if you choose to bring your Daily Wire sign-in. WireLoft's
+folder is only read; VODLoft works on its own copy.
+
+The import brings over your shows (as Collections), seasons, episodes, movies and extras with their Daily Wire ids,
+episode numbers and Custom Index numbers, so file names stay the same. Local Media Profiles keep their templates;
+`show_*` variables become `collection_*`. RSS feeds keep their tokens, so podcast apps only need VODLoft's address.
+Downloads are adopted where they are. A show you already added in VODLoft is linked, not added twice.
+
+A feed whose token VODLoft already uses is not imported, and the report says so. A download VODLoft can't reach in
+its download folder is kept but marked as not downloaded, and won't be downloaded again; the next import adopts it
+once the folder is reachable.
+
+VODLoft no longer upgrades a WireLoft database in place. If VODLoft finds a WireLoft database in its own config
+folder, it doesn't start, and asks you to import it instead.

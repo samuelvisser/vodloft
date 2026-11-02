@@ -19,7 +19,8 @@ from typing import Sequence, Union
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from alembic import op
-from config.settings.base import get_config_path
+
+from . import _support
 from jinja2 import Environment
 import sqlalchemy as sa
 
@@ -789,7 +790,9 @@ def _write_if_changed(path: Path, original: str, updated: str) -> None:
 
 
 def _migrate_config(transform) -> None:
-    path = get_config_path()
+    path = _support.config_path
+    if path is None:
+        return
     try:
         original = path.read_text(encoding="utf-8")
     except FileNotFoundError:

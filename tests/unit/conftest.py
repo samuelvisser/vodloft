@@ -128,3 +128,37 @@ def available_artifact(path: Path | None = None) -> dict[str, object]:
 def mark_artifact_available(download, path: Path | None = None) -> None:
     for field, value in available_artifact(path).items():
         setattr(download, field, value)
+
+
+def schema_of(engine) -> dict[str, dict[str, object]]:
+    """Every table's columns, keys, constraints and indexes, independent of their order in the SQL."""
+    from sqlalchemy import inspect
+
+    inspector = inspect(engine)
+    schema: dict[str, dict[str, object]] = {}
+    for table in sorted(set(inspector.get_table_names()) - {"apscheduler_jobs"}):
+        schema[table] = {
+            "columns": [
+                (column["name"], str(column["type"]), column["nullable"], column.get("default"))
+                for column in inspector.get_columns(table)
+            ],
+            "primary_key": inspector.get_pk_constraint(table),
+            "foreign_keys": sorted(
+                (key["name"] or "", tuple(key["constrained_columns"]), key["referred_table"],
+                 tuple(key["referred_columns"]), tuple(sorted(key.get("options", {}).items())))
+                for key in inspector.get_foreign_keys(table)
+            ),
+            "unique": sorted(
+                (constraint["name"] or "", tuple(constraint["column_names"]))
+                for constraint in inspector.get_unique_constraints(table)
+            ),
+            "checks": sorted(
+                (constraint["name"] or "", " ".join(constraint["sqltext"].split()))
+                for constraint in inspector.get_check_constraints(table)
+            ),
+            "indexes": sorted(
+                (index["name"], tuple(index["column_names"]), bool(index["unique"]))
+                for index in inspector.get_indexes(table)
+            ),
+        }
+    return schema

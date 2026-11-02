@@ -58,3 +58,27 @@ the columns it reads. `plan_import` turns it into a plan:
 testing recorded paths on disk. `importer.uploads` names the files an importer
 reads (`UPLOAD_FILES`) so an upload of a whole config folder or archive keeps
 only those.
+
+## WireLoft
+
+`importer.wireloft` reads a WireLoft database of any release from 1.0 on.
+`importer.wireloft.migrations` holds WireLoft's own migrations, frozen: the
+reader detects the release (from `alembic_version`, or
+`settings.alembic_version_num` from 1.1 on) and runs the later ones on the
+private copy, so the mapping reads one schema. A new WireLoft release means
+adding its migration file and a line to `RELEASES`. VODLoft's own history starts
+at a baseline that creates the schema these migrations ended with (WireLoft
+1.2.3), under the same revision id.
+
+Because WireLoft's model is VODLoft's from before VODLoft's changes, the plan
+hands over `RecordPlan`s instead of files to match: Collections, seasons,
+episodes, movies, Download Profiles, RSS Stream Profiles, downloads with their
+history, Custom Index states and Collection assets, each with VODLoft's field
+names and references to the others. The mapping makes VODLoft's changes the
+way VODLoft's migrations made them (show to Collection names, one Download
+Profile table, renamed stored values). The backend creates each record or
+links it to the one VODLoft already has with the same Daily Wire id.
+
+The Daily Wire sign-in comes from keyrings.alt's plaintext keyring file, which
+holds it unencrypted; WireLoft's `wl_secret.key` only signs its own browser
+sessions and is not needed.

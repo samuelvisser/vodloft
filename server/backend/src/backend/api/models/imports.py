@@ -160,6 +160,20 @@ class ImportCountsAPIRead(ResponseBase):
     files: int
 
 
+class ImportRecordCollectionAPIRead(ResponseBase):
+    external_id: str
+    title: Optional[str] = None
+    url: Optional[str] = None
+    becomes: str
+
+
+class ImportRecordsAPIRead(ResponseBase):
+    """Records an importer hands over as they are (WireLoft's): per kind, how many are new or linked."""
+
+    kinds: dict[str, dict[str, int]]
+    collections: list[ImportRecordCollectionAPIRead]
+
+
 class ImportPreviewAPIRead(ResponseBase):
     importer: str
     version: Optional[str] = None
@@ -169,6 +183,7 @@ class ImportPreviewAPIRead(ResponseBase):
     profiles: list[ImportProfileAPIRead]
     settings: list[ImportSettingAPIRead]
     warnings: list[ImportWarningAPIRead]
+    records: Optional[ImportRecordsAPIRead] = None
     last_run: Optional[ImportRunSummaryAPIRead] = None
     counts: ImportCountsAPIRead
 

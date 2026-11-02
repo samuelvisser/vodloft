@@ -30,6 +30,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 import importer.pinchflat  # noqa: F401  (registers the importer)
+import importer.wireloft  # noqa: F401  (registers the importer)
 from config import get_settings
 from config.settings.submodels import FilenameRestrictionMode
 from importer.contract import CollectionPlan, FilePlan, Importer, ImportPlan, ImportWarning, ProfilePlan
@@ -38,7 +39,7 @@ from importer.registry import get_importer as _registered_importer
 
 from backend.db.models import (
     Collection, CollectionLocalMediaProfile, DownloadProfile, Episode, ImportLink, ImportRun, ImportStep,
-    MediaDownloadBase,
+    LocalMediaProfileBase, MediaDownloadBase, MovieLocalMediaProfile,
 )
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.adoption import AdoptionError, adopt, download_root, real_path
@@ -180,7 +181,11 @@ def _with_templates(plan: ImportPlan, templates: Mapping[str, str]) -> ImportPla
 def load_plan(importer: Importer, options: ImportOptions) -> LoadedPlan:
     """The importer's plan for the upload, with its files mapped to the folders VODLoft sees."""
     plan = importer.read(work_location(importer, DEFAULT_PATH_MAP))
-    original = [file.path for file in plan.files if file.kind == "file" and file.path]
+    original = [file.path for file in plan.files if file.kind == "file" and file.path] + [
+        str(record.values["original_path"]) for record in plan.records
+        if record.kind == "download" and record.values.get("original_path")
+        and record.values.get("artifact_status") == MediaDownloadArtifactStatus.AVAILABLE.value
+    ]
     samples = _samples(original)
     if options.path_map is not None:
         chosen = options.path_map
@@ -507,12 +512,19 @@ def preview(session: Session, importer: Importer, options: ImportOptions) -> dic
         "profiles": profile_views,
         "settings": settings,
         "warnings": [_warning(warning) for warning in plan.warnings],
+        "records": _record_summary(session, plan, links) if plan.records else None,
         "last_run": run_summary(last) if last else None,
         "counts": {
             "collections": len(plan.collections),
             "files": sum(1 for file in plan.files if file.kind == "file"),
         },
     }
+
+
+def _record_summary(session: Session, plan: ImportPlan, links) -> dict[str, Any]:
+    from .import_records import record_summary
+
+    return record_summary(session, plan, links)
 
 
 def run_summary(run: ImportRun) -> dict[str, Any]:
@@ -555,8 +567,46 @@ class _Report:
         self.entries.append({"kind": kind, "subject": subject, "message": message, **extra})
 
 
+def _settings_path(key: str) -> tuple[str, str] | None:
+    """``settings.<section>.<field>`` as the section and field of VODLoft's settings, when VODLoft has it."""
+    from backend.api.models.settings import SettingsValues
+
+    parts = key.split(".")
+    if len(parts) != 3 or parts[0] != "settings":
+        return None
+    section = SettingsValues.model_fields.get(parts[1])
+    model = section.annotation if section is not None else None
+    if model is None or not hasattr(model, "model_fields") or parts[2] not in model.model_fields:
+        return None
+    return parts[1], parts[2]
+
+
+def _camel(name: str) -> str:
+    head, *rest = name.split("_")
+    return head + "".join(part.title() for part in rest)
+
+
 def _apply_setting(key: str, value: object) -> None:
     """Change one VODLoft setting the way the Settings screen does."""
+    if key.startswith("settings."):
+        from backend.api.endpoints.settings.service import save_ui_settings
+        from backend.api.models.settings import SettingsAPIUpdate, SettingsValues
+
+        path = _settings_path(key)
+        if path is None:
+            raise ImportServiceError(f"VODLoft has no setting {key.removeprefix('settings.')}")
+        values = SettingsValues.from_app_settings(get_settings()).model_dump()
+        values[path[0]][path[1]] = value
+        save_ui_settings(SettingsAPIUpdate(
+            values=SettingsValues.model_validate(values),
+            changed_fields=[f"{_camel(path[0])}.{_camel(path[1])}"],
+        ))
+        return
+    if key == "dailywire.sign_in":
+        from backend.api.endpoints.dailywire.auth.imported_sign_in import save_imported_sign_in
+
+        save_imported_sign_in(dict(value))  # type: ignore[call-overload]
+        return
     if key == "downloads.filename_restriction_mode":
         from backend.api.endpoints.settings.service import save_ui_settings
         from backend.api.models.settings import SettingsAPIUpdate, SettingsValues
@@ -577,6 +627,11 @@ def _apply_setting(key: str, value: object) -> None:
 
 
 def _current_setting(key: str) -> object:
+    path = _settings_path(key) if key.startswith("settings.") else None
+    if path is not None:
+        section = getattr(get_settings(), path[0], None)
+        current = getattr(section, path[1], None)
+        return getattr(current, "value", current)
     if key == "downloads.filename_restriction_mode":
         return str(get_settings().download_settings.filename_restriction_mode)
     return None
@@ -809,6 +864,8 @@ def apply_run(session: Session, run_id: int) -> dict[str, int]:
 
     _apply_settings(session, plan, options, links, run, report)
     session.flush()
+    if plan.records:
+        _apply_record_plan(session, plan, options, links, run, report)
 
     selected = _selected_collections(plan, options)
     profile_plans = {profile.external_id: profile for profile in plan.profiles}
@@ -867,6 +924,68 @@ def apply_run(session: Session, run_id: int) -> dict[str, int]:
     if any(item.key == "ytdlp.cookies" for item in plan.settings):
         remove_secrets(importer)
     return dict(report.counts)
+
+
+def _upsert_movie_profile(session: Session, plan: ProfilePlan, links, run: ImportRun, report: _Report) -> LocalMediaProfileBase | None:
+    """A movie Local Media Profile: one that names files the same way is used instead of a copy."""
+    from fastapi import HTTPException
+
+    from backend.api.endpoints.movie_local_media_profiles.service import create_movie_local_media_profile
+    from backend.api.models.movie_local_media_profile import MovieLocalMediaProfileAPICreate
+
+    link = links.get(("profile", plan.external_id))
+    existing = session.get(MovieLocalMediaProfile, link.entity_id) if link and link.entity_id else None
+    if existing is not None:
+        return existing
+    reused = session.scalar(select(MovieLocalMediaProfile).where(
+        MovieLocalMediaProfile.output_template == plan.output_template,
+        MovieLocalMediaProfile.preferred_format == plan.settings.get("preferred_format"),
+    ).limit(1))
+    if reused is not None:
+        _remember(session, links, run.importer, "profile", plan.external_id, reused.id, {}, [], run.id)
+        report.add("reused", plan.name, f"Uses the Local Media Profile {reused.name}, which names files the same way")
+        return reused
+    fields = ("preferred_format", "download_mode", "thumbnail_mode", "metadata_mode", "subtitle_mode",
+              "append_media_type_to_filename")
+    try:
+        created = create_movie_local_media_profile(session, MovieLocalMediaProfileAPICreate.model_validate({
+            **{name: plan.settings[name] for name in fields if plan.settings.get(name) is not None},
+            "name": _unique_name(session, plan.name), "output_template": plan.output_template, "type": "movie",
+        }))
+    except (HTTPException, ValueError) as exc:
+        detail = getattr(exc, "detail", exc)
+        report.add("failed", plan.name, f"{detail}; its movies' downloads were not imported")
+        return None
+    profile = session.get(MovieLocalMediaProfile, created.id)
+    _remember(session, links, run.importer, "profile", plan.external_id, profile.id, {}, [], run.id)
+    report.add("created", plan.name, f"Local Media Profile {profile.name}")
+    report.counts["profiles_created"] += 1
+    return profile
+
+
+def _apply_record_plan(session: Session, plan: ImportPlan, options: ImportOptions, links, run: ImportRun, report: _Report) -> None:
+    """Records (WireLoft's): every profile, then the records in order, then the Download Profiles."""
+    from .import_records import apply_records
+
+    profiles: dict[str, LocalMediaProfileBase | None] = {}
+    for profile_plan in plan.profiles:
+        if profile_plan.settings.get("type") == "movie":
+            profiles[profile_plan.external_id] = _upsert_movie_profile(session, profile_plan, links, run, report)
+        else:
+            profiles[profile_plan.external_id] = _upsert_profile(session, profile_plan, links, run, report)
+    session.flush()
+    chosen = set(options.collections) if options.collections is not None else None
+    skip = {record.external_id for record in plan.records
+            if record.kind == "collection" and chosen is not None and record.external_id not in chosen}
+    result = apply_records(session, plan, profiles, links, run, skip_collections=skip)
+    report.entries.extend(result.entries)
+    report.counts.update(result.counts)
+    # Every download is adopted now, so a Download Profile that should be on can be.
+    for profile_id, wanted_on in result.download_profiles:
+        profile = session.get(DownloadProfile, profile_id)
+        if profile is not None:
+            profile.enable_profile = bool(wanted_on and options.enable_download_profiles)
+    session.flush()
 
 
 def _queue_step(session: Session, step: ImportStep) -> None:

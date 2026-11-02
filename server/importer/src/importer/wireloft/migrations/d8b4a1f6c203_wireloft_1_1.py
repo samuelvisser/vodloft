@@ -25,11 +25,7 @@ from alembic.runtime.migration import MigrationContext
 from alembic.util import CommandError
 import sqlalchemy as sa
 
-from backend.db.alembic_version import (
-    SETTINGS_VERSION_COLUMN,
-    SETTINGS_VERSION_TABLE,
-    apply_settings_version_table,
-)
+from ._support import SETTINGS_VERSION_COLUMN, SETTINGS_VERSION_TABLE, apply_settings_version_table
 
 
 revision = "d8b4a1f6c203"

@@ -9,7 +9,7 @@ import sqlalchemy as sa
 
 def test_show_assets_upgrade_downgrade_and_foreign_keys():
     migration = importlib.import_module(
-        "backend.db.alembic.versions.f2a6c93d8b14_wireloft_1_2_1"
+        "importer.wireloft.migrations.f2a6c93d8b14_wireloft_1_2_1"
     )
     engine = sa.create_engine("sqlite:///:memory:")
     with engine.begin() as connection:

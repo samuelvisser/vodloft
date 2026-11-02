@@ -12,6 +12,8 @@ from .contract import (
     ImportWarning,
     Importer,
     ProfilePlan,
+    RecordPlan,
+    Reference,
     SettingPlan,
 )
 from .registry import all_importers, get_importer, register
@@ -25,6 +27,8 @@ __all__ = [
     "ImportWarning",
     "Importer",
     "ProfilePlan",
+    "RecordPlan",
+    "Reference",
     "SettingPlan",
     "all_importers",
     "get_importer",

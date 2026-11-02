@@ -688,7 +688,7 @@ def test_background_reindex_downgrade_restores_previous_identifier_grammar():
     from importlib import import_module
 
     migration = import_module(
-        "backend.db.alembic.versions.6d4a8c1f2b90_wireloft_1_2"
+        "importer.wireloft.migrations.6d4a8c1f2b90_wireloft_1_2"
     )
     _identifier_for_previous_release = migration._identifier_for_previous_release
 

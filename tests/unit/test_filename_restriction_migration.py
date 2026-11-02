@@ -2,7 +2,7 @@ from importlib import import_module
 
 
 migration = import_module(
-    "backend.db.alembic.versions.c8d4e2f1a7b9_wireloft_1_0"
+    "importer.wireloft.migrations.c8d4e2f1a7b9_wireloft_1_0"
 )
 
 

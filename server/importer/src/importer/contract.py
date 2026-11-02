@@ -112,6 +112,44 @@ class FilePlan:
 
 
 @dataclass(frozen=True)
+class Reference:
+    """Another record of the same plan, or a profile, by its kind and external id."""
+
+    kind: str
+    external_id: str
+
+
+@dataclass(frozen=True)
+class RecordPlan:
+    """A record the other program keeps the way VODLoft does, such as a Daily Wire episode.
+
+    An importer of a program that VODLoft shares its model with (WireLoft) hands
+    over records instead of files to match: ``kind`` names VODLoft's record
+    (``collection``, ``season``, ``episode`` …), ``values`` are its fields by
+    VODLoft's names, and ``references`` point at other records of the plan,
+    which the backend resolves to VODLoft's ids. ``identity`` holds the fields
+    that find the same record when VODLoft already has it, such as a Daily
+    Wire id, so it is linked instead of added twice.
+    """
+
+    kind: str
+    external_id: str
+    values: dict[str, object] = field(default_factory=dict)
+    references: dict[str, Reference] = field(default_factory=dict)
+    identity: dict[str, object] = field(default_factory=dict)
+    metadata: dict[str, str] = field(default_factory=dict)
+    """The record's own metadata rows, by key."""
+    profile_metadata: tuple[tuple[str, str, str, str], ...] = ()
+    """Metadata whose key names a profile, as (profile external id, key prefix, key suffix, value).
+
+    The key is ``prefix + <VODLoft profile id> + suffix``, such as a Custom Index
+    assignment ``custom_index.<id>.day``.
+    """
+    children: tuple["RecordPlan", ...] = ()
+    """Records that only exist with this one, such as a download's history."""
+
+
+@dataclass(frozen=True)
 class SettingPlan:
     key: str
     value: object
@@ -127,6 +165,8 @@ class ImportPlan:
     profiles: tuple[ProfilePlan, ...] = ()
     collections: tuple[CollectionPlan, ...] = ()
     files: tuple[FilePlan, ...] = ()
+    records: tuple[RecordPlan, ...] = ()
+    """Records in the order they can be created: everything a record references comes before it."""
     settings: tuple[SettingPlan, ...] = ()
     warnings: tuple[ImportWarning, ...] = ()
     version: str | None = None

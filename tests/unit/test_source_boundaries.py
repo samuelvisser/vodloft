@@ -14,6 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SERVER = REPO_ROOT / "server"
 
 DAILYWIRE_FEATURE_MODULES = {
+    "backend/src/backend/api/endpoints/dailywire/auth/imported_sign_in.py",
     "backend/src/backend/api/endpoints/dailywire/auth/router.py",
     "backend/src/backend/api/endpoints/dailywire/catalog/router.py",
     "backend/src/backend/api/endpoints/dailywire/catalog/service.py",
