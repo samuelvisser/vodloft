@@ -1,0 +1,665 @@
+.regex-editor {
+    --rx-border: rgba(100, 116, 139, 0.22);
+    --rx-soft: rgba(148, 163, 184, 0.055);
+    --rx-accent: #0284c7;
+    --rx-accent-soft: rgba(14, 165, 233, 0.11);
+    --rx-ok: #15803d;
+    --rx-warn-bg: #fff7e6;
+    --rx-warn-border: #f0c36d;
+    --rx-warn-text: #7a4b00;
+    --rx-error: #b91c1c;
+    --rx-code-bg: #ffffff;
+    --rx-escape: #b45309;
+    --rx-class: #0f766e;
+    --rx-group: #7c3aed;
+    --rx-quantifier: #db2777;
+    --rx-anchor: #2563eb;
+    --rx-mark: rgba(14, 165, 233, 0.18);
+    min-width: 0;
+    overflow: visible;
+    border: 1px solid var(--rx-border);
+    border-radius: 12px;
+    background: rgba(148, 163, 184, 0.035);
+    color: var(--text);
+}
+
+@media (prefers-color-scheme: dark) {
+    .regex-editor {
+        --rx-border: rgba(148, 163, 184, 0.2);
+        --rx-accent: #7dd3fc;
+        --rx-ok: #4ade80;
+        --rx-warn-bg: #2a2315;
+        --rx-warn-border: #5a4a24;
+        --rx-warn-text: #f3c675;
+        --rx-error: #fca5a5;
+        --rx-code-bg: #0f1522;
+        --rx-escape: #f2c27b;
+        --rx-class: #5eead4;
+        --rx-group: #c4b5fd;
+        --rx-quantifier: #f9a8d4;
+        --rx-anchor: #93c5fd;
+        --rx-mark: rgba(56, 189, 248, 0.22);
+    }
+}
+
+.regex-editor__section {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+    padding: 14px;
+    border-top: 1px solid var(--rx-border);
+}
+
+.regex-editor__presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    padding: 12px;
+    border-radius: 12px 12px 0 0;
+    background: var(--rx-soft);
+}
+
+.regex-editor__preset {
+    appearance: none;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 7px 11px;
+    border: 1px solid rgba(100, 116, 139, 0.24);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 650;
+}
+
+.regex-editor__preset small {
+    color: var(--muted);
+    font-size: 10.5px;
+    font-weight: 500;
+}
+
+.regex-editor__preset:hover:not(:disabled) {
+    background: rgba(148, 163, 184, 0.11);
+}
+
+.regex-editor__preset.is-active {
+    border-color: rgba(14, 165, 233, 0.42);
+    background: var(--rx-accent-soft);
+    color: var(--rx-accent);
+}
+
+.regex-editor__preset:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.regex-editor__form {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.15fr);
+    align-items: start;
+    gap: 14px;
+}
+
+.regex-editor__form--any {
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+}
+
+.regex-editor__form--any .regex-editor__toggles {
+    grid-column: 1 / -1;
+}
+
+.regex-editor__field {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.regex-editor__field > span,
+.regex-editor__field > label {
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.regex-editor__field small,
+.regex-editor__muted {
+    color: var(--muted);
+    font-size: 11.5px;
+    font-weight: 500;
+}
+
+.regex-editor__toggles {
+    display: grid;
+    gap: 10px;
+    padding-top: 4px;
+}
+
+.regex-editor__toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    cursor: pointer;
+    font-size: 12.5px;
+}
+
+.regex-editor__toggle > span {
+    display: grid;
+    gap: 1px;
+}
+
+.regex-editor__toggle small {
+    color: var(--muted);
+    font-size: 11.5px;
+}
+
+.regex-editor__chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    min-height: 40px;
+    padding: 6px 8px;
+    border: 1px solid rgba(100, 116, 139, 0.35);
+    border-radius: 8px;
+    background: var(--rx-code-bg);
+}
+
+.regex-editor__chips:focus-within {
+    border-color: rgba(14, 165, 233, 0.6);
+}
+
+.regex-editor__chips input {
+    flex: 1 1 120px;
+    min-width: 80px;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-weight: 400;
+}
+
+.regex-editor__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 4px 3px 9px;
+    border: 1px solid var(--rx-border);
+    border-radius: 6px;
+    background: rgba(148, 163, 184, 0.14);
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+.regex-editor__chip button {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 0 3px;
+}
+
+/* Pattern blocks */
+.regex-editor__blocks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+}
+
+.regex-editor__block {
+    --rx-block: #94a3b8;
+    appearance: none;
+    display: grid;
+    gap: 1px;
+    min-width: 0;
+    max-width: 100%;
+    padding: 6px 11px 6px 10px;
+    border: 1px solid var(--rx-border);
+    border-left: 3px solid var(--rx-block);
+    border-radius: 8px;
+    background: var(--rx-soft);
+    color: var(--text);
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+}
+
+.regex-editor__block small {
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.regex-editor__block span {
+    overflow: hidden;
+    font-size: 13px;
+    font-weight: 650;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.regex-editor__block.is-selected {
+    border-color: rgba(14, 165, 233, 0.7);
+    box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.25);
+}
+
+.regex-editor__block.is-text { --rx-block: #e2e8f0; }
+.regex-editor__block.is-oneOf { --rx-block: #2dd4bf; }
+.regex-editor__block.is-number { --rx-block: #f472b6; }
+.regex-editor__block.is-anyText { --rx-block: #a78bfa; }
+.regex-editor__block.is-spaces { --rx-block: #fbbf24; }
+.regex-editor__block.is-date { --rx-block: #fb923c; }
+.regex-editor__block.is-optional { --rx-block: #818cf8; }
+.regex-editor__block.is-position { --rx-block: #60a5fa; }
+
+@media (prefers-color-scheme: light) {
+    .regex-editor__block.is-text { --rx-block: #64748b; }
+}
+
+.regex-editor__add {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-style: dashed;
+    border-left-width: 1px;
+    color: var(--rx-accent);
+    font-weight: 650;
+}
+
+.regex-editor__inspector,
+.regex-editor__palette {
+    display: grid;
+    gap: 10px;
+    padding: 12px 14px;
+    border: 1px solid var(--rx-border);
+    border-radius: 10px;
+}
+
+.regex-editor__inspector-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 13px;
+}
+
+.regex-editor__inspector-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.regex-editor__inspector-actions button {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font: inherit;
+    padding: 2px 4px;
+}
+
+.regex-editor__inspector-actions button:disabled {
+    cursor: default;
+    opacity: 0.4;
+}
+
+.regex-editor__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    align-items: start;
+    gap: 14px;
+}
+
+.regex-editor__nested {
+    display: grid;
+    gap: 8px;
+}
+
+.regex-editor__palette {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.regex-editor__palette button {
+    display: grid;
+    gap: 2px;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+}
+
+.regex-editor__palette button:hover,
+.regex-editor__palette button:focus-visible {
+    background: rgba(148, 163, 184, 0.12);
+}
+
+.regex-editor__palette strong {
+    font-size: 13px;
+}
+
+.regex-editor__palette span {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+/* The expression */
+.regex-editor__label-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px 12px;
+}
+
+.regex-editor__label-row label {
+    font-size: 12.5px;
+    font-weight: 700;
+}
+
+.regex-editor__expression {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px 4px 0;
+    border: 1px solid rgba(100, 116, 139, 0.35);
+    border-radius: 8px;
+    background: var(--rx-code-bg);
+}
+
+.regex-editor__expression:focus-within {
+    border-color: rgba(14, 165, 233, 0.65);
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
+}
+
+.regex-editor__expression.is-invalid {
+    border-color: var(--rx-error);
+}
+
+.regex-editor__code {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13.5px;
+    line-height: 1.5;
+}
+
+.regex-editor__code pre,
+.regex-editor__code textarea {
+    margin: 0;
+    padding: 7px 10px;
+    border: 0;
+    font: inherit;
+    letter-spacing: 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+    overflow-wrap: anywhere;
+}
+
+.regex-editor__code pre {
+    pointer-events: none;
+    color: var(--text);
+}
+
+.regex-editor__code textarea {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    resize: none;
+    overflow: hidden;
+    outline: 0;
+    background: transparent;
+    color: transparent;
+    caret-color: var(--text);
+}
+
+.regex-editor__code .is-escape { color: var(--rx-escape); }
+.regex-editor__code .is-class { color: var(--rx-class); }
+.regex-editor__code .is-group,
+.regex-editor__code .is-alternation { color: var(--rx-group); }
+.regex-editor__code .is-quantifier,
+.regex-editor__code .is-any { color: var(--rx-quantifier); }
+.regex-editor__code .is-anchor { color: var(--rx-anchor); }
+.regex-editor__code .is-hovered { border-radius: 3px; background: var(--rx-mark); }
+.regex-editor__code .is-error {
+    border-radius: 2px;
+    background: rgba(220, 38, 38, 0.3);
+    text-decoration: underline wavy var(--rx-error);
+}
+
+.regex-editor__case {
+    flex: none;
+    padding: 4px 10px;
+    border: 1px solid var(--rx-border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 650;
+    white-space: nowrap;
+}
+
+.regex-editor__case.is-active {
+    border-color: rgba(14, 165, 233, 0.5);
+    background: var(--rx-accent-soft);
+    color: var(--rx-accent);
+}
+
+.regex-editor__description {
+    padding: 9px 12px;
+    border-radius: 8px;
+    background: var(--rx-accent-soft);
+    font-size: 13px;
+}
+
+.regex-editor__error {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--rx-error);
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+.regex-editor__explain {
+    display: grid;
+    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+    gap: 4px 28px;
+    padding: 10px 14px;
+    border: 1px solid var(--rx-border);
+    border-radius: 8px;
+    font-size: 12.5px;
+}
+
+.regex-editor__explain code {
+    overflow-wrap: anywhere;
+    color: var(--rx-escape);
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+}
+
+.regex-editor__note {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    padding: 9px 12px;
+    border: 1px solid var(--rx-warn-border);
+    border-radius: 8px;
+    background: var(--rx-warn-bg);
+    color: var(--rx-warn-text);
+    font-size: 12.5px;
+}
+
+.regex-editor__note svg {
+    margin-top: 2px;
+}
+
+/* The tester */
+.regex-editor__tester-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 16px;
+    font-size: 13px;
+}
+
+.regex-editor__count {
+    color: var(--muted);
+}
+
+.regex-editor__count b {
+    color: var(--text);
+}
+
+.regex-editor__filter {
+    display: inline-flex;
+    gap: 3px;
+    padding: 3px;
+    border: 1px solid var(--rx-border);
+    border-radius: 8px;
+}
+
+.regex-editor__filter button {
+    padding: 3px 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 650;
+}
+
+.regex-editor__filter button.is-active {
+    background: var(--rx-accent-soft);
+    color: var(--rx-accent);
+}
+
+.regex-editor__samples {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.regex-editor__samples li {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: var(--rx-soft);
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.regex-editor__samples li.is-match {
+    color: var(--text);
+}
+
+.regex-editor__samples li.regex-editor__empty {
+    display: block;
+}
+
+.regex-editor__sample-text {
+    overflow-wrap: anywhere;
+}
+
+.regex-editor__sample-text mark {
+    border-radius: 3px;
+    background: var(--rx-mark);
+    box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.35);
+    color: inherit;
+}
+
+.regex-editor__mark {
+    color: var(--rx-ok);
+    text-align: center;
+}
+
+.regex-editor__date {
+    color: var(--muted);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.regex-editor__remove {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+}
+
+.regex-editor__add-sample {
+    display: flex;
+    gap: 8px;
+}
+
+.regex-editor__add-sample .input {
+    flex: 1;
+    min-width: 0;
+}
+
+.regex-editor__link {
+    justify-self: start;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--rx-accent);
+    cursor: pointer;
+    font: inherit;
+    font-size: 12.5px;
+    text-decoration: underline;
+}
+
+@media (max-width: 720px) {
+    .regex-editor__form,
+    .regex-editor__form--any {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .regex-editor__presets {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .regex-editor__palette {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .regex-editor__explain {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 2px;
+    }
+
+    .regex-editor__explain span {
+        margin-bottom: 6px;
+    }
+
+    .regex-editor__samples li {
+        grid-template-columns: 18px minmax(0, 1fr);
+    }
+
+    .regex-editor__date {
+        grid-column: 2;
+    }
+}

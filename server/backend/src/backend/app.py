@@ -269,6 +269,7 @@ def create_app() -> FastAPI:
         import_router,
         assets_router,
         health_router,
+        regex_router,
     )
     from backend.api.endpoints.auth.router import router as auth_router
 
@@ -295,6 +296,7 @@ def create_app() -> FastAPI:
     app.include_router(quick_download_router, prefix="/api")
     app.include_router(setting_router, prefix="/api")
     app.include_router(import_router, prefix="/api")
+    app.include_router(regex_router, prefix="/api")
     app.include_router(local_media_profile_router, prefix="/api")
     app.include_router(collection_local_media_profile_router, prefix="/api")
     app.include_router(movie_local_media_profile_router, prefix="/api")
