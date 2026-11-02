@@ -6,7 +6,6 @@ import subprocess
 import pytest
 
 from sources import registry
-from sources import ytdlp_runner as runner
 from sources.ytdlp import thumbnails
 
 from test_ytdlp_collections import ListedSource, _collection, _video, session  # noqa: F401
@@ -72,30 +71,33 @@ def test_no_picture_is_missing_and_other_pictures_are_taken_as_they_are(monkeypa
     assert head.urls == []
 
 
-def test_first_frame_reads_the_start_of_the_stream_with_ffmpeg(monkeypatch):
+def test_first_frame_downloads_the_first_seconds_and_keeps_a_frame(monkeypatch):
+    from pathlib import Path
+
     monkeypatch.setattr(thumbnails.shutil, "which", lambda name: f"/usr/bin/{name}")
-    monkeypatch.setattr(runner, "run_json", lambda *args: {"url": "https://stream/video", "http_headers": {"User-Agent": "UA"}})
     calls = []
 
     def run(command, **_kwargs):
         calls.append(command)
+        if len(calls) == 1:
+            Path(command[command.index("-o") + 1]).write_bytes(b"clip")
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        assert Path(command[command.index("-i") + 1]).read_bytes() == b"clip"
         return subprocess.CompletedProcess(command, 0, stdout=b"jpeg", stderr=b"")
 
     monkeypatch.setattr(thumbnails.subprocess, "run", run)
     assert thumbnails.first_frame("https://www.youtube.com/watch?v=dQw4w9WgXcQ") == b"jpeg"
-    command = calls[0]
-    assert command[command.index("-headers") + 1] == "User-Agent: UA\r\n"
-    assert command.index("-t") < command.index("-i")
-    assert command[command.index("-i") + 1] == "https://stream/video"
-    assert command[-1] == "pipe:1"
+    download, frame = calls
+    assert download[download.index("--download-sections") + 1] == "*0-4"
+    assert download[-1] == "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    assert frame[0] == "/usr/bin/ffmpeg" and frame[-1] == "pipe:1"
 
 
-def test_first_frame_gives_up_when_ffmpeg_fails(monkeypatch):
+def test_first_frame_gives_up_when_the_download_fails(monkeypatch):
     monkeypatch.setattr(thumbnails.shutil, "which", lambda name: f"/usr/bin/{name}")
-    monkeypatch.setattr(runner, "run_json", lambda *args: {"url": "https://stream/video"})
     monkeypatch.setattr(
         thumbnails.subprocess, "run",
-        lambda command, **_kwargs: subprocess.CompletedProcess(command, 1, stdout=b"", stderr=b"404 Not Found"),
+        lambda command, **_kwargs: subprocess.CompletedProcess(command, 1, stdout="", stderr="ERROR: HTTP Error 403: Forbidden"),
     )
     assert thumbnails.first_frame("https://www.youtube.com/watch?v=dQw4w9WgXcQ") is None
 
