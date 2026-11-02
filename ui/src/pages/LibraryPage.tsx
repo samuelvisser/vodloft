@@ -20,6 +20,21 @@ import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {CollectionTypeReg, CollectionTypeValue} from '../types/collection'
 
 const LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY = 'libraryCollectionTypeFilter'
+const LIBRARY_SOURCE_FILTER_STORAGE_KEY = 'librarySourceFilter'
+
+/** The remembered Source filter; empty (every Source) when nothing usable is stored. */
+function loadLibrarySourceFilter(): Set<string> {
+    try {
+        const raw = localStorage.getItem(LIBRARY_SOURCE_FILTER_STORAGE_KEY)
+        if (raw === null) return new Set()
+
+        const parsed: unknown = JSON.parse(raw)
+        if (!Array.isArray(parsed)) return new Set()
+        return new Set(parsed.filter((value): value is string => typeof value === 'string'))
+    } catch {
+        return new Set()
+    }
+}
 
 function loadLibraryCollectionTypeFilter(): Set<CollectionTypeValue> {
     try {
@@ -83,7 +98,7 @@ export default function LibraryPage() {
     const navigate = useNavigate()
     const [params, setParams] = useSearchParams()
     const [collectionTypeFilter, setCollectionTypeFilter] = useState(loadLibraryCollectionTypeFilter)
-    const [sourceFilter, setSourceFilter] = useState<Set<string>>(() => new Set())
+    const [sourceFilter, setSourceFilter] = useState(loadLibrarySourceFilter)
     const {data: collections, isLoading: collectionsLoading, error: collectionsError} = useCollectionsView()
     const {data: movies, isLoading: moviesLoading, error: moviesError} = useMovies()
     const {data: videos, isLoading: videosLoading, error: videosError} = useVideos()
@@ -92,19 +107,27 @@ export default function LibraryPage() {
         () => [...new Set([...(collections ?? []), ...(movies ?? []), ...(videos ?? [])].map((item) => item.sourceKey))].sort(),
         [collections, movies, videos],
     )
+    // A remembered Source can disappear from the library. Only apply the Sources still
+    // present, and every Source while the chips are hidden, so nothing stays filtered
+    // out without a visible way to clear it.
+    const activeSourceFilter = useMemo(() => {
+        if (sourceKeys.length < 2) return new Set<string>()
+        const kept = [...sourceFilter].filter((key) => sourceKeys.includes(key))
+        return kept.length === sourceKeys.length ? new Set<string>() : new Set(kept)
+    }, [sourceFilter, sourceKeys])
     const filteredCollections = useMemo(
         () => collections?.filter((collection) => (
-            matchesCollectionTypeFilter(collection.type, collectionTypeFilter) && matchesSourceFilter(collection.sourceKey, sourceFilter)
+            matchesCollectionTypeFilter(collection.type, collectionTypeFilter) && matchesSourceFilter(collection.sourceKey, activeSourceFilter)
         )) ?? [],
-        [collections, collectionTypeFilter, sourceFilter],
+        [collections, collectionTypeFilter, activeSourceFilter],
     )
     const filteredMovies = useMemo(
-        () => movies?.filter((movie) => matchesSourceFilter(movie.sourceKey, sourceFilter)) ?? [],
-        [movies, sourceFilter],
+        () => movies?.filter((movie) => matchesSourceFilter(movie.sourceKey, activeSourceFilter)) ?? [],
+        [movies, activeSourceFilter],
     )
     const filteredVideos = useMemo(
-        () => videos?.filter((video) => matchesSourceFilter(video.sourceKey, sourceFilter)) ?? [],
-        [videos, sourceFilter],
+        () => videos?.filter((video) => matchesSourceFilter(video.sourceKey, activeSourceFilter)) ?? [],
+        [videos, activeSourceFilter],
     )
     const hasCollections = !!collections?.length
     const hasMovies = !!movies?.length
@@ -129,6 +152,14 @@ export default function LibraryPage() {
             // should still work normally for the current page session in that case.
         }
     }, [collectionTypeFilter])
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(LIBRARY_SOURCE_FILTER_STORAGE_KEY, JSON.stringify(Array.from(sourceFilter)))
+        } catch {
+            // As above: without storage the filter just isn't remembered.
+        }
+    }, [sourceFilter])
 
     // The URL is the single source of truth for the selected library type, just
     // like on the Browse page. Never switch away from an explicitly requested
@@ -175,7 +206,7 @@ export default function LibraryPage() {
             {hasAny && (
                 <SourceFilter
                     sourceKeys={sourceKeys}
-                    selected={sourceFilter}
+                    selected={activeSourceFilter}
                     onChange={setSourceFilter}
                     ariaLabel="Filter library by source"
                 />
