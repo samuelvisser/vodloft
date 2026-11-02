@@ -202,31 +202,38 @@ export default function LibraryPage() {
                 </div>
             ) : activeType === 'collections' && hasCollections ? (
                 filteredCollections.length > 0 ? (
-                    <div className="library-collection-list" role="list" aria-label="Collections">
+                    <div className="library-collection-grid" role="list" aria-label="Collections">
                         {filteredCollections.map((collection) => {
+                            const landscape = !collection.thumbnailPortraitPath && !!collection.thumbnailLandscapePath
                             const image = toImageUrl(
                                 collection.thumbnailPortraitPath || collection.thumbnailLandscapePath || collection.logoImagePath || collection.authorHeadshotPath,
                             )
-                            const landscape = !collection.thumbnailPortraitPath && !!collection.thumbnailLandscapePath
                             return (
-                                <Link className={`collection-summary-card library-collection-card${landscape ? ' is-landscape' : ''}`} to={`/collection/${collection.slug}`} key={collection.slug} role="listitem">
-                                    <span className="collection-summary-art">
-                                        {image ? <img src={image} alt="" loading="lazy" decoding="async"/> : <span className="collection-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', 'podcast')}/></span>}
+                                <Link className="library-tile" to={`/collection/${collection.slug}`} key={collection.slug} role="listitem">
+                                    <span className="library-tile-art">
+                                        {!image ? (
+                                            <span className="collection-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', 'podcast')}/></span>
+                                        ) : landscape ? (
+                                            <img className="library-tile-image" src={image} alt="" loading="lazy" decoding="async"/>
+                                        ) : (
+                                            <>
+                                                <img className="library-tile-backdrop" src={image} alt="" aria-hidden="true" loading="lazy" decoding="async"/>
+                                                <img className="library-tile-poster" src={image} alt="" loading="lazy" decoding="async"/>
+                                            </>
+                                        )}
+                                        <SourceBadge sourceKey={collection.sourceKey} className="library-tile-source"/>
                                     </span>
-                                    <div className="collection-summary-copy">
-                                        <span className="collection-summary-title">{collection.title}</span>
-                                        <span className="collection-summary-author">{collection.authorName}</span>
-                                        <SourceBadge sourceKey={collection.sourceKey}/>
-                                        <span className="collection-summary-meta">{collection.episodeCount} episodes{collection.years ? ` • ${collection.years}` : ''}</span>
-                                        {collection.description && <span className="collection-summary-description">{collection.description}</span>}
+                                    <span className="library-tile-copy">
+                                        <span className="library-tile-title">{collection.title}</span>
+                                        {collection.authorName && <span className="library-tile-author">{collection.authorName}</span>}
+                                        <span className="library-tile-meta">{collection.episodeCount} episodes{collection.years ? ` • ${collection.years}` : ''}</span>
                                         <CollectionIndexingProgress
                                             collectionId={collection.id}
                                             collectionSlug={collection.slug}
                                             pollForStart={collection.episodeCount === 0}
                                             className="library-collection-indexing"
                                         />
-                                    </div>
-                                    <FontAwesomeIcon icon={faIcon('fass', 'chevron-right')} aria-hidden="true"/>
+                                    </span>
                                 </Link>
                             )
                         })}
