@@ -51,17 +51,17 @@ async def rename_file_worker(
             *([EpisodeMediaDownload.local_media_profile_id == local_media_profile_id]
               if local_media_profile_id is not None else []),
         ).distinct()))
-        show_id = episode.show_id if episode is not None else None
+        collection_id = episode.collection_id if episode is not None else None
     try:
         while True:
-            if show_id is not None:
+            if collection_id is not None:
                 for profile_id in profile_ids:
-                    await wait_for_custom_index_pair(show_id, profile_id)
+                    await wait_for_custom_index_pair(collection_id, profile_id)
             async with AsyncExitStack() as locks:
-                if show_id is not None:
+                if collection_id is not None:
                     for profile_id in sorted(profile_ids):
-                        await locks.enter_async_context(custom_index_pair_lock(show_id, profile_id))
-                    if not all(pair_is_ready(show_id, profile_id) for profile_id in profile_ids):
+                        await locks.enter_async_context(custom_index_pair_lock(collection_id, profile_id))
+                    if not all(pair_is_ready(collection_id, profile_id) for profile_id in profile_ids):
                         continue
                 with db_session() as s:
                     return await run_rename_file_worker(

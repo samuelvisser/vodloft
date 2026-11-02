@@ -12,9 +12,9 @@ import {
     MovieLocalMediaProfileCreateSchema,
 } from '../../types/schemas/movie_local_media_profile'
 import {
-    ShowLocalMediaProfileCreateIn,
-    ShowLocalMediaProfileCreateSchema,
-} from '../../types/schemas/show_local_media_profile'
+    CollectionLocalMediaProfileCreateIn,
+    CollectionLocalMediaProfileCreateSchema,
+} from '../../types/schemas/collection_local_media_profile'
 import {
     VideoLocalMediaProfileCreateIn,
     VideoLocalMediaProfileCreateSchema,
@@ -44,20 +44,20 @@ export default function AddLocalMediaProfilePage() {
         [draftKey],
     )
     const requestedMode = searchParams.get('type')
-    const explicitMode = requestedMode === 'movie' || requestedMode === 'show' || requestedMode === 'video'
+    const explicitMode = requestedMode === 'movie' || requestedMode === 'collection' || requestedMode === 'video'
         ? requestedMode
         : undefined
-    const initialMode: LocalMediaProfileMode = explicitMode ?? restoredDraft?.mode ?? 'show'
+    const initialMode: LocalMediaProfileMode = explicitMode ?? restoredDraft?.mode ?? 'collection'
     const [mode, setMode] = useState<LocalMediaProfileMode>(initialMode)
 
-    const formShow = useForm<WithRoot<ShowLocalMediaProfileCreateIn>>({
-        resolver: zodResolver(ShowLocalMediaProfileCreateSchema),
+    const formCollection = useForm<WithRoot<CollectionLocalMediaProfileCreateIn>>({
+        resolver: zodResolver(CollectionLocalMediaProfileCreateSchema),
         mode: 'onBlur',
         shouldFocusError: true,
         defaultValues: {
-            ...getZodDefaults(ShowLocalMediaProfileCreateSchema),
-            ...(restoredDraft?.mode === 'show'
-                ? restoredDraft.values as Partial<ShowLocalMediaProfileCreateIn>
+            ...getZodDefaults(CollectionLocalMediaProfileCreateSchema),
+            ...(restoredDraft?.mode === 'collection'
+                ? restoredDraft.values as Partial<CollectionLocalMediaProfileCreateIn>
                 : {}),
         },
     })
@@ -86,7 +86,7 @@ export default function AddLocalMediaProfilePage() {
         },
     })
 
-    const form = ({show: formShow, movie: formMovie, video: formVideo}[mode]) as UseFormReturn<any>
+    const form = ({collection: formCollection, movie: formMovie, video: formVideo}[mode]) as UseFormReturn<any>
 
     useEffect(() => {
         const saveDraft = (values: Partial<LocalMediaProfileCreateIn>) => {
@@ -135,7 +135,7 @@ export default function AddLocalMediaProfilePage() {
         <section className="view" aria-labelledby="add-media-profile-title">
             <div className="view-header">
                 <h1 id="add-media-profile-title">Add local media profile</h1>
-                {mode === 'show' && <IndexingValuesEditorButton form={form}/>}
+                {mode === 'collection' && <IndexingValuesEditorButton form={form}/>}
             </div>
 
             <form className="form" onSubmit={onCreate} noValidate>
@@ -147,9 +147,9 @@ export default function AddLocalMediaProfilePage() {
                         onChange={(value) => setMode(value as LocalMediaProfileMode)}
                         options={[
                             {
-                                value: 'show',
-                                label: 'Show',
-                                description: 'Store downloaded show episodes',
+                                value: 'collection',
+                                label: 'Collection',
+                                description: 'Store downloaded collection episodes',
                             },
                             {
                                 value: 'movie',

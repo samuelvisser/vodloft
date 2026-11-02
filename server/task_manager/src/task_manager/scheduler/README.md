@@ -1,7 +1,7 @@
 # VODLoft Scheduler
 
 A lightweight, APScheduler-powered task scheduler integrated into the VODLoft backend. It lets you:
-- Register internal tasks bound to a resource (show/season/episode/movie)
+- Register internal tasks bound to a resource (collection/season/episode/movie)
 - Schedule tasks via cron/interval/date triggers
 - Trigger ad-hoc runs immediately
 - Track task runs, progress, status, retries, and errors via the API
@@ -89,7 +89,7 @@ async def refresh_episode_metadata(resource_id: int, progress: ProgressUpdater):
     progress.set(100, "Done")
 
 Notes:
-- allowed_resource_types controls what resource kinds can bind to this task ("show", "season", "episode", "movie").
+- allowed_resource_types controls what resource kinds can bind to this task ("collection", "season", "episode", "movie").
 - default_max_retries sets a task-level default retry limit. Precedence is covered in Retry policy.
 - ProgressUpdater.set(percent, message=None, meta=None) clamps percent to [0..100] and persists message/meta for the UI.
 - Ensure the module containing the task is imported during app startup (e.g., import it in your backend app module) so the decorator registers the definition.
@@ -128,7 +128,7 @@ You can run a task on demand without creating a schedule.
 Endpoint: POST /api/tasks/runs/trigger
 Query params:
 - definition_key: string
-- resource_type: show|season|episode|movie
+- resource_type: collection|season|episode|movie
 - resource_id: int
 - max_retries: int (optional)
 
@@ -199,7 +199,7 @@ Response: { "jobId": "..." }
 ## Troubleshooting
 - I don’t see my task in /api/tasks/definitions:
   - Make sure the module that defines @task is imported before app startup calls sync_registry_to_db().
-- My /api/tasks/schedules shows nextRunTime as null:
+- My /api/tasks/schedules collections nextRunTime as null:
   - APScheduler computes next run times after start; ensure the scheduler is enabled and started (get_settings().scheduler.enabled = true).
 - Date trigger rejected:
   - Use an ISO8601 string with explicit timezone offset, e.g., 2025-10-12T03:00:00+00:00.

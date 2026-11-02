@@ -7,10 +7,10 @@ from jinja2 import StrictUndefined, nodes
 from jinja2.sandbox import ImmutableSandboxedEnvironment
 import pytest
 
-from backend.utils.jinja_analysis import UnknownOutput, analyze_template, expression_dependencies
-from backend.utils.jinja_analysis.comparison import OutputOverlap, compare_outputs
-from backend.utils.jinja_analysis.expressions import analysis_environment
-from backend.utils.jinja_analysis.paths import INPUT_PREFIX
+from jinja_analysis import UnknownOutput, analyze_template, expression_dependencies
+from jinja_analysis.comparison import OutputOverlap, compare_outputs
+from jinja_analysis.expressions import analysis_environment
+from jinja_analysis.paths import INPUT_PREFIX
 
 
 def _emit(value):
@@ -116,12 +116,12 @@ def test_symbolic_paths_agree_with_real_jinja(environment, template):
 
 
 def test_known_values_preserve_dependency_provenance(environment):
-    result = analyze_template('/downloads/{{ show_title|upper }}/{{ title }}.ext', environment=environment,
-                              known_values={'show_title': 'My Show'})
+    result = analyze_template('/downloads/{{ collection_title|upper }}/{{ title }}.ext', environment=environment,
+                              known_values={'collection_title': 'My Collection'})
     expr = result.variants[0].parts[1]
     assert isinstance(expr, nodes.Const)
-    assert expr.value == 'MY SHOW'
-    assert expression_dependencies(expr) == frozenset({'show_title'})
+    assert expr.value == 'MY COLLECTION'
+    assert expression_dependencies(expr) == frozenset({'collection_title'})
 
 
 @pytest.mark.parametrize('template', [
@@ -143,7 +143,7 @@ def test_branch_and_work_limits(environment):
     result = analyze_template(template, environment=environment, max_variants=8)
     assert not result.complete
     assert len(result.variants) <= 8
-    result = analyze_template('/downloads/{{show}}/' + template, environment=environment, max_steps=30)
+    result = analyze_template('/downloads/{{collection}}/' + template, environment=environment, max_steps=30)
     assert not result.complete
     assert any(isinstance(part, UnknownOutput) for variant in result.variants for part in variant.parts)
 
@@ -203,7 +203,7 @@ def test_large_constant_operations_are_bounded_before_evaluation(environment):
 
 
 def test_custom_index_reachability_ignores_unrelated_output_changes(environment):
-    from backend.utils.jinja_analysis import (
+    from jinja_analysis import (
         CustomIndexReachabilityStatus,
         compare_custom_index_reachability,
     )
@@ -225,7 +225,7 @@ def test_custom_index_reachability_ignores_unrelated_output_changes(environment)
 
 
 def test_custom_index_reachability_detects_assignment_condition_change(environment):
-    from backend.utils.jinja_analysis import (
+    from jinja_analysis import (
         CustomIndexReachabilityStatus,
         compare_custom_index_reachability,
     )
@@ -245,7 +245,7 @@ def test_custom_index_reachability_detects_assignment_condition_change(environme
 
 
 def test_custom_index_reachability_is_unknown_for_short_circuit_effects(environment):
-    from backend.utils.jinja_analysis import (
+    from jinja_analysis import (
         CustomIndexReachabilityStatus,
         compare_custom_index_reachability,
     )

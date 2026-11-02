@@ -173,7 +173,7 @@ def setup_triggers_from_registry() -> None:
                     trigger=cron_trigger,
                     kwargs={
                         "def_key": task_key,
-                        "resource_type": trigger.resource_type or "show",
+                        "resource_type": trigger.resource_type or "collection",
                         "resource_id": trigger.resource_id,
                         "schedule_id": None,
                     },
@@ -196,7 +196,7 @@ def setup_triggers_from_registry() -> None:
 
                     resource_type = resource_type_captured
                     if resource_type is None:
-                        resource_type = event_data.get("resource_type") or "show"
+                        resource_type = event_data.get("resource_type") or "collection"
 
                     forwarded_data = {
                         key: value

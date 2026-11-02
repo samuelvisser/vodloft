@@ -11,11 +11,11 @@ from sqlalchemy.orm import Session
 
 def _db_with_download(tmp_path, *, file_name="episode.m4a", write_bytes: bytes | None = b"hello world"):
     from backend.db import Base
-    from backend.db.models import Episode, LocalMediaProfile, Season, Show
+    from backend.db.models import Episode, LocalMediaProfile, Season, Collection
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
     from downloader.storage.identity import inspect_artifact
     from backend.utils.helpers import generate_uuid
 
@@ -23,25 +23,25 @@ def _db_with_download(tmp_path, *, file_name="episode.m4a", write_bytes: bytes |
     Base.metadata.create_all(engine)
     session = Session(engine)
 
-    show = Show(
+    collection = Collection(
         source_key="dailywire",
-        uuid="show-uuid",
-        slug="test-show",
+        uuid="collection-uuid",
+        slug="test-collection",
         title="Test Show",
         description=None,
-        sharing_url="https://example.test/show",
+        sharing_url="https://example.test/collection",
         membership_level="FREE",
-        type=ShowType.PODCAST.value,
+        type=CollectionType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Host",
         author_slug="host",
     )
-    season = Season(show=show, index=1, slug="season-2026", name="2026")
+    season = Season(collection=collection, index=1, slug="season-2026", name="2026")
     episode = Episode(
         source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
-        show=show,
+        collection=collection,
         season=season,
         index=1,
         episode_identifier="ep.101",
@@ -55,10 +55,10 @@ def _db_with_download(tmp_path, *, file_name="episode.m4a", write_bytes: bytes |
     profile = LocalMediaProfile(
         slug="audio",
         name="Audio",
-        output_template="/downloads/{{ show }}/{{ episode }}.ext",
+        output_template="/downloads/{{ collection }}/{{ episode }}.ext",
         preferred_format="format_audio_only",
     )
-    session.add_all([show, season, episode, profile])
+    session.add_all([collection, season, episode, profile])
     session.commit()
 
     file_path = tmp_path / file_name
@@ -86,7 +86,7 @@ def _db_with_download(tmp_path, *, file_name="episode.m4a", write_bytes: bytes |
     session.add(download)
     session.commit()
 
-    return session, engine, show, episode, download
+    return session, engine, collection, episode, download
 
 
 @pytest.fixture(autouse=True)
@@ -109,7 +109,7 @@ def _run(session, **kwargs):
 def test_healthy_download_is_left_untouched(tmp_path):
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
-    session, engine, _show, _episode, download = _db_with_download(tmp_path)
+    session, engine, _collection, _episode, download = _db_with_download(tmp_path)
 
     _run(session)
 
@@ -123,7 +123,7 @@ def test_healthy_download_is_left_untouched(tmp_path):
 def test_deleted_file_is_flagged_missing(tmp_path):
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
-    session, engine, _show, _episode, download = _db_with_download(tmp_path)
+    session, engine, _collection, _episode, download = _db_with_download(tmp_path)
     os.remove(download.file_path)
 
     _run(session)
@@ -138,7 +138,7 @@ def test_deleted_file_is_flagged_missing(tmp_path):
 def test_same_directory_rename_is_reconciled_by_filesystem_identity(tmp_path):
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
-    session, engine, _show, _episode, download = _db_with_download(tmp_path)
+    session, engine, _collection, _episode, download = _db_with_download(tmp_path)
     renamed = tmp_path / "renamed-by-user.m4a"
     os.rename(download.file_path, renamed)
 
@@ -155,7 +155,7 @@ def test_same_directory_rename_is_reconciled_by_filesystem_identity(tmp_path):
 def test_same_directory_rename_falls_back_to_fingerprint_for_unstable_filesystem_ids(tmp_path):
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
-    session, engine, _show, _episode, download = _db_with_download(tmp_path)
+    session, engine, _collection, _episode, download = _db_with_download(tmp_path)
     # Simulate an SMB/NFS reconnect or mount where the same file no longer has
     # the device/inode values recorded when it was downloaded.
     download.artifact_stat_dev = "999999999999"
@@ -180,7 +180,7 @@ def test_same_directory_rename_falls_back_to_fingerprint_for_unstable_filesystem
 def test_rename_to_different_directory_is_not_followed(tmp_path):
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
-    session, engine, _show, _episode, download = _db_with_download(tmp_path)
+    session, engine, _collection, _episode, download = _db_with_download(tmp_path)
     other_directory = tmp_path / "elsewhere"
     other_directory.mkdir()
     moved = other_directory / "episode.m4a"
@@ -198,7 +198,7 @@ def test_rename_to_different_directory_is_not_followed(tmp_path):
 def test_same_size_different_file_is_not_mistaken_for_rename(tmp_path):
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
-    session, engine, _show, _episode, download = _db_with_download(tmp_path, write_bytes=b"hello world")
+    session, engine, _collection, _episode, download = _db_with_download(tmp_path, write_bytes=b"hello world")
     original = download.file_path
     os.remove(original)
     (tmp_path / "different.m4a").write_bytes(b"HELLO WORLD")
@@ -215,7 +215,7 @@ def test_same_size_different_file_is_not_mistaken_for_rename(tmp_path):
 def test_ambiguous_fingerprint_matches_are_not_guessed(tmp_path):
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
-    session, engine, _show, _episode, download = _db_with_download(tmp_path)
+    session, engine, _collection, _episode, download = _db_with_download(tmp_path)
     original = download.file_path
     shutil.copyfile(original, tmp_path / "copy-a.m4a")
     shutil.copyfile(original, tmp_path / "copy-b.m4a")
@@ -234,7 +234,7 @@ def test_ambiguous_fingerprint_matches_are_not_guessed(tmp_path):
 def test_empty_file_is_flagged_corrupted(tmp_path):
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
-    session, engine, _show, _episode, download = _db_with_download(tmp_path, write_bytes=b"")
+    session, engine, _collection, _episode, download = _db_with_download(tmp_path, write_bytes=b"")
 
     _run(session)
 
@@ -248,7 +248,7 @@ def test_empty_file_is_flagged_corrupted(tmp_path):
 def test_truncated_file_is_flagged_corrupted(tmp_path):
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
-    session, engine, _show, _episode, download = _db_with_download(tmp_path, write_bytes=b"0123456789")
+    session, engine, _collection, _episode, download = _db_with_download(tmp_path, write_bytes=b"0123456789")
     with open(download.file_path, "wb") as file:
         file.write(b"012")
 
@@ -265,7 +265,7 @@ def test_modest_shrinkage_is_tolerated(tmp_path):
     """Small changes stay below the corruption threshold relative to the final artifact."""
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
-    session, engine, _show, _episode, download = _db_with_download(tmp_path, write_bytes=b"x" * 1000)
+    session, engine, _collection, _episode, download = _db_with_download(tmp_path, write_bytes=b"x" * 1000)
     with open(download.file_path, "wb") as file:
         file.write(b"x" * 900)
 
@@ -281,7 +281,7 @@ def test_size_check_uses_final_artifact_size_not_network_bytes(tmp_path):
     """Video-to-audio conversion can make the final artifact far smaller than its download."""
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
-    session, engine, _show, _episode, download = _db_with_download(
+    session, engine, _collection, _episode, download = _db_with_download(
         tmp_path,
         write_bytes=b"a" * 50,
     )
@@ -307,7 +307,7 @@ def test_truncation_check_can_be_disabled(tmp_path, monkeypatch):
 
     monkeypatch.setattr(get_settings().file_watcher, "verify_file_size", False)
 
-    session, engine, _show, _episode, download = _db_with_download(tmp_path, write_bytes=b"0123456789")
+    session, engine, _collection, _episode, download = _db_with_download(tmp_path, write_bytes=b"0123456789")
     with open(download.file_path, "wb") as file:
         file.write(b"012")
 
@@ -322,7 +322,7 @@ def test_truncation_check_can_be_disabled(tmp_path, monkeypatch):
 def test_missing_download_recovers_once_file_reappears(tmp_path):
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
-    session, engine, _show, _episode, download = _db_with_download(tmp_path)
+    session, engine, _collection, _episode, download = _db_with_download(tmp_path)
     download.artifact_status = MediaDownloadArtifactStatus.MISSING.value
     download.artifact_error = "File not found"
     session.commit()
@@ -340,7 +340,7 @@ def test_absent_artifacts_are_never_touched(tmp_path):
     """An active attempt is TaskRun state; an absent artifact is not watched as a file."""
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
-    session, engine, _show, _episode, download = _db_with_download(tmp_path, write_bytes=None)
+    session, engine, _collection, _episode, download = _db_with_download(tmp_path, write_bytes=None)
     download.file_path = str(tmp_path / "not-written-yet.m4a")
     session.commit()
 
@@ -360,7 +360,7 @@ def test_disabled_file_watcher_skips_everything(tmp_path, monkeypatch):
 
     monkeypatch.setattr(get_settings().file_watcher, "enabled", False)
 
-    session, engine, _show, _episode, download = _db_with_download(tmp_path)
+    session, engine, _collection, _episode, download = _db_with_download(tmp_path)
     os.remove(download.file_path)
 
     _run(session)
@@ -371,36 +371,36 @@ def test_disabled_file_watcher_skips_everything(tmp_path, monkeypatch):
     engine.dispose()
 
 
-def test_scan_can_be_scoped_to_one_show(tmp_path):
-    from backend.db.models import Episode, LocalMediaProfile, Season, Show
+def test_scan_can_be_scoped_to_one_collection(tmp_path):
+    from backend.db.models import Episode, LocalMediaProfile, Season, Collection
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
     from downloader.storage.identity import inspect_artifact
     from backend.utils.helpers import generate_uuid
 
-    session, engine, show, _episode, download = _db_with_download(tmp_path)
+    session, engine, collection, _episode, download = _db_with_download(tmp_path)
 
-    other_show = Show(
+    other_collection = Collection(
         source_key="dailywire",
-        uuid="show-uuid-2",
-        slug="other-show",
-        title="Other Show",
+        uuid="collection-uuid-2",
+        slug="other-collection",
+        title="Other Collection",
         description=None,
-        sharing_url="https://example.test/other-show",
+        sharing_url="https://example.test/other-collection",
         membership_level="FREE",
-        type=ShowType.PODCAST.value,
+        type=CollectionType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Host",
         author_slug="host",
     )
-    other_season = Season(show=other_show, index=1, slug="other-season-2026", name="2026")
+    other_season = Season(collection=other_collection, index=1, slug="other-season-2026", name="2026")
     other_episode = Episode(
         source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
-        show=other_show,
+        collection=other_collection,
         season=other_season,
         index=1,
         episode_identifier="ep.101",
@@ -427,7 +427,7 @@ def test_scan_can_be_scoped_to_one_show(tmp_path):
         artifact_size_bytes=other_identity.size_bytes,
         artifact_fingerprint=other_identity.fingerprint,
     )
-    session.add_all([other_show, other_season, other_episode])
+    session.add_all([other_collection, other_season, other_episode])
     session.commit()
     other_download.media_item_id = other_episode.id
     session.add(other_download)
@@ -436,7 +436,7 @@ def test_scan_can_be_scoped_to_one_show(tmp_path):
     os.remove(download.file_path)
     os.remove(other_file)
 
-    _run(session, show_id=show.id)
+    _run(session, collection_id=collection.id)
 
     assert download.artifact_status == MediaDownloadArtifactStatus.MISSING.value
     assert other_download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value

@@ -172,41 +172,41 @@ def test_movie_profiles_default_to_subtitle_sidecars():
     ("series", "sidecar"),
     ("podcast", "no_subtitles"),
 ])
-def test_show_subtitle_default_follows_scope_when_not_specified(scope, expected):
-    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
+def test_collection_subtitle_default_follows_scope_when_not_specified(scope, expected):
+    from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPICreate
 
-    show = ShowLocalMediaProfileAPICreate(
-        name="Show", type="show", show_scope=scope,
+    collection = CollectionLocalMediaProfileAPICreate(
+        name="Collection", type="collection", collection_scope=scope,
         preferred_format="format_1080p",
-        output_template="/downloads/shows/{{ show }}/{{ episode }}.ext",
+        output_template="/downloads/shows/{{ collection }}/{{ episode }}.ext",
     )
-    assert show.subtitle_mode == expected
-    assert show.model_dump(by_alias=True, mode="json")["subtitle_mode"] == expected
+    assert collection.subtitle_mode == expected
+    assert collection.model_dump(by_alias=True, mode="json")["subtitle_mode"] == expected
 
 
 @pytest.mark.parametrize("mode", [
     "no_subtitles", "embed", "sidecar", "embed_and_sidecar",
 ])
 @pytest.mark.parametrize("scope", ["podcast", "series", "both"])
-def test_manual_subtitle_selection_overrides_show_scope(scope, mode):
-    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
+def test_manual_subtitle_selection_overrides_collection_scope(scope, mode):
+    from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPICreate
 
-    profile = ShowLocalMediaProfileAPICreate(
-        name="Show", preferred_format="format_1080p",
-        show_scope=scope, subtitle_mode=mode,
-        output_template="/downloads/shows/{{ show }}/{{ episode }}.ext",
+    profile = CollectionLocalMediaProfileAPICreate(
+        name="Collection", preferred_format="format_1080p",
+        collection_scope=scope, subtitle_mode=mode,
+        output_template="/downloads/shows/{{ collection }}/{{ episode }}.ext",
     )
     assert profile.subtitle_mode == mode
 
 
 def test_subtitle_system_mode_is_no_longer_valid():
     from pydantic import ValidationError
-    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
+    from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPICreate
 
     with pytest.raises(ValidationError):
-        ShowLocalMediaProfileAPICreate(
-            name="Show", preferred_format="format_1080p", subtitle_mode="system",
-            output_template="/downloads/shows/{{ show }}/{{ episode }}.ext",
+        CollectionLocalMediaProfileAPICreate(
+            name="Collection", preferred_format="format_1080p", subtitle_mode="system",
+            output_template="/downloads/shows/{{ collection }}/{{ episode }}.ext",
         )
 
 
@@ -358,3 +358,74 @@ def test_unavailable_optional_subtitles_do_not_fail_media_download(tmp_path, mon
         assert execution.assets == ()
         assert not (tmp_path / "library" / "Movie.en.srt").exists()
         execution.cleanup_workspace()
+
+
+@pytest.mark.parametrize(("subtitles", "embed"), [
+    ((("en", "Hello"), ("nl", "Hallo")), False),
+    ((("en", "Hello"), ("nl", "Hallo")), True),
+    ((), True),
+])
+def test_ytdlp_subtitles_publish_one_sidecar_per_language(tmp_path, monkeypatch, subtitles, embed):
+    from pathlib import Path
+
+    from downloader import coordinator
+    from downloader.capacity import DownloadResources
+    from downloader.lifecycle import DownloadTracker
+    from downloader.models import DownloadProgress, DownloadResult
+
+    embedding_calls = []
+    monkeypatch.setattr(coordinator, "embed_media", lambda *args, **kwargs: embedding_calls.append(kwargs))
+
+    def transfer(_url, destination, *, command, subtitles_dir, progress, should_cancel):
+        assert subtitles_dir is not None
+        Path(destination).write_bytes(b"media")
+        written = []
+        for language, text in subtitles:
+            path = subtitles_dir / f"ytdlp-subtitle.{language}.srt"
+            path.write_text(f"1\n00:00:01,000 --> 00:00:02,000\n{text}\n\n")
+            written.append((language, str(path)))
+        progress(DownloadProgress(5, 5))
+        return DownloadResult(destination, 5, subtitles=tuple(written))
+
+    monkeypatch.setattr(coordinator, "download_ytdlp", transfer)
+    asset = SidecarSpec(
+        "subtitles", "subtitle", url="https://www.youtube.com/watch?v=x", extension="srt",
+        source_format="ytdlp", publish=True, required=False,
+    )
+    with DownloadTracker() as tracker:
+        plan = build_download_plan(
+            source=ResolvedDownloadSource(
+                "https://www.youtube.com/watch?v=x", "up to 1080p", False, False, "mp4", False,
+                ytdlp_command=("yt-dlp",),
+            ),
+            requested_destination=tmp_path / "library" / "Video.mp4",
+            temporary_root=tmp_path / "temp", download_mode="temporary",
+            assets=(asset,), subtitle_asset_ids=("subtitles",) if embed else (),
+            attempt_id=tracker.attempt_id,
+        )
+        execution = coordinator.execute_download_plan(plan, tracker=tracker, resources=DownloadResources())
+        library = tmp_path / "library"
+        assert sorted(path.name for path in library.iterdir()) == sorted(
+            ["Video.mp4", *(f"Video.{language}.srt" for language, _ in subtitles)]
+        )
+        assert sorted(item.id for item in execution.assets) == sorted(f"subtitles-{language}" for language, _ in subtitles)
+        assert {item.kind for item in execution.assets} <= {"subtitle"}
+        if embed and subtitles:
+            assert [item[0] for item in embedding_calls[0]["subtitles"]] == ["en", "nl"]
+        elif embed:
+            assert embedding_calls == [] or embedding_calls[0]["subtitles"] == ()
+        assert not tracker.snapshot().warnings
+        execution.cleanup_workspace()
+
+
+def test_ytdlp_subtitles_need_a_ytdlp_download(tmp_path):
+    asset = SidecarSpec(
+        "subtitles", "subtitle", url="https://www.youtube.com/watch?v=x", extension="srt",
+        source_format="ytdlp", required=False,
+    )
+    with pytest.raises(ValueError, match="yt-dlp download"):
+        build_download_plan(
+            source=ResolvedDownloadSource("https://cdn.example/a.mp4", "1080p", False, False, "mp4", False),
+            requested_destination=tmp_path / "a.mp4", temporary_root=tmp_path / "t",
+            download_mode="temporary", assets=(asset,),
+        )

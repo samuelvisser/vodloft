@@ -17,12 +17,12 @@ from backend.api.models.operations import (
 from backend.app import db_session
 from backend.types.local_media_profile_types import (
     LocalMediaProfileType,
-    ShowLocalMediaProfileScope,
+    CollectionLocalMediaProfileScope,
 )
 
 from .output_template import (
     get_output_template_source_page,
-    get_random_show_template_source,
+    get_random_collection_template_source,
     get_output_template_variables,
 )
 from .file_rename import request_local_media_profile_file_rename
@@ -75,7 +75,7 @@ def local_media_profile_template_variables(
 @router.get("/template/sources", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=LocalMediaProfileTemplateSourcePage)
 def local_media_profile_template_sources(
     type: LocalMediaProfileType = Query(...),
-    show_scope: ShowLocalMediaProfileScope = Query(ShowLocalMediaProfileScope.BOTH),
+    collection_scope: CollectionLocalMediaProfileScope = Query(CollectionLocalMediaProfileScope.BOTH),
     search: str | None = Query(None, max_length=200),
     cursor: str | None = Query(None, max_length=4096),
     limit: int = Query(30, ge=1, le=100),
@@ -87,7 +87,7 @@ def local_media_profile_template_sources(
             return get_output_template_source_page(
                 s,
                 type,
-                show_scope,
+                collection_scope,
                 search=search,
                 cursor=cursor,
                 limit=limit,
@@ -98,16 +98,16 @@ def local_media_profile_template_sources(
 
 
 @router.get(
-    "/template/sources/random-show-episode",
+    "/template/sources/random-collection-episode",
     dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))],
     response_model=LocalMediaProfileTemplateSource | None,
 )
-def local_media_profile_random_show_template_source(
-    show_scope: ShowLocalMediaProfileScope = Query(ShowLocalMediaProfileScope.BOTH),
+def local_media_profile_random_collection_template_source(
+    collection_scope: CollectionLocalMediaProfileScope = Query(CollectionLocalMediaProfileScope.BOTH),
 ):
-    """Choose a fresh initial episode without weighting Shows by episode count."""
+    """Choose a fresh initial episode without weighting Collections by episode count."""
     with db_session() as s:
-        return get_random_show_template_source(s, show_scope)
+        return get_random_collection_template_source(s, collection_scope)
 
 
 @router.get(

@@ -6,12 +6,12 @@ from pydantic import Field
 
 from backend.api.models.base import ResponseBase
 from backend.api.models.movie_local_media_profile import MovieLocalMediaProfileAPIRead
-from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPIRead
+from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPIRead
 from backend.api.models.video_local_media_profile import VideoLocalMediaProfileAPIRead
 
 
 LocalMediaProfileAPIRead = Annotated[
-    ShowLocalMediaProfileAPIRead | MovieLocalMediaProfileAPIRead | VideoLocalMediaProfileAPIRead,
+    CollectionLocalMediaProfileAPIRead | MovieLocalMediaProfileAPIRead | VideoLocalMediaProfileAPIRead,
     Field(discriminator="type"),
 ]
 

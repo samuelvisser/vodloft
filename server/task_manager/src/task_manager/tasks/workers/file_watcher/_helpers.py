@@ -8,7 +8,7 @@ from typing import Optional
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Episode, Show
+from backend.db.models import Episode, Collection
 from backend.db.models.media_download import MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from config import get_settings
@@ -38,23 +38,23 @@ def _scoped_download_count(s: Session, stmt) -> int:
 def get_tracked_downloads(
     s: Session,
     *,
-    show_id: Optional[int],
-    show_slug: Optional[str],
+    collection_id: Optional[int],
+    collection_slug: Optional[str],
 ) -> list[MediaDownloadBase]:
     """Load persistent artifacts that should currently have a file."""
     stmt = select(MediaDownloadBase).where(
         MediaDownloadBase.artifact_status.in_(TRACKED_ARTIFACT_STATUSES)
     )
 
-    if show_slug:
+    if collection_slug:
         stmt = (
             stmt.join(Episode, Episode.id == MediaDownloadBase.media_item_id)
-            .join(Show, Show.id == Episode.show_id)
-            .where(Show.slug == show_slug)
+            .join(Collection, Collection.id == Episode.collection_id)
+            .where(Collection.slug == collection_slug)
         )
-    elif show_id:
+    elif collection_id:
         stmt = stmt.join(Episode, Episode.id == MediaDownloadBase.media_item_id).where(
-            Episode.show_id == show_id
+            Episode.collection_id == collection_id
         )
 
     download_root = Path(

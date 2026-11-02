@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from backend.db.models import Episode, Show
+from backend.db.models import Episode, Collection
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode_publication_timing import (
     record_publication_lifecycle_observation,
@@ -21,7 +21,7 @@ _PUBLISHED_STATUSES = frozenset({
 def episode_event_payload(
         *,
         episode: Episode,
-        show: Show,
+        collection: Collection,
         old_status: str | None = None,
 ) -> dict:
     """Build the standard payload emitted for episode status-lifecycle events."""
@@ -29,8 +29,8 @@ def episode_event_payload(
         "resource_id": episode.id,
         "id": episode.id,
         "slug": episode.slug,
-        "show_id": show.id,
-        "show_slug": show.slug,
+        "collection_id": collection.id,
+        "collection_slug": collection.slug,
         "season_id": episode.season_id,
         "episode_identifier": episode.episode_identifier,
         "episode_index": episode.index,
@@ -82,7 +82,7 @@ def queue_episode_identifier_changed_event(
 
     payload = episode_event_payload(
         episode=episode,
-        show=episode.show,
+        collection=episode.collection,
         old_status=previous_publish_status,
     )
     payload.update({
@@ -107,7 +107,7 @@ def queue_episode_status_events(
         s: Session,
         *,
         episode: Episode,
-        show: Show,
+        collection: Collection,
         old_status: str | None,
         new_status: EpisodePublishStatus,
         was_created: bool,
@@ -136,7 +136,7 @@ def queue_episode_status_events(
     )
     event_data = episode_event_payload(
         episode=episode,
-        show=show,
+        collection=collection,
         old_status=old_status,
     )
 

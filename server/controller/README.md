@@ -32,7 +32,7 @@
       key="my_task",
       title="My Task",
       description="What it does",
-      allowed_resource_types=("show",),
+      allowed_resource_types=("collection",),
       default_max_retries=3,
       tracks_progress=True,
   )
@@ -69,4 +69,4 @@
 
 ### Notes
 - The backend app syncs all registered tasks to the TaskDefinition table on startup (if the scheduler is enabled in settings). Ensure your task module is importable at startup.
-- The sample task saves the file as series_thumbnail.jpg/png under the media profile’s output directory (parent of output_template). If the show has no thumbnail URL, the task will fail (and be retried according to policy).
+- The sample task saves the file as series_thumbnail.jpg/png under the media profile’s output directory (parent of output_template). If the collection has no thumbnail URL, the task will fail (and be retried according to policy).

@@ -12,11 +12,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 
-def _make_show(session, *, slug="test-show", episode_identifier=None):
-    from backend.db.models import Show
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+def _make_collection(session, *, slug="test-collection", episode_identifier=None):
+    from backend.db.models import Collection
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
 
-    show = Show(
+    collection = Collection(
         source_key="dailywire",
         uuid=f"{slug}-uuid",
         slug=slug,
@@ -24,26 +24,26 @@ def _make_show(session, *, slug="test-show", episode_identifier=None):
         description=None,
         sharing_url=f"https://example.test/{slug}",
         membership_level="FREE",
-        type=ShowType.PODCAST.value,
+        type=CollectionType.PODCAST.value,
         episode_identifier=episode_identifier or EpisodeIdentifier.NUMBERED.value,
         author_name="Host",
         author_slug="host",
     )
-    session.add(show)
+    session.add(collection)
     session.flush()
-    return show
+    return collection
 
 
-def _make_season(session, show, *, index=1, slug="season-1", name="One"):
+def _make_season(session, collection, *, index=1, slug="season-1", name="One"):
     from backend.db.models import Season
 
-    season = Season(show=show, index=index, slug=slug, name=name)
+    season = Season(collection=collection, index=index, slug=slug, name=name)
     session.add(season)
     session.flush()
     return season
 
 
-def _make_episode(session, show, season, *, slug, ep_id, status, published_at, index):
+def _make_episode(session, collection, season, *, slug, ep_id, status, published_at, index):
     from backend.db.models import Episode
     from backend.utils.helpers import generate_uuid
 
@@ -51,7 +51,7 @@ def _make_episode(session, show, season, *, slug, ep_id, status, published_at, i
         source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
-        show=show,
+        collection=collection,
         season=season,
         index=index,
         episode_identifier=ep_id,
@@ -73,7 +73,7 @@ def _make_local_media_profile(session, *, slug="audio"):
     profile = LocalMediaProfile(
         slug=slug,
         name=slug,
-        output_template="/downloads/{{ show }}/{{ episode }}.ext",
+        output_template="/downloads/{{ collection }}/{{ episode }}.ext",
         preferred_format="format_audio_only",
     )
     session.add(profile)
@@ -81,12 +81,12 @@ def _make_local_media_profile(session, *, slug="audio"):
     return profile
 
 
-def _make_podcast_profile(session, show, lmp, **overrides):
+def _make_podcast_profile(session, collection, lmp, **overrides):
     from backend.db.models.download_profile import DownloadProfile
     from backend.types.download_profile_types import EpIdType
 
     defaults = dict(
-        show=show,
+        collection=collection,
         local_media_profile=lmp,
         enable_profile=True,
         ep_id_type_list=[EpIdType.EP.value],
@@ -103,12 +103,12 @@ def _make_podcast_profile(session, show, lmp, **overrides):
     return profile
 
 
-def _make_series_profile(session, show, lmp, seasons, **overrides):
+def _make_series_profile(session, collection, lmp, seasons, **overrides):
     from backend.db.models.download_profile import DownloadProfile
     from backend.types.download_profile_types import EpIdType
 
     defaults = dict(
-        show=show,
+        collection=collection,
         local_media_profile=lmp,
         enable_profile=True,
         ep_id_type_list=[EpIdType.EP.value],
@@ -198,7 +198,7 @@ def test_download_profile_worker_uses_dedicated_scoped_event():
         if trigger.trigger_type == "event"
     }
     assert DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT in event_names
-    assert "show.indexed" not in event_names
+    assert "collection.indexed" not in event_names
     assert "download_profile.added" not in event_names
     assert "download_profile.updated" not in event_names
     assert "episode.published_final" not in event_names
@@ -219,12 +219,12 @@ def test_episode_trigger_creates_visible_delayed_download_operation(db_session, 
         "episode_download_delay_minutes",
         10,
     )
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     lmp = _make_local_media_profile(db_session)
     episode = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="fresh",
         ep_id="ep.1",
@@ -247,7 +247,7 @@ def test_episode_trigger_creates_visible_delayed_download_operation(db_session, 
     )
     assert episode.safe_published_final is not None
 
-    _make_podcast_profile(db_session, show, lmp)
+    _make_podcast_profile(db_session, collection, lmp)
     # The worker ends its discovery transaction before locking each profile.
     db_session.commit()
     dispatch = Mock(return_value=0)
@@ -271,15 +271,15 @@ def test_episode_trigger_creates_visible_delayed_download_operation(db_session, 
 def test_podcast_profile_filters_by_type_status_and_countdown(db_session):
     from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     lmp = _make_local_media_profile(db_session)
     now = _now()
-    final_ep = _make_episode(db_session, show, season, slug="final", ep_id="ep.1", status="published_final", published_at=now, index=1)
-    countdown_ep = _make_episode(db_session, show, season, slug="countdown", ep_id="ep.2", status="published_with_countdown", published_at=now, index=2)
-    _make_episode(db_session, show, season, slug="live", ep_id="ep.3", status="live", published_at=now, index=3)
-    _make_episode(db_session, show, season, slug="trailer", ep_id="trailer.1", status="published_final", published_at=now, index=4)
-    profile = _make_podcast_profile(db_session, show, lmp)
+    final_ep = _make_episode(db_session, collection, season, slug="final", ep_id="ep.1", status="published_final", published_at=now, index=1)
+    countdown_ep = _make_episode(db_session, collection, season, slug="countdown", ep_id="ep.2", status="published_with_countdown", published_at=now, index=2)
+    _make_episode(db_session, collection, season, slug="live", ep_id="ep.3", status="live", published_at=now, index=3)
+    _make_episode(db_session, collection, season, slug="trailer", ep_id="trailer.1", status="published_final", published_at=now, index=4)
+    profile = _make_podcast_profile(db_session, collection, lmp)
 
     assert {e.slug for e in get_download_profile_episodes(db_session, profile)} == {final_ep.slug}
     profile.download_with_countdown = True
@@ -295,13 +295,13 @@ def test_download_profile_selection_keeps_episodes_before_delay_deadline(db_sess
         "episode_download_delay_minutes",
         10,
     )
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     lmp = _make_local_media_profile(db_session)
     now = _now()
     aged = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="aged",
         ep_id="ep.1",
@@ -311,7 +311,7 @@ def test_download_profile_selection_keeps_episodes_before_delay_deadline(db_sess
     )
     fresh = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="fresh",
         ep_id="ep.2",
@@ -319,7 +319,7 @@ def test_download_profile_selection_keeps_episodes_before_delay_deadline(db_sess
         published_at=now - timedelta(minutes=5),
         index=2,
     )
-    profile = _make_podcast_profile(db_session, show, lmp)
+    profile = _make_podcast_profile(db_session, collection, lmp)
 
     assert {episode.slug for episode in get_download_profile_episodes(db_session, profile)} == {
         aged.slug,
@@ -340,11 +340,11 @@ def test_countdown_download_delay_uses_safe_live_ended(db_session, monkeypatch):
         "episode_download_delay_minutes",
         10,
     )
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     episode = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="countdown-after-live",
         ep_id="ep.1",
@@ -383,11 +383,11 @@ def test_final_download_delay_uses_safe_published_final(db_session, monkeypatch)
         "episode_download_delay_minutes",
         10,
     )
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     episode = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="final-after-processing",
         ep_id="ep.1",
@@ -421,14 +421,14 @@ def test_ensure_safe_delay_uses_recorded_final_when_safe_final_is_missing(db_ses
     monkeypatch.setattr(settings, "episode_download_delay_minutes", 10)
     monkeypatch.setattr(settings, "ensure_safe_delay", False)
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     now = _now()
     published_at = now - timedelta(hours=1)
     recorded_final = now - timedelta(minutes=2)
     episode = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="safe-delay-recorded-final",
         ep_id="ep.1",
@@ -466,14 +466,14 @@ def test_ensure_safe_delay_prefers_safe_final_over_recorded_final(db_session, mo
     monkeypatch.setattr(settings, "episode_download_delay_minutes", 10)
     monkeypatch.setattr(settings, "ensure_safe_delay", True)
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     now = _now()
     safe_final = now - timedelta(minutes=15)
     recorded_final = now - timedelta(minutes=2)
     episode = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="safe-delay-safe-final-wins",
         ep_id="ep.1",
@@ -504,11 +504,11 @@ def test_ensure_safe_delay_does_not_apply_when_download_delay_is_zero(db_session
     monkeypatch.setattr(settings, "episode_download_delay_minutes", 0)
     monkeypatch.setattr(settings, "ensure_safe_delay", True)
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     episode = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="safe-delay-disabled-by-zero",
         ep_id="ep.1",
@@ -534,13 +534,13 @@ def test_final_download_delay_uses_last_known_pending_after_monitor_restart(db_s
         "episode_download_delay_minutes",
         10,
     )
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     now = _now()
     last_known_pending = now - timedelta(minutes=2)
     episode = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="final-after-restart",
         ep_id="ep.1",
@@ -573,12 +573,12 @@ def test_final_download_falls_back_instead_of_using_safe_live_ended(db_session, 
         "episode_download_delay_minutes",
         10,
     )
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     published_at = _now() - timedelta(hours=1)
     episode = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="final-with-only-live-end",
         ep_id="ep.1",
@@ -613,12 +613,12 @@ def test_download_delay_falls_back_to_dailywire_timestamp_without_trusted_monito
         "episode_download_delay_minutes",
         10,
     )
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     published_at = _now() - timedelta(hours=3)
     episode = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="startup-backfill",
         ep_id="ep.1",
@@ -641,13 +641,13 @@ def test_download_delay_does_not_backfill_outside_episode_count_scope(db_session
         "episode_download_delay_minutes",
         10,
     )
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     lmp = _make_local_media_profile(db_session)
     now = _now()
     _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="older",
         ep_id="ep.1",
@@ -657,7 +657,7 @@ def test_download_delay_does_not_backfill_outside_episode_count_scope(db_session
     )
     fresh = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="fresh",
         ep_id="ep.2",
@@ -667,7 +667,7 @@ def test_download_delay_does_not_backfill_outside_episode_count_scope(db_session
     )
     profile = _make_podcast_profile(
         db_session,
-        show,
+        collection,
         lmp,
         download_episode_count=1,
     )
@@ -685,12 +685,12 @@ def test_download_delay_does_not_remove_recent_artifact_from_retention_scope(db_
         "episode_download_delay_minutes",
         10,
     )
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     lmp = _make_local_media_profile(db_session)
     episode = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="fresh",
         ep_id="ep.1",
@@ -700,7 +700,7 @@ def test_download_delay_does_not_remove_recent_artifact_from_retention_scope(db_
     )
     profile = _make_podcast_profile(
         db_session,
-        show,
+        collection,
         lmp,
         download_episode_count=1,
         delete_older_episodes=True,
@@ -714,64 +714,64 @@ def test_download_delay_does_not_remove_recent_artifact_from_retention_scope(db_
 def test_podcast_profile_respects_days_in_past_window(db_session):
     from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     lmp = _make_local_media_profile(db_session)
     now = _now()
-    recent = _make_episode(db_session, show, season, slug="recent", ep_id="ep.1", status="published_final", published_at=now - timedelta(days=1), index=1)
-    _make_episode(db_session, show, season, slug="old", ep_id="ep.2", status="published_final", published_at=now - timedelta(days=30), index=2)
-    profile = _make_podcast_profile(db_session, show, lmp, download_days_in_past=7)
+    recent = _make_episode(db_session, collection, season, slug="recent", ep_id="ep.1", status="published_final", published_at=now - timedelta(days=1), index=1)
+    _make_episode(db_session, collection, season, slug="old", ep_id="ep.2", status="published_final", published_at=now - timedelta(days=30), index=2)
+    profile = _make_podcast_profile(db_session, collection, lmp, download_days_in_past=7)
 
     assert [episode.slug for episode in get_download_profile_episodes(db_session, profile)] == [recent.slug]
 
 
 def test_series_profile_filters_by_seasons_and_upcoming(db_session):
-    from backend.types.show_types import EpisodeIdentifier
+    from backend.types.collection_types import EpisodeIdentifier
     from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
 
-    show = _make_show(db_session, episode_identifier=EpisodeIdentifier.SEASONAL.value)
-    season1 = _make_season(db_session, show, index=1, slug="s1")
-    season2 = _make_season(db_session, show, index=2, slug="s2")
+    collection = _make_collection(db_session, episode_identifier=EpisodeIdentifier.SEASONAL.value)
+    season1 = _make_season(db_session, collection, index=1, slug="s1")
+    season2 = _make_season(db_session, collection, index=2, slug="s2")
     lmp = _make_local_media_profile(db_session)
     now = _now()
-    ep1 = _make_episode(db_session, show, season1, slug="ep1", ep_id="ep.1", status="published_final", published_at=now, index=1)
-    ep2 = _make_episode(db_session, show, season2, slug="ep2", ep_id="ep.2", status="published_final", published_at=now, index=2)
-    profile = _make_series_profile(db_session, show, lmp, [season1])
+    ep1 = _make_episode(db_session, collection, season1, slug="ep1", ep_id="ep.1", status="published_final", published_at=now, index=1)
+    ep2 = _make_episode(db_session, collection, season2, slug="ep2", ep_id="ep.2", status="published_final", published_at=now, index=2)
+    profile = _make_series_profile(db_session, collection, lmp, [season1])
 
     assert {e.slug for e in get_download_profile_episodes(db_session, profile)} == {ep1.slug}
     profile.include_upcoming_seasons = True
     assert {e.slug for e in get_download_profile_episodes(db_session, profile)} == {ep1.slug, ep2.slug}
 
 
-def test_profile_ignores_seasons_unless_the_show_is_identified_by_season(db_session):
-    from backend.types.show_types import EpisodeIdentifier
+def test_profile_ignores_seasons_unless_the_collection_is_identified_by_season(db_session):
+    from backend.types.collection_types import EpisodeIdentifier
     from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
 
-    show = _make_show(db_session, episode_identifier=EpisodeIdentifier.DATE_BASED.value)
-    season1 = _make_season(db_session, show, index=1, slug="s1")
-    season2 = _make_season(db_session, show, index=2, slug="s2")
+    collection = _make_collection(db_session, episode_identifier=EpisodeIdentifier.DATE_BASED.value)
+    season1 = _make_season(db_session, collection, index=1, slug="s1")
+    season2 = _make_season(db_session, collection, index=2, slug="s2")
     lmp = _make_local_media_profile(db_session)
     now = _now()
-    ep1 = _make_episode(db_session, show, season1, slug="ep1", ep_id="ep.1", status="published_final", published_at=now, index=1)
-    ep2 = _make_episode(db_session, show, season2, slug="ep2", ep_id="ep.2", status="published_final", published_at=now, index=2)
-    profile = _make_series_profile(db_session, show, lmp, [season1])
+    ep1 = _make_episode(db_session, collection, season1, slug="ep1", ep_id="ep.1", status="published_final", published_at=now, index=1)
+    ep2 = _make_episode(db_session, collection, season2, slug="ep2", ep_id="ep.2", status="published_final", published_at=now, index=2)
+    profile = _make_series_profile(db_session, collection, lmp, [season1])
 
     assert {e.slug for e in get_download_profile_episodes(db_session, profile)} == {ep1.slug, ep2.slug}
 
 
 def test_seasonal_profile_also_applies_date_filters(db_session):
-    from backend.types.show_types import EpisodeIdentifier
+    from backend.types.collection_types import EpisodeIdentifier
     from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
 
-    show = _make_show(db_session, episode_identifier=EpisodeIdentifier.SEASONAL.value)
-    season1 = _make_season(db_session, show, index=1, slug="s1")
-    season2 = _make_season(db_session, show, index=2, slug="s2")
+    collection = _make_collection(db_session, episode_identifier=EpisodeIdentifier.SEASONAL.value)
+    season1 = _make_season(db_session, collection, index=1, slug="s1")
+    season2 = _make_season(db_session, collection, index=2, slug="s2")
     lmp = _make_local_media_profile(db_session)
     now = _now()
-    _make_episode(db_session, show, season1, slug="old", ep_id="ep.1", status="published_final", published_at=now - timedelta(days=30), index=1)
-    recent = _make_episode(db_session, show, season1, slug="recent", ep_id="ep.2", status="published_final", published_at=now, index=2)
-    _make_episode(db_session, show, season2, slug="other-season", ep_id="ep.3", status="published_final", published_at=now, index=3)
-    profile = _make_series_profile(db_session, show, lmp, [season1], download_days_in_past=7)
+    _make_episode(db_session, collection, season1, slug="old", ep_id="ep.1", status="published_final", published_at=now - timedelta(days=30), index=1)
+    recent = _make_episode(db_session, collection, season1, slug="recent", ep_id="ep.2", status="published_final", published_at=now, index=2)
+    _make_episode(db_session, collection, season2, slug="other-season", ep_id="ep.3", status="published_final", published_at=now, index=3)
+    profile = _make_series_profile(db_session, collection, lmp, [season1], download_days_in_past=7)
 
     assert {e.slug for e in get_download_profile_episodes(db_session, profile)} == {recent.slug}
 
@@ -783,11 +783,11 @@ def test_ensure_episode_download_creates_absent_artifact(db_session):
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from task_manager.tasks.workers.download_profile_worker._helpers import ensure_episode_download
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     lmp = _make_local_media_profile(db_session)
-    episode = _make_episode(db_session, show, season, slug="ep", ep_id="ep.1", status="published_final", published_at=_now(), index=1)
-    profile = _make_podcast_profile(db_session, show, lmp)
+    episode = _make_episode(db_session, collection, season, slug="ep", ep_id="ep.1", status="published_final", published_at=_now(), index=1)
+    profile = _make_podcast_profile(db_session, collection, lmp)
 
     action = ensure_episode_download(db_session, profile, episode)
     db_session.commit()
@@ -802,11 +802,11 @@ def test_ensure_episode_download_creates_absent_artifact(db_session):
 
 
 def test_ensure_episode_download_adopts_available_manual_artifact(db_session):
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     lmp = _make_local_media_profile(db_session)
-    episode = _make_episode(db_session, show, season, slug="ep", ep_id="ep.1", status="published_final", published_at=_now(), index=1)
-    profile = _make_podcast_profile(db_session, show, lmp)
+    episode = _make_episode(db_session, collection, season, slug="ep", ep_id="ep.1", status="published_final", published_at=_now(), index=1)
+    profile = _make_podcast_profile(db_session, collection, lmp)
     manual = _completed_download(db_session, episode, lmp, profile)
     manual.download_profile_id = None
     db_session.commit()
@@ -824,11 +824,11 @@ def test_ensure_episode_download_respects_user_retry_suppression(db_session):
     from backend.types.media_types import MediaType
     from task_manager.tasks.workers.download_profile_worker._helpers import ensure_episode_download
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     lmp = _make_local_media_profile(db_session)
-    episode = _make_episode(db_session, show, season, slug="ep", ep_id="ep.1", status="published_final", published_at=_now(), index=1)
-    profile = _make_podcast_profile(db_session, show, lmp)
+    episode = _make_episode(db_session, collection, season, slug="ep", ep_id="ep.1", status="published_final", published_at=_now(), index=1)
+    profile = _make_podcast_profile(db_session, collection, lmp)
     download = EpisodeMediaDownload(
         type=MediaType.EPISODE.value,
         media_item_id=episode.id,
@@ -850,12 +850,12 @@ def test_ensure_episode_download_leaves_final_replacement_to_event_handler(db_se
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from task_manager.tasks.workers.download_profile_worker._helpers import ensure_episode_download
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     lmp = _make_local_media_profile(db_session)
     episode = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="ep",
         ep_id="ep.1",
@@ -865,7 +865,7 @@ def test_ensure_episode_download_leaves_final_replacement_to_event_handler(db_se
     )
     profile = _make_podcast_profile(
         db_session,
-        show,
+        collection,
         lmp,
         download_with_countdown=True,
         redownload_final=True,
@@ -893,12 +893,12 @@ def test_ensure_episode_download_marks_automatic_countdown_for_final_replacement
     from backend.db.models.media_download import EpisodeMediaDownload
     from task_manager.tasks.workers.download_profile_worker._helpers import ensure_episode_download
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     lmp = _make_local_media_profile(db_session)
     episode = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="countdown",
         ep_id="ep.1",
@@ -908,7 +908,7 @@ def test_ensure_episode_download_marks_automatic_countdown_for_final_replacement
     )
     profile = _make_podcast_profile(
         db_session,
-        show,
+        collection,
         lmp,
         download_with_countdown=True,
         redownload_final=True,
@@ -926,12 +926,12 @@ def test_ensure_episode_download_respects_profile_redownload_policy(db_session):
     from backend.db.models.media_download import EpisodeMediaDownload
     from task_manager.tasks.workers.download_profile_worker._helpers import ensure_episode_download
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     lmp = _make_local_media_profile(db_session)
     episode = _make_episode(
         db_session,
-        show,
+        collection,
         season,
         slug="countdown-no-replace",
         ep_id="ep.2",
@@ -941,7 +941,7 @@ def test_ensure_episode_download_respects_profile_redownload_policy(db_session):
     )
     profile = _make_podcast_profile(
         db_session,
-        show,
+        collection,
         lmp,
         download_with_countdown=True,
         redownload_final=False,
@@ -960,11 +960,11 @@ def test_ensure_episode_download_rearms_unhealthy_artifact(db_session, artifact_
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from task_manager.tasks.workers.download_profile_worker._helpers import ensure_episode_download
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     lmp = _make_local_media_profile(db_session)
-    episode = _make_episode(db_session, show, season, slug="ep", ep_id="ep.1", status="published_final", published_at=_now(), index=1)
-    profile = _make_podcast_profile(db_session, show, lmp)
+    episode = _make_episode(db_session, collection, season, slug="ep", ep_id="ep.1", status="published_final", published_at=_now(), index=1)
+    profile = _make_podcast_profile(db_session, collection, lmp)
     existing = _completed_download(db_session, episode, lmp, profile)
     existing.artifact_status = artifact_status
     existing.artifact_error = "file watcher"
@@ -989,13 +989,13 @@ def test_cleanup_older_episodes_deletes_download_record_and_file(db_session, tmp
     from backend.types.media_types import MediaType
     from task_manager.tasks.workers.download_profile_worker._helpers import cleanup_older_episodes
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     lmp = _make_local_media_profile(db_session)
     now = _now()
-    old_episode = _make_episode(db_session, show, season, slug="old", ep_id="ep.1", status="published_final", published_at=now - timedelta(days=30), index=1)
-    recent_episode = _make_episode(db_session, show, season, slug="recent", ep_id="ep.2", status="published_final", published_at=now - timedelta(days=1), index=2)
-    profile = _make_podcast_profile(db_session, show, lmp, download_days_in_past=7, delete_older_episodes=True)
+    old_episode = _make_episode(db_session, collection, season, slug="old", ep_id="ep.1", status="published_final", published_at=now - timedelta(days=30), index=1)
+    recent_episode = _make_episode(db_session, collection, season, slug="recent", ep_id="ep.2", status="published_final", published_at=now - timedelta(days=1), index=2)
+    profile = _make_podcast_profile(db_session, collection, lmp, download_days_in_past=7, delete_older_episodes=True)
 
     old_file = tmp_path / "old.m4a"
     recent_file = tmp_path / "recent.m4a"
@@ -1033,11 +1033,11 @@ def test_cleanup_older_episodes_deletes_download_record_and_file(db_session, tmp
 def test_run_worker_creates_system_media_download_operation(db_session, monkeypatch):
     from task_manager.tasks.workers.download_profile_worker import service
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     lmp = _make_local_media_profile(db_session)
-    episode = _make_episode(db_session, show, season, slug="ep", ep_id="ep.1", status="published_final", published_at=_now(), index=1)
-    _make_podcast_profile(db_session, show, lmp)
+    episode = _make_episode(db_session, collection, season, slug="ep", ep_id="ep.1", status="published_final", published_at=_now(), index=1)
+    _make_podcast_profile(db_session, collection, lmp)
     db_session.commit()
 
     created = Mock(return_value=SimpleNamespace(id="op-1"))
@@ -1060,11 +1060,11 @@ def test_run_worker_does_not_recreate_a_deleted_download_record(db_session, monk
     from task_manager.tasks.workers.download_profile_worker import service
     from task_manager.tasks.workers.download_profile_worker._helpers import ensure_episode_download
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     lmp = _make_local_media_profile(db_session)
-    episode = _make_episode(db_session, show, season, slug="ep", ep_id="ep.1", status="published_final", published_at=_now(), index=1)
-    profile = _make_podcast_profile(db_session, show, lmp)
+    episode = _make_episode(db_session, collection, season, slug="ep", ep_id="ep.1", status="published_final", published_at=_now(), index=1)
+    profile = _make_podcast_profile(db_session, collection, lmp)
     db_session.flush()
     action = ensure_episode_download(db_session, profile, episode)
     db_session.get(EpisodeMediaDownload, action.media_download_id).file_path = "/definitely/not/present/ep.m4a"

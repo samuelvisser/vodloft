@@ -66,7 +66,7 @@ class EpisodeIdentifierInfo:
                 label=payload,
             )
 
-        # Every other tag, such as aux, trailer or a YouTube short, counts on its own across the show.
+        # Every other tag, such as aux, trailer or a YouTube short, counts on its own across the collection.
         if _TAG.fullmatch(episode_type):
             if not _NUMBER.fullmatch(payload):
                 raise ValueError(f"Invalid VODLoft episode identifier: {identifier!r}")

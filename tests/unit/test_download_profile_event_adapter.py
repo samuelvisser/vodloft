@@ -23,7 +23,7 @@ def test_published_episode_added_requests_episode_scope():
         _event(
             "episode.added",
             resource_id=501,
-            show_id=12,
+            collection_id=12,
             status="published_final",
         ),
     ) == [
@@ -39,7 +39,7 @@ def test_non_published_episode_added_does_not_request_download_profile_run():
         _event(
             "episode.added",
             resource_id=501,
-            show_id=12,
+            collection_id=12,
             status="scheduled",
         ),
     ) == []
@@ -51,7 +51,7 @@ def test_published_status_update_requests_episode_scope_without_worker_specific_
         _event(
             "episode.status_updated",
             resource_id=501,
-            show_id=12,
+            collection_id=12,
             status="published_with_countdown",
         ),
     ) == [
@@ -61,34 +61,34 @@ def test_published_status_update_requests_episode_scope_without_worker_specific_
         ),
     ]
 
-def test_show_scope_subsumes_new_episode_events_from_same_index_transaction():
+def test_collection_scope_subsumes_new_episode_events_from_same_index_transaction():
     assert _adapt(
         _event(
             "episode.added",
             resource_id=501,
-            show_id=12,
+            collection_id=12,
             status="published_final",
         ),
         _event(
             "episode.status_updated",
             resource_id=501,
-            show_id=12,
+            collection_id=12,
             status="published_final",
         ),
         _event(
             "episode.published_final",
             resource_id=501,
-            show_id=12,
+            collection_id=12,
         ),
         _event(
-            "show.indexed",
+            "collection.indexed",
             resource_id=12,
             indexed_count=1,
         ),
     ) == [
         (
             "download_profile.run_requested",
-            {"resource_type": "show", "resource_id": 12},
+            {"resource_type": "collection", "resource_id": 12},
         ),
     ]
 
@@ -98,12 +98,12 @@ def test_profile_events_collapse_to_one_profile_scope():
         _event(
             "download_profile.added",
             resource_id=91,
-            show_id=12,
+            collection_id=12,
         ),
         _event(
             "download_profile.updated",
             resource_id=91,
-            show_id=12,
+            collection_id=12,
         ),
     ) == [
         (
@@ -113,25 +113,25 @@ def test_profile_events_collapse_to_one_profile_scope():
     ]
 
 
-def test_show_scope_subsumes_profile_and_episode_scopes_for_same_show_only():
+def test_collection_scope_subsumes_profile_and_episode_scopes_for_same_collection_only():
     assert _adapt(
         _event(
             "download_profile.updated",
             resource_id=91,
-            show_id=12,
+            collection_id=12,
         ),
         _event(
             "episode.published_with_countdown",
             resource_id=501,
-            show_id=12,
+            collection_id=12,
         ),
         _event(
             "episode.published_final",
             resource_id=777,
-            show_id=99,
+            collection_id=99,
         ),
         _event(
-            "show.indexed",
+            "collection.indexed",
             resource_id=12,
         ),
     ) == [
@@ -141,13 +141,13 @@ def test_show_scope_subsumes_profile_and_episode_scopes_for_same_show_only():
         ),
         (
             "download_profile.run_requested",
-            {"resource_type": "show", "resource_id": 12},
+            {"resource_type": "collection", "resource_id": 12},
         ),
     ]
 
 
 
-def test_index_transaction_emits_one_show_scoped_worker_request(monkeypatch):
+def test_index_transaction_emits_one_collection_scoped_worker_request(monkeypatch):
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
     from task_manager.events import transactional
@@ -168,7 +168,7 @@ def test_index_transaction_emits_one_show_scoped_worker_request(monkeypatch):
             "episode.added",
             {
                 "resource_id": 501,
-                "show_id": 12,
+                "collection_id": 12,
                 "status": "published_final",
             },
         )
@@ -177,18 +177,18 @@ def test_index_transaction_emits_one_show_scoped_worker_request(monkeypatch):
             "episode.status_updated",
             {
                 "resource_id": 501,
-                "show_id": 12,
+                "collection_id": 12,
                 "status": "published_final",
             },
         )
         transactional.queue_event(
             session,
             "episode.published_final",
-            {"resource_id": 501, "show_id": 12},
+            {"resource_id": 501, "collection_id": 12},
         )
         transactional.queue_event(
             session,
-            "show.indexed",
+            "collection.indexed",
             {"resource_id": 12, "indexed_count": 1},
         )
         session.commit()
@@ -200,5 +200,5 @@ def test_index_transaction_emits_one_show_scoped_worker_request(monkeypatch):
         for name, data in emitted
         if name == DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
     ] == [
-        {"resource_type": "show", "resource_id": 12},
+        {"resource_type": "collection", "resource_id": 12},
     ]

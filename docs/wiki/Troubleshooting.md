@@ -6,7 +6,7 @@ For exact setting names and defaults, see [[Settings]].
 
 ## A new episode is not visible yet
 
-1. Open the show and check its recent sync history.
+1. Open the collection and check its recent sync history.
 2. Use **Sync now** if you do not want to wait for the next automatic check.
 3. If a sync completed but found nothing, Daily Wire may not be exposing the episode to VODLoft yet.
 4. If the episode is already listed but is live or still publishing, VODLoft will continue monitoring it automatically.
@@ -21,7 +21,7 @@ Daily Wire can change metadata after publication. VODLoft refreshes recently pub
 15m,30m,1h,3h,6h,24h,3d
 ```
 
-Use **Sync now** when you want to check the show immediately. If the problem persists much longer, check the Daily Wire version itself to confirm whether the upstream metadata has actually changed.
+Use **Sync now** when you want to check the collection immediately. If the problem persists much longer, check the Daily Wire version itself to confirm whether the upstream metadata has actually changed.
 
 ## A live episode has no download yet
 
@@ -43,9 +43,9 @@ Check:
 - the **Find new episodes** schedule is valid;
 - `TZ` is correct;
 - Home/download logs for recent errors;
-- the Daily Wire connection when the show requires member access.
+- the Daily Wire connection when the collection requires member access.
 
-Try **Sync now** on one show. If manual sync works, the problem is more likely related to scheduling than Daily Wire access.
+Try **Sync now** on one collection. If manual sync works, the problem is more likely related to scheduling than Daily Wire access.
 
 ## Downloads stay queued
 
@@ -133,7 +133,7 @@ Check the actual file and storage health. If the storage is healthy and you want
 Check **Settings → Downloads → Filename restrictions**:
 
 - **Minimal restrictions** preserves most punctuation and Unicode;
-- **Windows-compatible filenames** removes characters Windows cannot safely use;
+- **Windows-compatible filenames** turns characters Windows cannot use into look-alikes, such as `：` for `:`, as yt-dlp does;
 - **Restricted filenames** creates conservative ASCII-style names.
 
 See [[Local-Media-Profiles#filename-restrictions]].

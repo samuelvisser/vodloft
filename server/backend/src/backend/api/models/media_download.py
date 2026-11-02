@@ -96,8 +96,8 @@ class MediaDownloadAPIReadView(SourcedResponse, MediaDownloadAPIRead):
         default=None,
         validation_alias=AliasPath("episode", "episode_identifier"),
     )
-    show_slug: Optional[str] = Field(default=None, validation_alias=AliasPath("show", "slug"))
-    show_title: Optional[str] = Field(default=None, validation_alias=AliasPath("show", "title"))
+    collection_slug: Optional[str] = Field(default=None, validation_alias=AliasPath("collection", "slug"))
+    collection_title: Optional[str] = Field(default=None, validation_alias=AliasPath("collection", "title"))
     movie_slug: Optional[str] = Field(default=None, validation_alias=AliasPath("movie", "slug"))
     movie_title: Optional[str] = Field(default=None, validation_alias=AliasPath("movie", "title"))
     movie_extra_type: Optional[str] = Field(

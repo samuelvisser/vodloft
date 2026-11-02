@@ -12,7 +12,7 @@ from backend.api.models.local_media_profile import (
 class LocalMediaProfilePreviewRequest(LocalMediaProfileTemplatePreview):
     """One unsaved profile and editable example shared by every form preview."""
 
-    type: Literal["show", "movie", "video"]
+    type: Literal["collection", "movie", "video"]
     source_id: str | None = Field(default=None, max_length=100)
     local_media_profile_id: int | None = Field(default=None, gt=0)
 
@@ -28,13 +28,13 @@ class LocalMediaProfileOutputPreview(LocalMediaProfileTemplatePreviewResult):
     error: str | None = None
 
 
-class LocalMediaProfileShowPreview(ResponseBase):
+class LocalMediaProfileCollectionPreview(ResponseBase):
     path: str | None = None
     reason: str | None = None
-    show_title: str | None = None
+    collection_title: str | None = None
     system_enabled: bool
 
 
 class LocalMediaProfilePreviewResult(ResponseBase):
     output: LocalMediaProfileOutputPreview
-    show_root: LocalMediaProfileShowPreview | None = None
+    collection_root: LocalMediaProfileCollectionPreview | None = None

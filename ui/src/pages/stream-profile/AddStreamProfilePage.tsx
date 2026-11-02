@@ -2,8 +2,8 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate, useSearchParams} from 'react-router-dom'
-import {useDownloadProfilesView, useShows} from '../../lib/queries'
-import {buildShowSelectRegistry} from '../../types/show'
+import {useDownloadProfilesView, useCollections} from '../../lib/queries'
+import {buildCollectionSelectRegistry} from '../../types/collection'
 import {SelectRegistry} from '../../utils/selectRegistry'
 import Select from 'react-select'
 import {getZodDefaults} from '../../utils/defaultZod'
@@ -21,9 +21,9 @@ export default function AddStreamProfilePage() {
 
     const [mode, setMode] = useState<StreamProfileMode>('rss')
 
-    const {data: shows} = useShows()
+    const {data: collections} = useCollections()
     const {data: downloadProfiles} = useDownloadProfilesView()
-    const showReg: SelectRegistry = buildShowSelectRegistry(shows)
+    const collectionReg: SelectRegistry = buildCollectionSelectRegistry(collections)
 
     const form = useForm<RssStreamProfileCreateIn>({
         resolver: zodResolver(RssStreamProfileCreateSchema),
@@ -33,32 +33,32 @@ export default function AddStreamProfilePage() {
     })
     const {watch, formState: {errors, isSubmitting}} = form
     const prefillApplied = useRef(false)
-    const requestedShowSlug = searchParams.get('show')
-    const selectedShowId = watch('showId')
+    const requestedCollectionSlug = searchParams.get('collection')
+    const selectedCollectionId = watch('collectionId')
     const useDownloads = watch('useDownloads')
-    const selectedShow = shows?.find((show) => show.id === selectedShowId)
+    const selectedCollection = collections?.find((collection) => collection.id === selectedCollectionId)
 
     const downloadProfileDefaults = useMemo(() => {
         if (!downloadProfiles) return undefined
-        if (!selectedShow) return []
+        if (!selectedCollection) return []
         return downloadProfiles
-            .filter((profile) => profile.showSlug === selectedShow.slug)
+            .filter((profile) => profile.collectionSlug === selectedCollection.slug)
             .map((profile) => ({
                 id: profile.id,
                 preferredFormat: profile.localMediaProfilePreferredFormat,
                 episodeTypes: profile.epIdTypeList,
                 enabled: profile.enableProfile,
             }))
-    }, [downloadProfiles, selectedShow?.slug])
+    }, [downloadProfiles, selectedCollection?.slug])
 
     useEffect(() => {
-        if (prefillApplied.current || !requestedShowSlug || !Array.isArray(shows)) return
-        const requestedShow = shows.find((show) => show.slug === requestedShowSlug)
-        if (!requestedShow) return
+        if (prefillApplied.current || !requestedCollectionSlug || !Array.isArray(collections)) return
+        const requestedCollection = collections.find((collection) => collection.slug === requestedCollectionSlug)
+        if (!requestedCollection) return
 
-        form.setValue('showId', requestedShow.id, {shouldDirty: false, shouldValidate: true})
+        form.setValue('collectionId', requestedCollection.id, {shouldDirty: false, shouldValidate: true})
         prefillApplied.current = true
-    }, [form, requestedShowSlug, shows])
+    }, [form, requestedCollectionSlug, collections])
 
     const onCancel = useCallback(() => navigate('/stream-profiles'), [navigate])
 
@@ -81,7 +81,7 @@ export default function AddStreamProfilePage() {
         onSuccess,
         successStatuses: [201],
     })
-    const waitingForDownloadProfileDefaults = !!selectedShowId && useDownloads && downloadProfiles === undefined
+    const waitingForDownloadProfileDefaults = !!selectedCollectionId && useDownloads && downloadProfiles === undefined
 
     return (
         <section className="view" aria-labelledby="add-stream-profile-title">
@@ -97,29 +97,29 @@ export default function AddStreamProfilePage() {
                 )}
 
                 <div className="form-row">
-                    <label htmlFor="show-id">Show</label>
+                    <label htmlFor="collection-id">Collection</label>
                     <Controller
                         control={form.control}
-                        name={"showId"}
+                        name={"collectionId"}
                         render={({field}) => (
                             <Select
-                                inputId="show-id"
+                                inputId="collection-id"
                                 classNamePrefix="select"
-                                options={showReg.options}
-                                value={showReg.options.find(o => Number(o.value) === field.value) ?? null}
+                                options={collectionReg.options}
+                                value={collectionReg.options.find(o => Number(o.value) === field.value) ?? null}
                                 onChange={(opt) => field.onChange((opt as any) ? Number((opt as any).value) : undefined)}
                                 onBlur={field.onBlur}
-                                isDisabled={showReg.options.length === 0}
-                                placeholder={showReg.options.length === 0 ? 'No shows found' : undefined}
+                                isDisabled={collectionReg.options.length === 0}
+                                placeholder={collectionReg.options.length === 0 ? 'No collections found' : undefined}
                                 isClearable
-                                aria-invalid={!!errors.showId}
-                                aria-describedby={errors.showId ? 'show-errors' : undefined}
+                                aria-invalid={!!errors.collectionId}
+                                aria-describedby={errors.collectionId ? 'collection-errors' : undefined}
                             />
                         )}
                     />
-                    {errors.showId && (
-                        <div id="show-errors" className="error" role="alert" aria-live="polite">
-                            {String(errors.showId.message)}
+                    {errors.collectionId && (
+                        <div id="collection-errors" className="error" role="alert" aria-live="polite">
+                            {String(errors.collectionId.message)}
                         </div>
                     )}
                 </div>
@@ -135,10 +135,10 @@ export default function AddStreamProfilePage() {
                                 value: 'rss',
                                 label: 'RSS',
                                 description: (
-                                    <ReadMore summary={<span>Open RSS feed for the show.</span>}>
+                                    <ReadMore summary={<span>Open RSS feed for the collection.</span>}>
                                         <p>RSS is the technology used to distribute podcast feeds.</p>
                                         <p>With an RSS Stream Profile in VODLoft, you can effectively create your very own podcast from
-                                        the shows in your library. This is great when you want to listen to the versions included with
+                                        the collections in your library. This is great when you want to listen to the versions included with
                                         your membership using your favorite podcast app.</p>
                                     </ReadMore>
                                 ),
@@ -150,11 +150,11 @@ export default function AddStreamProfilePage() {
                 <StreamProfileForm
                     form={form as any}
                     mode={mode}
-                    showRoot={false}
+                    collectionRoot={false}
                     isCreating
                     downloadProfileDefaults={downloadProfileDefaults}
-                    showSlug={selectedShow?.slug}
-                    showTitle={selectedShow?.title}
+                    collectionSlug={selectedCollection?.slug}
+                    collectionTitle={selectedCollection?.title}
                 />
 
                 <div className="actions">
@@ -163,7 +163,7 @@ export default function AddStreamProfilePage() {
                         type="submit"
                         className="btn btn-primary"
                         value="Create profile"
-                        disabled={isSubmitting || !selectedShowId || waitingForDownloadProfileDefaults}
+                        disabled={isSubmitting || !selectedCollectionId || waitingForDownloadProfileDefaults}
                     />
                 </div>
             </form>

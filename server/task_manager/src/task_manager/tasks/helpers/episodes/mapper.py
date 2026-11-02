@@ -3,8 +3,8 @@ from __future__ import annotations
 import re
 from typing import Any, List, Optional, OrderedDict, Sequence, Tuple
 
-from backend.db.models import Episode, Season, Show
-from backend.types.show_types import EpisodeIdentifier
+from backend.db.models import Episode, Season, Collection
+from backend.types.collection_types import EpisodeIdentifier
 from sources.dailywire.api.dw_api.client import (
     ByNextPage,
     ByShowSeason,
@@ -39,7 +39,7 @@ def count_total_episodes(episodes_map: EpisodeMapTuple) -> int:
 def get_dw_episodes_by_seasons(
     client: MiddlewareClient,
     *,
-    show: Show,
+    collection: Collection,
     membership_plan: str,
     seasons: Sequence[Season],
     dw_id_by_slug: dict[str, str],
@@ -52,7 +52,7 @@ def get_dw_episodes_by_seasons(
     """Fetch and identify all episodes for the given local seasons."""
     return _scan_seasons(
         client,
-        show=show,
+        collection=collection,
         membership_plan=membership_plan,
         seasons=seasons,
         dw_id_by_slug=dw_id_by_slug,
@@ -67,7 +67,7 @@ def get_dw_episodes_by_seasons(
 def get_dw_episodes_since_ep(
     client: MiddlewareClient,
     *,
-    show: Show,
+    collection: Collection,
     membership_plan: str,
     seasons: Sequence[Season],
     dw_id_by_slug: dict[str, str],
@@ -97,7 +97,7 @@ def get_dw_episodes_since_ep(
 
     return _scan_seasons(
         client,
-        show=show,
+        collection=collection,
         membership_plan=membership_plan,
         seasons=seasons_to_scan,
         dw_id_by_slug=dw_id_by_slug,
@@ -161,7 +161,7 @@ def _resolve_trailer_candidates(
 def _scan_seasons(
     client: MiddlewareClient,
     *,
-    show: Show,
+    collection: Collection,
     membership_plan: str,
     seasons: Sequence[Season],
     dw_id_by_slug: dict[str, str],
@@ -187,14 +187,14 @@ def _scan_seasons(
 
     seasons_asc = sorted(seasons, key=lambda season: season.index)
     season_count = len(seasons_asc)
-    update_progress(progress, bounds.min_pct, f"Scanning episodes for '{show.slug}'...")
+    update_progress(progress, bounds.min_pct, f"Scanning episodes for '{collection.slug}'...")
     tracker = CollectionListProgressTracker(
         progress_sink=progress,
         bounds=bounds,
         collection_count=season_count,
     )
 
-    identifier_type = EpisodeIdentifier(show.episode_identifier)
+    identifier_type = EpisodeIdentifier(collection.episode_identifier)
     require_member_exclusive = membership_plan != "FREE"
 
     for idx, season in enumerate(seasons_asc):
@@ -203,7 +203,7 @@ def _scan_seasons(
         else:
             eps = fetch_all_episodes_paginated(
                 client,
-                show.slug,
+                collection.slug,
                 ByShowSeason(
                     season_dw_id=dw_id_by_slug[season.slug],
                     membership_plan=membership_plan,
@@ -268,22 +268,22 @@ def _scan_seasons(
     update_progress(
         progress,
         bounds.max_pct,
-        f"Finished scanning {season_count} season(s) for '{show.slug}'.",
+        f"Finished scanning {season_count} season(s) for '{collection.slug}'.",
     )
     return ep_map_final, current_values
 
 
 def fetch_all_episodes_paginated(
     client: MiddlewareClient,
-    show_slug: str,
+    collection_slug: str,
     by: ByShowSeason,
 ) -> List[DwEpisodeRecord]:
     """Fetch one entire Daily Wire season, following nextPageUrl until absent."""
-    items, next_page_url, has_next = client.get_episodes_paginated(show_slug, by)
+    items, next_page_url, has_next = client.get_episodes_paginated(collection_slug, by)
     all_items: List[DwEpisodeRecord] = list(items) if items else []
     while has_next and next_page_url:
         items, next_page_url, has_next = client.get_episodes_paginated(
-            show_slug,
+            collection_slug,
             ByNextPage(next_page_url=next_page_url),
         )
         if items:
@@ -293,7 +293,7 @@ def fetch_all_episodes_paginated(
 
 def fetch_episodes_until_slug(
     client: MiddlewareClient,
-    show_slug: str,
+    collection_slug: str,
     by: ByShowSeason,
     *,
     stop_slug: str,
@@ -304,7 +304,7 @@ def fetch_episodes_until_slug(
     fall through to the end of the season. That preserves the old complete-scan
     behavior for the exceptional case instead of silently truncating discovery.
     """
-    items, next_page_url, has_next = client.get_episodes_paginated(show_slug, by)
+    items, next_page_url, has_next = client.get_episodes_paginated(collection_slug, by)
     all_items: List[DwEpisodeRecord] = list(items) if items else []
 
     if any(item.slug == stop_slug for item in all_items):
@@ -312,7 +312,7 @@ def fetch_episodes_until_slug(
 
     while has_next and next_page_url:
         items, next_page_url, has_next = client.get_episodes_paginated(
-            show_slug,
+            collection_slug,
             ByNextPage(next_page_url=next_page_url),
         )
         if items:

@@ -39,8 +39,8 @@ class LocalMediaProfileBase(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     type: Mapped[str] = mapped_column(
-        default=LocalMediaProfileType.SHOW.value,
-        server_default=LocalMediaProfileType.SHOW.value,
+        default=LocalMediaProfileType.COLLECTION.value,
+        server_default=LocalMediaProfileType.COLLECTION.value,
         nullable=False,
     )
     slug: Mapped[str] = mapped_column(index=True, unique=True)

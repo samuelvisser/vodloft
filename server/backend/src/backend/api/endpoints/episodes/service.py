@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Optional, Sequence
 
 from sqlalchemy.orm import Session
-from backend.services.custom_indexes import request_show_custom_index_reconciliation
+from backend.services.custom_indexes import request_collection_custom_index_reconciliation
 from sqlalchemy import and_, case, func, or_, select
 
 from fastapi import HTTPException
@@ -11,7 +11,7 @@ from fastapi import HTTPException
 from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.api.models.episode import *
 from backend.api.pagination import InvalidCursorError, decode_cursor, encode_cursor, keyset_after, KeysetField
-from backend.db.models import Show
+from backend.db.models import Collection
 from backend.db.models.media_item import Episode
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.episode_types import EpisodePublishStatus
@@ -51,20 +51,20 @@ def _episode_api_read(episode: Episode) -> EpisodeAPIRead:
     ))
 
 
-def _episodes_for_show_stmt(show_slug: str):
+def _episodes_for_collection_stmt(collection_slug: str):
     return (
         select(Episode)
-        .join(Show, Episode.show_id == Show.id)
-        .where(Show.slug == show_slug)
+        .join(Collection, Episode.collection_id == Collection.id)
+        .where(Collection.slug == collection_slug)
         .order_by(Episode.published_date.desc())
     )
 
 
-def get_episodes_by_show_list(s: Session, show_slug: str, limit: int | None = None) -> list[EpisodeAPIRead]:
-    # Join directly through the indexed show slug rather than using Episode.show.has(), which
+def get_episodes_by_collection_list(s: Session, collection_slug: str, limit: int | None = None) -> list[EpisodeAPIRead]:
+    # Join directly through the indexed collection slug rather than using Episode.collection.has(), which
     # produces a correlated EXISTS predicate. This keeps the full-list query simple while
     # preserving the existing endpoint contract for callers that need complete episode records.
-    stmt = _episodes_for_show_stmt(show_slug)
+    stmt = _episodes_for_collection_stmt(collection_slug)
     if limit is not None:
         stmt = stmt.limit(limit)
     episodes: Sequence[Episode] = s.scalars(stmt).all()
@@ -72,15 +72,15 @@ def get_episodes_by_show_list(s: Session, show_slug: str, limit: int | None = No
     return [_episode_api_read(episode) for episode in episodes]
 
 
-def _episode_view_stmt(show_slug: str, season_id: int | None = None):
-    # The show grid needs only a small subset of Episode. Selecting those columns directly avoids
+def _episode_view_stmt(collection_slug: str, season_id: int | None = None):
+    # The collection grid needs only a small subset of Episode. Selecting those columns directly avoids
     # constructing full ORM entities (and their select-in metadata relationship), then sending and
     # validating descriptions/timestamps that the grid never renders.
     stmt = (
         select(
             Episode.id.label("id"),
             Episode.source_key.label("source_key"),
-            Episode.show_id.label("show_id"),
+            Episode.collection_id.label("collection_id"),
             Episode.season_id.label("season_id"),
             Episode.index.label("index"),
             Episode.episode_identifier.label("episode_identifier"),
@@ -96,8 +96,8 @@ def _episode_view_stmt(show_slug: str, season_id: int | None = None):
             Episode.thumbnail_square_path.label("thumbnail_square_path"),
             Episode.published_date.label("published_date"),
         )
-        .join(Show, Episode.show_id == Show.id)
-        .where(Show.slug == show_slug)
+        .join(Collection, Episode.collection_id == Collection.id)
+        .where(Collection.slug == collection_slug)
     )
     if season_id is not None:
         stmt = stmt.where(Episode.season_id == season_id)
@@ -105,13 +105,13 @@ def _episode_view_stmt(show_slug: str, season_id: int | None = None):
     return stmt.order_by(Episode.published_date.desc().nulls_last(), Episode.id.desc())
 
 
-def get_episode_views_by_show_list(
+def get_episode_views_by_collection_list(
         s: Session,
-        show_slug: str,
+        collection_slug: str,
         limit: int | None = None,
 ) -> list[EpisodeAPIReadView]:
     """Return compact rows for internal callers that still need a simple list."""
-    stmt = _episode_view_stmt(show_slug)
+    stmt = _episode_view_stmt(collection_slug)
     if limit is not None:
         stmt = stmt.limit(limit)
 
@@ -121,33 +121,33 @@ def get_episode_views_by_show_list(
     ]
 
 
-def get_episode_views_by_show_page(
+def get_episode_views_by_collection_page(
         s: Session,
-        show_slug: str,
+        collection_slug: str,
         *,
         cursor: str | None,
         limit: int,
         season_id: int | None = None,
 ) -> EpisodeAPIReadViewPage:
-    """Return one stable cursor page of compact episodes for a show."""
-    show_count_stmt = (
+    """Return one stable cursor page of compact episodes for a collection."""
+    collection_count_stmt = (
         select(func.count(Episode.id))
-        .join(Show, Episode.show_id == Show.id)
-        .where(Show.slug == show_slug)
+        .join(Collection, Episode.collection_id == Collection.id)
+        .where(Collection.slug == collection_slug)
     )
-    show_total = int(s.scalar(show_count_stmt) or 0)
+    collection_total = int(s.scalar(collection_count_stmt) or 0)
     total = (
-        show_total
+        collection_total
         if season_id is None
-        else int(s.scalar(show_count_stmt.where(Episode.season_id == season_id)) or 0)
+        else int(s.scalar(collection_count_stmt.where(Episode.season_id == season_id)) or 0)
     )
     revision_stmt = (
         select(func.max(case(
             (Episode.updated_at > Episode.created_at, Episode.updated_at),
             else_=None,
         )))
-        .join(Show, Episode.show_id == Show.id)
-        .where(Show.slug == show_slug)
+        .join(Collection, Episode.collection_id == Collection.id)
+        .where(Collection.slug == collection_slug)
     )
     if season_id is not None:
         revision_stmt = revision_stmt.where(Episode.season_id == season_id)
@@ -158,13 +158,13 @@ def get_episode_views_by_show_page(
         else ""
     )
 
-    stmt = _episode_view_stmt(show_slug, season_id)
+    stmt = _episode_view_stmt(collection_slug, season_id)
     if cursor:
         try:
             values = decode_cursor(cursor)
             if (
-                values.get("kind") != "show-episodes"
-                or values.get("show_slug") != show_slug
+                values.get("kind") != "collection-episodes"
+                or values.get("collection_slug") != collection_slug
                 or values.get("season_id") != season_id
             ):
                 raise InvalidCursorError("Cursor does not match this episode collection")
@@ -220,8 +220,8 @@ def get_episode_views_by_show_page(
     if has_more and rows:
         last = rows[-1]
         values: dict[str, object] = {
-            "kind": "show-episodes",
-            "show_slug": show_slug,
+            "kind": "collection-episodes",
+            "collection_slug": collection_slug,
             "season_id": season_id,
             "revision": revision,
             "id": last["id"],
@@ -239,7 +239,7 @@ def get_episode_views_by_show_page(
         items=items,
         limit=limit,
         total=total,
-        show_total=show_total,
+        collection_total=collection_total,
         next_cursor=next_cursor,
         revision=revision,
     )
@@ -257,11 +257,11 @@ def get_recently_indexed_episodes(
             Episode.title.label("title"),
             Episode.slug.label("slug"),
             Episode.created_at.label("indexed_at"),
-            Show.title.label("show_title"),
-            Show.slug.label("show_slug"),
+            Collection.title.label("collection_title"),
+            Collection.slug.label("collection_slug"),
         )
         .select_from(Episode)
-        .join(Show, Episode.show_id == Show.id)
+        .join(Collection, Episode.collection_id == Collection.id)
         .order_by(Episode.created_at.desc(), Episode.id.desc())
         .limit(limit)
     ).mappings().all()
@@ -295,7 +295,7 @@ def queue_episode_metadata_refresh(
         "resource_id": episode.id,
         "id": episode.id,
         "slug": episode.slug,
-        "show_id": episode.show_id,
+        "collection_id": episode.collection_id,
         "refresh": True,
     })
 
@@ -318,7 +318,7 @@ def request_episode_metadata_refresh(
         resource_id=episode.id,
         task_kwargs={"refresh": True},
     )
-    show = episode.show
+    collection = episode.collection
     operation = create_operation(
         s,
         kind="episode.refresh_metadata",
@@ -329,9 +329,9 @@ def request_episode_metadata_refresh(
         context={
             "episode_slug": episode.slug,
             "episode_title": episode.title,
-            "show_id": episode.show_id,
-            "show_slug": show.slug if show is not None else None,
-            "show_title": show.title if show is not None else None,
+            "collection_id": episode.collection_id,
+            "collection_slug": collection.slug if collection is not None else None,
+            "collection_title": collection.title if collection is not None else None,
         },
     )
     if queue_operation_target_dispatch(s, operation.id, target.resolved_slot_key()):
@@ -362,11 +362,11 @@ def request_episode_early_delete(
             detail="Early Delete is only available after Daily Wire has returned 404 for this episode",
         )
 
-    show = episode.show
+    collection = episode.collection
     target = OperationTargetSpec(
         task_key=_EARLY_DELETE_TASK_KEY,
-        resource_type="show",
-        resource_id=episode.show_id,
+        resource_type="collection",
+        resource_id=episode.collection_id,
         task_kwargs={
             "episode_id": episode.id,
             "force": True,
@@ -383,9 +383,9 @@ def request_episode_early_delete(
         context={
             "episode_slug": episode.slug,
             "episode_title": episode.title,
-            "show_id": episode.show_id,
-            "show_slug": show.slug if show is not None else None,
-            "show_title": show.title if show is not None else None,
+            "collection_id": episode.collection_id,
+            "collection_slug": collection.slug if collection is not None else None,
+            "collection_title": collection.title if collection is not None else None,
         },
     )
     queue_operation_target_dispatch(s, operation.id, target.resolved_slot_key())
@@ -397,12 +397,12 @@ def request_episode_early_delete(
 
 
 def create_episode(s: Session, body: EpisodeAPICreate) -> EpisodeAPIRead:
-    show = s.get(Show, body.show_id)
-    if show is None:
-        raise HTTPException(status_code=404, detail="Show not found")
+    collection = s.get(Collection, body.collection_id)
+    if collection is None:
+        raise HTTPException(status_code=404, detail="Collection not found")
     episode = create_database_fields(Episode, body)
-    # An episode comes from its show's Source.
-    episode.source_key = show.source_key
+    # An episode comes from its collection's Source.
+    episode.source_key = collection.source_key
     s.add(episode)
     s.flush()
 
@@ -416,10 +416,10 @@ def create_episode(s: Session, body: EpisodeAPICreate) -> EpisodeAPIRead:
         "resource_id": episode.id,
         "id": episode.id,
         "slug": episode.slug,
-        "show_id": episode.show_id,
+        "collection_id": episode.collection_id,
         "status": episode.publish_status
     })
-    request_show_custom_index_reconciliation(s, episode.show_id)
+    request_collection_custom_index_reconciliation(s, episode.collection_id)
 
     return _episode_api_read(episode)
 
@@ -454,7 +454,7 @@ def update_episode(s: Session, episode_slug: str, body: EpisodeAPIUpdate) -> Epi
             "resource_id": episode.id,
             "id": episode.id,
             "slug": episode.slug,
-            "show_id": episode.show_id,
+            "collection_id": episode.collection_id,
         }
         queue_event(s, "episode.status_updated", event_data)
 
@@ -463,7 +463,7 @@ def update_episode(s: Session, episode_slug: str, body: EpisodeAPIUpdate) -> Epi
         elif new_status is EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN:
             queue_event(s, "episode.published_with_countdown", event_data)
 
-    request_show_custom_index_reconciliation(s, episode.show_id)
+    request_collection_custom_index_reconciliation(s, episode.collection_id)
     return _episode_api_read(episode)
 
 
@@ -486,16 +486,16 @@ def delete_episode(s: Session, episode_slug: str) -> EpisodeAPIRead:
     if media_download is not None:
         raise HTTPException(
             status_code=409,
-            detail="This episode owns persistent download history and can only be removed with its show",
+            detail="This episode owns persistent download history and can only be removed with its collection",
         )
 
     queue_event(s, "episode.deleted", {
         "resource_id": episode.id,
         "id": episode.id,
         "slug": episode.slug,
-        "show_id": episode.show_id
+        "collection_id": episode.collection_id
     })
-    request_show_custom_index_reconciliation(s, episode.show_id)
+    request_collection_custom_index_reconciliation(s, episode.collection_id)
 
     s.delete(episode)
     s.flush()

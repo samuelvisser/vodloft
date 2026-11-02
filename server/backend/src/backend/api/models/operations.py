@@ -24,15 +24,15 @@ class MovieRedownloadOperationAccepted(TaskOperationAccepted):
     downloads_queued: int
 
 
-class ShowDownloadAllOperationAccepted(TaskOperationAccepted):
+class CollectionDownloadAllOperationAccepted(TaskOperationAccepted):
     episodes_queued: int
 
 
-class ShowMetadataOperationAccepted(TaskOperationAccepted):
+class CollectionMetadataOperationAccepted(TaskOperationAccepted):
     episodes_queued: int
 
 
-class ShowFileRenameOperationAccepted(TaskOperationAccepted):
+class CollectionFileRenameOperationAccepted(TaskOperationAccepted):
     episodes_queued: int
     local_media_profiles_queued: int
 
@@ -57,15 +57,15 @@ class LocalMediaProfileRedownloadOperationAccepted(
     pass
 
 
-class _ShowDownloadMaintenanceOperationAccepted(TaskOperationAccepted):
+class _CollectionDownloadMaintenanceOperationAccepted(TaskOperationAccepted):
     local_media_profiles_queued: int
 
 
-class ShowDeleteDownloadsOperationAccepted(_ShowDownloadMaintenanceOperationAccepted):
+class CollectionDeleteDownloadsOperationAccepted(_CollectionDownloadMaintenanceOperationAccepted):
     download_profiles_disabled: int
 
 
-class ShowRedownloadOperationAccepted(_ShowDownloadMaintenanceOperationAccepted):
+class CollectionRedownloadOperationAccepted(_CollectionDownloadMaintenanceOperationAccepted):
     pass
 
 

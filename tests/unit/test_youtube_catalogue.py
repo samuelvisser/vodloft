@@ -1,4 +1,4 @@
-"""YouTube shows listed through the Data API, and the same shows without a key."""
+"""YouTube collections listed through the Data API, and the same collections without a key."""
 from __future__ import annotations
 
 import json
@@ -188,7 +188,7 @@ def test_a_channel_is_listed_through_the_api_with_its_shorts_and_livestreams(you
     assert found[-1].published_at.year == 2023
     # One handle lookup, one uploads page, one Shorts page and one batch of details.
     assert [name for name, _ in youtube.calls] == ["channels", "playlistItems", "videos", "playlistItems"]
-    # A first index is paid from the units kept free for adding shows.
+    # A first index is paid from the units kept free for adding collections.
     status = quota.status()
     assert (status.usage(Share.RESERVE).used, status.usage(Share.CHECKS).used) == (4, 0)
 
@@ -207,7 +207,7 @@ def test_a_rescan_only_details_new_videos_and_pays_from_the_checks_share(youtube
     assert quota.status().usage(Share.CHECKS).used == 4
 
 
-def test_adding_a_show_moves_on_to_the_checks_share_when_the_reserve_is_used(youtube):
+def test_adding_a_collection_moves_on_to_the_checks_share_when_the_reserve_is_used(youtube):
     youtube.playlists["PL1"] = ["v1"]
     youtube.videos["v1"] = _video_item("v1")
     assert quota.try_spend(Share.RESERVE, quota.status().usage(Share.RESERVE).limit)
@@ -263,10 +263,10 @@ def test_a_channel_link_is_resolved_through_the_api(youtube, lookups):
     source = YtDlpSource()
 
     link = source.resolve("https://www.youtube.com/@a-channel")
-    details = source.show_details("https://www.youtube.com/@a-channel")
+    details = source.collection_details("https://www.youtube.com/@a-channel")
 
     assert (link.kind, link.slug, link.url, link.title, link.site) == (
-        LinkKind.SHOW, "UC1", "https://www.youtube.com/@a-channel/videos", "A Channel", "YouTube",
+        LinkKind.COLLECTION, "UC1", "https://www.youtube.com/@a-channel/videos", "A Channel", "YouTube",
     )
     assert (details.slug, details.description, details.image_url, details.author_url) == (
         "UC1", "All about A", "https://yt3.example/a.jpg", "https://www.youtube.com/channel/UC1",

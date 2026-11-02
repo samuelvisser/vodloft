@@ -15,7 +15,7 @@ from sources import MAIN_TAG, RssEpisodeType, VideoDetails, get_source, registry
 from sources import ytdlp_runner as runner
 from sources.ytdlp import YtDlpSource
 
-from test_ytdlp_shows import ListedSource
+from test_ytdlp_collections import ListedSource
 
 
 def _video(slug: str, day: int, tag: str = MAIN_TAG) -> VideoDetails:
@@ -34,7 +34,7 @@ def listed(monkeypatch):
 @pytest.fixture
 def session():
     from backend.db.core import Base
-    import backend.api.endpoints.shows.router  # noqa: F401  (loads every model first)
+    import backend.api.endpoints.collections.router  # noqa: F401  (loads every model first)
 
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
@@ -85,21 +85,21 @@ def test_other_sites_only_have_videos(monkeypatch):
     assert YtDlpSource().video_details("https://vimeo.com/1").tag == MAIN_TAG
 
 
-def test_other_tags_count_on_their_own_across_the_show(listed, session):
-    from backend.db.models import Episode, Show
-    from task_manager.tasks.helpers.listed_shows import index_listed_show
+def test_other_tags_count_on_their_own_across_the_collection(listed, session):
+    from backend.db.models import Episode, Collection
+    from task_manager.tasks.helpers.listed_collections import index_listed_collection
 
-    show = Show(
+    collection = Collection(
         uuid="uuid-UC1", slug="UC1", source_key="listed", title="A channel",
         sharing_url="https://www.youtube.com/@a/videos", membership_level="FREE", type="podcast",
         episode_identifier="seasonal", author_name="A", author_slug="a",
     )
-    session.add(show)
+    session.add(collection)
     session.commit()
     listed.videos = [
         _video("v1", 1), _video("s1", 2, "short"), _video("l1", 3, "livestream"), _video("v2", 4), _video("s2", 5, "short"),
     ]
-    index_listed_show(session, show_id=show.id, source=listed)
+    index_listed_collection(session, collection_id=collection.id, source=listed)
     episodes = session.query(Episode).order_by(Episode.index).all()
     assert [(e.source_slug, e.episode_identifier, e.index) for e in episodes] == [
         ("v1", "ep.S2024E01", 1),
@@ -141,7 +141,7 @@ def test_the_episode_tags_endpoint_and_profiles_accept_source_tags():
     assert client.get("/api/sources/nope/episode-tags").status_code == 404
 
     body = {
-        "show_id": 1, "local_media_profile_id": 1, "enable_profile": True, "ep_id_type_list": ["ep", "livestream"],
+        "collection_id": 1, "local_media_profile_id": 1, "enable_profile": True, "ep_id_type_list": ["ep", "livestream"],
         "download_with_countdown": False, "redownload_final": False, "download_days_in_past": 0,
         "download_episode_count": 0, "download_starting_from": None, "delete_older_episodes": False,
         "seasons": [], "include_upcoming_seasons": False,

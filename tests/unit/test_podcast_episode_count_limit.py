@@ -8,38 +8,38 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 
-def _make_show(session):
-    from backend.db.models import Show
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+def _make_collection(session):
+    from backend.db.models import Collection
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
 
-    show = Show(
+    collection = Collection(
         source_key="dailywire",
-        uuid="episode-limit-show-uuid",
-        slug="episode-limit-show",
+        uuid="episode-limit-collection-uuid",
+        slug="episode-limit-collection",
         title="Episode Limit Show",
         description=None,
-        sharing_url="https://example.test/episode-limit-show",
+        sharing_url="https://example.test/episode-limit-collection",
         membership_level="FREE",
-        type=ShowType.PODCAST.value,
+        type=CollectionType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Host",
         author_slug="host",
     )
-    session.add(show)
+    session.add(collection)
     session.flush()
-    return show
+    return collection
 
 
-def _make_season(session, show):
+def _make_season(session, collection):
     from backend.db.models import Season
 
-    season = Season(show=show, index=1, slug="season-1", name="One")
+    season = Season(collection=collection, index=1, slug="season-1", name="One")
     session.add(season)
     session.flush()
     return season
 
 
-def _make_episode(session, show, season, *, index: int, published_at: datetime):
+def _make_episode(session, collection, season, *, index: int, published_at: datetime):
     from backend.db.models import Episode
     from backend.utils.helpers import generate_uuid
 
@@ -47,7 +47,7 @@ def _make_episode(session, show, season, *, index: int, published_at: datetime):
         source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
-        show=show,
+        collection=collection,
         season=season,
         index=index,
         episode_identifier=f"ep.{index}",
@@ -69,7 +69,7 @@ def _make_local_media_profile(session):
     profile = LocalMediaProfile(
         slug="episode-limit-audio",
         name="Episode limit audio",
-        output_template="/downloads/{{ show }}/{{ episode }}.ext",
+        output_template="/downloads/{{ collection }}/{{ episode }}.ext",
         preferred_format="format_audio_only",
     )
     session.add(profile)
@@ -77,12 +77,12 @@ def _make_local_media_profile(session):
     return profile
 
 
-def _make_podcast_profile(session, show, local_media_profile, *, count: int, delete_older: bool = False):
+def _make_podcast_profile(session, collection, local_media_profile, *, count: int, delete_older: bool = False):
     from backend.db.models.download_profile import DownloadProfile
     from backend.types.download_profile_types import EpIdType
 
     profile = DownloadProfile(
-        show=show,
+        collection=collection,
         local_media_profile=local_media_profile,
         enable_profile=True,
         ep_id_type_list=[EpIdType.EP.value],
@@ -115,15 +115,15 @@ def db_session(tmp_path, monkeypatch):
 def test_podcast_profile_selects_only_latest_episode_count(db_session):
     from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     local_media_profile = _make_local_media_profile(db_session)
     now = datetime.now(timezone.utc)
     episodes = [
-        _make_episode(db_session, show, season, index=index, published_at=now - timedelta(days=4 - index))
+        _make_episode(db_session, collection, season, index=index, published_at=now - timedelta(days=4 - index))
         for index in range(1, 5)
     ]
-    profile = _make_podcast_profile(db_session, show, local_media_profile, count=2)
+    profile = _make_podcast_profile(db_session, collection, local_media_profile, count=2)
 
     selected = get_download_profile_episodes(db_session, profile)
     assert [episode.id for episode in selected] == [episodes[3].id, episodes[2].id]
@@ -132,13 +132,13 @@ def test_podcast_profile_selects_only_latest_episode_count(db_session):
 def test_episode_scoped_run_still_checks_global_latest_set(db_session):
     from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     local_media_profile = _make_local_media_profile(db_session)
     now = datetime.now(timezone.utc)
-    old_episode = _make_episode(db_session, show, season, index=1, published_at=now - timedelta(days=10))
-    newest_episode = _make_episode(db_session, show, season, index=2, published_at=now)
-    profile = _make_podcast_profile(db_session, show, local_media_profile, count=1)
+    old_episode = _make_episode(db_session, collection, season, index=1, published_at=now - timedelta(days=10))
+    newest_episode = _make_episode(db_session, collection, season, index=2, published_at=now)
+    profile = _make_podcast_profile(db_session, collection, local_media_profile, count=1)
 
     assert get_download_profile_episodes(db_session, profile, only_episode=old_episode) == []
     assert get_download_profile_episodes(db_session, profile, only_episode=newest_episode) == [newest_episode]
@@ -150,15 +150,15 @@ def test_episode_count_cleanup_removes_available_and_absent_artifacts_outside_li
     from backend.types.media_types import MediaType
     from task_manager.tasks.workers.download_profile_worker._helpers import cleanup_older_episodes
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     local_media_profile = _make_local_media_profile(db_session)
     now = datetime.now(timezone.utc)
     episodes = [
-        _make_episode(db_session, show, season, index=index, published_at=now - timedelta(days=4 - index))
+        _make_episode(db_session, collection, season, index=index, published_at=now - timedelta(days=4 - index))
         for index in range(1, 5)
     ]
-    profile = _make_podcast_profile(db_session, show, local_media_profile, count=2, delete_older=True)
+    profile = _make_podcast_profile(db_session, collection, local_media_profile, count=2, delete_older=True)
 
     completed_file = tmp_path / "old-completed.m4a"
     completed_file.write_bytes(b"data")
@@ -208,14 +208,14 @@ def test_episode_count_cleanup_keeps_available_files_when_delete_older_is_off(db
     from backend.types.media_types import MediaType
     from task_manager.tasks.workers.download_profile_worker._helpers import cleanup_older_episodes
 
-    show = _make_show(db_session)
-    season = _make_season(db_session, show)
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
     local_media_profile = _make_local_media_profile(db_session)
     now = datetime.now(timezone.utc)
-    completed_episode = _make_episode(db_session, show, season, index=1, published_at=now - timedelta(days=2))
-    absent_episode = _make_episode(db_session, show, season, index=2, published_at=now - timedelta(days=1))
-    _make_episode(db_session, show, season, index=3, published_at=now)
-    profile = _make_podcast_profile(db_session, show, local_media_profile, count=1, delete_older=False)
+    completed_episode = _make_episode(db_session, collection, season, index=1, published_at=now - timedelta(days=2))
+    absent_episode = _make_episode(db_session, collection, season, index=2, published_at=now - timedelta(days=1))
+    _make_episode(db_session, collection, season, index=3, published_at=now)
+    profile = _make_podcast_profile(db_session, collection, local_media_profile, count=1, delete_older=False)
 
     completed_file = tmp_path / "retained-old.m4a"
     completed_file.write_bytes(b"data")

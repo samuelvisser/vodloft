@@ -8,7 +8,7 @@ def _install_task(monkeypatch, *, key: str, function):
     registry_module.task(
         key=key,
         title="Connection lifecycle worker",
-        allowed_resource_types=("show",),
+        allowed_resource_types=("collection",),
         default_max_retries=0,
     )(function)
     registry_module.sync_registry_to_db()
@@ -27,7 +27,7 @@ def test_executor_releases_tracking_connection_before_worker_runs(task_database,
 
     execute_task(
         def_key="test_executor_connection_release",
-        resource_type="show",
+        resource_type="collection",
         resource_id=11,
     )
 
@@ -47,7 +47,7 @@ def test_missing_retry_run_is_not_recreated_after_resource_cleanup(task_database
 
     execute_task(
         def_key="test_deleted_retry_run",
-        resource_type="show",
+        resource_type="collection",
         resource_id=12,
     )
 
@@ -60,7 +60,7 @@ def test_missing_retry_run_is_not_recreated_after_resource_cleanup(task_database
 
     execute_task(
         def_key="test_deleted_retry_run",
-        resource_type="show",
+        resource_type="collection",
         resource_id=12,
         run_id=run_id,
     )

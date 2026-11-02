@@ -4,7 +4,7 @@ import {LocalMediaProfileServerErrors} from '../../types/schemas/local_media_pro
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import LocalMediaProfileCommonFields from './LocalMediaProfileCommonFields'
 import MovieLocalMediaProfileForm from './MovieLocalMediaProfileForm'
-import ShowLocalMediaProfileForm from './ShowLocalMediaProfileForm'
+import CollectionLocalMediaProfileForm from './CollectionLocalMediaProfileForm'
 import VideoLocalMediaProfileForm from './VideoLocalMediaProfileForm'
 
 type Props = {
@@ -13,7 +13,7 @@ type Props = {
     isCreating: boolean
 }
 
-export type LocalMediaProfileMode = 'show' | 'movie' | 'video'
+export type LocalMediaProfileMode = 'collection' | 'movie' | 'video'
 
 export function buildLocalMediaProfileOnSubmit<TIn extends FieldValues, TOut extends FieldValues = TIn>(
     form: UseFormReturn<TIn>,
@@ -36,7 +36,7 @@ export default function LocalMediaProfileForm({form, mode, isCreating}: Props) {
             <LocalMediaProfileCommonFields form={form} mode={mode} isCreating={isCreating}/>
             {mode === 'movie' && <MovieLocalMediaProfileForm form={form}/>}
             {mode === 'video' && <VideoLocalMediaProfileForm form={form}/>}
-            {mode === 'show' && <ShowLocalMediaProfileForm form={form}/>}
+            {mode === 'collection' && <CollectionLocalMediaProfileForm form={form}/>}
         </>
     )
 }

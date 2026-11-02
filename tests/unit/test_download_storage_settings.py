@@ -7,7 +7,7 @@ def test_system_download_storage_defaults_to_local_temporary_mode():
     from config.settings.submodels import (
         DownloadMode,
         MetadataMode,
-        ShowArtworkFallbackFormat,
+        CollectionArtworkFallbackFormat,
         ThumbnailMode,
     )
 
@@ -16,7 +16,7 @@ def test_system_download_storage_defaults_to_local_temporary_mode():
     assert settings.download_settings.download_mode is DownloadMode.TEMPORARY
     assert settings.download_settings.thumbnail_mode is ThumbnailMode.EMBED
     assert settings.download_settings.metadata_mode is MetadataMode.EMBED
-    assert settings.download_settings.show_artwork_fallback_format is ShowArtworkFallbackFormat.JPG
+    assert settings.download_settings.collection_artwork_fallback_format is CollectionArtworkFallbackFormat.JPG
     assert settings.download_settings.temporary_download_root.name == "vodloft-downloads"
     assert settings.download_settings.temporary_download_root != (
         settings.download_settings.download_root / ".vodloft-temp"
@@ -34,7 +34,7 @@ def test_system_download_storage_defaults_to_local_temporary_mode():
     assert values["downloadSettings"]["downloadMode"] == "temporary"
     assert values["downloadSettings"]["thumbnailMode"] == "embed"
     assert values["downloadSettings"]["metadataMode"] == "embed"
-    assert values["downloadSettings"]["showArtworkFallbackFormat"] == "jpg"
+    assert values["downloadSettings"]["collectionArtworkFallbackFormat"] == "jpg"
     assert values["downloadSettings"]["temporaryDownloadRoot"] == str(
         settings.download_settings.temporary_download_root
     )
@@ -70,13 +70,13 @@ def test_explicit_download_storage_paths_override_default_factories():
 
 
 def test_local_media_profile_defaults_to_system_storage_thumbnail_and_metadata_modes():
-    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
+    from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPICreate
 
-    body = ShowLocalMediaProfileAPICreate(
+    body = CollectionLocalMediaProfileAPICreate(
         name="Audio",
-        type="show",
+        type="collection",
         preferred_format="format_audio_only",
-        output_template="/downloads/shows/{{ show }}/{{ episode }}.ext",
+        output_template="/downloads/shows/{{ collection }}/{{ episode }}.ext",
     )
 
     assert str(body.download_mode) == "system"
@@ -89,43 +89,43 @@ def test_local_media_profile_defaults_to_system_storage_thumbnail_and_metadata_m
 
 
 def test_local_media_profile_accepts_each_storage_override():
-    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
+    from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPICreate
 
     for mode in ("system", "direct", "temporary"):
-        body = ShowLocalMediaProfileAPICreate(
+        body = CollectionLocalMediaProfileAPICreate(
             name=f"Audio {mode}",
-            type="show",
+            type="collection",
             preferred_format="format_audio_only",
             download_mode=mode,
-            output_template="/downloads/shows/{{ show }}/{{ episode }}.ext",
+            output_template="/downloads/shows/{{ collection }}/{{ episode }}.ext",
         )
         assert str(body.download_mode) == mode
 
 
 def test_local_media_profile_accepts_each_thumbnail_override():
-    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
+    from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPICreate
 
     for mode in ("system", "no_thumbnail", "embed", "sidecar", "embed_and_sidecar"):
-        body = ShowLocalMediaProfileAPICreate(
+        body = CollectionLocalMediaProfileAPICreate(
             name=f"Audio {mode}",
-            type="show",
+            type="collection",
             preferred_format="format_audio_only",
             thumbnail_mode=mode,
-            output_template="/downloads/shows/{{ show }}/{{ episode }}.ext",
+            output_template="/downloads/shows/{{ collection }}/{{ episode }}.ext",
         )
         assert str(body.thumbnail_mode) == mode
 
 
 def test_local_media_profile_accepts_each_metadata_override():
-    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
+    from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPICreate
 
     for mode in ("system", "no_metadata", "embed", "nfo", "embed_and_nfo"):
-        body = ShowLocalMediaProfileAPICreate(
+        body = CollectionLocalMediaProfileAPICreate(
             name=f"Audio metadata {mode}",
-            type="show",
+            type="collection",
             preferred_format="format_audio_only",
             metadata_mode=mode,
-            output_template="/downloads/shows/{{ show }}/{{ episode }}.ext",
+            output_template="/downloads/shows/{{ collection }}/{{ episode }}.ext",
         )
         assert str(body.metadata_mode) == mode
 
@@ -171,7 +171,7 @@ def test_download_profile_no_longer_contains_storage_mode():
     from backend.api.models.download_profile import DownloadProfileAPICreate
 
     body = DownloadProfileAPICreate(
-        show_id=1,
+        collection_id=1,
         local_media_profile_id=2,
         enable_profile=True,
         ep_id_type_list=[],

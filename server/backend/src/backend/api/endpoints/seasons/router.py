@@ -6,25 +6,25 @@ from backend.app import db_session
 from backend.security.access import Area, Level
 from backend.security.deps import requires
 
-router = APIRouter(prefix="/shows/{show_slug}/seasons", tags=["Seasons"])
+router = APIRouter(prefix="/collections/{collection_slug}/seasons", tags=["Seasons"])
 
 @router.get("", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[SeasonAPIRead])
-def season_list(show_slug: str):
+def season_list(collection_slug: str):
     """
-    List all seasons for a specific show.
+    List all seasons for a specific collection.
 
-    Returns a collection of all seasons associated with the specified show slug.
+    Returns a collection of all seasons associated with the specified collection slug.
     """
     with db_session() as s:
-        return get_seasons_list(s, show_slug)
+        return get_seasons_list(s, collection_slug)
 
 
 @router.post("", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=SeasonAPIRead, status_code=status.HTTP_201_CREATED)
 def season_create(body: SeasonAPICreate):
     """
-    Create a new season for a show.
+    Create a new season for a collection.
 
-    Creates a new season with the provided metadata and associates it with a show.
+    Creates a new season with the provided metadata and associates it with a collection.
     Returns the created season with a generated slug identifier.
     """
     with db_session() as s:
@@ -38,18 +38,18 @@ def season_create(body: SeasonAPICreate):
 
 
 @router.get("/{season_slug}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=SeasonAPIRead)
-def season_detail(show_slug: str, season_slug: str):
+def season_detail(collection_slug: str, season_slug: str):
     """
     Retrieve detailed information for a specific season.
 
     Returns complete season metadata including title, number, and associated episodes.
     """
     with db_session() as s:
-        return get_season(s, show_slug, season_slug)
+        return get_season(s, collection_slug, season_slug)
 
 
 @router.patch("/{season_slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=SeasonAPIRead)
-def season_update(show_slug: str, season_slug: str, body: SeasonAPIUpdate):
+def season_update(collection_slug: str, season_slug: str, body: SeasonAPIUpdate):
     """
     Update an existing season's metadata.
 
@@ -58,7 +58,7 @@ def season_update(show_slug: str, season_slug: str, body: SeasonAPIUpdate):
     """
     with db_session() as s:
         try:
-            result = update_season(s, show_slug, season_slug, body)
+            result = update_season(s, collection_slug, season_slug, body)
             s.commit()
             return result
         except Exception:
@@ -67,7 +67,7 @@ def season_update(show_slug: str, season_slug: str, body: SeasonAPIUpdate):
 
 
 @router.delete("/{season_slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=SeasonAPIRead)
-def season_delete(show_slug: str, season_slug: str):
+def season_delete(collection_slug: str, season_slug: str):
     """
     Delete a season from the system.
 
@@ -76,7 +76,7 @@ def season_delete(show_slug: str, season_slug: str):
     """
     with db_session() as s:
         try:
-            result = delete_season(s, show_slug, season_slug)
+            result = delete_season(s, collection_slug, season_slug)
             s.commit()
             return result
         except Exception:

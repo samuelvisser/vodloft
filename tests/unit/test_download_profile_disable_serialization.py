@@ -8,24 +8,24 @@ def test_profile_reconciliation_reloads_current_enabled_state():
     import backend.db.models  # noqa: F401
     import task_manager.scheduler.db  # noqa: F401
     from backend.db import Base
-    from backend.db.models import LocalMediaProfile, DownloadProfile, Show
+    from backend.db.models import LocalMediaProfile, DownloadProfile, Collection
     from backend.types.download_profile_types import EpIdType
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
     from task_manager.tasks.helpers.download_profiles import lock_enabled_download_profile
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     session = Session(engine, expire_on_commit=False)
     try:
-        show = Show(
+        collection = Collection(
             source_key="dailywire",
-            uuid="show-uuid",
-            slug="test-show",
+            uuid="collection-uuid",
+            slug="test-collection",
             title="Test Show",
             description=None,
-            sharing_url="https://example.test/show",
+            sharing_url="https://example.test/collection",
             membership_level="FREE",
-            type=ShowType.PODCAST.value,
+            type=CollectionType.PODCAST.value,
             episode_identifier=EpisodeIdentifier.NUMBERED.value,
             author_name="Host",
             author_slug="host",
@@ -33,13 +33,13 @@ def test_profile_reconciliation_reloads_current_enabled_state():
         local_media_profile = LocalMediaProfile(
             slug="audio",
             name="Audio",
-            output_template="/downloads/{{ show }}/{{ episode }}.ext",
+            output_template="/downloads/{{ collection }}/{{ episode }}.ext",
             preferred_format="format_audio_only",
         )
-        session.add_all([show, local_media_profile])
+        session.add_all([collection, local_media_profile])
         session.flush()
         profile = DownloadProfile(
-            show_id=show.id,
+            collection_id=collection.id,
             local_media_profile_id=local_media_profile.id,
             enable_profile=True,
             ep_id_type_list=[EpIdType.EP.value],

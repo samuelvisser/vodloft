@@ -5,7 +5,7 @@ from importlib import import_module
 from sqlalchemy import create_engine, text
 
 
-migration = import_module("backend.db.alembic.versions.d8b4a1f6c203_wireloft_1_1")
+migration = import_module("importer.wireloft.migrations.d8b4a1f6c203_wireloft_1_1")
 
 
 def test_migration_repairs_official_trailer_classification() -> None:

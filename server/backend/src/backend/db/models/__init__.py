@@ -2,23 +2,25 @@
 from .local_media_profile import (
     LocalMediaProfileBase,
     MovieLocalMediaProfile,
-    ShowLocalMediaProfile,
+    CollectionLocalMediaProfile,
     VideoLocalMediaProfile,
 )
 
 # Existing code and third-party integrations historically constructed
-# ``LocalMediaProfile`` directly for shows. Keep that import compatible while
+# ``LocalMediaProfile`` directly for collections. Keep that import compatible while
 # production code that needs all types queries ``LocalMediaProfileBase``.
-LocalMediaProfile = ShowLocalMediaProfile
+LocalMediaProfile = CollectionLocalMediaProfile
 from .Season import Season
 from .Settings import Settings
 from .SourceDomainPreference import SourceDomainPreference
 from .QuickDownloadHistory import QuickDownloadHistory
 from .user import User, UserAccess, UserSourceAccess
-from .Show import Show
-from .ShowLocalAsset import ShowLocalAsset
+from .Collection import Collection
+from .CollectionLocalAsset import CollectionLocalAsset
 from .Metadata import Metadata
 from .CustomIndexState import CustomIndexState
+from .ExistingFileScan import ExistingFileScan
+from .ImportRun import ImportLink, ImportRun, ImportStep
 
 from .download_profile import DownloadProfile
 from .media_download import MediaDownloadBase

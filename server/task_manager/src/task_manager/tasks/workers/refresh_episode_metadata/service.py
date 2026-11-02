@@ -7,7 +7,7 @@ from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Episode
-from backend.services.custom_indexes import request_show_custom_index_reconciliation
+from backend.services.custom_indexes import request_collection_custom_index_reconciliation
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode_publication_timing import (
@@ -68,7 +68,7 @@ async def run_refresh_episode_metadata(
     if refresh:
         did_refresh = True
         episode_slug = episode.slug
-        require_member_exclusive = episode.show.membership_level not in {
+        require_member_exclusive = episode.collection.membership_level not in {
             DwMembershipLevel.FREE.value,
             DwMembershipLevel.HIGHEST_ALLOWED.value,
         }
@@ -90,9 +90,9 @@ async def run_refresh_episode_metadata(
         if episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value:
             return False
 
-        custom_index_show_id = episode.show_id
+        custom_index_collection_id = episode.collection_id
         refreshed_normally = _refresh_episode_from_dailywire(s, episode, detail)
-        request_show_custom_index_reconciliation(s, custom_index_show_id)
+        request_collection_custom_index_reconciliation(s, custom_index_collection_id)
         if not refreshed_normally:
             episode.metadata_is_final = False
             s.commit()
@@ -184,7 +184,7 @@ def _refresh_episode_from_dailywire(
     detail: DwEpisodeDetailRecord | None,
 ) -> bool:
     """Apply one fetched snapshot; return False when lifecycle ownership transfers."""
-    show = episode.show
+    collection = episode.collection
     old_status = episode.publish_status
     if detail is None:
         new_status = EpisodePublishStatus.NO_USABLE_MEDIA
@@ -196,7 +196,7 @@ def _refresh_episode_from_dailywire(
         queue_episode_status_events(
             s,
             episode=episode,
-            show=show,
+            collection=collection,
             old_status=old_status,
             new_status=new_status,
             was_created=False,
@@ -233,7 +233,7 @@ def _refresh_episode_from_dailywire(
         queue_episode_status_events(
             s,
             episode=episode,
-            show=show,
+            collection=collection,
             old_status=old_status,
             new_status=new_status,
             was_created=False,
@@ -249,7 +249,7 @@ def _refresh_episode_from_dailywire(
         queue_episode_status_events(
             s,
             episode=episode,
-            show=show,
+            collection=collection,
             old_status=old_status,
             new_status=new_status,
             was_created=False,
@@ -257,7 +257,7 @@ def _refresh_episode_from_dailywire(
         queue_event(
             s,
             MONITOR_REQUESTED_EVENT,
-            episode_event_payload(episode=episode, show=show, old_status=old_status),
+            episode_event_payload(episode=episode, collection=collection, old_status=old_status),
         )
         s.flush()
         return False

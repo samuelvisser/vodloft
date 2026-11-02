@@ -5,25 +5,25 @@ from typing import Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Episode, Season, Show
+from backend.db.models import Episode, Season, Collection
 from backend.types.download_profile_types import EpIdType
 from backend.types.episode_types import (
     EpisodePublishStatus,
     PENDING_EPISODE_PUBLISH_STATUSES,
 )
-from backend.types.show_types import EpisodeIdentifier
+from backend.types.collection_types import EpisodeIdentifier
 from backend.utils.episode import EpisodeIdentifierInfo
 from sources.dailywire.api.records import DwEpisodeRecord
 from .metadata import ensure_utc
 
 
-def pending_episodes_for_show(s: Session, show_id: int) -> list[Episode]:
+def pending_episodes_for_collection(s: Session, collection_id: int) -> list[Episode]:
     """Load at most enough rows to decide whether one pending episode exists."""
     return list(
         s.scalars(
             select(Episode)
             .where(
-                Episode.show_id == show_id,
+                Episode.collection_id == collection_id,
                 Episode.publish_status.in_(PENDING_EPISODE_PUBLISH_STATUSES),
             )
             .limit(2)
@@ -55,12 +55,12 @@ def _matches_source_number(
 
 
 def _matches_identity(
-    show: Show,
+    collection: Collection,
     local: Episode,
     season: Season,
     remote: DwEpisodeRecord,
 ) -> bool:
-    identifier_type = EpisodeIdentifier(show.episode_identifier)
+    identifier_type = EpisodeIdentifier(collection.episode_identifier)
     try:
         info = EpisodeIdentifierInfo.from_identifier(local.episode_identifier)
     except ValueError:
@@ -85,12 +85,12 @@ def _matches_identity(
 def reconcile_single_pending_episode_slug(
     s: Session,
     *,
-    show: Show,
+    collection: Collection,
     season: Season,
     remote_records: Sequence[DwEpisodeRecord],
 ) -> Episode | None:
     """Adopt a changed Daily Wire slug onto the sole pending local episode."""
-    pending = pending_episodes_for_show(s, show.id)
+    pending = pending_episodes_for_collection(s, collection.id)
     if len(pending) != 1:
         return None
     local = pending[0]
@@ -102,7 +102,7 @@ def reconcile_single_pending_episode_slug(
     candidate_slugs = {record.slug for record in remote_records}
     known_slugs = set(s.scalars(
         select(Episode.slug).where(
-            Episode.show_id == show.id,
+            Episode.collection_id == collection.id,
             Episode.slug.in_(candidate_slugs),
         )
     ))
@@ -110,7 +110,7 @@ def reconcile_single_pending_episode_slug(
         record
         for record in remote_records
         if record.slug not in known_slugs
-        and _matches_identity(show, local, season, record)
+        and _matches_identity(collection, local, season, record)
     ]
     if len(matches) != 1:
         return None

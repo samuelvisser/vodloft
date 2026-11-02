@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Show
+from backend.db.models import Collection
 from backend.db.models.Metadata import Metadata
 from backend.db.models.media_item import Movie
 from backend.utils.custom_metadata import (
@@ -16,7 +16,7 @@ from backend.utils.custom_metadata import (
 
 
 _PARENT_TABLE_BY_SCOPE: dict[CustomMetadataScope, str] = {
-    "show": Show.__tablename__,
+    "collection": Collection.__tablename__,
     "movie": Movie.__tablename__,
 }
 
@@ -52,7 +52,7 @@ def get_custom_metadata_fields(
 
 def remove_shared_custom_metadata_fields(
     session: Session,
-    resource: Show | Movie,
+    resource: Collection | Movie,
     *,
     parent_table: str,
     fields: list[str],
@@ -73,8 +73,8 @@ def remove_shared_custom_metadata_fields(
     # resource before replacing its remaining values so globally deleted rows
     # cannot be reintroduced from a stale relationship collection.
     session.expire(resource, ["meta_items"])
-    if parent_table == Show.__tablename__:
-        # Removing a shared field can change every show's output directory.
-        from backend.services.show_assets import request_show_asset_reconciliation
-        request_show_asset_reconciliation(session)
+    if parent_table == Collection.__tablename__:
+        # Removing a shared field can change every collection's output directory.
+        from backend.services.collection_assets import request_collection_asset_reconciliation
+        request_collection_asset_reconciliation(session)
 

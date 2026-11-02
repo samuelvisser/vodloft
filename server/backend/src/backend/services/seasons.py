@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Season
 from backend.types.season_types import SeasonType
-from backend.types.show_types import ShowType
+from backend.types.collection_types import CollectionType
 from backend.utils.season_ordering import season_type_from_name
 from task_manager.events.transactional import queue_event
 
@@ -12,16 +12,16 @@ from task_manager.events.transactional import queue_event
 def create_season_record(
     s: Session,
     *,
-    show_id: int,
+    collection_id: int,
     index: int,
     slug: str,
     name: str,
-    update_show_profiles: bool = False,
+    update_collection_profiles: bool = False,
     season_number: int | None = None,
 ) -> Season:
     """Create one persistent season without depending on an API request model.
 
-    Without ``season_number`` a normal season is numbered after the show's last one.
+    Without ``season_number`` a normal season is numbered after the collection's last one.
     """
     season_type = season_type_from_name(name)
     if season_type is SeasonType.EXTRA:
@@ -30,14 +30,14 @@ def create_season_record(
         season_number = max(
             (
                 existing.season_number
-                for existing in s.query(Season).filter(Season.show_id == show_id)
+                for existing in s.query(Season).filter(Season.collection_id == collection_id)
                 if existing.season_type == SeasonType.NORMAL.value
             ),
             default=0,
         ) + 1
 
     season = Season(
-        show_id=show_id,
+        collection_id=collection_id,
         index=index,
         slug=slug,
         name=name,
@@ -47,8 +47,8 @@ def create_season_record(
     s.add(season)
     s.flush()
 
-    if update_show_profiles and season.show.type == ShowType.SERIES.value:
-        for profile in season.show.download_profiles:
+    if update_collection_profiles and season.collection.type == CollectionType.SERIES.value:
+        for profile in season.collection.download_profiles:
             if profile.include_upcoming_seasons:
                 profile.seasons.append(season)
         s.flush()
@@ -60,7 +60,7 @@ def create_season_record(
             "resource_id": season.id,
             "id": season.id,
             "slug": season.slug,
-            "show_id": season.show_id,
+            "collection_id": season.collection_id,
         },
     )
     return season

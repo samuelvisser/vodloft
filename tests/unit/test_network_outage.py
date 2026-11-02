@@ -22,7 +22,7 @@ def _install_task(monkeypatch, *, key: str, function, default_max_retries: int =
         key=key,
         title="Network test",
         description="Network outage test task",
-        allowed_resource_types=("show",),
+        allowed_resource_types=("collection",),
         default_max_retries=default_max_retries,
     )(function)
     registry_module.sync_registry_to_db()
@@ -78,7 +78,7 @@ def test_scheduler_suppresses_expected_external_failures(monkeypatch, caplog) ->
         raise NoInternetConnectionError()
 
     monkeypatch.setattr(executor_module, "execute_task", offline)
-    _execute_task_job(def_key="test", resource_type="show", resource_id=1)
+    _execute_task_job(def_key="test", resource_type="collection", resource_id=1)
 
     def unavailable(**_kwargs) -> None:
         raise MediaUnavailableError("Could not refresh signed media URL")
@@ -93,7 +93,7 @@ def test_scheduler_suppresses_expected_external_failures(monkeypatch, caplog) ->
 
     monkeypatch.setattr(executor_module, "execute_task", broken)
     with pytest.raises(RuntimeError, match="application bug"):
-        _execute_task_job(def_key="test", resource_type="show", resource_id=1)
+        _execute_task_job(def_key="test", resource_type="collection", resource_id=1)
 
 
 def test_task_outage_is_logged_and_persisted_cleanly(task_database, monkeypatch, caplog) -> None:
@@ -109,7 +109,7 @@ def test_task_outage_is_logged_and_persisted_cleanly(task_database, monkeypatch,
     with pytest.raises(NoInternetConnectionError, match=NO_INTERNET_CONNECTION_MESSAGE):
         execute_task(
             def_key="test_network_outage",
-            resource_type="show",
+            resource_type="collection",
             resource_id=1,
             max_retries=0,
         )
@@ -159,7 +159,7 @@ def test_rss_stream_outage_is_not_downgraded_to_episode_502() -> None:
             raise outage
 
     profile = SimpleNamespace(
-        show=SimpleNamespace(membership_level=DwMembershipLevel.FREE.value),
+        collection=SimpleNamespace(membership_level=DwMembershipLevel.FREE.value),
         preferred_format="720p",
     )
     episode = SimpleNamespace(slug="example-episode")

@@ -10,25 +10,25 @@ from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
 
 if TYPE_CHECKING:
-    from backend.db.models import Show
+    from backend.db.models import Collection
     from backend.db.models.local_media_profile import LocalMediaProfileBase
 
 
 class CustomIndexState(Base):
-    """Durable reconciliation generations for one Show/Local Media Profile pair."""
+    """Durable reconciliation generations for one Collection/Local Media Profile pair."""
 
     __tablename__ = "custom_index_states"
     __table_args__ = (
         UniqueConstraint(
-            "show_id",
+            "collection_id",
             "local_media_profile_id",
             name="uq_custom_index_state_scope",
         ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    show_id: Mapped[int] = mapped_column(
-        ForeignKey("shows.id", ondelete="CASCADE"),
+    collection_id: Mapped[int] = mapped_column(
+        ForeignKey("collections.id", ondelete="CASCADE"),
         index=True,
     )
     local_media_profile_id: Mapped[int] = mapped_column(
@@ -47,5 +47,5 @@ class CustomIndexState(Base):
         onupdate=func.now(),
     )
 
-    show: Mapped["Show"] = relationship(back_populates="custom_index_states")
+    collection: Mapped["Collection"] = relationship(back_populates="custom_index_states")
     local_media_profile: Mapped["LocalMediaProfileBase"] = relationship()

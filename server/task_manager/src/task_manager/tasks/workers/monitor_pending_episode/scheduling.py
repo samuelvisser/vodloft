@@ -7,7 +7,7 @@ from apscheduler.jobstores.base import JobLookupError
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.orm import Session
 
-from backend.db.models import Episode, Show
+from backend.db.models import Episode, Collection
 from config import get_settings
 from config.settings.cron_validation import (
     WorkerCronExpressionError,
@@ -90,7 +90,7 @@ def queue_monitor_completion_if_settled(
     s: Session,
     *,
     episode: Episode,
-    show: Show,
+    collection: Collection,
     old_status: str | None,
 ) -> bool:
     if episode.publish_status in PENDING_EPISODE_PUBLISH_STATUSES:
@@ -98,7 +98,7 @@ def queue_monitor_completion_if_settled(
     queue_event(
         s,
         MONITOR_COMPLETED_EVENT,
-        episode_event_payload(episode=episode, show=show, old_status=old_status),
+        episode_event_payload(episode=episode, collection=collection, old_status=old_status),
     )
     return True
 

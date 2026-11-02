@@ -17,7 +17,7 @@ import {
     type LocalMediaProfileTemplateSource,
     useLocalMediaProfileTemplateSources,
     useLocalMediaProfileTemplateVariables,
-    useRandomShowTemplateSource,
+    useRandomCollectionTemplateSource,
 } from '../../lib/localMediaProfileTemplateSources'
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
 import TemplateSourceSelect from './TemplateSourceSelect'
@@ -106,9 +106,20 @@ const vodloftFilterCompletionOptions: Completion[] = [
         'Return true when the regex matches anywhere in the value.',
     ),
     filterCompletion(
+        'regex_groups',
+        'regex_groups(pattern)',
+        'Return the groups of the first regex match as a list, or an empty list when nothing matches.',
+    ),
+    filterCompletion(
+        'as_typed',
+        'as_typed',
+        'Name the value as if it were typed into the template: in Restricted mode it keeps its spaces. Use it last.',
+    ),
+    filterCompletion(
         'custom_index',
-        "'key' | custom_index",
-        'Use the current episode number from a defined Indexing Value.',
+        "'key' | custom_index(per=None, start=1, step=1)",
+        'Use this episode\'s number from a defined Indexing Value. per counts separately for each value, ' +
+        'start and step set the first number and how it changes.',
     ),
 ]
 
@@ -483,11 +494,23 @@ function PreviewPath({path}: { path: string }) {
     )
 }
 
+const FILENAME_MODE_NAMES: Record<string, string> = {
+    unrestricted: 'Unrestricted',
+    windows: 'Windows',
+    restricted: 'Restricted',
+}
+
+function describeTypedCharacter(char: string): string {
+    if (char === ' ') return 'space'
+    if (char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127) return 'control character'
+    return char
+}
+
 export default function OutputTemplateEditor({form, mode, placeholder, help, renderPreviewFields}: Props) {
     const {control, formState: {errors}} = form
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
-    const showScope = useWatch({control, name: 'showScope'}) ?? 'both'
+    const collectionScope = useWatch({control, name: 'collectionScope'}) ?? 'both'
     const indexingValues = useWatch({control, name: 'indexingValues'}) ?? []
     const rawLocalMediaProfileId = useWatch({control, name: 'id'})
     const localMediaProfileId = typeof rawLocalMediaProfileId === 'number'
@@ -516,11 +539,11 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
     const [testValues, setTestValues] = useState<Record<string, string>>({})
     const [testValuesExpanded, setTestValuesExpanded] = useState(false)
     const sourceQuery = useLocalMediaProfileTemplateSources(mode, {
-        showScope,
+        collectionScope,
         search: sourceSearch,
         anchorSourceId: selectedSource?.id,
     })
-    const randomShowSourceQuery = useRandomShowTemplateSource(showScope, mode === 'show')
+    const randomCollectionSourceQuery = useRandomCollectionTemplateSource(collectionScope, mode === 'collection')
     const variableQuery = useLocalMediaProfileTemplateVariables(mode)
     const customVariables = (variableQuery.data ?? []) as OutputTemplateVariable[]
     const variables = useMemo(
@@ -529,6 +552,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
     )
     const [usedVariableNames, setUsedVariableNames] = useState<string[]>([])
     const [provisionalIndexingValueNames, setProvisionalIndexingValueNames] = useState<string[]>([])
+    const [replacedTyped, setReplacedTyped] = useState<{mode: string, characters: string[]}>({mode: '', characters: []})
     const usedVariables = useMemo(
         () => {
             const used = new Set(usedVariableNames)
@@ -539,7 +563,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
     const usedVariablesKey = usedVariables.map(({name}) => name).join('|')
     const missingMetadataVariables = useMemo(() => {
         if (mode === 'video') return []
-        const prefix = mode === 'movie' ? 'meta_movie_' : 'meta_show_'
+        const prefix = mode === 'movie' ? 'meta_movie_' : 'meta_collection_'
         const available = new Set(customVariables.map(({name}) => name))
         return [...new Set(
             usedVariableNames.filter((name) => name.startsWith(prefix) && !available.has(name)),
@@ -604,7 +628,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
                 from: context.pos - currentWord.length,
                 options: [
                     ...vodloftFilterCompletionOptions
-                        .filter((option) => mode === 'show' || option.label !== 'custom_index')
+                        .filter((option) => mode === 'collection' || option.label !== 'custom_index')
                         .map((option) => currentWord ? option : {...option, boost: 99}),
                     ...jinjaNativeFilterCompletionOptions,
                 ],
@@ -720,15 +744,15 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
         setSelectedSource(null)
         setTestValues({})
         setSourceSearch('')
-    }, [mode, showScope])
+    }, [mode, collectionScope])
 
     useEffect(() => {
         if (selectedSource) return
-        if (mode === 'show') {
-            if (randomShowSourceQuery.isLoading) return
-            if (randomShowSourceQuery.data) {
-                setSelectedSource(randomShowSourceQuery.data)
-                setTestValues({...randomShowSourceQuery.data.values})
+        if (mode === 'collection') {
+            if (randomCollectionSourceQuery.isLoading) return
+            if (randomCollectionSourceQuery.data) {
+                setSelectedSource(randomCollectionSourceQuery.data)
+                setTestValues({...randomCollectionSourceQuery.data.values})
                 return
             }
         }
@@ -737,8 +761,8 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
         setTestValues({...sources[0].values})
     }, [
         mode,
-        randomShowSourceQuery.data,
-        randomShowSourceQuery.isLoading,
+        randomCollectionSourceQuery.data,
+        randomCollectionSourceQuery.isLoading,
         selectedSource,
         sources,
     ])
@@ -763,15 +787,15 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
         preferredFormat,
         values: testValues,
         sourceId: selectedSource.id,
-        localMediaProfileId: mode === 'show' ? localMediaProfileId : null,
-        indexingValues: mode === 'show' ? indexingValues : null,
+        localMediaProfileId: mode === 'collection' ? localMediaProfileId : null,
+        indexingValues: mode === 'collection' ? indexingValues : null,
     } : null)
     const previewPath = preview.result?.output.outputPath ?? ''
     const previewError = preview.error || preview.result?.output.error || ''
     const previewLoading = preview.loading
     const previewIndicatorLoading = selectedSource
         ? previewLoading
-        : sourceQuery.isLoading || (mode === 'show' && randomShowSourceQuery.isLoading)
+        : sourceQuery.isLoading || (mode === 'collection' && randomCollectionSourceQuery.isLoading)
 
     useEffect(() => {
         // Keep editable controls mounted while the shared request is pending.
@@ -779,6 +803,10 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
         const output = preview.result?.output
         setUsedVariableNames(output?.usedVariables ?? [])
         setProvisionalIndexingValueNames(output?.provisionalIndexingValues ?? [])
+        setReplacedTyped(output?.outputPath ? {
+            mode: output.filenameMode,
+            characters: output.replacedTypedCharacters,
+        } : {mode: '', characters: []})
     }, [preview.loading, preview.result])
 
     function chooseSource(source: LocalMediaProfileTemplateSource) {
@@ -836,7 +864,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
                             {missingMetadataVariables.length === 1 ? ' does' : ' do'} not exist yet and will render as empty.
                         </div>
                     )}
-                    {mode === 'show' && (
+                    {mode === 'collection' && (
                         <CustomIndexAdvisories
                             template={template}
                             indexingValues={indexingValues}
@@ -862,6 +890,15 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
                             an assignment.
                         </div>
                     )}
+                    {replacedTyped.characters.length > 0 && (
+                        <div className="template-metadata-warning" role="status">
+                            In {FILENAME_MODE_NAMES[replacedTyped.mode] ?? replacedTyped.mode} file name mode, the typed
+                            {' '}{replacedTyped.characters.map((char, index) => (
+                                <span key={char}>{index > 0 ? ' ' : ''}<code>{describeTypedCharacter(char)}</code></span>
+                            ))}
+                            {' '}will be replaced in file names. The preview shows the result.
+                        </div>
+                    )}
                     {pathHasLeadingSpace && (
                         <div className="template-metadata-warning" role="status">
                             One or more path parts begins with a space. This is usually not intentional.
@@ -885,7 +922,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
                                         sourceQuery.isLoading
                                         || sourceQuery.isFetchingNextPage
                                         || sourceQuery.isFetchingPreviousPage
-                                        || (mode === 'show' && !selectedSource && randomShowSourceQuery.isLoading)
+                                        || (mode === 'collection' && !selectedSource && randomCollectionSourceQuery.isLoading)
                                     }
                                     hasMore={sourceQuery.hasNextPage ?? false}
                                     hasPrevious={sourceQuery.hasPreviousPage ?? false}
@@ -907,7 +944,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
                             <p className="error" role="alert">Examples could not be loaded. Try refreshing the page.</p>
                         )}
                         {selectedSource?.fallback && (
-                            <p className="template-preview-status">No {({show: 'episodes', movie: 'movies', video: 'videos'} as const)[mode]} found yet, so example values are
+                            <p className="template-preview-status">No {({collection: 'episodes', movie: 'movies', video: 'videos'} as const)[mode]} found yet, so example values are
                                 being used.</p>
                         )}
 

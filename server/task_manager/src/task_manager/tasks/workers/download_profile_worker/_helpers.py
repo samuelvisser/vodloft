@@ -14,7 +14,7 @@ from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
-from backend.types.show_types import EpisodeIdentifier
+from backend.types.collection_types import EpisodeIdentifier
 from backend.services.media_download_history import record_media_download_history
 from backend.utils.episode import episode_identifier_type_predicate
 from backend.utils.output_template import resolve_episode_output_path
@@ -30,9 +30,9 @@ from task_manager.tasks.workers.file_watcher.service import resolve_media_downlo
 
 
 def _download_profile_stmt():
-    """Load profiles with the show and seasons their episode filters need."""
+    """Load profiles with the collection and seasons their episode filters need."""
     return select(DownloadProfile).options(
-        joinedload(DownloadProfile.show),
+        joinedload(DownloadProfile.collection),
         selectinload(DownloadProfile.seasons),
     )
 
@@ -45,12 +45,12 @@ def resolve_target_profiles(
         episode = s.get(Episode, resource_id) if resource_id is not None else None
         if episode is None:
             return []
-        return _enabled_profiles_for_show(s, episode.show_id)
+        return _enabled_profiles_for_collection(s, episode.collection_id)
 
-    if resource_type == "show":
+    if resource_type == "collection":
         if resource_id is None:
             return []
-        return _enabled_profiles_for_show(s, resource_id)
+        return _enabled_profiles_for_collection(s, resource_id)
 
     if resource_type == "download_profile" and resource_id:
         profile = s.scalars(
@@ -65,10 +65,10 @@ def resolve_target_profiles(
     ))
 
 
-def _enabled_profiles_for_show(s: Session, show_id: int) -> Sequence[DownloadProfile]:
+def _enabled_profiles_for_collection(s: Session, collection_id: int) -> Sequence[DownloadProfile]:
     return list(s.scalars(
         _download_profile_stmt().where(
-            DownloadProfile.show_id == show_id,
+            DownloadProfile.collection_id == collection_id,
             DownloadProfile.enable_profile.is_(True),
         )
     ))
@@ -93,7 +93,7 @@ def get_download_profile_episodes(
 ) -> list[Episode]:
     """Episodes a Download Profile currently wants represented by artifacts.
 
-    Apply the stable profile predicates in SQL so large shows do not materialize
+    Apply the stable profile predicates in SQL so large collections do not materialize
     thousands of Episode ORM objects merely to discard nearly all of them.
     """
     allowed_types = set(profile.ep_id_type_list)
@@ -106,7 +106,7 @@ def get_download_profile_episodes(
 
     published_at = func.coalesce(Episode.published_date, Episode.went_live_date)
     stmt = select(Episode).where(
-        Episode.show_id == profile.show_id,
+        Episode.collection_id == profile.collection_id,
         Episode.publish_status.in_(eligible_statuses),
         episode_identifier_type_predicate(Episode.episode_identifier, allowed_types),
         # Media protected by DRM cannot be downloaded.
@@ -114,7 +114,7 @@ def get_download_profile_episodes(
         # Nor can media the Source no longer has.
         Episode.removed_from_source.is_(False),
     )
-    if not _subscription_active(profile.show.source_key):
+    if not _subscription_active(profile.collection.source_key):
         # Nor can media that needs a subscription VODLoft is not signed in with.
         stmt = stmt.where(Episode.needs_subscription.is_(False))
 
@@ -137,8 +137,8 @@ def get_download_profile_episodes(
             published_at >= utc_start,
         )
 
-    # Only a show identified by season filters its episodes by season.
-    if profile.show.episode_identifier == EpisodeIdentifier.SEASONAL.value:
+    # Only a collection identified by season filters its episodes by season.
+    if profile.collection.episode_identifier == EpisodeIdentifier.SEASONAL.value:
         allowed_season_ids = {season.id for season in profile.seasons}
         season_predicates = []
         if allowed_season_ids:

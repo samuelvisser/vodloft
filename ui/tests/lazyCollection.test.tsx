@@ -256,8 +256,8 @@ function domainDownload(
         episodeSlug: `episode-${id}`,
         episodeTitle: `Episode ${id}`,
         episodeIdentifier: null,
-        showSlug: 'show',
-        showTitle: 'Show',
+        collectionSlug: 'collection',
+        collectionTitle: 'Collection',
         movieSlug: null,
         movieTitle: null,
         movieExtraType: null,
@@ -449,7 +449,7 @@ function taskLedgerEntry(
     id: number,
     {
         definitionKey = 'fetch_new_episodes',
-        resourceType = 'show',
+        resourceType = 'collection',
         resourceId = 0,
         status = 'SUCCEEDED',
         startedAt = `2026-10-08T0${id}:00:00Z`,
@@ -485,7 +485,7 @@ test('cron task ledger can render immediately from the broader Tasks cache witho
     )
     const cronKey = lazyCollectionQueryKey(
         ['taskLedger'],
-        ['fetch_new_episodes', 'show', [0], null, null, 'created_at', 'desc', false],
+        ['fetch_new_episodes', 'collection', [0], null, null, 'created_at', 'desc', false],
         10,
         10,
     )
@@ -510,7 +510,7 @@ test('cron task ledger can render immediately from the broader Tasks cache witho
 
     const placeholder = deriveTaskLedgerCollectionPlaceholder(queryClient, {
         definitionKey: 'fetch_new_episodes',
-        resourceType: 'show',
+        resourceType: 'collection',
         resourceIds: [0],
         statuses: undefined,
         startedAfter: undefined,
@@ -557,7 +557,7 @@ test('task ledger placeholder reuse respects status and started-after filters', 
 
     const placeholder = deriveTaskLedgerCollectionPlaceholder(queryClient, {
         definitionKey: 'fetch_new_episodes',
-        resourceType: 'show',
+        resourceType: 'collection',
         resourceIds: [0],
         statuses: ['FAILED'],
         startedAfter: '2026-10-08T02:00:00Z',
@@ -596,7 +596,7 @@ test('task ledger placeholder reuse never crosses ordering', () => {
     assert.equal(
         deriveTaskLedgerCollectionPlaceholder(queryClient, {
             definitionKey: 'fetch_new_episodes',
-            resourceType: 'show',
+            resourceType: 'collection',
             resourceIds: [0],
             statuses: undefined,
             startedAfter: undefined,
@@ -701,7 +701,7 @@ test('task ledger placeholder includes both unscoped and legacy global scans', (
 
     const query = {
         definitionKey: 'fetch_new_episodes',
-        resourceType: 'show',
+        resourceType: 'collection',
         resourceIds: [0, 7],
         statuses: undefined,
         startedAfter: undefined,
@@ -725,7 +725,7 @@ test('scoped task cache cannot seed unscoped-inclusive ledger without global row
     const queryClient = new QueryClient()
     const key = lazyCollectionQueryKey(
         ['taskLedger'],
-        ['fetch_new_episodes', 'show', [0, 7], null, null, 'created_at', 'desc', false],
+        ['fetch_new_episodes', 'collection', [0, 7], null, null, 'created_at', 'desc', false],
         10,
         10,
     )
@@ -740,7 +740,7 @@ test('scoped task cache cannot seed unscoped-inclusive ledger without global row
     })
     assert.equal(deriveTaskLedgerCollectionPlaceholder(queryClient, {
         definitionKey: 'fetch_new_episodes',
-        resourceType: 'show',
+        resourceType: 'collection',
         resourceIds: [0, 7],
         includeUnscoped: true,
         statuses: undefined,
@@ -755,7 +755,7 @@ test('unscoped-only task ledger keeps global runs and never seeds the full ledge
     const queryClient = new QueryClient()
     const all = lazyCollectionQueryKey(
         ['taskLedger'],
-        ['fetch_new_episodes', 'show', null, null, null, 'created_at', 'desc', false],
+        ['fetch_new_episodes', 'collection', null, null, null, 'created_at', 'desc', false],
         10,
         10,
     )
@@ -770,7 +770,7 @@ test('unscoped-only task ledger keeps global runs and never seeds the full ledge
     })
     const query = {
         definitionKey: 'fetch_new_episodes',
-        resourceType: 'show',
+        resourceType: 'collection',
         resourceIds: undefined,
         statuses: undefined,
         startedAfter: undefined,
@@ -785,7 +785,7 @@ test('unscoped-only task ledger keeps global runs and never seeds the full ledge
     queryClient.clear()
     const unscopedKey = lazyCollectionQueryKey(
         ['taskLedger'],
-        ['fetch_new_episodes', 'show', null, null, null, 'created_at', 'desc', true],
+        ['fetch_new_episodes', 'collection', null, null, null, 'created_at', 'desc', true],
         10,
         10,
     )

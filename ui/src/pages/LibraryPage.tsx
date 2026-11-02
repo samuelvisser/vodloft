@@ -5,46 +5,46 @@ import {Link, useNavigate, useSearchParams} from 'react-router-dom'
 import {faIcon} from '../icons/faIcon'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
-import ShowIndexingProgress from '../components/ShowIndexingProgress/ShowIndexingProgress'
+import CollectionIndexingProgress from '../components/CollectionIndexingProgress/CollectionIndexingProgress'
 import MediaTypeTabs, {MediaType} from '../components/MediaTypeTabs/MediaTypeTabs'
-import ShowTypeFilter, {
-    createDefaultShowTypeFilter,
-    matchesShowTypeFilter,
-} from '../components/common/ShowTypeFilter'
+import CollectionTypeFilter, {
+    createDefaultCollectionTypeFilter,
+    matchesCollectionTypeFilter,
+} from '../components/common/CollectionTypeFilter'
 import SourceBadge from '../components/Source/SourceBadge'
 import {DrmBadge} from '../components/common/DrmProtected'
 import {SubscriptionBadge} from '../components/common/NeedsSubscription'
 import SourceFilter, {matchesSourceFilter} from '../components/Source/SourceFilter'
-import {useMediaDownloadsView, useMovies, useShowsView, useVideos} from '../lib/queries'
+import {useMediaDownloadsView, useMovies, useCollectionsView, useVideos} from '../lib/queries'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
-import {ShowTypeReg, ShowTypeValue} from '../types/show'
+import {CollectionTypeReg, CollectionTypeValue} from '../types/collection'
 
-const LIBRARY_SHOW_TYPE_FILTER_STORAGE_KEY = 'libraryShowTypeFilter'
+const LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY = 'libraryCollectionTypeFilter'
 
-function loadLibraryShowTypeFilter(): Set<ShowTypeValue> {
+function loadLibraryCollectionTypeFilter(): Set<CollectionTypeValue> {
     try {
-        const raw = localStorage.getItem(LIBRARY_SHOW_TYPE_FILTER_STORAGE_KEY)
-        if (raw === null) return createDefaultShowTypeFilter()
+        const raw = localStorage.getItem(LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY)
+        if (raw === null) return createDefaultCollectionTypeFilter()
 
         const parsed: unknown = JSON.parse(raw)
-        if (!Array.isArray(parsed)) return createDefaultShowTypeFilter()
+        if (!Array.isArray(parsed)) return createDefaultCollectionTypeFilter()
 
         const selectedTypes = parsed.filter(
-            (value): value is ShowTypeValue => (
+            (value): value is CollectionTypeValue => (
                 typeof value === 'string'
-                && ShowTypeReg.values.includes(value as ShowTypeValue)
+                && CollectionTypeReg.values.includes(value as CollectionTypeValue)
             ),
         )
 
         // Preserve an intentionally empty filter, while rejecting stored data that
         // only contains stale or otherwise invalid values.
         if (parsed.length > 0 && selectedTypes.length === 0) {
-            return createDefaultShowTypeFilter()
+            return createDefaultCollectionTypeFilter()
         }
 
         return new Set(selectedTypes)
     } catch {
-        return createDefaultShowTypeFilter()
+        return createDefaultCollectionTypeFilter()
     }
 }
 
@@ -82,21 +82,21 @@ function formatVideoDuration(seconds: number) {
 export default function LibraryPage() {
     const navigate = useNavigate()
     const [params, setParams] = useSearchParams()
-    const [showTypeFilter, setShowTypeFilter] = useState(loadLibraryShowTypeFilter)
+    const [collectionTypeFilter, setCollectionTypeFilter] = useState(loadLibraryCollectionTypeFilter)
     const [sourceFilter, setSourceFilter] = useState<Set<string>>(() => new Set())
-    const {data: shows, isLoading: showsLoading, error: showsError} = useShowsView()
+    const {data: collections, isLoading: collectionsLoading, error: collectionsError} = useCollectionsView()
     const {data: movies, isLoading: moviesLoading, error: moviesError} = useMovies()
     const {data: videos, isLoading: videosLoading, error: videosError} = useVideos()
     const {data: downloads} = useMediaDownloadsView()
     const sourceKeys = useMemo(
-        () => [...new Set([...(shows ?? []), ...(movies ?? []), ...(videos ?? [])].map((item) => item.sourceKey))].sort(),
-        [shows, movies, videos],
+        () => [...new Set([...(collections ?? []), ...(movies ?? []), ...(videos ?? [])].map((item) => item.sourceKey))].sort(),
+        [collections, movies, videos],
     )
-    const filteredShows = useMemo(
-        () => shows?.filter((show) => (
-            matchesShowTypeFilter(show.type, showTypeFilter) && matchesSourceFilter(show.sourceKey, sourceFilter)
+    const filteredCollections = useMemo(
+        () => collections?.filter((collection) => (
+            matchesCollectionTypeFilter(collection.type, collectionTypeFilter) && matchesSourceFilter(collection.sourceKey, sourceFilter)
         )) ?? [],
-        [shows, showTypeFilter, sourceFilter],
+        [collections, collectionTypeFilter, sourceFilter],
     )
     const filteredMovies = useMemo(
         () => movies?.filter((movie) => matchesSourceFilter(movie.sourceKey, sourceFilter)) ?? [],
@@ -106,45 +106,45 @@ export default function LibraryPage() {
         () => videos?.filter((video) => matchesSourceFilter(video.sourceKey, sourceFilter)) ?? [],
         [videos, sourceFilter],
     )
-    const hasShows = !!shows?.length
+    const hasCollections = !!collections?.length
     const hasMovies = !!movies?.length
     const hasVideos = !!videos?.length
-    const hasAny = hasShows || hasMovies || hasVideos
+    const hasAny = hasCollections || hasMovies || hasVideos
     const presentTypes = useMemo(() => {
         const types: MediaType[] = []
-        if (hasShows) types.push('shows')
+        if (hasCollections) types.push('collections')
         if (hasMovies) types.push('movies')
         if (hasVideos) types.push('videos')
         return types
-    }, [hasShows, hasMovies, hasVideos])
+    }, [hasCollections, hasMovies, hasVideos])
 
     useEffect(() => {
         try {
             localStorage.setItem(
-                LIBRARY_SHOW_TYPE_FILTER_STORAGE_KEY,
-                JSON.stringify(Array.from(showTypeFilter)),
+                LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY,
+                JSON.stringify(Array.from(collectionTypeFilter)),
             )
         } catch {
             // Storage can be unavailable in restricted browser contexts. The filter
             // should still work normally for the current page session in that case.
         }
-    }, [showTypeFilter])
+    }, [collectionTypeFilter])
 
     // The URL is the single source of truth for the selected library type, just
     // like on the Browse page. Never switch away from an explicitly requested
     // type based on which query happens to finish first.
     // Without one, open the first type the library has.
     const requestedType = params.get('type')
-    const activeType: MediaType = requestedType === 'shows' || requestedType === 'movies' || requestedType === 'videos'
+    const activeType: MediaType = requestedType === 'collections' || requestedType === 'movies' || requestedType === 'videos'
         ? requestedType
-        : presentTypes[0] ?? 'shows'
+        : presentTypes[0] ?? 'collections'
 
     const chooseType = (type: MediaType) => {
         setParams({type}, {replace: true})
     }
 
-    const loading = showsLoading || moviesLoading || videosLoading
-    const error = showsError || moviesError || videosError
+    const loading = collectionsLoading || moviesLoading || videosLoading
+    const error = collectionsError || moviesError || videosError
     const showTabs = presentTypes.length > 1
 
     return (
@@ -152,7 +152,7 @@ export default function LibraryPage() {
             <div className="view-header">
                 <div>
                     <h1 id="library-title">Library</h1>
-                    <p className="view-description">Shows, movies and videos indexed by VODLoft.</p>
+                    <p className="view-description">Collections, movies and videos indexed by VODLoft.</p>
                 </div>
                 {can('add_media') && (
                     <button className="btn btn-primary" onClick={() => navigate('/add')}>
@@ -168,7 +168,7 @@ export default function LibraryPage() {
                     onChange={chooseType}
                     ariaLabel="Library media type"
                     types={presentTypes}
-                    counts={{shows: shows?.length ?? 0, movies: movies?.length ?? 0, videos: videos?.length ?? 0}}
+                    counts={{collections: collections?.length ?? 0, movies: movies?.length ?? 0, videos: videos?.length ?? 0}}
                 />
             )}
 
@@ -181,11 +181,11 @@ export default function LibraryPage() {
                 />
             )}
 
-            {activeType === 'shows' && hasShows && (
-                <ShowTypeFilter
-                    selectedTypes={showTypeFilter}
-                    onChange={setShowTypeFilter}
-                    ariaLabel="Filter library shows by type"
+            {activeType === 'collections' && hasCollections && (
+                <CollectionTypeFilter
+                    selectedTypes={collectionTypeFilter}
+                    onChange={setCollectionTypeFilter}
+                    ariaLabel="Filter library collections by type"
                 />
             )}
 
@@ -197,32 +197,32 @@ export default function LibraryPage() {
                 <div className="library-empty">
                     <FontAwesomeIcon icon={faIcon('fass', 'book-open')}/>
                     <h2>Your library is empty</h2>
-                    <p>Paste a link to a show, a movie or a video to add it.</p>
+                    <p>Paste a link to a collection, a movie or a video to add it.</p>
                     {can('add_media') && <button className="btn btn-primary" onClick={() => navigate('/add')}>Add media</button>}
                 </div>
-            ) : activeType === 'shows' && hasShows ? (
-                filteredShows.length > 0 ? (
-                    <div className="library-show-list" role="list" aria-label="Shows">
-                        {filteredShows.map((show) => {
+            ) : activeType === 'collections' && hasCollections ? (
+                filteredCollections.length > 0 ? (
+                    <div className="library-collection-list" role="list" aria-label="Collections">
+                        {filteredCollections.map((collection) => {
                             const image = toImageUrl(
-                                show.thumbnailPortraitPath || show.thumbnailLandscapePath || show.logoImagePath || show.authorHeadshotPath,
+                                collection.thumbnailPortraitPath || collection.thumbnailLandscapePath || collection.logoImagePath || collection.authorHeadshotPath,
                             )
                             return (
-                                <Link className="show-summary-card library-show-card" to={`/show/${show.slug}`} key={show.slug} role="listitem">
-                                    <span className="show-summary-art">
-                                        {image ? <img src={image} alt="" loading="lazy" decoding="async"/> : <span className="show-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', 'podcast')}/></span>}
+                                <Link className="show-summary-card library-show-card" to={`/collection/${collection.slug}`} key={collection.slug} role="listitem">
+                                    <span className="collection-summary-art">
+                                        {image ? <img src={image} alt="" loading="lazy" decoding="async"/> : <span className="collection-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', 'podcast')}/></span>}
                                     </span>
-                                    <div className="show-summary-copy">
-                                        <span className="show-summary-title">{show.title}</span>
-                                        <span className="show-summary-author">{show.authorName}</span>
-                                        <SourceBadge sourceKey={show.sourceKey}/>
-                                        <span className="show-summary-meta">{show.episodeCount} episodes{show.years ? ` • ${show.years}` : ''}</span>
-                                        {show.description && <span className="show-summary-description">{show.description}</span>}
-                                        <ShowIndexingProgress
-                                            showId={show.id}
-                                            showSlug={show.slug}
-                                            pollForStart={show.episodeCount === 0}
-                                            className="library-show-indexing"
+                                    <div className="collection-summary-copy">
+                                        <span className="collection-summary-title">{collection.title}</span>
+                                        <span className="collection-summary-author">{collection.authorName}</span>
+                                        <SourceBadge sourceKey={collection.sourceKey}/>
+                                        <span className="collection-summary-meta">{collection.episodeCount} episodes{collection.years ? ` • ${collection.years}` : ''}</span>
+                                        {collection.description && <span className="collection-summary-description">{collection.description}</span>}
+                                        <CollectionIndexingProgress
+                                            collectionId={collection.id}
+                                            collectionSlug={collection.slug}
+                                            pollForStart={collection.episodeCount === 0}
+                                            className="library-collection-indexing"
                                         />
                                     </div>
                                     <FontAwesomeIcon icon={faIcon('fass', 'chevron-right')} aria-hidden="true"/>

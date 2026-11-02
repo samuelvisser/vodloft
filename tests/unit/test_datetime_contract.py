@@ -131,11 +131,11 @@ def test_dailywire_show_payload_round_trips_after_timezone_preparation(monkeypat
     )
 
     published_at = datetime(2026, 9, 7, 13, 0, tzinfo=timezone.utc)
-    show = DwShowRecord.model_validate(
+    collection = DwShowRecord.model_validate(
         {
             "show": {
                 "id": "show-1",
-                "slug": "example-show",
+                "slug": "example-collection",
                 "title": "Example Show",
                 "sharingURL": "https://www.dailywire.com/show/example-show",
                 "latestEpisode": {
@@ -157,7 +157,7 @@ def test_dailywire_show_payload_round_trips_after_timezone_preparation(monkeypat
         }
     )
 
-    payload = api_timezone_payload(show)
+    payload = api_timezone_payload(collection)
 
     assert payload["dw_id"] == "show-1"
     assert payload["latest_episode"]["published_date"] == "2026-09-07T15:00:00+02:00"

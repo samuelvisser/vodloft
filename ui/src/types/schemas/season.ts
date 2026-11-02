@@ -9,7 +9,7 @@ const SeasonBaseSchema = z.object({
 })
 
 export const SeasonCreateSchema = SeasonBaseSchema.extend({
-    showId: z.int().min(1, "showId missing"),
+    collectionId: z.int().min(1, "showId missing"),
     index: z.int(),
     slug: z.string().min(1, "slug missing"),
 })
@@ -18,7 +18,7 @@ export type SeasonCreateOut = z.output<typeof SeasonCreateSchema>;
 
 
 export const SeasonDetachedSchema = SeasonCreateSchema.omit({
-    showId: true,
+    collectionId: true,
     index: true,
 })
 export type SeasonDetachedIn = z.input<typeof SeasonDetachedSchema>;
@@ -35,7 +35,7 @@ export type SeasonUpdateOut = z.output<typeof SeasonUpdateSchema>;
 // ------------ Lenient response (read) ------------
 export const SeasonReadSchema = z.looseObject({
     id: z.int(),
-    showId: z.int(),
+    collectionId: z.int(),
     index: z.int(),
     name: z.string(),
     slug: z.string(),

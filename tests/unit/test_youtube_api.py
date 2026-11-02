@@ -151,7 +151,7 @@ def test_the_quota_day_follows_pacific_time():
     assert quota.status(now=morning).usage(Share.CHECKS).used == 0
 
 
-def test_check_interval_follows_the_show_count_and_the_budget():
+def test_check_interval_follows_the_collection_count_and_the_budget():
     # 100 channels of 500 videos: the daily re-scan costs 2,000 units.
     rescan = quota.rescan_units([500] * 100)
     assert rescan == 2_000
@@ -209,15 +209,15 @@ def test_a_stored_key_that_stops_working_needs_attention(monkeypatch):
 def api_client(monkeypatch):
     from backend.api.endpoints.sources import router as source_router_module
     from backend.db.core import Base
-    from backend.db.models import Episode, Show
-    import backend.api.endpoints.shows.router  # noqa: F401  (loads every model first)
+    from backend.db.models import Episode, Collection
+    import backend.api.endpoints.collections.router  # noqa: F401  (loads every model first)
 
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
     session_factory = sessionmaker(bind=engine)
     with session_factory() as s:
         for slug, url in (("yt", "https://www.youtube.com/@a/videos"), ("vimeo", "https://vimeo.com/channels/b")):
-            s.add(Show(
+            s.add(Collection(
                 uuid=f"uuid-{slug}", slug=slug, source_key="ytdlp", title=slug, sharing_url=url,
                 membership_level="FREE", type="podcast", episode_identifier="seasonal", author_name="A",
                 author_slug="a",
@@ -243,8 +243,8 @@ def test_the_api_key_endpoints(api_client, monkeypatch):
 
     status = api_client.get("/api/sources/ytdlp/api").json()
     assert status["keyHint"] is None
-    # Only the YouTube show counts towards the checks.
-    assert (status["showCount"], status["rescanUnits"]) == (1, 2)
+    # Only the YouTube collection counts towards the checks.
+    assert (status["collectionCount"], status["rescanUnits"]) == (1, 2)
     assert [share["name"] for share in status["shares"]] == ["checks", "search", "reserve"]
 
     rejected = api_client.put("/api/sources/ytdlp/api/key", json={"key": "bad"})

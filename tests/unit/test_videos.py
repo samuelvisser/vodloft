@@ -60,18 +60,18 @@ class VideoSource(Source):
         raise NotImplementedError
 
 
-class ShowOnlySource(VideoSource):
-    id = "shows_only"
+class CollectionOnlySource(VideoSource):
+    id = "collections_only"
     name = "Shows Only"
-    domains = ("shows.example",)
-    features = frozenset({Feature.SHOWS})
+    domains = ("collections.example",)
+    features = frozenset({Feature.COLLECTIONS})
 
 
 @pytest.fixture
 def video_sources(monkeypatch):
     monkeypatch.setattr(registry, "_sources", dict(registry._sources))
     clips = registry.register(VideoSource())
-    registry.register(ShowOnlySource())
+    registry.register(CollectionOnlySource())
     return clips
 
 
@@ -150,7 +150,7 @@ def test_the_same_id_at_two_sources_is_two_videos(video_sources, session):
 
 
 def test_only_sources_with_videos_can_add_one(client):
-    response = client.post("/api/videos", json={"url": "https://shows.example/v/x", "sourceKey": "shows_only"})
+    response = client.post("/api/videos", json={"url": "https://collections.example/v/x", "sourceKey": "collections_only"})
     assert response.status_code == 422
     assert "Shows Only has no single videos" in response.json()["detail"]
 
@@ -184,7 +184,7 @@ def test_video_output_paths_use_the_channel_date_and_id(video_sources, session):
     assert path.as_posix().endswith("/videos/Clips/Clip abc [abc].mp4")
 
 
-def test_video_profiles_take_audio_but_not_hls_or_show_variables():
+def test_video_profiles_take_audio_but_not_hls_or_collection_variables():
     from pydantic import ValidationError
 
     from backend.api.models.video_local_media_profile import VideoLocalMediaProfileAPICreate
@@ -195,10 +195,10 @@ def test_video_profiles_take_audio_but_not_hls_or_show_variables():
     assert audio.type == "video"
     with pytest.raises(ValidationError, match="HLS"):
         VideoLocalMediaProfileAPICreate(name="HLS", preferred_format="format_hls", output_template=VIDEO_TEMPLATE)
-    with pytest.raises(ValidationError, match="show_title"):
+    with pytest.raises(ValidationError, match="collection_title"):
         VideoLocalMediaProfileAPICreate(
             name="Wrong", preferred_format="format_1080p",
-            output_template="/downloads/{{ show_title }}/{{ title }}.ext",
+            output_template="/downloads/{{ collection_title }}/{{ title }}.ext",
         )
 
 
@@ -296,3 +296,32 @@ def test_a_ytdlp_playback_plans_a_ytdlp_download(video_sources, session, monkeyp
     assert plan.source.ytdlp_command[:3] == ("yt-dlp", "--cookies", "c.txt")
     assert "res:720,vcodec:h264,acodec:m4a" in plan.source.ytdlp_command
     assert str(plan.requested_destination).endswith("/videos/A Channel/2026-03-04 - Clip abc [abc].mp4")
+
+
+@pytest.mark.parametrize(("mode", "publish", "embedded"), [
+    ("no_subtitles", None, ()),
+    ("sidecar", True, ()),
+    ("embed", False, ("subtitles",)),
+    ("embed_and_sidecar", True, ("subtitles",)),
+])
+def test_a_ytdlp_download_asks_ytdlp_for_subtitles_as_the_profile_says(video_sources, session, monkeypatch, mode, publish, embedded):
+    from backend.api.endpoints.media_downloads.service import create_video_download
+    from backend.api.models.media_download import MediaDownloadAPICreate
+    from backend.services import download_plans
+    from backend.services.videos import index_video
+    from downloader.lifecycle import DownloadTracker
+    from sources import PlaybackKind
+
+    monkeypatch.setattr(video_sources, "video_playback", lambda *, slug, url: Playback(url=url, kind=PlaybackKind.YTDLP, command=("yt-dlp",)))
+    profile = _video_profile(session, subtitle_mode=mode)
+    video, _ = index_video(session, "clips", video_sources.video_details("https://clips.example/v/abc"))
+    download = create_video_download(session, video, MediaDownloadAPICreate(local_media_profile_id=profile.id))
+    session.commit()
+
+    plan = download_plans.prepare_download_plan(session, download.id, DownloadTracker())
+    subtitles = [asset for asset in plan.assets if asset.kind == "subtitle"]
+    if publish is None:
+        assert subtitles == []
+    else:
+        assert [(asset.source_format, asset.publish) for asset in subtitles] == [("ytdlp", publish)]
+    assert plan.subtitle_asset_ids == embedded

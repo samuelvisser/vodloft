@@ -2,48 +2,48 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from backend.db.models import Show
+from backend.db.models import Collection
 from sources.dailywire.api.dw_api.client import MiddlewareClient, ByShowSeason
 from sources.dailywire.api.types.user_info import DwMembershipLevel
 from controller.m3u8 import get_vod_info
 from controller.m3u8.get_vod_info import _fmt_hhmmss
 from ...helpers.episodes.status import get_publish_status_from_dw_detail, is_published_final
-from ...helpers.shows.get import get_show_from_params
+from ...helpers.collections.get import get_collection_from_params
 
 
 # Registered as a task in entrypoint.py; this service function expects an open session.
-async def run_debug_ep_details(s: Session, *, show_slug: str, progress):  # progress provided by executor
+async def run_debug_ep_details(s: Session, *, collection_slug: str, progress):  # progress provided by executor
     print("Starting debug_ep_details")
 
-    # Get show for the new episode
-    show: Show | None = get_show_from_params(s, show_slug=show_slug)
-    if show is None:
-        raise ValueError("Show not found; provide a valid show_slug")
+    # Get collection for the new episode
+    collection: Collection | None = get_collection_from_params(s, collection_slug=collection_slug)
+    if collection is None:
+        raise ValueError("Collection not found; provide a valid collection_slug")
     else:
-        print(f"Found show {show.slug} with id {show.id}")
+        print(f"Found collection {collection.slug} with id {collection.id}")
 
     # Get the latest season
-    if show.seasons is None or len(show.seasons) == 0:
-        raise ValueError("Show has no seasons")
-    latest_db_season = show.seasons[0]
+    if collection.seasons is None or len(collection.seasons) == 0:
+        raise ValueError("Collection has no seasons")
+    latest_db_season = collection.seasons[0]
 
     # Get latest episode from DW
     client = MiddlewareClient()
-    season_dw_id = client.get_season_id_by_slugs(show.slug, latest_db_season.slug)
-    latest_dw_episode, _, _ = client.get_episodes_paginated(show.slug, ByShowSeason(
+    season_dw_id = client.get_season_id_by_slugs(collection.slug, latest_db_season.slug)
+    latest_dw_episode, _, _ = client.get_episodes_paginated(collection.slug, ByShowSeason(
         season_dw_id=season_dw_id,
-        membership_plan=show.membership_level,
+        membership_plan=collection.membership_level,
         page_size=1,
         order_by="CreatedAt_DESC"
     ))
     latest_dw_episode = latest_dw_episode[0] if len(latest_dw_episode) > 0 else None
 
     if latest_dw_episode is None:
-        raise ValueError(f"No DW episodes found for show {show.slug}")
-    print(f"Latest dw ep for {show.slug}: {latest_dw_episode.title}")
+        raise ValueError(f"No DW episodes found for collection {collection.slug}")
+    print(f"Latest dw ep for {collection.slug}: {latest_dw_episode.title}")
 
     # Get details for all retrieved latest episodes
-    dw_ep_detail = client.get_episode_details(latest_dw_episode.slug, require_member_exclusive=show.membership_level != DwMembershipLevel.FREE.value)
+    dw_ep_detail = client.get_episode_details(latest_dw_episode.slug, require_member_exclusive=collection.membership_level != DwMembershipLevel.FREE.value)
 
     print("-----------------------------")
     print(f"DW ep - {dw_ep_detail.title}")

@@ -25,7 +25,7 @@ def rss_stream_profiles_create(body: RssStreamProfileAPICreate, request: Request
     """
     Create a new RSS stream profile.
 
-    Creates a profile defining how RSS streams should be handled for a show.
+    Creates a profile defining how RSS streams should be handled for a collection.
     Returns the created profile with tracking information. If no feed_url is
     given, one is generated automatically.
     """
@@ -44,7 +44,7 @@ def rss_stream_profiles_detail(rss_stream_profile_id: int, access: Access = sign
     """
     Retrieve detailed information for a specific RSS stream profile.
 
-    Returns complete configuration including show association and profile settings.
+    Returns complete configuration including collection association and profile settings.
     """
     with db_session() as s:
         return get_stream_profile_rss(s, access, rss_stream_profile_id)

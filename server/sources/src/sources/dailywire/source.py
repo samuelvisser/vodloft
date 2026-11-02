@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from ..contract import MAIN_TAG, EpisodeMedia, EpisodeTag, Feature, Playback, ResolvedLink, RssEpisodeType, Source
+from types import MappingProxyType
+
+from ..contract import MAIN_TAG, EpisodeMedia, EpisodeTag, Feature, LinkKind, Playback, ResolvedLink, RssEpisodeType, Source
 from .api.dw_api.client import MiddlewareClient
 from .api.dw_api.movie import MovieMiddlewareClient
 from .auth import DeviceAuthClient
@@ -12,8 +14,9 @@ class DailyWireSource(Source):
     id = "dailywire"
     name = "The Daily Wire"
     domains = ("dailywire.com",)
+    kind_names = MappingProxyType({LinkKind.COLLECTION: "Show"})
     features = frozenset({
-        Feature.SHOWS,
+        Feature.COLLECTIONS,
         Feature.MOVIES,
         Feature.MOVIE_EXTRAS,
         Feature.BROWSE,

@@ -46,7 +46,7 @@ class _FakeSession:
 def _episode(index: int, published: datetime):
     return SimpleNamespace(
         id=index,
-        show_id=1,
+        collection_id=1,
         episode_type="ep",
         publish_status="published_final",
         is_no_show_today=False,
@@ -58,7 +58,7 @@ def _episode(index: int, published: datetime):
 
 def _profile(max_items: int):
     return SimpleNamespace(
-        show_id=1,
+        collection_id=1,
         use_downloads=False,
         use_dw_stream=True,
         preferred_format="format_1080p",

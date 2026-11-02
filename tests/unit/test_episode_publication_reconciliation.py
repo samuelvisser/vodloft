@@ -225,7 +225,7 @@ def test_incremental_mapper_reclaims_vacated_identifier_before_final_cursor():
     )
 
     class FakeClient:
-        def get_episodes_paginated(self, show_slug, selector):
+        def get_episodes_paginated(self, collection_slug, selector):
             return EpisodesPaginatedResult([cursor, replacement], None, False)
 
     season = SimpleNamespace(
@@ -236,12 +236,12 @@ def test_incremental_mapper_reclaims_vacated_identifier_before_final_cursor():
         season_type="normal",
         season_number=1,
     )
-    show = SimpleNamespace(slug="test-show", episode_identifier="numbered")
+    collection = SimpleNamespace(slug="test-collection", episode_identifier="numbered")
     since_episode = SimpleNamespace(slug=cursor.slug, season=season)
 
     episode_map, max_values = get_dw_episodes_since_ep(
         FakeClient(),
-        show=show,
+        collection=collection,
         membership_plan="FREE",
         seasons=[season],
         dw_id_by_slug={season.slug: "remote-season"},
@@ -258,30 +258,30 @@ def test_incremental_mapper_reclaims_vacated_identifier_before_final_cursor():
     assert "ep_id.latest_ep_num" not in max_values
 
 
-def _make_show_and_episode(session, *, identifier: str):
-    from backend.db.models import Episode, Season, Show
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+def _make_collection_and_episode(session, *, identifier: str):
+    from backend.db.models import Episode, Season, Collection
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
     from backend.utils.helpers import generate_uuid
-    show = Show(
+    collection = Collection(
         source_key="dailywire",
-        uuid="show-uuid", slug="the-ben-shapiro-show", title="The Ben Shapiro Show",
-        description=None, sharing_url="https://example.test/show", membership_level="FREE",
-        type=ShowType.PODCAST.value, episode_identifier=EpisodeIdentifier.NUMBERED.value,
+        uuid="collection-uuid", slug="the-ben-shapiro-show", title="The Ben Shapiro Show",
+        description=None, sharing_url="https://example.test/collection", membership_level="FREE",
+        type=CollectionType.PODCAST.value, episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Ben Shapiro", author_slug="ben-shapiro",
     )
     season = Season(
-        show=show,
+        collection=collection,
         index=1,
         slug="2026",
         name="2026",
         season_type="normal",
         season_number=1,
     )
-    session.add_all([show, season])
+    session.add_all([collection, season])
     session.flush()
     episode = Episode(
         source_key="dailywire",
-        uuid=generate_uuid(), type="episode", show=show, season=season, index=2500,
+        uuid=generate_uuid(), type="episode", collection=collection, season=season, index=2500,
         episode_identifier=identifier, slug="the-ben-shapiro-show-2500",
         title="BREAKING: Judge Threatens Mistrial", duration=2500,
         publish_status="published_final", metadata_is_final=False,
@@ -290,7 +290,7 @@ def _make_show_and_episode(session, *, identifier: str):
     )
     session.add(episode)
     session.commit()
-    return show, episode
+    return collection, episode
 
 
 def test_metadata_refresh_repairs_wrong_main_episode_identifier(monkeypatch):
@@ -300,7 +300,7 @@ def test_metadata_refresh_repairs_wrong_main_episode_identifier(monkeypatch):
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     session = Session(engine)
-    show, episode = _make_show_and_episode(session, identifier="ep-extra.other.2500.1")
+    collection, episode = _make_collection_and_episode(session, identifier="ep-extra.other.2500.1")
     detail = _episode_detail(slug=episode.slug, episode_number="2500.00", publish_status="PUBLISHED")
 
     class FakeClient:
@@ -330,7 +330,7 @@ def test_identifier_reconciliation_can_fix_extra_ordinal_after_collision_is_gone
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     session = Session(engine)
-    show, episode = _make_show_and_episode(session, identifier="ep-extra.other.2500.2")
+    collection, episode = _make_collection_and_episode(session, identifier="ep-extra.other.2500.2")
     detail = _episode_detail(slug=episode.slug, episode_number="2500.01")
     assert reconcile_episode_identifier_from_dailywire(session, episode, detail) is True
     session.commit()
@@ -347,7 +347,7 @@ def test_identifier_reconciliation_uses_dailywire_segment_10_directly():
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     session = Session(engine)
-    _show, episode = _make_show_and_episode(session, identifier="ep-extra.other.2500.1")
+    _collection, episode = _make_collection_and_episode(session, identifier="ep-extra.other.2500.1")
     detail = _episode_detail(slug=episode.slug, episode_number="2500.10")
     assert reconcile_episode_identifier_from_dailywire(session, episode, detail) is True
     assert episode.episode_identifier == "ep-extra.other.2500.10"

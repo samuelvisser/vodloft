@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, inspect, text
 
 def test_operation_dependency_schema_is_created_directly():
     migration = importlib.import_module(
-        "backend.db.alembic.versions.f2a6c93d8b14_wireloft_1_2_1"
+        "importer.wireloft.migrations.f2a6c93d8b14_wireloft_1_2_1"
     )
     engine = create_engine("sqlite:///:memory:")
 

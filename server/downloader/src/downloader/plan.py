@@ -55,7 +55,8 @@ class SidecarSpec:
     maximum_bytes: int = 32 * 1024 * 1024
     attempts: int = 3
     allowed_extensions: tuple[str, ...] = ()
-    source_format: Literal["direct", "hls_webvtt"] = "direct"
+    source_format: Literal["direct", "hls_webvtt", "ytdlp"] = "direct"
+    """``ytdlp``: the subtitles yt-dlp writes while it downloads the media, one file per language."""
     language: str | None = None
     forced: bool = False
 
@@ -82,6 +83,10 @@ class SidecarSpec:
             self.url is None or self.extension != "srt" or self.kind != "subtitle"
         ):
             raise ValueError("HLS WebVTT assets must be remote subtitle playlists converted to SRT")
+        if self.source_format == "ytdlp" and (
+            self.url is None or self.extension != "srt" or self.kind != "subtitle"
+        ):
+            raise ValueError("yt-dlp subtitles are remote pages whose subtitles are saved as SRT")
 
 
 @dataclass(frozen=True)
@@ -210,6 +215,8 @@ def build_download_plan(
         raise DownloadError("HLS bundles support sidecars, not container embedding")
     if source.ytdlp_command and (source.use_hls or source.hls_bundle or source.remux_to_mp4 or source.convert_video_to_m4a):
         raise DownloadError("yt-dlp downloads produce their final format themselves")
+    if any(asset.source_format == "ytdlp" for asset in assets) and not source.ytdlp_command:
+        raise ValueError("Only a yt-dlp download writes yt-dlp subtitles")
     if len(set(subtitle_asset_ids)) != len(subtitle_asset_ids) or any(
         not any(asset.id == asset_id and asset.kind == "subtitle" for asset in assets)
         for asset_id in subtitle_asset_ids
@@ -246,7 +253,9 @@ def build_download_plan(
         weight = max(0.002, (len(asset.content) if asset.content is not None else 512 * 1024) / media_bytes)
         stages.append(StageSpec(
             f"acquire:{asset.id}", "generate_sidecar" if asset.content is not None else "download_sidecar",
-            "transferring", "sidecar", weight=weight, asset_id=asset.id, depends_on=("prepare",),
+            "transferring", "sidecar", weight=weight, asset_id=asset.id,
+            # yt-dlp writes its subtitles during the media transfer.
+            depends_on=("media",) if asset.source_format == "ytdlp" else ("prepare",),
         ))
     # Dependencies and deadlines are policy, not runtime decisions. Auxiliary
     # acquisition depends only on preparation; local media conversion can

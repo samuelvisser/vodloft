@@ -7,8 +7,8 @@ import {ClearInputButton} from '../components/common/ClearInputButton'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import MediaTypeTabs, {MediaType} from '../components/MediaTypeTabs/MediaTypeTabs'
-import {useDailywireMovieCatalog, useDailywireShowCatalog, useMovies, useShows, useSourceLookup} from '../lib/queries'
-import {DAILYWIRE_SOURCE_KEY, SourceFeature, sourceHas} from '../types/schemas/source'
+import {useDailywireMovieCatalog, useDailywireShowCatalog, useMovies, useCollections, useSourceLookup} from '../lib/queries'
+import {DAILYWIRE_SOURCE_KEY, SourceFeature, kindName, pluralKindName, sourceHas} from '../types/schemas/source'
 import {
     DailywireCatalogMovieRead,
     DailywireCatalogShowRead,
@@ -20,31 +20,34 @@ type ShowGrouping = 'alphabetical' | 'host'
 
 type BrowsePageProps = {
     onboarding?: boolean
-    onShowSelect?: (show: DailywireCatalogShowRead, url: string) => void
+    onCollectionSelect?: (collection: DailywireCatalogShowRead, url: string) => void
     onMovieSelect?: (movie: DailywireCatalogMovieRead, url: string) => void
     onSkip?: () => void
 }
 
-function groupShows(shows: DailywireCatalogShowRead[], grouping: ShowGrouping) {
+function groupCollections(collections: DailywireCatalogShowRead[], grouping: ShowGrouping) {
     const groups = new Map<string, DailywireCatalogShowRead[]>()
-    for (const show of shows) {
-        const key = grouping === 'host' ? (show.authorName || 'Other') : (show.title[0]?.toUpperCase() || '#')
+    for (const collection of collections) {
+        const key = grouping === 'host' ? (collection.authorName || 'Other') : (collection.title[0]?.toUpperCase() || '#')
         const group = groups.get(key) || []
-        group.push(show)
+        group.push(collection)
         groups.set(key, group)
     }
     return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right))
 }
 
-export default function BrowsePage({onboarding = false, onShowSelect, onMovieSelect, onSkip}: BrowsePageProps = {}) {
+export default function BrowsePage({onboarding = false, onCollectionSelect, onMovieSelect, onSkip}: BrowsePageProps = {}) {
     const navigate = useNavigate()
     const [params, setParams] = useSearchParams()
     const sources = useSourceLookup()
     const catalogSource = sources.get(DAILYWIRE_SOURCE_KEY)
     const sourceName = catalogSource?.name ?? 'the catalogue'
+    // The catalogue is the Source's own, so it uses the Source's word for a collection.
+    const collectionName = kindName(catalogSource, 'collection', 'Collection')
+    const collectionsName = pluralKindName(collectionName)
     const mayUse = canUseSource(DAILYWIRE_SOURCE_KEY)
     const canBrowse = mayUse && (!catalogSource || sourceHas(catalogSource, SourceFeature.BROWSE))
-    const initialType = params.get('type') === 'movies' ? 'movies' : 'shows'
+    const initialType = params.get('type') === 'movies' ? 'movies' : 'collections'
     const [activeType, setActiveType] = useState<MediaType>(initialType)
     const [grouping, setGrouping] = useState<ShowGrouping>('host')
     const [search, setSearch] = useState('')
@@ -54,20 +57,20 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
         return () => window.clearTimeout(timer)
     }, [search])
 
-    const showCatalog = useDailywireShowCatalog(debouncedSearch, grouping, canBrowse && activeType === 'shows')
+    const showCatalog = useDailywireShowCatalog(debouncedSearch, grouping, canBrowse && activeType === 'collections')
     const movieCatalog = useDailywireMovieCatalog(debouncedSearch, canBrowse && activeType === 'movies')
-    const {data: localShows} = useShows()
+    const {data: localCollections} = useCollections()
     const {data: localMovies} = useMovies()
-    const localShowsBySlug = useMemo(
-        () => new Map(localShows?.map((show) => [show.slug, show]) ?? []),
-        [localShows],
+    const localCollectionsBySlug = useMemo(
+        () => new Map(localCollections?.map((collection) => [collection.slug, collection]) ?? []),
+        [localCollections],
     )
     const localMovieSlugs = useMemo(
         () => new Set(localMovies?.map((movie) => movie.slug) ?? []),
         [localMovies],
     )
 
-    const shows = useMemo(
+    const collections = useMemo(
         () => showCatalog.data?.pages.flatMap((page) => page.items) || [],
         [showCatalog.data],
     )
@@ -75,10 +78,10 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
         () => movieCatalog.data?.pages.flatMap((page) => page.items) || [],
         [movieCatalog.data],
     )
-    const groupedShows = useMemo(() => groupShows(shows, grouping), [grouping, shows])
+    const groupedCollections = useMemo(() => groupCollections(collections, grouping), [grouping, collections])
 
-    const activeQuery = activeType === 'shows' ? showCatalog : movieCatalog
-    const hasItems = activeType === 'shows' ? shows.length > 0 : movies.length > 0
+    const activeQuery = activeType === 'collections' ? showCatalog : movieCatalog
+    const hasItems = activeType === 'collections' ? collections.length > 0 : movies.length > 0
     const loadMoreRef = useRef<HTMLDivElement | null>(null)
     useEffect(() => {
         const node = loadMoreRef.current
@@ -95,18 +98,18 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
         setParams({type}, {replace: true})
     }
 
-    const chooseShow = (show: DailywireCatalogShowRead) => {
-        const url = `https://www.dailywire.com/show/${show.slug}`
-        if (onShowSelect) {
-            onShowSelect(show, url)
+    const chooseCollection = (collection: DailywireCatalogShowRead) => {
+        const url = `https://www.dailywire.com/show/${collection.slug}`
+        if (onCollectionSelect) {
+            onCollectionSelect(collection, url)
             return
         }
-        const localShow = localShowsBySlug.get(show.slug)
-        if (localShow) {
-            navigate(`/show/${localShow.slug}`)
+        const localCollection = localCollectionsBySlug.get(collection.slug)
+        if (localCollection) {
+            navigate(`/collection/${localCollection.slug}`)
             return
         }
-        navigate(`/add-show?url=${encodeURIComponent(url)}`)
+        navigate(`/add-collection?url=${encodeURIComponent(url)}`)
     }
 
     const chooseMovie = (movie: DailywireCatalogMovieRead) => {
@@ -134,8 +137,8 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
                     <h1 id="browse-title">{onboarding ? 'Add your first media' : `Browse ${sourceName}`}</h1>
                     <p className="view-description">
                         {onboarding
-                            ? 'Choose a show or movie. VODLoft will let you confirm its download location before anything is saved.'
-                            : 'Choose a show or movie to add, view, or download.'}
+                            ? `Choose a ${collectionName.toLowerCase()} or movie. VODLoft will let you confirm its download location before anything is saved.`
+                            : `Choose a ${collectionName.toLowerCase()} or movie to add, view, or download.`}
                     </p>
                 </div>
                 {onSkip && (
@@ -144,16 +147,16 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
                     </button>
                 )}
             </div>
-            <MediaTypeTabs activeType={activeType} onChange={chooseType} ariaLabel="Browse media type"/>
+            <MediaTypeTabs activeType={activeType} onChange={chooseType} ariaLabel="Browse media type" labels={{collections: collectionsName}}/>
             <div className="browse-toolbar">
                 <label className="browse-search">
-                    <span className="sr-only">Search {activeType}</span>
+                    <span className="sr-only">Search {activeType === 'collections' ? collectionsName.toLowerCase() : activeType}</span>
                     <FontAwesomeIcon icon={faIcon('fass', 'magnifying-glass')} aria-hidden="true"/>
                     <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${activeType}`}/>
                     {search && <ClearInputButton label="Clear the search" onClear={() => setSearch('')}/>}
                 </label>
-                {activeType === 'shows' && (
-                    <div className="compact-switch" role="group" aria-label="Group shows">
+                {activeType === 'collections' && (
+                    <div className="compact-switch" role="group" aria-label={`Group ${collectionsName.toLowerCase()}`}>
                         <button type="button" aria-pressed={grouping === 'alphabetical'} onClick={() => setGrouping('alphabetical')}>A–Z</button>
                         <button type="button" aria-pressed={grouping === 'host'} onClick={() => setGrouping('host')}>By host</button>
                     </div>
@@ -165,26 +168,26 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
             ) : !hasItems ? (
                 <div className="catalog-empty">
                     <FontAwesomeIcon icon={faIcon('fass', 'magnifying-glass')}/>
-                    <p>No {activeType} match your search.</p>
+                    <p>No {activeType === 'collections' ? collectionsName.toLowerCase() : activeType} match your search.</p>
                 </div>
-            ) : activeType === 'shows' ? (
+            ) : activeType === 'collections' ? (
                 <div className="catalog-groups">
-                    {groupedShows.map(([label, items], groupIndex) => (
+                    {groupedCollections.map(([label, items], groupIndex) => (
                         <section className="catalog-group" key={label} aria-labelledby={`catalog-${grouping}-${groupIndex}`}>
                             <h2 id={`catalog-${grouping}-${groupIndex}`}>{label}</h2>
-                            <div className="catalog-show-grid">
-                                {items.map((show) => {
-                                    const image = toImageUrl(show.thumbnailPortraitPath || show.thumbnailLandscapePath || show.backgroundImagePath)
-                                    const added = localShowsBySlug.has(show.slug)
+                            <div className="catalog-collection-grid">
+                                {items.map((collection) => {
+                                    const image = toImageUrl(collection.thumbnailPortraitPath || collection.thumbnailLandscapePath || collection.backgroundImagePath)
+                                    const added = localCollectionsBySlug.has(collection.slug)
                                     return (
-                                        <button className="show-summary-card catalog-show-card" type="button" key={show.slug} onClick={() => chooseShow(show)}>
-                                            <span className="show-summary-art">
-                                                {image ? <img src={image} alt="" loading="lazy" decoding="async"/> : <span className="show-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', 'tv')}/></span>}
+                                        <button className="show-summary-card catalog-show-card" type="button" key={collection.slug} onClick={() => chooseCollection(collection)}>
+                                            <span className="collection-summary-art">
+                                                {image ? <img src={image} alt="" loading="lazy" decoding="async"/> : <span className="collection-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', 'tv')}/></span>}
                                             </span>
-                                            <span className="show-summary-copy">
-                                                <strong className="show-summary-title">{show.title}</strong>
-                                                <span className="show-summary-author">{show.authorName || sourceName}</span>
-                                                {show.description && <span className="show-summary-description">{show.description}</span>}
+                                            <span className="collection-summary-copy">
+                                                <strong className="collection-summary-title">{collection.title}</strong>
+                                                <span className="collection-summary-author">{collection.authorName || sourceName}</span>
+                                                {collection.description && <span className="collection-summary-description">{collection.description}</span>}
                                             </span>
                                             {added && <span className="catalog-added"><FontAwesomeIcon icon={faIcon('fass', 'check')}/> In library</span>}
                                         </button>

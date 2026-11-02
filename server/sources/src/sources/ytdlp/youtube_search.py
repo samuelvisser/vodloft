@@ -73,7 +73,7 @@ def _api_channel(item: dict, channel: dict | None) -> ResolvedLink:
     stats = (channel or {}).get("statistics") or {}
     subscribers = None if stats.get("hiddenSubscriberCount") else _plural(stats.get("subscriberCount"), "subscriber")
     return ResolvedLink(
-        kind=LinkKind.SHOW, slug=channel_id, url=mapping.channel_url(channel_id),
+        kind=LinkKind.COLLECTION, slug=channel_id, url=mapping.channel_url(channel_id),
         title=snippet.get("channelTitle") or snippet.get("title") or channel_id,
         description=snippet.get("description") or None, image_url=mapping.thumbnail(snippet.get("thumbnails")),
         site="YouTube", kind_label="Channel", facts=_facts(subscribers, _plural(stats.get("videoCount"), "video")),
@@ -85,7 +85,7 @@ def _api_playlist(item: dict, playlist: dict | None) -> ResolvedLink:
     playlist_id = item["id"]["playlistId"]
     count = ((playlist or {}).get("contentDetails") or {}).get("itemCount")
     return ResolvedLink(
-        kind=LinkKind.SHOW, slug=playlist_id, url=f"https://www.youtube.com/playlist?list={playlist_id}",
+        kind=LinkKind.COLLECTION, slug=playlist_id, url=f"https://www.youtube.com/playlist?list={playlist_id}",
         title=snippet.get("title") or playlist_id, description=snippet.get("description") or None,
         image_url=mapping.thumbnail(snippet.get("thumbnails")), author_name=snippet.get("channelTitle"),
         site="YouTube", kind_label="Playlist", facts=_facts(_plural(count, "video")),
@@ -161,7 +161,7 @@ def _ytdlp_channel(entry: dict) -> ResolvedLink | None:
     if not isinstance(channel_id, str) or not channel_id.startswith("UC"):
         return None
     return ResolvedLink(
-        kind=LinkKind.SHOW, slug=channel_id, url=mapping.channel_url(channel_id),
+        kind=LinkKind.COLLECTION, slug=channel_id, url=mapping.channel_url(channel_id),
         title=entry.get("title") or entry.get("channel") or channel_id, description=entry.get("description") or None,
         image_url=_image(entry), site="YouTube", kind_label="Channel",
         facts=_facts(_plural(entry.get("channel_follower_count"), "subscriber"),
@@ -174,7 +174,7 @@ def _ytdlp_playlist(entry: dict) -> ResolvedLink | None:
     if not isinstance(playlist_id, str) or entry.get("ie_key") != "YoutubeTab" or playlist_id.startswith("UC"):
         return None
     return ResolvedLink(
-        kind=LinkKind.SHOW, slug=playlist_id, url=f"https://www.youtube.com/playlist?list={playlist_id}",
+        kind=LinkKind.COLLECTION, slug=playlist_id, url=f"https://www.youtube.com/playlist?list={playlist_id}",
         title=entry.get("title") or playlist_id, image_url=_image(entry),
         author_name=entry.get("channel") or entry.get("uploader"), site="YouTube", kind_label="Playlist",
         facts=_facts(_plural(entry.get("playlist_count"), "video")),

@@ -94,6 +94,14 @@
     color: var(--muted);
 }
 
+.custom-metadata-keep {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    cursor: pointer;
+}
+
 .custom-metadata-add {
     justify-self: start;
 }

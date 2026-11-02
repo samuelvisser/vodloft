@@ -87,12 +87,12 @@ function DownloadStatusIcons({downloads}: { downloads: MediaDownloadViewRead[] }
 
 type Props = {
     ep: EpisodeReadView
-    showSlug: string
+    collectionSlug: string
     downloads?: MediaDownloadViewRead[]
 }
 
 /** The episode thumbnail card used on a show's episode list. */
-export default function EpisodeCard({ep, showSlug, downloads}: Props) {
+export default function EpisodeCard({ep, collectionSlug, downloads}: Props) {
     const initials = ep.title
         .split(' ')
         .map((w) => w[0])
@@ -117,7 +117,7 @@ export default function EpisodeCard({ep, showSlug, downloads}: Props) {
     const cornerBadgeText = showNumberBadge ? `#${ep.episodeLabel}` : typeBadgeLabel
 
     const navigate = useNavigate()
-    const goToEpisode = () => navigate(`/show/${showSlug}/episode/${ep.slug}`)
+    const goToEpisode = () => navigate(`/collection/${collectionSlug}/episode/${ep.slug}`)
     const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
         if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault()

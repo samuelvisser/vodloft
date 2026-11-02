@@ -92,6 +92,8 @@ class DownloadResult:
     path: str
     bytes_downloaded: int
     segments_downloaded: Optional[int] = None
+    subtitles: tuple[tuple[str, str], ...] = ()
+    """(language, SRT path) of each subtitle the download wrote alongside the media."""
 
 
 # Called periodically during a download with a progress snapshot.

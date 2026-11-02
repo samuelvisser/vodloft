@@ -7,7 +7,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from backend.db.model_mapping import update_database_fields, create_database_fields
-from backend.db.models import Show, Season
+from backend.db.models import Collection, Season
 from backend.db.models.media_item import Episode
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.helpers import generate_uuid
@@ -46,11 +46,11 @@ class ResolvedEpisode:
 
 
 def upsert_episode(
-        s: Session, *, show: Show, season: Season, ep: DwEpisodeRecord, index_value: int, ep_id: str
+        s: Session, *, collection: Collection, season: Season, ep: DwEpisodeRecord, index_value: int, ep_id: str
 ) -> Episode:
     episode: Optional[Episode] = (
         s.query(Episode)
-        .filter(Episode.show_id == show.id, Episode.slug == ep.slug)
+        .filter(Episode.collection_id == collection.id, Episode.slug == ep.slug)
         .one_or_none()
     )
     was_created = episode is None
@@ -61,8 +61,8 @@ def upsert_episode(
             **{
                 "uuid": generate_uuid(),
                 "type": MediaType.EPISODE.value,
-                "source_key": show.source_key,
-                "show_id": show.id,
+                "source_key": collection.source_key,
+                "collection_id": collection.id,
                 "season_id": season.id,
                 "index": index_value,
                 "episode_identifier": ep_id,
@@ -168,7 +168,7 @@ def resolve_dw_episodes(
 def _upsert_resolved_episode(
         s: Session,
         *,
-        show: Show,
+        collection: Collection,
         season: Season,
         resolved: ResolvedEpisode,
         index_value: int,
@@ -179,7 +179,7 @@ def _upsert_resolved_episode(
     )
     episode = upsert_episode(
         s,
-        show=show,
+        collection=collection,
         season=season,
         ep=ep_to_save,
         index_value=index_value,
@@ -208,7 +208,7 @@ def _upsert_resolved_episode(
 def _save_resolved(
         s: Session,
         *,
-        show: Show,
+        collection: Collection,
         season: Season,
         episodes: list[ResolvedEpisode],
         start_index: int,
@@ -220,7 +220,7 @@ def _save_resolved(
         for resolved in episodes:
             saved.append(_upsert_resolved_episode(
                 s,
-                show=show,
+                collection=collection,
                 season=season,
                 resolved=resolved,
                 index_value=current_index,
@@ -233,15 +233,15 @@ def _save_resolved(
         raise
 
 
-def save_resolved_episodes_per_season_desc(s: Session, *, show: Show, season: Season, episodes: list[ResolvedEpisode], start_index: int):
-    return _save_resolved(s, show=show, season=season, episodes=episodes, start_index=start_index, step=-1)
+def save_resolved_episodes_per_season_desc(s: Session, *, collection: Collection, season: Season, episodes: list[ResolvedEpisode], start_index: int):
+    return _save_resolved(s, collection=collection, season=season, episodes=episodes, start_index=start_index, step=-1)
 
 
-def save_resolved_episodes_per_season_asc(s: Session, *, show: Show, season: Season, episodes: list[ResolvedEpisode], start_index: int):
-    return _save_resolved(s, show=show, season=season, episodes=episodes, start_index=start_index, step=1)
+def save_resolved_episodes_per_season_asc(s: Session, *, collection: Collection, season: Season, episodes: list[ResolvedEpisode], start_index: int):
+    return _save_resolved(s, collection=collection, season=season, episodes=episodes, start_index=start_index, step=1)
 
 
-def save_dw_episodes_per_season_desc(s: Session, *, show: Show, season: Season, episodes: list[EpisodeWithIdentifier], start_index: int, client: MiddlewareClient, require_member_exclusive: bool, always_resolve_details: bool = False):
+def save_dw_episodes_per_season_desc(s: Session, *, collection: Collection, season: Season, episodes: list[EpisodeWithIdentifier], start_index: int, client: MiddlewareClient, require_member_exclusive: bool, always_resolve_details: bool = False):
     resolved = resolve_dw_episodes(
         episodes=episodes,
         client=client,
@@ -249,11 +249,11 @@ def save_dw_episodes_per_season_desc(s: Session, *, show: Show, season: Season, 
         always_resolve_details=always_resolve_details,
     )
     return save_resolved_episodes_per_season_desc(
-        s, show=show, season=season, episodes=resolved, start_index=start_index,
+        s, collection=collection, season=season, episodes=resolved, start_index=start_index,
     )
 
 
-def save_dw_episodes_per_season_asc(s: Session, *, show: Show, season: Season, episodes: list[EpisodeWithIdentifier], start_index: int, client: MiddlewareClient, require_member_exclusive: bool, always_resolve_details: bool = False):
+def save_dw_episodes_per_season_asc(s: Session, *, collection: Collection, season: Season, episodes: list[EpisodeWithIdentifier], start_index: int, client: MiddlewareClient, require_member_exclusive: bool, always_resolve_details: bool = False):
     resolved = resolve_dw_episodes(
         episodes=episodes,
         client=client,
@@ -261,5 +261,5 @@ def save_dw_episodes_per_season_asc(s: Session, *, show: Show, season: Season, e
         always_resolve_details=always_resolve_details,
     )
     return save_resolved_episodes_per_season_asc(
-        s, show=show, season=season, episodes=resolved, start_index=start_index,
+        s, collection=collection, season=season, episodes=resolved, start_index=start_index,
     )

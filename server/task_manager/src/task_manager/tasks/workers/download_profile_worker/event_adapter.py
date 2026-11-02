@@ -13,7 +13,7 @@ from task_manager.events.transactional import (
 
 DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT = "download_profile.run_requested"
 
-DownloadProfileRunResourceType = Literal["download_profile", "show", "episode"]
+DownloadProfileRunResourceType = Literal["download_profile", "collection", "episode"]
 _PUBLISHED_DOWNLOAD_STATUSES = frozenset({
     EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN.value,
     EpisodePublishStatus.PUBLISHED_FINAL.value,
@@ -32,7 +32,7 @@ _EPISODE_EVENTS = frozenset({
 class _RunRequest:
     resource_type: DownloadProfileRunResourceType
     resource_id: int
-    show_id: int | None = None
+    collection_id: int | None = None
 
     def as_event(self) -> PendingEvent:
         return PendingEvent(
@@ -69,14 +69,14 @@ def _request_for_event(event: PendingEvent) -> _RunRequest | None:
     if resource_id is None or resource_id <= 0:
         return None
 
-    if event.name == "show.indexed":
-        return _RunRequest("show", resource_id, show_id=resource_id)
+    if event.name == "collection.indexed":
+        return _RunRequest("collection", resource_id, collection_id=resource_id)
 
     if event.name in _PROFILE_EVENTS:
         return _RunRequest(
             "download_profile",
             resource_id,
-            show_id=_int_value(event.data.get("show_id")),
+            collection_id=_int_value(event.data.get("collection_id")),
         )
 
     if event.name in {"episode.added", "episode.status_updated"}:
@@ -88,7 +88,7 @@ def _request_for_event(event: PendingEvent) -> _RunRequest | None:
     return _RunRequest(
         "episode",
         resource_id,
-        show_id=_int_value(event.data.get("show_id")),
+        collection_id=_int_value(event.data.get("collection_id")),
     )
 
 
@@ -98,11 +98,11 @@ def adapt_download_profile_events(
 ) -> tuple[PendingEvent, ...]:
     """Reduce committed domain events to the Download Profile runs they require.
 
-    Domain code only reports facts about shows, episodes, and profiles. This
+    Domain code only reports facts about collections, episodes, and profiles. This
     adapter owns the policy that translates those facts into worker requests.
 
-    A show-scoped request subsumes profile- and episode-scoped requests for that
-    same show within the same committed transaction. Exact duplicate scopes are
+    A collection-scoped request subsumes profile- and episode-scoped requests for that
+    same collection within the same committed transaction. Exact duplicate scopes are
     also collapsed. No time-window or cross-transaction deduplication is used.
     """
     requests: list[_RunRequest] = []
@@ -119,18 +119,18 @@ def adapt_download_profile_events(
         seen.add(key)
         requests.append(request)
 
-    show_ids = {
+    collection_ids = {
         request.resource_id
         for request in requests
-        if request.resource_type == "show"
+        if request.resource_type == "collection"
     }
 
     return tuple(
         request.as_event()
         for request in requests
         if (
-            request.resource_type == "show"
-            or request.show_id is None
-            or request.show_id not in show_ids
+            request.resource_type == "collection"
+            or request.collection_id is None
+            or request.collection_id not in collection_ids
         )
     )

@@ -13,11 +13,11 @@ from .core import get_session, load_database_models
 # This module runs only after Alembic has brought a fresh database to the
 # current schema. Keep schema/data transformations for existing installations
 # in migrations; keep development/demo fixtures in backend.db.fake_data.
-_SHOW_VIDEO_TEMPLATE = (
-    "/downloads/shows/{{ show_title }}/{{ season_name }}/{{ episode_title }}.ext"
+_COLLECTION_VIDEO_TEMPLATE = (
+    "/downloads/shows/{{ collection_title }}/{{ season_name }}/{{ episode_title }}.ext"
 )
-_SHOW_AUDIO_TEMPLATE = (
-    "/downloads/podcasts/{{ show_title }}/"
+_COLLECTION_AUDIO_TEMPLATE = (
+    "/downloads/podcasts/{{ collection_title }}/"
     "{{ episode_published_date }} - {{ episode_title }}.ext"
 )
 _MOVIE_TEMPLATE = (
@@ -35,29 +35,26 @@ _VIDEO_TEMPLATE = (
 )
 
 
-def _seed_local_media_profiles(session: Session) -> None:
-    from backend.db.models import (
-        LocalMediaProfileBase,
-        MovieLocalMediaProfile,
-        ShowLocalMediaProfile,
-        VideoLocalMediaProfile,
+def _add_missing_profiles(session: Session, profiles) -> None:
+    from backend.db.models import LocalMediaProfileBase
+
+    slugs = tuple(profile.slug for profile in profiles)
+    existing_slugs = set(session.scalars(
+        select(LocalMediaProfileBase.slug).where(
+            LocalMediaProfileBase.slug.in_(slugs)
+        )
+    ))
+    session.add_all(
+        profile
+        for profile in profiles
+        if profile.slug not in existing_slugs
     )
 
-    profiles = (
-        ShowLocalMediaProfile(
-            slug="vodloft-shows-video",
-            name="VODLoft Shows (Video)",
-            subtitle_mode="sidecar",
-            output_template=_SHOW_VIDEO_TEMPLATE,
-            preferred_format="format_1080p",
-        ),
-        ShowLocalMediaProfile(
-            slug="vodloft-shows-audio",
-            name="VODLoft Shows (Audio)",
-            subtitle_mode="sidecar",
-            output_template=_SHOW_AUDIO_TEMPLATE,
-            preferred_format="format_audio_only",
-        ),
+
+def _seed_local_media_profiles(session: Session) -> None:
+    from backend.db.models import MovieLocalMediaProfile, VideoLocalMediaProfile
+
+    _add_missing_profiles(session, (
         MovieLocalMediaProfile(
             slug="vodloft-movies",
             name="VODLoft Movies",
@@ -71,18 +68,33 @@ def _seed_local_media_profiles(session: Session) -> None:
             output_template=_VIDEO_TEMPLATE,
             preferred_format="format_1080p",
         ),
-    )
-    slugs = tuple(profile.slug for profile in profiles)
-    existing_slugs = set(session.scalars(
-        select(LocalMediaProfileBase.slug).where(
-            LocalMediaProfileBase.slug.in_(slugs)
-        )
     ))
-    session.add_all(
-        profile
-        for profile in profiles
-        if profile.slug not in existing_slugs
-    )
+
+
+def seed_fresh_start_profiles(session: Session) -> None:
+    """The default Collection profiles, for a library that starts fresh instead of importing one.
+
+    Onboarding adds them on "Start fresh", or when it finishes without an import, so a library
+    imported during onboarding only holds the imported profiles (plus Movies and Videos).
+    """
+    from backend.db.models import CollectionLocalMediaProfile
+
+    _add_missing_profiles(session, (
+        CollectionLocalMediaProfile(
+            slug="vodloft-collections-video",
+            name="VODLoft Collections (Video)",
+            subtitle_mode="sidecar",
+            output_template=_COLLECTION_VIDEO_TEMPLATE,
+            preferred_format="format_1080p",
+        ),
+        CollectionLocalMediaProfile(
+            slug="vodloft-collections-audio",
+            name="VODLoft Collections (Audio)",
+            subtitle_mode="sidecar",
+            output_template=_COLLECTION_AUDIO_TEMPLATE,
+            preferred_format="format_audio_only",
+        ),
+    ))
 
 
 _INITIAL_SEED_STEPS: tuple[Callable[[Session], None], ...] = (

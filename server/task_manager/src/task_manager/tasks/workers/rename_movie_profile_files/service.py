@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 
+from backend.services.no_ascii_names import settle_no_ascii_name
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
@@ -99,6 +100,7 @@ def run_rename_movie_profile_files(
             raise ValueError(
                 f"Media download {download.id} is not a movie, movie extra or video"
             )
+        destination = settle_no_ascii_name(download, destination, session=session)
         if source == destination:
             unchanged += 1
             continue

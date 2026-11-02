@@ -3,9 +3,9 @@ import {useQuery} from '@tanstack/react-query'
 
 import {useLazyCollection} from './lazyCollection'
 
-import type {ShowLocalMediaProfileScope} from '../types/local_media_profile'
+import type {CollectionLocalMediaProfileScope} from '../types/local_media_profile'
 
-export type LocalMediaProfileTemplateSourceMode = 'show' | 'movie' | 'video'
+export type LocalMediaProfileTemplateSourceMode = 'collection' | 'movie' | 'video'
 
 export type LocalMediaProfileTemplateVariable = {
     name: string
@@ -30,7 +30,7 @@ export type LocalMediaProfileTemplateSourcePage = {
 }
 
 type LocalMediaProfileTemplateSourceOptions = {
-    showScope?: ShowLocalMediaProfileScope
+    collectionScope?: CollectionLocalMediaProfileScope
     search?: string
     enabled?: boolean
     pageSize?: number
@@ -68,14 +68,14 @@ export function useLocalMediaProfileTemplateVariables(
 export function useLocalMediaProfileTemplateSources(
     mode: LocalMediaProfileTemplateSourceMode,
     {
-        showScope = 'both',
+        collectionScope = 'both',
         search = '',
         enabled = true,
         pageSize = 30,
         anchorSourceId,
     }: LocalMediaProfileTemplateSourceOptions = {},
 ) {
-    const effectiveAnchorSourceId = mode === 'show' && !search.trim()
+    const effectiveAnchorSourceId = mode === 'collection' && !search.trim()
         ? anchorSourceId
         : undefined
 
@@ -83,7 +83,7 @@ export function useLocalMediaProfileTemplateSources(
         collectionPrefix: ['localMediaProfileTemplateSources'] as const,
         queryKey: [
             mode,
-            showScope,
+            collectionScope,
             search.trim(),
             effectiveAnchorSourceId ?? null,
         ] as const,
@@ -100,7 +100,7 @@ export function useLocalMediaProfileTemplateSources(
             } else if (effectiveAnchorSourceId) {
                 params.set('anchor_source_id', effectiveAnchorSourceId)
             }
-            if (mode === 'show') params.set('show_scope', showScope)
+            if (mode === 'collection') params.set('collection_scope', collectionScope)
             if (search.trim()) params.set('search', search.trim())
             return fetchTemplateJson<LocalMediaProfileTemplateSourcePage>(
                 `sources?${params.toString()}`,
@@ -112,18 +112,18 @@ export function useLocalMediaProfileTemplateSources(
 
 
 
-export function useRandomShowTemplateSource(
-    showScope: ShowLocalMediaProfileScope = 'both',
+export function useRandomCollectionTemplateSource(
+    collectionScope: CollectionLocalMediaProfileScope = 'both',
     enabled = true,
 ) {
     // A per-mount key makes reopening the form request a fresh example instead
     // of reusing React Query's cache from the previous page visit.
     const [requestKey] = useState(() => Math.random())
     return useQuery<LocalMediaProfileTemplateSource | null>({
-        queryKey: ['randomShowTemplateSource', showScope, requestKey],
+        queryKey: ['randomCollectionTemplateSource', collectionScope, requestKey],
         enabled,
         queryFn: ({signal}) => fetchTemplateJson(
-            `sources/random-show-episode?show_scope=${encodeURIComponent(showScope)}`,
+            `sources/random-collection-episode?collection_scope=${encodeURIComponent(collectionScope)}`,
             signal,
             'no-store',
         ),

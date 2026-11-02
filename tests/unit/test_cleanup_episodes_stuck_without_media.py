@@ -10,31 +10,31 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 
-def _make_show(session):
-    from backend.db.models import Show
-    from backend.types.show_types import EpisodeIdentifier, ShowType
-    show = Show(
+def _make_collection(session):
+    from backend.db.models import Collection
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
+    collection = Collection(
         source_key="dailywire",
-        uuid="show-uuid", slug="test-show", title="Test Show", description=None,
-        sharing_url="https://example.test/show", membership_level="FREE",
-        type=ShowType.PODCAST.value, episode_identifier=EpisodeIdentifier.NUMBERED.value,
+        uuid="collection-uuid", slug="test-collection", title="Test Show", description=None,
+        sharing_url="https://example.test/collection", membership_level="FREE",
+        type=CollectionType.PODCAST.value, episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Host", author_slug="host",
     )
-    session.add(show)
+    session.add(collection)
     session.flush()
-    return show
+    return collection
 
 
-def _make_episode(session, show, *, slug="episode", identifier="ep.2"):
+def _make_episode(session, collection, *, slug="episode", identifier="ep.2"):
     from backend.db.models import Episode, Season
     from backend.types.episode_types import EpisodePublishStatus
     from backend.utils.helpers import generate_uuid
-    season = Season(show=show, index=1, slug="season-1", name="One")
+    season = Season(collection=collection, index=1, slug="season-1", name="One")
     session.add(season)
     session.flush()
     episode = Episode(
         source_key="dailywire",
-        uuid=generate_uuid(), type="episode", show=show, season=season, index=2,
+        uuid=generate_uuid(), type="episode", collection=collection, season=season, index=2,
         episode_identifier=identifier, slug=slug, title="Unavailable episode", duration=100.0,
         publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
         sharing_url=f"https://example.test/{slug}",
@@ -57,7 +57,7 @@ def _make_replacement_episode(session, original, *, slug="canonical-slug"):
         source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
-        show=original.show,
+        collection=original.collection,
         season=original.season,
         index=original.index + 1,
         episode_identifier=previous_identifier,
@@ -137,8 +137,8 @@ def test_mark_no_usable_media_refreshes_existing_metadata_rows(db_session):
         mark_episode_no_usable_media,
     )
 
-    show = _make_show(db_session)
-    episode = _make_episode(db_session, show)
+    collection = _make_collection(db_session)
+    episode = _make_episode(db_session, collection)
     first_seen = datetime.now(timezone.utc) - timedelta(hours=5)
 
     mark_episode_no_usable_media(
@@ -175,8 +175,8 @@ def test_monitor_deletes_only_expired_episode_that_still_404s(db_session, monkey
     from backend.db.models import Episode
     from sources.dailywire.api.dw_api.client import MiddlewareAPIError
     from task_manager.tasks.workers.monitor_no_usable_media_episode import service
-    show = _make_show(db_session)
-    episode = _make_episode(db_session, show)
+    collection = _make_collection(db_session)
+    episode = _make_episode(db_session, collection)
     _mark_missing(db_session, episode, hours_ago=5)
     episode_id = episode.id
 
@@ -195,8 +195,8 @@ def test_monitor_releases_database_transaction_before_external_requests(db_sessi
     from backend.types.episode_types import EpisodePublishStatus
     from task_manager.tasks.workers.monitor_no_usable_media_episode import service
 
-    show = _make_show(db_session)
-    episode = _make_episode(db_session, show)
+    collection = _make_collection(db_session)
+    episode = _make_episode(db_session, collection)
     _mark_missing(db_session, episode, hours_ago=5)
 
     detail = SimpleNamespace(
@@ -252,8 +252,8 @@ def test_monitor_keeps_expired_episode_when_daily_wire_still_returns_it(db_sessi
     from backend.db.models import Episode
     from task_manager.tasks.helpers.episodes.unusable_media import episode_no_usable_media_reason, NoUsableMediaReason
     from task_manager.tasks.workers.monitor_no_usable_media_episode import service
-    show = _make_show(db_session)
-    episode = _make_episode(db_session, show)
+    collection = _make_collection(db_session)
+    episode = _make_episode(db_session, collection)
     _mark_missing(db_session, episode, hours_ago=5)
     episode_id = episode.id
 
@@ -278,8 +278,8 @@ def test_monitor_keeps_expired_episode_when_daily_wire_still_returns_it(db_sessi
 def test_force_delete_still_requires_fresh_404(db_session, monkeypatch):
     from backend.db.models import Episode
     from task_manager.tasks.workers.monitor_no_usable_media_episode import service
-    show = _make_show(db_session)
-    episode = _make_episode(db_session, show)
+    collection = _make_collection(db_session)
+    episode = _make_episode(db_session, collection)
     _mark_missing(db_session, episode, hours_ago=1)
     episode_id = episode.id
 
@@ -307,8 +307,8 @@ def test_force_delete_reports_recovery_and_new_status(db_session, monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
     from task_manager.tasks.workers.monitor_no_usable_media_episode import service
 
-    show = _make_show(db_session)
-    episode = _make_episode(db_session, show)
+    collection = _make_collection(db_session)
+    episode = _make_episode(db_session, collection)
     _mark_missing(db_session, episode, hours_ago=1)
     episode_id = episode.id
     detail = SimpleNamespace(
@@ -358,8 +358,8 @@ def test_force_delete_reports_replacement_as_recovered_state(db_session, monkeyp
     from sources.dailywire.api.dw_api.client import MiddlewareAPIError
     from task_manager.tasks.workers.monitor_no_usable_media_episode import service
 
-    show = _make_show(db_session)
-    episode = _make_episode(db_session, show, slug="wrong-slug")
+    collection = _make_collection(db_session)
+    episode = _make_episode(db_session, collection, slug="wrong-slug")
     _mark_missing(db_session, episode, hours_ago=1)
     episode_id = episode.id
     replacement = _make_replacement_episode(db_session, episode, slug="canonical-slug")
@@ -391,8 +391,8 @@ def test_force_delete_removes_target_immediately_when_it_still_404s(db_session, 
     from backend.db.models import Episode
     from sources.dailywire.api.dw_api.client import MiddlewareAPIError
     from task_manager.tasks.workers.monitor_no_usable_media_episode import service
-    show = _make_show(db_session)
-    episode = _make_episode(db_session, show)
+    collection = _make_collection(db_session)
+    episode = _make_episode(db_session, collection)
     _mark_missing(db_session, episode, hours_ago=1)
     episode_id = episode.id
 

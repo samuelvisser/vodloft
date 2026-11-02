@@ -21,7 +21,7 @@ class StreamProfileAPIRead(ResponseBase):
     model_config = response_model_config(nested_source="profile")
 
     id: int
-    show_id: int
+    collection_id: int
     enable_profile: bool
     use_downloads: bool
     use_dw_stream: bool
@@ -37,8 +37,8 @@ class StreamProfileAPIRead(ResponseBase):
 class StreamProfileAPIReadView(StreamProfileAPIRead):
     """Denormalized stream-profile view sourced from ORM relationships."""
 
-    show_title: str = Field(validation_alias=AliasPath("profile", "show", "title"))
-    show_slug: str = Field(validation_alias=AliasPath("profile", "show", "slug"))
+    collection_title: str = Field(validation_alias=AliasPath("profile", "collection", "title"))
+    collection_slug: str = Field(validation_alias=AliasPath("profile", "collection", "slug"))
     stream_profile_impl: RssStreamProfileAPIRead = Field(
         validation_alias="profile"
     )

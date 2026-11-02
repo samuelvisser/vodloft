@@ -1,0 +1,271 @@
+.collection-page-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 14px 18px;
+    align-items: start;
+    margin-bottom: 16px;
+}
+
+.collection-page-heading {
+    min-width: 0;
+}
+
+.collection-page-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.collection-profile-summary {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.26);
+    border-radius: 12px;
+    background: rgba(148, 163, 184, 0.06);
+}
+
+.collection-profile-group {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+}
+
+.collection-profile-group + .collection-profile-group {
+    padding-left: 10px;
+    border-left: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.collection-profile-group-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.collection-profile-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+}
+
+.collection-profile-chip-group {
+    display: inline-flex;
+    align-items: stretch;
+    overflow: hidden;
+    border: 1px solid rgba(148, 163, 184, 0.34);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.54);
+}
+
+.collection-profile-chip,
+.collection-profile-copy {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    font: inherit;
+}
+
+.collection-profile-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 30px;
+    padding: 5px 10px;
+    border: 1px solid rgba(148, 163, 184, 0.34);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.54);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.collection-profile-chip-group .collection-profile-chip {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+.collection-profile-chip svg {
+    font-size: 0.76em;
+    color: var(--muted);
+}
+
+.collection-profile-chip:hover,
+.collection-profile-chip:focus-visible,
+.collection-profile-copy:hover,
+.collection-profile-copy:focus-visible {
+    background: rgba(148, 163, 184, 0.14);
+    outline: none;
+}
+
+.collection-profile-chip:focus-visible,
+.collection-profile-copy:focus-visible {
+    box-shadow: inset 0 0 0 2px #3b82f6;
+}
+
+.collection-profile-copy {
+    display: grid;
+    place-items: center;
+    width: 31px;
+    min-width: 31px;
+    border-left: 1px solid rgba(148, 163, 184, 0.28);
+    color: var(--muted);
+}
+
+.collection-season-filter {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 2px 0 18px;
+}
+
+.collection-season-filter label {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--muted);
+}
+
+.collection-season-select {
+    width: auto;
+    min-width: 190px;
+}
+
+.collection-season-count {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.collection-season-empty {
+    padding: 18px 0;
+    color: var(--muted);
+}
+
+.episode-card-skeleton {
+    pointer-events: none;
+}
+
+.episode-skeleton-cover,
+.episode-skeleton-title {
+    background: #e5e7eb;
+    animation: episode-skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.episode-skeleton-cover {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: 12px;
+}
+
+.episode-skeleton-title {
+    width: 88%;
+    height: 14px;
+    margin-top: 8px;
+    border-radius: 5px;
+}
+
+.episode-skeleton-title-short {
+    width: 58%;
+    margin-top: 6px;
+}
+
+@keyframes episode-skeleton-pulse {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .episode-skeleton-cover,
+    .episode-skeleton-title {
+        animation: none;
+    }
+}
+
+@media (prefers-color-scheme: dark) {
+    .collection-profile-summary {
+        background: rgba(255, 255, 255, 0.035);
+        border-color: rgba(148, 163, 184, 0.18);
+    }
+
+    .collection-profile-chip,
+    .collection-profile-chip-group {
+        background: rgba(255, 255, 255, 0.055);
+        border-color: rgba(148, 163, 184, 0.22);
+    }
+
+    .collection-profile-chip-group .collection-profile-chip {
+        background: transparent;
+    }
+
+    .episode-skeleton-cover,
+    .episode-skeleton-title {
+        background: rgba(148, 163, 184, 0.22);
+    }
+}
+
+@media (max-width: 700px) {
+    .collection-page-header {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .collection-page-actions {
+        justify-content: flex-start;
+    }
+
+    .collection-profile-summary {
+        grid-column: 1;
+        display: grid;
+        gap: 10px;
+    }
+
+    .collection-profile-group {
+        align-items: flex-start;
+        display: grid;
+        gap: 7px;
+    }
+
+    .collection-profile-group + .collection-profile-group {
+        padding-left: 0;
+        padding-top: 10px;
+        border-left: 0;
+        border-top: 1px solid rgba(148, 163, 184, 0.22);
+    }
+
+    .collection-season-filter {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 7px;
+    }
+
+    .collection-season-select {
+        width: 100%;
+        min-width: 0;
+    }
+}
+
+@media (max-width: 460px) {
+    .collection-page-actions {
+        display: flex;
+        flex-wrap: wrap;
+    }
+
+    .collection-profile-links {
+        gap: 7px;
+    }
+}
+
+/* Links share the button row; match the size buttons get from the browser. */
+.collection-page-actions > a.btn { font-size: 0.8333rem; }

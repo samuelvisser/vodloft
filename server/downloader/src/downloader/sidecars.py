@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextvars import copy_context
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .capacity import DownloadResources
@@ -107,7 +107,11 @@ class SidecarDownloads:
         self._futures: dict[str, Future[AcquiredSidecar]] = {}
         self._resolved: dict[str, AcquiredSidecar | None] = {}
         self._specs = {asset.id: asset for asset in assets}
+        self._ytdlp: dict[str, tuple[AcquiredSidecar, ...]] = {}
         for spec in assets:
+            if spec.source_format == "ytdlp":
+                # The media transfer writes these; see fulfil().
+                continue
             # Context variables must be copied separately per submitted activity.
             future = self._executor.submit(copy_context().run, acquire_sidecar, spec, workspace, tracker, resources)
             self._futures[spec.id] = future
@@ -119,6 +123,25 @@ class SidecarDownloads:
             error = future.exception()
             if error is not None and not isinstance(error, DownloadCancelled):
                 self._tracker.fail(error)
+
+    def fulfil(self, asset_id: str, subtitles: tuple[tuple[str, str], ...]) -> None:
+        """The subtitles yt-dlp wrote for a ``ytdlp`` spec, one asset per language."""
+        spec = self._specs[asset_id]
+        items = []
+        for language, path in subtitles:
+            key = "".join(char if char.isalnum() else "-" for char in language.lower())
+            items.append(AcquiredSidecar(
+                replace(spec, id=f"{spec.id}-{key}", language=language, target_suffix=f".{language}.srt"),
+                Path(path), f".{language}.srt", Path(path).stat().st_size,
+            ))
+        self._ytdlp[asset_id] = tuple(items)
+
+    def all(self, asset_id: str) -> tuple[AcquiredSidecar, ...]:
+        """Every file acquired for one planned asset: one, none, or one per subtitle language."""
+        if self._specs[asset_id].source_format == "ytdlp":
+            return self._ytdlp.get(asset_id, ())
+        asset = self.get(asset_id)
+        return (asset,) if asset is not None else ()
 
     def get(self, asset_id: str) -> AcquiredSidecar | None:
         if asset_id in self._resolved:

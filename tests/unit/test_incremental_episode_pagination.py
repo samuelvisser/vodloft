@@ -56,7 +56,7 @@ def test_incremental_fetch_stops_when_known_cursor_is_seen():
     calls: list[str] = []
 
     class FakeClient:
-        def get_episodes_paginated(self, _show_slug, selector):
+        def get_episodes_paginated(self, _collection_slug, selector):
             if isinstance(selector, ByShowSeason):
                 calls.append("initial")
                 return pages["initial"]
@@ -66,7 +66,7 @@ def test_incremental_fetch_stops_when_known_cursor_is_seen():
 
     items = fetch_episodes_until_slug(
         FakeClient(),
-        "show",
+        "collection",
         ByShowSeason(
             season_dw_id="season",
             membership_plan="FREE",
@@ -108,7 +108,7 @@ def test_incremental_fetch_falls_back_to_end_when_cursor_disappeared():
     calls: list[str] = []
 
     class FakeClient:
-        def get_episodes_paginated(self, _show_slug, selector):
+        def get_episodes_paginated(self, _collection_slug, selector):
             if isinstance(selector, ByShowSeason):
                 calls.append("initial")
                 return pages["initial"]
@@ -118,7 +118,7 @@ def test_incremental_fetch_falls_back_to_end_when_cursor_disappeared():
 
     items = fetch_episodes_until_slug(
         FakeClient(),
-        "show",
+        "collection",
         ByShowSeason(
             season_dw_id="season",
             membership_plan="FREE",

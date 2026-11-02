@@ -7,10 +7,10 @@ import {
     MovieLocalMediaProfileUpdateSchema,
 } from './movie_local_media_profile'
 import {
-    ShowLocalMediaProfileCreateSchema,
-    ShowLocalMediaProfileReadSchema,
-    ShowLocalMediaProfileUpdateSchema,
-} from './show_local_media_profile'
+    CollectionLocalMediaProfileCreateSchema,
+    CollectionLocalMediaProfileReadSchema,
+    CollectionLocalMediaProfileUpdateSchema,
+} from './collection_local_media_profile'
 import {
     VideoLocalMediaProfileCreateSchema,
     VideoLocalMediaProfileReadSchema,
@@ -19,7 +19,7 @@ import {
 
 export * from './local_media_profile_base'
 export * from './movie_local_media_profile'
-export * from './show_local_media_profile'
+export * from './collection_local_media_profile'
 export * from './video_local_media_profile'
 
 
@@ -36,11 +36,12 @@ const DATE_OUTPUT_TEMPLATE_FIELDS = [
     'date', 'time', 'datetime', 'year', 'month', 'day', 'hour', 'minute', 'second',
 ] as const
 
-export const SHOW_OUTPUT_TEMPLATE_FIELDS = [
-    'show', 'show_title', 'season', 'season_name', 'season_index', 'season_type', 'season_number',
+export const COLLECTION_OUTPUT_TEMPLATE_FIELDS = [
+    'collection', 'collection_title', 'season', 'season_name', 'season_index', 'season_type', 'season_number',
     'episode', 'episode_title', 'title', 'dw_episode_number', 'episode_type', 'episode_extra_type',
     'episode_number', 'episode_sub_number', 'episode_label', 'episode_identifier', 'episode_published_date',
     'episode_published_time', 'episode_published_datetime', 'episode_index',
+    'collection_author', 'collection_site_id', 'episode_site_id', 'episode_uploader', 'duration_seconds',
     ...DATE_OUTPUT_TEMPLATE_FIELDS,
 ] as const
 
@@ -62,7 +63,7 @@ export const VIDEO_OUTPUT_TEMPLATE_FIELDS = [
 
 // ---------- Strict request (create/update) ----------
 export const LocalMediaProfileCreateSchema = z.discriminatedUnion('type', [
-    ShowLocalMediaProfileCreateSchema,
+    CollectionLocalMediaProfileCreateSchema,
     MovieLocalMediaProfileCreateSchema,
     VideoLocalMediaProfileCreateSchema,
 ])
@@ -70,7 +71,7 @@ export type LocalMediaProfileCreateIn = z.input<typeof LocalMediaProfileCreateSc
 export type LocalMediaProfileCreateOut = z.output<typeof LocalMediaProfileCreateSchema>
 
 export const LocalMediaProfileUpdateSchema = z.discriminatedUnion('type', [
-    ShowLocalMediaProfileUpdateSchema,
+    CollectionLocalMediaProfileUpdateSchema,
     MovieLocalMediaProfileUpdateSchema,
     VideoLocalMediaProfileUpdateSchema,
 ])
@@ -80,7 +81,7 @@ export type LocalMediaProfileUpdateOut = z.output<typeof LocalMediaProfileUpdate
 
 // ------------ Lenient response (read) ------------
 export const LocalMediaProfileReadSchema = z.discriminatedUnion('type', [
-    ShowLocalMediaProfileReadSchema,
+    CollectionLocalMediaProfileReadSchema,
     MovieLocalMediaProfileReadSchema,
     VideoLocalMediaProfileReadSchema,
 ])

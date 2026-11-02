@@ -14,11 +14,11 @@ def test_event_is_emitted_only_after_commit(monkeypatch):
     session = Session(create_engine("sqlite+pysqlite:///:memory:"))
 
     session.execute(text("SELECT 1"))
-    transactional.queue_event(session, "show.added", {"resource_id": 42})
+    transactional.queue_event(session, "collection.added", {"resource_id": 42})
     assert emit.call_count == 0
 
     session.commit()
-    emit.assert_called_once_with("show.added", {"resource_id": 42})
+    emit.assert_called_once_with("collection.added", {"resource_id": 42})
     session.close()
 
 
@@ -30,7 +30,7 @@ def test_event_is_discarded_on_rollback(monkeypatch):
     session = Session(create_engine("sqlite+pysqlite:///:memory:"))
 
     session.execute(text("SELECT 1"))
-    transactional.queue_event(session, "show.added", {"resource_id": 42})
+    transactional.queue_event(session, "collection.added", {"resource_id": 42})
     session.rollback()
     session.commit()
 
@@ -50,12 +50,12 @@ def test_committed_event_batch_adapter_derives_one_event_from_full_batch(monkeyp
     def derive(events):
         assert [event.name for event in events] == [
             "episode.published_final",
-            "show.indexed",
+            "collection.indexed",
         ]
         return (
             transactional.PendingEvent(
                 "worker.run_requested",
-                {"resource_type": "show", "resource_id": 12},
+                {"resource_type": "collection", "resource_id": 12},
             ),
         )
 
@@ -63,19 +63,19 @@ def test_committed_event_batch_adapter_derives_one_event_from_full_batch(monkeyp
         transactional.queue_event(
             session,
             "episode.published_final",
-            {"resource_id": 501, "show_id": 12},
+            {"resource_id": 501, "collection_id": 12},
         )
         transactional.queue_event(
             session,
-            "show.indexed",
+            "collection.indexed",
             {"resource_id": 12},
         )
         session.commit()
 
         assert [item.args for item in emit.call_args_list] == [
-            ("episode.published_final", {"resource_id": 501, "show_id": 12}),
-            ("show.indexed", {"resource_id": 12}),
-            ("worker.run_requested", {"resource_type": "show", "resource_id": 12}),
+            ("episode.published_final", {"resource_id": 501, "collection_id": 12}),
+            ("collection.indexed", {"resource_id": 12}),
+            ("worker.run_requested", {"resource_type": "collection", "resource_id": 12}),
         ]
     finally:
         transactional.unregister_committed_event_batch_adapter("test.transactional.batch")

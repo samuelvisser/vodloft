@@ -18,7 +18,7 @@ import logging
 from sqlalchemy import select
 
 from backend.db.core import get_session
-from backend.db.models import Episode, Show, Video
+from backend.db.models import Episode, Collection, Video
 from sources.npo.client import NpoClient, NpoError
 from sources.npo.source import NpoSource, needs_subscription, parse_link
 
@@ -34,18 +34,18 @@ def _unchecked() -> tuple[list[tuple[int, str]], list[tuple[str, str]]]:
     """The NPO shows with programmes that are not marked yet, and such single videos."""
     session = get_session()
     try:
-        shows = session.execute(
-            select(Show.id, Show.sharing_url)
-            .where(Show.source_key == NpoSource.id)
-            .where(Show.id.in_(select(Episode.show_id).where(Episode.needs_subscription.is_(False))))
-            .order_by(Show.id)
+        collections = session.execute(
+            select(Collection.id, Collection.sharing_url)
+            .where(Collection.source_key == NpoSource.id)
+            .where(Collection.id.in_(select(Episode.collection_id).where(Episode.needs_subscription.is_(False))))
+            .order_by(Collection.id)
         ).all()
         videos = session.execute(
             select(Video.slug, Video.sharing_url)
             .where(Video.source_key == NpoSource.id, Video.needs_subscription.is_(False))
             .order_by(Video.id)
         ).all()
-        return [(row.id, row.sharing_url) for row in shows], [(row.slug, row.sharing_url) for row in videos]
+        return [(row.id, row.sharing_url) for row in collections], [(row.slug, row.sharing_url) for row in videos]
     finally:
         session.close()
 
@@ -70,13 +70,13 @@ def _premium_video(client: NpoClient, slug: str, url: str) -> bool:
     return needs_subscription(client.program_detail(parsed[1] if parsed else slug))
 
 
-def _mark_episodes(show_id: int, slugs: set[str]) -> None:
+def _mark_episodes(collection_id: int, slugs: set[str]) -> None:
     if not slugs:
         return
     session = get_session()
     try:
         for episode in session.scalars(
-            select(Episode).where(Episode.show_id == show_id, Episode.source_slug.in_(slugs))
+            select(Episode).where(Episode.collection_id == collection_id, Episode.source_slug.in_(slugs))
         ):
             episode.needs_subscription = True
         session.commit()
@@ -104,13 +104,13 @@ def _mark_video(slug: str) -> None:
 
 
 async def migrate(context) -> None:
-    shows, videos = _unchecked()
-    total = len(shows) + len(videos)
+    collections, videos = _unchecked()
+    total = len(collections) + len(videos)
     if total == 0:
         return
     client = NpoClient()
     done = 0
-    for show_id, url in shows:
+    for collection_id, url in collections:
         context.raise_if_cancelled()
         context.update_progress(done, total, "Checking which NPO Start programmes need NPO Plus")
         try:
@@ -118,7 +118,7 @@ async def migrate(context) -> None:
         except NpoError as exc:
             logger.warning("Could not check %s for NPO Plus programmes: %s", url, exc)
         else:
-            _mark_episodes(show_id, premium)
+            _mark_episodes(collection_id, premium)
         done += 1
     for slug, url in videos:
         context.raise_if_cancelled()

@@ -96,11 +96,11 @@ export default function StreamProfilesPage() {
         <section className="view" aria-labelledby="stream-profiles-title">
             <div className="view-header">
                 <h1 id="stream-profiles-title">Stream Profiles</h1>
-                <PageSubtitle summary={<>Control how VODLoft streams each show.</>}>
-                    <p>Stream Profiles allow you to control how each show is streamed. You can stream episodes straight from the files
+                <PageSubtitle summary={<>Control how VODLoft streams each collection.</>}>
+                    <p>Stream Profiles allow you to control how each collection is streamed. You can stream episodes straight from the files
                         you downloaded, or directly from DW. </p>
                     <p>For now, a stream within VODLoft just means opening an RSS feed for it. More streaming options might come later.</p>
-                    <p>Use multiple profiles per show to fit different listening or
+                    <p>Use multiple profiles per collection to fit different listening or
                         viewing needs.</p>
                 </PageSubtitle>
                 {can('stream_profiles') && <button className="btn btn-primary" onClick={onAdd}>Add stream profile</button>}
@@ -149,7 +149,7 @@ export default function StreamProfilesPage() {
             <ConfirmDeleteDialog
                 ref={confirmRef}
                 title="Delete stream profile"
-                subjectProp="showTitle"
+                subjectProp="collectionTitle"
                 deleteRequest={(p) => {
                     const path = `${p.type === 'rss' ? 'rss-stream-profiles' : 'stream-profiles'}/${p.id}`
                     return fetch(`${(window as any).appConfig.API_URL}/${path}`, {method: 'DELETE', credentials: 'include'})

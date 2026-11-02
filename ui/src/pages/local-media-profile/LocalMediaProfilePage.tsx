@@ -20,7 +20,7 @@ import {
 import {
     LocalMediaProfileTypeReg,
     PreferredFormatReg,
-    ShowLocalMediaProfileScopeReg,
+    CollectionLocalMediaProfileScopeReg,
 } from '../../types/local_media_profile'
 import {formatBytes} from '../../utils/formatting'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
@@ -85,8 +85,8 @@ export default function LocalMediaProfilePage() {
     }
 
     const actionBusy = Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation)
-    const managedLabel = profile.type === 'show' ? 'Managed episodes' : 'Managed items'
-    const downloadedLabel = profile.type === 'show' ? 'Downloaded episodes' : 'Downloaded items'
+    const managedLabel = profile.type === 'collection' ? 'Managed episodes' : 'Managed items'
+    const downloadedLabel = profile.type === 'collection' ? 'Downloaded episodes' : 'Downloaded items'
 
     const controlTaskOperation = async (
         operationId: string,
@@ -170,8 +170,8 @@ export default function LocalMediaProfilePage() {
         }
     }
 
-    const availableFor = profile.type === 'show'
-        ? ShowLocalMediaProfileScopeReg.getLabelLoose(profile.showScope)
+    const availableFor = profile.type === 'collection'
+        ? CollectionLocalMediaProfileScopeReg.getLabelLoose(profile.collectionScope)
         : 'Movies'
 
     return (

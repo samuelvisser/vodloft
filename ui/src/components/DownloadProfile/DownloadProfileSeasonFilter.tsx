@@ -17,7 +17,7 @@ const INCLUDE_UPCOMING_VALUE = '__include_upcoming__'
 
 type UIOption = {value: string; label: string}
 
-/** Filters on season, for a show identified by season. */
+/** Filters on season, for a collection identified by season. */
 export default function DownloadProfileSeasonFilter({form, seasons}: Props) {
     const {control, setValue, watch, formState: {errors}} = form
 

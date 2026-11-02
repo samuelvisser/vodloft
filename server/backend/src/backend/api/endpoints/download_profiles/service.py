@@ -18,13 +18,13 @@ from backend.utils.season_ordering import season_type_from_name
 from task_manager.events.transactional import queue_event
 
 
-def get_download_profiles_list(s: Session, show_slug: Optional[str] = None) -> list[DownloadProfileAPIRead]:
+def get_download_profiles_list(s: Session, collection_slug: Optional[str] = None) -> list[DownloadProfileAPIRead]:
 
-    if show_slug is not None:
+    if collection_slug is not None:
         items = (
             s.query(DownloadProfile)
             .filter(
-                DownloadProfile.show.has(slug=show_slug)
+                DownloadProfile.collection.has(slug=collection_slug)
             )
             .order_by(DownloadProfile.id)
             .all()
@@ -55,11 +55,11 @@ def _profile_event(item: DownloadProfile) -> dict[str, int]:
     return {
         "resource_id": item.id,
         "id": item.id,
-        "show_id": item.show_id,
+        "collection_id": item.collection_id,
     }
 
 
-def _resolve_or_create_seasons_for_show(s: Session, show_id: int, seasons_req: list[SeasonAPIRequestDetached]) -> list[Season]:
+def _resolve_or_create_seasons_for_collection(s: Session, collection_id: int, seasons_req: list[SeasonAPIRequestDetached]) -> list[Season]:
     # If empty list provided, clear association
     if not seasons_req:
         return []
@@ -71,7 +71,7 @@ def _resolve_or_create_seasons_for_show(s: Session, show_id: int, seasons_req: l
     if slugs:
         existing = (
             s.query(Season)
-            .filter(Season.show_id == show_id)
+            .filter(Season.collection_id == collection_id)
             .filter(Season.slug.in_(slugs))
             .all()
         )
@@ -82,12 +82,12 @@ def _resolve_or_create_seasons_for_show(s: Session, show_id: int, seasons_req: l
     seen_ids: set[int] = set()
     next_index = int(s.scalar(
         select(func.coalesce(func.max(Season.index), 0))
-        .where(Season.show_id == show_id)
+        .where(Season.collection_id == collection_id)
     ) or 0)
     next_regular_number = int(s.scalar(
         select(func.coalesce(func.max(Season.season_number), 0))
         .where(
-            Season.show_id == show_id,
+            Season.collection_id == collection_id,
             Season.season_type == SeasonType.NORMAL.value,
         )
     ) or 0)
@@ -95,7 +95,7 @@ def _resolve_or_create_seasons_for_show(s: Session, show_id: int, seasons_req: l
     for season_in in seasons_req:
         match = by_slug.get(season_in.slug)
         if match is None:
-            # This is normally pre-created by show indexing, but keep the profile
+            # This is normally pre-created by collection indexing, but keep the profile
             # endpoint correct when it receives a newly discovered season first.
             next_index += 1
             season_type = season_type_from_name(season_in.name)
@@ -105,7 +105,7 @@ def _resolve_or_create_seasons_for_show(s: Session, show_id: int, seasons_req: l
             else:
                 season_number = 0
             match = Season(
-                show_id=show_id,
+                collection_id=collection_id,
                 index=next_index,
                 slug=season_in.slug,
                 name=season_in.name,
@@ -128,16 +128,16 @@ def _resolve_or_create_seasons_for_show(s: Session, show_id: int, seasons_req: l
 
 
 def create_download_profile(s: Session, body: DownloadProfileAPICreate) -> DownloadProfileAPIRead:
-    require_local_media_profile_type(s, body.local_media_profile_id, LocalMediaProfileType.SHOW)
+    require_local_media_profile_type(s, body.local_media_profile_id, LocalMediaProfileType.COLLECTION)
     require_unique_download_profile_episode_types(
         s,
-        show_id=body.show_id,
+        collection_id=body.collection_id,
         local_media_profile_id=body.local_media_profile_id,
         episode_types=body.ep_id_type_list,
     )
     item = create_database_fields(DownloadProfile, body, exclude_fields={"seasons"})
     s.add(item)
-    item.seasons = _resolve_or_create_seasons_for_show(s, show_id=item.show_id, seasons_req=body.seasons)
+    item.seasons = _resolve_or_create_seasons_for_collection(s, collection_id=item.collection_id, seasons_req=body.seasons)
     s.flush()
 
     queue_event(s, "download_profile.added", _profile_event(item))
@@ -150,16 +150,16 @@ def update_download_profile(s: Session, download_profile_id: int, body: Download
     if item is None:
         raise HTTPException(status_code=404, detail="Download profile not found")
 
-    require_local_media_profile_type(s, body.local_media_profile_id, LocalMediaProfileType.SHOW)
+    require_local_media_profile_type(s, body.local_media_profile_id, LocalMediaProfileType.COLLECTION)
     require_unique_download_profile_episode_types(
         s,
-        show_id=item.show_id,
+        collection_id=item.collection_id,
         local_media_profile_id=body.local_media_profile_id,
         episode_types=body.ep_id_type_list,
         exclude_profile_id=item.id,
     )
     update_database_fields(item, body, exclude_fields={"seasons"})
-    item.seasons = _resolve_or_create_seasons_for_show(s, show_id=item.show_id, seasons_req=body.seasons)
+    item.seasons = _resolve_or_create_seasons_for_collection(s, collection_id=item.collection_id, seasons_req=body.seasons)
     s.flush()
 
     queue_event(s, "download_profile.updated", _profile_event(item))
@@ -184,7 +184,7 @@ def delete_download_profile(s: Session, download_profile_id: int) -> DownloadPro
 def require_unique_download_profile_episode_types(
         s: Session,
         *,
-        show_id: int,
+        collection_id: int,
         local_media_profile_id: int,
         episode_types: Sequence[str],
         exclude_profile_id: int | None = None,
@@ -201,7 +201,7 @@ def require_unique_download_profile_episode_types(
         .select_from(DownloadProfile)
         .join(episode_type, true())
         .where(
-            DownloadProfile.show_id == show_id,
+            DownloadProfile.collection_id == collection_id,
             DownloadProfile.local_media_profile_id == local_media_profile_id,
             episode_type.c.value.in_(requested_types),
         )
@@ -215,7 +215,7 @@ def require_unique_download_profile_episode_types(
         raise HTTPException(
             status_code=409,
             detail=(
-                "Episode types already used by another Download Profile for this show and Local Media Profile: "
+                "Episode types already used by another Download Profile for this collection and Local Media Profile: "
                 + ", ".join(conflicts)
             ),
         )

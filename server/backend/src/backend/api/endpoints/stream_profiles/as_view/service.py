@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, joinedload, with_polymorphic
 from sqlalchemy.orm.util import AliasedClass
 
 from backend.api.models.stream_profile import StreamProfileAPIReadView
-from backend.db.models import RssStreamProfile, Show, StreamProfileBase
+from backend.db.models import RssStreamProfile, Collection, StreamProfileBase
 
 
 @dataclass(frozen=True)
@@ -26,9 +26,9 @@ def get_stream_profile_views_list(s: Session, access: Access) -> list[StreamProf
     profile = with_polymorphic(StreamProfileBase, [RssStreamProfile])
     items = (
         owned_by(s.query(profile), profile.owner_user_id, access)
-        .options(joinedload(profile.show))
-        .join(Show, Show.id == profile.show_id)
-        .order_by(Show.title.asc(), profile.id.asc())
+        .options(joinedload(profile.collection))
+        .join(Collection, Collection.id == profile.collection_id)
+        .order_by(Collection.title.asc(), profile.id.asc())
         .all()
     )
     return [_to_view(item) for item in items]
@@ -42,7 +42,7 @@ def get_stream_profile_view(
     profile = with_polymorphic(StreamProfileBase, [RssStreamProfile])
     item = (
         s.query(profile)
-        .options(joinedload(profile.show))
+        .options(joinedload(profile.collection))
         .filter_by(id=stream_profile_id)
         .one_or_none()
     )

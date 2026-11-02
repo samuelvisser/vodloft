@@ -1,14 +1,14 @@
 # VODLoft Wiki
 
-VODLoft is a self-hosted media manager for shows, podcasts, movies and videos from The Daily Wire, YouTube, NPO Start and many other sites. It keeps a local library of the media you choose, downloads it to your own storage, and exposes shows through private RSS feeds.
+VODLoft is a self-hosted media manager for collections, podcasts, movies and videos from The Daily Wire, YouTube, NPO Start and many other sites. It keeps a local library of the media you choose, downloads it to your own storage, and exposes collections through private RSS feeds.
 
 Each site VODLoft works with is handled by a **Source**; see [[Sources]].
 
 ## What you can do with VODLoft
 
 - Add media by pasting a link, search YouTube or NPO Start, or browse The Daily Wire's catalogue.
-- Add YouTube channels and playlists as shows, and single videos from YouTube and many other sites.
-- Keep show seasons and episodes synchronized automatically.
+- Add YouTube channels and playlists as collections, and single videos from YouTube and many other sites.
+- Keep collection seasons and episodes synchronized automatically.
 - Download episodes in audio, 720p, 1080p, or 4K where available.
 - Download movies and movie extras using separate movie storage rules.
 - Keep only the latest episodes, a date window, selected seasons, or everything.
@@ -26,13 +26,13 @@ The Home page is VODLoft's status dashboard. It shows active and queued download
 
 ### Add media and Browse
 
-**Add media** takes a link to a show, episode, movie or video from any Source, and shows a preview before anything is added. It also searches YouTube and NPO Start. **Browse** is The Daily Wire's catalogue, for finding its shows and movies that are not yet in your Library.
+**Add media** takes a link to a collection, episode, movie or video from any Source, and shows a preview before anything is added. It also searches YouTube and NPO Start. **Browse** is The Daily Wire's catalogue, for finding its collections and movies that are not yet in your Library.
 
 ### Library
 
-The Library contains the shows, movies and videos VODLoft manages for you. Adding something to the Library does **not** automatically mean it must be downloaded.
+The Library contains the collections, movies and videos VODLoft manages for you. Adding something to the Library does **not** automatically mean it must be downloaded.
 
-For shows, VODLoft can manage seasons, episodes, automatic downloads, and RSS feeds. Movies and single videos are downloaded manually. Movies can include extras such as trailers or featurettes when The Daily Wire provides them.
+For collections, VODLoft can manage seasons, episodes, automatic downloads, and RSS feeds. Movies and single videos are downloaded manually. Movies can include extras such as trailers or featurettes when The Daily Wire provides them.
 
 ### Downloads
 
@@ -43,7 +43,7 @@ The Downloads page is the central history and queue for actual media files. It s
 VODLoft separates three decisions so they can be changed independently:
 
 1. A **Local Media Profile** defines the format, download behavior, and output path for a local file.
-2. A **Download Profile** decides which show episodes should be downloaded automatically with a Local Media Profile.
+2. A **Download Profile** decides which collection episodes should be downloaded automatically with a Local Media Profile.
 3. An **RSS Stream Profile** decides which episodes appear in a private feed and whether media should come from local downloads, The Daily Wire's streams, or both.
 
 This makes it possible, for example, to keep every episode as audio, retain only the latest five episodes as 1080p video, and expose both through one RSS feed.
@@ -57,10 +57,11 @@ The Settings page covers normal application, download, automation, Sources, and 
 - [[Installation]] — install VODLoft with Docker and persist the correct directories.
 - [[First-Run-Setup]] — sign in to Sources, secure VODLoft, and add your first media.
 - [[Sources]] — which sites VODLoft supports, how links are matched, and what DRM means for downloads.
-- [[Shows-and-Library]] — understand Home, Add media, Browse, Library, shows, movies, videos, seasons, and episodes.
+- [[Collections-and-Library]] — understand Home, Add media, Browse, Library, collections, movies, videos, seasons, and episodes.
 - [[Local-Media-Profiles]] — choose formats, download behavior, and output paths.
-- [[Download-Profiles]] — configure automatic show downloads and retention.
+- [[Download-Profiles]] — configure automatic collection downloads and retention.
 - [[Downloads-and-File-Integrity]] — use the download queue and understand missing/corrupted file handling.
+- [[Existing-Files-and-Imports]] — adopt files you already have, so VODLoft does not download them again.
 - [[Quick-Download]] — download one file from a link, without adding it to your library.
 - [[Podcast-RSS-Feeds]] — create private podcast/video feeds.
 - [[Automation-and-Background-Tasks]] — understand what VODLoft keeps updated automatically.

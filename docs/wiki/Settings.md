@@ -91,7 +91,7 @@ These settings are available under **Settings → Downloads**.
 | `downloadSettings.maxConcurrentDownloads` | `VL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS` | `5` | Maximum primary-media transfers running at once. Their slots are released while post-processing continues. |
 | `downloadSettings.maxDownloadAttempts` | `VL_DOWNLOAD_SETTINGS__MAX_DOWNLOAD_ATTEMPTS` | `3` | Automatic attempts before a download is left failed. |
 | `downloadSettings.episodeDownloadDelayMinutes` | `VL_DOWNLOAD_SETTINGS__EPISODE_DOWNLOAD_DELAY_MINUTES` | `10` | Delay after publication before automatically downloading an episode. Manual downloads can be scheduled until the delay expires or started immediately. |
-| `downloadSettings.ensureSafeDelay` | `VL_DOWNLOAD_SETTINGS__ENSURE_SAFE_DELAY` | `false` | When enabled, post-publication delay is always calculated from a point in time VODLoft itself recorded the episode as published final. With this disabled, VODLoft makes a best- effort guess for publication time as The Daily Wire API does not accurately report it for every show. |
+| `downloadSettings.ensureSafeDelay` | `VL_DOWNLOAD_SETTINGS__ENSURE_SAFE_DELAY` | `false` | When enabled, post-publication delay is always calculated from a point in time VODLoft itself recorded the episode as published final. With this disabled, VODLoft makes a best- effort guess for publication time as The Daily Wire API does not accurately report it for every collection. |
 | `downloadSettings.downloadTimeoutSeconds` | `VL_DOWNLOAD_SETTINGS__DOWNLOAD_TIMEOUT_SECONDS` | `600` | Timeout for one download attempt. |
 | `downloadSettings.filenameRestrictionMode` | `VL_DOWNLOAD_SETTINGS__FILENAME_RESTRICTION_MODE` | `windows` | Filename compatibility: `unrestricted`, `windows`, or `restricted`. |
 | `downloadSettings.remuxVideoToMp4` | `VL_DOWNLOAD_SETTINGS__REMUX_VIDEO_TO_MP4` | `true` | Repackage compatible downloaded video into MP4 without re-encoding. |
@@ -107,9 +107,11 @@ Temporary mode is useful when a media server watches the destination and should 
 
 ### Filename modes
 
-- `unrestricted` — preserves most Unicode and punctuation while preventing path-breaking values.
-- `windows` — keeps Unicode but removes Windows-incompatible characters and names. This is the default.
-- `restricted` — conservative ASCII-style filenames.
+The modes follow yt-dlp, so new files are named as yt-dlp and Pinchflat name them. See [[Local-Media-Profiles#filename-restrictions]] for examples.
+
+- `unrestricted` — like yt-dlp's `--no-windows-filenames`: only a `/` in a value changes, to `⧸`.
+- `windows` — like yt-dlp's default: characters Windows does not allow become look-alikes such as `：` and `？`, and reserved names are protected. This is the default.
+- `restricted` — like yt-dlp's `--restrict-filenames`: values such as titles use ASCII letters, numbers, `.`, `_` and `-` only. Text typed in the template keeps its spaces, as in yt-dlp, and is made ASCII.
 
 ---
 
@@ -149,18 +151,18 @@ These settings are available under **Settings → Automation**.
 | Setting | Environment variable | Default | What it does |
 | --- | --- | --- | --- |
 | `newEpisodeSchedule.findEpisodesCronEnabled` | `VL_NEW_EPISODE_SCHEDULE__FIND_EPISODES_CRON_ENABLED` | `true` | Enables the recurring new-episode discovery schedule. |
-| `newEpisodeSchedule.findEpisodesCron` | `VL_NEW_EPISODE_SCHEDULE__FIND_EPISODES_CRON` | `*/30 * * * *` | Checks managed shows for new episodes every 30 minutes. YouTube channels and other yt-dlp shows get quick checks instead. |
-| `newEpisodeSchedule.quickCheckCronEnabled` | `VL_NEW_EPISODE_SCHEDULE__QUICK_CHECK_CRON_ENABLED` | `true` | Enables quick checks for new videos in yt-dlp shows. |
-| `newEpisodeSchedule.quickCheckCron` | `VL_NEW_EPISODE_SCHEDULE__QUICK_CHECK_CRON` | `*/5 * * * *` | Wakes the quick check. Each show is checked as often as the YouTube API quota allows, and never more often than `youtubeApi.minCheckIntervalMinutes`. |
-| `newEpisodeSchedule.fullRescanCronEnabled` | `VL_NEW_EPISODE_SCHEDULE__FULL_RESCAN_CRON_ENABLED` | `true` | Enables the full re-scan of shows with quick checks. |
-| `newEpisodeSchedule.fullRescanCron` | `VL_NEW_EPISODE_SCHEDULE__FULL_RESCAN_CRON` | `0 4 * * *` | Lists shows with quick checks in full once a day, to catch anything a quick check missed, and refreshes their episodes (see [[Shows-and-Library#renamed-and-removed-videos]]). |
+| `newEpisodeSchedule.findEpisodesCron` | `VL_NEW_EPISODE_SCHEDULE__FIND_EPISODES_CRON` | `*/30 * * * *` | Checks managed collections for new episodes every 30 minutes. YouTube channels and other yt-dlp collections get quick checks instead. |
+| `newEpisodeSchedule.quickCheckCronEnabled` | `VL_NEW_EPISODE_SCHEDULE__QUICK_CHECK_CRON_ENABLED` | `true` | Enables quick checks for new videos in yt-dlp collections. |
+| `newEpisodeSchedule.quickCheckCron` | `VL_NEW_EPISODE_SCHEDULE__QUICK_CHECK_CRON` | `*/5 * * * *` | Wakes the quick check. Each collection is checked as often as the YouTube API quota allows, and never more often than `youtubeApi.minCheckIntervalMinutes`. |
+| `newEpisodeSchedule.fullRescanCronEnabled` | `VL_NEW_EPISODE_SCHEDULE__FULL_RESCAN_CRON_ENABLED` | `true` | Enables the full re-scan of collections with quick checks. |
+| `newEpisodeSchedule.fullRescanCron` | `VL_NEW_EPISODE_SCHEDULE__FULL_RESCAN_CRON` | `0 4 * * *` | Lists collections with quick checks in full once a day, to catch anything a quick check missed, and refreshes their episodes (see [[Collections-and-Library#renamed-and-removed-videos]]). |
 | `newEpisodeSchedule.monitorPendingEpisodeCronEnabled` | `VL_NEW_EPISODE_SCHEDULE__MONITOR_PENDING_EPISODE_CRON_ENABLED` | `true` | Enables recurring monitoring for episodes that are not final yet. |
 | `newEpisodeSchedule.monitorPendingEpisodeCron` | `VL_NEW_EPISODE_SCHEDULE__MONITOR_PENDING_EPISODE_CRON` | `*/2 * * * *` | Rechecks known episodes that are scheduled, live, processing, or otherwise not final. |
 | `newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled` | `VL_NEW_EPISODE_SCHEDULE__MONITOR_NO_USABLE_MEDIA_EPISODE_CRON_ENABLED` | `true` | Enables recurring checks for episodes without usable media. |
 | `newEpisodeSchedule.monitorNoUsableMediaEpisodeCron` | `VL_NEW_EPISODE_SCHEDULE__MONITOR_NO_USABLE_MEDIA_EPISODE_CRON` | `*/20 * * * *` | Rechecks episodes that temporarily have no usable Daily Wire media. |
 | `newEpisodeSchedule.metadataRefreshIntervals` | `VL_NEW_EPISODE_SCHEDULE__METADATA_REFRESH_INTERVALS` | `15m,30m,1h,3h,6h,24h,3d` | Follow-up metadata refreshes after publication. |
 
-A quick check looks only at a show's newest videos and looks up the ones VODLoft does not have yet. For YouTube it reads the first page of the channel's uploads through the YouTube Data API (1 unit). Without a key, or once the quota is used up, it reads the channel's RSS feed, and if that fails, lists the newest videos with yt-dlp. A show that was never indexed gets its full first index instead.
+A quick check looks only at a collection's newest videos and looks up the ones VODLoft does not have yet. For YouTube it reads the first page of the channel's uploads through the YouTube Data API (1 unit). Without a key, or once the quota is used up, it reads the channel's RSS feed, and if that fails, lists the newest videos with yt-dlp. A collection that was never indexed gets its full first index instead.
 
 Metadata intervals accept positive values using `s`, `m`, `h`, or `d`, separated by commas and ordered from shortest to longest.
 
@@ -204,11 +206,11 @@ Google gives each project 10,000 units a day, reset at midnight Pacific time. Mo
 | Setting | Environment variable | Default | What it is for |
 | --- | --- | --- | --- |
 | `youtubeApi.dailyQuota` | `VL_YOUTUBE_API__DAILY_QUOTA` | `10000` | What Google gives the project. Only raise it if Google gave you more. |
-| `youtubeApi.checksQuota` | `VL_YOUTUBE_API__CHECKS_QUOTA` | `7000` | Checks for new videos and full re-scans of your YouTube shows. |
+| `youtubeApi.checksQuota` | `VL_YOUTUBE_API__CHECKS_QUOTA` | `7000` | Checks for new videos and full re-scans of your YouTube collections. |
 | `youtubeApi.searchQuota` | `VL_YOUTUBE_API__SEARCH_QUOTA` | `2000` | YouTube searches on the Add media page, about 19 a day. When it is used up, or set to `0`, searches use yt-dlp. |
-| `youtubeApi.minCheckIntervalMinutes` | `VL_YOUTUBE_API__MIN_CHECK_INTERVAL_MINUTES` | `10` | The shortest time between two checks of the same show. |
+| `youtubeApi.minCheckIntervalMinutes` | `VL_YOUTUBE_API__MIN_CHECK_INTERVAL_MINUTES` | `10` | The shortest time between two checks of the same collection. |
 
-What the checks and search shares leave of the daily total is kept free for adding shows, testing the key and manual refreshes. Adding a show uses the units kept free first and then the checks share; listing a channel costs about 2 units per 50 videos. The panel shows what each share means in practice, such as how often each show gets checked.
+What the checks and search shares leave of the daily total is kept free for adding collections, testing the key and manual refreshes. Adding a collection uses the units kept free first and then the checks share; listing a channel costs about 2 units per 50 videos. The panel shows what each share means in practice, such as how often each collection gets checked.
 
 ### Sites more than one Source handles
 

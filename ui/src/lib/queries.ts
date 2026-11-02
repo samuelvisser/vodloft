@@ -9,7 +9,7 @@ import {
     useQueryClient,
 } from '@tanstack/react-query'
 import {useEffect, useMemo, useRef} from 'react'
-import {saveEpisodePreviewToStorage, saveProfilesToStorage, saveShowsToStorage} from './cache'
+import {saveEpisodePreviewToStorage, saveProfilesToStorage, saveCollectionsToStorage} from './cache'
 import {
     type LazyCollectionPage,
     type LazyCollectionPageRequest,
@@ -24,10 +24,10 @@ import {
     episodeQueryKeys,
     fetchEpisodePage,
     seasonsQueryOptions,
-    SHOW_EPISODE_PREVIEW_SIZE,
-    showQueryOptions,
-    showsQueryOptions,
-} from './showQueryOptions'
+    COLLECTION_EPISODE_PREVIEW_SIZE,
+    collectionQueryOptions,
+    collectionsQueryOptions,
+} from './collectionQueryOptions'
 import {
     LocalMediaProfileRead,
     LocalMediaProfileReadSchema,
@@ -37,7 +37,7 @@ import {
 import {DownloadProfileRead, DownloadProfileReadSchema} from "../types/schemas/download_profile";
 import {DownloadProfileReadView, DownloadProfileReadViewSchema} from "../types/schemas/download_profile_view";
 import {StreamProfileRead, StreamProfileReadSchema, StreamProfileReadView, StreamProfileReadViewSchema} from "../types/schemas/stream_profile_base";
-import {ShowRead, ShowReadView, ShowReadViewSchema} from "../types/schemas/show";
+import {CollectionRead, CollectionReadView, CollectionReadViewSchema} from "../types/schemas/collection";
 import {
     EpisodeIndexedActivityRead,
     EpisodeIndexedActivityReadSchema,
@@ -61,7 +61,7 @@ import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
     ApiStatusRead, ApiStatusReadSchema, CookiesRead, EpisodeTagRead, EpisodeTagReadSchema, CookiesReadSchema, ProgramStatusRead, SourceProblemRead,
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
-    ResolvedLinkReadSchema, SearchResultsRead, SearchResultsReadSchema, ShowDetailsRead, ShowDetailsReadSchema, SourceDomainRead, SourceDomainReadSchema, SourceRead,
+    ResolvedLinkReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceDomainRead, SourceDomainReadSchema, SourceRead,
     SourceReadSchema,
 } from "../types/schemas/source";
 import {
@@ -174,21 +174,21 @@ export function useStreamProfilesView() {
     })
 }
 
-export function useShows() {
-    const result = useQuery({...showsQueryOptions(), enabled: can('library')})
+export function useCollections() {
+    const result = useQuery({...collectionsQueryOptions(), enabled: can('library')})
     useEffect(() => {
-        if (result.data) saveShowsToStorage(result.data)
+        if (result.data) saveCollectionsToStorage(result.data)
     }, [result.data])
     return result
 }
 
-export function useShowsView() {
-    return useQuery<ShowReadView[], Error, ShowReadView[], readonly ['showsView']>({
-        queryKey: ['showsView'] as const,
+export function useCollectionsView() {
+    return useQuery<CollectionReadView[], Error, CollectionReadView[], readonly ['collectionsView']>({
+        queryKey: ['collectionsView'] as const,
         enabled: can('library'),
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/shows/as-view`,
-            ShowReadViewSchema.array(),
+            `${(window as any).appConfig.API_URL}/collections/as-view`,
+            CollectionReadViewSchema.array(),
             signal,
         ),
         refetchOnMount: 'always',
@@ -344,14 +344,14 @@ export function useEpisodeTags(sourceKey?: string | null, url?: string | null) {
 }
 
 /** The episode tags of a saved show, or of a show about to be added from ``sourceKey`` at ``url``. */
-export function useShowEpisodeTags({showId, showSlug, sourceKey, url}: {
-    showId?: number, showSlug?: string, sourceKey?: string, url?: string,
+export function useCollectionEpisodeTags({collectionId, collectionSlug, sourceKey, url}: {
+    collectionId?: number, collectionSlug?: string, sourceKey?: string, url?: string,
 }) {
-    const {data: shows} = useShows()
-    const show = showId !== undefined
-        ? shows?.find((item) => item.id === showId)
-        : showSlug ? shows?.find((item) => item.slug === showSlug) : undefined
-    return useEpisodeTags(show?.sourceKey ?? sourceKey, show?.sharingUrl ?? url)
+    const {data: collections} = useCollections()
+    const collection = collectionId !== undefined
+        ? collections?.find((item) => item.id === collectionId)
+        : collectionSlug ? collections?.find((item) => item.slug === collectionSlug) : undefined
+    return useEpisodeTags(collection?.sourceKey ?? sourceKey, collection?.sharingUrl ?? url)
 }
 
 export function useSourceApi(sourceId: string, enabled = true) {
@@ -461,19 +461,19 @@ export function useResolvedLink(url: string | undefined) {
     })
 }
 
-/** A show to add, at a Source that lists its episodes. */
-export function useListedShowDetails(sourceId: string | undefined, url: string | undefined) {
-    return useQuery<ShowDetailsRead, Error, ShowDetailsRead, readonly ['listedShow', string | undefined, string | undefined]>({
-        queryKey: ['listedShow', sourceId, url] as const,
+/** A collection to add, at a Source that lists its episodes. */
+export function useListedCollectionDetails(sourceId: string | undefined, url: string | undefined) {
+    return useQuery<CollectionDetailsRead, Error, CollectionDetailsRead, readonly ['listedCollection', string | undefined, string | undefined]>({
+        queryKey: ['listedCollection', sourceId, url] as const,
         enabled: !!sourceId && !!url,
         queryFn: async ({signal}) => {
             const params = new URLSearchParams({url: url!})
             const response = await fetch(
-                `${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceId!)}/show?${params}`,
+                `${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceId!)}/collection?${params}`,
                 {signal, credentials: 'include'},
             )
             if (!response.ok) throw await responseError(response)
-            return ShowDetailsReadSchema.parse(await response.json())
+            return CollectionDetailsReadSchema.parse(await response.json())
         },
         staleTime: 5 * 60 * 1000,
         retry: false,
@@ -509,7 +509,7 @@ const DAILYWIRE_CATALOG_PAGE_SIZE = 24
 
 export function useDailywireShowCatalog(search: string, grouping: 'host' | 'alphabetical', enabled = true) {
     return useInfiniteQuery({
-        queryKey: ['dailywireCatalog', 'shows', search, grouping] as const,
+        queryKey: ['dailywireCatalog', 'collections', search, grouping] as const,
         enabled,
         initialPageParam: 0,
         queryFn: async ({pageParam, signal}) => {
@@ -575,16 +575,16 @@ export function useDailywireMovie(slug?: string) {
     })
 }
 
-export function useShow(id?: string) {
+export function useCollection(id?: string) {
     const qc = useQueryClient()
     return useQuery({
-        ...showQueryOptions(id, qc),
+        ...collectionQueryOptions(id, qc),
         enabled: !!id,
     })
 }
 
 export function useEpisodePages(
-    showSlug?: string,
+    collectionSlug?: string,
     opts?: {
         pageSize?: number
         seasonId?: number | null
@@ -594,13 +594,13 @@ export function useEpisodePages(
     const pageSize = opts?.pageSize ?? 36
     const seasonId = opts?.seasonId
     const result = useLazyCollection<EpisodeReadView, EpisodeReadViewPage>({
-        collectionPrefix: episodeQueryKeys.forShow(showSlug),
+        collectionPrefix: episodeQueryKeys.forCollection(collectionSlug),
         queryKey: ['pages', seasonId ?? null] as const,
         initialCount: pageSize,
         batchSize: pageSize,
-        enabled: !!showSlug && seasonId !== null && (opts?.enabled ?? true),
+        enabled: !!collectionSlug && seasonId !== null && (opts?.enabled ?? true),
         fetchPage: ({cursor, limit}, signal) => fetchEpisodePage(
-            showSlug!,
+            collectionSlug!,
             {
                 cursor,
                 limit,
@@ -612,14 +612,14 @@ export function useEpisodePages(
 
     const firstPage = result.data?.pages[0]
     useEffect(() => {
-        if (!showSlug || seasonId !== undefined || firstPage === undefined) return
+        if (!collectionSlug || seasonId !== undefined || firstPage === undefined) return
         saveEpisodePreviewToStorage(
-            showSlug,
-            firstPage.items.slice(0, SHOW_EPISODE_PREVIEW_SIZE),
+            collectionSlug,
+            firstPage.items.slice(0, COLLECTION_EPISODE_PREVIEW_SIZE),
             Date.now(),
-            firstPage.showTotal,
+            firstPage.collectionTotal,
         )
-    }, [firstPage, seasonId, showSlug])
+    }, [firstPage, seasonId, collectionSlug])
 
     return result
 }
@@ -657,8 +657,8 @@ export function useRecentlyIndexedEpisodes(limit = 7) {
 
 // Fetch DailyWire show preview by slug for Add Show URL step
 export function useDailywireShow(slug?: string, membershipPlan?: string) {
-    return useQuery<any, Error, DailywireShowRead, readonly ['dwShow', string | undefined, string | undefined]>({
-        queryKey: ['dwShow', slug, membershipPlan] as const,
+    return useQuery<any, Error, DailywireShowRead, readonly ['dwCollection', string | undefined, string | undefined]>({
+        queryKey: ['dwCollection', slug, membershipPlan] as const,
         enabled: !!slug,
         queryFn: async ({signal}) => {
             const urlBase = (window as any).appConfig.API_URL
@@ -708,19 +708,19 @@ export function useDailywireUserInfo() {
     })
 }
 
-export function useShowSeasons(showSlug?: string) {
+export function useCollectionSeasons(collectionSlug?: string) {
     return useQuery({
-        ...seasonsQueryOptions(showSlug),
-        enabled: !!showSlug,
+        ...seasonsQueryOptions(collectionSlug),
+        enabled: !!collectionSlug,
     })
 }
 
-export function useDownloadProfilesByShowSlug(showSlug?: string) {
-    return useQuery<DownloadProfileRead[], Error, DownloadProfileRead[], readonly ['downloadProfilesByShowSlug', string | undefined]>({
-        queryKey: ['downloadProfilesByShowSlug', showSlug] as const,
-        enabled: !!showSlug,
+export function useDownloadProfilesByCollectionSlug(collectionSlug?: string) {
+    return useQuery<DownloadProfileRead[], Error, DownloadProfileRead[], readonly ['downloadProfilesByCollectionSlug', string | undefined]>({
+        queryKey: ['downloadProfilesByCollectionSlug', collectionSlug] as const,
+        enabled: !!collectionSlug,
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/download-profiles/by-show-slug/${showSlug}`,
+            `${(window as any).appConfig.API_URL}/download-profiles/by-collection-slug/${collectionSlug}`,
             DownloadProfileReadSchema.array(),
             signal,
         ),
@@ -728,12 +728,12 @@ export function useDownloadProfilesByShowSlug(showSlug?: string) {
     })
 }
 
-export function useStreamProfilesByShowSlug(showSlug?: string) {
-    return useQuery<StreamProfileRead[], Error, StreamProfileRead[], readonly ['streamProfilesByShowSlug', string | undefined]>({
-        queryKey: ['streamProfilesByShowSlug', showSlug] as const,
-        enabled: !!showSlug,
+export function useStreamProfilesByCollectionSlug(collectionSlug?: string) {
+    return useQuery<StreamProfileRead[], Error, StreamProfileRead[], readonly ['streamProfilesByCollectionSlug', string | undefined]>({
+        queryKey: ['streamProfilesByCollectionSlug', collectionSlug] as const,
+        enabled: !!collectionSlug,
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/stream-profiles/by-show-slug/${showSlug}`,
+            `${(window as any).appConfig.API_URL}/stream-profiles/by-collection-slug/${collectionSlug}`,
             StreamProfileReadSchema.array(),
             signal,
         ),
@@ -846,8 +846,8 @@ function syntheticDownload(operation: TaskOperationRead): MediaDownloadDomainVie
         episodeSlug: contextString(operation, 'episode_slug'),
         episodeTitle: contextString(operation, 'episode_title'),
         episodeIdentifier: contextString(operation, 'episode_identifier'),
-        showSlug: contextString(operation, 'show_slug'),
-        showTitle: contextString(operation, 'show_title'),
+        collectionSlug: contextString(operation, 'collection_slug'),
+        collectionTitle: contextString(operation, 'collection_title'),
         movieSlug: contextString(operation, 'movie_slug'),
         movieTitle: contextString(operation, 'movie_title'),
         movieExtraType: contextString(operation, 'movie_extra_type'),
@@ -866,7 +866,7 @@ type MediaDownloadScope =
     | {kind: 'all'}
     | {kind: 'episode'; slug?: string}
     | {kind: 'movie'; slug?: string}
-    | {kind: 'show'; slug?: string}
+    | {kind: 'collection'; slug?: string}
     | {kind: 'video'; id?: number}
 
 function mediaDownloadScopeKey(scope: MediaDownloadScope) {
@@ -875,8 +875,8 @@ function mediaDownloadScopeKey(scope: MediaDownloadScope) {
             return ['episodeDownloads', scope.slug] as const
         case 'movie':
             return ['movieDownloads', scope.slug] as const
-        case 'show':
-            return ['showDownloads', scope.slug] as const
+        case 'collection':
+            return ['collectionDownloads', scope.slug] as const
         case 'video':
             return ['videoDownloads', scope.id] as const
         default:
@@ -891,7 +891,7 @@ function mediaDownloadScopeUrl(scope: MediaDownloadScope) {
     const params = new URLSearchParams()
     if (scope.kind === 'episode' && scope.slug) params.set('episode_slug', scope.slug)
     if (scope.kind === 'movie' && scope.slug) params.set('movie_slug', scope.slug)
-    if (scope.kind === 'show' && scope.slug) params.set('show_slug', scope.slug)
+    if (scope.kind === 'collection' && scope.slug) params.set('collection_slug', scope.slug)
     if (scope.kind === 'video' && scope.id !== undefined) params.set('video_id', String(scope.id))
     return `${base}?${params}`
 }
@@ -909,7 +909,7 @@ function operationMatchesMediaDownloadScope(
     if (!scope.slug) return false
     if (scope.kind === 'episode') return contextString(operation, 'episode_slug') === scope.slug
     if (scope.kind === 'movie') return contextString(operation, 'movie_slug') === scope.slug
-    return contextString(operation, 'show_slug') === scope.slug
+    return contextString(operation, 'collection_slug') === scope.slug
 }
 
 function useMediaDownloadPresentation(scope: MediaDownloadScope) {
@@ -971,8 +971,8 @@ export function useVideoDownloads(videoId?: number) {
     return useMediaDownloadPresentation({kind: 'video', id: videoId})
 }
 
-export function useShowDownloads(showSlug?: string) {
-    return useMediaDownloadPresentation({kind: 'show', slug: showSlug})
+export function useCollectionDownloads(collectionSlug?: string) {
+    return useMediaDownloadPresentation({kind: 'collection', slug: collectionSlug})
 }
 
 export function useMediaDownloadsView() {
@@ -1346,10 +1346,10 @@ export function applyMediaDownloadQueuePositions(
 export function prefetchCoreData(qc: QueryClient) {
     const library = can('library')
     if (library) void qc
-        .prefetchQuery(showsQueryOptions())
+        .prefetchQuery(collectionsQueryOptions())
         .then(() => {
-            const shows = qc.getQueryData<ShowRead[]>(showsQueryOptions().queryKey)
-            if (shows) saveShowsToStorage(shows)
+            const collections = qc.getQueryData<CollectionRead[]>(collectionsQueryOptions().queryKey)
+            if (collections) saveCollectionsToStorage(collections)
         })
     if (library) void qc.prefetchQuery({
         queryKey: ['movies'],

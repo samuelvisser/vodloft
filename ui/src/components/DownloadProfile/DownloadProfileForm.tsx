@@ -4,24 +4,24 @@ import ReadMore from '../../utils/ReadMore'
 import DownloadProfileDateFilters from './DownloadProfileDateFilters'
 import DownloadProfileSeasonFilter, {SeasonItem} from './DownloadProfileSeasonFilter'
 import Select from "react-select";
-import {useShowEpisodeTags} from "../../lib/queries";
+import {useCollectionEpisodeTags} from "../../lib/queries";
 import {episodeTagLabel} from "../../types/schemas/source";
 import {useEffect, useMemo} from "react";
-import {EpisodeIdentifierReg} from "../../types/show";
+import {EpisodeIdentifierReg} from "../../types/collection";
 
 type Props = {
     form: UseFormReturn<any>
-    /** How the show identifies its episodes; the filters shown follow it. Unknown until a show is chosen. */
+    /** How the collection identifies its episodes; the filters shown follow it. Unknown until a collection is chosen. */
     episodeIdentifier?: string
     seasons?: SeasonItem[]
-    showRoot?: boolean
+    collectionRoot?: boolean
     disabledEpisodeTypes?: ReadonlySet<string>
-    /** The saved show the profile is for. */
-    showId?: number
-    /** The Source of a show that is not saved yet. */
+    /** The saved collection the profile is for. */
+    collectionId?: number
+    /** The Source of a collection that is not saved yet. */
     sourceKey?: string
-    /** The link of a show that is not saved yet, which decides the tags its episodes can get. */
-    showUrl?: string
+    /** The link of a collection that is not saved yet, which decides the tags its episodes can get. */
+    collectionUrl?: string
 }
 
 // Simple option model for react-select
@@ -29,12 +29,12 @@ type UIOption = { value: string; label: string }
 
 const NO_DISABLED_EPISODE_TYPES = new Set<string>()
 
-export default function DownloadProfileForm({form, episodeIdentifier, seasons, showRoot, disabledEpisodeTypes, showId, sourceKey, showUrl}: Props) {
+export default function DownloadProfileForm({form, episodeIdentifier, seasons, collectionRoot, disabledEpisodeTypes, collectionId, sourceKey, collectionUrl}: Props) {
     const {control, watch, setValue, formState: {errors}} = form
-    showRoot ??= true
+    collectionRoot ??= true
 
     const unavailableEpisodeTypes = disabledEpisodeTypes ?? NO_DISABLED_EPISODE_TYPES
-    const {data: tags} = useShowEpisodeTags({showId, sourceKey, url: showUrl})
+    const {data: tags} = useCollectionEpisodeTags({collectionId, sourceKey, url: collectionUrl})
     const tagOptions: UIOption[] = useMemo(() => (tags ?? []).map((tag) => ({value: tag.key, label: tag.label})), [tags])
 
     // Episode types multiselect wiring
@@ -63,7 +63,7 @@ export default function DownloadProfileForm({form, episodeIdentifier, seasons, s
 
     return (
         <>
-            {showRoot && errors.root && (
+            {collectionRoot && errors.root && (
                 <div className="form-error-card" role="alert" aria-live="polite">
                     {String(errors.root.message)}
                 </div>
@@ -96,8 +96,8 @@ export default function DownloadProfileForm({form, episodeIdentifier, seasons, s
                 )}
                 <div className="help" id="enable-profile-help">
                     <ReadMore summary={<span>Whether to automatically download episodes</span>}>
-                        If you disable the download profile, the show will still be indexed and you can still manually
-                        download episodes in the show.
+                        If you disable the download profile, the collection will still be indexed and you can still manually
+                        download episodes in the collection.
                     </ReadMore>
                 </div>
             </div>
@@ -148,12 +148,12 @@ export default function DownloadProfileForm({form, episodeIdentifier, seasons, s
                 </div>
             </div>
 
-            {/* A seasonal show filters on season first, and on date on top of that */}
+            {/* A seasonal collection filters on season first, and on date on top of that */}
             {episodeIdentifier === EpisodeIdentifierReg.Enum.seasonal && (
                 <DownloadProfileSeasonFilter form={form} seasons={seasons ?? []}/>
             )}
             {episodeIdentifier !== undefined && (
-                <DownloadProfileDateFilters form={form} showId={showId} sourceKey={sourceKey}/>
+                <DownloadProfileDateFilters form={form} collectionId={collectionId} sourceKey={sourceKey}/>
             )}
         </>
     )

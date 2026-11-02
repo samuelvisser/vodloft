@@ -50,7 +50,7 @@ def test_task_operation_reports_worker_wait_state():
             key="test_worker",
             title="Test worker",
             description=None,
-            allowed_resource_types=["show"],
+            allowed_resource_types=["collection"],
             default_max_retries=0,
         )
         session.add(definition)
@@ -59,7 +59,7 @@ def test_task_operation_reports_worker_wait_state():
         run = TaskRun(
             schedule_id=None,
             definition_id=definition.id,
-            resource_type=ResourceType.SHOW,
+            resource_type=ResourceType.COLLECTION,
             resource_id=42,
             status=TaskStatus.RUNNING,
             progress=35,
@@ -79,14 +79,14 @@ def test_task_operation_reports_worker_wait_state():
 
         operation = create_operation(
             session,
-            kind="show.sync",
-            resource_type="show",
+            kind="collection.sync",
+            resource_type="collection",
             resource_id=42,
             title="Test Show",
             targets=[
                 OperationTargetSpec(
                     task_key=definition.key,
-                    resource_type="show",
+                    resource_type="collection",
                     resource_id=42,
                 )
             ],

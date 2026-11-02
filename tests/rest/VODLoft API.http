@@ -6,13 +6,13 @@ GET http://localhost:5001/api/tasks/runs
 
 
 ### Get relevant task
-GET http://localhost:5001/api/tasks/runs?resource_type=show&resource_id=2
+GET http://localhost:5001/api/tasks/runs?resource_type=collection&resource_id=2
 
 <> 2025-10-23T173248.200.json
 <> 2025-10-23T165834.200.json
 
 ### TEst
-GET http://localhost:5001/api/local-media-profiles/template/sources?type=show&show_scope=false
+GET http://localhost:5001/api/local-media-profiles/template/sources?type=collection&collection_scope=false
 
 ### Get last 5 episodes for The Ben Shapiro Show
 GET http://localhost:5001/api/dailywire/episodes/by-show-slug/the-ben-shapiro-show
@@ -20,8 +20,8 @@ GET http://localhost:5001/api/dailywire/episodes/by-show-slug/the-ben-shapiro-sh
 
 
 
-### Get shows list as view
-GET http://localhost:5001/api/shows/as-view/
+### Get collections list as view
+GET http://localhost:5001/api/collections/as-view/
 
 ### DW episode details
 GET http://localhost:5001/api/dailywire/episodes/ben-shapiro-show-ep-2470
@@ -42,7 +42,7 @@ GET http://localhost:5001/api/dailywire/episodes/by-show-slug/the-ben-shapiro-sh
 ### Get show from The Daily Wire (The Ben Shapiro Show)
 GET http://localhost:5001/api/dailywire/shows/the-ben-shapiro-show
 
-### Get show episodes (home page)
+### Get collection episodes (home page)
 GET http://localhost:5001/api/episodes/by-show-slug/the-ben-shapiro-show?limit=20
 
 
@@ -83,14 +83,14 @@ PATCH http://localhost:5001/api/media-profiles/1080p
 {"name":"1080p","outputTemplate":"/downloads/test.ext","preferredFormat":"format_1080p","downloadSeriesImages":true,"id":2,"slug":"1080p"}
 
 ### Options
-OPTIONS http://localhost:5001/api/shows/as_bundle
+OPTIONS http://localhost:5001/api/collections/as_bundle
 
 
 ### Add Ben Shapiro Show through the wizard (for empty database)
-POST http://localhost:5001/api/shows/as-bundle
+POST http://localhost:5001/api/collections/as-bundle
 
 {
-  "show": {
+  "collection": {
     "url": "https://www.dailywire.com/show/the-ben-shapiro-show",
     "membershipLevel": "ALL_ACCESS",
     "type": "podcast",
@@ -168,7 +168,7 @@ POST http://localhost:5001/api/shows/as-bundle
   ],
   "localMediaProfile": {
     "name": "ABS Audio",
-    "outputTemplate": "/downloads/audio/{show}/{episode}.ext",
+    "outputTemplate": "/downloads/audio/{collection}/{episode}.ext",
     "preferredFormat": "format_audio_only",
     "op": "create_new"
   },

@@ -8,11 +8,11 @@ from backend.api.models.download_profile import DownloadProfileAPIRead
 class DownloadProfileAPIReadView(DownloadProfileAPIRead):
     """Denormalized download-profile view sourced from ORM relationships."""
 
-    show_title: str = Field(validation_alias=AliasPath("profile", "show", "title"))
-    show_slug: str = Field(validation_alias=AliasPath("profile", "show", "slug"))
-    show_type: str = Field(validation_alias=AliasPath("profile", "show", "type"))
-    show_episode_identifier: str = Field(
-        validation_alias=AliasPath("profile", "show", "episode_identifier")
+    collection_title: str = Field(validation_alias=AliasPath("profile", "collection", "title"))
+    collection_slug: str = Field(validation_alias=AliasPath("profile", "collection", "slug"))
+    collection_type: str = Field(validation_alias=AliasPath("profile", "collection", "type"))
+    collection_episode_identifier: str = Field(
+        validation_alias=AliasPath("profile", "collection", "episode_identifier")
     )
     local_media_profile_name: str = Field(
         validation_alias=AliasPath("profile", "local_media_profile", "name")

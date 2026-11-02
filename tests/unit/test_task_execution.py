@@ -22,7 +22,7 @@ def _install_task(
         key=key,
         title="Original title",
         description="Original description",
-        allowed_resource_types=("show",),
+        allowed_resource_types=("collection",),
         default_max_retries=default_max_retries,
         pauses_scheduled_work=pauses_scheduled_work,
         tracks_progress=tracks_progress,
@@ -56,7 +56,7 @@ def test_successful_task_persists_progress_and_terminal_state(task_database, mon
     _install_task(monkeypatch, key="test_success", function=worker)
     execute_task(
         def_key="test_success",
-        resource_type="show",
+        resource_type="collection",
         resource_id=7,
         slug="stable-slug",
     )
@@ -103,7 +103,7 @@ def test_task_marked_without_progress_keeps_active_progress_indeterminate(task_d
         function=worker,
         tracks_progress=False,
     )
-    execute_task(def_key="test_no_progress", resource_type="show", resource_id=0)
+    execute_task(def_key="test_no_progress", resource_type="collection", resource_id=0)
 
     assert observed_state == (None, {})
     with task_database() as session:
@@ -141,7 +141,7 @@ def test_resource_type_not_forwarded_when_undeclared(task_database, monkeypatch)
         pass  # would raise TypeError if resource_type were forwarded
 
     _install_task(monkeypatch, key="test_no_resource_type", function=worker)
-    execute_task(def_key="test_no_resource_type", resource_type="show", resource_id=1)
+    execute_task(def_key="test_no_resource_type", resource_type="collection", resource_id=1)
 
 
 def test_zero_retry_override_is_terminal(task_database, monkeypatch):
@@ -159,7 +159,7 @@ def test_zero_retry_override_is_terminal(task_database, monkeypatch):
     with pytest.raises(RuntimeError, match="expected failure"):
         execute_task(
             def_key="test_no_retry",
-            resource_type="show",
+            resource_type="collection",
             resource_id=1,
             max_retries=0,
         )
@@ -187,7 +187,7 @@ def test_cancelled_task_is_terminal_without_scheduling_retry(task_database, monk
     schedule_retry = Mock()
     monkeypatch.setattr(scheduler_module, "schedule_retry", schedule_retry)
 
-    execute_task(def_key="test_cancel", resource_type="show", resource_id=1)
+    execute_task(def_key="test_cancel", resource_type="collection", resource_id=1)
 
     schedule_retry.assert_not_called()
     with task_database() as session:
@@ -216,7 +216,7 @@ def test_retry_run_is_nonterminal_then_clears_retry_state_on_success(task_databa
     schedule_retry = Mock()
     monkeypatch.setattr(scheduler_module, "schedule_retry", schedule_retry)
 
-    execute_task(def_key="test_retry", resource_type="show", resource_id=9)
+    execute_task(def_key="test_retry", resource_type="collection", resource_id=9)
 
     with task_database() as session:
         run = session.execute(select(TaskRun)).scalar_one()
@@ -228,7 +228,7 @@ def test_retry_run_is_nonterminal_then_clears_retry_state_on_success(task_databa
 
     execute_task(
         def_key="test_retry",
-        resource_type="show",
+        resource_type="collection",
         resource_id=9,
         run_id=run_id,
     )
@@ -268,7 +268,7 @@ def test_critical_task_keeps_scheduled_work_paused_across_retry(task_database, m
     try:
         execute_task(
             def_key="test_critical_retry",
-            resource_type="show",
+            resource_type="collection",
             resource_id=5,
         )
 
@@ -283,7 +283,7 @@ def test_critical_task_keeps_scheduled_work_paused_across_retry(task_database, m
 
         execute_task(
             def_key="test_critical_retry",
-            resource_type="show",
+            resource_type="collection",
             resource_id=5,
             run_id=run_id,
         )
@@ -316,7 +316,7 @@ def test_canceling_waiting_critical_task_releases_scheduled_work_pause(task_data
     try:
         execute_task(
             def_key="test_critical_cancel",
-            resource_type="show",
+            resource_type="collection",
             resource_id=6,
         )
         with task_database() as session:

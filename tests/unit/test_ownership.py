@@ -121,24 +121,24 @@ class _Request:
     method = "GET"
 
 
-def _show(session):
-    from backend.db.models import Show
+def _collection(session):
+    from backend.db.models import Collection
 
-    show = Show(
-        source_key="dailywire", uuid="u", slug="show", title="Show", description="", sharing_url="https://x/show",
+    collection = Collection(
+        source_key="dailywire", uuid="u", slug="collection", title="Collection", description="", sharing_url="https://x/collection",
         membership_level="FREE", type="podcast", episode_identifier="numbered", author_name="A", author_slug="a",
     )
-    session.add(show)
+    session.add(collection)
     session.flush()
-    return show
+    return collection
 
 
-def _profile(session, access, show):
+def _profile(session, access, collection):
     from backend.api.endpoints.rss_stream_profiles.service import create_stream_profile_rss
     from backend.api.models.rss_stream_profile import RssStreamProfileAPICreate
 
     return create_stream_profile_rss(session, _Request(), RssStreamProfileAPICreate(
-        show_id=show.id, title="Show", enable_profile=True, use_downloads=True, use_dw_stream=False,
+        collection_id=collection.id, title="Collection", enable_profile=True, use_downloads=True, use_dw_stream=False,
         preferred_format="format_1080p", prefer_exact_match=False, feed_url="https://vodloft.test/feed",
     ), access)
 
@@ -147,11 +147,11 @@ def test_stream_profiles_belong_to_whoever_made_them(session, monkeypatch):
     from backend.api.endpoints.rss_stream_profiles import service as rss
     from backend.api.endpoints.stream_profiles.service import get_stream_profiles_list
 
-    monkeypatch.setattr(rss, "ensure_source_can_stream", lambda show, use_dw_stream: None)
+    monkeypatch.setattr(rss, "ensure_source_can_stream", lambda collection, use_dw_stream: None)
     _add_users(session, 1, 2)
-    show = _show(session)
-    mine = _profile(session, _user(1, "viewer"), show)
-    theirs = _profile(session, _user(2, "viewer"), show)
+    collection = _collection(session)
+    mine = _profile(session, _user(1, "viewer"), collection)
+    theirs = _profile(session, _user(2, "viewer"), collection)
 
     assert [p.id for p in get_stream_profiles_list(session, _user(1, "viewer"))] == [mine.id]
     assert [p.id for p in rss.get_rss_stream_profiles_list(session, _user(1, "viewer"))] == [mine.id]
@@ -168,9 +168,9 @@ def test_a_disabled_users_feeds_stop_answering(session, monkeypatch):
     from backend.api.endpoints.rss_stream_profiles import service as rss
     from backend.db.models import RssStreamProfile, User
 
-    monkeypatch.setattr(rss, "ensure_source_can_stream", lambda show, use_dw_stream: None)
+    monkeypatch.setattr(rss, "ensure_source_can_stream", lambda collection, use_dw_stream: None)
     _add_users(session, 1)
-    profile = session.get(RssStreamProfile, _profile(session, _user(1, "viewer"), _show(session)).id)
+    profile = session.get(RssStreamProfile, _profile(session, _user(1, "viewer"), _collection(session)).id)
     assert get_rss_stream_profile_by_token(session, profile.token).id == profile.id
     session.get(User, 1).is_enabled = False
     session.flush()
@@ -184,9 +184,9 @@ def test_profiles_from_before_accounts_go_to_the_first_administrator(session, mo
     from backend.db.models import RssStreamProfile, Settings
     from backend.services import users
 
-    monkeypatch.setattr(rss, "ensure_source_can_stream", lambda show, use_dw_stream: None)
+    monkeypatch.setattr(rss, "ensure_source_can_stream", lambda collection, use_dw_stream: None)
     session.add(Settings())
-    profile = _profile(session, Access.full(), _show(session))
+    profile = _profile(session, Access.full(), _collection(session))
     admin = users.set_accounts_enabled(session, True, first_administrator=("sam", "hash"))
     assert session.get(RssStreamProfile, profile.id).owner_user_id == admin.id
 
@@ -197,9 +197,9 @@ def test_deleting_a_user_transfers_or_deletes_their_profiles(session, monkeypatc
     from backend.db.models import RssStreamProfile, User
     from backend.services import users
 
-    monkeypatch.setattr(rss, "ensure_source_can_stream", lambda show, use_dw_stream: None)
+    monkeypatch.setattr(rss, "ensure_source_can_stream", lambda collection, use_dw_stream: None)
     _add_users(session, 1, 2)
-    profile_id = _profile(session, _user(2, "viewer"), _show(session)).id
+    profile_id = _profile(session, _user(2, "viewer"), _collection(session)).id
     users.delete_user(session, session.get(User, 2), stream_profiles=choice, heir_id=1)
     remaining = session.get(RssStreamProfile, profile_id)
     assert (remaining is not None) is kept
@@ -210,24 +210,24 @@ def test_deleting_a_user_transfers_or_deletes_their_profiles(session, monkeypatc
 # Who added it ----------------------------------------------------------------
 
 
-def test_shows_remember_who_added_them(session):
+def test_collections_remember_who_added_them(session):
     from task_manager.scheduler.requester import current_requester
 
     _add_users(session, 5)
     token = current_requester.set(5)
     try:
-        show = _show(session)
+        collection = _collection(session)
     finally:
         current_requester.reset(token)
-    assert show.created_by_user_id == 5
+    assert collection.created_by_user_id == 5
     session.expunge_all()
-    from backend.db.models import Show
-    session.add(Show(
+    from backend.db.models import Collection
+    session.add(Collection(
         source_key="dailywire", uuid="u2", slug="other", title="Other", description="", sharing_url="https://x/o",
         membership_level="FREE", type="podcast", episode_identifier="numbered", author_name="A", author_slug="a",
     ))
     session.flush()
-    assert session.query(Show).filter_by(slug="other").one().created_by_user_id is None
+    assert session.query(Collection).filter_by(slug="other").one().created_by_user_id is None
 
 
 def test_a_feed_streams_only_what_its_owner_may_use(session, monkeypatch):
@@ -235,10 +235,10 @@ def test_a_feed_streams_only_what_its_owner_may_use(session, monkeypatch):
     from backend.api.endpoints.rss_stream_profiles import service as rss
     from backend.db.models import RssStreamProfile, User
 
-    monkeypatch.setattr(rss, "ensure_source_can_stream", lambda show, use_dw_stream: None)
+    monkeypatch.setattr(rss, "ensure_source_can_stream", lambda collection, use_dw_stream: None)
     _add_users(session, 1)
-    profile = session.get(RssStreamProfile, _profile(session, _user(1, "viewer"), _show(session)).id)
-    profile.show.membership_level = "PREMIUM"
+    profile = session.get(RssStreamProfile, _profile(session, _user(1, "viewer"), _collection(session)).id)
+    profile.collection.membership_level = "PREMIUM"
     asked: list[bool] = []
 
     class Source:
@@ -320,16 +320,16 @@ def test_everyones_quick_downloads_say_who_asked(session, ready_files):
     assert [f.owner_name for f in list_quick_downloads(session, _user(1)).ready] == [None]
 
 
-def test_shows_say_who_added_them(session):
-    from backend.api.models.show import ShowAPIRead
-    from backend.db.models import Show
+def test_collections_say_who_added_them(session):
+    from backend.api.models.collection import CollectionAPIRead
+    from backend.db.models import Collection
     from task_manager.scheduler.requester import current_requester
 
     _add_users(session, 5)
     token = current_requester.set(5)
     try:
-        show_id = _show(session).id
+        collection_id = _collection(session).id
     finally:
         current_requester.reset(token)
     session.expire_all()
-    assert ShowAPIRead.model_validate(session.get(Show, show_id)).added_by == "user5"
+    assert CollectionAPIRead.model_validate(session.get(Collection, collection_id)).added_by == "user5"

@@ -174,7 +174,7 @@ export default function QuickFormatPanel({
                     <label className="quick-check">
                         <input type="checkbox" checked={choice.embedMetadata}
                                onChange={(event) => set({embedMetadata: event.target.checked})}/>
-                        Title, show or channel and date
+                        Title, collection or channel and date
                     </label>
                     <label className="quick-check">
                         <input type="checkbox" checked={choice.embedArtwork}

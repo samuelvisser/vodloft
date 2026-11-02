@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.models.source import (
     ApiKeyAPIUpdate, ApiStatusAPIRead, CookiesAPIRead, EpisodeTagAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultsAPIRead,
-    ShowDetailsAPIRead, SourceAPIRead, SourceDomainAPIRead, SourceDomainAPIUpdate,
+    CollectionDetailsAPIRead, SourceAPIRead, SourceDomainAPIRead, SourceDomainAPIUpdate,
 )
 from backend.app import db_session
 from sources import ApiKeyRejected, Feature, Source, UnknownSourceError, get_source
@@ -70,7 +70,7 @@ def resolve(body: ResolveAPIRequest, access: Access = signed_in()):
 
 @router.get("/sources/{source_id}/episode-tags", dependencies=[requires_any((Area.LIBRARY, Level.VIEW), (Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW))], response_model=list[EpisodeTagAPIRead])
 def episode_tags(source_id: str, url: str | None = Query(default=None, max_length=2048)):
-    """The tags a Source gives episodes, such as Video, Short and Livestream, for the show at ``url`` or for any show."""
+    """The tags a Source gives episodes, such as Video, Short and Livestream, for the collection at ``url`` or for any collection."""
     try:
         source = get_source(source_id)
     except UnknownSourceError as exc:
@@ -78,15 +78,15 @@ def episode_tags(source_id: str, url: str | None = Query(default=None, max_lengt
     return [EpisodeTagAPIRead.model_validate(tag) for tag in source.episode_tags_for(url)]
 
 
-@router.get("/sources/{source_id}/show", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=ShowDetailsAPIRead)
-def show_details(source_id: str, url: str = Query(min_length=1, max_length=2048), access: Access = signed_in()):
-    """Look up a show to add, at a Source that lists its episodes."""
+@router.get("/sources/{source_id}/collection", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=CollectionDetailsAPIRead)
+def collection_details(source_id: str, url: str = Query(min_length=1, max_length=2048), access: Access = signed_in()):
+    """Look up a collection to add, at a Source that lists its episodes."""
     return lookup_show_details(access, _source(source_id, Feature.EPISODE_LISTS), url)
 
 
 @router.get("/sources/{source_id}/search", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=SearchResultsAPIRead)
 def search(source_id: str, q: str = Query(min_length=1, max_length=200), access: Access = signed_in()):
-    """Find shows and videos at a Source by name."""
+    """Find collections and videos at a Source by name."""
     return search_source(access, _source(source_id, Feature.SEARCH), q)
 
 

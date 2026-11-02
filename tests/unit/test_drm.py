@@ -106,15 +106,15 @@ def test_a_video_that_needs_a_subscription_cannot_be_downloaded(session):
 
 
 def test_automatic_downloads_skip_protected_episodes(session):
-    from backend.db.models import Show, ShowLocalMediaProfile
+    from backend.db.models import Collection, CollectionLocalMediaProfile
     from backend.db.models.download_profile import DownloadProfile
     from sources import Feature, Source
-    from task_manager.tasks.helpers.listed_shows import index_listed_show
+    from task_manager.tasks.helpers.listed_collections import index_listed_collection
     from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
 
     class Listed(Source):
         id, name, domains = "listed", "Listed", ("listed.example",)
-        features = frozenset({Feature.SHOWS, Feature.EPISODE_LISTS})
+        features = frozenset({Feature.COLLECTIONS, Feature.EPISODE_LISTS})
 
         def resolve(self, url):
             return None
@@ -128,17 +128,17 @@ def test_automatic_downloads_skip_protected_episodes(session):
         def list_episodes(self, url, *, known):
             return iter([_details("open"), _details("locked", drm=True)])
 
-    show = Show(
+    collection = Collection(
         uuid="u", slug="PL1", source_key="listed", title="A playlist", sharing_url="https://listed.example/PL1",
         membership_level="FREE", type="podcast", episode_identifier="numbered", author_name="A", author_slug="a",
     )
-    session.add(show)
+    session.add(collection)
     session.commit()
-    index_listed_show(session, show_id=show.id, source=Listed())
-    local = ShowLocalMediaProfile(slug="shows", name="Shows", preferred_format="format_1080p",
-                                  output_template="/downloads/{{ show_title }}/{{ episode_title }}.ext")
+    index_listed_collection(session, collection_id=collection.id, source=Listed())
+    local = CollectionLocalMediaProfile(slug="collections", name="Collections", preferred_format="format_1080p",
+                                  output_template="/downloads/{{ collection_title }}/{{ episode_title }}.ext")
     profile = DownloadProfile(
-        show=show, local_media_profile=local, enable_profile=True, ep_id_type_list=["ep"],
+        collection=collection, local_media_profile=local, enable_profile=True, ep_id_type_list=["ep"],
         download_with_countdown=False, redownload_final=False, download_days_in_past=0,
         download_episode_count=0, delete_older_episodes=False,
     )

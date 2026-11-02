@@ -53,7 +53,7 @@ def test_with_a_key_the_api_answers_with_counts_durations_and_dates(youtube):
 
     channel, playlist, video = answer.results
     assert (channel.kind, channel.slug, channel.kind_label, channel.facts) == (
-        LinkKind.SHOW, "UCv", "Channel", ("18.1M subscribers", "412 videos"))
+        LinkKind.COLLECTION, "UCv", "Channel", ("18.1M subscribers", "412 videos"))
     assert channel.url == "https://www.youtube.com/channel/UCv"
     assert (playlist.kind_label, playlist.url, playlist.facts) == (
         "Playlist", "https://www.youtube.com/playlist?list=PL1", ("38 videos",))

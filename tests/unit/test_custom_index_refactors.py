@@ -5,8 +5,8 @@ import pytest
 from jinja2 import StrictUndefined, pass_context
 from jinja2.sandbox import ImmutableSandboxedEnvironment
 
-from backend.utils.jinja_analysis.custom_index_advisory import get_custom_index_advisories
-from backend.utils.jinja_analysis.custom_index_refactors import suggest_guarded_index
+from jinja_analysis.custom_index_advisory import get_custom_index_advisories
+from jinja_analysis.custom_index_refactors import suggest_guarded_index
 
 
 @pytest.fixture

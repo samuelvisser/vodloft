@@ -55,11 +55,11 @@ def test_file_watcher_filters_foreign_roots_in_sql(
 
     current = _download(
         db_session,
-        path=str(current_root / "shows" / "episode.m4a"),
+        path=str(current_root / "collections" / "episode.m4a"),
     )
     foreign = _download(
         db_session,
-        path=str(foreign_root / "shows" / "episode.m4a"),
+        path=str(foreign_root / "collections" / "episode.m4a"),
         media_item_id=2,
     )
     current_id, foreign_id = current.id, foreign.id
@@ -68,8 +68,8 @@ def test_file_watcher_filters_foreign_roots_in_sql(
 
     rows = get_tracked_downloads(
         db_session,
-        show_id=None,
-        show_slug=None,
+        collection_id=None,
+        collection_slug=None,
     )
 
     assert [row.id for row in rows] == [current_id]
@@ -93,15 +93,15 @@ def test_file_watcher_preserves_artifacts_when_configured_root_is_unavailable(
 
     _download(
         db_session,
-        path=str(unavailable_root / "shows" / "episode.m4a"),
+        path=str(unavailable_root / "collections" / "episode.m4a"),
     )
     db_session.commit()
     db_session.expunge_all()
 
     assert get_tracked_downloads(
         db_session,
-        show_id=None,
-        show_slug=None,
+        collection_id=None,
+        collection_slug=None,
     ) == []
     assert "configured download root" in caplog.text
     assert "is unavailable" in caplog.text

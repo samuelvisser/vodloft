@@ -7,10 +7,11 @@ caller today; methods are added together with the feature that needs them.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
+from types import MappingProxyType
 from typing import Any, ClassVar
 from urllib.parse import urlsplit
 
@@ -19,7 +20,7 @@ class Feature(StrEnum):
     """Optional capabilities. Code that only makes sense for some services
     checks the feature instead of the Source id."""
 
-    SHOWS = "shows"
+    COLLECTIONS = "collections"
     MOVIES = "movies"
     MOVIE_EXTRAS = "movie_extras"
     BROWSE = "browse"
@@ -29,10 +30,10 @@ class Feature(StrEnum):
     RSS_STREAMING = "rss_streaming"
     VIDEOS = "videos"
     EPISODE_LISTS = "episode_lists"
-    """Shows whose episodes the Source lists with ``list_episodes``. VODLoft
+    """Collections whose episodes the Source lists with ``list_episodes``. VODLoft
     keeps the Source's own seasons, or makes one season per upload year."""
     SEARCH = "search"
-    """Finding shows and videos at the Source by name, with ``search``."""
+    """Finding collections and videos at the Source by name, with ``search``."""
     COSTLY_SEARCH = "costly_search"
     """Each search costs the Source something, such as API quota, so the search
     page searches when asked instead of while the user types."""
@@ -41,15 +42,15 @@ class Feature(StrEnum):
     API_KEY = "api_key"
     """An optional key for the service's own API, which makes catalogue lookups faster."""
     QUICK_CHECK = "quick_check"
-    """Cheaply finding a listed show's newest items, with ``latest_items`` and
-    ``item_details``, between full scans of the show."""
+    """Cheaply finding a listed collection's newest items, with ``latest_items`` and
+    ``item_details``, between full scans of the collection."""
     FORMAT_CHOICES = "format_choices"
     """Quick downloads of this Source's videos can choose their quality,
     container and codec, and "Best" is whatever the Source's program picks on
     its own. Without it, "Best" is MP4 video at the highest resolution and the
     other choices are not offered."""
     CATALOGUE_REFRESH = "catalogue_refresh"
-    """Refreshing the titles, descriptions and thumbnails of a listed show's
+    """Refreshing the titles, descriptions and thumbnails of a listed collection's
     episodes, and telling which ones the Source no longer has, with ``refresh_items``."""
 
 
@@ -70,7 +71,7 @@ class EpisodeTag:
 
     The key is the first part of an episode's identifier (``short.12``) and what
     Download and RSS profiles select. Episodes with the ``main`` tag follow the
-    show's numbering scheme; every other tag counts on its own across the show.
+    collection's numbering scheme; every other tag counts on its own across the collection.
     """
 
     key: str
@@ -119,7 +120,7 @@ class Playback:
 
 
 class LinkKind(StrEnum):
-    SHOW = "show"
+    COLLECTION = "collection"
     MOVIE = "movie"
     EPISODE = "episode"
     VIDEO = "video"
@@ -139,8 +140,8 @@ class LinkPreview:
 class ResolvedLink:
     """What a link points to, with enough to show a preview before anything is added.
 
-    An episode link names the show it belongs to in ``show_slug`` and
-    ``show_url`` when the Source can tell, because VODLoft adds whole shows.
+    An episode link names the collection it belongs to in ``collection_slug`` and
+    ``collection_url`` when the Source can tell, because VODLoft adds whole collections.
     """
 
     kind: LinkKind
@@ -150,8 +151,8 @@ class ResolvedLink:
     description: str | None = None
     image_url: str | None = None
     author_name: str | None = None
-    show_slug: str | None = None
-    show_url: str | None = None
+    collection_slug: str | None = None
+    collection_url: str | None = None
     site: str | None = None
     """The site the link is on, for a Source that serves many sites."""
     drm_protected: bool = False
@@ -159,7 +160,7 @@ class ResolvedLink:
     needs_subscription: bool = False
     """The Source only gives the video to a paying account, so it can be added but not downloaded."""
     kind_label: str | None = None
-    """What the Source calls this kind of result, such as Channel or Playlist for a show."""
+    """What the Source calls this kind of result, such as Channel or Playlist for a collection."""
     facts: tuple[str, ...] = ()
     """Short facts for a search result, such as "412 videos" or "19:05"."""
 
@@ -240,7 +241,7 @@ class VideoDetails:
     """The Source only gives the video to a paying account, such as NPO Plus. VODLoft
     indexes it, but does not download it."""
     season: SeasonRef | None = None
-    """The show season a listed episode belongs to, for a Source with real seasons.
+    """The collection season a listed episode belongs to, for a Source with real seasons.
     Without one, VODLoft puts the episode in a season per upload year."""
     episode_number: int | None = None
     """The episode's number in its season, when the Source has one."""
@@ -250,7 +251,7 @@ class VideoDetails:
 
 @dataclass(frozen=True)
 class ItemRef:
-    """One of a show's items, as a quick check finds it: its slug and its link."""
+    """One of a collection's items, as a quick check finds it: its slug and its link."""
 
     slug: str
     url: str
@@ -271,8 +272,8 @@ class ItemRefresh:
 
 
 @dataclass(frozen=True)
-class ShowDetails:
-    """What VODLoft stores about a show from a Source with ``Feature.EPISODE_LISTS``."""
+class CollectionDetails:
+    """What VODLoft stores about a collection from a Source with ``Feature.EPISODE_LISTS``."""
 
     slug: str
     url: str
@@ -282,7 +283,7 @@ class ShowDetails:
     author_name: str | None = None
     author_url: str | None = None
     seasons: tuple[SeasonRef, ...] = ()
-    """The show's own seasons, for a Source that has them, so they can be picked
+    """The collection's own seasons, for a Source that has them, so they can be picked
     before the episodes are indexed."""
 
 
@@ -337,10 +338,10 @@ class ApiStatus:
     resets_at: datetime
     problem: str | None = None
     problem_fix_url: str | None = None
-    show_count: int = 0
-    """The shows the key speeds up."""
+    collection_count: int = 0
+    """The collections the key speeds up."""
     rescan_units: int = 0
-    """What one full re-scan of those shows costs, so the settings can say how often each gets checked."""
+    """What one full re-scan of those collections costs, so the settings can say how often each gets checked."""
 
 
 class ApiKeyRejected(ValueError):
@@ -369,7 +370,7 @@ class Source(ABC):
     domains: ClassVar[tuple[str, ...]]
     features: ClassVar[frozenset[Feature]]
     episode_tags: ClassVar[tuple[EpisodeTag, ...]] = (
-        EpisodeTag(MAIN_TAG, "Episode", "An episode of the show", main=True),
+        EpisodeTag(MAIN_TAG, "Episode", "An episode of the collection", main=True),
     )
     """Every tag the Source gives episodes, the main one first."""
     subscription_name: ClassVar[str | None] = None
@@ -378,6 +379,10 @@ class Source(ABC):
     """What a cookies file does for this Source, for a Source with ``Feature.COOKIES``."""
     search_label: ClassVar[str | None] = None
     """What the search button names, when that is not the Source's name, such as YouTube for yt-dlp."""
+    kind_names: ClassVar[Mapping[LinkKind, str]] = MappingProxyType({})
+    """What the Source calls a kind of media where its own word differs from VODLoft's, such as
+    Show for a Daily Wire collection. VODLoft uses these words only where it shows the Source's
+    own catalogue, and a search result's ``kind_label`` still wins for that one result."""
 
     def has(self, feature: Feature) -> bool:
         return feature in self.features
@@ -390,7 +395,7 @@ class Source(ABC):
         return any(on_domain(host, domain) for domain in self.domains)
 
     def episode_tags_for(self, url: str | None) -> tuple[EpisodeTag, ...]:
-        """The tags episodes of the show at this link can get, or all of them without a link."""
+        """The tags episodes of the collection at this link can get, or all of them without a link."""
         return self.episode_tags
 
     def episode_tag(self, key: str | None) -> EpisodeTag | None:
@@ -407,7 +412,7 @@ class Source(ABC):
     def episode_media(
         self, *, slug: str, members_only: bool, interactive: bool = False,
     ) -> EpisodeMedia:
-        """Look up the current media URLs of an episode. Only Sources whose shows
+        """Look up the current media URLs of an episode. Only Sources whose collections
         do not have ``Feature.EPISODE_LISTS`` implement it; the others play each
         episode with ``video_playback``."""
         raise NotImplementedError(f"{self.name} plays its episodes with video_playback")
@@ -428,17 +433,17 @@ class Source(ABC):
         raise NotImplementedError(f"{self.name} offers no format choices")
 
     def video_playback(self, *, slug: str, url: str) -> Playback:
-        """Resolve the playable URL of a single video, or of an episode of a show
+        """Resolve the playable URL of a single video, or of an episode of a collection
         from ``list_episodes``. Only Sources with ``Feature.VIDEOS`` or
         ``Feature.EPISODE_LISTS`` implement it."""
         raise NotImplementedError(f"{self.name} has no single videos")
 
-    def show_details(self, url: str) -> ShowDetails:
-        """Look up a show. Only Sources with ``Feature.EPISODE_LISTS`` implement it."""
+    def collection_details(self, url: str) -> CollectionDetails:
+        """Look up a collection. Only Sources with ``Feature.EPISODE_LISTS`` implement it."""
         raise NotImplementedError(f"{self.name} does not list episodes")
 
     def list_episodes(self, url: str, *, known: frozenset[str]) -> Iterator[VideoDetails]:
-        """The show's episodes whose slugs are not in ``known``.
+        """The collection's episodes whose slugs are not in ``known``.
 
         An episode that cannot be looked up right now is left out, so a later
         scan tries it again.
@@ -446,7 +451,7 @@ class Source(ABC):
         raise NotImplementedError(f"{self.name} does not list episodes")
 
     def latest_items(self, url: str) -> list[ItemRef]:
-        """The show's newest items, newest first. Only Sources with ``Feature.QUICK_CHECK`` implement it."""
+        """The collection's newest items, newest first. Only Sources with ``Feature.QUICK_CHECK`` implement it."""
         raise NotImplementedError(f"{self.name} has no quick check")
 
     def item_details(self, items: Sequence[ItemRef]) -> dict[str, VideoDetails | None]:
@@ -455,17 +460,17 @@ class Source(ABC):
         raise NotImplementedError(f"{self.name} has no quick check")
 
     def refresh_items(self, url: str, items: Sequence[ItemRef]) -> ItemRefresh:
-        """What the Source says now about these items of the show at ``url``.
+        """What the Source says now about these items of the collection at ``url``.
         Only Sources with ``Feature.CATALOGUE_REFRESH`` implement it."""
-        raise NotImplementedError(f"{self.name} cannot refresh a show's items")
+        raise NotImplementedError(f"{self.name} cannot refresh a collection's items")
 
-    def quick_check_minutes(self, shows: Sequence[tuple[str, int]]) -> int:
-        """How often each of these shows, given as link and episode count, can
+    def quick_check_minutes(self, collections: Sequence[tuple[str, int]]) -> int:
+        """How often each of these collections, given as link and episode count, can
         get a quick check. ``Feature.QUICK_CHECK`` only."""
         raise NotImplementedError(f"{self.name} has no quick check")
 
     def search(self, query: str) -> SearchResults:
-        """Shows and videos whose name matches the query. Only Sources with ``Feature.SEARCH`` implement it."""
+        """Collections and videos whose name matches the query. Only Sources with ``Feature.SEARCH`` implement it."""
         raise NotImplementedError(f"{self.name} cannot be searched")
 
     def program_status(self) -> ProgramStatus:
@@ -511,9 +516,9 @@ class Source(ABC):
         """What the user should fix about this Source right now."""
         return []
 
-    def api_status(self, shows: Sequence[tuple[str, int]] = ()) -> ApiStatus:
-        """The API key and today's quota. ``shows`` are the link and episode count of
-        each of this Source's shows. Only Sources with ``Feature.API_KEY`` implement it."""
+    def api_status(self, collections: Sequence[tuple[str, int]] = ()) -> ApiStatus:
+        """The API key and today's quota. ``collections`` are the link and episode count of
+        each of this Source's collections. Only Sources with ``Feature.API_KEY`` implement it."""
         raise NotImplementedError(f"{self.name} takes no API key")
 
     def save_api_key(self, key: str) -> None:

@@ -22,14 +22,14 @@ def test_task_ledger_filters_orders_and_paginates(monkeypatch):
         key="fetch_new_episodes",
         title="Fetch episodes",
         description=None,
-        allowed_resource_types=["show"],
+        allowed_resource_types=["collection"],
         default_max_retries=2,
     )
     other_definition = TaskDefinition(
         key="other_worker",
         title="Other",
         description=None,
-        allowed_resource_types=["show"],
+        allowed_resource_types=["collection"],
         default_max_retries=0,
     )
     setup.add_all([definition, other_definition])
@@ -41,12 +41,12 @@ def test_task_ledger_filters_orders_and_paginates(monkeypatch):
         TaskRun(
             definition_id=definition.id,
             schedule_id=None,
-            resource_type=ResourceType.SHOW,
+            resource_type=ResourceType.COLLECTION,
             resource_id=7,
             status=TaskStatus.SUCCEEDED,
             progress=100,
-            message="before show creation",
-            meta={"inputs": {"show_slug": "show-seven"}},
+            message="before collection creation",
+            meta={"inputs": {"collection_slug": "collection-seven"}},
             result={"summary": "old", "data": {"episodes_found": 1}},
             attempt_count=1,
             max_retries=2,
@@ -59,12 +59,12 @@ def test_task_ledger_filters_orders_and_paginates(monkeypatch):
         TaskRun(
             definition_id=definition.id,
             schedule_id=None,
-            resource_type=ResourceType.SHOW,
+            resource_type=ResourceType.COLLECTION,
             resource_id=7,
             status=TaskStatus.FAILED,
             progress=None,
             message="direct failure",
-            meta={"inputs": {"show_slug": "show-seven"}},
+            meta={"inputs": {"collection_slug": "collection-seven"}},
             result=None,
             attempt_count=1,
             max_retries=2,
@@ -77,7 +77,7 @@ def test_task_ledger_filters_orders_and_paginates(monkeypatch):
         TaskRun(
             definition_id=definition.id,
             schedule_id=None,
-            resource_type=ResourceType.SHOW,
+            resource_type=ResourceType.COLLECTION,
             resource_id=0,
             status=TaskStatus.SUCCEEDED,
             progress=100,
@@ -86,8 +86,8 @@ def test_task_ledger_filters_orders_and_paginates(monkeypatch):
             result={
                 "summary": "global",
                 "data": {
-                    "shows": [
-                        {"show_id": 7, "show_slug": "show-seven", "episodes_found": 3},
+                    "collections": [
+                        {"collection_id": 7, "collection_slug": "collection-seven", "episodes_found": 3},
                     ],
                 },
             },
@@ -102,7 +102,7 @@ def test_task_ledger_filters_orders_and_paginates(monkeypatch):
         TaskRun(
             definition_id=definition.id,
             schedule_id=None,
-            resource_type=ResourceType.SHOW,
+            resource_type=ResourceType.COLLECTION,
             resource_id=7,
             status=TaskStatus.RUNNING,
             progress=50,
@@ -127,7 +127,7 @@ def test_task_ledger_filters_orders_and_paginates(monkeypatch):
         TaskRun(
             definition_id=definition.id,
             schedule_id=None,
-            resource_type=ResourceType.SHOW,
+            resource_type=ResourceType.COLLECTION,
             resource_id=8,
             status=TaskStatus.SUCCEEDED,
             progress=100,
@@ -145,7 +145,7 @@ def test_task_ledger_filters_orders_and_paginates(monkeypatch):
         TaskRun(
             definition_id=other_definition.id,
             schedule_id=None,
-            resource_type=ResourceType.SHOW,
+            resource_type=ResourceType.COLLECTION,
             resource_id=7,
             status=TaskStatus.SUCCEEDED,
             progress=100,
@@ -168,7 +168,7 @@ def test_task_ledger_filters_orders_and_paginates(monkeypatch):
 
     first = service.list_ledger(
         definition_key="fetch_new_episodes",
-        resource_type="show",
+        resource_type="collection",
         resource_ids=[0, 7],
         statuses=[TaskStatus.SUCCEEDED.value, TaskStatus.FAILED.value],
         started_after=base + timedelta(seconds=30),
@@ -181,12 +181,12 @@ def test_task_ledger_filters_orders_and_paginates(monkeypatch):
     assert first.has_more is True
     assert first.next_cursor is not None
     assert [item.message for item in first.items] == ["global success"]
-    assert first.items[0].result["data"]["shows"][0]["episodes_found"] == 3
+    assert first.items[0].result["data"]["collections"][0]["episodes_found"] == 3
 
     with pytest.raises(ValueError, match="Cursor does not match this task ledger"):
         service.list_ledger(
             definition_key="fetch_new_episodes",
-            resource_type="show",
+            resource_type="collection",
             resource_ids=[7],
             statuses=[TaskStatus.SUCCEEDED.value, TaskStatus.FAILED.value],
             started_after=base + timedelta(seconds=30),
@@ -203,7 +203,7 @@ def test_task_ledger_filters_orders_and_paginates(monkeypatch):
         mutation.add(TaskRun(
             definition_id=definition_id,
             schedule_id=None,
-            resource_type=ResourceType.SHOW,
+            resource_type=ResourceType.COLLECTION,
             resource_id=7,
             status=TaskStatus.SUCCEEDED,
             progress=100,
@@ -222,7 +222,7 @@ def test_task_ledger_filters_orders_and_paginates(monkeypatch):
 
     second = service.list_ledger(
         definition_key="fetch_new_episodes",
-        resource_type="show",
+        resource_type="collection",
         resource_ids=[0, 7],
         statuses=[TaskStatus.SUCCEEDED.value, TaskStatus.FAILED.value],
         started_after=base + timedelta(seconds=30),
@@ -237,7 +237,7 @@ def test_task_ledger_filters_orders_and_paginates(monkeypatch):
 
     continuation = service.list_ledger(
         definition_key="fetch_new_episodes",
-        resource_type="show",
+        resource_type="collection",
         resource_ids=[0, 7],
         statuses=[TaskStatus.SUCCEEDED.value, TaskStatus.FAILED.value],
         started_after=base + timedelta(seconds=30),
@@ -249,7 +249,7 @@ def test_task_ledger_filters_orders_and_paginates(monkeypatch):
     assert continuation.has_more is False
     assert [item.message for item in continuation.items] == ["direct failure"]
     assert continuation.items[0].last_error == "boom"
-    assert continuation.items[0].inputs == {"show_slug": "show-seven"}
+    assert continuation.items[0].inputs == {"collection_slug": "collection-seven"}
 
     waiting = service.list_ledger(
         definition_key="fetch_new_episodes",
@@ -300,7 +300,7 @@ def test_task_cursor_restarts_when_filtered_ordering_changes():
             key="revision_worker",
             title="Revision worker",
             description=None,
-            allowed_resource_types=["show"],
+            allowed_resource_types=["collection"],
             default_max_retries=0,
         )
         session.add(definition)
@@ -312,7 +312,7 @@ def test_task_cursor_restarts_when_filtered_ordering_changes():
             run = TaskRun(
                 definition_id=definition.id,
                 schedule_id=None,
-                resource_type=ResourceType.SHOW,
+                resource_type=ResourceType.COLLECTION,
                 resource_id=1,
                 status=TaskStatus.RUNNING,
                 progress=index,
@@ -379,7 +379,7 @@ def _revision_task_fixture():
         key="cursor_revision_worker",
         title="Cursor revision worker",
         description=None,
-        allowed_resource_types=["show"],
+        allowed_resource_types=["collection"],
         default_max_retries=0,
     )
     session.add(definition)
@@ -390,7 +390,7 @@ def _revision_task_fixture():
         run = TaskRun(
             definition_id=definition.id,
             schedule_id=None,
-            resource_type=ResourceType.SHOW,
+            resource_type=ResourceType.COLLECTION,
             resource_id=1,
             status=TaskStatus.RUNNING,
             progress=index,
@@ -546,7 +546,7 @@ def test_task_ledger_can_include_unscoped_runs():
         definition = TaskDefinition(
             key="fetch_new_episodes",
             title="Fetch episodes",
-            allowed_resource_types=["show"],
+            allowed_resource_types=["collection"],
         )
         session.add(definition)
         session.flush()
@@ -554,7 +554,7 @@ def test_task_ledger_can_include_unscoped_runs():
         for index, resource_id in enumerate((None, 6, 7, 8)):
             session.add(TaskRun(
                 definition_id=definition.id,
-                resource_type=ResourceType.SHOW,
+                resource_type=ResourceType.COLLECTION,
                 resource_id=resource_id,
                 status=TaskStatus.SUCCEEDED,
                 progress=100,
@@ -566,7 +566,7 @@ def test_task_ledger_can_include_unscoped_runs():
 
         args = dict(
             definition_key="fetch_new_episodes",
-            resource_type="show",
+            resource_type="collection",
             resource_ids=[6, 7],
             order_by="started_at",
             order="desc",
@@ -591,7 +591,7 @@ def test_task_ledger_can_include_unscoped_runs():
         unscoped_only = query_ledger(
             session,
             definition_key="fetch_new_episodes",
-            resource_type="show",
+            resource_type="collection",
             include_unscoped=True,
             order_by="started_at",
             order="desc",

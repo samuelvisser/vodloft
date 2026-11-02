@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 def _episode(identifier: str, *, dw_episode_number: str | None = None):
     return SimpleNamespace(
-        show=SimpleNamespace(slug="chip-chilla", title="Chip Chilla", meta_items=[]),
+        collection=SimpleNamespace(slug="chip-chilla", title="Chip Chilla", author_name="Daily Wire", meta_items=[]),
         season=SimpleNamespace(
             slug="season-1",
             name="Season 1",
@@ -12,6 +12,9 @@ def _episode(identifier: str, *, dw_episode_number: str | None = None):
             season_number=1,
         ),
         slug="chips-odyssey",
+        source_slug="chips-odyssey",
+        author_name=None,
+        duration=1290.4,
         title="Chip's Odyssey",
         episode_identifier=identifier,
         dw_episode_number=dw_episode_number,
@@ -23,7 +26,7 @@ def _episode(identifier: str, *, dw_episode_number: str | None = None):
 
 def test_seasonal_episode_number_renders_as_numeric_episode_number() -> None:
     from backend.utils.output_template import (
-        SHOW_OUTPUT_TEMPLATE_FIELDS,
+        COLLECTION_OUTPUT_TEMPLATE_FIELDS,
         episode_output_template_values,
         render_output_template,
     )
@@ -38,11 +41,11 @@ def test_seasonal_episode_number_renders_as_numeric_episode_number() -> None:
     assert values["episode_label"] == "S01E07"
     assert values["episode_identifier"] == "ep.S01E07"
     assert render_output_template(
-        "/downloads/Video/{{ show_title }}/Season {{ \"%02d\"|format(season_number|int) }}/"
-        "{{ show_title }} - S{{ \"%02d\"|format(season_number|int) }}"
+        "/downloads/Video/{{ collection_title }}/Season {{ \"%02d\"|format(season_number|int) }}/"
+        "{{ collection_title }} - S{{ \"%02d\"|format(season_number|int) }}"
         "E{{ \"%02d\"|format(episode_number|int) }} - {{ title }}.ext",
         values,
-        allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+        allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
     ) == (
         "/downloads/Video/Chip Chilla/Season 01/"
         "Chip Chilla - S01E07 - Chip's Odyssey.ext"
@@ -51,7 +54,7 @@ def test_seasonal_episode_number_renders_as_numeric_episode_number() -> None:
 
 def test_episode_identifier_semantics_are_exposed_to_templates() -> None:
     from backend.utils.output_template import (
-        SHOW_OUTPUT_TEMPLATE_FIELDS,
+        COLLECTION_OUTPUT_TEMPLATE_FIELDS,
         episode_output_template_values,
         render_output_template,
     )
@@ -75,12 +78,12 @@ def test_episode_identifier_semantics_are_exposed_to_templates() -> None:
         "dw_episode_number",
         "episode_extra_type",
         "episode_sub_number",
-    }.issubset(SHOW_OUTPUT_TEMPLATE_FIELDS)
+    }.issubset(COLLECTION_OUTPUT_TEMPLATE_FIELDS)
 
     assert render_output_template(
         "/downloads/{{ episode_label }}-{{ episode_extra_type }}{{ episode_sub_number }}.ext",
         values,
-        allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+        allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
     ) == "/downloads/S03E12.5-trailer5.ext"
 
 
@@ -96,18 +99,18 @@ def test_episode_identifier_info_extracts_parent_and_sub_episode_numbers() -> No
     assert info.sub_episode_number == "2"
 
 
-def test_episode_index_is_the_stored_show_wide_value_not_season_number() -> None:
+def test_episode_index_is_the_stored_collection_wide_value_not_season_number() -> None:
     from backend.utils.output_template import (
-        SHOW_OUTPUT_TEMPLATE_FIELDS, episode_output_template_values, render_output_template,
+        COLLECTION_OUTPUT_TEMPLATE_FIELDS, episode_output_template_values, render_output_template,
     )
 
     for identifier in ("ep.S01E07", "aux.2", "trailer.1"):
         values = episode_output_template_values(_episode(identifier))
         assert values["episode_index"] == "42"
-        assert "episode_index" in SHOW_OUTPUT_TEMPLATE_FIELDS
+        assert "episode_index" in COLLECTION_OUTPUT_TEMPLATE_FIELDS
         assert render_output_template(
             "/downloads/{{ episode_index }}-{{ '%03d'|format(episode_index|int) }}.ext",
-            values, allowed_fields=SHOW_OUTPUT_TEMPLATE_FIELDS,
+            values, allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
         ) == "/downloads/42-042.ext"
 
 
@@ -134,19 +137,42 @@ def test_episode_index_is_not_available_to_movie_profiles() -> None:
 
 def test_episode_index_is_available_in_real_and_fallback_preview_sources() -> None:
     from backend.api.endpoints.local_media_profiles.output_template import (
-        _EXAMPLE_SHOW_VALUES, _show_template_source, get_output_template_preview,
+        _EXAMPLE_COLLECTION_VALUES, _collection_template_source, get_output_template_preview,
     )
     from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview
 
     episode = _episode("ep.S01E07")
     episode.id = 987
-    source = _show_template_source(episode)
+    source = _collection_template_source(episode)
     assert source.values["episode_index"] == "42"
-    assert _EXAMPLE_SHOW_VALUES["episode_index"] == "1"
-    for values, expected in ((source.values, "42"), (_EXAMPLE_SHOW_VALUES, "1")):
+    assert _EXAMPLE_COLLECTION_VALUES["episode_index"] == "1"
+    for values, expected in ((source.values, "42"), (_EXAMPLE_COLLECTION_VALUES, "1")):
         result = get_output_template_preview(None, LocalMediaProfileTemplatePreview(
-            type="show", output_template="/downloads/{{ episode_index }}.ext",
+            type="collection", output_template="/downloads/{{ episode_index }}.ext",
             preferred_format="format_1080p", values=values, indexing_values=[],
         ))
         assert result.output_path == f"/downloads/{expected}.mp4"
         assert result.used_variables == ["episode_index"]
+
+
+def test_site_ids_uploader_author_and_duration_are_template_values() -> None:
+    from backend.utils.output_template import COLLECTION_OUTPUT_TEMPLATE_FIELDS, episode_output_template_values
+
+    episode = _episode("ep.1")
+    episode.source_slug = "dQw4w9WgXcQ"
+    episode.author_name = "Uploader"
+    episode.collection.slug = "UC1234"
+
+    values = episode_output_template_values(episode)
+
+    assert {
+        name: values[name]
+        for name in ("episode_site_id", "episode_uploader", "collection_author", "collection_site_id", "duration_seconds")
+    } == {
+        "episode_site_id": "dQw4w9WgXcQ",
+        "episode_uploader": "Uploader",
+        "collection_author": "Daily Wire",
+        "collection_site_id": "UC1234",
+        "duration_seconds": "1290",
+    }
+    assert {"episode_site_id", "episode_uploader", "collection_author", "collection_site_id", "duration_seconds"} <= COLLECTION_OUTPUT_TEMPLATE_FIELDS

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 from backend.db.models import Episode
 from backend.db.models.Metadata import Metadata
 from backend.types.episode_types import EpisodePublishStatus
-from backend.types.show_types import EpisodeIdentifier
+from backend.types.collection_types import EpisodeIdentifier
 from backend.utils.episode import EpisodeIdentifierInfo
 from .metadata import ensure_utc
 
@@ -25,14 +25,14 @@ def _utc_timestamp(value: datetime) -> int:
 def _rollback_date_head(s: Session, episode: Episode, previous_identifier: str) -> None:
     if not previous_identifier.startswith("ep.") or episode.published_date is None:
         return
-    show = episode.show
+    collection = episode.collection
     timestamp = _utc_timestamp(episode.published_date)
-    if int(show.get_meta("ep_id.latest_ep_date") or 0) != timestamp:
+    if int(collection.get_meta("ep_id.latest_ep_date") or 0) != timestamp:
         return
     latest_remaining = s.scalar(
         select(Episode.published_date)
         .where(
-            Episode.show_id == episode.show_id,
+            Episode.collection_id == episode.collection_id,
             Episode.id != episode.id,
             Episode.episode_identifier.startswith("ep."),
             Episode.published_date.is_not(None),
@@ -45,23 +45,23 @@ def _rollback_date_head(s: Session, episode: Episode, previous_identifier: str) 
         if latest_remaining is not None
         else 0
     )
-    show.set_meta("ep_id.latest_ep_date", str(new_head))
+    collection.set_meta("ep_id.latest_ep_date", str(new_head))
 
 
 def rollback_identifier_head(s: Session, episode: Episode, previous_identifier: str) -> None:
     """Roll back only state that still participates in canonical allocation."""
-    if EpisodeIdentifier(episode.show.episode_identifier) is EpisodeIdentifier.DATE_BASED:
+    if EpisodeIdentifier(episode.collection.episode_identifier) is EpisodeIdentifier.DATE_BASED:
         _rollback_date_head(s, episode, previous_identifier)
 
 
 def _reserve_not_usable_number(s: Session, episode: Episode) -> int:
-    """Atomically reserve the next per-show quarantine identifier number."""
+    """Atomically reserve the next per-collection quarantine identifier number."""
     s.flush()
     statement = (
         sqlite_insert(Metadata)
         .values(
-            parent_table="shows",
-            parent_id=episode.show_id,
+            parent_table="collections",
+            parent_id=episode.collection_id,
             key=_NOT_USABLE_COUNTER_KEY,
             value="1",
         )
@@ -75,7 +75,7 @@ def _reserve_not_usable_number(s: Session, episode: Episode) -> int:
         .returning(Metadata.value)
     )
     current = int(s.execute(statement).scalar_one())
-    s.expire(episode.show, ["meta_items"])
+    s.expire(episode.collection, ["meta_items"])
     return current
 
 
@@ -94,20 +94,20 @@ def quarantine_episode_identifier(s: Session, episode: Episode) -> bool:
     return True
 
 
-def vacated_canonical_identifiers_for_show(s: Session, show_id: int) -> set[str]:
+def vacated_canonical_identifiers_for_collection(s: Session, collection_id: int) -> set[str]:
     """Return free source-backed identifiers displaced by quarantined episodes.
 
-    Most shows have no quarantined rows. Avoid materializing the show's complete
+    Most collections have no quarantined rows. Avoid materializing the collection's complete
     Episode history merely to discover that fact; only load the exceptional rows
     and keep the occupied-identifier check scalar.
     """
     episodes = list(s.scalars(
         select(Episode)
         .where(
-            Episode.show_id == show_id,
+            Episode.collection_id == collection_id,
             Episode.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA,
         )
-        .options(joinedload(Episode.show))
+        .options(joinedload(Episode.collection))
     ))
     if not episodes:
         return set()
@@ -124,14 +124,14 @@ def vacated_canonical_identifiers_for_show(s: Session, show_id: int) -> set[str]
     occupied = (
         set(s.scalars(
             select(Episode.episode_identifier).where(
-                Episode.show_id == show_id,
+                Episode.collection_id == collection_id,
                 Episode.episode_identifier.in_(candidate_identifiers),
             )
         ))
         if candidate_identifiers
         else set()
     )
-    show_identifier_type = EpisodeIdentifier(episodes[0].show.episode_identifier)
+    collection_identifier_type = EpisodeIdentifier(episodes[0].collection.episode_identifier)
 
     vacated: set[str] = set()
     for episode in episodes:
@@ -143,7 +143,7 @@ def vacated_canonical_identifiers_for_show(s: Session, show_id: int) -> set[str]
         except ValueError:
             continue
         if info.source_slot is not None or (
-            show_identifier_type is EpisodeIdentifier.DATE_BASED
+            collection_identifier_type is EpisodeIdentifier.DATE_BASED
             and info.type == "ep"
         ):
             vacated.add(previous)
@@ -152,7 +152,7 @@ def vacated_canonical_identifiers_for_show(s: Session, show_id: int) -> set[str]
 
 def _advance_date_head_for_identifier(episode: Episode, identifier: str) -> None:
     if (
-        EpisodeIdentifier(episode.show.episode_identifier) is not EpisodeIdentifier.DATE_BASED
+        EpisodeIdentifier(episode.collection.episode_identifier) is not EpisodeIdentifier.DATE_BASED
         or episode.published_date is None
     ):
         return
@@ -163,9 +163,9 @@ def _advance_date_head_for_identifier(episode: Episode, identifier: str) -> None
     if info.type != "ep":
         return
     timestamp = _utc_timestamp(episode.published_date)
-    episode.show.set_meta(
+    episode.collection.set_meta(
         "ep_id.latest_ep_date",
-        str(max(int(episode.show.get_meta("ep_id.latest_ep_date") or 0), timestamp)),
+        str(max(int(episode.collection.get_meta("ep_id.latest_ep_date") or 0), timestamp)),
     )
 
 
@@ -178,7 +178,7 @@ def restore_quarantined_identifier(s: Session, episode: Episode) -> bool:
     collision = s.scalar(
         select(Episode.id)
         .where(
-            Episode.show_id == episode.show_id,
+            Episode.collection_id == episode.collection_id,
             Episode.id != episode.id,
             Episode.episode_identifier == previous_identifier,
         )

@@ -11,7 +11,7 @@ def _definition(session, key: str = "watchdog_worker"):
         key=key,
         title="Watchdog worker",
         description=None,
-        allowed_resource_types=["show"],
+        allowed_resource_types=["collection"],
         default_max_retries=0,
     )
     session.add(definition)
@@ -26,7 +26,7 @@ def _running_task(session, definition, *, progress: int = 30):
     run = TaskRun(
         schedule_id=None,
         definition_id=definition.id,
-        resource_type=ResourceType.SHOW,
+        resource_type=ResourceType.COLLECTION,
         resource_id=7,
         status=TaskStatus.RUNNING,
         progress=progress,
@@ -52,9 +52,9 @@ def _running_operation(session, *, progress: int = 30):
 
     operation = TaskOperation(
         id="watchdog-operation",
-        kind="show.sync",
+        kind="collection.sync",
         source=OperationSource.UI.value,
-        resource_type="show",
+        resource_type="collection",
         resource_id=7,
         title="Watchdog Show",
         status=OperationStatus.RUNNING.value,
@@ -238,7 +238,7 @@ def test_watchdog_does_not_treat_retry_backoff_as_stalled_execution(task_databas
     run = TaskRun(
         schedule_id=None,
         definition_id=definition.id,
-        resource_type=ResourceType.SHOW,
+        resource_type=ResourceType.COLLECTION,
         resource_id=8,
         status=TaskStatus.RETRY_SCHEDULED,
         progress=40,
@@ -295,14 +295,14 @@ def test_active_operation_owns_watchdog_for_its_task_run(task_database, monkeypa
     definition = _definition(session, "watchdog_operation_owned_worker")
     operation = create_operation(
         session,
-        kind="show.sync",
-        resource_type="show",
+        kind="collection.sync",
+        resource_type="collection",
         resource_id=7,
         title="Watchdog Show",
         targets=[
             OperationTargetSpec(
                 task_key=definition.key,
-                resource_type="show",
+                resource_type="collection",
                 resource_id=7,
             )
         ],

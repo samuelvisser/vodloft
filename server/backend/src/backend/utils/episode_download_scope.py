@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from backend.db.models import Episode, Show
+from backend.db.models import Episode, Collection
 from backend.db.models.media_download import EpisodeMediaDownload
 
 
@@ -15,7 +15,7 @@ from backend.db.models.media_download import EpisodeMediaDownload
 class EpisodeDownloadScope:
     """Reusable SQL-backed selection of episode MediaDownloads."""
 
-    show: Show
+    collection: Collection
     episode: Episode | None
     downloads: tuple[EpisodeMediaDownload, ...]
     _session: Session = field(repr=False, compare=False)
@@ -27,7 +27,7 @@ class EpisodeDownloadScope:
     def _downloads(
             s: Session,
             *,
-            show_id: int,
+            collection_id: int,
             episode_id: int | None,
             local_media_profile_id: int | None,
             artifact_statuses: frozenset[str] | None,
@@ -36,7 +36,7 @@ class EpisodeDownloadScope:
             select(EpisodeMediaDownload)
             .options(joinedload(EpisodeMediaDownload.local_media_profile))
             .join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
-            .where(Episode.show_id == show_id)
+            .where(Episode.collection_id == collection_id)
         )
         if episode_id is not None:
             stmt = stmt.where(Episode.id == episode_id)
@@ -58,24 +58,24 @@ class EpisodeDownloadScope:
             cls,
             s: Session,
             *,
-            show_id: int | None = None,
+            collection_id: int | None = None,
             episode_id: int | None = None,
             local_media_profile_id: int | None = None,
             artifact_statuses: Collection[str] | None = None,
     ) -> EpisodeDownloadScope:
-        if (show_id is None) == (episode_id is None):
-            raise ValueError("Provide exactly one show id or episode id")
+        if (collection_id is None) == (episode_id is None):
+            raise ValueError("Provide exactly one collection id or episode id")
 
         episode: Episode | None = None
         if episode_id is not None:
             episode = s.get(Episode, episode_id)
             if episode is None:
                 raise ValueError(f"Episode {episode_id} no longer exists")
-            show = episode.show
+            collection = episode.collection
         else:
-            show = s.get(Show, show_id)
-            if show is None:
-                raise ValueError(f"Show {show_id} no longer exists")
+            collection = s.get(Collection, collection_id)
+            if collection is None:
+                raise ValueError(f"Collection {collection_id} no longer exists")
 
         accepted_statuses = (
             frozenset(artifact_statuses)
@@ -84,13 +84,13 @@ class EpisodeDownloadScope:
         )
         downloads = cls._downloads(
             s,
-            show_id=show.id,
+            collection_id=collection.id,
             episode_id=episode.id if episode is not None else None,
             local_media_profile_id=local_media_profile_id,
             artifact_statuses=accepted_statuses,
         )
         return cls(
-            show=show,
+            collection=collection,
             episode=episode,
             downloads=downloads,
             _session=s,
@@ -150,7 +150,7 @@ class EpisodeDownloadScope:
 
         downloads = self._downloads(
             self._session,
-            show_id=self.show.id,
+            collection_id=self.collection.id,
             episode_id=self.episode.id if self.episode is not None else None,
             local_media_profile_id=selected_profile_id,
             artifact_statuses=selected_statuses,
@@ -169,9 +169,9 @@ class EpisodeDownloadScope:
 
     def result_data(self) -> dict[str, Any]:
         data: dict[str, Any] = {
-            "show_id": self.show.id,
-            "show_slug": self.show.slug,
-            "show_title": self.show.title,
+            "collection_id": self.collection.id,
+            "collection_slug": self.collection.slug,
+            "collection_title": self.collection.title,
             "local_media_profiles": self.local_media_profile_count,
         }
         if self.episode is not None:

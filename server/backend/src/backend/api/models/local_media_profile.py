@@ -94,3 +94,6 @@ class LocalMediaProfileTemplatePreviewResult(ResponseBase):
     used_indexing_values: list[str] = Field(default_factory=list)
     missing_indexing_values: list[str] = Field(default_factory=list)
     provisional_indexing_values: list[str] = Field(default_factory=list)
+    # The filename mode, and the characters typed in the template that it replaces.
+    filename_mode: str = ""
+    replaced_typed_characters: list[str] = Field(default_factory=list)

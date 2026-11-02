@@ -45,11 +45,11 @@ How media is downloaded and stored is set with three kinds of profiles:
 
 - A **Local Media Profile** describes a file: audio or video, which quality, and where it goes, using a Jinja
   template for folders and file names.
-- A **Download Profile** decides which episodes of a show are downloaded automatically, such as every episode,
+- A **Download Profile** decides which episodes of a collection are downloaded automatically, such as every episode,
   the latest ten, the last month, or certain seasons.
-- An **RSS Stream Profile** publishes a show as a private podcast or video feed.
+- An **RSS Stream Profile** publishes a collection as a private podcast or video feed.
 
-A show can have several of each. For example, you can keep every episode of a show as audio while keeping only
+A collection can have several of each. For example, you can keep every episode of a collection as audio while keeping only
 the latest five as 1080p video, and listen to both through one feed.
 
 VODLoft does not play media itself. For downloaded files, use a self-hosted media server such as Plex or Jellyfin
@@ -62,11 +62,11 @@ This project was inspired by [Pinchflat](https://github.com/kieraneglin/pinchfla
 - Fully featured, easy-to-use Web UI for navigation and configuration.
 - Add shows, podcasts, movies and single videos from The Daily Wire, YouTube, NPO Start and many other sites.
 - Download premium Daily Wire content using your own Daily Wire subscription.
-- Create multiple media profiles for the same show — for example, automatically maintain separate video and audio downloads.
+- Create multiple media profiles for the same collection — for example, automatically maintain separate video and audio downloads.
 - Organize your library exactly how you want with configurable naming, directory structures, and powerful Jinja templates.
-- Automatically embed metadata and artwork, generate NFO files, and download show assets for media servers such as Jellyfin and Plex.
+- Automatically embed metadata and artwork, generate NFO files, and download collection artwork for media servers such as Jellyfin and Plex.
 - Intelligently handles live Daily Wire episodes, avoiding countdown footage and waiting for the proper published version when appropriate.
-- Create private audio or video RSS feeds for your shows and use them in your favorite podcast app.
+- Create private audio or video RSS feeds for your collections and use them in your favorite podcast app.
 - Stream Daily Wire episodes through RSS without downloading them, with stable episode URLs that can seamlessly transition to locally downloaded media once available.
 - Automatically discover, download, refresh, and clean up media in the background.
 - Configure automatic retention rules to remove older content from your server.
@@ -75,7 +75,7 @@ This project was inspired by [Pinchflat](https://github.com/kieraneglin/pinchfla
 ## What VODLoft does not do
 
 - **DRM-protected media cannot be downloaded, on any Source.** VODLoft does not bypass DRM. It still lists such
-  media, so you can see what a show contains, but marks it with a **DRM** badge and never queues it for download.
+  media, so you can see what a collection contains, but marks it with a **DRM** badge and never queues it for download.
   On NPO Start this applies to a large share of programmes, often whole seasons.
 - NPO Plus sign-in is not supported yet, so programmes that need an NPO Plus subscription cannot be downloaded.
 - RSS feeds for YouTube, NPO and other yt-dlp sites serve downloaded files only. Their stream links expire, so

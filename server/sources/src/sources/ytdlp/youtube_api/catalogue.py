@@ -2,7 +2,7 @@
 
 A channel's videos come from its uploads playlist, 50 IDs a page, and their
 details from ``videos.list``, 50 videos a call. Every call is paid from the
-first share that still has room, so adding a show uses the units kept free
+first share that still has room, so adding a collection uses the units kept free
 first and the checks share after that.
 """
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from typing import TypeVar
 
-from ...contract import ShowDetails
+from ...contract import CollectionDetails
 from . import mapping, quota
 from .client import MAX_RESULTS, NotFoundError, QuotaExceededError, YouTubeApiClient
 from .mapping import YouTubeRef
@@ -52,13 +52,13 @@ class Catalogue:
             raise NotFoundError("YouTube does not know this playlist")
         return items[0]
 
-    def show(self, ref: YouTubeRef, url: str) -> ShowDetails:
+    def collection(self, ref: YouTubeRef, url: str) -> CollectionDetails:
         if ref.kind == "playlist":
-            return mapping.playlist_show(self.playlist(ref.value), url)
-        return mapping.channel_show(self.channel(ref), url)
+            return mapping.playlist_collection(self.playlist(ref.value), url)
+        return mapping.channel_collection(self.channel(ref), url)
 
     def playlist_id(self, ref: YouTubeRef) -> str:
-        """The playlist that lists the show's videos."""
+        """The playlist that lists the collection's videos."""
         if ref.kind == "playlist":
             return ref.value
         channel_id = ref.value if ref.kind == "channel" else self.channel(ref)["id"]

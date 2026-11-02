@@ -88,7 +88,7 @@ def test_movie_extra_output_uses_parent_movie_and_actual_media_fields(tmp_path: 
         tmp_path
         / "movies"
         / "Run Hide Fight"
-        / "Run Hide Fight _ Official Trailer-run-hide-fight-official-trailer-trailer.mp4"
+        / "Run Hide Fight ｜ Official Trailer-run-hide-fight-official-trailer-trailer.mp4"
     ).resolve()
 
 

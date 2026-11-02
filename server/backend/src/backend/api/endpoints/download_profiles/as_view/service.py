@@ -9,7 +9,7 @@ from backend.api.models.download_profile_view import DownloadProfileAPIReadView
 from backend.db.models import (
     DownloadProfile,
     LocalMediaProfileBase,
-    Show,
+    Collection,
 )
 
 
@@ -28,16 +28,16 @@ def get_download_profile_views_list(s: Session) -> list[DownloadProfileAPIReadVi
     items = (
         s.query(DownloadProfile)
         .options(
-            joinedload(DownloadProfile.show),
+            joinedload(DownloadProfile.collection),
             joinedload(DownloadProfile.local_media_profile),
             selectinload(DownloadProfile.seasons),
         )
-        .join(Show, Show.id == DownloadProfile.show_id)
+        .join(Collection, Collection.id == DownloadProfile.collection_id)
         .join(
             LocalMediaProfileBase,
             LocalMediaProfileBase.id == DownloadProfile.local_media_profile_id,
         )
-        .order_by(Show.title.asc(), DownloadProfile.id.asc())
+        .order_by(Collection.title.asc(), DownloadProfile.id.asc())
         .all()
     )
     return [_to_view(item) for item in items]
@@ -50,7 +50,7 @@ def get_download_profile_view(
     item = (
         s.query(DownloadProfile)
         .options(
-            joinedload(DownloadProfile.show),
+            joinedload(DownloadProfile.collection),
             joinedload(DownloadProfile.local_media_profile),
             selectinload(DownloadProfile.seasons),
         )

@@ -60,6 +60,8 @@ type ActionConfirmDialogueProps = {
     scope_by_local_media_profile?: boolean
     showDeleteOlderThan?: boolean
     localMediaProfiles?: readonly ActionConfirmDialogueLocalMediaProfile[]
+    /** The Local Media Profile selected when the dialogue opens, instead of all of them. */
+    initialLocalMediaProfileId?: number
 }
 
 export default function ActionConfirmDialogue({
@@ -79,6 +81,7 @@ export default function ActionConfirmDialogue({
     scope_by_local_media_profile = false,
     showDeleteOlderThan = false,
     localMediaProfiles = [],
+    initialLocalMediaProfileId,
 }: ActionConfirmDialogueProps) {
     const startOperation = useStartOperation()
     const selectorId = `action-confirm-dialogue-local-media-profile-${useId()}`
@@ -113,13 +116,15 @@ export default function ActionConfirmDialogue({
     useEffect(() => {
         if (!open || !scope_by_local_media_profile) return
         setLocalMediaProfileId(
-            localMediaProfiles.length > 1
+            initialLocalMediaProfileId !== undefined && localMediaProfiles.some((profile) => profile.id === initialLocalMediaProfileId)
+                ? String(initialLocalMediaProfileId)
+                : localMediaProfiles.length > 1
                 ? 'all'
                 : localMediaProfiles[0]
                     ? String(localMediaProfiles[0].id)
                     : '',
         )
-    }, [open, scope_by_local_media_profile, localMediaProfileKey])
+    }, [open, scope_by_local_media_profile, localMediaProfileKey, initialLocalMediaProfileId])
 
     useEffect(() => {
         if (open && showDeleteOlderThan) reset(deleteOlderThanDefaults)

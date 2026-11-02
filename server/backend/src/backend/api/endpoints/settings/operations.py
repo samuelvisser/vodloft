@@ -41,7 +41,7 @@ class FindEpisodesCronOperation(_SingleTaskSettingsCronOperation):
     kind = "system.cron.find_episodes"
     title_text = "Find new episodes"
     task = "fetch_new_episodes"
-    target_resource_type = "show"
+    target_resource_type = "collection"
     target_resource_id = None
 
 
@@ -54,9 +54,9 @@ class QuickCheckCronOperation(_SingleTaskSettingsCronOperation):
 
 class FullRescanCronOperation(_SingleTaskSettingsCronOperation):
     kind = "system.cron.full_rescan"
-    title_text = "Re-scan shows with quick checks"
-    task = "rescan_quick_checked_shows"
-    target_resource_type = "show"
+    title_text = "Re-scan collections with quick checks"
+    task = "rescan_quick_checked_collections"
+    target_resource_type = "collection"
     target_resource_id = None
 
 
@@ -87,7 +87,7 @@ class MonitorNoUsableMediaCronOperation(_SingleTaskSettingsCronOperation):
     kind = "system.cron.monitor_no_usable_media"
     title_text = "Monitor episodes without usable media"
     task = "monitor_no_usable_media_episode"
-    target_resource_type = "show"
+    target_resource_type = "collection"
 
 
 class VerifyDownloadsCronOperation(_SingleTaskSettingsCronOperation):
@@ -101,4 +101,4 @@ class FileWatcherCronOperation(_SingleTaskSettingsCronOperation):
     kind = "system.cron.file_watcher"
     title_text = "File watcher"
     task = "file_watcher"
-    target_resource_type = "show"
+    target_resource_type = "collection"

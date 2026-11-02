@@ -16,7 +16,7 @@ type Props = {
     onRegenerateToken?: () => void | Promise<void>
     regeneratingToken?: boolean
     advisory?: ReactNode
-    /** Whether the show's Source has live episodes to offer. */
+    /** Whether the collection's Source has live episodes to offer. */
     liveEpisodes?: boolean
 }
 

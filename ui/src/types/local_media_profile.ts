@@ -26,57 +26,57 @@ export const VideoPreferredFormatReg = createSelectRegistry("VideoPreferredForma
 });
 
 export const LocalMediaProfileTypeReg = createSelectRegistry("LocalMediaProfileType", {
-  'show': { label: "Show", help: "Store downloaded show episodes" },
+  'collection': { label: "Collection", help: "Store downloaded collection episodes" },
   'movie': { label: "Movie", help: "Store manually downloaded movies" },
   'video': { label: "Video", help: "Store single videos added on their own" },
 });
 
-export const ShowLocalMediaProfileScopeReg = createSelectRegistry("ShowLocalMediaProfileScope", {
+export const CollectionLocalMediaProfileScopeReg = createSelectRegistry("CollectionLocalMediaProfileScope", {
   'both': { label: "Podcasts and Series", help: "Offer this profile for both Podcasts and Series" },
   'podcast': { label: "Podcasts", help: "Offer this profile only for Podcasts" },
   'series': { label: "Series", help: "Offer this profile only for Series" },
 });
 
-export type LocalMediaProfileType = 'show' | 'movie' | 'video'
+export type LocalMediaProfileType = 'collection' | 'movie' | 'video'
 /** The API collection that creates, updates and deletes profiles of one type. */
 export function localMediaProfileEndpoint(type: LocalMediaProfileType | string): string {
     return `${type}-local-media-profiles`
 }
 
-export type ShowLocalMediaProfileScope = (typeof ShowLocalMediaProfileScopeReg)["values"][number]
-export type ShowLocalMediaProfileContext = 'podcast' | 'series'
+export type CollectionLocalMediaProfileScope = (typeof CollectionLocalMediaProfileScopeReg)["values"][number]
+export type CollectionLocalMediaProfileContext = 'podcast' | 'series'
 
 export function defaultSubtitleModeForProfile(
     type: LocalMediaProfileType,
-    showScope: ShowLocalMediaProfileScope = 'both',
+    collectionScope: CollectionLocalMediaProfileScope = 'both',
 ): LocalMediaProfileSubtitleMode {
     // Subtitles come from Daily Wire streams; single videos come from yt-dlp, which VODLoft does not fetch subtitles for yet.
     if (type === 'video') return 'no_subtitles'
-    return type === 'show' && showScope === 'podcast' ? 'no_subtitles' : 'sidecar'
+    return type === 'collection' && collectionScope === 'podcast' ? 'no_subtitles' : 'sidecar'
 }
 
-export function isShowLocalMediaProfileAvailableFor(
+export function isCollectionLocalMediaProfileAvailableFor(
     profile: LocalMediaProfileRead,
-    showType: string | null | undefined,
+    collectionType: string | null | undefined,
 ): boolean {
-    if (profile.type !== 'show') return false
-    if (showType !== 'podcast' && showType !== 'series') return true
-    const scope = profile.showScope ?? 'both'
-    return scope === 'both' || scope === showType
+    if (profile.type !== 'collection') return false
+    if (collectionType !== 'podcast' && collectionType !== 'series') return true
+    const scope = profile.collectionScope ?? 'both'
+    return scope === 'both' || scope === collectionType
 }
 
 /** Build a select registry for Local Media Profiles from an array (no memoization). */
 export function buildLocalMediaProfileSelectRegistry(
     mediaProfiles: readonly LocalMediaProfileRead[] | undefined | null,
     type?: LocalMediaProfileType,
-    showType?: ShowLocalMediaProfileContext,
+    collectionType?: CollectionLocalMediaProfileContext,
 ): SelectRegistry{
     const spec: Record<string, { label: string }> = {}
     const values: string[] = []
     if (Array.isArray(mediaProfiles)) {
         for (const p of mediaProfiles) {
             if (type && p.type !== type) continue
-            if (type === 'show' && showType && !isShowLocalMediaProfileAvailableFor(p, showType)) continue
+            if (type === 'collection' && collectionType && !isCollectionLocalMediaProfileAvailableFor(p, collectionType)) continue
             const id = (p as any).id
             const name = (p as any).name ?? String(id)
             if (typeof id === 'number') {
@@ -93,10 +93,10 @@ export function buildLocalMediaProfileSelectRegistry(
 export function useLocalMediaProfileSelectRegistry(
     mediaProfiles: readonly LocalMediaProfileRead[] | undefined | null,
     type?: LocalMediaProfileType,
-    showType?: ShowLocalMediaProfileContext,
+    collectionType?: CollectionLocalMediaProfileContext,
 ): SelectRegistry{
     return useMemo(
-        (): SelectRegistry => buildLocalMediaProfileSelectRegistry(mediaProfiles, type, showType),
-        [mediaProfiles, type, showType],
+        (): SelectRegistry => buildLocalMediaProfileSelectRegistry(mediaProfiles, type, collectionType),
+        [mediaProfiles, type, collectionType],
     )
 }

@@ -13,13 +13,13 @@ from backend.types.stream_profile_types import StreamProfileType
 from backend.db.models import StreamProfileBase, RssStreamProfile
 
 
-def get_stream_profiles_list(s: Session, access: Access, show_slug: Optional[str] = None) -> list[StreamProfileAPIRead]:
+def get_stream_profiles_list(s: Session, access: Access, collection_slug: Optional[str] = None) -> list[StreamProfileAPIRead]:
     SP = with_polymorphic(StreamProfileBase, [RssStreamProfile])
-    if show_slug is not None:
+    if collection_slug is not None:
         items = (
             owned_by(s.query(SP), SP.owner_user_id, access)
             .filter(
-                SP.show.has(slug=show_slug)
+                SP.collection.has(slug=collection_slug)
             )
             .order_by(SP.id.asc())
             .all()

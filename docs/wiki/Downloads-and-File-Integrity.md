@@ -8,7 +8,7 @@ Files from **Quick download** do not appear here, because they never go into the
 
 ## Download statuses
 
-VODLoft can show downloads as:
+VODLoft can collection downloads as:
 
 - **Queued** — waiting for a download slot;
 - **Downloading** — media is currently being transferred;
@@ -128,7 +128,7 @@ If a file is marked corrupted, check the actual storage first if you suspect a d
 
 ## Retention and automatic deletion
 
-Automatic retention for show episodes comes from Podcast Download Profiles.
+Automatic retention for collection episodes comes from Podcast Download Profiles.
 
 A rolling date or episode-count limit can optionally delete downloads that fall outside the active window. If **Delete older episodes** is disabled, the limit affects new download selection but leaves older files already on disk alone.
 

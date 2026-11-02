@@ -15,31 +15,31 @@ def _session() -> tuple[Session, object]:
 
 
 def _library(session: Session):
-    from backend.db.models import Episode, LocalMediaProfile, Season, Show
+    from backend.db.models import Episode, LocalMediaProfile, Season, Collection
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
 
-    show = Show(
+    collection = Collection(
         source_key="dailywire",
-        uuid="show-uuid",
-        slug="test-show",
+        uuid="collection-uuid",
+        slug="test-collection",
         title="Test Show",
         description=None,
-        sharing_url="https://example.test/show",
+        sharing_url="https://example.test/collection",
         membership_level="FREE",
-        type=ShowType.PODCAST.value,
+        type=CollectionType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Host",
         author_slug="host",
     )
-    season = Season(show=show, index=1, slug="season-1", name="Season 1")
+    season = Season(collection=collection, index=1, slug="season-1", name="Season 1")
     episode = Episode(
         source_key="dailywire",
         uuid="episode-uuid",
         type=MediaType.EPISODE.value,
-        show=show,
+        collection=collection,
         season=season,
         index=1,
         episode_identifier="ep.1",
@@ -53,16 +53,16 @@ def _library(session: Session):
     audio_profile = LocalMediaProfile(
         slug="audio",
         name="Audio",
-        output_template="/downloads/{{ show }}/{{ episode }}.ext",
+        output_template="/downloads/{{ collection }}/{{ episode }}.ext",
         preferred_format="format_audio_only",
     )
     video_profile = LocalMediaProfile(
         slug="video",
         name="Video",
-        output_template="/downloads/{{ show }}/video/{{ episode }}.ext",
+        output_template="/downloads/{{ collection }}/video/{{ episode }}.ext",
         preferred_format="format_1080p",
     )
-    session.add_all([show, season, episode, audio_profile, video_profile])
+    session.add_all([collection, season, episode, audio_profile, video_profile])
     session.flush()
 
     audio_download = EpisodeMediaDownload(
@@ -81,7 +81,7 @@ def _library(session: Session):
     )
     session.add_all([audio_download, video_download])
     session.commit()
-    return show, episode, audio_profile, video_profile, audio_download, video_download
+    return collection, episode, audio_profile, video_profile, audio_download, video_download
 
 
 def test_episode_download_scope_can_be_reused_for_profile_and_artifact_selection():
@@ -91,7 +91,7 @@ def test_episode_download_scope_can_be_reused_for_profile_and_artifact_selection
     session, engine = _session()
     try:
         (
-            show,
+            collection,
             episode,
             audio_profile,
             video_profile,
@@ -99,9 +99,9 @@ def test_episode_download_scope_can_be_reused_for_profile_and_artifact_selection
             video_download,
         ) = _library(session)
 
-        scope = EpisodeDownloadScope.resolve(session, show_id=show.id)
+        scope = EpisodeDownloadScope.resolve(session, collection_id=collection.id)
 
-        assert scope.show.id == show.id
+        assert scope.collection.id == collection.id
         assert scope.episode is None
         assert scope.local_media_profile_ids == tuple(sorted((audio_profile.id, video_profile.id)))
         assert scope.local_media_profile_count == 2
@@ -130,11 +130,11 @@ def test_episode_download_scope_resolves_single_episode_and_all_profiles():
 
     session, engine = _session()
     try:
-        show, episode, _audio_profile, _video_profile, _audio_download, _video_download = _library(session)
+        collection, episode, _audio_profile, _video_profile, _audio_download, _video_download = _library(session)
 
         scope = EpisodeDownloadScope.resolve(session, episode_id=episode.id)
 
-        assert scope.show.id == show.id
+        assert scope.collection.id == collection.id
         assert scope.episode is not None
         assert scope.episode.id == episode.id
         assert len(scope.downloads) == 2
@@ -143,22 +143,22 @@ def test_episode_download_scope_resolves_single_episode_and_all_profiles():
         session.close()
         engine.dispose()
 
-def test_show_scope_selection_uses_one_query_on_the_success_path():
-    from backend.api.endpoints.shows.service import (
-        _select_show_episode_download_scope,
+def test_collection_scope_selection_uses_one_query_on_the_success_path():
+    from backend.api.endpoints.collections.service import (
+        _select_collection_episode_download_scope,
     )
 
     session, engine = _session()
     try:
         (
-            show,
+            collection,
             _episode,
             audio_profile,
             _video_profile,
             audio_download,
             _video_download,
         ) = _library(session)
-        session.refresh(show)
+        session.refresh(collection)
         session.refresh(audio_profile)
         session.refresh(audio_download)
         audio_profile_id = audio_profile.id
@@ -178,9 +178,9 @@ def test_show_scope_selection_uses_one_query_on_the_success_path():
 
         event.listen(engine, "before_cursor_execute", record_statement)
         try:
-            scope = _select_show_episode_download_scope(
+            scope = _select_collection_episode_download_scope(
                 session,
-                show,
+                collection,
                 local_media_profile_id=audio_profile_id,
             )
         finally:
@@ -199,16 +199,16 @@ def test_show_scope_selection_uses_one_query_on_the_success_path():
         engine.dispose()
 
 
-def test_show_scope_artifact_filter_can_legitimately_select_nothing():
-    from backend.api.endpoints.shows.service import (
-        _select_show_episode_download_scope,
+def test_collection_scope_artifact_filter_can_legitimately_select_nothing():
+    from backend.api.endpoints.collections.service import (
+        _select_collection_episode_download_scope,
     )
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
     session, engine = _session()
     try:
         (
-            show,
+            collection,
             _episode,
             audio_profile,
             _video_profile,
@@ -216,9 +216,9 @@ def test_show_scope_artifact_filter_can_legitimately_select_nothing():
             _video_download,
         ) = _library(session)
 
-        scope = _select_show_episode_download_scope(
+        scope = _select_collection_episode_download_scope(
             session,
-            show,
+            collection,
             local_media_profile_id=audio_profile.id,
             artifact_statuses=(MediaDownloadArtifactStatus.CORRUPTED.value,),
         )

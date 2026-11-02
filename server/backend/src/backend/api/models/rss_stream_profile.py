@@ -92,7 +92,7 @@ class RssStreamProfileAPICreate(_RssStreamProfileAPIBaseIn):
     secret token. It can always be edited afterwards.
     """
 
-    show_id: int
+    collection_id: int
     feed_url: Optional[str] = None
 
 
@@ -109,9 +109,9 @@ class _RssStreamProfileAPIBaseOut(ResponseBase):
     type: Literal["rss"] = StreamProfileType.RSS.value
 
     id: int
-    show_id: int
-    overwrite_show_title: Optional[str] = Field(exclude=True)
-    show_title: str = Field(validation_alias=AliasPath("show", "title"), exclude=True)
+    collection_id: int
+    overwrite_collection_title: Optional[str] = Field(exclude=True)
+    collection_title: str = Field(validation_alias=AliasPath("collection", "title"), exclude=True)
     enable_profile: bool
     use_downloads: bool
     use_dw_stream: bool
@@ -126,7 +126,7 @@ class _RssStreamProfileAPIBaseOut(ResponseBase):
     @computed_field
     @property
     def effective_title(self) -> str:
-        return self.overwrite_show_title or self.show_title
+        return self.overwrite_collection_title or self.collection_title
 
 
 class RssStreamProfileAPIRead(_RssStreamProfileAPIBaseOut):

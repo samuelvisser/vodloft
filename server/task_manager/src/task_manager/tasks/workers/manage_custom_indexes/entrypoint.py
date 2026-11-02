@@ -16,7 +16,7 @@ from .service import run_manage_custom_indexes, run_manage_profile_custom_indexe
 def _dispatch_newer_generation_on_completion(
     *, resource_type: str, resource_id: int | None, task_run_id: int, **_,
 ) -> None:
-    if resource_type != "show" or resource_id is None:
+    if resource_type != "collection" or resource_id is None:
         return
     with db_session() as session:
         run = session.get(TaskRun, task_run_id)
@@ -27,12 +27,12 @@ def _dispatch_newer_generation_on_completion(
         if not isinstance(profile_id, int):
             return
         state = session.scalar(select(CustomIndexState).where(
-            CustomIndexState.show_id == resource_id,
+            CustomIndexState.collection_id == resource_id,
             CustomIndexState.local_media_profile_id == profile_id,
         ))
         if state is not None and state.completed_generation != state.requested_generation:
             dispatch_custom_index_reconciliation(
-                session, show_id=resource_id, local_media_profile_id=profile_id,
+                session, collection_id=resource_id, local_media_profile_id=profile_id,
             )
             session.commit()
 
@@ -40,8 +40,8 @@ def _dispatch_newer_generation_on_completion(
 @task(
     key="manage_custom_indexes",
     title="Manage custom indexes",
-    description="Derive Episode ranks for an applicable Show and Local Media Profile.",
-    allowed_resource_types=("show", "local_media_profile"),
+    description="Derive Episode ranks for an applicable Collection and Local Media Profile.",
+    allowed_resource_types=("collection", "local_media_profile"),
     default_max_retries=3,
     tracks_progress=True,
     terminal_callback=_dispatch_newer_generation_on_completion,
@@ -66,6 +66,6 @@ async def manage_custom_indexes(
         else:
             async with custom_index_pair_lock(resource_id, local_media_profile_id):
                 return run_manage_custom_indexes(
-                    session, show_id=resource_id,
+                    session, collection_id=resource_id,
                     local_media_profile_id=local_media_profile_id, progress=progress,
                 )

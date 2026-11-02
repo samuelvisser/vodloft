@@ -6,12 +6,12 @@ import {faIcon} from '../icons/faIcon'
 import {ClearInputButton} from '../components/common/ClearInputButton'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
-import {useShows, useSourceLookup, useSourceSearch} from '../lib/queries'
-import {SearchNoticeRead, SearchResultRead, SourceFeature, searchName, sourceHas} from '../types/schemas/source'
+import {useCollections, useSourceLookup, useSourceSearch} from '../lib/queries'
+import {SearchNoticeRead, SearchResultRead, SourceFeature, kindName, searchName, sourceHas} from '../types/schemas/source'
 import {SubscriptionBadge} from '../components/common/NeedsSubscription'
 
 const KIND_LABEL: Record<SearchResultRead['kind'], string> = {
-    show: 'Show',
+    collection: 'Collection',
     movie: 'Movie',
     episode: 'Episode',
     video: 'Video',
@@ -54,13 +54,13 @@ export default function SourceSearchPage() {
     }, [search, onEnter])
     const results = useSourceSearch(canSearch ? sourceId : undefined, query)
     const searching = !!query && results.isFetching
-    const {data: localShows} = useShows()
+    const {data: localCollections} = useCollections()
     const sourceName = searchName(source) ?? sourceId ?? 'this service'
 
     const choose = (result: SearchResultRead) => {
-        if (result.kind === 'show') {
-            const local = localShows?.find((show) => show.sourceKey === sourceId && show.slug === result.slug)
-            navigate(local ? `/show/${local.slug}` : `/add-show?url=${encodeURIComponent(result.url)}`)
+        if (result.kind === 'collection') {
+            const local = localCollections?.find((collection) => collection.sourceKey === sourceId && collection.slug === result.slug)
+            navigate(local ? `/collection/${local.slug}` : `/add-collection?url=${encodeURIComponent(result.url)}`)
             return
         }
         navigate(`/add?url=${encodeURIComponent(result.url)}`)
@@ -81,7 +81,7 @@ export default function SourceSearchPage() {
             <div className="view-header">
                 <div>
                     <h1 id="browse-title">Search {sourceName}</h1>
-                    <p className="view-description">Find a show or video to add, view, or download.</p>
+                    <p className="view-description">Find a collection or video to add, view, or download.</p>
                 </div>
             </div>
             <form className={`browse-toolbar${onEnter ? ' browse-toolbar--submit' : ''}`} role="search" onSubmit={(event) => {
@@ -114,19 +114,19 @@ export default function SourceSearchPage() {
                     <p>Nothing at {sourceName} matches your search.</p>
                 </div>
             ) : (
-                <div className="catalog-show-grid" role="list" aria-label={`${sourceName} results`}>
+                <div className="catalog-collection-grid" role="list" aria-label={`${sourceName} results`}>
                     {results.data.results.map((result) => {
                         const image = toImageUrl(result.imageUrl)
-                        const added = result.kind === 'show' && localShows?.some((show) => show.sourceKey === sourceId && show.slug === result.slug)
+                        const added = result.kind === 'collection' && localCollections?.some((collection) => collection.sourceKey === sourceId && collection.slug === result.slug)
                         return (
                             <button className="show-summary-card catalog-show-card" type="button" role="listitem" key={`${result.kind}-${result.slug}`} onClick={() => choose(result)}>
-                                <span className="show-summary-art">
-                                    {image ? <img src={image} alt="" loading="lazy" decoding="async"/> : <span className="show-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', 'tv')}/></span>}
+                                <span className="collection-summary-art">
+                                    {image ? <img src={image} alt="" loading="lazy" decoding="async"/> : <span className="collection-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', 'tv')}/></span>}
                                 </span>
-                                <span className="show-summary-copy">
-                                    <strong className="show-summary-title">{result.title}</strong>
-                                    <span className="show-summary-author">{[result.kindLabel ?? KIND_LABEL[result.kind], result.authorName, ...(result.facts ?? [])].filter(Boolean).join(' · ')}</span>
-                                    {result.description && <span className="show-summary-description">{result.description}</span>}
+                                <span className="collection-summary-copy">
+                                    <strong className="collection-summary-title">{result.title}</strong>
+                                    <span className="collection-summary-author">{[result.kindLabel ?? kindName(source, result.kind, KIND_LABEL[result.kind]), result.authorName, ...(result.facts ?? [])].filter(Boolean).join(' · ')}</span>
+                                    {result.description && <span className="collection-summary-description">{result.description}</span>}
                                     {result.needsSubscription && <span><SubscriptionBadge sourceKey={sourceId}/></span>}
                                 </span>
                                 {added && <span className="catalog-added"><FontAwesomeIcon icon={faIcon('fass', 'check')}/> In library</span>}

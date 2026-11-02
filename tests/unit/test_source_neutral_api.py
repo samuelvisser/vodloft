@@ -44,7 +44,7 @@ class CatchAllSource(StubSource):
     domains = (ANY_DOMAIN,)
 
     def resolve(self, url):
-        return ResolvedLink(kind=LinkKind.SHOW, slug="anything", url=url, title="Anything")
+        return ResolvedLink(kind=LinkKind.COLLECTION, slug="anything", url=url, title="Anything")
 
 
 @pytest.fixture
@@ -88,14 +88,14 @@ def client(stub_sources, session, monkeypatch):
         yield test_client
 
 
-def _show(source_key: str):
-    from backend.db.models import Show
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+def _collection(source_key: str):
+    from backend.db.models import Collection
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
 
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    return Show(
-        id=1, uuid="show-uuid", slug="a-show", title="A Show", sharing_url="https://example.test/a-show",
-        membership_level="ALL_ACCESS", type=ShowType.PODCAST.value,
+    return Collection(
+        id=1, uuid="collection-uuid", slug="a-collection", title="A Collection", sharing_url="https://example.test/a-collection",
+        membership_level="ALL_ACCESS", type=CollectionType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value, author_name="Host", author_slug="host",
         source_key=source_key, created_at=now, updated_at=now,
     )
@@ -110,7 +110,7 @@ def test_sources_that_claim_every_domain_come_last(stub_sources):
 def test_daily_wire_links_are_parsed_by_path():
     from sources.dailywire.links import parse_link
 
-    assert parse_link("https://www.dailywire.com/show/the-ben-shapiro-show") == (LinkKind.SHOW, "the-ben-shapiro-show")
+    assert parse_link("https://www.dailywire.com/show/the-ben-shapiro-show") == (LinkKind.COLLECTION, "the-ben-shapiro-show")
     assert parse_link("https://www.dailywire.com/videos/run-hide-fight/") == (LinkKind.MOVIE, "run-hide-fight")
     assert parse_link("https://www.dailywire.com/episode/ep-1?x=1") == (LinkKind.EPISODE, "ep-1")
     assert parse_link("https://www.dailywire.com/") is None
@@ -121,7 +121,7 @@ def test_resolve_stops_at_the_first_source_that_recognises_the_link(client):
     response = client.post("/api/resolve", json={"url": "stub.example/watch/clip-1"})
     assert response.status_code == 200
     body = response.json()
-    assert body["source"] == {"id": "stub", "name": "Stub Video", "domains": ["stub.example"], "features": [], "searchLabel": None, "subscriptionName": None, "cookiesHelp": None, "subscriptionActive": False}
+    assert body["source"] == {"id": "stub", "name": "Stub Video", "domains": ["stub.example"], "features": [], "searchLabel": None, "kindNames": {}, "subscriptionName": None, "cookiesHelp": None, "subscriptionActive": False}
     assert body["kind"] == "movie"
     assert body["slug"] == "clip-1"
     assert body["preview"]["title"] == "Stub clip-1"
@@ -155,18 +155,18 @@ def test_resolve_reports_a_failing_source_as_bad_gateway(client, monkeypatch):
     assert "Stub Video could not look up this link" in response.json()["detail"]
 
 
-def test_resolve_finds_the_show_of_a_known_episode(client, session, monkeypatch):
+def test_resolve_finds_the_collection_of_a_known_episode(client, session, monkeypatch):
     from backend.db.models import Episode, Season
     from backend.utils.helpers import generate_uuid
 
-    show = _show("stub")
-    season = Season(show=show, index=1, slug="season-1", name="One")
+    collection = _collection("stub")
+    season = Season(collection=collection, index=1, slug="season-1", name="One")
     episode = Episode(
-        uuid=generate_uuid(), type="episode", show=show, season=season, index=1, episode_identifier="ep.1",
+        uuid=generate_uuid(), type="episode", collection=collection, season=season, index=1, episode_identifier="ep.1",
         slug="ep-1", title="Episode 1", duration=1.0, publish_status="published_final",
         sharing_url="https://stub.example/episode/ep-1", source_key="stub",
     )
-    session.add_all([show, season, episode])
+    session.add_all([collection, season, episode])
     session.commit()
 
     monkeypatch.setattr(
@@ -175,8 +175,8 @@ def test_resolve_finds_the_show_of_a_known_episode(client, session, monkeypatch)
     )
     body = client.post("/api/resolve", json={"url": "https://stub.example/episode/ep-1"}).json()
     assert body["kind"] == "episode"
-    assert body["showSlug"] == "a-show"
-    assert body["showUrl"] == "https://example.test/a-show"
+    assert body["collectionSlug"] == "a-collection"
+    assert body["collectionUrl"] == "https://example.test/a-collection"
 
 
 def test_source_list_names_each_source_and_its_features(client):
@@ -186,15 +186,15 @@ def test_source_list_names_each_source_and_its_features(client):
     assert sources["dailywire"]["domains"] == ["dailywire.com"]
 
 
-def test_show_responses_have_the_same_shape_for_every_source(stub_sources):
-    from backend.api.models.show import ShowAPIRead
+def test_collection_responses_have_the_same_shape_for_every_source(stub_sources):
+    from backend.api.models.collection import CollectionAPIRead
 
-    stub_show = ShowAPIRead.model_validate(_show("stub")).model_dump(by_alias=True)
-    dw_show = ShowAPIRead.model_validate(_show("dailywire")).model_dump(by_alias=True)
+    stub_collection = CollectionAPIRead.model_validate(_collection("stub")).model_dump(by_alias=True)
+    dw_show = CollectionAPIRead.model_validate(_collection("dailywire")).model_dump(by_alias=True)
 
-    assert stub_show.keys() == dw_show.keys()
-    assert stub_show["sourceKey"] == "stub"
-    assert stub_show["sourceFeatures"] == []
+    assert stub_collection.keys() == dw_show.keys()
+    assert stub_collection["sourceKey"] == "stub"
+    assert stub_collection["sourceFeatures"] == []
     assert "live_episodes" in dw_show["sourceFeatures"]
 
 
@@ -222,7 +222,7 @@ def test_movie_and_episode_responses_send_every_field(stub_sources):
     assert movie["sourceFeatures"] == []
 
     episode = EpisodeAPIRead.model_validate({
-        "id": 1, "show_id": 1, "season_id": 1, "index": 1, "publish_status": "published_final",
+        "id": 1, "collection_id": 1, "season_id": 1, "index": 1, "publish_status": "published_final",
         "went_live_date": now, "published_date": now, "scheduled_date": None, "sharing_url": "https://x",
         "download_delay_passed": True, "download_delay_ready_at": None, "title": "E", "description": None,
         "duration": 1.0, "uuid": "u", "slug": "e", "background_image_path": None,
@@ -235,17 +235,17 @@ def test_movie_and_episode_responses_send_every_field(stub_sources):
     assert episode["sourceKey"] == "stub"
 
 
-def test_api_routes_serialise_a_show_from_any_source(stub_sources):
-    from backend.api.models.show import ShowAPIRead
+def test_api_routes_serialise_a_collection_from_any_source(stub_sources):
+    from backend.api.models.collection import CollectionAPIRead
 
     app = FastAPI()
 
-    @app.get("/show", response_model=ShowAPIRead)
-    def show():
-        return ShowAPIRead.model_validate(_show("stub"))
+    @app.get("/collection", response_model=CollectionAPIRead)
+    def collection():
+        return CollectionAPIRead.model_validate(_collection("stub"))
 
     with TestClient(app) as test_client:
-        body = test_client.get("/show").json()
+        body = test_client.get("/collection").json()
     assert body["membershipLevel"] == "ALL_ACCESS"
     assert body["sourceKey"] == "stub"
 
@@ -291,14 +291,14 @@ def test_a_source_with_search_is_searched_by_name(client, monkeypatch):
 
     monkeypatch.setattr(type(stub), "features", frozenset({Feature.SEARCH}))
     monkeypatch.setattr(stub, "search", lambda query, **_: SearchResults([
-        ResolvedLink(kind=LinkKind.SHOW, slug="clips", url="https://stub.example/show/clips", title=f"{query} show",
+        ResolvedLink(kind=LinkKind.COLLECTION, slug="clips", url="https://stub.example/collection/clips", title=f"{query} collection",
                      kind_label="Channel", facts=("3 videos",)),
     ], SearchNotice(badge="Search via stub", text="Answered by the stub")), raising=False)
     body = client.get("/api/sources/stub/search", params={"q": "clip"}).json()
     assert body == {
         "results": [{
-            "kind": "show", "slug": "clips", "url": "https://stub.example/show/clips", "title": "clip show",
-            "description": None, "imageUrl": None, "authorName": None, "showSlug": None, "showUrl": None,
+            "kind": "collection", "slug": "clips", "url": "https://stub.example/collection/clips", "title": "clip collection",
+            "description": None, "imageUrl": None, "authorName": None, "collectionSlug": None, "collectionUrl": None,
             "kindLabel": "Channel", "facts": ["3 videos"], "needsSubscription": False,
         }],
         "notice": {

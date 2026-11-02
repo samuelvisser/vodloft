@@ -21,7 +21,7 @@ def test_waiting_operation_keeps_linked_run_out_of_standalone_watchdog(task_data
         key="watchdog_wait_state_worker",
         title="Watchdog wait-state worker",
         description=None,
-        allowed_resource_types=["show"],
+        allowed_resource_types=["collection"],
         default_max_retries=0,
     )
     session.add(definition)
@@ -29,14 +29,14 @@ def test_waiting_operation_keeps_linked_run_out_of_standalone_watchdog(task_data
 
     operation = create_operation(
         session,
-        kind="show.sync",
-        resource_type="show",
+        kind="collection.sync",
+        resource_type="collection",
         resource_id=7,
         title="Waiting Show",
         targets=[
             OperationTargetSpec(
                 task_key=definition.key,
-                resource_type="show",
+                resource_type="collection",
                 resource_id=7,
             )
         ],
@@ -44,7 +44,7 @@ def test_waiting_operation_keeps_linked_run_out_of_standalone_watchdog(task_data
     run = TaskRun(
         schedule_id=None,
         definition_id=definition.id,
-        resource_type=ResourceType.SHOW,
+        resource_type=ResourceType.COLLECTION,
         resource_id=7,
         status=TaskStatus.RUNNING,
         progress=35,
@@ -114,7 +114,7 @@ def test_waiting_standalone_task_is_not_marked_stalled(task_database):
         key="standalone_wait_state_worker",
         title="Standalone wait-state worker",
         description=None,
-        allowed_resource_types=["show"],
+        allowed_resource_types=["collection"],
         default_max_retries=0,
     )
     session.add(definition)
@@ -123,7 +123,7 @@ def test_waiting_standalone_task_is_not_marked_stalled(task_database):
     run = TaskRun(
         schedule_id=None,
         definition_id=definition.id,
-        resource_type=ResourceType.SHOW,
+        resource_type=ResourceType.COLLECTION,
         resource_id=8,
         status=TaskStatus.RUNNING,
         progress=None,

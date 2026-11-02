@@ -10,11 +10,11 @@ from backend.api.models.season import *
 from backend.db.models import Season
 
 
-def get_seasons_list(s: Session, show_slug: str) -> list[SeasonAPIRead]:
+def get_seasons_list(s: Session, collection_slug: str) -> list[SeasonAPIRead]:
     seasons = (
         s.query(Season)
         .filter(
-            Season.show.has(slug=show_slug)
+            Season.collection.has(slug=collection_slug)
         )
         .order_by(Season.id)
         .all()
@@ -22,12 +22,12 @@ def get_seasons_list(s: Session, show_slug: str) -> list[SeasonAPIRead]:
     return [SeasonAPIRead.model_validate(season) for season in seasons]
 
 
-def get_season(s: Session, show_slug: str, season_slug: str) -> SeasonAPIRead:
+def get_season(s: Session, collection_slug: str, season_slug: str) -> SeasonAPIRead:
     season = (
         s.query(Season)
         .filter(
             Season.slug == season_slug,
-            Season.show.has(slug=show_slug)
+            Season.collection.has(slug=collection_slug)
         )
         .one_or_none()
     )
@@ -41,28 +41,28 @@ def create_season(
     s: Session,
     body: SeasonAPICreate,
     *,
-    update_show_profiles: bool = False,
+    update_collection_profiles: bool = False,
 ) -> SeasonAPIRead:
     from backend.services.seasons import create_season_record
 
     season = create_season_record(
         s,
-        show_id=body.show_id,
+        collection_id=body.collection_id,
         index=body.index,
         slug=body.slug,
         name=body.name,
-        update_show_profiles=update_show_profiles,
+        update_collection_profiles=update_collection_profiles,
     )
     return SeasonAPIRead.model_validate(season)
 
 
 
-def update_season(s: Session, show_slug: str, season_slug: str, body: SeasonAPIUpdate) -> SeasonAPIRead:
+def update_season(s: Session, collection_slug: str, season_slug: str, body: SeasonAPIUpdate) -> SeasonAPIRead:
     season: Optional[Season] = (
         s.query(Season)
         .filter(
             Season.slug == season_slug,
-            Season.show.has(slug=show_slug)
+            Season.collection.has(slug=collection_slug)
         )
         .one_or_none()
     )
@@ -75,12 +75,12 @@ def update_season(s: Session, show_slug: str, season_slug: str, body: SeasonAPIU
     return SeasonAPIRead.model_validate(season)
 
 
-def delete_season(s: Session, show_slug: str, season_slug: str) -> SeasonAPIRead:
+def delete_season(s: Session, collection_slug: str, season_slug: str) -> SeasonAPIRead:
     season = (
         s.query(Season)
         .filter(
             Season.slug == season_slug,
-            Season.show.has(slug=show_slug)
+            Season.collection.has(slug=collection_slug)
         )
         .one_or_none()
     )
@@ -93,7 +93,7 @@ def delete_season(s: Session, show_slug: str, season_slug: str) -> SeasonAPIRead
         "resource_id": season.id,
         "id": season.id,
         "slug": season.slug,
-        "show_id": season.show_id
+        "collection_id": season.collection_id
     })
 
     s.delete(season)

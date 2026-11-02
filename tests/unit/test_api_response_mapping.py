@@ -7,21 +7,21 @@ from types import SimpleNamespace
 NOW = datetime(2026, 9, 20, 12, 0, tzinfo=timezone.utc)
 
 
-def test_show_view_maps_nested_orm_source_through_aliases():
-    from backend.api.models.show import ShowAPIReadView
+def test_collection_view_maps_nested_orm_source_through_aliases():
+    from backend.api.models.collection import CollectionAPIReadView
 
-    show = SimpleNamespace(
+    collection = SimpleNamespace(
         id=1,
-        uuid="show-uuid",
+        uuid="collection-uuid",
         source_key="dailywire",
-        slug="show",
+        slug="collection",
         membership_level="FREE",
         type="podcast",
         episode_identifier="numbered",
         author_slug="host",
-        title="Show",
+        title="Collection",
         description="Description",
-        sharing_url="https://example.test/show",
+        sharing_url="https://example.test/collection",
         author_name="Host",
         author_headshot_path=None,
         background_image_path=None,
@@ -34,15 +34,15 @@ def test_show_view_maps_nested_orm_source_through_aliases():
         meta_items=[],
     )
     source = SimpleNamespace(
-        show=show,
+        collection=collection,
         episode_count=12,
         years="2025-2026",
     )
 
-    view = ShowAPIReadView.model_validate(source)
+    view = CollectionAPIReadView.model_validate(source)
 
     assert view.id == 1
-    assert view.title == "Show"
+    assert view.title == "Collection"
     assert view.episode_count == 12
     assert view.years == "2025-2026"
 
@@ -52,13 +52,13 @@ def test_download_profile_view_uses_relationship_aliases():
 
     profile = SimpleNamespace(
         id=4,
-        show_id=1,
+        collection_id=1,
         local_media_profile_id=2,
         enable_profile=True,
         ep_id_type_list=["ep", "aux"],
         created_at=NOW,
         updated_at=NOW,
-        show=SimpleNamespace(title="Show", slug="show", type="series", episode_identifier="seasonal"),
+        collection=SimpleNamespace(title="Collection", slug="collection", type="series", episode_identifier="seasonal"),
         local_media_profile=SimpleNamespace(name="Audio", preferred_format="audio"),
         download_with_countdown=False,
         redownload_final=False,
@@ -74,9 +74,9 @@ def test_download_profile_view_uses_relationship_aliases():
         SimpleNamespace(profile=profile)
     )
 
-    assert view.show_title == "Show"
+    assert view.collection_title == "Collection"
     assert view.local_media_profile_name == "Audio"
-    assert view.show_episode_identifier == "seasonal"
+    assert view.collection_episode_identifier == "seasonal"
     assert view.download_episode_count == 25
 
 
@@ -85,7 +85,7 @@ def test_stream_profile_view_uses_relationship_aliases():
 
     profile = SimpleNamespace(
         id=5,
-        show_id=1,
+        collection_id=1,
         enable_profile=True,
         use_downloads=True,
         use_dw_stream=False,
@@ -95,9 +95,9 @@ def test_stream_profile_view_uses_relationship_aliases():
         type="rss",
         created_at=NOW,
         updated_at=NOW,
-        show=SimpleNamespace(title="Show", slug="show"),
+        collection=SimpleNamespace(title="Collection", slug="collection"),
         feed_url="https://example.test/feed",
-        overwrite_show_title=None,
+        overwrite_collection_title=None,
         video_output_mode="audio_mp4",
         stream_live_episodes=False,
         max_items=200,
@@ -107,7 +107,7 @@ def test_stream_profile_view_uses_relationship_aliases():
         SimpleNamespace(profile=profile, implementation=profile)
     )
 
-    assert view.show_slug == "show"
+    assert view.collection_slug == "collection"
     assert view.stream_profile_impl.feed_url == "https://example.test/feed"
 
 
@@ -120,7 +120,7 @@ def test_media_download_view_maps_composed_sources_without_manual_serialization(
         source_key="dailywire",
         title="Episode",
         episode_identifier="ep.42",
-        show=SimpleNamespace(slug="show", title="Show"),
+        collection=SimpleNamespace(slug="collection", title="Collection"),
     )
     download = SimpleNamespace(
         id=7,
@@ -146,7 +146,7 @@ def test_media_download_view_maps_composed_sources_without_manual_serialization(
         episode=episode,
         movie=None,
         movie_extra=None,
-        show=episode.show,
+        collection=episode.collection,
         profile=SimpleNamespace(name="Video", preferred_format="1080p"),
         latest_run=SimpleNamespace(
             status=TaskStatus.SUCCEEDED,
@@ -162,7 +162,7 @@ def test_media_download_view_maps_composed_sources_without_manual_serialization(
 
     assert view.id == 7
     assert view.episode_identifier == "ep.42"
-    assert view.show_title == "Show"
+    assert view.collection_title == "Collection"
     assert view.latest_task_status == TaskStatus.SUCCEEDED.value
     assert view.latest_task_is_redownload is True
 
@@ -173,7 +173,7 @@ def test_task_models_follow_relationship_aliases():
     run = SimpleNamespace(
         id=10,
         definition=SimpleNamespace(key="worker", title="Worker"),
-        resource_type="show",
+        resource_type="collection",
         resource_id=3,
         status="RUNNING",
         progress=35,

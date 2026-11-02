@@ -6,11 +6,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 
-def test_deleting_show_cascades_scheduler_work_and_exposes_relationships(tmp_path):
+def test_deleting_collection_cascades_scheduler_work_and_exposes_relationships(tmp_path):
     import backend.db.models  # noqa: F401
     import task_manager.scheduler.db  # noqa: F401
     from backend.db import Base
-    from backend.db.models import Show
+    from backend.db.models import Collection
     from task_manager.scheduler.db import (
         TaskDefinition,
         TaskOperation,
@@ -28,13 +28,13 @@ def test_deleting_show_cascades_scheduler_work_and_exposes_relationships(tmp_pat
 
     try:
         with Session(engine) as session:
-            show = Show(
+            collection = Collection(
                 source_key="dailywire",
-                uuid="show-uuid",
-                slug="show-slug",
-                title="Show title",
+                uuid="collection-uuid",
+                slug="collection-slug",
+                title="Collection title",
                 description=None,
-                sharing_url="https://example.test/show",
+                sharing_url="https://example.test/collection",
                 membership_level="FREE",
                 type="podcast",
                 episode_identifier="numbered",
@@ -47,14 +47,14 @@ def test_deleting_show_cascades_scheduler_work_and_exposes_relationships(tmp_pat
                 thumbnail_portrait_path=None,
                 thumbnail_square_path=None,
             )
-            session.add(show)
+            session.add(collection)
             session.flush()
 
             definition = TaskDefinition(
                 key="resource_relationship_worker",
                 title="Resource relationship worker",
                 description=None,
-                allowed_resource_types=["show"],
+                allowed_resource_types=["collection"],
                 default_max_retries=0,
             )
             session.add(definition)
@@ -62,8 +62,8 @@ def test_deleting_show_cascades_scheduler_work_and_exposes_relationships(tmp_pat
 
             schedule = TaskSchedule(
                 definition_id=definition.id,
-                resource_type=ResourceType.SHOW,
-                resource_id=show.id,
+                resource_type=ResourceType.COLLECTION,
+                resource_id=collection.id,
                 trigger="interval",
                 trigger_args={"minutes": 5},
                 active=True,
@@ -72,8 +72,8 @@ def test_deleting_show_cascades_scheduler_work_and_exposes_relationships(tmp_pat
             run = TaskRun(
                 schedule_id=None,
                 definition_id=definition.id,
-                resource_type=ResourceType.SHOW,
-                resource_id=show.id,
+                resource_type=ResourceType.COLLECTION,
+                resource_id=collection.id,
                 status=TaskStatus.RUNNING,
                 progress=35,
                 message="Working",
@@ -88,12 +88,12 @@ def test_deleting_show_cascades_scheduler_work_and_exposes_relationships(tmp_pat
                 runtime_ms=None,
             )
             operation = TaskOperation(
-                id="show-operation",
-                kind="show.sync",
+                id="collection-operation",
+                kind="collection.sync",
                 source=OperationSource.UI.value,
-                resource_type="show",
-                resource_id=show.id,
-                title=show.title,
+                resource_type="collection",
+                resource_id=collection.id,
+                title=collection.title,
                 status=OperationStatus.RUNNING.value,
                 progress=35,
                 message="Working",
@@ -107,30 +107,30 @@ def test_deleting_show_cascades_scheduler_work_and_exposes_relationships(tmp_pat
             target = TaskOperationTarget(
                 operation=operation,
                 task_key=definition.key,
-                resource_type="show",
-                resource_id=show.id,
-                slot_key="show",
+                resource_type="collection",
+                resource_id=collection.id,
+                slot_key="collection",
                 task_kwargs={},
                 recover_on_restart=True,
             )
             session.add_all([schedule, run, operation, target])
             session.commit()
 
-            show_id = show.id
+            collection_id = collection.id
             schedule_id = schedule.id
             run_id = run.id
             operation_id = operation.id
             target_id = target.id
 
-            assert [item.id for item in show.task_schedules] == [schedule_id]
-            assert [item.id for item in show.task_runs] == [run_id]
-            assert [item.id for item in show.task_operations] == [operation_id]
-            assert [item.id for item in show.task_operation_targets] == [target_id]
+            assert [item.id for item in collection.task_schedules] == [schedule_id]
+            assert [item.id for item in collection.task_runs] == [run_id]
+            assert [item.id for item in collection.task_operations] == [operation_id]
+            assert [item.id for item in collection.task_operation_targets] == [target_id]
 
-            session.delete(show)
+            session.delete(collection)
             session.commit()
 
-            assert session.get(Show, show_id) is None
+            assert session.get(Collection, collection_id) is None
             assert session.get(TaskSchedule, schedule_id) is None
             assert session.get(TaskRun, run_id) is None
             assert session.get(TaskOperation, operation_id) is None

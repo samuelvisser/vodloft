@@ -12,11 +12,11 @@ from sqlalchemy.orm import Session
 
 def _db_with_download(tmp_path: Path):
     from backend.db import Base
-    from backend.db.models import Episode, LocalMediaProfile, Season, Show
+    from backend.db.models import Episode, LocalMediaProfile, Season, Collection
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
     from downloader.storage.identity import inspect_artifact
     from backend.utils.helpers import generate_uuid
 
@@ -25,25 +25,25 @@ def _db_with_download(tmp_path: Path):
     Base.metadata.create_all(engine)
     session = Session(engine)
 
-    show = Show(
+    collection = Collection(
         source_key="dailywire",
-        uuid="show-uuid",
-        slug="test-show",
+        uuid="collection-uuid",
+        slug="test-collection",
         title="Test Show",
         description=None,
-        sharing_url="https://example.test/show",
+        sharing_url="https://example.test/collection",
         membership_level="FREE",
-        type=ShowType.PODCAST.value,
+        type=CollectionType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Host",
         author_slug="host",
     )
-    season = Season(show=show, index=1, slug="season-2026", name="2026")
+    season = Season(collection=collection, index=1, slug="season-2026", name="2026")
     episode = Episode(
         source_key="dailywire",
         uuid=generate_uuid(),
         type="episode",
-        show=show,
+        collection=collection,
         season=season,
         index=1,
         episode_identifier="ep.101",
@@ -57,10 +57,10 @@ def _db_with_download(tmp_path: Path):
     profile = LocalMediaProfile(
         slug="audio",
         name="Audio",
-        output_template="/downloads/{{ show }}/{{ episode }}.ext",
+        output_template="/downloads/{{ collection }}/{{ episode }}.ext",
         preferred_format="format_audio_only",
     )
-    session.add_all([show, season, episode, profile])
+    session.add_all([collection, season, episode, profile])
     session.commit()
 
     file_path = tmp_path / "episode.m4a"

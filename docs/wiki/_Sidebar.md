@@ -8,10 +8,11 @@
 
 **Using VODLoft**
 - [[Sources]]
-- [[Shows-and-Library]]
+- [[Collections-and-Library]]
 - [[Local-Media-Profiles]]
 - [[Download-Profiles]]
 - [[Downloads-and-File-Integrity]]
+- [[Existing-Files-and-Imports]]
 - [[Quick-Download]]
 - [[Podcast-RSS-Feeds]]
 

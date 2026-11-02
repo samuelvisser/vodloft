@@ -11,30 +11,31 @@ from alembic.util import CommandError
 from sqlalchemy import inspect as sa_inspect, text
 from sqlalchemy.engine import Connection
 
-from .alembic_version import (
-    SETTINGS_VERSION_COLUMN,
-    SETTINGS_VERSION_TABLE,
-    VERSION_STORAGE_MIGRATION_ATTRIBUTE,
-)
+from .alembic_version import SETTINGS_VERSION_COLUMN, SETTINGS_VERSION_TABLE
 from .core import get_db_path, get_engine
 
 
 ALEMBIC_DIR = Path(__file__).with_name("alembic")
 _UNMANAGED_TABLES = {"apscheduler_jobs"}
 
+# WireLoft's own releases. VODLoft's history starts at the baseline, which keeps
+# the id of WireLoft 1.2.3's migration; no VODLoft release ever stopped there.
+WIRELOFT_REVISIONS = frozenset({
+    "0001", "c8d4e2f1a7b9", "d8b4a1f6c203", "6d4a8c1f2b90", "f2a6c93d8b14", "a4e7c19b2d53", "c4e93f1a2b6d",
+})
+_LEGACY_VERSION_TABLE = "alembic_version"
+
 
 class DatabaseMigrationError(RuntimeError):
     """Raised when VODLoft cannot safely use or migrate the database."""
 
 
-def get_alembic_config(*, allow_version_storage_migration: bool = False) -> Config:
+def get_alembic_config() -> Config:
     # Alembic's Config default binds stdout when Alembic itself is imported.
     # Test runners and other embedders can replace and close that stream later,
     # so always bind the currently active stream when creating a config.
     config = Config(stdout=sys.stdout)
     config.set_main_option("script_location", str(ALEMBIC_DIR))
-    if allow_version_storage_migration:
-        config.attributes[VERSION_STORAGE_MIGRATION_ATTRIBUTE] = True
     return config
 
 
@@ -55,9 +56,31 @@ def get_head_revision() -> str:
     return heads[0]
 
 
+class WireLoftDatabaseError(DatabaseMigrationError):
+    """The database is WireLoft's. VODLoft imports it instead of taking it over."""
+
+    def __init__(self, path: Path) -> None:
+        super().__init__(
+            f"Database '{path}' belongs to WireLoft. VODLoft no longer upgrades a WireLoft "
+            "database in place. Start VODLoft with an empty config folder, then import the "
+            "WireLoft config folder from Settings > Import > WireLoft. The WireLoft folder is "
+            "only read, never changed."
+        )
+
+
+def _refuse_wireloft_config() -> None:
+    """A WireLoft config folder mounted as VODLoft's: its wireloft.db sits where VODLoft's database would."""
+    path = get_db_path()
+    wireloft = path.with_name("wireloft.db")
+    if wireloft.is_file() and not (path.is_file() and path.stat().st_size > 0):
+        raise WireLoftDatabaseError(wireloft)
+
+
 def _settings_revisions(connection: Connection) -> tuple[str, ...]:
     """Read the current revision from VODLoft's only supported version store."""
     inspector = sa_inspect(connection)
+    if inspector.has_table(_LEGACY_VERSION_TABLE):
+        raise WireLoftDatabaseError(get_db_path())
     if not inspector.has_table(SETTINGS_VERSION_TABLE):
         raise DatabaseMigrationError(
             f"Database '{get_db_path()}' does not contain current VODLoft migration metadata. "
@@ -109,6 +132,7 @@ def _database_tables() -> set[str]:
 
 def validate_database_migration_state() -> None:
     """Reject application schemas without valid current VODLoft revision state."""
+    _refuse_wireloft_config()
     tables = _database_tables()
     application_tables = tables - _UNMANAGED_TABLES
     if not application_tables:
@@ -120,6 +144,8 @@ def validate_database_migration_state() -> None:
             f"Database '{get_db_path()}' contains VODLoft tables but its Alembic revision is empty. "
             "Refusing to guess the schema version."
         )
+    if WIRELOFT_REVISIONS.intersection(current):
+        raise WireLoftDatabaseError(get_db_path())
 
     scripts = _script_directory()
     for revision in current:
@@ -154,15 +180,13 @@ def initialize_database() -> None:
 
 def upgrade_database() -> None:
     """Upgrade the schema and initialize application data for a fresh database."""
+    _refuse_wireloft_config()
     is_initial_install = not (_database_tables() - _UNMANAGED_TABLES)
+    if not is_initial_install:
+        validate_database_migration_state()
 
     try:
-        # The one migration that moved version storage into Settings owns the
-        # compatibility required to enter the chain from older databases.
-        command.upgrade(
-            get_alembic_config(allow_version_storage_migration=True),
-            "head",
-        )
+        command.upgrade(get_alembic_config(), "head")
     except CommandError as exc:
         raise DatabaseMigrationError(str(exc)) from exc
 
@@ -247,7 +271,7 @@ def get_database_status() -> tuple[tuple[str, ...], str]:
     return get_current_revisions(), get_head_revision()
 
 
-def show_history() -> None:
+def collection_history() -> None:
     try:
         command.history(get_alembic_config(), verbose=True)
     except CommandError as exc:

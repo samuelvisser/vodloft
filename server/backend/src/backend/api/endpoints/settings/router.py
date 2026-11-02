@@ -4,7 +4,7 @@ from backend.api.models.operations import TaskOperationAccepted
 from backend.api.models.settings import LibraryDefaultsAPIRead, SettingsAPIRead, SettingsAPIUpdate
 from config import get_settings
 from backend.app import db_session
-from backend.services.show_assets import request_show_asset_reconciliation
+from backend.services.collection_assets import request_collection_asset_reconciliation
 from .service import (
     SettingsManagedByEnvironmentError,
     SettingsPersistenceError,
@@ -52,12 +52,12 @@ def settings_update(body: SettingsAPIUpdate):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     if set(body.changed_fields) & {
-        "downloadSettings.downloadShowAssets", "downloadSettings.showArtworkFallbackFormat",
+        "downloadSettings.downloadCollectionAssets", "downloadSettings.collectionArtworkFallbackFormat",
         "downloadSettings.downloadRoot", "downloadSettings.filenameRestrictionMode",
         "downloadSettings.ffmpegPath",
     }:
         with db_session() as session:
-            request_show_asset_reconciliation(session)
+            request_collection_asset_reconciliation(session)
             session.commit()
     return result
 

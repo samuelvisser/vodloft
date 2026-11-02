@@ -20,3 +20,4 @@ class MediaDownloadHistoryAction(StrEnum):
     ARTIFACT_CORRUPTED = "artifact_corrupted"
     ARTIFACT_RESTORED = "artifact_restored"
     ARTIFACT_RENAMED = "artifact_renamed"
+    IMPORTED = "imported"

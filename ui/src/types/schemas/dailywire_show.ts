@@ -27,7 +27,7 @@ export const DailywireShowReadSchema = z.looseObject({
     latestEpisode: DailywireEpisodeReadSchema,
     latestEpisodes: z.array(DailywireEpisodeReadSchema),
 
-    probableShowType: z.string(),
+    probableCollectionType: z.string(),
     probableEpisodeIdentification: z.string(),
 });
 export type DailywireShowRead = z.infer<typeof DailywireShowReadSchema>;

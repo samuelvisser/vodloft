@@ -11,7 +11,7 @@ from backend.types.stream_profile_types import StreamProfileType
 from backend.utils.helpers import generate_stream_profile_token
 
 if TYPE_CHECKING:
-    from backend.db.models import Show
+    from backend.db.models import Collection
 
 
 def _default_episode_types() -> list[str]:
@@ -28,8 +28,8 @@ class StreamProfileBase(Base):
     # Columns
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     type: Mapped[str]
-    show_id: Mapped[int] = mapped_column(ForeignKey("shows.id"))
-    overwrite_show_title: Mapped[Optional[str]] = mapped_column(nullable=True, default=None)
+    collection_id: Mapped[int] = mapped_column(ForeignKey("collections.id"))
+    overwrite_collection_title: Mapped[Optional[str]] = mapped_column(nullable=True, default=None)
     enable_profile: Mapped[bool] = mapped_column(default=True)
     # Secret path segment identifying this profile's feed/media routes. Stays
     # constant across edits to the (user-editable, purely informational)
@@ -64,7 +64,7 @@ class StreamProfileBase(Base):
     )
 
     # Relationships
-    show: Mapped["Show"] = relationship(back_populates="stream_profiles")
+    collection: Mapped["Collection"] = relationship(back_populates="stream_profiles")
 
 
     def __repr__(self) -> str:

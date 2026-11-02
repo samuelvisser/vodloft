@@ -13,8 +13,8 @@ from backend.types.download_profile_types import EpisodeTagKey
 class DownloadProfileAPIBaseIn(RequestBase):
     """Fields for requests: validate here (constraints allowed).
 
-    The season fields only apply to a show identified by season, the other
-    filters apply to every show.
+    The season fields only apply to a collection identified by season, the other
+    filters apply to every collection.
     """
 
     enable_profile: bool
@@ -42,14 +42,14 @@ class DownloadProfileAPIBaseIn(RequestBase):
 
 
 class DownloadProfileAPICreateBundle(DownloadProfileAPIBaseIn):
-    """Request body for creating a download profile while bundling it with a show and media profile."""
+    """Request body for creating a download profile while bundling it with a collection and media profile."""
     pass
 
 
 class DownloadProfileAPICreate(DownloadProfileAPIBaseIn):
     """Request body for creating a download profile."""
 
-    show_id: int
+    collection_id: int
     local_media_profile_id: int
 
 
@@ -64,7 +64,7 @@ class DownloadProfileAPIBaseOut(ResponseBase):
     model_config = response_model_config(nested_source="profile")
 
     id: int
-    show_id: int
+    collection_id: int
     local_media_profile_id: int
     enable_profile: bool
     ep_id_type_list: list[EpisodeTagKey]

@@ -8,11 +8,13 @@ export const LocalMediaProfilePreviewSchema = z.object({
         usedIndexingValues: z.array(z.string()),
         missingIndexingValues: z.array(z.string()),
         provisionalIndexingValues: z.array(z.string()),
+        filenameMode: z.string().default(''),
+        replacedTypedCharacters: z.array(z.string()).default([]),
     }),
-    showRoot: z.object({
+    collectionRoot: z.object({
         path: z.string().nullable(),
         reason: z.string().nullable(),
-        showTitle: z.string().nullable(),
+        collectionTitle: z.string().nullable(),
         systemEnabled: z.boolean(),
     }).nullable(),
 })

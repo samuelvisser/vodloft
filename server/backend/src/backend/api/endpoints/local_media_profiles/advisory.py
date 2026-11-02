@@ -4,7 +4,7 @@ from backend.api.models.output_template_advisory import (
     CustomIndexAdvisoryRequest,
     CustomIndexAdvisoryResultRead,
 )
-from backend.utils.jinja_analysis.custom_index_advisory import get_custom_index_advisories
+from jinja_analysis.custom_index_advisory import get_custom_index_advisories
 from backend.utils.output_template_jinja import create_output_template_environment
 from backend.security.access import Area, Level
 from backend.security.deps import requires_any

@@ -4,7 +4,7 @@ from __future__ import annotations
 def test_dailywire_catalog_normalizes_show_and_movie_titles(monkeypatch):
     from sources.dailywire.api.dw_api.client import MiddlewareClient
 
-    show_description = (
+    collection_description = (
         "Matt Walsh confronts the lies used to rewrite America's past. "
         "It challenges decades of propaganda."
     )
@@ -15,8 +15,8 @@ def test_dailywire_catalog_normalizes_show_and_movie_titles(monkeypatch):
                 {"show": {
                     "id": "show-1",
                     "slug": "real-history-with-matt-walsh",
-                    "title": f"Real History with Matt Walsh | {show_description}",
-                    "description": show_description,
+                    "title": f"Real History with Matt Walsh | {collection_description}",
+                    "description": collection_description,
                 }},
                 {"video": {
                     "id": "movie-1",
@@ -40,8 +40,8 @@ def test_dailywire_catalog_normalizes_show_and_movie_titles(monkeypatch):
 
     catalog = client.get_catalog()
 
-    assert [show.title for show in catalog.shows] == ["Real History with Matt Walsh"]
-    assert catalog.shows[0].description == show_description
+    assert [collection.title for collection in catalog.collections] == ["Real History with Matt Walsh"]
+    assert catalog.collections[0].description == collection_description
 
     movie = catalog.movies[0]
     assert movie.title == "Sample Movie"

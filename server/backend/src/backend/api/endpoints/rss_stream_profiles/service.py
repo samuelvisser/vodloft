@@ -11,7 +11,7 @@ from backend.api.models.rss_stream_profile import (
     RssStreamProfileAPIUpdate,
 )
 from backend.db.model_mapping import create_database_fields, update_database_fields
-from backend.db.models import Show
+from backend.db.models import Collection
 from backend.db.models.stream_profile import RssStreamProfile
 from backend.types.local_media_profile_types import PreferredFormat
 from backend.types.stream_profile_types import RSS_HLS_OUTPUT_MODES
@@ -22,20 +22,20 @@ from backend.utils.helpers import generate_stream_profile_token
 from sources import Feature, get_source
 
 
-def _title_override(title: str, show_title: str) -> Optional[str]:
+def _title_override(title: str, collection_title: str) -> Optional[str]:
     normalized = title.strip()
-    return None if normalized == show_title else normalized
+    return None if normalized == collection_title else normalized
 
 
-def ensure_source_can_stream(show: Show, use_dw_stream: bool) -> None:
+def ensure_source_can_stream(collection: Collection, use_dw_stream: bool) -> None:
     """Only a Source with RSS streaming can stream episodes that are not downloaded."""
     if not use_dw_stream:
         return
-    source = get_source(show.source_key)
+    source = get_source(collection.source_key)
     if not source.has(Feature.RSS_STREAMING):
         raise HTTPException(
             status_code=422,
-            detail=f"{source.name} cannot stream episodes; a feed for this show serves downloaded files only",
+            detail=f"{source.name} cannot stream episodes; a feed for this collection serves downloaded files only",
         )
 
 
@@ -80,16 +80,16 @@ def create_stream_profile_rss(
         body: RssStreamProfileAPICreate,
         access: Access,
 ) -> RssStreamProfileAPIRead:
-    show: Optional[Show] = s.get(Show, body.show_id)
-    if show is None:
-        raise HTTPException(status_code=404, detail="Show not found")
-    ensure_source_can_stream(show, body.use_dw_stream)
+    collection: Optional[Collection] = s.get(Collection, body.collection_id)
+    if collection is None:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    ensure_source_can_stream(collection, body.use_dw_stream)
 
     token = generate_stream_profile_token()
     feed_url = (body.feed_url or "").strip() or build_rss_feed_url(
         request,
         token=token,
-        show_slug=show.slug,
+        collection_slug=collection.slug,
     )
 
     item = create_database_fields(
@@ -97,8 +97,8 @@ def create_stream_profile_rss(
         body,
         exclude_fields={"feed_url", "title"},
     )
-    item.overwrite_show_title = _title_override(body.title, show.title)
-    item.show = show
+    item.overwrite_collection_title = _title_override(body.title, collection.title)
+    item.collection = collection
     item.token = token
     item.feed_url = feed_url
     item.owner_user_id = access.user_id
@@ -121,11 +121,11 @@ def update_stream_profile_rss(
     if item is None:
         raise HTTPException(status_code=404, detail="Stream profile not found")
     check_owner(item, access)
-    ensure_source_can_stream(item.show, body.use_dw_stream)
+    ensure_source_can_stream(item.collection, body.use_dw_stream)
 
     feed_url = body.feed_url.strip()
     update_database_fields(item, body, exclude_fields={"feed_url", "title"})
-    item.overwrite_show_title = _title_override(body.title, item.show.title)
+    item.overwrite_collection_title = _title_override(body.title, item.collection.title)
     if not _keeps_live_episode_handoff(item):
         item.live_episode_handoff_ids = []
     item.feed_url = feed_url
@@ -158,7 +158,7 @@ def regenerate_stream_profile_rss_token(
         item.feed_url = build_rss_feed_url(
             request,
             token=item.token,
-            show_slug=item.show.slug,
+            collection_slug=item.collection.slug,
         )
 
     s.flush()

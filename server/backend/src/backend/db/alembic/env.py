@@ -2,10 +2,7 @@ from __future__ import annotations
 
 from alembic import context
 
-from backend.db.alembic_version import (
-    VERSION_STORAGE_MIGRATION_ATTRIBUTE,
-    apply_settings_version_table,
-)
+from backend.db.alembic_version import apply_settings_version_table
 from backend.db.core import Base, get_engine, load_database_models
 from config import get_settings
 
@@ -23,22 +20,6 @@ def _include_name(name: str | None, type_: str, _parent_names: dict[str, str]) -
     if type_ == "table" and name in _UNMANAGED_TABLES:
         return False
     return True
-
-
-def _configure_version_storage() -> None:
-    migration_context = context.get_context()
-    if context.config.attributes.get(VERSION_STORAGE_MIGRATION_ATTRIBUTE):
-        # Only db upgrade needs to understand databases from before the one-time
-        # version-storage migration. Keep that compatibility with the migration
-        # that owns the schema transition instead of normal migration services.
-        from backend.db.alembic.versions.d8b4a1f6c203_wireloft_1_1 import (
-            configure_version_storage_for_upgrade,
-        )
-
-        configure_version_storage_for_upgrade(migration_context)
-        return
-
-    apply_settings_version_table(migration_context)
 
 
 def _set_sqlite_foreign_keys(connection, *, enabled: bool) -> None:
@@ -88,7 +69,7 @@ def run_migrations_online() -> None:
                 compare_type=True,
                 include_name=_include_name,
             )
-            _configure_version_storage()
+            apply_settings_version_table(context.get_context())
 
             with context.begin_transaction():
                 context.run_migrations()

@@ -59,32 +59,32 @@ def episode_download_create(episode_slug: str, body: EpisodeDownloadAPICreate):
             raise
 
 
-@router.get("/by-show-slug/{show_slug}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[EpisodeAPIRead])
-def episodes_by_show_list(show_slug: str, limit: int | None = None):
+@router.get("/by-collection-slug/{collection_slug}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[EpisodeAPIRead])
+def episodes_by_collection_list(collection_slug: str, limit: int | None = None):
     """List complete episode records for callers that need episode detail fields."""
     with db_session() as s:
-        return get_episodes_by_show_list(s, show_slug, limit)
+        return get_episodes_by_collection_list(s, collection_slug, limit)
 
 
-@router.get("/as-view/by-show-slug/{show_slug}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[EpisodeAPIReadView])
-def episode_views_by_show_list(show_slug: str, limit: int | None = None):
+@router.get("/as-view/by-collection-slug/{collection_slug}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[EpisodeAPIReadView])
+def episode_views_by_collection_list(collection_slug: str, limit: int | None = None):
     """List compact episode fields."""
     with db_session() as s:
-        return get_episode_views_by_show_list(s, show_slug, limit)
+        return get_episode_views_by_collection_list(s, collection_slug, limit)
 
 
-@router.get("/as-view/by-show-slug/{show_slug}/page", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=EpisodeAPIReadViewPage)
-def episode_views_by_show_page(
-        show_slug: str,
+@router.get("/as-view/by-collection-slug/{collection_slug}/page", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=EpisodeAPIReadViewPage)
+def episode_views_by_collection_page(
+        collection_slug: str,
         cursor: str | None = Query(default=None, max_length=2048),
         limit: int = Query(default=25, ge=1, le=100),
         season_id: int | None = Query(default=None, ge=1),
 ):
-    """Return one compact episode page for a show grid or browser cache preview."""
+    """Return one compact episode page for a collection grid or browser cache preview."""
     with db_session() as s:
-        return get_episode_views_by_show_page(
+        return get_episode_views_by_collection_page(
             s,
-            show_slug,
+            collection_slug,
             cursor=cursor,
             limit=limit,
             season_id=season_id,
@@ -103,9 +103,9 @@ def recently_indexed_episode_views(
 @router.post("", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=EpisodeAPIRead, status_code=status.HTTP_201_CREATED)
 def episode_create(body: EpisodeAPICreate):
     """
-    Create a new episode for a show.
+    Create a new episode for a collection.
 
-    Creates a new episode with the provided metadata and associates it with a show.
+    Creates a new episode with the provided metadata and associates it with a collection.
     Returns the created episode with a generated slug identifier.
     """
     with db_session() as s:

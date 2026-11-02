@@ -14,6 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SERVER = REPO_ROOT / "server"
 
 DAILYWIRE_FEATURE_MODULES = {
+    "backend/src/backend/api/endpoints/dailywire/auth/imported_sign_in.py",
     "backend/src/backend/api/endpoints/dailywire/auth/router.py",
     "backend/src/backend/api/endpoints/dailywire/catalog/router.py",
     "backend/src/backend/api/endpoints/dailywire/catalog/service.py",
@@ -30,7 +31,7 @@ DAILYWIRE_FEATURE_MODULES = {
     "backend/src/backend/db/background_migrations/versions/f6a1c3d8b427_episode_indexing_semantics.py",
     "backend/src/backend/db/background_migrations/versions/2965d0593097_vodloft_file_names.py",
     "backend/src/backend/services/movies.py",
-    "backend/src/backend/services/show_assets.py",
+    "backend/src/backend/services/collection_assets.py",
     "task_manager/src/task_manager/tasks/helpers/episodes/identifier.py",
     "task_manager/src/task_manager/tasks/helpers/episodes/identifier_reconciliation.py",
     "task_manager/src/task_manager/tasks/helpers/episodes/mapper.py",
@@ -39,7 +40,7 @@ DAILYWIRE_FEATURE_MODULES = {
     "task_manager/src/task_manager/tasks/helpers/episodes/save.py",
     "task_manager/src/task_manager/tasks/helpers/episodes/status.py",
     "task_manager/src/task_manager/tasks/helpers/seasons.py",
-    "task_manager/src/task_manager/tasks/helpers/shows.py",
+    "task_manager/src/task_manager/tasks/helpers/collections.py",
     "task_manager/src/task_manager/tasks/workers/debug_ep_details/service.py",
     "task_manager/src/task_manager/tasks/workers/fetch_new_episodes/service.py",
     "task_manager/src/task_manager/tasks/workers/monitor_no_usable_media_episode/service.py",

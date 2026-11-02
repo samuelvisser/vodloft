@@ -3,11 +3,11 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 from backend.api.models.custom_metadata import CustomMetadataAPIUpdate
 from backend.api.models.movie import MovieAPIRead
-from backend.api.models.show import ShowAPIRead
+from backend.api.models.collection import CollectionAPIRead
 from backend.app import db_session
-from backend.db.models import Show
+from backend.db.models import Collection
 from backend.db.models.media_item import Movie
-from backend.services.custom_indexes import request_show_custom_index_reconciliation
+from backend.services.custom_indexes import request_collection_custom_index_reconciliation
 from backend.utils.custom_metadata import (
     CustomMetadataScope,
     replace_custom_metadata,
@@ -36,23 +36,23 @@ def custom_metadata_fields(
         return get_custom_metadata_fields(session, scope)
 
 
-@router.put("/shows/{show_slug}/metadata", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=ShowAPIRead)
-def show_custom_metadata_update(show_slug: str, body: CustomMetadataAPIUpdate) -> ShowAPIRead:
+@router.put("/collections/{collection_slug}/metadata", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=CollectionAPIRead)
+def collection_custom_metadata_update(collection_slug: str, body: CustomMetadataAPIUpdate) -> CollectionAPIRead:
     with db_session() as session:
-        show = session.query(Show).filter_by(slug=show_slug).one_or_none()
-        if show is None:
-            raise HTTPException(status_code=404, detail="Show not found")
+        collection = session.query(Collection).filter_by(slug=collection_slug).one_or_none()
+        if collection is None:
+            raise HTTPException(status_code=404, detail="Collection not found")
         try:
             remove_shared_custom_metadata_fields(
                 session,
-                show,
-                parent_table=Show.__tablename__,
+                collection,
+                parent_table=Collection.__tablename__,
                 fields=body.removed_fields,
             )
-            replace_custom_metadata(show, body.custom_metadata)
-            request_show_custom_index_reconciliation(session, show.id)
+            replace_custom_metadata(collection, body.custom_metadata)
+            request_collection_custom_index_reconciliation(session, collection.id)
             session.flush()
-            result = ShowAPIRead.model_validate(show)
+            result = CollectionAPIRead.model_validate(collection)
             session.commit()
             return result
         except Exception:

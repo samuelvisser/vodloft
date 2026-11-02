@@ -6,10 +6,10 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.api.models.source import (
-    ApiStatusAPIRead, ProgramStatusAPIRead, SourceProblemAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SearchResultsAPIRead, ShowDetailsAPIRead,
+    ApiStatusAPIRead, ProgramStatusAPIRead, SourceProblemAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SearchResultsAPIRead, CollectionDetailsAPIRead,
     SourceAPIRead, SourceDomainAPIRead,
 )
-from backend.db.models import Episode, Show, SourceDomainPreference
+from backend.db.models import Episode, Collection, SourceDomainPreference
 from backend.security.access import Access
 from backend.services.source_requests import asking_source
 from backend.utils.helpers import slugify
@@ -43,13 +43,13 @@ def source_with(source_id: str, feature: Feature) -> Source:
     return source
 
 
-def lookup_show_details(access: Access, source: Source, url: str) -> ShowDetailsAPIRead:
-    """Look up a show to add, shaped like the fields of a new show."""
+def lookup_show_details(access: Access, source: Source, url: str) -> CollectionDetailsAPIRead:
+    """Look up a collection to add, shaped like the fields of a new collection."""
     access.check_link(source, url)
-    with asking_source(f"{source.name} could not look up this show"):
-        details = source.show_details(url)
+    with asking_source(f"{source.name} could not look up this collection"):
+        details = source.collection_details(url)
     author = details.author_name or details.title
-    return ShowDetailsAPIRead(
+    return CollectionDetailsAPIRead(
         source_key=source.id,
         slug=details.slug,
         title=details.title,
@@ -92,39 +92,39 @@ def list_source_problems() -> list[SourceProblemAPIRead]:
 
 
 def get_api_status(s: Session, source: Source) -> ApiStatusAPIRead:
-    """The Source's API status, given its shows so it can say what checking them costs."""
-    shows = (
-        s.query(Show.sharing_url, func.count(Episode.id))
-        .outerjoin(Episode, Episode.show_id == Show.id)
-        .filter(Show.source_key == source.id)
-        .group_by(Show.id)
+    """The Source's API status, given its collections so it can say what checking them costs."""
+    collections = (
+        s.query(Collection.sharing_url, func.count(Episode.id))
+        .outerjoin(Episode, Episode.collection_id == Collection.id)
+        .filter(Collection.source_key == source.id)
+        .group_by(Collection.id)
         .all()
     )
-    return ApiStatusAPIRead.model_validate(source.api_status([(url, count) for url, count in shows]))
+    return ApiStatusAPIRead.model_validate(source.api_status([(url, count) for url, count in collections]))
 
 
-def _show_of_local_episode(s: Session, source: Source, episode_slug: str) -> Show | None:
+def _collection_of_local_episode(s: Session, source: Source, episode_slug: str) -> Collection | None:
     episode = (
         s.query(Episode)
         .filter(Episode.source_key == source.id, Episode.slug == episode_slug)
         .one_or_none()
     )
-    return episode.show if episode is not None else None
+    return episode.collection if episode is not None else None
 
 
 def _to_read(s: Session, source: Source, link: ResolvedLink, candidates: list[Source]) -> ResolvedLinkAPIRead:
-    show_slug, show_url = link.show_slug, link.show_url
-    if link.kind is LinkKind.EPISODE and show_slug is None:
-        local_show = _show_of_local_episode(s, source, link.slug)
-        if local_show is not None:
-            show_slug, show_url = local_show.slug, local_show.sharing_url
+    collection_slug, collection_url = link.collection_slug, link.collection_url
+    if link.kind is LinkKind.EPISODE and collection_slug is None:
+        local_collection = _collection_of_local_episode(s, source, link.slug)
+        if local_collection is not None:
+            collection_slug, collection_url = local_collection.slug, local_collection.sharing_url
     return ResolvedLinkAPIRead(
         source=SourceAPIRead.model_validate(source),
         kind=link.kind,
         slug=link.slug,
         url=link.url,
-        show_slug=show_slug,
-        show_url=show_url,
+        collection_slug=collection_slug,
+        collection_url=collection_url,
         site=link.site,
         drm_protected=link.drm_protected,
         needs_subscription=link.needs_subscription,

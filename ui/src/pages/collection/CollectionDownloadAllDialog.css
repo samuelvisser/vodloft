@@ -1,0 +1,10 @@
+.collection-download-all-dialog {
+  max-width: 600px;
+}
+
+.collection-download-all-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}

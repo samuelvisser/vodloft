@@ -32,12 +32,12 @@ function formatNumber(value: number): string {
     return value.toLocaleString()
 }
 
-/** How often each show can get a quick check from what the daily re-scan leaves of the checks share. */
-function checkIntervalMinutes(showCount: number, rescanUnits: number, checksQuota: number, minInterval: number): number | null {
-    if (showCount === 0) return minInterval
+/** How often each collection can get a quick check from what the daily re-scan leaves of the checks share. */
+function checkIntervalMinutes(collectionCount: number, rescanUnits: number, checksQuota: number, minInterval: number): number | null {
+    if (collectionCount === 0) return minInterval
     const room = checksQuota - rescanUnits
     if (room <= 0) return null
-    return Math.max(minInterval, Math.ceil((24 * 60) / (room / (showCount * 1.1))))
+    return Math.max(minInterval, Math.ceil((24 * 60) / (room / (collectionCount * 1.1))))
 }
 
 function formatInterval(minutes: number): string {
@@ -179,14 +179,14 @@ export default function YouTubeApiSettings({draft, updateDraft, environmentVaria
     const quota = draft.youtubeApi
     const keptFree = quota.dailyQuota - quota.checksQuota - quota.searchQuota
     const interval = status
-        ? checkIntervalMinutes(status.showCount, status.rescanUnits, quota.checksQuota, quota.minCheckIntervalMinutes)
+        ? checkIntervalMinutes(status.collectionCount, status.rescanUnits, quota.checksQuota, quota.minCheckIntervalMinutes)
         : null
-    const showCount = status?.showCount ?? 0
-    const checksHelp = !status || showCount === 0
-        ? 'Quick checks for new videos and the daily full re-scan of your YouTube shows.'
+    const collectionCount = status?.collectionCount ?? 0
+    const checksHelp = !status || collectionCount === 0
+        ? 'Quick checks for new videos and the daily full re-scan of your YouTube collections.'
         : interval === null
-            ? `Not enough for the daily re-scan of your ${showCount} YouTube shows (about ${formatNumber(status.rescanUnits)} units). Quick checks use RSS.`
-            : `Quick check about every ${formatInterval(interval)} for your ${showCount} YouTube ${showCount === 1 ? 'show' : 'shows'}, plus the daily re-scan.`
+            ? `Not enough for the daily re-scan of your ${collectionCount} YouTube collections (about ${formatNumber(status.rescanUnits)} units). Quick checks use RSS.`
+            : `Quick check about every ${formatInterval(interval)} for your ${collectionCount} YouTube ${collectionCount === 1 ? 'collection' : 'collections'}, plus the daily re-scan.`
     const searches = Number.isFinite(quota.searchQuota) ? Math.floor(quota.searchQuota / SEARCH_UNITS) : 0
 
     return (
@@ -251,12 +251,12 @@ export default function YouTubeApiSettings({draft, updateDraft, environmentVaria
                     onChange={(value) => updateDraft((next) => {
                         next.youtubeApi.minCheckIntervalMinutes = value
                     })}
-                    help="VODLoft never checks a show more often than this, even with quota to spare."
+                    help="VODLoft never checks a collection more often than this, even with quota to spare."
                 />
                 <div className="settings-field">
                     <span className="youtube-api-split__label">Kept free</span>
                     <div className="youtube-api-split__value">{Number.isFinite(keptFree) ? `${formatNumber(Math.max(keptFree, 0))} units` : '—'}</div>
-                    <div className="settings-field__help">For adding shows, Test key and manual refreshes.</div>
+                    <div className="settings-field__help">For adding collections, Test key and manual refreshes.</div>
                 </div>
             </SettingsSection>
         </>

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Iterable, Literal
 
 from backend.services import quick_download_history
+from backend.utils.filenames import clean_value
 from backend.utils.output_template import sanitize_path_component
 from config import get_settings
 from config.settings.submodels import FilenameRestrictionMode
@@ -141,8 +142,8 @@ def check_quick_downloadable(source: Source, kind: LinkKind, *, drm_protected: b
         raise QuickDownloadRefused(
             f"{source.name} only gives this video to {source.subscription_name or 'paying'} subscribers"
         )
-    if kind is LinkKind.SHOW:
-        raise QuickDownloadRefused("Quick download takes one video, episode or movie, not a whole show or channel")
+    if kind is LinkKind.COLLECTION:
+        raise QuickDownloadRefused("Quick download takes one video, episode or movie, not a whole collection such as a channel")
 
 
 def check_quick_choice(source: Source, choice: QuickChoice) -> None:
@@ -254,7 +255,8 @@ def quick_file_name(title: str, extension: str) -> str:
     """The title as a file name, made safe by the same rules as library files."""
     mode = FilenameRestrictionMode(get_settings().download_settings.filename_restriction_mode)
     stem = (title.strip() or "Quick download")[:_MAX_FILE_STEM]
-    return sanitize_path_component(f"{stem}.{extension}", mode=mode)
+    # The title is a value, as in a template: cleaned like yt-dlp cleans a field, then as a name.
+    return sanitize_path_component(f"{clean_value(stem, mode)}.{extension}", mode=mode, extension=extension)
 
 
 def _video_details(source: Source, request: QuickDownloadRequest):
@@ -276,7 +278,7 @@ def _metadata(source: Source, request: QuickDownloadRequest, details) -> MediaSe
         title=request.title,
         description=request.description,
         source_url=request.url,
-        show_title=author,
+        collection_title=author,
         aired=published.date() if isinstance(published, datetime) else published if isinstance(published, date) else None,
         duration_seconds=details.duration if details is not None else None,
         authors=(author,) if author else (),
@@ -309,8 +311,8 @@ class _Streams:
 
 def _streams(source: Source, request: QuickDownloadRequest, tracker) -> _Streams:
     """Ask the Source where the link's media is, refusing what cannot be downloaded."""
-    if request.kind is LinkKind.SHOW:
-        raise DownloadError("Quick download takes one video, episode or movie, not a whole show")
+    if request.kind is LinkKind.COLLECTION:
+        raise DownloadError("Quick download takes one video, episode or movie, not a whole collection")
     if request.kind is LinkKind.MOVIE:
         if source.has(Feature.MEMBERSHIP_LEVELS) and not request.members_only:
             raise SubscriptionRequiredError(_NOT_A_MEMBER.format(source=source.name))

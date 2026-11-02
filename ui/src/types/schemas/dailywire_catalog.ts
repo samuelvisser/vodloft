@@ -165,7 +165,7 @@ export const DailywireMovieReadSchema = DailywireCatalogMovieReadSchema.extend({
 export type DailywireMovieRead = z.infer<typeof DailywireMovieReadSchema>
 
 export const DailywireCatalogReadSchema = z.looseObject({
-    shows: z.array(DailywireCatalogShowReadSchema),
+    collections: z.array(DailywireCatalogShowReadSchema),
     movies: z.array(DailywireCatalogMovieReadSchema),
 })
 export type DailywireCatalogRead = z.infer<typeof DailywireCatalogReadSchema>

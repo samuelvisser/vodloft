@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 
-def test_media_download_view_filters_episode_show_and_movie_in_sql():
+def test_media_download_view_filters_episode_collection_and_movie_in_sql():
     import backend.db.models  # noqa: F401
 
     from backend.api.endpoints.media_downloads.service import get_media_downloads_view
@@ -15,8 +15,8 @@ def test_media_download_view_filters_episode_show_and_movie_in_sql():
         MovieExtra,
         MovieLocalMediaProfile,
         Season,
-        Show,
-        ShowLocalMediaProfile,
+        Collection,
+        CollectionLocalMediaProfile,
     )
     from backend.db.models.media_download import (
         EpisodeMediaDownload,
@@ -25,31 +25,31 @@ def test_media_download_view_filters_episode_show_and_movie_in_sql():
     )
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
 
     with Session(engine) as session:
-        show = Show(
+        collection = Collection(
             source_key="dailywire",
-            uuid="show-scope",
-            slug="scope-show",
+            uuid="collection-scope",
+            slug="scope-collection",
             title="Scope Show",
             description=None,
-            sharing_url="https://example.test/show",
+            sharing_url="https://example.test/collection",
             membership_level="FREE",
-            type=ShowType.PODCAST.value,
+            type=CollectionType.PODCAST.value,
             episode_identifier=EpisodeIdentifier.NUMBERED.value,
             author_name="Host",
             author_slug="host",
         )
-        season = Season(show=show, index=1, slug="season-1", name="Season 1")
+        season = Season(collection=collection, index=1, slug="season-1", name="Season 1")
         episode_one = Episode(
             source_key="dailywire",
             uuid="episode-scope-1",
             type=MediaType.EPISODE.value,
-            show=show,
+            collection=collection,
             season=season,
             index=1,
             episode_identifier="ep.1",
@@ -65,7 +65,7 @@ def test_media_download_view_filters_episode_show_and_movie_in_sql():
             source_key="dailywire",
             uuid="episode-scope-2",
             type=MediaType.EPISODE.value,
-            show=show,
+            collection=collection,
             season=season,
             index=2,
             episode_identifier="ep.2",
@@ -77,9 +77,9 @@ def test_media_download_view_filters_episode_show_and_movie_in_sql():
             publish_status="published_final",
             sharing_url="https://example.test/episode-two",
         )
-        show_profile = ShowLocalMediaProfile(
-            slug="show-profile",
-            name="Show Profile",
+        collection_profile = CollectionLocalMediaProfile(
+            slug="collection-profile",
+            name="Collection Profile",
             output_template="/downloads/{{ episode }}.ext",
             preferred_format="format_audio_only",
         )
@@ -112,11 +112,11 @@ def test_media_download_view_filters_episode_show_and_movie_in_sql():
         )
 
         session.add_all([
-            show,
+            collection,
             season,
             episode_one,
             episode_two,
-            show_profile,
+            collection_profile,
             movie,
             trailer,
             movie_profile,
@@ -127,7 +127,7 @@ def test_media_download_view_filters_episode_show_and_movie_in_sql():
             EpisodeMediaDownload(
                 type=MediaType.EPISODE.value,
                 media_item_id=episode_one.id,
-                local_media_profile_id=show_profile.id,
+                local_media_profile_id=collection_profile.id,
                 artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
                 file_path="/downloads/episode-one.ext",
                 downloaded_publish_status="published_final",
@@ -135,7 +135,7 @@ def test_media_download_view_filters_episode_show_and_movie_in_sql():
             EpisodeMediaDownload(
                 type=MediaType.EPISODE.value,
                 media_item_id=episode_two.id,
-                local_media_profile_id=show_profile.id,
+                local_media_profile_id=collection_profile.id,
                 artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
                 file_path="/downloads/episode-two.ext",
             ),
@@ -161,11 +161,11 @@ def test_media_download_view_filters_episode_show_and_movie_in_sql():
             episode_slug=episode_one.slug,
         )
         assert episode_view.episode_slug == episode_one.slug
-        assert episode_view.show_slug == show.slug
+        assert episode_view.collection_slug == collection.slug
         assert episode_view.downloaded_publish_status == "published_final"
 
-        show_views = get_media_downloads_view(session, show_slug=show.slug)
-        assert {view.episode_slug for view in show_views} == {
+        collection_views = get_media_downloads_view(session, collection_slug=collection.slug)
+        assert {view.episode_slug for view in collection_views} == {
             episode_one.slug,
             episode_two.slug,
         }

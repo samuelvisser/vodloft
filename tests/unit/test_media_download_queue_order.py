@@ -15,14 +15,14 @@ _DOWNLOAD_INPUTS = {"is_redownload": False, "prepare_existing_artifact": False}
 def _make_download(session: Session, *, slug: str):
     import backend.db.models  # noqa: F401
     import task_manager.scheduler.db  # noqa: F401
-    from backend.db.models import Episode, LocalMediaProfile, Season, Show
+    from backend.db.models import Episode, LocalMediaProfile, Season, Collection
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
     from backend.utils.helpers import generate_uuid
 
-    show = Show(
+    collection = Collection(
         source_key="dailywire",
         uuid=f"{slug}-show-uuid",
         slug=f"{slug}-show",
@@ -30,17 +30,17 @@ def _make_download(session: Session, *, slug: str):
         description=None,
         sharing_url=f"https://example.test/{slug}-show",
         membership_level="FREE",
-        type=ShowType.PODCAST.value,
+        type=CollectionType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Host",
         author_slug="host",
     )
-    season = Season(show=show, index=1, slug=f"{slug}-season", name="One")
+    season = Season(collection=collection, index=1, slug=f"{slug}-season", name="One")
     episode = Episode(
         source_key="dailywire",
         uuid=generate_uuid(),
         type=MediaType.EPISODE.value,
-        show=show,
+        collection=collection,
         season=season,
         index=1,
         episode_identifier="ep.1",
@@ -53,10 +53,10 @@ def _make_download(session: Session, *, slug: str):
     profile = LocalMediaProfile(
         slug=f"{slug}-audio",
         name=f"Audio {slug}",
-        output_template=f"/downloads/{slug}/{{show}}/{{episode}}.ext",
+        output_template=f"/downloads/{slug}/{{collection}}/{{episode}}.ext",
         preferred_format="format_audio_only",
     )
-    session.add_all([show, season, episode, profile])
+    session.add_all([collection, season, episode, profile])
     session.flush()
     download = EpisodeMediaDownload(
         type=MediaType.EPISODE.value,

@@ -4,14 +4,14 @@ import ReadMore from '../../utils/ReadMore'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import DateInput from '../common/DateInput'
 import SimpleSelect from '../common/SimpleSelect'
-import {useShows, useSourceLookup} from '../../lib/queries'
+import {useCollections, useSourceLookup} from '../../lib/queries'
 import {sourceControls} from '../../lib/sourceControls'
 
 type Props = {
     form: UseFormReturn<any>
-    /** The saved show the profile is for. */
-    showId?: number
-    /** The Source of a show that is not saved yet. */
+    /** The saved collection the profile is for. */
+    collectionId?: number
+    /** The Source of a collection that is not saved yet. */
     sourceKey?: string
 }
 
@@ -22,18 +22,18 @@ const LimitModeReg = createSelectRegistry('DownloadLimitMode', {
 })
 type LimitMode = (typeof LimitModeReg)['values'][number]
 
-/** Filters on when episodes were published, for every show. */
-export default function DownloadProfileDateFilters({form, showId, sourceKey}: Props) {
+/** Filters on when episodes were published, for every collection. */
+export default function DownloadProfileDateFilters({form, collectionId, sourceKey}: Props) {
     const {control, register, watch, setValue, clearErrors, formState: {errors}} = form
 
     // If countdown is disabled, redownload final becomes irrelevant and is hidden
     const withCountdown = watch('downloadWithCountdown')
 
     // Countdowns only appear on the live episodes some Sources publish.
-    const {data: shows} = useShows()
-    const show = shows?.find((item) => item.id === showId)
-    const newShowSource = useSourceLookup().get(sourceKey)
-    const controls = sourceControls(show ?? (newShowSource ? {sourceFeatures: newShowSource.features} : undefined))
+    const {data: collections} = useCollections()
+    const collection = collections?.find((item) => item.id === collectionId)
+    const newCollectionSource = useSourceLookup().get(sourceKey)
+    const controls = sourceControls(collection ?? (newCollectionSource ? {sourceFeatures: newCollectionSource.features} : undefined))
     const offersCountdown = controls.countdownDownloads || !!withCountdown
 
     const watchedDaysRaw = watch('downloadDaysInPast') ?? 0
@@ -109,7 +109,7 @@ export default function DownloadProfileDateFilters({form, showId, sourceKey}: Pr
                     </div>
                 )}
                 <div className="help" id="with-countdown-help">
-                    <ReadMore summary={<span>Download with the countdown meant for live shows</span>}>
+                    <ReadMore summary={<span>Download with the countdown meant for live collections</span>}>
                         Some live podcast episodes appear with a countdown timer before the final media is available. Enabling
                         this option will download the episode while the countdown is still present. If enabled, you may also choose
                         to re-download the final version after the countdown disappears (usually in about 1,5 to 2 hours after
@@ -212,7 +212,7 @@ export default function DownloadProfileDateFilters({form, showId, sourceKey}: Pr
                         </div>
                     )}
                     <div className="help" id="days-in-past-help">
-                        Amount of days in the past the show should be downloaded.
+                        Amount of days in the past the collection should be downloaded.
                         {oldestDateText ? (
                             <>
                                 {' '}Earliest date that will be downloaded: <strong>{oldestDateText}</strong>

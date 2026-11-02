@@ -5,8 +5,10 @@ the format selection, runs it into a private directory and reports progress.
 """
 from __future__ import annotations
 
+import logging
 import os
 import queue
+import re
 import shutil
 import subprocess
 import threading
@@ -17,9 +19,20 @@ from .errors import DownloadCancelled, DownloadError, EncryptedMediaError, FileT
 from .models import CancelCheck, DownloadProgress, DownloadResult, ProgressCallback
 from .plan import ResolvedDownloadSource
 from .source import FORMAT_HEIGHTS
+from .subtitles import webvtt_to_srt
+
+logger = logging.getLogger(__name__)
 
 _PROGRESS = "[vodloft-progress]"
 _FILE = "[vodloft-file]"
+# Only subtitles a person uploaded, in every language, never YouTube's live
+# chat. --ignore-errors turns a subtitle that fails to download into a warning;
+# any other error still ends yt-dlp with a non-zero exit status.
+YTDLP_SUBTITLE_OPTIONS = (
+    "--write-subs", "--sub-langs", "all,-live_chat", "--sub-format", "srt/vtt/best", "--ignore-errors",
+)
+_SUBTITLE_FILE = re.compile(r"^media\.(?P<language>[A-Za-z0-9][A-Za-z0-9_-]{0,34})\.(?P<format>srt|vtt)$")
+_MAX_SUBTITLE_BYTES = 32 * 1024 * 1024
 _UNAVAILABLE_MARKERS = ("video unavailable", "private video", "has been removed", "not available", "http error 404")
 
 
@@ -190,6 +203,32 @@ def _number(value: str) -> int | None:
         return None
 
 
+def _keep_subtitles(work: Path, target: Path) -> tuple[tuple[str, str], ...]:
+    """Each subtitle yt-dlp wrote, as SRT in ``target``; one that can't be read is left out."""
+    kept: dict[str, str] = {}
+    for path in sorted(work.iterdir()):
+        match = _SUBTITLE_FILE.match(path.name)
+        if match is None:
+            continue
+        language = match.group("language")
+        try:
+            if path.stat().st_size > _MAX_SUBTITLE_BYTES:
+                raise DownloadError("The subtitle is larger than allowed")
+            text = path.read_bytes().decode("utf-8-sig")
+            content = webvtt_to_srt(text) if match.group("format") == "vtt" else text.replace("\r\n", "\n").encode("utf-8")
+            if not content.strip():
+                raise DownloadError("The subtitle is empty")
+        except (DownloadError, OSError, UnicodeDecodeError) as exc:
+            logger.info("Leaving out the %s subtitle yt-dlp wrote: %s", language, exc)
+            continue
+        if language in kept:
+            continue
+        destination = target / f"ytdlp-subtitle.{language}.srt"
+        destination.write_bytes(content)
+        kept[language] = str(destination)
+    return tuple(kept.items())
+
+
 def download_ytdlp(
         url: str,
         dest_path: str,
@@ -197,8 +236,14 @@ def download_ytdlp(
         command: tuple[str, ...],
         progress: Optional[ProgressCallback] = None,
         should_cancel: Optional[CancelCheck] = None,
+        subtitles_dir: Path | None = None,
 ) -> DownloadResult:
-    """Run yt-dlp for ``url`` and move the file it produces to ``dest_path``."""
+    """Run yt-dlp for ``url`` and move the file it produces to ``dest_path``.
+
+    With ``subtitles_dir``, yt-dlp also writes the video's subtitles; each one
+    is saved there as SRT and listed in the result. A subtitle that fails
+    never fails the download.
+    """
     if should_cancel and should_cancel():
         raise DownloadCancelled("Download cancelled")
     work = Path(dest_path + ".ytdlp")
@@ -211,6 +256,7 @@ def download_ytdlp(
         f"download:{_PROGRESS} %(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s",
         "--print", f"after_move:{_FILE} %(filepath)s",
         "-P", str(work), "-o", "media.%(ext)s",
+        *(YTDLP_SUBTITLE_OPTIONS if subtitles_dir is not None else ()),
         "--", url,
     ]
     lines: queue.Queue[str | None] = queue.Queue()
@@ -273,9 +319,10 @@ def download_ytdlp(
             raise DownloadError("yt-dlp finished without producing a file")
         size = Path(produced).stat().st_size
         os.replace(produced, dest_path)
+        subtitles = _keep_subtitles(work, subtitles_dir) if subtitles_dir is not None else ()
         if progress:
             progress(DownloadProgress(bytes_downloaded=size, total_bytes=size))
-        return DownloadResult(path=dest_path, bytes_downloaded=size)
+        return DownloadResult(path=dest_path, bytes_downloaded=size, subtitles=subtitles)
     finally:
         if process.poll() is None:
             process.terminate()

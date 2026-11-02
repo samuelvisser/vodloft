@@ -72,7 +72,7 @@ def test_episode_identifier_info_parses_all_canonical_semantics():
 
 
 def test_extra_before_main_does_not_reserve_main_number():
-    from backend.types.show_types import EpisodeIdentifier
+    from backend.types.collection_types import EpisodeIdentifier
     from task_manager.tasks.helpers.episodes.identifier import identify_episodes_in_season
 
     extra = _record("1645.01", slug="extra-first")
@@ -93,7 +93,7 @@ def test_extra_before_main_does_not_reserve_main_number():
 
 
 def test_extra_can_arrive_after_a_newer_main():
-    from backend.types.show_types import EpisodeIdentifier
+    from backend.types.collection_types import EpisodeIdentifier
     from task_manager.tasks.helpers.episodes.identifier import identify_episodes_in_season
 
     late_extra = _record("1843.01")
@@ -110,7 +110,7 @@ def test_extra_can_arrive_after_a_newer_main():
 
 
 def test_dailywire_segments_20_and_above_are_show_auxiliary_content():
-    from backend.types.show_types import EpisodeIdentifier
+    from backend.types.collection_types import EpisodeIdentifier
     from task_manager.tasks.helpers.episodes.identifier import identify_episodes_in_season
 
     mapped, values = identify_episodes_in_season(
@@ -132,7 +132,7 @@ def test_dailywire_segments_20_and_above_are_show_auxiliary_content():
 
 
 def test_dailywire_segments_20_and_above_are_auxiliary_for_seasonal_shows():
-    from backend.types.show_types import EpisodeIdentifier
+    from backend.types.collection_types import EpisodeIdentifier
     from task_manager.tasks.helpers.episodes.identifier import identify_episodes_in_season
 
     mapped, values = identify_episodes_in_season(
@@ -146,7 +146,7 @@ def test_dailywire_segments_20_and_above_are_auxiliary_for_seasonal_shows():
 
 
 def test_extras_season_numbers_do_not_create_episode_relationships():
-    from backend.types.show_types import EpisodeIdentifier
+    from backend.types.collection_types import EpisodeIdentifier
     from task_manager.tasks.helpers.episodes.identifier import identify_episodes_in_season
 
     mapped, _ = identify_episodes_in_season(
@@ -162,7 +162,7 @@ def test_extras_season_numbers_do_not_create_episode_relationships():
 
 
 def test_attached_trailer_remains_episode_extra_with_trailer_subtype():
-    from backend.types.show_types import EpisodeIdentifier
+    from backend.types.collection_types import EpisodeIdentifier
     from task_manager.tasks.helpers.episodes.identifier import identify_episodes_in_season
 
     mapped, _ = identify_episodes_in_season(
@@ -174,8 +174,8 @@ def test_attached_trailer_remains_episode_extra_with_trailer_subtype():
     assert mapped[0][0] == "ep-extra.trailer.2083.5"
 
 
-def test_standalone_trailer_uses_show_global_trailer_counter():
-    from backend.types.show_types import EpisodeIdentifier
+def test_standalone_trailer_uses_collection_global_trailer_counter():
+    from backend.types.collection_types import EpisodeIdentifier
     from task_manager.tasks.helpers.episodes.identifier import identify_episodes_in_season
 
     mapped, values = identify_episodes_in_season(
@@ -189,7 +189,7 @@ def test_standalone_trailer_uses_show_global_trailer_counter():
 
 
 def test_duplicate_source_slot_ignores_episode_extra_subtype():
-    from backend.types.show_types import EpisodeIdentifier
+    from backend.types.collection_types import EpisodeIdentifier
     from task_manager.tasks.helpers.episodes.identifier import identify_episodes_in_season
 
     first = _record("2083.05", slug="first", is_trailer=False)
@@ -208,7 +208,7 @@ def test_duplicate_source_slot_ignores_episode_extra_subtype():
 
 
 def test_same_episode_number_is_distinct_across_seasons():
-    from backend.types.show_types import EpisodeIdentifier
+    from backend.types.collection_types import EpisodeIdentifier
     from task_manager.tasks.helpers.episodes.identifier import identify_episodes_in_season
 
     occupied: set[str] = set()
@@ -243,7 +243,7 @@ def test_mapper_uses_false_detail_flag_for_ambiguous_trailer_title():
     authoritative = record.model_copy(update={"is_trailer": False})
 
     class FakeClient:
-        def get_episodes_paginated(self, show_slug, selector):
+        def get_episodes_paginated(self, collection_slug, selector):
             return EpisodesPaginatedResult([record], None, False)
 
         def get_episode_details(self, slug, *, require_member_exclusive):
@@ -253,11 +253,11 @@ def test_mapper_uses_false_detail_flag_for_ambiguous_trailer_title():
 
     season = _season()
     season.id = 11
-    show = SimpleNamespace(slug="test-show", episode_identifier="numbered")
+    collection = SimpleNamespace(slug="test-collection", episode_identifier="numbered")
 
     episode_map, _ = get_dw_episodes_by_seasons(
         FakeClient(),
-        show=show,
+        collection=collection,
         membership_plan="FREE",
         seasons=[season],
         dw_id_by_slug={season.slug: "remote-season"},
@@ -280,7 +280,7 @@ def test_mapper_accepts_true_paginated_trailer_flag_without_detail_lookup():
     )
 
     class FakeClient:
-        def get_episodes_paginated(self, show_slug, selector):
+        def get_episodes_paginated(self, collection_slug, selector):
             return EpisodesPaginatedResult([record], None, False)
 
         def get_episode_details(self, slug, *, require_member_exclusive):
@@ -288,11 +288,11 @@ def test_mapper_accepts_true_paginated_trailer_flag_without_detail_lookup():
 
     season = _season()
     season.id = 11
-    show = SimpleNamespace(slug="test-show", episode_identifier="numbered")
+    collection = SimpleNamespace(slug="test-collection", episode_identifier="numbered")
 
     episode_map, _ = get_dw_episodes_by_seasons(
         FakeClient(),
-        show=show,
+        collection=collection,
         membership_plan="FREE",
         seasons=[season],
         dw_id_by_slug={season.slug: "remote-season"},
@@ -317,7 +317,7 @@ def test_mapper_checks_detail_when_paginated_trailer_flag_is_none():
     detail_calls: list[str] = []
 
     class FakeClient:
-        def get_episodes_paginated(self, show_slug, selector):
+        def get_episodes_paginated(self, collection_slug, selector):
             return EpisodesPaginatedResult([record], None, False)
 
         def get_episode_details(self, slug, *, require_member_exclusive):
@@ -326,11 +326,11 @@ def test_mapper_checks_detail_when_paginated_trailer_flag_is_none():
 
     season = _season()
     season.id = 11
-    show = SimpleNamespace(slug="test-show", episode_identifier="numbered")
+    collection = SimpleNamespace(slug="test-collection", episode_identifier="numbered")
 
     episode_map, _ = get_dw_episodes_by_seasons(
         FakeClient(),
-        show=show,
+        collection=collection,
         membership_plan="FREE",
         seasons=[season],
         dw_id_by_slug={season.slug: "remote-season"},
@@ -355,7 +355,7 @@ def test_mapper_promotes_attached_trailer_from_affirmative_detail_flag():
     authoritative = record.model_copy(update={"is_trailer": True})
 
     class FakeClient:
-        def get_episodes_paginated(self, show_slug, selector):
+        def get_episodes_paginated(self, collection_slug, selector):
             return EpisodesPaginatedResult([record], None, False)
 
         def get_episode_details(self, slug, *, require_member_exclusive):
@@ -363,11 +363,11 @@ def test_mapper_promotes_attached_trailer_from_affirmative_detail_flag():
 
     season = _season()
     season.id = 11
-    show = SimpleNamespace(slug="test-show", episode_identifier="numbered")
+    collection = SimpleNamespace(slug="test-collection", episode_identifier="numbered")
 
     episode_map, _ = get_dw_episodes_by_seasons(
         FakeClient(),
-        show=show,
+        collection=collection,
         membership_plan="FREE",
         seasons=[season],
         dw_id_by_slug={season.slug: "remote-season"},
@@ -378,7 +378,7 @@ def test_mapper_promotes_attached_trailer_from_affirmative_detail_flag():
 
 
 def test_official_trailer_title_overrides_false_dailywire_flag():
-    from backend.types.show_types import EpisodeIdentifier
+    from backend.types.collection_types import EpisodeIdentifier
     from task_manager.tasks.helpers.episodes.identifier import identify_episodes_in_season
 
     mapped, values = identify_episodes_in_season(
@@ -411,7 +411,7 @@ def test_mapper_skips_detail_lookup_for_explicit_official_trailer_title():
     )
 
     class FakeClient:
-        def get_episodes_paginated(self, show_slug, selector):
+        def get_episodes_paginated(self, collection_slug, selector):
             return EpisodesPaginatedResult([record], None, False)
 
         def get_episode_details(self, slug, *, require_member_exclusive):
@@ -419,11 +419,11 @@ def test_mapper_skips_detail_lookup_for_explicit_official_trailer_title():
 
     season = _season(season_number=0, season_type="extra")
     season.id = 11
-    show = SimpleNamespace(slug="test-show", episode_identifier="seasonal")
+    collection = SimpleNamespace(slug="test-collection", episode_identifier="seasonal")
 
     episode_map, _ = get_dw_episodes_by_seasons(
         FakeClient(),
-        show=show,
+        collection=collection,
         membership_plan="FREE",
         seasons=[season],
         dw_id_by_slug={season.slug: "remote-season"},
@@ -587,8 +587,8 @@ def test_background_reindex_only_updates_raw_number_when_remote_record_exists():
     from backend.db.background_migrations.versions.f6a1c3d8b427_episode_indexing_semantics import (
         LocalEpisode,
         LocalSeason,
-        LocalShow,
-        _plan_show,
+        LocalCollection,
+        _plan_collection,
     )
 
     season = LocalSeason(
@@ -613,9 +613,9 @@ def test_background_reindex_only_updates_raw_number_when_remote_record_exists():
         identifier="ep.2",
         previous_identifier=None,
     )
-    show = LocalShow(
+    collection = LocalCollection(
         id=1,
-        slug="test-show",
+        slug="test-collection",
         sharing_url="https://www.dailywire.com/show/test-show",
         membership_level="FREE",
         identifier_mode="numbered",
@@ -626,7 +626,7 @@ def test_background_reindex_only_updates_raw_number_when_remote_record_exists():
     )
     remote = _record("", slug="matched")
 
-    plan = _plan_show(show, {11: {"matched": remote}})
+    plan = _plan_collection(collection, {11: {"matched": remote}})
     by_id = {episode.episode_id: episode for episode in plan.episodes}
 
     assert by_id[101].update_dw_episode_number is True
@@ -644,7 +644,7 @@ def test_resolved_batch_is_reidentified_from_authoritative_detail_numbers():
 
     season = _season()
     season.id = 11
-    show = SimpleNamespace(
+    collection = SimpleNamespace(
         episode_identifier="numbered",
         seasons=[season],
     )
@@ -668,7 +668,7 @@ def test_resolved_batch_is_reidentified_from_authoritative_detail_numbers():
     }
 
     canonical, values = _canonicalize_resolved_identifiers(
-        show=show,
+        collection=collection,
         resolved_by_season=resolved,
         previous_values={},
         occupied_identifiers={"ep.1843"},
@@ -688,7 +688,7 @@ def test_background_reindex_downgrade_restores_previous_identifier_grammar():
     from importlib import import_module
 
     migration = import_module(
-        "backend.db.alembic.versions.6d4a8c1f2b90_wireloft_1_2"
+        "importer.wireloft.migrations.6d4a8c1f2b90_wireloft_1_2"
     )
     _identifier_for_previous_release = migration._identifier_for_previous_release
 
@@ -722,17 +722,17 @@ def test_mapper_does_not_mutate_callers_occupied_identifier_snapshot():
     record = _record("2500.00", slug="new-episode")
 
     class FakeClient:
-        def get_episodes_paginated(self, show_slug, selector):
+        def get_episodes_paginated(self, collection_slug, selector):
             return EpisodesPaginatedResult([record], None, False)
 
     season = _season()
     season.id = 11
-    show = SimpleNamespace(slug="test-show", episode_identifier="numbered")
+    collection = SimpleNamespace(slug="test-collection", episode_identifier="numbered")
     occupied = {"ep.2499"}
 
     episode_map, _ = get_dw_episodes_by_seasons(
         FakeClient(),
-        show=show,
+        collection=collection,
         membership_plan="FREE",
         seasons=[season],
         dw_id_by_slug={season.slug: "remote-season"},
@@ -752,7 +752,7 @@ def test_episode_read_view_derives_identifier_fields_during_model_validation():
         {
             "id": 1,
             "source_key": "dailywire",
-            "show_id": 2,
+            "collection_id": 2,
             "season_id": 3,
             "index": 4,
             "episode_identifier": "ep-extra.other.S03E42.10",
@@ -778,30 +778,30 @@ def test_compact_episode_view_includes_identifier_semantics():
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
 
-    from backend.api.endpoints.episodes.service import get_episode_views_by_show_page
+    from backend.api.endpoints.episodes.service import get_episode_views_by_collection_page
     from backend.db import Base
-    from backend.db.models import Episode, Season, Show
-    from backend.types.show_types import EpisodeIdentifier, ShowType
+    from backend.db.models import Episode, Season, Collection
+    from backend.types.collection_types import EpisodeIdentifier, CollectionType
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     session = Session(engine)
 
-    show = Show(
+    collection = Collection(
         source_key="dailywire",
-        uuid="show-view-semantics",
+        uuid="collection-view-semantics",
         slug="view-semantics",
         title="View Semantics",
         description=None,
-        sharing_url="https://example.test/show",
+        sharing_url="https://example.test/collection",
         membership_level="FREE",
-        type=ShowType.SERIES.value,
+        type=CollectionType.SERIES.value,
         episode_identifier=EpisodeIdentifier.SEASONAL.value,
         author_name="Host",
         author_slug="host",
     )
     season = Season(
-        show=show,
+        collection=collection,
         index=3,
         slug="season-3",
         name="Season 3",
@@ -812,7 +812,7 @@ def test_compact_episode_view_includes_identifier_semantics():
         source_key="dailywire",
         uuid="episode-view-semantics",
         type="episode",
-        show=show,
+        collection=collection,
         season=season,
         index=12,
         episode_identifier="ep-extra.trailer.S03E12.5",
@@ -825,10 +825,10 @@ def test_compact_episode_view_includes_identifier_semantics():
         sharing_url="https://example.test/episode",
         published_date=datetime(2026, 9, 18, 12, 0, 0, tzinfo=timezone.utc),
     )
-    session.add_all([show, season, episode])
+    session.add_all([collection, season, episode])
     session.commit()
 
-    [view] = get_episode_views_by_show_page(session, show.slug, cursor=None, limit=10).items
+    [view] = get_episode_views_by_collection_page(session, collection.slug, cursor=None, limit=10).items
 
     assert view.dw_episode_number == "12.05"
     assert view.episode_type == "ep-extra"

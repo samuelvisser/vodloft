@@ -2,7 +2,7 @@ import {Controller, UseFormReturn} from 'react-hook-form'
 
 import {defaultSubtitleModeForProfile, type LocalMediaProfileType} from '../../types/local_media_profile'
 import type {LocalMediaProfileSubtitleMode} from '../../types/schemas/local_media_profile_base'
-import ShowLocalMediaProfileScopeField from './ShowLocalMediaProfileScopeField'
+import CollectionLocalMediaProfileScopeField from './CollectionLocalMediaProfileScopeField'
 import {useSubtitleModeDefaults} from './useSubtitleModeDefaults'
 
 import {useLibraryDefaults} from '../../lib/settings'
@@ -104,8 +104,8 @@ export default function LocalMediaProfileCommonFields({
                 )}
             </div>
 
-            {mode === 'show' && (
-                <ShowLocalMediaProfileScopeField
+            {mode === 'collection' && (
+                <CollectionLocalMediaProfileScopeField
                     form={form}
                     onScopeChange={onScopeChange}
                     isCreating={isCreating}
@@ -231,7 +231,7 @@ export default function LocalMediaProfileCommonFields({
                             inputId="local-media-subtitle-mode"
                             registry={subtitleModeReg}
                             value={field.value ?? (isCreating
-                                ? defaultSubtitleModeForProfile(mode, form.getValues('showScope'))
+                                ? defaultSubtitleModeForProfile(mode, form.getValues('collectionScope'))
                                 : undefined)}
                             onChange={(value) => {
                                 onSubtitleModeChange(value as LocalMediaProfileSubtitleMode)
@@ -249,13 +249,14 @@ export default function LocalMediaProfileCommonFields({
                     </div>
                 )}
                 <div className="help" id="local-media-subtitle-mode-help">
-                    <ReadMore summary="Choose how subtitles provided by The Daily Wire are stored with this media.">
+                    <ReadMore summary="Choose how the subtitles a video has are stored with this media.">
                         <p><strong>No subtitles</strong> skips subtitle acquisition.</p>
                         <p><strong>Embed in media</strong> adds available subtitles as selectable tracks in supported containers.</p>
                         <p><strong>Download besides media</strong> saves language-specific SRT files, such as <code>Movie.en.srt</code>, beside the downloaded media for Plex and other media servers.</p>
                         <p><strong>Both embed and download</strong> does both.</p>
-                        <p>New Movie profiles and Show profiles available for Series or Podcasts and Series default to sidecars. New Podcast-only profiles default to no subtitles. Changing availability on an existing profile never changes its saved subtitle choice.</p>
+                        <p>New Movie profiles and Collection profiles available for Series or Podcasts and Series default to sidecars. New Podcast-only profiles default to no subtitles. Changing availability on an existing profile never changes its saved subtitle choice.</p>
                         {isCreating && <p>While creating a new profile, changing type or availability updates the suggested default until you select a subtitle option yourself.</p>}
+                        <p>Subtitles come from The Daily Wire and from every site yt-dlp downloads from, such as YouTube. For yt-dlp sites only subtitles a person uploaded are fetched, in every language; automatic subtitles and live chat are not. NPO Start has no subtitles yet.</p>
                         <p>Embedding requires a supported media container, not a raw HLS bundle.</p>
                     </ReadMore>
                 </div>

@@ -8,11 +8,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 
-def _make_show(session: Session, *, slug: str, show_type: str):
-    from backend.db.models import Show
-    from backend.types.show_types import EpisodeIdentifier
+def _make_collection(session: Session, *, slug: str, collection_type: str):
+    from backend.db.models import Collection
+    from backend.types.collection_types import EpisodeIdentifier
 
-    show = Show(
+    collection = Collection(
         source_key="dailywire",
         uuid=f"{slug}-uuid",
         slug=slug,
@@ -20,14 +20,14 @@ def _make_show(session: Session, *, slug: str, show_type: str):
         description=None,
         sharing_url=f"https://example.test/{slug}",
         membership_level="FREE",
-        type=show_type,
+        type=collection_type,
         episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Host",
         author_slug="host",
     )
-    session.add(show)
+    session.add(collection)
     session.flush()
-    return show
+    return collection
 
 
 def _make_local_media_profile(session: Session, *, slug: str):
@@ -36,7 +36,7 @@ def _make_local_media_profile(session: Session, *, slug: str):
     profile = LocalMediaProfile(
         slug=slug,
         name=slug,
-        output_template="/downloads/{show}/{episode}.ext",
+        output_template="/downloads/{collection}/{episode}.ext",
         preferred_format="format_audio_only",
     )
     session.add(profile)
@@ -79,11 +79,11 @@ def test_podcast_profile_create_and_update_fire_transactional_events(db_session)
         DownloadProfileAPIUpdate,
     )
     from backend.types.download_profile_types import EpIdType
-    from backend.types.show_types import ShowType
+    from backend.types.collection_types import CollectionType
     from task_manager.events.registry import VodloftEventLinker, wait_for_events
     from task_manager.tasks.workers.download_profile_worker.event_adapter import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
 
-    show = _make_show(db_session, slug="podcast", show_type=ShowType.PODCAST.value)
+    collection = _make_collection(db_session, slug="podcast", collection_type=CollectionType.PODCAST.value)
     media_profile = _make_local_media_profile(db_session, slug="podcast-audio")
 
     added = _capture_event("download_profile.added")
@@ -91,7 +91,7 @@ def test_podcast_profile_create_and_update_fire_transactional_events(db_session)
     created = create_download_profile(
         db_session,
         DownloadProfileAPICreate(
-            show_id=show.id,
+            collection_id=collection.id,
             local_media_profile_id=media_profile.id,
             enable_profile=True,
             ep_id_type_list=[EpIdType.EP.value],
@@ -112,7 +112,7 @@ def test_podcast_profile_create_and_update_fire_transactional_events(db_session)
     assert added == [{
         "resource_id": created.id,
         "id": created.id,
-        "show_id": show.id,
+        "collection_id": collection.id,
     }]
     assert requested == [{
         "resource_type": "download_profile",
@@ -147,7 +147,7 @@ def test_podcast_profile_create_and_update_fire_transactional_events(db_session)
     assert updated == [{
         "resource_id": created.id,
         "id": created.id,
-        "show_id": show.id,
+        "collection_id": collection.id,
     }]
     assert requested == [{
         "resource_type": "download_profile",
@@ -167,13 +167,13 @@ def test_series_profile_create_and_update_fire_transactional_events(db_session):
     )
     from backend.db.models import Season
     from backend.types.download_profile_types import EpIdType
-    from backend.types.show_types import ShowType
+    from backend.types.collection_types import CollectionType
     from task_manager.events.registry import VodloftEventLinker, wait_for_events
     from task_manager.tasks.workers.download_profile_worker.event_adapter import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
 
-    show = _make_show(db_session, slug="series", show_type=ShowType.SERIES.value)
+    collection = _make_collection(db_session, slug="series", collection_type=CollectionType.SERIES.value)
     media_profile = _make_local_media_profile(db_session, slug="series-video")
-    season = Season(show=show, index=1, slug="season-1", name="Season 1")
+    season = Season(collection=collection, index=1, slug="season-1", name="Season 1")
     db_session.add(season)
     db_session.flush()
     season_input = SeasonAPIRequestDetached(name=season.name, slug=season.slug)
@@ -183,7 +183,7 @@ def test_series_profile_create_and_update_fire_transactional_events(db_session):
     created = create_download_profile(
         db_session,
         DownloadProfileAPICreate(
-            show_id=show.id,
+            collection_id=collection.id,
             local_media_profile_id=media_profile.id,
             enable_profile=True,
             ep_id_type_list=[EpIdType.EP.value],
@@ -204,7 +204,7 @@ def test_series_profile_create_and_update_fire_transactional_events(db_session):
     assert added == [{
         "resource_id": created.id,
         "id": created.id,
-        "show_id": show.id,
+        "collection_id": collection.id,
     }]
     assert requested == [{
         "resource_type": "download_profile",
@@ -239,7 +239,7 @@ def test_series_profile_create_and_update_fire_transactional_events(db_session):
     assert updated == [{
         "resource_id": created.id,
         "id": created.id,
-        "show_id": show.id,
+        "collection_id": collection.id,
     }]
     assert requested == [{
         "resource_type": "download_profile",
@@ -251,11 +251,11 @@ def test_download_profile_events_are_discarded_on_rollback(db_session):
     from backend.api.endpoints.download_profiles.service import create_download_profile
     from backend.api.models.download_profile import DownloadProfileAPICreate
     from backend.types.download_profile_types import EpIdType
-    from backend.types.show_types import ShowType
+    from backend.types.collection_types import CollectionType
     from task_manager.events.registry import wait_for_events
     from task_manager.tasks.workers.download_profile_worker.event_adapter import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
 
-    show = _make_show(db_session, slug="rolled-back", show_type=ShowType.PODCAST.value)
+    collection = _make_collection(db_session, slug="rolled-back", collection_type=CollectionType.PODCAST.value)
     media_profile = _make_local_media_profile(db_session, slug="rolled-back-audio")
     added = _capture_event("download_profile.added")
     requested = _capture_event(DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT)
@@ -263,7 +263,7 @@ def test_download_profile_events_are_discarded_on_rollback(db_session):
     create_download_profile(
         db_session,
         DownloadProfileAPICreate(
-            show_id=show.id,
+            collection_id=collection.id,
             local_media_profile_id=media_profile.id,
             enable_profile=True,
             ep_id_type_list=[EpIdType.EP.value],
@@ -295,7 +295,7 @@ def test_download_profile_worker_subscribes_only_to_dedicated_run_event():
     }
 
     assert DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT in event_names
-    assert "show.indexed" not in event_names
+    assert "collection.indexed" not in event_names
     assert "download_profile.added" not in event_names
     assert "download_profile.updated" not in event_names
     assert "episode.published_final" not in event_names
@@ -306,7 +306,7 @@ def test_download_profile_worker_subscribes_only_to_dedicated_run_event():
     ("resource_type", "resource_id"),
     (
         ("download_profile", 91),
-        ("show", 12),
+        ("collection", 12),
         ("episode", 501),
     ),
 )

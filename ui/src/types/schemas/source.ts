@@ -2,7 +2,7 @@ import {z} from "zod";
 
 /** Optional capabilities of a Source, as the backend names them. */
 export const SourceFeature = {
-    SHOWS: 'shows',
+    COLLECTIONS: 'collections',
     MOVIES: 'movies',
     MOVIE_EXTRAS: 'movie_extras',
     BROWSE: 'browse',
@@ -44,6 +44,8 @@ export const SourceReadSchema = z.object({
     domains: z.array(z.string()),
     features: z.array(z.string()),
     searchLabel: z.string().nullable().optional(),
+    /** What the Source calls a kind of media in its own catalogue, such as Show for a Daily Wire collection. */
+    kindNames: z.record(z.string(), z.string()).optional(),
     /** What the Source calls the subscription some of its videos need, such as NPO Plus. */
     subscriptionName: z.string().nullable().optional(),
     /** What a cookies file does for the Source, when it says so itself. */
@@ -59,11 +61,11 @@ export function sourceHas(source: SourceRead | null | undefined, feature: Source
 
 export const ResolvedLinkReadSchema = z.object({
     source: SourceReadSchema,
-    kind: z.enum(['show', 'movie', 'episode', 'video']),
+    kind: z.enum(['collection', 'movie', 'episode', 'video']),
     slug: z.string(),
     url: z.string(),
-    showSlug: z.string().nullable(),
-    showUrl: z.string().nullable(),
+    collectionSlug: z.string().nullable(),
+    collectionUrl: z.string().nullable(),
     site: z.string().nullable(),
     drmProtected: z.boolean(),
     needsSubscription: z.boolean().optional().default(false),
@@ -79,15 +81,15 @@ export const ResolvedLinkReadSchema = z.object({
 export type ResolvedLinkRead = z.infer<typeof ResolvedLinkReadSchema>
 
 export const SearchResultReadSchema = z.object({
-    kind: z.enum(['show', 'movie', 'episode', 'video']),
+    kind: z.enum(['collection', 'movie', 'episode', 'video']),
     slug: z.string(),
     url: z.string(),
     title: z.string(),
     description: z.string().nullable(),
     imageUrl: z.string().nullable(),
     authorName: z.string().nullable(),
-    showSlug: z.string().nullable(),
-    showUrl: z.string().nullable(),
+    collectionSlug: z.string().nullable(),
+    collectionUrl: z.string().nullable(),
     kindLabel: z.string().nullable().optional(),
     facts: z.array(z.string()).optional(),
     needsSubscription: z.boolean().optional(),
@@ -114,6 +116,16 @@ export function searchName(source: SourceRead | null | undefined): string | unde
     return source?.searchLabel ?? source?.name
 }
 
+/** What the Source calls a kind of media where it shows its own catalogue, or VODLoft's word for it. */
+export function kindName(source: SourceRead | null | undefined, kind: string, vodloftName: string): string {
+    return source?.kindNames?.[kind] ?? vodloftName
+}
+
+/** The plural of a kind name, such as Shows for Show; Series stays Series. */
+export function pluralKindName(name: string): string {
+    return name.endsWith('s') ? name : `${name}s`
+}
+
 export const SourceDomainReadSchema = z.object({
     domain: z.string(),
     sourceKeys: z.array(z.string()),
@@ -137,7 +149,7 @@ export const EpisodeTagReadSchema = z.object({
     help: z.string(),
     selectedByDefault: z.boolean(),
     rssEpisodeType: z.enum(['full', 'trailer', 'bonus']),
-    /** Episodes with the main tag follow the show's numbering. */
+    /** Episodes with the main tag follow the collection's numbering. */
     main: z.boolean(),
 })
 export type EpisodeTagRead = z.infer<typeof EpisodeTagReadSchema>
@@ -156,8 +168,8 @@ export const ApiStatusReadSchema = z.object({
     resetsAt: z.string(),
     problem: z.string().nullable(),
     problemFixUrl: z.string().nullable(),
-    /** The shows the key speeds up, and what one full re-scan of them costs. */
-    showCount: z.number(),
+    /** The collections the key speeds up, and what one full re-scan of them costs. */
+    collectionCount: z.number(),
     rescanUnits: z.number(),
 })
 export type ApiStatusRead = z.infer<typeof ApiStatusReadSchema>
@@ -178,8 +190,8 @@ export const CookiesReadSchema = z.object({
 })
 export type CookiesRead = z.infer<typeof CookiesReadSchema>
 
-/** A show at a Source with listed episodes, shaped like the fields of a new show. */
-export const ShowDetailsReadSchema = z.object({
+/** A collection at a Source with listed episodes, shaped like the fields of a new collection. */
+export const CollectionDetailsReadSchema = z.object({
     sourceKey: z.string(),
     slug: z.string(),
     title: z.string(),
@@ -188,7 +200,7 @@ export const ShowDetailsReadSchema = z.object({
     authorName: z.string(),
     authorSlug: z.string(),
     thumbnailLandscapePath: z.string().nullable(),
-    /** The show's own seasons, oldest first; empty when VODLoft makes a season per upload year. */
+    /** The collection's own seasons, oldest first; empty when VODLoft makes a season per upload year. */
     seasons: z.array(z.object({slug: z.string(), name: z.string()})),
 })
-export type ShowDetailsRead = z.infer<typeof ShowDetailsReadSchema>
+export type CollectionDetailsRead = z.infer<typeof CollectionDetailsReadSchema>

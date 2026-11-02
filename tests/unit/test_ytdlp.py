@@ -83,14 +83,14 @@ def test_other_sites_are_prefixed_and_unknown_pages_are_best_effort(lookups):
     assert source.resolve("https://example.com/about") is None
 
 
-def test_playlists_resolve_to_shows_but_are_not_videos(lookups):
+def test_playlists_resolve_to_collections_but_are_not_videos(lookups):
     answers, _ = lookups
     answers["https://www.youtube.com/playlist?list=PL1"] = {
         "_type": "playlist", "id": "PL1", "extractor_key": "YoutubeTab", "title": "A playlist", "uploader": "A Channel",
     }
     source = YtDlpSource()
     link = source.resolve("https://www.youtube.com/playlist?list=PL1")
-    assert (link.kind, link.slug, link.title) == (LinkKind.SHOW, "PL1", "A playlist")
+    assert (link.kind, link.slug, link.title) == (LinkKind.COLLECTION, "PL1", "A playlist")
     with pytest.raises(runner.YtDlpError, match="not a single video"):
         source.video_details("https://www.youtube.com/playlist?list=PL1")
 
@@ -219,6 +219,11 @@ FAKE_YTDLP = textwrap.dedent('''
         print(template.replace("%(progress.downloaded_bytes)s", str(done)).replace("%(progress.total_bytes)s", "20").replace("%(progress.total_bytes_estimate)s", "NA"))
     print("[Merger] Merging formats")
     (work / "media.mp4").write_bytes(b"x" * 120)
+    if "--write-subs" in args and "subs" in url:
+        (work / "media.en.vtt").write_text("WEBVTT\\n\\n00:00:01.000 --> 00:00:02.000\\nHello\\n")
+        (work / "media.nl.srt").write_text("1\\n00:00:01,000 --> 00:00:02,000\\nHallo\\n\\n")
+        (work / "media.live_chat.json").write_text("{}")
+        (work / "media.de.vtt").write_text("not a subtitle")
     print("[vodloft-file] " + str(work / "media.mp4"))
 ''')
 
@@ -358,3 +363,22 @@ def test_the_weekly_update_only_updates_sources_that_are_due(tool_sources):
     tool.due, tool.fails = True, True
     with pytest.raises(RuntimeError, match="Could not update Tool"):
         run_update_source_programs()
+
+
+def test_ytdlp_writes_each_uploaded_subtitle_as_srt(fake_ytdlp, tmp_path):
+    from downloader.ytdlp import download_ytdlp
+
+    keep = tmp_path / "keep"
+    keep.mkdir()
+    result = download_ytdlp("https://x/subs", str(tmp_path / "out.mp4"), command=fake_ytdlp, subtitles_dir=keep)
+    languages = dict(result.subtitles)
+    assert sorted(languages) == ["en", "nl"]
+    assert open(languages["en"], encoding="utf-8").read() == "1\n00:00:01,000 --> 00:00:02,000\nHello\n\n"
+    assert "Hallo" in open(languages["nl"], encoding="utf-8").read()
+
+
+def test_ytdlp_without_a_subtitle_folder_asks_for_no_subtitles(fake_ytdlp, tmp_path):
+    from downloader.ytdlp import download_ytdlp
+
+    result = download_ytdlp("https://x/subs", str(tmp_path / "out.mp4"), command=fake_ytdlp)
+    assert result.subtitles == ()

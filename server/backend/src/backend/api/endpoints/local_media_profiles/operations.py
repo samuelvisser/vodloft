@@ -7,7 +7,7 @@ from task_manager.scheduler.operation_factory import OperationDefinition
 from task_manager.scheduler.operations import OperationTargetSpec
 
 
-_RENAME_SHOW_FILES_TASK_KEY = "rename_show_profile_files"
+_RENAME_COLLECTION_FILES_TASK_KEY = "rename_collection_profile_files"
 _RENAME_MOVIE_FILES_TASK_KEY = "rename_movie_profile_files"
 _BULK_DOWNLOAD_TASK_KEY = "media_download_bulk_action_worker"
 
@@ -20,11 +20,11 @@ class LocalMediaProfileFileRenameOperation(OperationDefinition[LocalMediaProfile
         self,
         local_media_profile: LocalMediaProfileBase,
         *,
-        show_ids: Sequence[int] = (),
+        collection_ids: Sequence[int] = (),
         movie_profile: bool = False,
     ) -> None:
         super().__init__(local_media_profile)
-        self.show_ids = tuple(dict.fromkeys(int(show_id) for show_id in show_ids))
+        self.collection_ids = tuple(dict.fromkeys(int(collection_id) for collection_id in collection_ids))
         self.movie_profile = bool(movie_profile)
 
     @property
@@ -43,20 +43,20 @@ class LocalMediaProfileFileRenameOperation(OperationDefinition[LocalMediaProfile
             )
         return tuple(
             OperationTargetSpec(
-                task_key=_RENAME_SHOW_FILES_TASK_KEY,
-                resource_type="show",
-                resource_id=show_id,
+                task_key=_RENAME_COLLECTION_FILES_TASK_KEY,
+                resource_type="collection",
+                resource_id=collection_id,
                 task_kwargs={"local_media_profile_id": self.resource.id},
-                slot_key=f"show:{show_id}",
+                slot_key=f"collection:{collection_id}",
             )
-            for show_id in self.show_ids
+            for collection_id in self.collection_ids
         )
 
     def context(self) -> dict[str, object]:
         return {
             "local_media_profile_slug": self.resource.slug,
             "local_media_profile_name": self.resource.name,
-            "shows_requested": len(self.show_ids),
+            "collections_requested": len(self.collection_ids),
         }
 
 

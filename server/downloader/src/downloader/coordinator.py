@@ -190,14 +190,21 @@ def execute_download_plan(
                 should_cancel=tracker.is_canceled,
                 waiting=lambda value: tracker.wait("media", "download_capacity" if value else None),
             ):
+                ytdlp_subtitles = [spec.id for spec in plan.assets if spec.source_format == "ytdlp"]
                 if plan.source.ytdlp_command:
-                    transfer = partial(download_ytdlp, command=plan.source.ytdlp_command)
+                    transfer = partial(
+                        download_ytdlp, command=plan.source.ytdlp_command,
+                        subtitles_dir=workspace.workspace if ytdlp_subtitles else None,
+                    )
                 else:
                     transfer = download_hls_bundle if plan.source.hls_bundle else download_hls if plan.source.use_hls else download_file
                 result = transfer(
                     plan.source.url, str(transfer_path),
                     progress=lambda value: tracker.progress("media", value), should_cancel=tracker.is_canceled,
                 )
+        for asset_id in ytdlp_subtitles:
+            with tracker.activity(f"acquire:{asset_id}", foreground=False):
+                assets.fulfil(asset_id, result.subtitles)
         if media_path.is_file() and not (plan.source.remux_to_mp4 or plan.source.convert_video_to_m4a):
             owned_media = inspect_artifact(media_path)
         # Completion of the transfer releases its lease, not the operation. The
@@ -223,7 +230,7 @@ def execute_download_plan(
             subtitle_assets = tuple(
                 (asset.spec.language or "und", str(asset.path), asset.spec.forced)
                 for asset_id in plan.subtitle_asset_ids
-                if (asset := assets.get(asset_id)) is not None
+                for asset in assets.all(asset_id)
             )
             with _local_activity(tracker, resources, "embed"):
                 embed_media(
@@ -235,11 +242,13 @@ def execute_download_plan(
                 )
             owned_media = inspect_artifact(media_path)
         acquired: list[AcquiredSidecar] = []
+        planned_by_asset: dict[str, str] = {}
         for spec in plan.assets:
-            asset = assets.get(spec.id)
-            if asset is not None:
+            found = assets.all(spec.id)
+            for asset in found:
                 acquired.append(asset)
-            elif spec.publish:
+                planned_by_asset[asset.spec.id] = spec.id
+            if not found and spec.publish and spec.source_format != "ytdlp":
                 tracker.skip(f"publish:{spec.id}", f"Optional {spec.kind} was not published")
         targets = [item.target_suffix for item in acquired if item.spec.publish]
         if len(set(targets)) != len(targets) or media_path.suffix in targets:
@@ -288,26 +297,31 @@ def execute_download_plan(
             # Publication staged and renamed all sidecars before the media.
             # Report their completed lifecycle stages after the media publish
             # stage, preserving the tracker dependency graph.
-            for asset in published:
-                activity = f"publish:{asset.id}"
+            for spec in plan.assets:
+                if not spec.publish or (not assets.all(spec.id) and spec.source_format != "ytdlp"):
+                    continue
+                activity = f"publish:{spec.id}"
+                size = sum(
+                    asset.identity.size_bytes for asset in published
+                    if planned_by_asset.get(asset.id) == spec.id
+                )
                 with tracker.activity(activity):
-                    tracker.progress(
-                        activity, DownloadProgress(
-                            asset.identity.size_bytes, asset.identity.size_bytes,
-                        ),
-                    )
+                    tracker.progress(activity, DownloadProgress(size, size))
         else:
             assert journal is not None
-            for asset in acquired:
-                if not asset.spec.publish:
+            for spec in plan.assets:
+                files = assets.all(spec.id)
+                if not spec.publish or (not files and spec.source_format != "ytdlp"):
                     continue
-                activity = f"publish:{asset.spec.id}"
+                activity = f"publish:{spec.id}"
+                # A yt-dlp subtitle spec publishes one file per language, or none.
                 with tracker.activity(activity):
-                    path = journal.publish(
-                        asset.path, asset.target_suffix, should_cancel=tracker.is_canceled,
-                        progress=lambda value, activity=activity: tracker.progress(activity, value),
-                    )
-                    published.append(PublishedSidecar(asset.spec.id, asset.spec.kind, str(path), inspect_artifact(path)))
+                    for asset in files:
+                        path = journal.publish(
+                            asset.path, asset.target_suffix, should_cancel=tracker.is_canceled,
+                            progress=lambda value, activity=activity: tracker.progress(activity, value),
+                        )
+                        published.append(PublishedSidecar(asset.spec.id, asset.spec.kind, str(path), inspect_artifact(path)))
         with tracker.activity("verify"):
             identity = inspect_artifact(destination)
             if identity.size_bytes <= 0:

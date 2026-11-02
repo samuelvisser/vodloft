@@ -8,7 +8,7 @@ import {formatBytes} from '../utils/formatting'
 import {
     LocalMediaProfileTypeReg,
     PreferredFormatReg,
-    ShowLocalMediaProfileScopeReg,
+    CollectionLocalMediaProfileScopeReg,
 } from "../types/local_media_profile";
 import {faIcon} from '../icons/faIcon'
 import DataTable, { Column } from '../components/DataTable/DataTable';
@@ -23,8 +23,8 @@ type LocalMediaProfileOverviewRow = LocalMediaProfileRead & {
 }
 
 function getAvailableForLabel(profile: LocalMediaProfileRead) {
-    return profile.type === 'show'
-        ? ShowLocalMediaProfileScopeReg.getLabelLoose(profile.showScope)
+    return profile.type === 'collection'
+        ? CollectionLocalMediaProfileScopeReg.getLabelLoose(profile.collectionScope)
         : 'Movies'
 }
 
@@ -105,7 +105,7 @@ export default function LocalMediaProfilesPage() {
                 <h1 id="profiles-title">Local Media Profiles</h1>
                 <PageSubtitle summary={<>Define how downloaded files are stored and in what format.</>}>
                     <p>A Local Media Profile controls the output path and the preferred file format for your downloads
-                        across shows and movies. You can create multiple profiles (e.g., “Podcasts to ABS”, “Videos to NAS”) and
+                        across collections and movies. You can create multiple profiles (e.g., “Podcasts to ABS”, “Videos to NAS”) and
                         reuse them.</p>
                 </PageSubtitle>
                 {can('local_media_profiles', 'manage') && <button className="btn btn-primary" onClick={onAdd}>Add media profile</button>}

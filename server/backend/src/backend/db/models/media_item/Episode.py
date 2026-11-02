@@ -24,7 +24,7 @@ from backend.utils.episode_publication_timing import (
 from backend.utils.episode_slug import is_no_show_today_slug
 
 if TYPE_CHECKING:
-    from backend.db.models import Show, Season
+    from backend.db.models import Collection, Season
 
 # A Download Profile does not recreate a download record the user deleted.
 DOWNLOAD_DISMISSED_META_PREFIX = "download_dismissed.local_media_profile."
@@ -40,18 +40,18 @@ class Episode(
     __mapper_args__ = { "polymorphic_identity": MediaType.EPISODE.value, "polymorphic_load": "selectin"}
     __task_resource_types__ = ("episode",)
     __table_args__ = (
-        UniqueConstraint("show_id", "index", name="uq_episode_show_index"),
-        UniqueConstraint("show_id", "episode_identifier", name="uq_unique_episode_identifier_per_show"),
-        UniqueConstraint("show_id", "source_slug", name="uq_episode_show_source_slug"),
+        UniqueConstraint("collection_id", "index", name="uq_episode_collection_index"),
+        UniqueConstraint("collection_id", "episode_identifier", name="uq_unique_episode_identifier_per_collection"),
+        UniqueConstraint("collection_id", "source_slug", name="uq_episode_collection_source_slug"),
         Index(
-            "ix_media_items_episode_show_published_id",
-            "show_id",
+            "ix_media_items_episode_collection_published_id",
+            "collection_id",
             "published_date",
             "id",
         ),
         Index(
-            "ix_media_items_episode_show_publish_status",
-            "show_id",
+            "ix_media_items_episode_collection_publish_status",
+            "collection_id",
             "publish_status",
         ),
         Index(
@@ -65,21 +65,22 @@ class Episode(
             "publish_status",
             sqlite_where=text("metadata_is_final = 0"),
         ),
-        PrimaryKeyConstraint("id", "show_id", name="pk_episodes"),
+        PrimaryKeyConstraint("id", "collection_id", name="pk_episodes"),
     )
 
     # Fields
     id: Mapped[int] = mapped_column(ForeignKey("media_items.id", ondelete="CASCADE"), primary_key=True)
-    show_id: Mapped[int] = mapped_column(ForeignKey("shows.id"),primary_key=True,)
+    collection_id: Mapped[int] = mapped_column(ForeignKey("collections.id"),primary_key=True,)
     season_id: Mapped[int] = mapped_column(ForeignKey("seasons.id"))
     index: Mapped[int]
-    episode_identifier: Mapped[str] = mapped_column(comment="Unique identifier that is used to identify the episode within the show")
+    episode_identifier: Mapped[str] = mapped_column(comment="Unique identifier that is used to identify the episode within the collection")
     dw_episode_number: Mapped[Optional[str]] = mapped_column(comment="Episode number exactly as returned by The Daily Wire")
     slug: Mapped[str] = mapped_column(index=True, unique=True)
     source_slug: Mapped[str] = mapped_column(
         default=lambda context: context.get_current_parameters()["slug"],
-        comment="The episode's own slug at its Source. It is the slug, unless another show's episode already had that",
+        comment="The episode's own slug at its Source. It is the slug, unless another collection's episode already had that",
     )
+    author_name: Mapped[Optional[str]] = mapped_column(comment="Who uploaded the episode, as the Source names them")
     publish_status: Mapped[str]
     metadata_is_final: Mapped[bool] = mapped_column(
         Boolean,
@@ -95,7 +96,7 @@ class Episode(
     scheduled_date: Mapped[Optional[datetime]]
 
     # Relationships
-    show: Mapped["Show"] = relationship(back_populates="episodes")
+    collection: Mapped["Collection"] = relationship(back_populates="episodes")
     season: Mapped["Season"] = relationship(back_populates="episodes")
 
     @property
@@ -175,4 +176,4 @@ class Episode(
             self.set_meta(key, None)
 
     def __repr__(self) -> str:
-        return f"<Episode(id={self.id}, slug={self.slug}, show_id={self.show_id}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"
+        return f"<Episode(id={self.id}, slug={self.slug}, collection_id={self.collection_id}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"

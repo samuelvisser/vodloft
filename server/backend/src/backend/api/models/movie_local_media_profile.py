@@ -44,7 +44,7 @@ class _MovieLocalMediaProfileAPIBaseIn(LocalMediaProfileAPIBaseIn):
             allowed_metadata_scopes=MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
         )
         if output_template_custom_index_keys(value):
-            raise ValueError("custom_index is only available to Show Local Media Profiles")
+            raise ValueError("custom_index is only available to Collection Local Media Profiles")
         if not movie_template_has_media_item_field(value):
             raise ValueError(_MOVIE_EXTRA_COLLISION_MESSAGE)
         return value

@@ -20,7 +20,7 @@ def test_template_preview_reports_unknown_jinja_filter_as_output_error(db_sessio
     from backend.api.models.local_media_profile_preview import LocalMediaProfilePreviewRequest
 
     body = LocalMediaProfilePreviewRequest(
-        type="show",
+        type="collection",
         preferred_format="format_audio_only",
         output_template="/downloads/{{ title | not_a_filter('x', 'y') }}.ext",
         values={"title": "Example"},
@@ -37,11 +37,11 @@ def test_preview_plan_treats_incomplete_jinja_as_expected_editor_state(db_sessio
     from backend.api.models.local_media_profile_preview import LocalMediaProfilePreviewRequest
 
     body = LocalMediaProfilePreviewRequest(
-        type="show",
+        type="collection",
         preferred_format="format_audio_only",
         output_template=(
             "{% set extra_num = 'extra' | custom_index %}"
-            "{% set plex_year = ' (' ~ meta_show_year ~ ')' if meta_show_year e%}"
+            "{% set plex_year = ' (' ~ meta_collection_year ~ ')' if meta_collection_year e%}"
             "/downloads/{{ title }}.ext"
         ),
         indexing_values=[{"key": "extra", "name": "Extra"}],

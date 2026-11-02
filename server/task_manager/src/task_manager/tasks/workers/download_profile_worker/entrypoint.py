@@ -31,7 +31,7 @@ from .service import run_download_profile_worker
     key="download_profile_worker",
     title="Run Download Profiles",
     description="Makes sure Download Profiles actually work by downloading the episodes they request",
-    allowed_resource_types=("download_profile", "show", "episode"),
+    allowed_resource_types=("download_profile", "collection", "episode"),
     default_max_retries=5,
     tracks_progress=True,
     terminal_callback=on_media_download_task_terminal,
@@ -46,7 +46,7 @@ async def download_profile_worker(
     Ensures the episodes requested by enabled Download Profiles are downloaded.
 
     ``resource_id`` is polymorphic: an episode id for an episode-scoped request,
-    a show id (checks the whole show's profiles), a specific download_profile id,
+    a collection id (checks the whole collection's profiles), a specific download_profile id,
     or 0/None for a global sweep across every enabled profile (cron or app.startup).
     ``resource_type`` defines which one it is. The Download Profile event adapter
     translates normal committed domain events into the scoped worker-only request.

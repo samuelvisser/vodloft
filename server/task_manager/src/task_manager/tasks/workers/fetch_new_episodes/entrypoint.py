@@ -11,25 +11,25 @@ from .service import run_fetch_new_episodes
 
 @on_event(
     event_name="app.startup",
-    resource_type="show",
+    resource_type="collection",
 )
 @on_event(
-    event_name="show.added",
-    resource_type="show",
+    event_name="collection.added",
+    resource_type="collection",
 )
 @on_cron(
     cron=get_settings().new_episode_schedule.find_episodes_cron,
     enabled=get_settings().new_episode_schedule.find_episodes_cron_enabled,
     minimum_interval_ms=get_settings().dw_timeout.min_slow_request_ms,
-    resource_type="show",
+    resource_type="collection",
     resource_id=None,
     coalesce=True,
 )
 @task(
     key="fetch_new_episodes",
-    title="Find new episodes in all shows",
-    description="Finds new episodes in all shows. Shows with quick checks, such as YouTube channels, get a full re-scan once a day instead.",
-    allowed_resource_types=("show",),
+    title="Find new episodes in all collections",
+    description="Finds new episodes in all collections. Collections with quick checks, such as YouTube channels, get a full re-scan once a day instead.",
+    allowed_resource_types=("collection",),
     default_max_retries=5,
     tracks_progress=False,
 )
@@ -45,11 +45,11 @@ async def fetch_new_episodes(
     with db_session() as s:
         result = await run_fetch_new_episodes(
             s,
-            show_id=resource_id,
-            show_slug=slug,
+            collection_id=resource_id,
+            collection_slug=slug,
             dry_run=dry_run,
             initial_index=initial_index,
-            # Shows with quick checks get their full re-scan once a day instead.
+            # Collections with quick checks get their full re-scan once a day instead.
             quick_checked=False,
             progress=progress,
         )

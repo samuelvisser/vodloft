@@ -156,7 +156,7 @@ def test_controller_cancels_task_runs_interrupted_by_restart(task_database, monk
             key="legacy-indexing-task",
             title="Legacy indexing task",
             description=None,
-            allowed_resource_types=["show"],
+            allowed_resource_types=["collection"],
             default_max_retries=0,
         )
         session.add(definition)
@@ -164,7 +164,7 @@ def test_controller_cancels_task_runs_interrupted_by_restart(task_database, monk
 
         interrupted = TaskRun(
             definition_id=definition.id,
-            resource_type=ResourceType.SHOW,
+            resource_type=ResourceType.COLLECTION,
             resource_id=42,
             status=TaskStatus.RUNNING,
             progress=65,
@@ -172,7 +172,7 @@ def test_controller_cancels_task_runs_interrupted_by_restart(task_database, monk
         )
         completed = TaskRun(
             definition_id=definition.id,
-            resource_type=ResourceType.SHOW,
+            resource_type=ResourceType.COLLECTION,
             resource_id=43,
             status=TaskStatus.SUCCEEDED,
             progress=100,

@@ -22,13 +22,13 @@ def stream_profiles_list(access: Access = signed_in()):
         return get_stream_profiles_list(s, access)
 
 
-@router.get("/by-show-slug/{show_slug}", dependencies=[requires_any((Area.STREAM_PROFILES, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=list[StreamProfileAPIRead])
-def stream_profiles_by_show_slug_list(show_slug: str, access: Access = signed_in()):
+@router.get("/by-collection-slug/{collection_slug}", dependencies=[requires_any((Area.STREAM_PROFILES, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=list[StreamProfileAPIRead])
+def stream_profiles_by_collection_slug_list(collection_slug: str, access: Access = signed_in()):
     """
-    List all download profiles in any show.
+    List all download profiles in any collection.
     """
     with db_session() as s:
-        return get_stream_profiles_list(s, access, show_slug)
+        return get_stream_profiles_list(s, access, collection_slug)
 
 @router.get("/{stream_profile_id}", dependencies=[requires_any((Area.STREAM_PROFILES, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=StreamProfileAPIRead)
 def stream_profile_detail(stream_profile_id: int, access: Access = signed_in()):

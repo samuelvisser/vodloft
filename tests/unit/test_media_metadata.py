@@ -8,7 +8,7 @@ import pytest
 
 
 def _episode(*, identifier: str = "numbered"):
-    show = SimpleNamespace(
+    collection = SimpleNamespace(
         title="The Example Show",
         author_name="Example Host",
         episode_identifier=identifier,
@@ -18,7 +18,7 @@ def _episode(*, identifier: str = "numbered"):
         source_key="dailywire",
         title="An Episode",
         description="Episode description",
-        slug="show-an-episode",
+        slug="collection-an-episode",
         source_slug="an-episode",
         uuid="episode-uuid",
         sharing_url="https://example.test/episode",
@@ -30,16 +30,16 @@ def _episode(*, identifier: str = "numbered"):
         episode_number="7",
         index=7,
     )
-    return episode, show
+    return episode, collection
 
 
 def test_episode_metadata_keeps_real_season_and_episode_numbers():
     from backend.services.download_metadata import build_episode_metadata
 
-    episode, show = _episode()
-    metadata = build_episode_metadata(episode, show)
+    episode, collection = _episode()
+    metadata = build_episode_metadata(episode, collection)
 
-    assert metadata.show_title == "The Example Show"
+    assert metadata.collection_title == "The Example Show"
     assert metadata.season_number == 3
     assert metadata.episode_number == 7
     assert metadata.aired == date(2026, 9, 28)
@@ -51,8 +51,8 @@ def test_episode_metadata_keeps_real_season_and_episode_numbers():
 def test_date_based_episode_metadata_does_not_invent_numbers():
     from backend.services.download_metadata import build_episode_metadata
 
-    episode, show = _episode(identifier="date_based")
-    metadata = build_episode_metadata(episode, show)
+    episode, collection = _episode(identifier="date_based")
+    metadata = build_episode_metadata(episode, collection)
 
     assert metadata.season_number is None
     assert metadata.episode_number is None

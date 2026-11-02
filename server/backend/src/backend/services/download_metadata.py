@@ -4,7 +4,7 @@ from datetime import date, datetime
 from typing import Iterable
 
 from backend.db.models.media_item import Episode
-from backend.types.show_types import EpisodeIdentifier
+from backend.types.collection_types import EpisodeIdentifier
 from downloader.metadata import MediaServerMetadata
 from sources import Feature, UnknownSourceError, get_source
 
@@ -18,11 +18,11 @@ def _studios(source_key: str) -> tuple[str, ...]:
     return () if source.has(Feature.EPISODE_LISTS) else (source.name,)
 
 
-def build_episode_metadata(episode: Episode, show) -> MediaServerMetadata:
+def build_episode_metadata(episode: Episode, collection) -> MediaServerMetadata:
     published = episode.published_date or episode.went_live_date or episode.scheduled_date
     season_number: int | None = None
     episode_number: int | None = None
-    if show.episode_identifier != EpisodeIdentifier.DATE_BASED.value:
+    if collection.episode_identifier != EpisodeIdentifier.DATE_BASED.value:
         season = getattr(episode, "season", None)
         raw_season = getattr(season, "season_number", None)
         if isinstance(raw_season, int):
@@ -38,13 +38,13 @@ def build_episode_metadata(episode: Episode, show) -> MediaServerMetadata:
         unique_id=episode.source_slug,
         unique_id_type=episode.source_key,
         source_url=episode.sharing_url,
-        show_title=show.title,
+        collection_title=collection.title,
         season_number=season_number,
         episode_index=episode.index,
         episode_number=episode_number,
         aired=_as_date(published),
         duration_seconds=episode.duration,
-        authors=_strings((show.author_name,)),
+        authors=_strings((collection.author_name,)),
         studios=_studios(episode.source_key),
         media_type="episode",
     )

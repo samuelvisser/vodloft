@@ -7,8 +7,8 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Episode, EpisodeMediaDownload, Show
-from backend.services.custom_indexes import request_show_custom_index_reconciliation
+from backend.db.models import Episode, EpisodeMediaDownload, Collection
+from backend.services.custom_indexes import request_collection_custom_index_reconciliation
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from config.network import NoInternetConnectionError, is_no_internet_error
@@ -50,12 +50,12 @@ def _delete_episode(s: Session, episode: Episode) -> bool:
     )
     if media_download is not None:
         # The quarantined Episode remains the durable owner of its download history.
-        # It stays hidden by its NO_USABLE_MEDIA state until the Show is deleted.
+        # It stays hidden by its NO_USABLE_MEDIA state until the Collection is deleted.
         s.commit()
         return False
 
-    queue_event(s, "episode.deleted", episode_event_payload(episode=episode, show=episode.show))
-    request_show_custom_index_reconciliation(s, episode.show_id)
+    queue_event(s, "episode.deleted", episode_event_payload(episode=episode, collection=episode.collection))
+    request_collection_custom_index_reconciliation(s, episode.collection_id)
     s.delete(episode)
     s.commit()
     return True
@@ -68,7 +68,7 @@ def _replacement_for_quarantined_episode(s: Session, episode: Episode) -> Episod
         return None
     return s.scalar(
         select(Episode).where(
-            Episode.show_id == episode.show_id,
+            Episode.collection_id == episode.collection_id,
             Episode.id != episode.id,
             Episode.episode_identifier == previous_identifier,
             Episode.publish_status != EpisodePublishStatus.NO_USABLE_MEDIA.value,
@@ -84,8 +84,8 @@ def _reason_for_unusable_detail(detail, observed_status: EpisodePublishStatus) -
     return NoUsableMediaReason.MEDIA_UNUSABLE
 
 
-def _membership(show: Show) -> bool:
-    return show.membership_level not in {
+def _membership(collection: Collection) -> bool:
+    return collection.membership_level not in {
         DwMembershipLevel.FREE.value,
         DwMembershipLevel.HIGHEST_ALLOWED.value,
     }
@@ -138,7 +138,7 @@ def _recover_episode(
     queue_episode_status_events(
         s,
         episode=episode,
-        show=episode.show,
+        collection=episode.collection,
         old_status=old_status,
         new_status=resolved.status,
         was_created=False,
@@ -147,13 +147,13 @@ def _recover_episode(
         queue_event(
             s,
             MONITOR_REQUESTED_EVENT,
-            episode_event_payload(episode=episode, show=episode.show, old_status=old_status),
+            episode_event_payload(episode=episode, collection=episode.collection, old_status=old_status),
         )
     elif resolved.status is EpisodePublishStatus.PUBLISHED_FINAL:
         queue_event(
             s,
             METADATA_REFRESH_REQUESTED_EVENT,
-            episode_event_payload(episode=episode, show=episode.show, old_status=old_status),
+            episode_event_payload(episode=episode, collection=episode.collection, old_status=old_status),
         )
     s.commit()
     return True
@@ -191,8 +191,8 @@ def _target_result(
 async def run_monitor_no_usable_media_episode(
     s: Session,
     *,
-    show_id: Optional[int] = None,
-    show_slug: Optional[str] = None,
+    collection_id: Optional[int] = None,
+    collection_slug: Optional[str] = None,
     episode_id: Optional[int] = None,
     force: bool = False,
     delete_after_minutes: int = DEFAULT_NO_USABLE_MEDIA_DELETE_AFTER_MINUTES,
@@ -205,10 +205,10 @@ async def run_monitor_no_usable_media_episode(
     stmt = select(Episode).where(Episode.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value)
     if episode_id is not None:
         stmt = stmt.where(Episode.id == episode_id)
-    elif show_id is not None:
-        stmt = stmt.where(Episode.show_id == show_id)
-    elif show_slug is not None:
-        stmt = stmt.where(Episode.show.has(slug=show_slug))
+    elif collection_id is not None:
+        stmt = stmt.where(Episode.collection_id == collection_id)
+    elif collection_slug is not None:
+        stmt = stmt.where(Episode.collection.has(slug=collection_slug))
 
     candidates = list(s.scalars(stmt))
     if not candidates:
@@ -252,7 +252,7 @@ async def run_monitor_no_usable_media_episode(
         is_target = episode_id == episode.id
         episode_slug = episode.slug
         safe_live_ended = episode.safe_live_ended
-        require_member_exclusive = _membership(episode.show)
+        require_member_exclusive = _membership(episode.collection)
         s.rollback()
 
         if require_member_exclusive and access_token is None:

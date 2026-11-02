@@ -26,7 +26,7 @@ class ClipSource(Source):
 
     def resolve(self, url):
         slug = url.rstrip("/").rsplit("/", 1)[-1]
-        kind = LinkKind.SHOW if slug.startswith("channel") else LinkKind.VIDEO
+        kind = LinkKind.COLLECTION if slug.startswith("channel") else LinkKind.VIDEO
         return ResolvedLink(
             kind=kind, slug=slug, url=url, title=f"Clip: {slug}?", image_url="https://img.clips.example/a.jpg",
             author_name="A Channel", drm_protected=slug.startswith("locked"),
@@ -62,7 +62,7 @@ class WireSource(ClipSource):
     id = "wire"
     name = "Wire"
     domains = ("wire.example",)
-    features = frozenset({Feature.SHOWS, Feature.MOVIES})
+    features = frozenset({Feature.COLLECTIONS, Feature.MOVIES})
 
     def __init__(self):
         self.media_requests: list[bool] = []
@@ -142,7 +142,7 @@ def test_best_video_plans_the_highest_rendition_into_the_quick_folder(quick_sour
 
     assert probed["url"] == "https://cdn.clips.example/abc.m3u8"
     assert probed["preferred_format"] == "format_4k" and probed["remux_video_to_mp4"] is True
-    assert Path(plan.requested_destination) == folder / "Clip_ abc_.mp4"
+    assert Path(plan.requested_destination) == folder / "Clip： abc？.mp4"
     assert plan.download_mode == "temporary" and not plan.publication_requires_copy
     tags = dict(plan.metadata_tags)
     assert tags["title"] == "Clip: abc?" and tags["artist"] == "A Channel"
@@ -546,7 +546,7 @@ def test_starting_a_quick_download_queues_one_operation(api):
 
 @pytest.mark.parametrize(("url", "message"), [
     ("https://clips.example/v/locked-1", "DRM"),
-    ("https://clips.example/channel-1", "not a whole show"),
+    ("https://clips.example/channel-1", "not a whole collection"),
 ])
 def test_links_that_cannot_be_quick_downloaded_are_refused(api, url, message):
     response = api.client.post("/api/quick-downloads", json={"url": url})

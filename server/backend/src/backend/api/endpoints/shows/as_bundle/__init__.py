@@ -1,1 +1,0 @@
-from .router import router as show_as_bundle_router

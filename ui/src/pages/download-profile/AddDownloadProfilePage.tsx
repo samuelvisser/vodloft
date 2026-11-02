@@ -2,7 +2,7 @@ import {useCallback, useEffect, useMemo, useRef} from 'react'
 import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate, useSearchParams} from 'react-router-dom'
-import {useDownloadProfilesByShowSlug, useLocalMediaProfiles, useShowEpisodeTags, useShowSeasons, useShows} from '../../lib/queries'
+import {useDownloadProfilesByCollectionSlug, useLocalMediaProfiles, useCollectionEpisodeTags, useCollectionSeasons, useCollections} from '../../lib/queries'
 import DownloadProfileForm from '../../components/DownloadProfile/DownloadProfileForm'
 import {
     DownloadProfileCreateIn, DownloadProfileCreateOut, DownloadProfileCreateSchema,
@@ -10,9 +10,9 @@ import {
 } from '../../types/schemas/download_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import Select from 'react-select'
-import {isShowLocalMediaProfileAvailableFor, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
+import {isCollectionLocalMediaProfileAvailableFor, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
 import {SelectRegistry} from "../../utils/selectRegistry";
-import {buildShowSelectRegistry} from "../../types/show";
+import {buildCollectionSelectRegistry} from "../../types/collection";
 import {useQueryClient} from "@tanstack/react-query";
 import {getZodDefaults} from "../../utils/defaultZod";
 import ReadMore from "../../utils/ReadMore";
@@ -23,49 +23,49 @@ export default function AddDownloadProfilePage() {
     const navigate = useNavigate()
     const [searchParams] = useSearchParams()
 
-    const {data: shows} = useShows()
+    const {data: collections} = useCollections()
     const {data: mediaProfiles} = useLocalMediaProfiles()
 
     const qc = useQueryClient()
 
-    const showReg: SelectRegistry = useMemo(() => buildShowSelectRegistry(shows), [shows])
+    const collectionReg: SelectRegistry = useMemo(() => buildCollectionSelectRegistry(collections), [collections])
 
     const form = useForm<DownloadProfileCreateIn>({
-        // Which filters apply follows the chosen show, so the schema does too.
+        // Which filters apply follows the chosen collection, so the schema does too.
         resolver: (values, context, options) => zodResolver(forEpisodeIdentifier(
             DownloadProfileCreateSchema,
-            shows?.find((show) => show.id === values.showId)?.episodeIdentifier,
+            collections?.find((collection) => collection.id === values.collectionId)?.episodeIdentifier,
         ))(values, context, options),
         mode: 'onBlur',
         shouldFocusError: true,
         defaultValues: getZodDefaults(DownloadProfileCreateSchema),
     })
     const {watch, setValue, getFieldState, formState: {errors, isSubmitting}} = form
-    const showId = watch('showId')
+    const collectionId = watch('collectionId')
     const localMediaProfileId = watch('localMediaProfileId')
 
-    const selectedShow = useMemo(
-        () => shows?.find((show) => show.id === showId),
-        [shows, showId],
+    const selectedCollection = useMemo(
+        () => collections?.find((collection) => collection.id === collectionId),
+        [collections, collectionId],
     )
-    const episodeIdentifier = selectedShow?.episodeIdentifier
+    const episodeIdentifier = selectedCollection?.episodeIdentifier
     const mediaProfileReg: SelectRegistry = useLocalMediaProfileSelectRegistry(
         mediaProfiles,
-        'show',
-        selectedShow?.type === 'podcast' || selectedShow?.type === 'series' ? selectedShow.type : undefined,
+        'collection',
+        selectedCollection?.type === 'podcast' || selectedCollection?.type === 'series' ? selectedCollection.type : undefined,
     )
 
-    const selectShow = useCallback((id: number) => {
-        setValue('showId', id, {shouldDirty: true, shouldValidate: true})
-        // Seasons belong to one show; the other filters start from what fits the show.
+    const selectCollection = useCallback((id: number) => {
+        setValue('collectionId', id, {shouldDirty: true, shouldValidate: true})
+        // Seasons belong to one collection; the other filters start from what fits the collection.
         setValue('seasons', [], {shouldDirty: true})
-        const defaults = downloadProfileDefaultsFor(shows?.find((show) => show.id === id)?.episodeIdentifier, undefined)
+        const defaults = downloadProfileDefaultsFor(collections?.find((collection) => collection.id === id)?.episodeIdentifier, undefined)
         if (!getFieldState('downloadDaysInPast').isDirty && !getFieldState('downloadEpisodeCount').isDirty) {
             setValue('downloadDaysInPast', defaults.downloadDaysInPast)
         }
-    }, [getFieldState, setValue, shows])
-    // The episode tags to start with depend on the show's Source, which answers after the show is picked.
-    const {data: episodeTags} = useShowEpisodeTags({showId: selectedShow?.id})
+    }, [getFieldState, setValue, collections])
+    // The episode tags to start with depend on the collection's Source, which answers after the collection is picked.
+    const {data: episodeTags} = useCollectionEpisodeTags({collectionId: selectedCollection?.id})
     useEffect(() => {
         if (!episodeTags || getFieldState('epIdTypeList').isDirty) return
         setValue('epIdTypeList', downloadProfileDefaultsFor(episodeIdentifier, episodeTags).epIdTypeList)
@@ -74,7 +74,7 @@ export default function AddDownloadProfilePage() {
     const limitPrefillApplied = useRef(false)
     const mediaProfilePrefillApplied = useRef(false)
     const episodeTypesPrefillApplied = useRef(false)
-    const requestedShowSlug = searchParams.get('show')
+    const requestedCollectionSlug = searchParams.get('collection')
     const requestedPreferredFormat = searchParams.get('preferredFormat')
     const requestedEpisodeTypeValues = searchParams.getAll('episodeType')
     const requestedEpisodeTypes = requestedEpisodeTypeValues.filter((value) => /^[a-z][a-z-]*$/.test(value))
@@ -87,13 +87,13 @@ export default function AddDownloadProfilePage() {
         : undefined
 
     useEffect(() => {
-        if (prefillApplied.current || !requestedShowSlug || !Array.isArray(shows)) return
-        const requestedShow = shows.find((show) => show.slug === requestedShowSlug)
-        if (!requestedShow) return
+        if (prefillApplied.current || !requestedCollectionSlug || !Array.isArray(collections)) return
+        const requestedCollection = collections.find((collection) => collection.slug === requestedCollectionSlug)
+        if (!requestedCollection) return
 
-        selectShow(requestedShow.id)
+        selectCollection(requestedCollection.id)
         prefillApplied.current = true
-    }, [requestedShowSlug, selectShow, shows])
+    }, [requestedCollectionSlug, selectCollection, collections])
 
     useEffect(() => {
         if (limitPrefillApplied.current || requestedDownloadEpisodeCount === undefined) return
@@ -129,7 +129,7 @@ export default function AddDownloadProfilePage() {
 
     const onSuccess = async () => {
         await qc.invalidateQueries({queryKey: ['downloadProfilesView']})
-        await qc.invalidateQueries({queryKey: ['downloadProfilesByShowSlug']})
+        await qc.invalidateQueries({queryKey: ['downloadProfilesByCollectionSlug']})
 
         navigate('/download-profiles')
     }
@@ -143,14 +143,14 @@ export default function AddDownloadProfilePage() {
         if (
             mediaProfilePrefillApplied.current
             || !requestedPreferredFormat
-            || !selectedShow
+            || !selectedCollection
             || !Array.isArray(mediaProfiles)
         ) return
 
         const matchingProfile = mediaProfiles.find((profile) => (
-            profile.type === 'show'
+            profile.type === 'collection'
             && profile.preferredFormat === requestedPreferredFormat
-            && isShowLocalMediaProfileAvailableFor(profile, selectedShow.type)
+            && isCollectionLocalMediaProfileAvailableFor(profile, selectedCollection.type)
         ))
         if (!matchingProfile) return
 
@@ -163,13 +163,13 @@ export default function AddDownloadProfilePage() {
         setValue,
         mediaProfiles,
         requestedPreferredFormat,
-        selectedShow,
+        selectedCollection,
     ])
-    const selectedShowSlug: string | undefined = selectedShow?.slug
+    const selectedCollectionSlug: string | undefined = selectedCollection?.slug
 
     // Fetch seasons and existing download profiles for the selected show
-    const {data: seasonsData} = useShowSeasons(selectedShowSlug)
-    const {data: showProfiles} = useDownloadProfilesByShowSlug(selectedShowSlug)
+    const {data: seasonsData} = useCollectionSeasons(selectedCollectionSlug)
+    const {data: collectionProfiles} = useDownloadProfilesByCollectionSlug(selectedCollectionSlug)
 
     // Prepare seasons for the season filter (detached: name, slug)
     const seasonsForForm: SeasonItem[] = useMemo((): SeasonItem[] => (seasonsData ?? []).map((s: SeasonRead): SeasonItem => ({
@@ -178,16 +178,16 @@ export default function AddDownloadProfilePage() {
     })), [seasonsData])
 
     const disabledEpisodeTypes = useMemo(() => {
-        if (typeof localMediaProfileId !== 'number' || !selectedShow) return new Set<string>()
+        if (typeof localMediaProfileId !== 'number' || !selectedCollection) return new Set<string>()
         return new Set<string>(
-            (showProfiles ?? [])
+            (collectionProfiles ?? [])
                 .filter((profile) => (
-                    profile.showId === selectedShow.id
+                    profile.collectionId === selectedCollection.id
                     && profile.localMediaProfileId === localMediaProfileId
                 ))
                 .flatMap((profile) => profile.epIdTypeList)
         )
-    }, [localMediaProfileId, selectedShow?.id, showProfiles])
+    }, [localMediaProfileId, selectedCollection?.id, collectionProfiles])
 
     return (
         <section className="view" aria-labelledby="add-download-profile-title">
@@ -205,32 +205,32 @@ export default function AddDownloadProfilePage() {
 
                 {/* Show */}
                 <div className="form-row">
-                    <label htmlFor="show-id">Show</label>
+                    <label htmlFor="collection-id">Collection</label>
                     <Controller
                         control={form.control}
-                        name="showId"
+                        name="collectionId"
                         render={({field}) => (
                             <Select
-                                inputId="show-id"
+                                inputId="collection-id"
                                 classNamePrefix="select"
-                                options={showReg.options}
-                                value={showReg.options.find(o => Number(o.value) === field.value) ?? null}
+                                options={collectionReg.options}
+                                value={collectionReg.options.find(o => Number(o.value) === field.value) ?? null}
                                 onChange={(opt) => {
-                                    if (opt) selectShow(Number(opt.value))
+                                    if (opt) selectCollection(Number(opt.value))
                                     else field.onChange(undefined)
                                 }}
                                 onBlur={field.onBlur}
-                                isDisabled={showReg.options.length === 0}
-                                placeholder={showReg.options.length === 0 ? 'No shows found' : undefined}
+                                isDisabled={collectionReg.options.length === 0}
+                                placeholder={collectionReg.options.length === 0 ? 'No collections found' : undefined}
                                 isClearable
-                                aria-invalid={!!errors.showId}
-                                aria-describedby={errors.showId ? 'show-errors' : undefined}
+                                aria-invalid={!!errors.collectionId}
+                                aria-describedby={errors.collectionId ? 'collection-errors' : undefined}
                             />
                         )}
                     />
-                    {errors.showId && (
-                        <div id="show-errors" className="error" role="alert" aria-live="polite">
-                            {errors.showId.message as string}
+                    {errors.collectionId && (
+                        <div id="collection-errors" className="error" role="alert" aria-live="polite">
+                            {errors.collectionId.message as string}
                         </div>
                     )}
                 </div>
@@ -265,7 +265,7 @@ export default function AddDownloadProfilePage() {
                     <div className="help" id="local-media-profile-help">
                         <ReadMore summary={<span>The Local Media Profile defines the type and output path of downloaded media.</span>}>
                             <p>Add a Local Media Profile to define the type of media to download and where to store it.</p>
-                            <p>The same Local Media Profile can be used by multiple Download Profiles for a show, but each episode type can belong to only one of those profiles.</p>
+                            <p>The same Local Media Profile can be used by multiple Download Profiles for a collection, but each episode type can belong to only one of those profiles.</p>
                         </ReadMore>
                     </div>
                 </div>
@@ -273,15 +273,15 @@ export default function AddDownloadProfilePage() {
                 <DownloadProfileForm
                     form={form}
                     episodeIdentifier={episodeIdentifier}
-                    showId={selectedShow?.id}
+                    collectionId={selectedCollection?.id}
                     seasons={seasonsForForm}
-                    showRoot={false}
+                    collectionRoot={false}
                     disabledEpisodeTypes={disabledEpisodeTypes}
                 />
 
                 <div className="actions">
                     <button type="button" className="btn" onClick={onCancel}>Cancel</button>
-                    <input type="submit" className="btn btn-primary" value="Create profile" disabled={isSubmitting || !showId}/>
+                    <input type="submit" className="btn btn-primary" value="Create profile" disabled={isSubmitting || !collectionId}/>
                 </div>
             </form>
         </section>

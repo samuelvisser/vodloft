@@ -2,7 +2,7 @@ from enum import StrEnum
 
 
 class LocalMediaProfileType(StrEnum):
-    SHOW = "show"
+    COLLECTION = "collection"
     MOVIE = "movie"
     VIDEO = "video"
 
@@ -39,7 +39,7 @@ class LocalMediaProfileSubtitleMode(StrEnum):
     EMBED_AND_SIDECAR = "embed_and_sidecar"
 
 
-class ShowLocalMediaProfileScope(StrEnum):
+class CollectionLocalMediaProfileScope(StrEnum):
     BOTH = "both"
     PODCAST = "podcast"
     SERIES = "series"

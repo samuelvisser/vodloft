@@ -23,9 +23,11 @@ const DATE_VARIABLES: readonly OutputTemplateVariable[] = [
     {name: 'second', description: 'Two-digit second'},
 ]
 
-const SHOW_VARIABLES: readonly OutputTemplateVariable[] = [
-    {name: 'show', description: 'Show URL slug'},
-    {name: 'show_title', description: 'Show title'},
+const COLLECTION_VARIABLES: readonly OutputTemplateVariable[] = [
+    {name: 'collection', description: 'Collection URL slug'},
+    {name: 'collection_title', description: 'Collection title'},
+    {name: 'collection_author', description: 'Collection author, host or channel name'},
+    {name: 'collection_site_id', description: 'The id the site gives the collection, such as a YouTube channel or playlist id'},
     {name: 'season', description: 'Season URL slug'},
     {name: 'season_name', description: 'Season name'},
     {name: 'season_index', description: 'VODLoft internal season index'},
@@ -36,8 +38,8 @@ const SHOW_VARIABLES: readonly OutputTemplateVariable[] = [
             paragraphs: [
                 'VODLoft attempts to classify whether a season is regular or extra based on it\'s title. ' +
                 'Use this value in Jinja conditions when normal and extra seasons need different paths.',
-                '<strong>normal</strong> season contains regular show episodes',
-                '<strong>extra</strong> season contains extra\'s for the show'
+                '<strong>normal</strong> season contains regular collection episodes',
+                '<strong>extra</strong> season contains extra\'s for the collection'
             ],
         },
     },
@@ -54,12 +56,15 @@ const SHOW_VARIABLES: readonly OutputTemplateVariable[] = [
     {name: 'episode', description: 'Episode URL slug'},
     {name: 'episode_title', description: 'Episode title'},
     {name: 'title', description: 'Episode title'},
+    {name: 'episode_site_id', description: 'The id the site gives the episode, such as a YouTube video id'},
+    {name: 'episode_uploader', description: 'Who uploaded the episode, when the site says; empty otherwise'},
+    {name: 'duration_seconds', description: 'Episode duration in whole seconds'},
     {name: 'dw_episode_number', description: 'Raw episode number exactly as returned by the source'},
     {name: 'episode_type', description: 'Episode type: ep, ep-extra, aux, or trailer'},
     {name: 'episode_extra_type', description: 'Episode-extra subtype: other or trailer; empty otherwise'},
     {
         name: 'episode_index',
-        description: 'VODLoft episode index across the whole show, including extras',
+        description: 'VODLoft episode index across the whole collection, including extras',
         readMore: {
             paragraphs: [
                 'VODLoft\'s internal episode index, in ascending order.',
@@ -67,8 +72,8 @@ const SHOW_VARIABLES: readonly OutputTemplateVariable[] = [
                 'not a database ID or a newly calculated counter. Gaps caused by episodes that disappear from their Source ' +
                 'are preserved.',
                 'In most cases, it is better practice to use this index value instead of a custom index if your goal is ' +
-                'to number every episode in a show in order. However, custom indexes do automatically reconcile in the ' +
-                'case of an episode getting deleted in the middle of the show, which makes them slightly different.',
+                'to number every episode in a collection in order. However, custom indexes do automatically reconcile in the ' +
+                'case of an episode getting deleted in the middle of the collection, which makes them slightly different.',
 
             ],
         },
@@ -81,7 +86,7 @@ const SHOW_VARIABLES: readonly OutputTemplateVariable[] = [
         description: 'Guaranteed unique VODLoft episode identifier',
         readMore: {
             paragraphs: [
-                'The full VODLoft episode identifier includes the type prefix, making it guaranteed unique within the show.',
+                'The full VODLoft episode identifier includes the type prefix, making it guaranteed unique within the collection.',
                 'This is mainly meant for VODLoft internal usage, but can be handy nevertheless due to its guaranteed unique nature for naming files.'
             ]
         }
@@ -145,7 +150,7 @@ const VIDEO_VARIABLES: readonly OutputTemplateVariable[] = [
 ]
 
 const VARIABLES_BY_MODE: Record<LocalMediaProfileMode, readonly OutputTemplateVariable[]> = {
-    show: SHOW_VARIABLES,
+    collection: COLLECTION_VARIABLES,
     movie: MOVIE_VARIABLES,
     video: VIDEO_VARIABLES,
 }

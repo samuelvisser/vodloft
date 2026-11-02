@@ -20,17 +20,17 @@ def test_aggregate_local_media_profiles_are_validated_before_session_closes() ->
         get_local_media_profiles_list,
     )
     from backend.api.models.movie_local_media_profile import MovieLocalMediaProfileAPIRead
-    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPIRead
-    from backend.db.models import MovieLocalMediaProfile, ShowLocalMediaProfile
+    from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPIRead
+    from backend.db.models import MovieLocalMediaProfile, CollectionLocalMediaProfile
 
     session, engine = _new_session()
     try:
         session.add_all([
-            ShowLocalMediaProfile(
-                slug="show-profile",
-                name="Show profile",
-                show_scope="series",
-                output_template="/downloads/shows/{{ show }}/{{ episode }}.ext",
+            CollectionLocalMediaProfile(
+                slug="collection-profile",
+                name="Collection profile",
+                collection_scope="series",
+                output_template="/downloads/shows/{{ collection }}/{{ episode }}.ext",
                 preferred_format="format_1080p",
             ),
             MovieLocalMediaProfile(
@@ -43,16 +43,16 @@ def test_aggregate_local_media_profiles_are_validated_before_session_closes() ->
         session.commit()
 
         profiles = get_local_media_profiles_list(session)
-        show_profile = get_local_media_profile(session, "show-profile")
+        collection_profile = get_local_media_profile(session, "collection-profile")
     finally:
         session.close()
         engine.dispose()
 
-    assert isinstance(profiles[0], ShowLocalMediaProfileAPIRead)
-    assert profiles[0].show_scope == "series"
+    assert isinstance(profiles[0], CollectionLocalMediaProfileAPIRead)
+    assert profiles[0].collection_scope == "series"
     assert isinstance(profiles[1], MovieLocalMediaProfileAPIRead)
-    assert isinstance(show_profile, ShowLocalMediaProfileAPIRead)
-    assert show_profile.show_scope == "series"
+    assert isinstance(collection_profile, CollectionLocalMediaProfileAPIRead)
+    assert collection_profile.collection_scope == "series"
 
 
 

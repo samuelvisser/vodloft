@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from backend.services.no_ascii_names import settle_no_ascii_name
 from backend.db.models import Episode, Movie, MovieExtra, Video
 from backend.db.models.media_download import MediaDownloadBase
 from backend.services.download_metadata import build_episode_metadata, build_movie_metadata, build_video_metadata, select_thumbnail_url
@@ -42,7 +43,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     if episode is None and movie is None and video is None:
         raise DownloadError("Unsupported media type")
     expected_type = (
-        LocalMediaProfileType.SHOW.value if episode is not None
+        LocalMediaProfileType.COLLECTION.value if episode is not None
         else LocalMediaProfileType.VIDEO.value if video is not None
         else LocalMediaProfileType.MOVIE.value
     )
@@ -87,7 +88,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
             source = resolve_download_source(playback.url, preferred_format=preferred, audio_only=audio_only, remux_video_to_mp4=remux, cancellation=tracker.is_canceled)
     elif episode is not None:
         video_url, audio_url = episode.video_url, episode.audio_url
-        member_only = episode.show.membership_level != DwMembershipLevel.FREE.value
+        member_only = episode.collection.membership_level != DwMembershipLevel.FREE.value
         session.rollback()
         refreshed = False
         while True:
@@ -174,7 +175,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     media = download.media
     if isinstance(media, Episode):
         destination = resolve_episode_output_path(output_template, episode=media, local_media_profile=download.local_media_profile, media_download=download, extension=source.extension)
-        metadata = build_episode_metadata(media, media.show)
+        metadata = build_episode_metadata(media, media.collection)
     elif isinstance(media, Video):
         destination = resolve_video_output_path(output_template, video=media, extension=source.extension)
         metadata = build_video_metadata(media, source_name=media_source.name)
@@ -182,6 +183,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         movie = media.movie if isinstance(media, MovieExtra) else media
         destination = resolve_movie_output_path(output_template, movie=movie, media_item=media, extension=source.extension)
         metadata = build_movie_metadata(movie, media)
+    destination = settle_no_ascii_name(download, destination, session=session)
     session.rollback()
 
     assets: list[SidecarSpec] = []
@@ -209,7 +211,15 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         and source.extension in {"mp4", "m4v", "mkv"}
     )
     embedded_subtitle_ids: list[str] = []
-    if publish_subtitles or embed_subtitles:
+    if (publish_subtitles or embed_subtitles) and source.ytdlp_command:
+        # yt-dlp writes the subtitles itself while it downloads the media.
+        assets.append(SidecarSpec(
+            "subtitles", "subtitle", url=source.url, extension="srt", source_format="ytdlp",
+            publish=publish_subtitles, required=False,
+        ))
+        if embed_subtitles:
+            embedded_subtitle_ids.append("subtitles")
+    elif publish_subtitles or embed_subtitles:
         for index, track in enumerate(source.subtitles):
             asset_id = f"subtitle_{index}"
             assets.append(SidecarSpec(
