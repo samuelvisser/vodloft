@@ -28,8 +28,17 @@ RUN --mount=type=secret,id=npmrc,target=/ui/.npmrc,required=false \
             --no-fund; \
     fi
 
+# Optional label shown after the version number, e.g. "PR#15" -> "0.1.0 PR#15".
+# Test deployments use it to show which build is running. Declared only after
+# npm ci on purpose: every RUN after an ARG has that ARG in its cache key, so a
+# label that changes per deploy would otherwise reinstall all packages each time.
+ARG VODLOFT_BUILD_LABEL=
+
 # Give Vite the correct application version to bake in
 COPY pyproject.toml /pyproject.toml
+RUN if [ -n "$VODLOFT_BUILD_LABEL" ]; then \
+        sed -i -E "s/^version = \"([^\"]*)\"/version = \"\1 ${VODLOFT_BUILD_LABEL}\"/" /pyproject.toml; \
+    fi
 COPY ui/ ./
 
 RUN if [ "$VODLOFT_PRO_ICONS" = "true" ]; then \
@@ -74,6 +83,12 @@ COPY server ./server
 # Preserve uv's download/build cache independently of Docker's normal layer cache
 RUN --mount=type=cache,id=vodloft-uv,target=/root/.cache/uv,sharing=locked \
     uv sync --frozen --no-dev
+
+# Applied after uv sync: the labelled version is for display only, not a valid package version.
+ARG VODLOFT_BUILD_LABEL=
+RUN if [ -n "$VODLOFT_BUILD_LABEL" ]; then \
+        sed -i -E "s/^version = \"([^\"]*)\"/version = \"\1 ${VODLOFT_BUILD_LABEL}\"/" pyproject.toml; \
+    fi
 
 # Default config seed, copied into the /config volume on first run if missing.
 COPY config/config.yml.default ./config/config.yml.default
