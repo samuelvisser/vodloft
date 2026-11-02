@@ -17,7 +17,8 @@ def test_system_download_storage_defaults_to_local_temporary_mode():
     assert settings.download_settings.thumbnail_mode is ThumbnailMode.EMBED
     assert settings.download_settings.metadata_mode is MetadataMode.EMBED
     assert settings.download_settings.show_artwork_fallback_format is ShowArtworkFallbackFormat.JPG
-    assert settings.download_settings.temporary_download_root == (
+    assert settings.download_settings.temporary_download_root.name == "vodloft-downloads"
+    assert settings.download_settings.temporary_download_root != (
         settings.download_settings.download_root / ".vodloft-temp"
     )
     assert (
@@ -43,13 +44,13 @@ def test_system_download_storage_defaults_to_local_temporary_mode():
     assert values["downloadSettings"]["rssCacheRetentionSeconds"] == 7 * 24 * 60 * 60
 
 
-def test_cache_and_temporary_defaults_follow_the_download_root():
+def test_cache_default_follows_download_root_but_temporary_storage_does_not():
     from config.settings.submodels import DownloadSettings
 
     settings = DownloadSettings(download_root="/media")
 
-    # On the download volume, so that ready quick downloads survive a container update.
-    assert settings.temporary_download_root.as_posix() == "/media/.vodloft-temp"
+    assert settings.temporary_download_root.name == "vodloft-downloads"
+    assert settings.temporary_download_root.as_posix() != "/media/.vodloft-temp"
     assert settings.rss_cache_root.as_posix() == "/media/.vodloft-rss-cache"
 
 

@@ -84,7 +84,7 @@ These settings are available under **Settings → Downloads**.
 | --- | --- | --- | --- |
 | `downloadSettings.downloadRoot` | `VL_DOWNLOAD_SETTINGS__DOWNLOAD_ROOT` | `<project>/downloads` | Root directory used for paths beginning with `/downloads/`. In the supplied Docker layout, set/use `/downloads` to target the mounted media volume. |
 | `downloadSettings.downloadMode` | `VL_DOWNLOAD_SETTINGS__DOWNLOAD_MODE` | `temporary` | System default: stage downloads in the temporary folder before publishing them. Local Media Profiles can inherit or override it. |
-| `downloadSettings.temporaryDownloadRoot` | `VL_DOWNLOAD_SETTINGS__TEMPORARY_DOWNLOAD_ROOT` | `<download root>/.vodloft-temp` | Staging directory used by temporary download mode, and where quick downloads wait until they are fetched. By default it is on the download volume, so ready quick downloads survive a container update. If your library is on a network share, point this at a local folder that is also a mounted volume, to avoid remux and metadata I/O over the network. |
+| `downloadSettings.temporaryDownloadRoot` | `VL_DOWNLOAD_SETTINGS__TEMPORARY_DOWNLOAD_ROOT` | system temp directory (`/tmp/vodloft-downloads` in Docker) | Staging directory used by temporary download mode. Keeping this on local storage avoids repeated remux/metadata I/O against a network media library. |
 | `downloadSettings.rssCacheRoot` | `VL_DOWNLOAD_SETTINGS__RSS_CACHE_ROOT` | `<download root>/.vodloft-rss-cache` | Root for media cached while fulfilling RSS requests. When omitted, its default follows the download root; an explicit value stays independent. |
 | `downloadSettings.rssCacheRetentionSeconds` | `VL_DOWNLOAD_SETTINGS__RSS_CACHE_RETENTION_SECONDS` | `604800` (7 days) | Retains cached RSS media for this long since it was last served. Expired files are cleaned at startup and while new cache entries are prepared. |
 | `downloadSettings.maxConcurrentDownloads` | `VL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS` | `5` | Maximum primary-media transfers running at once. Their slots are released while post-processing continues. |
@@ -302,6 +302,7 @@ logLevel: INFO
 downloadSettings:
   downloadRoot: /downloads
   downloadMode: temporary
+  temporaryDownloadRoot: /tmp/vodloft-downloads
   rssCacheRoot: /tmp/vodloft-rss-cache
   maxConcurrentDownloads: 3
   episodeDownloadDelayMinutes: 10
