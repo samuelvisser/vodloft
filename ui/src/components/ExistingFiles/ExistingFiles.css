@@ -6,8 +6,18 @@
 }
 
 .existing-files-body {
+    display: grid;
+    gap: 14px;
+    min-height: 0;
+    margin-top: 8px;
+    padding: 0 4px 18px 0;
     overflow-y: auto;
-    padding-right: 4px;
+    overscroll-behavior: contain;
+}
+
+.existing-files-intro {
+    margin: 0;
+    color: var(--muted);
 }
 
 .existing-files-folder-input {
@@ -62,14 +72,18 @@
 .existing-files-actions {
     display: flex;
     justify-content: flex-end;
-    margin-bottom: 12px;
+}
+
+.existing-files-results {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
 }
 
 .existing-files-counts {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    margin: 8px 0 12px;
 }
 
 .existing-files-count {
@@ -126,8 +140,11 @@
 }
 
 .existing-files-footer {
+    flex: 0 0 auto;
     flex-wrap: wrap;
     gap: 8px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(148, 163, 184, 0.28);
 }
 
 .existing-files-banner {
