@@ -581,6 +581,26 @@ export const frontendOperationDefinitions = {
       return fileRenameSuccessMessage(operation, profileName)
     },
   },
+  'local_media_profile.move_episodes': {
+    kind: 'local_media_profile.move_episodes',
+    resourceType: 'local_media_profile',
+    label: 'Move episodes',
+    invalidate: (queryClient, operation, invalidations) => {
+      invalidateLocalMediaProfileFiles(queryClient, operation, invalidations)
+      invalidations.push(
+        queryClient.invalidateQueries({queryKey: ['localMediaProfileMovePreview']}),
+        queryClient.invalidateQueries({queryKey: ['downloadProfilesView']}),
+        queryClient.invalidateQueries({queryKey: ['localMediaProfilesView']}),
+      )
+    },
+    success: (operation) => {
+      const target = contextString(operation, 'target_local_media_profile_name') || 'the other profile'
+      const moved = resultNumber(operation, 'episodes_moved') ?? 0
+      const skipped = resultNumber(operation, 'episodes_skipped') ?? 0
+      const stayed = skipped > 0 ? `; ${skipped} ${plural(skipped, 'episode')} stayed` : ''
+      return `Moved ${moved} ${plural(moved, 'episode')} to ${target}${stayed}`
+    },
+  },
   'local_media_profile.redownload_media': {
     kind: 'local_media_profile.redownload_media',
     resourceType: 'local_media_profile',

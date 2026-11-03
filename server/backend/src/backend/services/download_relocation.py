@@ -66,7 +66,10 @@ def filter_relocation_conflicts(moves: list[DownloadRelocation]) -> tuple[list[D
     return remaining, skipped
 
 
-def relocate_downloads(session: Session, moves: list[DownloadRelocation], *, progress=None, skip_existing: bool = False) -> tuple[int, int]:
+def relocate_downloads(
+    session: Session, moves: list[DownloadRelocation], *, progress=None, skip_existing: bool = False,
+    reason: str = 'output_template_rename',
+) -> tuple[int, int]:
     destinations = [path.destination for move in moves for path in move.paths]
     if len(destinations) != len(set(destinations)):
         raise FileExistsError('Multiple managed artifacts resolve to the same destination')
@@ -95,7 +98,7 @@ def relocate_downloads(session: Session, moves: list[DownloadRelocation], *, pro
                     download.assets.remove(asset)
             record_media_download_history(session, download.id, MediaDownloadHistoryAction.ARTIFACT_RENAMED, metadata={
                 'old_path': str(move.source), 'new_path': str(move.destination),
-                'reason': 'output_template_rename', 'recovered': move.recovered,
+                'reason': reason, 'recovered': move.recovered,
             })
         session.commit()
     except BaseException:

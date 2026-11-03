@@ -1,0 +1,145 @@
+/* Wide enough for an old path and a new path next to each other. */
+.modal.move-episodes-dialog {
+    width: 100%;
+    max-width: 960px;
+    max-height: calc(100vh - 48px);
+    max-height: calc(100dvh - 48px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.move-episodes-body {
+    display: grid;
+    align-content: start;
+    gap: 14px;
+    flex: 1 1 auto;
+    min-height: 0;
+    margin-top: 8px;
+    padding: 0 4px 18px 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.move-episodes-intro,
+.move-episodes-muted {
+    margin: 0;
+    color: var(--muted);
+}
+
+.move-episodes-collection {
+    display: grid;
+    gap: 8px;
+    padding: 12px 14px;
+    border: 1px solid var(--select-menu-border);
+    border-radius: 12px;
+}
+
+.move-episodes-collection-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    cursor: pointer;
+}
+
+.move-episodes-collection-title {
+    font-weight: 600;
+}
+
+.move-episodes-download-profiles {
+    display: grid;
+    gap: 6px;
+    padding-left: 26px;
+}
+
+.move-episodes-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.move-episodes-note {
+    margin: 0;
+    font-size: 14px;
+}
+
+.move-episodes-warning {
+    color: var(--warning, #b45309);
+}
+
+.move-episodes-toggle {
+    justify-self: start;
+    padding: 2px 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.move-episodes-episodes {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.move-episodes-episode {
+    display: grid;
+    gap: 2px;
+    padding: 6px 0;
+    border-top: 1px solid var(--select-menu-border);
+}
+
+.move-episodes-episode-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+}
+
+.move-episodes-episode-title {
+    font-weight: 500;
+}
+
+.move-episodes-episode-outcome {
+    color: var(--muted);
+    font-size: 14px;
+}
+
+.move-episodes-episode-stays .move-episodes-episode-outcome {
+    color: var(--warning, #b45309);
+}
+
+.move-episodes-history {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+}
+
+.move-episodes-paths {
+    font-size: 13px;
+    color: var(--muted);
+    overflow-wrap: anywhere;
+}
+
+.move-episodes-paths code {
+    font-family: var(--font-mono, monospace);
+}
+
+.move-episodes-empty {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.move-episodes-empty .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
