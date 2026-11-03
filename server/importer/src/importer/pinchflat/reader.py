@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import shutil
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -125,6 +125,8 @@ class PinchflatData:
     sources: tuple[PinchflatSource, ...]
     items: tuple[PinchflatItem, ...]
     settings: PinchflatSettings
+    metadata_files: dict[int, str] = field(default_factory=dict)
+    """The yt-dlp metadata Pinchflat saved for a media item, by item id, as Pinchflat's path."""
 
 
 def private_copy(database: Path, directory: Path) -> Path:
@@ -302,6 +304,11 @@ def read_pinchflat(copy: Path) -> PinchflatData:
             sources=tuple(_source(row) for row in _rows(connection, "sources")),
             items=tuple(_item(row) for row in _rows(connection, "media_items")),
             settings=_settings(_rows(connection, "settings") if "settings" in tables else []),
+            metadata_files={
+                int(row["media_item_id"]): str(row["metadata_filepath"])
+                for row in (_rows(connection, "media_metadata") if "media_metadata" in tables else [])
+                if row.get("media_item_id") is not None and row.get("metadata_filepath")
+            },
         )
     finally:
         connection.close()

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -24,6 +24,7 @@ from ..ytdlp_templates import (
     OptionError, OptionSet, convert_pinchflat, expand, load_options, options_from, pinchflat_option_files,
 )
 from ..ytdlp_templates.options import PINCHFLAT_META_DATE
+from .metadata import saved_values
 from .reader import PinchflatData, PinchflatItem, PinchflatProfile, PinchflatSource, read_pinchflat
 
 PINCHFLAT_DOWNLOADS = "/downloads"
@@ -418,7 +419,8 @@ def _collection_plan(source: PinchflatSource, profile: PinchflatProfile, profile
     )
 
 
-def _file_plan(item: PinchflatItem, source: PinchflatSource, indexes: Sequence[CustomIndexPlan], path_map: PathMap) -> FilePlan | None:
+def _file_plan(item: PinchflatItem, source: PinchflatSource, indexes: Sequence[CustomIndexPlan], path_map: PathMap,
+               saved: Mapping[str, str] | None = None) -> FilePlan | None:
     external_id = f"source:{source.id}"
     if item.culled_at:
         return FilePlan(external_id, item.media_id, None, "missing", title=item.title, published=item.uploaded_at)
@@ -434,7 +436,7 @@ def _file_plan(item: PinchflatItem, source: PinchflatSource, indexes: Sequence[C
             if ordinal is not None:
                 values[index.key] = ordinal
         return FilePlan(external_id, item.media_id, path, "file", values, item.title, item.uploaded_at,
-                        kept=item.prevent_culling)
+                        kept=item.prevent_culling, episode_values=dict(saved or {}))
     if item.prevent_download:
         return FilePlan(external_id, item.media_id, None, "suppressed", title=item.title, published=item.uploaded_at)
     return None
@@ -495,7 +497,7 @@ def _megabytes_per_second(rate: str | None) -> float | None:
 
 
 def plan_import(data: PinchflatData, *, option_directory: Path | None, extras: Path | None = None,
-                path_map: PathMap = DEFAULT_PATH_MAP) -> ImportPlan:
+                path_map: PathMap = DEFAULT_PATH_MAP, saved: Mapping[int, Mapping[str, str]] | None = None) -> ImportPlan:
     variants = _variants(data, option_directory)
     planned = [_profile_plan(variant, data, path_map) for variant in variants]
     profiles = [plan for plan, _custom in planned]
@@ -514,7 +516,7 @@ def plan_import(data: PinchflatData, *, option_directory: Path | None, extras: P
         plan, profile, custom = by_source[source.id]
         collections.append(_collection_plan(source, profile, plan.external_id, path_map, custom))
         for item in items_by_source.get(source.id, ()):
-            file_plan = _file_plan(item, source, plan.custom_indexes, path_map)
+            file_plan = _file_plan(item, source, plan.custom_indexes, path_map, (saved or {}).get(item.id))
             if file_plan is not None:
                 files.append(file_plan)
     warnings = [ImportWarning(
@@ -545,8 +547,10 @@ UPLOAD_FILES = (
     UploadFile("extras/cookies.txt", secret=True),
     # Only to tell that there is one: VODLoft never copies or runs it.
     UploadFile("extras/user-scripts/lifecycle"),
+    # The yt-dlp metadata of each video, for values such as the uploader; the thumbnails next to it are left out.
+    UploadFile("metadata/media_items/*/metadata.json.gz"),
 )
-"""What a Pinchflat upload takes from its /config folder; its metadata folder of thumbnails is left out."""
+"""What a Pinchflat upload takes from its /config folder."""
 
 
 class PinchflatImporter:
@@ -562,4 +566,5 @@ class PinchflatImporter:
         return plan_import(
             data, option_directory=directory if directory is not None and directory.is_dir() else None,
             extras=location.extras, path_map=location.path_map,
+            saved=saved_values(location.folder, data.metadata_files),
         )

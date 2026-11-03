@@ -777,8 +777,36 @@ def test_a_run_from_before_merging_keeps_one_profile_per_variant(installation, t
     assert imports.with_merge_default(session, pinchflat.IMPORTER, imports.ImportOptions()).merge_profiles is False
 
 
-def test_the_path_check_reads_each_videos_uploader_from_its_own_path():
-    """VODLoft learns the uploader only when it indexes, so the check takes it from where the template puts it."""
+def test_the_path_check_uses_the_uploader_pinchflat_saved_for_each_video(tmp_path):
+    """VODLoft learns the uploader only when it indexes; Pinchflat's saved metadata has it already."""
+    import gzip
+    import json
+
+    from importer.pinchflat import IMPORTER
+    from importer.contract import ImportLocation
+
+    (tmp_path / "config" / "db").mkdir(parents=True)
+    database = _pinchflat_db(tmp_path / "config" / "db" / "pinchflat.db")
+    connection = sqlite3.connect(database)
+    connection.execute("CREATE TABLE media_metadata (id INTEGER PRIMARY KEY, media_item_id INTEGER, metadata_filepath TEXT)")
+    connection.executemany("INSERT INTO media_metadata (media_item_id, metadata_filepath) VALUES (?, ?)", [
+        (1, "/config/metadata/media_items/1/metadata.json.gz"),
+        (2, "/config/metadata/media_items/2/metadata.json.gz"),
+    ])
+    connection.commit()
+    connection.close()
+    saved = tmp_path / "config" / "metadata" / "media_items" / "1" / "metadata.json.gz"
+    saved.parent.mkdir(parents=True)
+    saved.write_bytes(gzip.compress(json.dumps({"uploader": "Derek", "channel": "Veritasium", "duration": 61.6}).encode()))
+
+    plan = IMPORTER.read(ImportLocation(database=database, folder=tmp_path / "config"))
+
+    values = {file.media_site_id: file.episode_values for file in plan.files if file.kind == "file"}
+    assert values["vid-aaaaaaa"] == {"episode_uploader": "Derek", "duration_seconds": "62"}
+    assert values["vid-bbbbbbb"] == {}
+
+
+def test_the_path_check_marks_an_uploader_it_cannot_know():
     from config.settings.submodels import FilenameRestrictionMode
     from backend.services import imports
     from importer.contract import FilePlan, ProfilePlan
@@ -786,15 +814,12 @@ def test_the_path_check_reads_each_videos_uploader_from_its_own_path():
     profile = ProfilePlan(external_id="p", name="Video",
                           output_template="/downloads/V/{{ collection_title }}/{{ episode_uploader or 'NA' }} - {{ title }}.ext")
     files = [
-        FilePlan("c", "a", "/downloads/V/Talks/PragerU - First.mp4", title="First"),
-        FilePlan("c", "b", "/downloads/Old/PragerU - Second.mp4", title="Second"),
-        FilePlan("c", "d", "/downloads/V/Talks/Third.mp4", title="Third"),
+        FilePlan("c", "a", "/downloads/V/Talks/PragerU - First.mp4", title="First",
+                 episode_values={"episode_uploader": "PragerU"}),
+        FilePlan("c", "b", "/downloads/V/Talks/PragerU - Second.mp4", title="Second"),
     ]
 
     proof = imports.path_proof(profile, files, {"c": "Talks"}, FilenameRestrictionMode.UNRESTRICTED)
 
     assert proof["identical"] == 1
-    assert [item["rendered"] for item in proof["differences"]] == [
-        "/downloads/V/Talks/PragerU - Second.mp4",
-        "/downloads/V/Talks/(uploader) - Third.mp4",
-    ]
+    assert [item["rendered"] for item in proof["differences"]] == ["/downloads/V/Talks/(uploader) - Second.mp4"]

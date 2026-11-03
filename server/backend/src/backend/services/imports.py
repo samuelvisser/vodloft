@@ -459,10 +459,12 @@ def path_proof(
             "title": file.title or "", "episode_title": file.title or "", "episode_site_id": file.media_site_id,
             "collection_title": titles.get(file.collection_external_id, ""), "collection_author": (authors or {}).get(file.collection_external_id, ""),
             "episode_published_date": published.strftime("%Y-%m-%d") if published else "",
+            # VODLoft learns the uploader when it indexes; without the saved metadata the check can't know it.
             "episode_uploader": _UPLOADER,
             **_date_substitutions(published),
             **{f"meta_collection_{key}": value
                for key, value in (fields or {}).get(file.collection_external_id, {}).items()},
+            **file.episode_values,
         }
         extension = PurePosixPath(file.path).suffix.removeprefix(".")
         try:
@@ -473,7 +475,7 @@ def path_proof(
             rendered = _sanitize_rendered_path(replace_output_extension(rendered, extension), mode=mode, extension=extension)
         except ValueError as exc:
             rendered = f"(could not render: {exc})"
-        rendered = _with_uploader(rendered, file.path)
+        rendered = rendered.replace(_UPLOADER, "(uploader)")
         if rendered == file.path:
             identical += 1
         else:
@@ -481,24 +483,8 @@ def path_proof(
     return {"identical": identical, "total": len(adopted), "differences": differences}
 
 
-# VODLoft learns each video's uploader when it indexes the Collection, after the preview; the
-# check reads it from the file's own path instead, where the template puts it.
+# Stands in for an uploader the upload has no metadata for; shown as "(uploader)".
 _UPLOADER = "Vodloftuploaderunknown"
-
-
-def _with_uploader(rendered: str, path: str) -> str:
-    """The rendered path with the uploader the real path has in its place, or a marker if it doesn't fit."""
-    if _UPLOADER not in rendered:
-        return rendered
-    # The whole path first; when a folder differs anyway, the file name alone can still tell.
-    for wanted, actual in ((rendered, path), (PurePosixPath(rendered).name, PurePosixPath(path).name)):
-        if _UPLOADER not in wanted:
-            continue
-        pattern = "([^/]+?)".join(re.escape(part) for part in wanted.split(_UPLOADER))
-        match = re.fullmatch(pattern, actual)
-        if match is not None and len(set(match.groups())) == 1:
-            return rendered.replace(_UPLOADER, match.group(1))
-    return rendered.replace(_UPLOADER, "(uploader)")
 
 
 def _filename_mode(plan: ImportPlan) -> FilenameRestrictionMode:
