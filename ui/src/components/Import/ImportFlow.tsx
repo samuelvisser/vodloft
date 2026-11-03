@@ -610,6 +610,11 @@ function CollectionList({collections, chosen, onToggle, onChooseAll}: {
         const key = item.profileName ?? ''
         groups.set(key, [...(groups.get(key) ?? []), item])
     }
+    // By profile name, then by collection title; collections without a profile come last.
+    const byName = (a: string, b: string) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'})
+    const sorted = [...groups.entries()]
+        .sort(([a], [b]) => (a === '') !== (b === '') ? (a === '' ? 1 : -1) : byName(a, b))
+        .map(([name, rows]) => [name, [...rows].sort((a, b) => byName(a.title, b.title))] as const)
     const all = chosen.size === collections.length
     return (
         <section className="import-block">
@@ -620,7 +625,7 @@ function CollectionList({collections, chosen, onToggle, onChooseAll}: {
                     {all ? 'Choose none' : 'Choose all'}
                 </button>
             </div>
-            {[...groups.entries()].map(([profileName, rows]) => (
+            {sorted.map(([profileName, rows]) => (
                 <div key={profileName} className="import-collections__group">
                     {profileName && (
                         <div className="import-collections__profile">
