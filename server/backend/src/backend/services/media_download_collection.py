@@ -389,15 +389,15 @@ def _is_executing(status_source):
 
 
 def _workflow_bucket(status_source):
-    """Running work, then the dispatch queue, then admission waits, then the rest.
+    """Running work, then admission waits, then the dispatch queue, then the rest.
 
     Admission waits (publication delay, countdown) have not started yet, so
     they never sort between downloads that are actually executing.
     """
     return case(
         (_is_executing(status_source), 0),
-        (status_source.c.status == "pending", 1),
-        (status_source.c.awaiting_admission.is_(True), 2),
+        (status_source.c.awaiting_admission.is_(True), 1),
+        (status_source.c.status == "pending", 2),
         else_=3,
     ).label("workflow_bucket")
 

@@ -1140,7 +1140,7 @@ def test_workflow_orders_active_downloads_by_execution_start_across_pages():
         engine.dispose()
 
 
-def test_workflow_orders_publication_waits_after_running_and_queued_downloads():
+def test_workflow_orders_publication_waits_between_running_and_queued_downloads():
     from sqlalchemy import select
 
     from backend.api.endpoints.media_downloads.service import get_media_downloads_page
@@ -1225,7 +1225,7 @@ def test_workflow_orders_publication_waits_after_running_and_queued_downloads():
                 break
 
         assert [row.id for row in rows] == [
-            running.id, queued.id, soon_delay.id, late_delay.id, countdown_delay.id,
+            running.id, soon_delay.id, late_delay.id, countdown_delay.id, queued.id,
         ]
     finally:
         session.close()
