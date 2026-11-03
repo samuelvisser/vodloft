@@ -18,7 +18,13 @@ from sqlalchemy.sql.selectable import Subquery
 
 from backend.db.models import MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
-from task_manager.scheduler.db import TaskDefinition, TaskOperation, TaskRun
+from task_manager.scheduler.db import (
+    TaskDefinition,
+    TaskOperation,
+    TaskOperationRun,
+    TaskRun,
+)
+from task_manager.scheduler.operations import OPERATION_ADMISSION_WAIT_CONTEXT_KEY
 from task_manager.scheduler.types import OperationStatus, ResourceType, TaskStatus
 from task_manager.tasks.media_download_operations import (
     media_download_queue_position_subquery,
@@ -137,6 +143,11 @@ def _latest_active_download_operation() -> Subquery:
             TaskOperation.context.label("operation_context"),
             TaskOperation.started_at.label("operation_started_at"),
             TaskOperation.created_at.label("operation_created_at"),
+            exists(
+                select(TaskOperationRun.task_run_id).where(
+                    TaskOperationRun.operation_id == TaskOperation.id,
+                )
+            ).label("operation_admitted"),
             func.row_number().over(
                 partition_by=TaskOperation.resource_id,
                 order_by=(
@@ -161,6 +172,7 @@ def _latest_active_download_operation() -> Subquery:
             ranked.c.operation_context,
             ranked.c.operation_started_at,
             ranked.c.operation_created_at,
+            ranked.c.operation_admitted,
         )
         .where(ranked.c.operation_rank == 1)
         .subquery()
@@ -296,6 +308,18 @@ def _effective_download_status(active_operation):
     ).label("status")
 
 
+def _awaiting_admission(active_operation):
+    """Whether the download waits before admission, such as a publication delay.
+
+    These operations have not claimed a download slot and no worker has
+    started, unlike runs that report a wait while they execute.
+    """
+    return func.coalesce(and_(
+        active_operation.c.operation_status == OperationStatus.WAITING.value,
+        active_operation.c.operation_admitted.is_(False),
+    ), False).label("awaiting_admission")
+
+
 def _download_status_source() -> Subquery:
     """One SQL relation containing the effective UI status for every download."""
     latest_run_ids = _latest_download_run_ids()
@@ -316,6 +340,10 @@ def _download_status_source() -> Subquery:
             active_operation.c.operation_started_at,
             active_operation.c.operation_created_at,
             queue.c.queue_position.label("queue_position"),
+            _awaiting_admission(active_operation),
+            active_operation.c.operation_context[
+                OPERATION_ADMISSION_WAIT_CONTEXT_KEY
+            ]["until"].as_float().label("admission_wait_until"),
             _effective_download_status(active_operation),
         )
         .outerjoin(
@@ -353,11 +381,24 @@ def _recent_activity_at(status_source):
     ).label("recent_at")
 
 
+def _is_executing(status_source):
+    return and_(
+        status_source.c.status.in_(_ACTIVE_WORKFLOW_STATUSES),
+        status_source.c.awaiting_admission.is_(False),
+    )
+
+
 def _workflow_bucket(status_source):
+    """Running work, then the dispatch queue, then admission waits, then the rest.
+
+    Admission waits (publication delay, countdown) have not started yet, so
+    they never sort between downloads that are actually executing.
+    """
     return case(
-        (status_source.c.status.in_(_ACTIVE_WORKFLOW_STATUSES), 0),
+        (_is_executing(status_source), 0),
         (status_source.c.status == "pending", 1),
-        else_=2,
+        (status_source.c.awaiting_admission.is_(True), 2),
+        else_=3,
     ).label("workflow_bucket")
 
 
@@ -383,7 +424,7 @@ def _workflow_active_started_at(status_source):
     )
     return case(
         (
-            status_source.c.status.in_(_ACTIVE_WORKFLOW_STATUSES),
+            _is_executing(status_source),
             func.coalesce(
                 current_run_started_at,
                 status_source.c.operation_started_at,
@@ -435,10 +476,19 @@ def _workflow_terminal_at(status_source):
 
 
 def _workflow_queue_position(status_source):
+    """Order within the queued and admission-wait buckets.
+
+    Queued downloads follow the dispatcher. Admission waits follow the moment
+    they may start, soonest first; waits without a deadline (countdowns) last.
+    """
     return case(
         (
             status_source.c.status == "pending",
             func.coalesce(status_source.c.queue_position, -1),
+        ),
+        (
+            status_source.c.awaiting_admission.is_(True),
+            func.coalesce(status_source.c.admission_wait_until, 1e18),
         ),
         else_=0,
     ).label("workflow_queue")
