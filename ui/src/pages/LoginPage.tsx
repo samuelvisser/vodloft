@@ -7,6 +7,8 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { buildServerAwareSubmit } from '../utils/buildServerAwareSubmit'
 import { hashPasswordForAdminAuth } from '../utils/security/adminAuth'
 import { getPublicConfig } from '../lib/publicConfig'
+import { ClearInputButton } from '../components/common/ClearInputButton'
+import './LoginPage.css'
 
 const LoginSchema = z.object({
   // Only asked for once user accounts are on; empty signs in with the environment password.
@@ -54,8 +56,17 @@ export default function LoginPage() {
 
   const {
     register,
+    watch,
+    setValue,
+    setFocus,
     formState: { errors },
   } = form
+  const username = watch('username')
+  const password = watch('password')
+  const clearField = (field: keyof LoginValues) => {
+    setValue(field, '', { shouldDirty: true })
+    setFocus(field)
+  }
 
   return (
     <div className="login-page" style={{ display: 'grid', placeItems: 'center', minHeight: '100vh', background: 'linear-gradient(135deg, #0b1020, #1b1f3b)' }}>
@@ -80,23 +91,30 @@ export default function LoginPage() {
             {accountsEnabled && (
               <>
                 <label htmlFor="username" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13 }}>Username</label>
-                <input
-                  id="username"
-                  type="text"
-                  autoFocus
-                  autoComplete="username"
-                  autoCapitalize="none"
-                  {...register('username')}
-                  placeholder="Enter username"
-                  style={inputStyle(Boolean(errors.username))}
-                />
+                <div className="login-field">
+                  <input
+                    id="username"
+                    type="text"
+                    autoFocus
+                    autoComplete="username"
+                    autoCapitalize="none"
+                    {...register('username')}
+                    placeholder="Enter username"
+                    style={{ ...inputStyle(Boolean(errors.username)), paddingRight: username ? 48 : 14 }}
+                  />
+                  {username && (
+                    <div className="login-field-actions">
+                      <ClearInputButton label="Clear the username" onClear={() => clearField('username')} />
+                    </div>
+                  )}
+                </div>
                 {errors.username && (
                   <div role="alert" style={{ color: '#ffb3b3', fontSize: 12 }}>{errors.username.message?.toString()}</div>
                 )}
               </>
             )}
             <label htmlFor="password" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13 }}>Password</label>
-            <div style={{ position: 'relative', display: 'grid' }}>
+            <div className="login-field">
               <input
                 id="password"
                 type={showPassword ? 'text' : 'password'}
@@ -107,18 +125,21 @@ export default function LoginPage() {
                 spellCheck={false}
                 {...register('password')}
                 placeholder="Enter password"
-                style={{ ...inputStyle(Boolean(errors.password)), paddingRight: 48 }}
+                style={{ ...inputStyle(Boolean(errors.password)), paddingRight: password ? 84 : 48 }}
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword((shown) => !shown)}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-                aria-pressed={showPassword}
-                title={showPassword ? 'Hide password' : 'Show password'}
-                style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', width: 40, height: 36, display: 'grid', placeItems: 'center', background: 'transparent', border: 'none', borderRadius: 8, color: 'rgba(255,255,255,0.7)', cursor: 'pointer' }}
-              >
-                <FontAwesomeIcon icon={showPassword ? faIcon('fass', 'eye-slash') : faIcon('fass', 'eye')} />
-              </button>
+              <div className="login-field-actions">
+                {password && <ClearInputButton label="Clear the password" onClear={() => clearField('password')} />}
+                <button
+                  type="button"
+                  className="login-field-action"
+                  onClick={() => setShowPassword((shown) => !shown)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  <FontAwesomeIcon icon={showPassword ? faIcon('fass', 'eye-slash') : faIcon('fass', 'eye')} />
+                </button>
+              </div>
             </div>
             {errors.password && (
               <div role="alert" style={{ color: '#ffb3b3', fontSize: 12 }}>{errors.password.message?.toString()}</div>
@@ -150,7 +171,8 @@ function inputStyle(invalid: boolean): React.CSSProperties {
     padding: '12px 14px',
     borderRadius: 10,
     outline: 'none',
-    fontSize: 14,
+    // 16px or larger keeps iOS Safari from zooming in when the field gets focus.
+    fontSize: 16,
     boxShadow: invalid ? '0 0 0 3px rgba(255,77,77,0.15)' : 'none',
   }
 }

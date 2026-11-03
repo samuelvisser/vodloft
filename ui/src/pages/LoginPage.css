@@ -1,0 +1,58 @@
+/* The login page is always dark, whatever the app theme. */
+.login-field {
+    position: relative;
+    display: grid;
+}
+
+.login-field-actions {
+    position: absolute;
+    top: 50%;
+    right: 4px;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.login-field-actions .clear-input-button,
+.login-field-action {
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.7);
+    cursor: pointer;
+}
+
+.login-field-actions .clear-input-button:hover,
+.login-field-action:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+/* Browsers paint an autofilled field light (yellow in Safari), so the white icons would vanish. Darken them. */
+.login-field:has(input:-webkit-autofill) .login-field-actions .clear-input-button,
+.login-field:has(input:-webkit-autofill) .login-field-action {
+    color: rgba(15, 23, 42, 0.75);
+}
+
+.login-field:has(input:autofill) .login-field-actions .clear-input-button,
+.login-field:has(input:autofill) .login-field-action {
+    color: rgba(15, 23, 42, 0.75);
+}
+
+.login-field:has(input:-webkit-autofill) .login-field-actions .clear-input-button:hover,
+.login-field:has(input:-webkit-autofill) .login-field-action:hover {
+    background: rgba(15, 23, 42, 0.08);
+    color: #0f172a;
+}
+
+.login-field:has(input:autofill) .login-field-actions .clear-input-button:hover,
+.login-field:has(input:autofill) .login-field-action:hover {
+    background: rgba(15, 23, 42, 0.08);
+    color: #0f172a;
+}
