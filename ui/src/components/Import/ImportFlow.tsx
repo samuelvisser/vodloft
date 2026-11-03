@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import FolderField from '../ExistingFiles/FolderField'
 import {watchImportMatches} from '../ExistingFiles/ImportMatchesWatcher'
 import ProgressBar from '../common/ProgressBar'
+import {useOperations} from '../OperationNotifier/OperationNotifier'
 import OpaqueOutputTemplateCode from '../LocalMediaProfile/OpaqueOutputTemplateCode'
 import {TemplateCodeEditor, templateEditorExtensions} from '../LocalMediaProfile/OutputTemplateEditor'
 import {
@@ -985,6 +986,17 @@ function useElapsed(since: string, running: boolean): string {
 }
 
 function RunView({importer, run, onBack}: {importer: Importer, run: ImportRun, onBack: () => void}) {
+    const {findActive} = useOperations()
+    // A waiting step is first indexed, then its files are adopted: each runs as an operation on the Collection.
+    const waitingLabel = (collectionId: number | null | undefined): string => {
+        if (collectionId == null) return 'Waiting for indexing'
+        if (findActive('import.adopt_files', 'collection', collectionId)) return 'Adopting files…'
+        const indexing = findActive('collection.index', 'collection', collectionId)
+        if (indexing?.status === 'RUNNING') {
+            return typeof indexing.progress === 'number' ? `Indexing… ${indexing.progress}%` : 'Indexing…'
+        }
+        return 'Waiting for indexing'
+    }
     const done = run.status === 'finished' || run.status === 'failed'
     const elapsed = useElapsed(run.createdAt, !done)
     const waitingSteps = run.steps.filter((step) => step.status === 'waiting').length
@@ -994,7 +1006,7 @@ function RunView({importer, run, onBack}: {importer: Importer, run: ImportRun, o
     const activity = run.status === 'running'
         ? `Bringing over settings, profiles, collections and downloads. A large library can take a few minutes. Running for ${elapsed}.`
         : run.status === 'waiting'
-            ? `${waitingSteps} of ${run.steps.length} collection${run.steps.length === 1 ? '' : 's'} waiting to be indexed; their files are adopted right after. Running for ${elapsed}.`
+            ? `${finishedSteps} of ${run.steps.length} collection${run.steps.length === 1 ? '' : 's'} done. Each collection is indexed first, and its files are adopted right after. Running for ${elapsed}.`
             : null
     return (
         <div className="import-step import-run" aria-live="polite">
@@ -1020,7 +1032,7 @@ function RunView({importer, run, onBack}: {importer: Importer, run: ImportRun, o
                         <li key={index} className={`is-${step.status}`}>
                             <span>{step.collectionTitle ?? step.collectionSlug}</span>
                             <small>
-                                {step.status === 'waiting' ? 'Waiting for indexing' : step.status === 'failed' ? 'Failed' : countsLine(step.counts) || 'Done'}
+                                {step.status === 'waiting' ? waitingLabel(step.collectionId) : step.status === 'failed' ? 'Failed' : countsLine(step.counts) || 'Done'}
                                 {step.problems.length ? ` · ${step.problems.length} problem${step.problems.length === 1 ? '' : 's'}` : ''}
                             </small>
                         </li>

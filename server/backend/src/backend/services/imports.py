@@ -1495,6 +1495,7 @@ def run_view(session: Session, run: ImportRun) -> dict[str, Any]:
     for step in session.scalars(select(ImportStep).where(ImportStep.run_id == run.id).order_by(ImportStep.id)):
         collection = session.get(Collection, step.collection_id)
         steps.append({
+            "collection_id": step.collection_id,
             "collection_slug": collection.slug if collection else None,
             "collection_title": collection.title if collection else None,
             "status": step.status,

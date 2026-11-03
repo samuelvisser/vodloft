@@ -227,6 +227,7 @@ class ImportStepMatchingAPIRead(ResponseBase):
 
 
 class ImportStepAPIRead(ResponseBase):
+    collection_id: Optional[int] = None
     collection_slug: Optional[str] = None
     collection_title: Optional[str] = None
     status: Literal["waiting", "done", "failed"]

@@ -142,6 +142,7 @@ export const ImportRunSchema = ImportRunSummarySchema.extend({
         support: z.string().nullish(),
     })),
     steps: z.array(z.looseObject({
+        collectionId: z.int().nullish(),
         collectionSlug: z.string().nullish(),
         collectionTitle: z.string().nullish(),
         status: z.enum(['waiting', 'done', 'failed']),
