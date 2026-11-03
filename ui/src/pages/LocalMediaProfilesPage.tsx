@@ -97,7 +97,7 @@ export default function LocalMediaProfilesPage() {
             ...profile,
             storageSizeBytes: statistics.storageSizeBytes,
         }),
-    )
+    ).sort((left, right) => left.name.localeCompare(right.name, undefined, {sensitivity: 'base', numeric: true}))
 
     return (
         <section className="view" aria-labelledby="profiles-title">
