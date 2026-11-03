@@ -286,6 +286,14 @@ export default function WhichEpisodes({
         (tags ?? []).map((tag) => tag.key),
     ).options
     const unselectedTypes = (tags ?? []).filter((tag) => !(values.epIdTypeList ?? []).includes(tag.key))
+    /** Names the episode types a line leaves out on its count badge, when there are few enough to fit. */
+    const excludedTypesLabel = (labels: string[]) => labels.length > 0 && labels.length <= 2 ? labels.join(', ') : undefined
+    /** A type filter's count badge names the types it leaves out, like the built-in types line does. */
+    const ruleCountLabel = (rule: EpisodeRule) => {
+        if (rule.field !== 'types' || !rule.episodeTypes?.length) return undefined
+        if (rule.action === 'skip') return excludedTypesLabel(rule.episodeTypes.map(typeLabel))
+        return excludedTypesLabel((tags ?? []).filter((tag) => !rule.episodeTypes?.includes(tag.key)).map((tag) => tag.label))
+    }
     const typeLabels = (values.epIdTypeList ?? []).map((key: string) => tags?.find((tag) => tag.key === key)?.label ?? key)
     const seasonNames = (values.seasons ?? []).map((season: SeasonItem) => seasons.find((item) => item.slug === season.slug)?.name ?? season.name)
 
@@ -383,7 +391,7 @@ export default function WhichEpisodes({
             <ul className="which-episodes-lines">
                 {typesShown && builtInLine(
                     'types', typesSentence(typeLabels), result?.types, typesField,
-                    unselectedTypes.length > 0 && unselectedTypes.length <= 2 ? unselectedTypes.map((tag) => tag.label).join(', ') : undefined,
+                    excludedTypesLabel(unselectedTypes.map((tag) => tag.label)),
                 )}
                 {seasonal && builtInLine('seasons', seasonsSentence(seasonNames, !!values.includeUpcomingSeasons), result?.seasons, seasonsField)}
                 {datesShown && builtInLine('dates', withLead(!typesShown && !seasonal, dateSentence({
@@ -417,7 +425,7 @@ export default function WhichEpisodes({
                                 }) : <span className="which-episodes-text"><Sentence parts={parts}/></span>}
                                 {rule.action === 'keep'
                                     ? <span className="which-episodes-count is-keep" title="Keep never stops a download; it protects matching downloads from deletion">keeps</span>
-                                    : <CountBadge count={ruleCounts[index]}/>}
+                                    : <CountBadge count={ruleCounts[index]} label={ruleCountLabel(rule)}/>}
                                 <button
                                     type="button" className={`which-episodes-icon${isOpen ? ' is-active' : ''}`}
                                     aria-label={`Edit: ${plainText(parts)}`} aria-expanded={isOpen}
