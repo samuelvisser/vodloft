@@ -290,6 +290,11 @@ function PreviewStep({importer, onReplace, onFinished, onRunStatus}: {
         setError(null)
         try {
             const result = await previewImport(importer.key, next)
+            // The importer list can be older than the import that is running now: show that import instead.
+            const last = result.lastRun
+            if (last && (last.status === 'running' || last.status === 'waiting')) {
+                setRun(await readRun(importer.key, last.id))
+            }
             setPreview(result)
             setPathMap([result.pathMap.source, result.pathMap.target])
             setOptions((current) => ({
@@ -360,6 +365,8 @@ function PreviewStep({importer, onReplace, onFinished, onRunStatus}: {
         setStarting(true)
         try {
             const summary = await startRun(importer.key, options)
+            // Opening the importer elsewhere, such as in Settings after onboarding, then shows this run.
+            void queryClient.invalidateQueries({queryKey: IMPORTERS_KEY})
             if (options.matchExistingFiles && !preview?.records) watchImportMatches(importer.key, summary.id)
             setRun(await readRun(importer.key, summary.id))
         } catch (exc) {
