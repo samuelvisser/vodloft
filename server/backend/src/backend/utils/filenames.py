@@ -52,8 +52,8 @@ _TRANSLITERATION: dict[str, str] = {
     "‘": "'", "’": "'", "‚": "'", "‛": "'",
     "“": '"', "”": '"', "„": '"', "‟": '"',
     "′": "'", "″": '"', "«": '"', "»": '"',
-    "‐": "-", "‑": "-", "‒": "-", "–": "-", "—": "-", "―": "-",
-    "−": "-", "…": "...", "×": "x", "÷": "_", "·": ".",
+    # Dashes are left out on purpose: like yt-dlp, Restricted mode makes them "_".
+    "…": "...", "×": "x", "÷": "_", "·": ".",
     "•": "-", "©": "(c)", "®": "(r)", "™": "TM", "€": "EUR",
     "£": "GBP", "¥": "JPY", "°": "deg", "½": "1_2", "¼": "1_4",
     "¾": "3_4", "²": "2", "³": "3", "¹": "1",
@@ -153,12 +153,18 @@ def _restricted_typed_character(char: str) -> str:
     return ascii_ if ascii_ and ascii_.isascii() else "_"
 
 
-def _restricted_component(value: str) -> str:
+def _restricted_component(value: str, *, has_extension: bool = False) -> str:
     cleaned = "".join(_restricted_typed_character(char) for char in _timestamps(value))
     # "Season 1: Specials" reads as "Season 1 - Specials"; a colon inside a word as "_-".
     cleaned = cleaned.replace(": ", " - ").replace(":", "_-")
     # Leading spaces are typed, as in Pinchflat's " {{ upload_yyyy_mm_dd }}"; only replaced characters go.
-    cleaned = re.sub(r"_+", "_", cleaned).lstrip("_").rstrip(" _.")
+    cleaned = re.sub(r"_+", "_", cleaned).lstrip("_").rstrip(" _")
+    if has_extension:
+        cleaned = cleaned.rstrip(".")
+    elif cleaned.endswith(".") and cleaned.strip("."):
+        # A value keeps its trailing dots, and yt-dlp's sanitize_path makes the last one "#",
+        # since a name can't end in a dot on Windows: "Wear . . ." becomes "Wear_._._#".
+        cleaned = f"{cleaned[:-1]}#"
     # Replaced punctuation right before an extension ("Test?.mp4") is not part of the name.
     return re.sub(r"[_ ]+(?=\.[A-Za-z0-9]+$)", "", cleaned)
 
@@ -178,7 +184,7 @@ def clean_component(value: str, mode: FilenameRestrictionMode, *, extension: str
         stem, suffix = value[: -len(extension) - 1], f".{extension}"
 
     if mode == FilenameRestrictionMode.RESTRICTED:
-        cleaned = _restricted_component(stem)
+        cleaned = _restricted_component(stem, has_extension=bool(suffix))
         if not _has_letters(cleaned) and (_has_letters(stem) or _NO_ASCII_MARK in stem):
             cleaned = NO_ASCII_FILE_NAME
         cleaned = f"{cleaned}{suffix}"

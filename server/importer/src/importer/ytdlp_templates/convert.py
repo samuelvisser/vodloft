@@ -43,6 +43,8 @@ class ConversionOptions:
     """Values of format fields such as ``height`` for the format VODLoft will request."""
     collection_type: str | None = None
     """Pinchflat's source collection type, such as ``channel`` or ``playlist``."""
+    for_playlists: bool = False
+    """Whether some Collections that use the template are playlists, whose videos can come from many channels."""
     extra_fields: Mapping[str, FieldValue] = field(default_factory=dict)
     """Fields the importer knows a value for, by yt-dlp name."""
     metadata_actions: tuple[MetadataAction, ...] = ()
@@ -111,6 +113,12 @@ _FIELDS: dict[str, FieldValue] = {
     "extractor": FieldValue("'youtube'", always=True),
     "extractor_key": FieldValue("'Youtube'", always=True),
 }
+
+# A playlist's videos can come from many channels and a playlist Collection has no author, so each
+# video's own channel is its uploader. A channel's videos all have it as their uploader too.
+_PLAYLIST_CHANNEL = FieldValue(
+    "episode_uploader", support="close", reason="VODLoft uses each video's uploader, which is its channel",
+)
 
 # Fields YouTube never fills, so yt-dlp always writes its placeholder for them.
 _NEVER_FILLED = frozenset({
@@ -271,6 +279,8 @@ class _Converter:
             return self.bindings[name]
         if name in self.options.extra_fields:
             return self.options.extra_fields[name]
+        if name == "channel" and (self.options.for_playlists or self.options.collection_type == "playlist"):
+            return _PLAYLIST_CHANNEL
         if name in _FIELDS:
             if name in {"autonumber", "video_autonumber"} and self.options.autonumber_start != 1:
                 start = self.options.autonumber_start
