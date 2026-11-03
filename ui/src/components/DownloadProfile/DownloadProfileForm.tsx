@@ -8,6 +8,7 @@ import {useCollectionEpisodeTags} from "../../lib/queries";
 import {episodeTagLabel} from "../../types/schemas/source";
 import {useEffect, useMemo} from "react";
 import WhichEpisodes from "./WhichEpisodes";
+import YouTubeSection from "./YouTubeSection";
 
 type Props = {
     form: UseFormReturn<any>
@@ -160,6 +161,7 @@ export default function DownloadProfileForm({form, episodeIdentifier, seasons, c
                 seasonsField={<DownloadProfileSeasonFilter form={form} seasons={seasons ?? []}/>}
                 datesField={<DownloadProfileDateFilters form={form} collectionId={collectionId} sourceKey={sourceKey}/>}
             />
+            <YouTubeSection form={form} collectionId={collectionId} sourceKey={sourceKey} collectionUrl={collectionUrl}/>
         </>
     )
 }

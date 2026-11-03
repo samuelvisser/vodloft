@@ -55,6 +55,10 @@ class DownloadProfile(Base, HasTaskResourcesMixin):
         String(16), default="published", server_default="published",
         comment="Whether a date window deletes episodes N days after publication or after downloading",
     )
+    auto_subtitles: Mapped[str] = mapped_column(
+        String(16), default="fallback", server_default="fallback",
+        comment="YouTube's auto-generated subtitles: never, fallback (when there is no real one) or always",
+    )
 
     # Season filter, used only when the collection is identified by season
     include_upcoming_seasons: Mapped[bool] = mapped_column(default=True)

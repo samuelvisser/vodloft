@@ -74,7 +74,7 @@ def update_movie_local_media_profile(
     update_database_fields(
         item,
         body,
-        exclude_fields={"subtitle_mode"} if "subtitle_mode" not in body.model_fields_set else None,
+        exclude_fields=body.fields_kept_on_update(),
     )
     s.flush()
     return MovieLocalMediaProfileAPIRead.model_validate(item)

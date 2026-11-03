@@ -30,15 +30,22 @@ PINCHFLAT_DOWNLOADS = "/downloads"
 """Pinchflat's download folder inside its container."""
 
 _RESOLUTIONS = {
-    "4320p": ("format_4k", "close", "VODLoft's best quality is 4K"),
+    "4320p": ("format_8k", "exact", None),
     "2160p": ("format_4k", "exact", None),
-    "1440p": ("format_1080p", "unsupported", "VODLoft has no 1440p yet, so new downloads are 1080p until it does"),
+    "1440p": ("format_1440p", "exact", None),
     "1080p": ("format_1080p", "exact", None),
     "720p": ("format_720p", "exact", None),
-    "480p": ("format_720p", "close", "VODLoft's lowest video quality is 720p"),
-    "360p": ("format_720p", "close", "VODLoft's lowest video quality is 720p"),
+    "480p": ("format_480p", "exact", None),
+    "360p": ("format_360p", "exact", None),
     "audio": ("format_audio_only", "exact", None),
 }
+# Pinchflat prefers H.264 but takes any codec, which in VODLoft is Your own
+# with H.264 first and every codec allowed.
+_PREFER_H264 = [
+    {"codec": "h264", "allowed": True}, {"codec": "vp9", "allowed": True},
+    {"codec": "av1", "allowed": True}, {"codec": "h265", "allowed": True},
+]
+_LANGUAGE = re.compile(r"[a-z]{2,3}(-[A-Za-z0-9]{2,8})*")
 _INDEX_FIELDS = {"playlist": "playlist_index", "day": "upload_date_index"}
 
 
@@ -125,11 +132,10 @@ def _profile_warnings(profile: PinchflatProfile) -> list[ImportWarning]:
         warnings.append(ImportWarning("preferred_resolution", f"VODLoft has no {profile.preferred_resolution}; it downloads 1080p"))
     elif resolution[1] != "exact":
         warnings.append(ImportWarning("preferred_resolution", resolution[2], resolution[1]))
-    if profile.download_auto_subs:
-        warnings.append(ImportWarning("download_auto_subs", "VODLoft downloads only subtitles a person uploaded, not automatic ones yet"))
-    if profile.download_subs and profile.sub_langs and profile.sub_langs.strip() not in ("", "all"):
+    _languages, left_out = _subtitle_languages(profile.sub_langs)
+    if profile.download_subs and left_out:
         warnings.append(ImportWarning(
-            "sub_langs", f"VODLoft downloads every uploaded language, not only {profile.sub_langs}", "close",
+            "sub_langs", f"VODLoft lists languages by code, so it leaves out {', '.join(left_out)}", "close",
         ))
     if profile.sponsorblock_behaviour not in (None, "", "disabled"):
         warnings.append(ImportWarning("sponsorblock_behaviour", "VODLoft does not use SponsorBlock yet"))
@@ -137,14 +143,57 @@ def _profile_warnings(profile: PinchflatProfile) -> list[ImportWarning]:
         warnings.append(ImportWarning(
             "redownload_delay_days", f"VODLoft does not download a video again after {profile.redownload_delay_days} days yet",
         ))
-    if profile.audio_track and profile.audio_track not in ("", "default"):
-        warnings.append(ImportWarning("audio_track", f"VODLoft does not choose an audio track ({profile.audio_track}) yet"))
-    if profile.media_container:
+    if _audio_language(profile.audio_track) is None and (profile.audio_track or "") not in ("", "default", "original"):
+        warnings.append(ImportWarning("audio_track", f"VODLoft chooses audio by language code, not {profile.audio_track}; it keeps the original"))
+    if profile.media_container and profile.media_container not in ("mp4", "mkv"):
         warnings.append(ImportWarning(
-            "media_container", f"New downloads use VODLoft's container instead of {profile.media_container}; existing files keep theirs",
+            "media_container", f"VODLoft downloads MP4 or MKV, not {profile.media_container}; new downloads are MKV",
             "close",
         ))
     return warnings
+
+
+def _subtitle_languages(sub_langs: str | None) -> tuple[list[str], list[str]]:
+    """Pinchflat's yt-dlp --sub-langs as language codes, and the parts that are no language code.
+
+    No list, or "all", is every language the site offers. A pattern such as
+    en.* becomes en, which VODLoft also matches with its regional variants.
+    """
+    languages: list[str] = []
+    left_out: list[str] = []
+    for part in (sub_langs or "").split(","):
+        part = part.strip()
+        if not part or part == "all" or part.startswith("-"):
+            continue
+        code = re.sub(r"(\.\*|\.\+|-\.\*|\*)$", "", part)
+        if _LANGUAGE.fullmatch(code) and code not in languages:
+            languages.append(code)
+        elif not _LANGUAGE.fullmatch(code):
+            left_out.append(part)
+    return languages, left_out
+
+
+def _audio_language(audio_track: str | None) -> str | None:
+    """Pinchflat's audio track as a language code; default and original keep the original language."""
+    track = (audio_track or "").strip()
+    return track if track not in ("default", "original") and _LANGUAGE.fullmatch(track) else None
+
+
+def _quality_settings(profile: PinchflatProfile) -> dict[str, object]:
+    """Pinchflat's container, audio track and subtitle languages as Local Media Profile choices."""
+    languages, _left_out = _subtitle_languages(profile.sub_langs)
+    settings: dict[str, object] = {
+        "subtitle_languages": languages or ["en"],
+        "subtitle_language_mode": "listed" if languages else "site",
+        "audio_language": _audio_language(profile.audio_track),
+    }
+    container = profile.media_container if profile.media_container in ("mp4", "mkv") else "mkv" if profile.media_container else "mp4"
+    # Above 1080p there is rarely H.264, so only a lower resolution in MP4 is Compatibility.
+    if container == "mp4" and profile.preferred_resolution not in ("1440p", "2160p", "4320p"):
+        settings["quality_goal"] = "compatibility"
+    else:
+        settings.update(quality_goal="custom", video_codecs=_PREFER_H264, container=container, audio_codec="aac")
+    return settings
 
 
 def _template_root(template: str, path_map: PathMap) -> tuple[str, str, str | None]:
@@ -180,6 +229,7 @@ def _profile_plan(variant: _Variant, data: PinchflatData, path_map: PathMap) -> 
     settings: dict[str, object] = {
         "preferred_format": (_RESOLUTIONS.get(profile.preferred_resolution or "1080p") or ("format_1080p",))[0],
         "collection_scope": "both",
+        **_quality_settings(profile),
     }
     if option_set is not None:
         settings.update({
@@ -289,6 +339,8 @@ def _collection_plan(source: PinchflatSource, profile: PinchflatProfile, profile
             "download_with_countdown": False, "redownload_final": False,
             "seasons": [], "include_upcoming_seasons": True,
             "rules": rules,
+            # yt-dlp takes an uploaded subtitle over an auto-generated one, as VODLoft's fallback does.
+            "auto_subtitles": "fallback" if profile.download_auto_subs else "never",
             **limits,
         },
         warnings=tuple(warnings),

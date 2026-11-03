@@ -34,7 +34,7 @@ import {
     LocalMediaProfileViewRead,
     LocalMediaProfileViewReadSchema,
 } from "../types/schemas/local_media_profile";
-import {DownloadProfileRead, DownloadProfileReadSchema, SkippedByFilterSchema} from "../types/schemas/download_profile";
+import {AutoSubtitlesUseSchema, DownloadProfileRead, DownloadProfileReadSchema, SiteOptionsSchema, SkippedByFilterSchema} from "../types/schemas/download_profile";
 import {DownloadProfileReadView, DownloadProfileReadViewSchema} from "../types/schemas/download_profile_view";
 import {StreamProfileRead, StreamProfileReadSchema, StreamProfileReadView, StreamProfileReadViewSchema} from "../types/schemas/stream_profile_base";
 import {CollectionRead, CollectionReadView, CollectionReadViewSchema} from "../types/schemas/collection";
@@ -725,6 +725,34 @@ export function useSkippedByFilter(collectionId?: number) {
             SkippedByFilterSchema.array(),
             signal,
         ),
+    })
+}
+
+export function useAutoSubtitleUses(localMediaProfileId?: number) {
+    return useQuery({
+        queryKey: ['autoSubtitleUses', localMediaProfileId] as const,
+        enabled: localMediaProfileId !== undefined,
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/download-profiles/auto-subtitles/${localMediaProfileId}`,
+            AutoSubtitlesUseSchema.array(),
+            signal,
+        ),
+    })
+}
+
+/** Choices only some sites offer, for a saved Collection or for the link of one that is being added. */
+export function useSiteOptions({collectionId, sourceKey, url}: {collectionId?: number; sourceKey?: string; url?: string | null}) {
+    return useQuery({
+        queryKey: ['siteOptions', collectionId, sourceKey, url] as const,
+        enabled: collectionId !== undefined || (!!sourceKey && !!url),
+        queryFn: ({signal}) => fetchParsed(
+            collectionId !== undefined
+                ? `${(window as any).appConfig.API_URL}/download-profiles/site-options/${collectionId}`
+                : `${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceKey ?? '')}/site-options?url=${encodeURIComponent(url ?? '')}`,
+            SiteOptionsSchema,
+            signal,
+        ),
+        staleTime: Infinity,
     })
 }
 

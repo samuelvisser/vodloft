@@ -11,7 +11,7 @@ from .capacity import DownloadResources
 from .errors import DownloadCancelled, DownloadError, MediaUnavailableError
 from .http import http_get, wait_for_retry
 from .lifecycle import DownloadTracker
-from .models import DownloadProgress, _extension_for_direct_file
+from .models import DownloadProgress, WrittenSubtitle, _extension_for_direct_file
 from .plan import SidecarSpec
 from .subtitles import download_hls_webvtt
 
@@ -124,15 +124,20 @@ class SidecarDownloads:
             if error is not None and not isinstance(error, DownloadCancelled):
                 self._tracker.fail(error)
 
-    def fulfil(self, asset_id: str, subtitles: tuple[tuple[str, str], ...]) -> None:
-        """The subtitles yt-dlp wrote for a ``ytdlp`` spec, one asset per language."""
+    def fulfil(self, asset_id: str, subtitles: tuple[WrittenSubtitle, ...]) -> None:
+        """The subtitles yt-dlp wrote for a ``ytdlp`` spec, one asset per language and kind."""
         spec = self._specs[asset_id]
         items = []
-        for language, path in subtitles:
+        for subtitle in subtitles:
+            language = subtitle.language
             key = "".join(char if char.isalnum() else "-" for char in language.lower())
+            suffix = f".{language}.auto.srt" if subtitle.auto_generated else f".{language}.srt"
             items.append(AcquiredSidecar(
-                replace(spec, id=f"{spec.id}-{key}", language=language, target_suffix=f".{language}.srt"),
-                Path(path), f".{language}.srt", Path(path).stat().st_size,
+                replace(
+                    spec, id=f"{spec.id}-{key}{'-auto' if subtitle.auto_generated else ''}", language=language,
+                    target_suffix=suffix, title="Auto-generated" if subtitle.auto_generated else None,
+                ),
+                Path(subtitle.path), suffix, Path(subtitle.path).stat().st_size,
             ))
         self._ytdlp[asset_id] = tuple(items)
 

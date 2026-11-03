@@ -38,7 +38,7 @@ class _VideoLocalMediaProfileAPIBaseIn(LocalMediaProfileAPIBaseIn):
 class VideoLocalMediaProfileAPICreate(_VideoLocalMediaProfileAPIBaseIn):
     """Create a Video Local Media Profile."""
 
-    # Single videos come from yt-dlp, which VODLoft does not fetch subtitles for yet.
+    # New Video profiles start without subtitles; they can be turned on like any other profile.
     subtitle_mode: LocalMediaProfileSubtitleMode = LocalMediaProfileSubtitleMode.NO_SUBTITLES
 
 

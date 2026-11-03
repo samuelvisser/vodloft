@@ -398,6 +398,10 @@ class Source(ABC):
         """The tags episodes of the collection at this link can get, or all of them without a link."""
         return self.episode_tags
 
+    def auto_subtitles_for(self, url: str) -> bool:
+        """The site of the collection or video at this link makes auto-generated subtitles, as YouTube does."""
+        return False
+
     def episode_tag(self, key: str | None) -> EpisodeTag | None:
         return next((tag for tag in self.episode_tags if tag.key == key), None)
 

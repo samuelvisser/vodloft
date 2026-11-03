@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from collections import Counter
 from typing import Optional, Sequence
 
 from sqlalchemy import func, select, true
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from fastapi import HTTPException
 
 from backend.api.models.download_profile import (
+    AutoSubtitlesUseAPIRead,
     DownloadProfileAPICreate,
     DownloadProfileAPIRead,
     DownloadProfileAPIUpdate,
@@ -24,6 +26,7 @@ from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.types.season_types import SeasonType
 from backend.utils.local_media_profiles import require_local_media_profile_type
 from backend.utils.season_ordering import season_type_from_name
+from sources import get_source
 from task_manager.events.transactional import queue_event
 
 
@@ -284,3 +287,30 @@ def skipped_by_filter(s: Session, collection_id: int) -> list[SkippedByFilterAPI
                     "rule": profile.rules[index],
                 }))
     return skipped
+
+
+def auto_subtitles_uses(s: Session, local_media_profile_id: int, access) -> list[AutoSubtitlesUseAPIRead]:
+    """The Download Profiles of YouTube Collections that use this Local Media Profile."""
+    profiles = list(s.scalars(
+        select(DownloadProfile).where(DownloadProfile.local_media_profile_id == local_media_profile_id)
+        .options(selectinload(DownloadProfile.collection))
+    ))
+    per_collection = Counter(profile.collection_id for profile in profiles)
+    uses: list[AutoSubtitlesUseAPIRead] = []
+    for profile in profiles:
+        collection = profile.collection
+        if not access.allows_source(collection.source_key):
+            continue
+        source = get_source(collection.source_key)
+        if not source.auto_subtitles_for(collection.sharing_url):
+            continue
+        tags = {tag.key: tag.label for tag in source.episode_tags_for(collection.sharing_url)}
+        uses.append(AutoSubtitlesUseAPIRead.model_validate({
+            "download_profile_id": profile.id,
+            "collection_id": collection.id,
+            "collection_title": collection.title,
+            "episode_types": [tags.get(key, key) for key in profile.ep_id_type_list]
+            if per_collection[profile.collection_id] > 1 else [],
+            "auto_subtitles": profile.auto_subtitles,
+        }))
+    return sorted(uses, key=lambda use: (use.collection_title.lower(), use.download_profile_id))

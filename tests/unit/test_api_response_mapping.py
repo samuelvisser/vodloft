@@ -67,6 +67,7 @@ def test_download_profile_view_uses_relationship_aliases():
         download_starting_from=None,
         delete_older_episodes=True,
         retention_from="published",
+        auto_subtitles="fallback",
         seasons=[],
         include_upcoming_seasons=True,
         rules=[],

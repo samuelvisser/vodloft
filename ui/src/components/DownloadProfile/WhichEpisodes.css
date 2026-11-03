@@ -276,3 +276,8 @@
         grid-column: 2;
     }
 }
+
+.which-episodes-line.is-highlighted {
+    background: var(--we-accent-soft);
+    transition: background 0.6s ease;
+}

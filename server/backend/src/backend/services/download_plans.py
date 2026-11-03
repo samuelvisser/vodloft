@@ -12,6 +12,8 @@ from backend.db.models import Episode, Movie, MovieExtra, Video
 from backend.db.models.media_download import MediaDownloadBase
 from backend.services.download_metadata import build_episode_metadata, build_movie_metadata, build_video_metadata, select_thumbnail_url
 from backend.services.download_options import effective_download_mode, effective_metadata_mode, effective_thumbnail_mode
+from backend.services.download_quality import chosen_subtitle_tracks, first_subtitle_is_default, ytdlp_quality, ytdlp_subtitles
+from backend.types.download_profile_types import AutoSubtitles
 from backend.services.movies import update_movie_extra_source_metadata
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.local_media_profile_types import LocalMediaProfileSubtitleMode, LocalMediaProfileType, PreferredFormat
@@ -63,6 +65,10 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     thumbnail_mode = effective_thumbnail_mode(profile)
     metadata_mode = effective_metadata_mode(profile)
     subtitle_mode = LocalMediaProfileSubtitleMode(profile.subtitle_mode)
+    quality = ytdlp_quality(profile)
+    auto_subtitles = _auto_subtitles(download, episode)
+    subtitle_request = ytdlp_subtitles(profile, AutoSubtitles.NEVER)
+    first_default = first_subtitle_is_default(profile)
     remux, ffmpeg_path, temporary_root = settings.remux_video_to_mp4, settings.ffmpeg_path, str(settings.temporary_download_root)
     output_template = profile.output_template
     title, slug, media_id = media.title, media.slug, media.id
@@ -82,7 +88,12 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
                 f"{media_source.name} only gives '{title}' to {media_source.subscription_name or 'paying'} subscribers"
             )
         if playback.kind is PlaybackKind.YTDLP:
-            source = resolve_ytdlp_source(playback.url, command=playback.command, preferred_format=preferred, audio_only=audio_only, ffmpeg_path=ffmpeg_path)
+            if media_source.auto_subtitles_for(page_url):
+                subtitle_request = ytdlp_subtitles(profile, auto_subtitles)
+            source = resolve_ytdlp_source(
+                playback.url, command=playback.command, preferred_format=preferred, audio_only=audio_only,
+                quality=quality, subtitles=subtitle_request, ffmpeg_path=ffmpeg_path,
+            )
         else:
             tracker.preparing("inspect_stream")
             source = resolve_download_source(playback.url, preferred_format=preferred, audio_only=audio_only, remux_video_to_mp4=remux, cancellation=tracker.is_canceled)
@@ -188,15 +199,17 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
 
     assets: list[SidecarSpec] = []
     artwork_id = None
+    # VODLoft embeds into MP4, M4A, MP3 and MKV; an Opus file only gets sidecars.
+    embeddable = not source.hls_bundle and source.extension != "opus"
     if thumbnail_url and thumbnail_mode is not ThumbnailMode.NO_THUMBNAIL:
         publish_artwork = thumbnail_mode in (ThumbnailMode.SIDECAR, ThumbnailMode.EMBED_AND_SIDECAR)
-        embed_artwork = thumbnail_mode in (ThumbnailMode.EMBED, ThumbnailMode.EMBED_AND_SIDECAR) and not source.hls_bundle
+        embed_artwork = thumbnail_mode in (ThumbnailMode.EMBED, ThumbnailMode.EMBED_AND_SIDECAR) and embeddable
         if publish_artwork or embed_artwork:
             assets.append(SidecarSpec("artwork", "thumbnail", url=thumbnail_url, extension="jpg", publish=publish_artwork, allowed_extensions=("jpg", "jpeg", "png", "webp")))
         if embed_artwork:
             artwork_id = "artwork"
     tags = ()
-    if metadata_mode in (MetadataMode.EMBED, MetadataMode.EMBED_AND_NFO) and not source.hls_bundle:
+    if metadata_mode in (MetadataMode.EMBED, MetadataMode.EMBED_AND_NFO) and embeddable:
         tags = tuple(metadata.ffmpeg_tags().items())
     if metadata_mode in (MetadataMode.NFO, MetadataMode.EMBED_AND_NFO):
         assets.append(SidecarSpec("nfo", "nfo", content=render_nfo(metadata), extension="nfo", target_suffix=".nfo"))
@@ -220,7 +233,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         if embed_subtitles:
             embedded_subtitle_ids.append("subtitles")
     elif publish_subtitles or embed_subtitles:
-        for index, track in enumerate(source.subtitles):
+        for index, track in enumerate(chosen_subtitle_tracks(subtitle_request, source.subtitles)):
             asset_id = f"subtitle_{index}"
             assets.append(SidecarSpec(
                 asset_id, "subtitle", url=track.url, extension="srt",
@@ -235,6 +248,23 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         temporary_root=temporary_root, ffmpeg_path=ffmpeg_path, assets=tuple(assets),
         metadata_tags=tags, artwork_asset_id=artwork_id,
         subtitle_asset_ids=tuple(embedded_subtitle_ids),
+        first_subtitle_default=first_default,
         attempt_id=tracker.attempt_id,
         media_lane=(f"source:{media_source.id}", streams) if (streams := media_source.download_streams) else None,
     )
+
+
+def _auto_subtitles(download: MediaDownloadBase, episode: Episode | None) -> AutoSubtitles:
+    """The auto-generated subtitle choice of the Download Profile behind an episode download.
+
+    An episode downloaded by hand follows the Collection's Download Profile
+    that uses the same Local Media Profile; a single video has none.
+    """
+    if episode is None:
+        return AutoSubtitles.NEVER
+    profile = getattr(download, "download_profile", None) or next(
+        (candidate for candidate in episode.collection.download_profiles
+         if candidate.local_media_profile_id == download.local_media_profile_id),
+        None,
+    )
+    return AutoSubtitles(profile.auto_subtitles) if profile is not None else AutoSubtitles.FALLBACK

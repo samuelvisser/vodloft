@@ -1,14 +1,13 @@
 import {UseFormReturn} from 'react-hook-form'
 
-import {VideoPreferredFormatReg} from '../../types/local_media_profile'
 import {DEFAULT_VIDEO_OUTPUT_TEMPLATE} from '../../types/schemas/video_local_media_profile'
-import LocalMediaProfilePreferredFormatField from './LocalMediaProfilePreferredFormatField'
+import QualityField from './QualityField'
 import OutputTemplateEditor from './OutputTemplateEditor'
 
 export default function VideoLocalMediaProfileForm({form}: { form: UseFormReturn<any> }) {
     return (
         <>
-            <LocalMediaProfilePreferredFormatField form={form} formatRegistry={VideoPreferredFormatReg}/>
+            <QualityField form={form}/>
             <OutputTemplateEditor
                 form={form}
                 mode="video"
