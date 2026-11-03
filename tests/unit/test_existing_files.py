@@ -384,3 +384,20 @@ def test_a_collection_review_only_shows_its_own_folder_and_the_profile_review_sh
     sewing = next(item for item in review["files"] if "Sewing" in item["path"])
     assert sewing["episode"]["collection_slug"] == "veritasium"
     assert [item["collection_slug"] for item in review["collections"]] == ["smarter-every-day", "veritasium"]
+
+
+def test_a_profile_scan_looks_for_every_collection_in_its_own_folder(library, monkeypatch):
+    from backend.services import existing_files
+
+    session, collection, profile, download_profile, _episodes, _root = library
+    queued = []
+    monkeypatch.setattr(existing_files, "queue_scan", lambda *args: queued.append(args))
+
+    assert existing_files.scan_profile(session, profile) == 1
+    session.commit()
+    scan = session.scalar(select(existing_files.ExistingFileScan))
+    assert (scan.collection_id, scan.folder, scan.status, len(queued)) == (
+        collection.id, "/downloads/YouTube/Veritasium", "scanning", 1,
+    )
+    # A scan started by hand holds no Download Profile.
+    assert download_profile.enable_profile is True

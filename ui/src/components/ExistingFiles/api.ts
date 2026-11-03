@@ -82,6 +82,12 @@ export function useProfileExistingFiles(localMediaProfileId: number | undefined)
     })
 }
 
+export function scanProfile(localMediaProfileId: number) {
+    return request(`/collections/existing-files/profiles/${localMediaProfileId}/scan`, {
+        parse: (value: unknown) => value as {collections: number},
+    }, {method: 'POST'})
+}
+
 export function readScan(collectionSlug: string, localMediaProfileId: number) {
     return request(`${collectionPath(collectionSlug)}?local_media_profile_id=${localMediaProfileId}`, ExistingFilesScanSchema)
 }

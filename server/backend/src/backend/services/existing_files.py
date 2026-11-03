@@ -182,6 +182,18 @@ def request_scan(
     return scan
 
 
+def scan_profile(session: Session, profile: LocalMediaProfileBase) -> int:
+    """Look for existing files for every Collection that downloads with this profile, each in its own folder."""
+    collections = session.scalars(select(Collection).where(Collection.id.in_(
+        select(DownloadProfile.collection_id).where(
+            DownloadProfile.local_media_profile_id == profile.id, DownloadProfile.collection_id.is_not(None),
+        )
+    )).order_by(Collection.title)).all()
+    for collection in collections:
+        request_scan(session, collection, profile, folder=scan_folder_for(collection, profile))
+    return len(collections)
+
+
 def queue_scan(session: Session, collection: Collection, local_media_profile: LocalMediaProfileBase) -> None:
     from task_manager.scheduler.operation_factory import create_operation
     from task_manager.scheduler.operations import queue_operation_target_dispatch

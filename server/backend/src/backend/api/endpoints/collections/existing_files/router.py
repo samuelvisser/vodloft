@@ -18,6 +18,7 @@ from backend.services.existing_files import (
     profile_review,
     request_scan,
     scan_folder_for,
+    scan_profile,
     scan_view,
 )
 
@@ -28,6 +29,7 @@ from ....models.existing_files import (
     ExistingFilesFinishAPIResult,
     ExistingFilesOpenScanAPIRead,
     ExistingFilesProfileReviewAPIRead,
+    ExistingFilesProfileScanAPIResult,
     ExistingFilesScanAPIRead,
     ExistingFilesScanAPIRequest,
     ExistingFilesScanSummaryAPIRead,
@@ -106,6 +108,23 @@ def existing_files_profile(local_media_profile_id: int):
     """The open scans of one Local Media Profile, as one review of its whole folder."""
     with db_session() as s:
         return ExistingFilesProfileReviewAPIRead.model_validate(profile_review(s, _profile(s, local_media_profile_id)))
+
+
+@router.post(
+    "/existing-files/profiles/{local_media_profile_id}/scan", dependencies=_MANAGE,
+    response_model=ExistingFilesProfileScanAPIResult,
+)
+def existing_files_profile_scan(local_media_profile_id: int):
+    """Look for existing files for every Collection that uses this Local Media Profile."""
+    with db_session() as s:
+        profile = _profile(s, local_media_profile_id)
+        try:
+            count = scan_profile(s, profile)
+            s.commit()
+        except (ExistingFilesError, AdoptionError) as exc:
+            s.rollback()
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return ExistingFilesProfileScanAPIResult(collections=count)
 
 
 @router.get("/{collection_slug}/existing-files/scans", dependencies=_MANAGE, response_model=list[ExistingFilesScanSummaryAPIRead])

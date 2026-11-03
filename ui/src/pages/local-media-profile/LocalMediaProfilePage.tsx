@@ -10,7 +10,7 @@ import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import OpaqueOutputTemplateCode from '../../components/LocalMediaProfile/OpaqueOutputTemplateCode'
 import ProfileExistingFilesDialog from '../../components/ExistingFiles/ProfileExistingFilesDialog'
-import {useOpenExistingFilesScans} from '../../components/ExistingFiles/api'
+import {scanProfile, useOpenExistingFilesScans} from '../../components/ExistingFiles/api'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
 import {useLocalMediaProfileView} from '../../lib/queries'
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
@@ -177,6 +177,18 @@ export default function LocalMediaProfilePage() {
         }
     }
 
+    async function matchExistingFiles() {
+        if (!profile) return
+        try {
+            const result = await scanProfile(profile.id)
+            toast.success(`Looking for existing files for ${result.collections} collection${result.collections === 1 ? '' : 's'}`)
+            await queryClient.invalidateQueries({queryKey: ['existingFilesOpen']})
+            setReviewOpen(true)
+        } catch (exc) {
+            toast.error(exc instanceof Error ? exc.message : 'Could not start looking for existing files')
+        }
+    }
+
     const availableFor = profile.type === 'collection'
         ? CollectionLocalMediaProfileScopeReg.getLabelLoose(profile.collectionScope)
         : 'Movies'
@@ -238,7 +250,19 @@ export default function LocalMediaProfilePage() {
                         <ActionMenu
                             items={[
                                 {
+                                    label: 'Match existing files',
+                                    icon: faIcon('fass', 'file-import'),
+                                    disabled: profile.type !== 'collection' || statistics.downloadProfileCount === 0,
+                                    disabledReason: profile.type !== 'collection'
+                                        ? 'Only Collection Local Media Profiles can match existing files.'
+                                        : statistics.downloadProfileCount === 0
+                                            ? 'No collection downloads with this Local Media Profile yet.'
+                                            : undefined,
+                                    onSelect: () => void matchExistingFiles(),
+                                },
+                                {
                                     label: 'Rename all managed files',
+                                    separatorBefore: true,
                                     icon: faIcon('fass', 'file-pen'),
                                     disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation),
                                     disabledReason: renameOperation

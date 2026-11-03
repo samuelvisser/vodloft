@@ -111,6 +111,10 @@ class ExistingFilesProfileReviewAPIRead(ResponseBase):
     collections: list[ExistingFilesProfileCollectionAPIRead] = Field(default_factory=list)
 
 
+class ExistingFilesProfileScanAPIResult(ResponseBase):
+    collections: int
+
+
 class ExistingFilesAdoptAPIResult(ResponseBase):
     adopted: int
     errors: list[dict[str, str]] = Field(default_factory=list)
