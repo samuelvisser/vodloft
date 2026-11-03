@@ -700,7 +700,7 @@ function PathProof({proof}: {proof: ImportProfile['pathProof']}) {
                     {!expanded && proof.differences.length > FEW_DIFFERENCES && (
                         <button type="button" className="btn import-differences__more" aria-expanded={false}
                                 onClick={() => setExpanded(true)}>
-                            Show {proof.differences.length - FEW_DIFFERENCES} more
+                            Show all {proof.differences.length}
                         </button>
                     )}
                 </div>
