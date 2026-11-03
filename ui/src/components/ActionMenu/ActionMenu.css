@@ -52,6 +52,7 @@
 
 .action-menu-item {
     appearance: none;
+    text-decoration: none;
     border: 0;
     position: relative;
     z-index: 1;
@@ -125,6 +126,7 @@
 
 .action-menu-item-control {
     appearance: none;
+    text-decoration: none;
     border: 0;
     width: 28px;
     height: 28px;

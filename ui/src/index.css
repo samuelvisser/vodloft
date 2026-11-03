@@ -1095,6 +1095,9 @@ th[aria-sort="descending"] .th-sort-icon { opacity: 1; }
   color: inherit;
   cursor: pointer;
 }
+a.icon-btn { display: inline-block; text-decoration: none; }
+/* Links styled as buttons use the browser's button text size, so they match the buttons beside them. */
+:where(a.btn, a.icon-btn) { font-size: 13.3333px; }
 .icon-btn:hover { background: rgba(0,0,0,0.05); }
 @media (prefers-color-scheme: dark) {
   .icon-btn:hover { background: rgba(255,255,255,0.06); }
@@ -1198,8 +1201,15 @@ th[aria-sort="descending"] .th-sort-icon { opacity: 1; }
   margin-bottom: 16px;
 }
 .log-section-label {
-  margin-bottom: 4px;
+  margin: 0 0 6px;
   font-weight: 600;
+}
+.log-section-label + .modal-text {
+  margin-top: 0;
+}
+/* The footer owns the gap above it: a scroll container's last bottom margin is not reliably kept (Safari). */
+.log-history-scroll > :last-child {
+  margin-bottom: 0;
 }
 .log-output {
   margin: 8px 0 0;
@@ -1226,6 +1236,7 @@ th[aria-sort="descending"] .th-sort-icon { opacity: 1; }
 }
 .log-dialog-actions {
   flex: 0 0 auto;
+  margin-top: 20px;
 }
 .log-dialog-delete {
   margin-right: auto;
@@ -2057,8 +2068,8 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .system-health.is-healthy { background: rgba(34,169,94,.09); border-color: rgba(34,169,94,.35); color: #178447; }
 .system-health.needs-attention { background: rgba(234,154,45,.09); border-color: rgba(234,154,45,.38); color: #a76512; }
 .operation-stats { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 9px; margin-bottom: 24px; }
-.operation-stats button { appearance: none; padding: 13px; border: 1px solid rgba(100,116,139,.28); border-radius: 12px; background: rgba(148,163,184,.04); color: inherit; text-align: left; cursor: pointer; }
-.operation-stats button:hover { background: rgba(148,163,184,.1); }
+.operation-stats a { display: block; text-decoration: none; padding: 13px; border: 1px solid rgba(100,116,139,.28); border-radius: 12px; background: rgba(148,163,184,.04); color: inherit; text-align: left; cursor: pointer; }
+.operation-stats a:hover { background: rgba(148,163,184,.1); }
 .operation-stats span, .operation-stats strong { display: block; }
 .operation-stats span { color: var(--muted); font-size: 12px; }
 .operation-stats strong { margin-top: 4px; font-size: 22px; }
@@ -2066,14 +2077,14 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .operation-section { min-width: 0; }
 .operation-section-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; }
 .operation-section-header h2 { margin: 0; font-size: 18px; }
-.operation-section-header button { appearance: none; border: 0; background: transparent; color: #3b82f6; font: inherit; font-size: 12px; cursor: pointer; }
-.operation-download, .recent-download { appearance: none; width: 100%; display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 11px; align-items: center; padding: 11px 0; border: 0; border-bottom: 1px solid rgba(100,116,139,.25); background: transparent; color: inherit; text-align: left; font: inherit; cursor: pointer; }
+.operation-section-header a { text-decoration: none; color: #3b82f6; font: inherit; font-size: 12px; cursor: pointer; }
+.operation-download, .recent-download { text-decoration: none; width: 100%; display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 11px; align-items: center; padding: 11px 0; border: 0; border-bottom: 1px solid rgba(100,116,139,.25); background: transparent; color: inherit; text-align: left; font: inherit; cursor: pointer; }
 .operation-icon { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 9px; background: rgba(100,116,139,.16); color: var(--muted); }
 .operation-download-copy { min-width: 0; }
 .operation-download-copy strong, .operation-download-copy small, .recent-download strong, .recent-download small { display: block; }
 .operation-download-copy small, .recent-download small { margin: 3px 0 7px; color: var(--muted); font-size: 12px; }
 .operation-download > span:last-child { color: var(--muted); font-size: 12px; }
-.operation-alert { appearance: none; width: 100%; display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 12px; margin-bottom: 9px; border: 1px solid rgba(234,154,45,.35); border-radius: 11px; background: rgba(234,154,45,.08); color: inherit; text-align: left; font: inherit; cursor: pointer; }
+.operation-alert { text-decoration: none; width: 100%; display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 12px; margin-bottom: 9px; border: 1px solid rgba(234,154,45,.35); border-radius: 11px; background: rgba(234,154,45,.08); color: inherit; text-align: left; font: inherit; cursor: pointer; }
 .operation-alert > svg { color: #d08724; }
 .operation-alert strong, .operation-alert small { display: block; }
 .operation-alert small { margin-top: 3px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

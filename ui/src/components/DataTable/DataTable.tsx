@@ -1,7 +1,9 @@
 import {CSSProperties, HTMLAttributes, ReactNode, useId, useMemo, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
+import {Link, useNavigate} from 'react-router-dom'
 import {faIcon} from '../../icons/faIcon'
+import {linkAreaHandlers} from '../../lib/linkClicks'
 
 export type Column<T> = {
     id?: string
@@ -29,11 +31,14 @@ function compareSortValues(a: string | number | Date, b: string | number | Date)
 }
 
 export type DataTableAction<T> = {
-    onClick: (row: T) => void
     icon: IconProp
     text: string
     classes?: string
-}
+} & (
+    | { onClick: (row: T) => void, href?: never }
+    /** An action that opens a page renders as a link, so it can also be opened in a new tab. */
+    | { href: string, onClick?: never }
+)
 
 export type DataTableProps<T> = {
     columns: Column<T>[]
@@ -44,7 +49,8 @@ export type DataTableProps<T> = {
     loadingMessage?: ReactNode
     emptyMessage?: ReactNode
     rowKey: (row: T) => string | number
-    onRowClick?: (row: T) => void
+    /** The page a row opens. Clicking the row opens it; middle-click or ctrl/cmd-click opens it in a new tab. */
+    rowHref?: (row: T) => string | undefined
     rowAriaLabel?: (row: T) => string
     getRowProps?: (row: T) => HTMLAttributes<HTMLTableRowElement>
     className?: string
@@ -52,7 +58,7 @@ export type DataTableProps<T> = {
     actions?: (row: T) => DataTableAction<T>[]
     /** Compact, always-visible content at the top of each mobile accordion card. */
     mobileSummary?: (row: T) => ReactNode
-    /** Adds a mobile-only action that invokes onRowClick after the card is expanded. */
+    /** Adds a mobile-only action that opens rowHref after the card is expanded. */
     mobileRowActionLabel?: string
 }
 
@@ -66,7 +72,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
         loadingMessage = 'Loading... ',
         emptyMessage = 'No data found',
         rowKey,
-        onRowClick,
+        rowHref,
         rowAriaLabel,
         getRowProps,
         className,
@@ -76,6 +82,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
         mobileRowActionLabel,
     } = props
 
+    const navigate = useNavigate()
     const tableId = useId().replace(/:/g, '')
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
 
@@ -179,26 +186,32 @@ export function DataTable<T>(props: DataTableProps<T>) {
                     </tr>
                 ) : (
                     sortedData.map((row) => {
-                        const clickable = Boolean(onRowClick)
+                        const href = rowHref?.(row)
                         const rowKeyValue = String(rowKey(row))
-                        const rowProps: HTMLAttributes<HTMLTableRowElement> = {
-                            ...(getRowProps ? getRowProps(row) : {}),
-                        }
-                        if (clickable) {
+                        const externalProps = getRowProps ? getRowProps(row) : {}
+                        const rowProps: HTMLAttributes<HTMLTableRowElement> = {...externalProps}
+                        if (href) {
+                            const linkHandlers = linkAreaHandlers(href, navigate)
                             rowProps.tabIndex = rowProps.tabIndex ?? 0
                             rowProps.style = {cursor: 'pointer', ...(rowProps.style || {})}
                             rowProps.onClick = (e) => {
                                 // Preserve any external onClick
-                                if (getRowProps && getRowProps(row)?.onClick) {
-                                    getRowProps(row)!.onClick!(e)
-                                    if (e.defaultPrevented) return
-                                }
-                                onRowClick?.(row)
+                                externalProps.onClick?.(e)
+                                linkHandlers.onClick(e)
+                            }
+                            rowProps.onMouseDown = (e) => {
+                                externalProps.onMouseDown?.(e)
+                                linkHandlers.onMouseDown(e)
+                            }
+                            rowProps.onAuxClick = (e) => {
+                                externalProps.onAuxClick?.(e)
+                                linkHandlers.onAuxClick(e)
                             }
                             rowProps.onKeyDown = (e) => {
+                                if (e.target !== e.currentTarget) return
                                 if (e.key === 'Enter' || e.key === ' ') {
                                     e.preventDefault()
-                                    onRowClick?.(row)
+                                    navigate(href)
                                 }
                             }
                         }
@@ -222,7 +235,17 @@ export function DataTable<T>(props: DataTableProps<T>) {
                                 {actions && (
                                     <td key={'actions-cell'} style={{textAlign: 'right'}} data-label={'Actions'}>
                                         <div style={{display: 'inline-flex', gap: 6, flexWrap: 'wrap'}}>
-                                            {actions(row).map((a, i) => (
+                                            {actions(row).map((a, i) => a.href ? (
+                                                <Link
+                                                    key={i}
+                                                    to={a.href}
+                                                    className="icon-btn"
+                                                    aria-label={`${a.text}${rowAriaLabel ? ' ' + (rowAriaLabel(row) ?? '') : ''}`}
+                                                    title={a.text}
+                                                >
+                                                    <FontAwesomeIcon icon={a.icon}/>
+                                                </Link>
+                                            ) : (
                                                 <button
                                                     key={i}
                                                     type="button"
@@ -231,7 +254,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
                                                     title={a.text}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        a.onClick(row)
+                                                        a.onClick?.(row)
                                                     }}
                                                 >
                                                     <FontAwesomeIcon icon={a.icon}/>
@@ -256,6 +279,9 @@ export function DataTable<T>(props: DataTableProps<T>) {
                         const isExpanded = expandedRows.has(rowKeyValue)
                         const detailsId = `${tableId}-details-${rowIndex}`
                         const rowActions = actions?.(row) ?? []
+                        const href = rowHref?.(row)
+
+                        const showRowAction = Boolean(mobileRowActionLabel && href)
 
                         return (
                             <article className={`mobile-data-card${isExpanded ? ' is-expanded' : ''}`} role="listitem" key={rowKeyValue}>
@@ -290,21 +316,25 @@ export function DataTable<T>(props: DataTableProps<T>) {
                                             </div>
                                         ))}
 
-                                        {(mobileRowActionLabel || rowActions.length > 0) && (
+                                        {(showRowAction || rowActions.length > 0) && (
                                             <div className="mobile-data-detail-row mobile-data-actions-row">
                                                 <span className="mobile-data-detail-label">Actions</span>
                                                 <div className="mobile-data-actions">
-                                                    {mobileRowActionLabel && onRowClick && (
-                                                        <button type="button" className="btn" onClick={() => onRowClick(row)}>
+                                                    {showRowAction && href && (
+                                                        <Link to={href} className="btn">
                                                             {mobileRowActionLabel}
-                                                        </button>
+                                                        </Link>
                                                     )}
-                                                    {rowActions.map((action, actionIndex) => (
+                                                    {rowActions.map((action, actionIndex) => action.href ? (
+                                                        <Link key={actionIndex} to={action.href} className={action.classes ?? 'btn'}>
+                                                            {action.text}
+                                                        </Link>
+                                                    ) : (
                                                         <button
                                                             key={actionIndex}
                                                             type="button"
                                                             className={action.classes ?? 'btn'}
-                                                            onClick={() => action.onClick(row)}
+                                                            onClick={() => action.onClick?.(row)}
                                                         >
                                                             {action.text}
                                                         </button>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import {Link, useNavigate, useParams} from 'react-router-dom'
 import CollectionForm, { CollectionFormValue, defaultCollectionFormValue } from '../../components/CollectionForm'
 import CustomMetadataEditor from '../../components/CustomMetadataEditor/CustomMetadataEditor'
 import { useQueryClient } from '@tanstack/react-query'
@@ -194,7 +194,7 @@ export default function EditCollectionPage() {
         </div>
         <p>Collection not found.</p>
         <div className="actions" style={{ marginTop: 12 }}>
-          <button type="button" className="btn" onClick={() => navigate('/')}>Back</button>
+          <Link className="btn" to="/">Back</Link>
         </div>
       </section>
     )

@@ -1,6 +1,6 @@
 import {useCallback, useRef} from 'react'
 import {can} from '../lib/access'
-import {useNavigate} from 'react-router-dom'
+import {Link} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
 import {useDownloadProfilesView} from '../lib/queries'
@@ -16,9 +16,7 @@ import {faIcon} from '../icons/faIcon'
 import {formatBytes} from '../utils/formatting'
 
 export default function DownloadProfilesPage() {
-    const navigate = useNavigate()
     const queryClient = useQueryClient()
-    const onAdd = useCallback(() => navigate('/add-download-profile'), [navigate])
 
     const {data: profiles, isLoading, error} = useDownloadProfilesView()
 
@@ -103,7 +101,7 @@ export default function DownloadProfilesPage() {
                     <p>Download Profiles are always connected to a Local Media Profile, which defines where your
                         downloads will be stored and what their file name should be.</p>
                 </PageSubtitle>
-                {can('download_profiles', 'manage') && <button className="btn btn-primary" onClick={onAdd}>Add download profile</button>}
+                {can('download_profiles', 'manage') && <Link className="btn btn-primary" to="/add-download-profile">Add download profile</Link>}
             </div>
 
             <div className="form-row">
@@ -132,10 +130,10 @@ export default function DownloadProfilesPage() {
                             </span>
                         </>
                     )}
-                    onRowClick={(p) => navigate(`/edit-download-profile/${p.id}`, {state: p})}
+                    rowHref={(p) => `/edit-download-profile/${p.id}`}
                     actions={(p) => [
                         {
-                            onClick: () => navigate(`/edit-download-profile/${p.id}`, {state: p}),
+                            href: `/edit-download-profile/${p.id}`,
                             icon: faIcon('fass', 'pen-to-square'),
                             text: 'Edit',
                             classes: 'btn',

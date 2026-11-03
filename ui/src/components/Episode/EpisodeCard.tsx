@@ -1,6 +1,7 @@
 import DownloadStatusBadge from '../DownloadProgress/DownloadStatusBadge'
 import React from 'react'
 import {useNavigate} from 'react-router-dom'
+import {linkAreaHandlers} from '../../lib/linkClicks'
 import {EpisodeReadView} from '../../types/schemas/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {DrmBadge} from '../common/DrmProtected'
@@ -143,17 +144,17 @@ export default function EpisodeCard({ep, collectionSlug, downloads, skippedBy}: 
     const cornerBadgeText = showNumberBadge ? episodeBadgeText(ep.episodeLabel) : typeBadgeLabel
 
     const navigate = useNavigate()
-    const goToEpisode = () => navigate(`/collection/${collectionSlug}/episode/${ep.slug}`)
+    const episodeHref = `/collection/${collectionSlug}/episode/${ep.slug}`
     const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
         if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault()
-            goToEpisode()
+            navigate(episodeHref)
         }
     }
 
     return (
         <div className="episode-card" role="listitem" aria-label={ep.title} tabIndex={0} onKeyDown={onKeyDown}>
-            <div className="cover" style={style} onClick={goToEpisode}>
+            <div className="cover" style={style} {...linkAreaHandlers(episodeHref, navigate)}>
                 <DownloadStatusIcons downloads={downloads ?? []}/>
                 {ep.drmProtected ? <DrmBadge onCover/>
                     : ep.needsSubscription ? <SubscriptionBadge sourceKey={ep.sourceKey} onCover/>

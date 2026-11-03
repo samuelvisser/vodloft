@@ -70,6 +70,7 @@
 .collection-profile-chip,
 .collection-profile-copy {
     appearance: none;
+    text-decoration: none;
     border: 0;
     background: transparent;
     color: var(--text);

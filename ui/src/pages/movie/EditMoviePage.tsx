@@ -2,7 +2,7 @@ import {useEffect, useMemo, useRef, useState} from 'react'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useQueryClient} from '@tanstack/react-query'
 import {useForm} from 'react-hook-form'
-import {useNavigate, useParams} from 'react-router-dom'
+import {Link, useNavigate, useParams} from 'react-router-dom'
 import {z} from 'zod'
 
 import CustomMetadataEditor from '../../components/CustomMetadataEditor/CustomMetadataEditor'
@@ -91,7 +91,7 @@ export default function EditMoviePage() {
                 </div>
                 <p>Movie not found.</p>
                 <div className="actions" style={{marginTop: 12}}>
-                    <button type="button" className="btn" onClick={() => navigate('/library?type=movies')}>Back</button>
+                    <Link className="btn" to="/library?type=movies">Back</Link>
                 </div>
             </section>
         )
@@ -111,7 +111,7 @@ export default function EditMoviePage() {
                     Could not load this movie: {moviesError?.message || 'Movie not found'}
                 </div>
                 <div className="actions" style={{marginTop: 12}}>
-                    <button type="button" className="btn" onClick={() => navigate('/library?type=movies')}>Back</button>
+                    <Link className="btn" to="/library?type=movies">Back</Link>
                 </div>
             </section>
         )

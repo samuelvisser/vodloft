@@ -6,6 +6,7 @@ import DownloadProgressActionItem from '../DownloadProgress/DownloadProgressActi
 import ProgressFill from '../common/ProgressFill'
 import {useEffect, useId, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
+import {Link} from 'react-router-dom'
 import './ActionMenu.css'
 import {faIcon} from '../../icons/faIcon'
 
@@ -20,7 +21,6 @@ export type ActionMenuControl = {
 export type ActionMenuItem = {
     label: string
     icon?: any
-    onSelect: () => void
     disabled?: boolean
     disabledReason?: string
     progress?: number
@@ -29,7 +29,11 @@ export type ActionMenuItem = {
     controls?: ActionMenuControl[]
     tone?: 'default' | 'danger'
     separatorBefore?: boolean
-}
+} & (
+    | { onSelect: () => void, href?: never }
+    /** An item that opens a page renders as a link, so it can also be opened in a new tab. */
+    | { href: string, onSelect?: never }
+)
 
 type Props = {
     label?: string
@@ -73,7 +77,7 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
     const selectItem = (item: ActionMenuItem) => {
         if (item.disabled) return
         setOpen(false)
-        item.onSelect()
+        item.onSelect?.()
     }
 
     const selectControl = (control: ActionMenuControl) => {
@@ -87,7 +91,19 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
     return (
         <div ref={rootRef} className={`action-menu${open ? ' is-open' : ''}${className ? ` ${className}` : ''}`}>
             <div className="action-menu-inline-items" role="group" aria-label={label}>
-                {items.map((item, index) => (
+                {items.map((item, index) => item.href && !item.disabled ? (
+                    <Link
+                        key={`${item.label}-${index}`}
+                        to={item.href}
+                        className={`action-menu-item-control${item.tone === 'danger' ? ' is-danger' : ''}`}
+                        aria-label={item.label}
+                        title={item.label}
+                    >
+                        {item.icon
+                            ? <FontAwesomeIcon icon={item.icon} aria-hidden="true"/>
+                            : <span>{item.label}</span>}
+                    </Link>
+                ) : (
                     <button
                         key={`${item.label}-${index}`}
                         type="button"
@@ -127,6 +143,15 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
                             const tooltipId = item.disabled && item.disabledReason
                                 ? `${menuId}-disabled-reason-${index}`
                                 : undefined
+                            const itemContent = (
+                                <>
+                                    {item.icon && (
+                                        <FontAwesomeIcon className="action-menu-item-icon" icon={item.icon} aria-hidden="true"/>
+                                    )}
+                                    <span>{item.label}</span>
+                                    {presentation && <DownloadProgressActionItem presentation={presentation}/>}
+                                </>
+                            )
 
                             return (
                                 <div
@@ -147,21 +172,29 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
                                                 aria-hidden="true"
                                             />
                                         )}
-                                        <button
-                                            type="button"
-                                            role="menuitem"
-                                            className={`action-menu-item${item.tone === 'danger' ? ' is-danger' : ''}${item.disabled ? ' is-disabled' : ''}`}
-                                            aria-disabled={item.disabled || undefined}
-                                            aria-describedby={tooltipId}
-                                            aria-label={presentation ? `${item.label}: ${presentation.detail}` : item.label}
-                                            onClick={() => selectItem(item)}
-                                        >
-                                            {item.icon && (
-                                                <FontAwesomeIcon className="action-menu-item-icon" icon={item.icon} aria-hidden="true"/>
-                                            )}
-                                            <span>{item.label}</span>
-                                            {presentation && <DownloadProgressActionItem presentation={presentation}/>}
-                                        </button>
+                                        {item.href && !item.disabled ? (
+                                            <Link
+                                                to={item.href}
+                                                role="menuitem"
+                                                className={`action-menu-item${item.tone === 'danger' ? ' is-danger' : ''}`}
+                                                aria-label={presentation ? `${item.label}: ${presentation.detail}` : item.label}
+                                                onClick={() => setOpen(false)}
+                                            >
+                                                {itemContent}
+                                            </Link>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                role="menuitem"
+                                                className={`action-menu-item${item.tone === 'danger' ? ' is-danger' : ''}${item.disabled ? ' is-disabled' : ''}`}
+                                                aria-disabled={item.disabled || undefined}
+                                                aria-describedby={tooltipId}
+                                                aria-label={presentation ? `${item.label}: ${presentation.detail}` : item.label}
+                                                onClick={() => selectItem(item)}
+                                            >
+                                                {itemContent}
+                                            </button>
+                                        )}
                                         {presentation && (
                                             <ProgressExplanation
                                                 detail={presentation.detail}

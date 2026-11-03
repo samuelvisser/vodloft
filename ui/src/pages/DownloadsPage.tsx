@@ -1,7 +1,7 @@
 import type {TaskOperationRead} from '../types/schemas/operation'
 import SourceBadge from '../components/Source/SourceBadge'
 import {useEffect, useMemo, useRef, useState} from 'react'
-import {useNavigate, useSearchParams} from 'react-router-dom'
+import {useSearchParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
@@ -95,7 +95,6 @@ function isDeletableDownload(row: MediaDownloadViewRead): boolean {
 }
 
 export default function DownloadsPage() {
-    const navigate = useNavigate()
     const [searchParams, setSearchParams] = useSearchParams()
     const qc = useQueryClient()
     const startOperation = useStartOperation()
@@ -537,10 +536,11 @@ export default function DownloadsPage() {
                         </>
                     )}
                     mobileRowActionLabel="Open media"
-                    onRowClick={(row) => {
-                        if (row.movieSlug) navigate(`/movie/${row.movieSlug}`)
-                        else if (row.type === 'video') navigate(`/video/${row.mediaItemId}`)
-                        else if (row.collectionSlug && row.episodeSlug) navigate(`/collection/${row.collectionSlug}/episode/${row.episodeSlug}`)
+                    rowHref={(row) => {
+                        if (row.movieSlug) return `/movie/${row.movieSlug}`
+                        if (row.type === 'video') return `/video/${row.mediaItemId}`
+                        if (row.collectionSlug && row.episodeSlug) return `/collection/${row.collectionSlug}/episode/${row.episodeSlug}`
+                        return undefined
                     }}
                     actions={(row) => {
                         const status = String(row.downloadStatus)
