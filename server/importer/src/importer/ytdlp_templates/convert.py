@@ -682,10 +682,11 @@ def convert_ytdlp(template: str, options: ConversionOptions | None = None, *, or
 
 
 def _action_source(action: MetadataAction) -> str:
+    """The option as an option file writes it: its arguments in double quotes, backslashes as they are."""
     if action.kind == "interpret":
-        return f"--parse-metadata {':'.join(action.arguments)!r}"
+        return f'--parse-metadata "{":".join(action.arguments)}"'
     field_, search, replace = action.arguments
-    return f"--replace-in-metadata {field_} {search!r} {replace!r}"
+    return f'--replace-in-metadata {field_} "{search}" "{replace}"'
 
 
 def _template_fields(template: str) -> set[str]:

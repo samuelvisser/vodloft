@@ -42,8 +42,8 @@ class ConversionReport:
 
     def lines(self) -> list[str]:
         """The report as text, one line per part that changed: renamed, nearly the same or not converted."""
-        lines = [f"{self.original!r} becomes {self.output_template!r}" if self.output_template
-                 else f"{self.original!r} could not be converted"]
+        lines = [f"{_quoted(self.original)} becomes {_quoted(self.output_template)}" if self.output_template
+                 else f"{_quoted(self.original)} could not be converted"]
         lines.extend(self.errors)
         for part in (*self.actions, *self.parts):
             if part.support == "exact" and part.source == part.result:
@@ -51,12 +51,18 @@ class ConversionReport:
             if part.support == "exact" and part in self.actions and not part.result:
                 # A metadata action the template doesn't use changes nothing for this profile.
                 continue
-            result = f"{part.result!r}" if part.result else "nothing"
+            result = _quoted(part.result) if part.result else "nothing"
             how = {"exact": "exact", "close": "nearly the same"}.get(part.support, "not converted")
-            line = f"{part.source!r} becomes {result} ({how}). {part.reason or ''}".rstrip()
+            line = f"{_quoted(part.source)} becomes {result} ({how}). {part.reason or ''}".rstrip()
             if line not in lines:
                 lines.append(line)
         return lines
+
+
+def _quoted(text: str) -> str:
+    """``text`` in quotes, exactly as it is: no escapes added, so backslashes read as written."""
+    quote = '"' if "'" in text else "'"
+    return f"{quote}{text}{quote}"
 
 
 @dataclass
