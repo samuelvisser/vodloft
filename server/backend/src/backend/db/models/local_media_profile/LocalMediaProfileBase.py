@@ -115,6 +115,11 @@ class LocalMediaProfileBase(Base):
     )
     # A dubbed audio track's language code; None keeps the original language.
     audio_language: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # None offers the profile for every Source, including ones added later.
+    source_keys: Mapped[list[str] | None] = mapped_column(
+        JSON, nullable=True, default=None,
+        comment="The Sources this profile is offered for; NULL offers it for every Source",
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()

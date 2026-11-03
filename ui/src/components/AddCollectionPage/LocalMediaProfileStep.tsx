@@ -20,7 +20,7 @@ import {
 import LocalMediaProfileCard from '../LocalMediaProfile/LocalMediaProfileCard'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {getZodDefaults} from '../../utils/defaultZod'
-import {isCollectionLocalMediaProfileAvailableFor, type CollectionLocalMediaProfileContext} from '../../types/local_media_profile'
+import {isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableForSource, type CollectionLocalMediaProfileContext} from '../../types/local_media_profile'
 /** Quality and subtitle language choices an existing profile keeps when this step picks it. */
 const QUALITY_FIELDS = [
     'subtitleLanguages', 'subtitleLanguageMode', 'qualityGoal', 'videoCodecs', 'codecFallback',
@@ -45,7 +45,8 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
     const profilesQuery = useLocalMediaProfiles()
     const profiles: CollectionLocalMediaProfileRead[] | undefined = profilesQuery.data?.filter(
         (profile): profile is CollectionLocalMediaProfileRead =>
-            profile.type === 'collection' && isCollectionLocalMediaProfileAvailableFor(profile, collectionType),
+            profile.type === 'collection' && isCollectionLocalMediaProfileAvailableFor(profile, collectionType)
+            && isLocalMediaProfileAvailableForSource(profile, collection?.sourceKey),
     )
     const profilesError = profilesQuery.isError ? ((profilesQuery.error)?.message ?? 'Failed to load media profiles') : null
     const createDefaults = getZodDefaults(LocalMediaProfileCreateUnionSchema)

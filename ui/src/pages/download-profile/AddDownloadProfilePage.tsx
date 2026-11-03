@@ -10,7 +10,7 @@ import {
 } from '../../types/schemas/download_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import Select from 'react-select'
-import {isCollectionLocalMediaProfileAvailableFor, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
+import {isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableForSource, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
 import {SelectRegistry} from "../../utils/selectRegistry";
 import {buildCollectionSelectRegistry} from "../../types/collection";
 import {useQueryClient} from "@tanstack/react-query";
@@ -53,6 +53,7 @@ export default function AddDownloadProfilePage() {
         mediaProfiles,
         'collection',
         selectedCollection?.type === 'podcast' || selectedCollection?.type === 'series' ? selectedCollection.type : undefined,
+        selectedCollection?.sourceKey,
     )
 
     const selectCollection = useCallback((id: number) => {
@@ -151,6 +152,7 @@ export default function AddDownloadProfilePage() {
             profile.type === 'collection'
             && profile.preferredFormat === requestedPreferredFormat
             && isCollectionLocalMediaProfileAvailableFor(profile, selectedCollection.type)
+            && isLocalMediaProfileAvailableForSource(profile, selectedCollection.sourceKey)
         ))
         if (!matchingProfile) return
 
