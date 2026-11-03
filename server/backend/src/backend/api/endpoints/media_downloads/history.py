@@ -131,7 +131,26 @@ def _presentation(entry: MediaDownloadHistory) -> tuple[str, str, str | None]:
         detail = " · ".join(str(value) for value in (path, matched_by) if value)
         return "Imported", "downloaded", detail or None
 
+    if action == MediaDownloadHistoryAction.UPGRADE_CHECKED:
+        best, kept = metadata.get("best_height"), metadata.get("kept_height")
+        found = [
+            f"Higher resolution ({kept}p → {best}p)" if value == "resolution" and best and kept
+            else _IMPROVEMENTS.get(str(value), str(value))
+            for value in metadata.get("improvements") or ()
+        ]
+        if not found:
+            return "Checked for a better version", "downloaded", "Nothing better yet"
+        return "Better version found", "redownloaded", " · ".join(found)
+
     return action.replace("_", " ").title(), "pending", None
+
+
+_IMPROVEMENTS = {
+    "resolution": "Higher resolution",
+    "sponsorblock": "New SponsorBlock segments",
+    "subtitles": "New subtitles",
+    "codec": "Preferred codec",
+}
 
 
 @dataclass(frozen=True)

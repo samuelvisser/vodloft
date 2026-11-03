@@ -123,12 +123,38 @@ Downloads you keep, and downloads a Keep filter matches, are never deleted.
 
 Leave it disabled if you only want the limit to control which new episodes are selected while keeping older files already on disk. Planned downloads that never produced a file are still discarded once they fall outside the active number of episodes window.
 
+## Upgrade check
+
+A download isn't always the best version of an episode. YouTube adds higher resolutions hours after an upload,
+SponsorBlock segments come in over the days after it, and subtitles get added later. The **Upgrade check** card, under
+Which episodes, downloads an episode again after a while, but only when something you care about improved.
+
+It only shows what can improve for the Collection's site: SponsorBlock only for YouTube, subtitles only when the Local
+Media Profile stores them, and the final version only for The Daily Wire.
+
+- **Download again when a better version is out** turns the check on. New profiles have it on; profiles made before
+  VODLoft had the check start with it off.
+- **Check after … days**: how long after downloading the first check happens. 7 days by default.
+- **How often**: **Once, then stop**; **Twice, again after 30 days**; or **Every … days, up to 3 times**, which with
+  7 days checks on day 7, 14 and 21. Every choice stops early once an episode can't get any better.
+- **Better means**: a higher resolution (up to the Local Media Profile's quality), new SponsorBlock segments of the types
+  you mark or cut out, new subtitles in a language the Local Media Profile asks for, or the preferred codec (the first
+  allowed codec in the Local Media Profile). A higher resolution and new SponsorBlock segments are on by default.
+
+The check first asks the site what it has now, and only downloads when one of your improvements is there. The old
+file stays until the new one is complete. Kept downloads are checked too: Keep protects a download from being deleted,
+not from a better copy. Downloads made after the check is turned on are the ones that get checked.
+
+The episode's download history shows each check and what it found, such as **Better version found: Higher resolution
+(720p → 1080p)**. On the Collection page, an episode says when it will be checked, or that it was upgraded or checked.
+
 ### Countdown and final versions
 
-Some Daily Wire episodes appear with temporary countdown media before the final episode is ready.
+Some Daily Wire episodes appear with temporary countdown media before the final episode is ready. Both choices are in
+the Upgrade check card:
 
 - **Download with countdown** allows VODLoft to download that early version.
-- **Redownload final version** replaces the early version after the final media becomes available.
+- **Download again as the final version** replaces the early version as soon as the final media is out.
 
 If you only want the finished episode, leave countdown downloading disabled.
 

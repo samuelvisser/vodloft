@@ -1,8 +1,10 @@
+from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from backend.db.datetime_types import UTCDateTime
 from .MediaDownloadBase import MediaDownloadBase
 from backend.types.media_types import MediaType
 
@@ -22,6 +24,16 @@ class EpisodeMediaDownload(MediaDownloadBase):
     redownload_when_delay_passed: Mapped[bool] = mapped_column(default=False)
     kept: Mapped[bool] = mapped_column(
         default=False, server_default="0", comment="Kept by hand: retention never deletes this download"
+    )
+
+    upgrade_checks: Mapped[int] = mapped_column(
+        default=0, server_default="0", comment="How many times the upgrade check has looked at this download",
+    )
+    upgrade_check_at: Mapped[Optional[datetime]] = mapped_column(
+        UTCDateTime(), comment="When the upgrade check looks next; empty when it will not",
+    )
+    upgrade_result: Mapped[Optional[str]] = mapped_column(
+        String(16), comment="What the last upgrade check found: upgraded or checked",
     )
 
     # Relationships

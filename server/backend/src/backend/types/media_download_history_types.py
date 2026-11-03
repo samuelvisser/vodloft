@@ -21,3 +21,5 @@ class MediaDownloadHistoryAction(StrEnum):
     ARTIFACT_RESTORED = "artifact_restored"
     ARTIFACT_RENAMED = "artifact_renamed"
     IMPORTED = "imported"
+    UPGRADE_CHECKED = "upgrade_checked"
+    """The upgrade check compared the download with what the site offers now."""

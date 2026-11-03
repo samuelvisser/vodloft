@@ -30,7 +30,7 @@ Seeing an episode in the Library does not necessarily mean final downloadable me
 For Podcast Download Profiles, check:
 
 - **Download with countdown** — whether VODLoft may download the early countdown version;
-- **Redownload final version** — whether an early copy should later be replaced;
+- **Download again as the final version** (in the Upgrade check card) — whether an early copy should later be replaced;
 - whether the profile's episode types include this item.
 
 If countdown downloading is disabled, waiting for the final version is expected behavior.

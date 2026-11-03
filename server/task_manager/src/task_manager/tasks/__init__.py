@@ -35,6 +35,7 @@ _WORKER_EXPORTS = {
     "update_source_programs": ".workers.update_source_programs",
     "quick_check_new_videos": ".workers.quick_check_new_videos",
     "quick_download": ".workers.quick_download",
+    "upgrade_check": ".workers.upgrade_check",
     "rescan_quick_checked_collections": ".workers.quick_check_new_videos",
 }
 

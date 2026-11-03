@@ -43,6 +43,16 @@ const LIVE_BADGE_DOT_STYLE: React.CSSProperties = {
     background: 'currentColor',
 }
 
+/** What the upgrade check did or will do for an episode's downloads, such as "Better version on Nov 10". */
+export function upgradeText(downloads: readonly MediaDownloadViewRead[]): string | null {
+    const next = downloads.map((download) => download.upgradeCheckAt).filter((at): at is Date => !!at)
+        .sort((a, b) => a.getTime() - b.getTime())[0]
+    if (downloads.some((download) => download.upgradeResult === 'upgraded')) return 'Upgraded to a better version'
+    if (next) return `Checked for a better version on ${next.toLocaleDateString(undefined, {month: 'short', day: 'numeric'})}`
+    if (downloads.some((download) => download.upgradeResult === 'checked')) return 'Checked: no better version'
+    return null
+}
+
 export function toImageUrl(path?: string | null): string | undefined {
     if (!path) return undefined
     // If already an absolute URL, return as-is
@@ -108,6 +118,7 @@ type Props = {
 
 /** The episode thumbnail card used on a show's episode list. */
 export default function EpisodeCard({ep, collectionSlug, downloads, skippedBy}: Props) {
+    const upgrade = upgradeText(downloads ?? [])
     const initials = ep.title
         .split(' ')
         .map((w) => w[0])
@@ -164,6 +175,7 @@ export default function EpisodeCard({ep, collectionSlug, downloads, skippedBy}: 
                 )}
             </div>
             <div className="episode-title" title={ep.title}>{ep.title}</div>
+            {upgrade && <div className="episode-upgrade">{upgrade}</div>}
             {skippedBy && !(downloads ?? []).some((download) => download.presentation.status !== 'not_downloaded') && (
                 <div className="episode-skipped" title="Open the episode to download it anyway">
                     Skipped by filter: {plainText(ruleSentence(skippedBy)).replace(/^\w/, (c) => c.toLowerCase())}

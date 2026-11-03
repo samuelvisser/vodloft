@@ -334,7 +334,7 @@ def execute_download_plan(
         tracker.ensure_active()
         successful = True
         return DownloadExecution(
-            DownloadResult(str(destination), result.bytes_downloaded, result.segments_downloaded, sponsorblock=result.sponsorblock),
+            DownloadResult(str(destination), result.bytes_downloaded, result.segments_downloaded, sponsorblock=result.sponsorblock, video=result.video, subtitles=result.subtitles),
             plan.source.format_downloaded, identity, tuple(published), workspace, journal,
             replacement_journal=replacement_journal,
         )

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
-from backend.types.download_profile_types import DEFAULT_SPONSORBLOCK_SEGMENTS
+from backend.types.download_profile_types import DEFAULT_SPONSORBLOCK_SEGMENTS, DEFAULT_UPGRADE_IMPROVEMENTS
 
 if TYPE_CHECKING:
     from backend.db.models import EpisodeMediaDownload, LocalMediaProfileBase, Season, Collection
@@ -65,6 +65,19 @@ class DownloadProfile(Base, HasTaskResourcesMixin):
     sponsorblock_segments: Mapped[dict[str, str]] = mapped_column(
         MutableDict.as_mutable(JSON), default=lambda: dict(DEFAULT_SPONSORBLOCK_SEGMENTS), nullable=False,
         comment="SponsorBlock segment type to keep, chapter or cut, for YouTube Collections",
+    )
+
+    # The upgrade check: downloading again later, and keeping the new file only when it is better
+    upgrade_check: Mapped[bool] = mapped_column(default=True, server_default="0")
+    upgrade_after_days: Mapped[int] = mapped_column(
+        default=7, server_default="7", comment="Days after downloading that the upgrade check first looks",
+    )
+    upgrade_repeat: Mapped[str] = mapped_column(
+        String(16), default="once", server_default="once", comment="once, twice (again after 30 days) or every (up to 3 times)",
+    )
+    upgrade_improvements: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON), default=lambda: list(DEFAULT_UPGRADE_IMPROVEMENTS), nullable=False,
+        comment="What counts as a better version: resolution, sponsorblock, subtitles or codec",
     )
 
     # Season filter, used only when the collection is identified by season

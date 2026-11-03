@@ -50,6 +50,11 @@ export const MediaDownloadReadSchema = z.looseObject({
     downloadedAt: ApiDateTimeSchema.nullable(),
     redownloadWhenFinal: z.boolean().nullable().optional(),
     kept: z.boolean().nullable().optional(),
+    videoHeight: z.int().nullable().optional(),
+    videoCodec: z.string().nullable().optional(),
+    /** When the upgrade check looks for a better version next. */
+    upgradeCheckAt: ApiDateTimeSchema.nullable().optional(),
+    upgradeResult: z.enum(['upgraded', 'checked']).nullable().optional(),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
 })

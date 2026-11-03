@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import re
 import threading
@@ -15,7 +16,7 @@ from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
     ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, Feature, LinkKind, LinkPreview, Playback, PlaybackKind, ProgramStatus,
-    ResolvedLink, SearchResults, CollectionDetails, Source, SourceProblem, VideoDetails, VideoFormat, VideoFormats,
+    ResolvedLink, SearchResults, CollectionDetails, Source, SourceProblem, SponsorBlockSegment, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
 )
 from .. import pacing, ytdlp_runner as runner
@@ -104,6 +105,8 @@ def _published_at(info: dict) -> datetime | None:
 
 _OEMBED_URL = "https://www.youtube.com/oembed"
 _OEMBED_TIMEOUT_SECONDS = 5
+_SPONSORBLOCK_URL = "https://sponsor.ajay.app/api/skipSegments"
+_SPONSORBLOCK_TIMEOUT_SECONDS = 15
 
 
 def _is_youtube(url: str) -> bool:
@@ -179,6 +182,23 @@ def video_formats(info: dict) -> VideoFormats:
     )
 
 
+def _sponsorblock_segments(video_id: str, categories: Sequence[str]) -> tuple[SponsorBlockSegment, ...]:
+    """The video's SponsorBlock segments of the given types; a video nobody submitted segments for has none."""
+    response = requests.get(
+        _SPONSORBLOCK_URL, params={"videoID": video_id, "categories": json.dumps(list(categories))},
+        timeout=_SPONSORBLOCK_TIMEOUT_SECONDS,
+    )
+    if response.status_code == 404:
+        return ()
+    response.raise_for_status()
+    segments = []
+    for entry in response.json() or ():
+        span = entry.get("segment") if isinstance(entry, dict) else None
+        if isinstance(span, list) and len(span) == 2 and all(isinstance(value, (int, float)) for value in span):
+            segments.append(SponsorBlockSegment(str(entry.get("category")), float(span[0]), float(span[1])))
+    return tuple(sorted(segments, key=lambda segment: (segment.start, segment.end)))
+
+
 def _lookup(*args: str) -> dict:
     """Look up a link. A video protected by DRM is looked up again for its details alone."""
     try:
@@ -206,7 +226,7 @@ class YtDlpSource(Source):
     features = frozenset({
         Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.API_KEY,
         Feature.QUICK_CHECK, Feature.CATALOGUE_REFRESH, Feature.SEARCH, Feature.COSTLY_SEARCH,
-        Feature.FORMAT_CHOICES, Feature.YTDLP_DOWNLOADS,
+        Feature.FORMAT_CHOICES, Feature.YTDLP_DOWNLOADS, Feature.UPGRADE_CHECKS,
     })
     episode_tags = _YOUTUBE_TAGS
     # Search covers YouTube only; other sites are added by link.
@@ -372,6 +392,20 @@ class YtDlpSource(Source):
         if info.get("_type") == "playlist":
             raise runner.YtDlpError("This link is a playlist or channel, not a single video")
         return video_formats(info)
+
+    def upgrade_offer(self, url: str, *, sponsorblock_categories: Sequence[str] = ()) -> UpgradeOffer:
+        # A fresh lookup: what the site offered when the link was last looked up may have changed.
+        info = _lookup("--no-playlist", url)
+        if info.get("_type") == "playlist":
+            raise runner.YtDlpError("This link is a playlist or channel, not a single video")
+        languages = frozenset(
+            str(language) for language, tracks in (info.get("subtitles") or {}).items()
+            if language != "live_chat" and tracks
+        )
+        sponsorblock = None
+        if sponsorblock_categories and self.sponsorblock_for(url) and info.get("id"):
+            sponsorblock = _sponsorblock_segments(str(info["id"]), sponsorblock_categories)
+        return UpgradeOffer(videos=video_formats(info).videos, subtitle_languages=languages, sponsorblock=sponsorblock)
 
     @staticmethod
     def _video(info: dict, url: str) -> VideoDetails:

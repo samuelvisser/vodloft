@@ -92,6 +92,14 @@ class WrittenSubtitle(NamedTuple):
     auto_generated: bool = False
 
 
+class VideoStream(NamedTuple):
+    """The video stream a download kept, as yt-dlp reported it."""
+    height: int
+    """The smaller side in pixels, so a portrait 1080p video is 1080."""
+    codec: str
+    """``h264``, ``h265``, ``vp9``, ``av1`` or another codec's name."""
+
+
 class SponsorSegment(NamedTuple):
     """A SponsorBlock segment of the video as it was published, and what the download did with it."""
     category: str
@@ -112,6 +120,8 @@ class DownloadResult:
     """Each subtitle the download wrote alongside the media, in order of preference."""
     sponsorblock: tuple[SponsorSegment, ...] | None = None
     """The SponsorBlock segments found, when the download asked SponsorBlock."""
+    video: VideoStream | None = None
+    """The video stream kept, when the downloader knows it."""
 
 
 # Called periodically during a download with a progress snapshot.
