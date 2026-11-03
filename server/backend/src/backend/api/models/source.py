@@ -39,6 +39,7 @@ class SourceAPIRead(ResponseBase):
     name: str
     domains: list[str]
     features: list[str]
+    sites_label: Optional[str] = None
     search_label: Optional[str] = None
     kind_names: dict[str, str] = {}
     subscription_name: Optional[str] = None

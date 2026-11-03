@@ -4,8 +4,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.api.models.onboarding import OnboardingStatusAPIRead
-from backend.db.initial_seed import seed_fresh_start_profiles
-from backend.db.models import ImportRun, Settings
+from backend.db.initial_seed import remove_fresh_start_profiles, seed_fresh_start_profiles
+from backend.db.models import Collection, ImportRun, Settings
 from config import get_settings
 
 
@@ -30,8 +30,18 @@ def get_onboarding_status(s: Session) -> OnboardingStatusAPIRead:
 
 
 def start_fresh(s: Session) -> None:
-    """The person chose not to import a library: add the default Collection profiles."""
+    """The person started a fresh library and now needs a Collection profile: add the default ones."""
     seed_fresh_start_profiles(s)
+    s.flush()
+
+
+def undo_start_fresh(s: Session) -> None:
+    """The person went back to choose between starting fresh and importing: remove the default
+    Collection profiles again, so an import starts without them. Nothing changes once onboarding is
+    complete or a collection uses a profile."""
+    if _get_or_create_settings(s).onboarding_completed or s.scalar(select(Collection.id).limit(1)) is not None:
+        return
+    remove_fresh_start_profiles(s)
     s.flush()
 
 

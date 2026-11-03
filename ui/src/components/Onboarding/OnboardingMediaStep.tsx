@@ -1,6 +1,5 @@
 import {useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {useQueryClient} from '@tanstack/react-query'
 
 import '../Import/Import.css'
 import ImportFlow from '../Import/ImportFlow'
@@ -17,30 +16,9 @@ type Props = {
 
 /** "Your media": start a library fresh, or move one over from Pinchflat or WireLoft. */
 export default function OnboardingMediaStep({importing, onBack, onImport, onStartFresh, onImported}: Props) {
-    const queryClient = useQueryClient()
     const importers = useImporters()
     const [chosen, setChosen] = useState<string | null>(null)
-    const [error, setError] = useState<string | null>(null)
-    const [busy, setBusy] = useState(false)
     const importer = importers.data?.find((item) => item.key === chosen)
-
-    async function startFresh() {
-        setBusy(true)
-        setError(null)
-        try {
-            const response = await fetch(`${(window as any).appConfig.API_URL}/onboarding/start-fresh`, {
-                method: 'POST',
-                credentials: 'include',
-            })
-            if (!response.ok) throw new Error(`HTTP ${response.status}`)
-            await queryClient.invalidateQueries({queryKey: ['localMediaProfiles']})
-            onStartFresh()
-        } catch {
-            setError('VODLoft could not set up the default profiles. Please try again.')
-        } finally {
-            setBusy(false)
-        }
-    }
 
     if (importing && importer) {
         return (
@@ -56,7 +34,7 @@ export default function OnboardingMediaStep({importing, onBack, onImport, onStar
                 <ImportFlow importer={importer} onFinished={(run) => run.status === 'finished' && onImported()}/>
                 <div className="onboarding-stage-actions">
                     <button className="btn" type="button" onClick={onBack}>Back</button>
-                    <button className="btn" type="button" disabled={busy} onClick={() => void startFresh()}>
+                    <button className="btn" type="button" onClick={onStartFresh}>
                         Skip and start fresh
                     </button>
                 </div>
@@ -75,7 +53,7 @@ export default function OnboardingMediaStep({importing, onBack, onImport, onStar
                 </p>
             </div>
             <div className="onboarding-media-choices">
-                <button className="onboarding-media-choice" type="button" disabled={busy} onClick={() => void startFresh()}>
+                <button className="onboarding-media-choice" type="button" onClick={onStartFresh}>
                     <FontAwesomeIcon icon={faIcon('fass', 'plus')}/>
                     <strong>Start fresh</strong>
                     <small>Add your first collection or movie.</small>
@@ -85,7 +63,6 @@ export default function OnboardingMediaStep({importing, onBack, onImport, onStar
                         key={item.key}
                         className="onboarding-media-choice"
                         type="button"
-                        disabled={busy}
                         onClick={() => {
                             setChosen(item.key)
                             onImport()
@@ -98,7 +75,6 @@ export default function OnboardingMediaStep({importing, onBack, onImport, onStar
                 ))}
             </div>
             {importers.isError && <p className="settings-field__help">The importers could not be loaded; you can import later in Settings › Import.</p>}
-            {error && <p className="form-error-card" role="alert">{error}</p>}
             <div className="onboarding-stage-actions">
                 <button className="btn" type="button" onClick={onBack}>Back</button>
             </div>

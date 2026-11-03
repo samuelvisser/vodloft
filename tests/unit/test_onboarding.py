@@ -99,3 +99,26 @@ def test_finishing_after_an_import_keeps_only_the_imported_profiles(monkeypatch)
         assert _profiles(session) == []
 
     engine.dispose()
+
+
+def test_going_back_removes_the_fresh_start_profiles_until_a_collection_uses_them(monkeypatch):
+    from backend.api.endpoints.onboarding import service
+    from backend.db import Base
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    monkeypatch.setattr(service, "get_settings", lambda: SimpleNamespace(admin_auth=SimpleNamespace(enabled=False)))
+
+    with Session(engine) as session:
+        service.start_fresh(session)
+        service.undo_start_fresh(session)
+        session.commit()
+        assert _profiles(session) == []
+
+        service.start_fresh(session)
+        service.complete_onboarding(session)
+        service.undo_start_fresh(session)
+        session.commit()
+        assert _profiles(session) == ["vodloft-collections-audio", "vodloft-collections-video"]
+
+    engine.dispose()

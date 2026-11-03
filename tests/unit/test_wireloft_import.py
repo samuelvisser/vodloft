@@ -233,3 +233,22 @@ def test_an_import_from_a_read_only_media_folder_changes_no_file(installation, t
     assert session.scalar(select(MediaDownloadBase)).artifact_status == "available"
     assert {path: folder_snapshot(tmp_path / path) for path in outside} == outside
     assert refused == []
+
+
+def test_the_import_task_says_the_downloaded_files_are_adopted(installation, monkeypatch):
+    from contextlib import contextmanager
+
+    from backend.services import imports
+    from task_manager.tasks.workers.import_run import entrypoint
+
+    session, _applied = installation
+    run = imports.start_run(session, wireloft.IMPORTER, imports.ImportOptions())
+    session.commit()
+
+    @contextmanager
+    def same_session():
+        yield session
+
+    monkeypatch.setattr(entrypoint, "db_session", same_session)
+    summary = entrypoint._run(run.id).summary
+    assert summary == "Imported 1 new collection(s) and linked 0; adopted 1 downloaded file(s)"

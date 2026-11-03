@@ -6,10 +6,12 @@ import AddCollectionPage from '../AddCollectionPage/AddCollectionPage'
 import AddMediaPage from '../../pages/AddMediaPage'
 import type {MediaLinkTarget} from '../../lib/sourceControls'
 import BrowsePage from '../../pages/BrowsePage'
+import SourceSearchPage from '../../pages/SourceSearchPage'
 import MoviePage from '../../pages/movie/MoviePage'
 import {useMovies, useSources} from '../../lib/queries'
 import {sourceComponents} from '../Source/sourceComponents'
-import {SourceFeature, sourceHas} from '../../types/schemas/source'
+import SourceCookiesCard from '../Source/SourceCookiesCard'
+import {ANY_DOMAIN, SourceFeature, SourceRead, sourceHas} from '../../types/schemas/source'
 import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {CollectionRead} from '../../types/schemas/collection'
 import OnboardingMovieProfileStep from './OnboardingMovieProfileStep'
@@ -18,7 +20,7 @@ import './Onboarding.css'
 import {faIcon} from '../../icons/faIcon'
 
 
-type OnboardingStep = 'welcome' | 'sources' | 'security' | 'media' | 'import' | 'add' | 'browse' | 'collection' | 'movie-profile' | 'movie'
+type OnboardingStep = 'welcome' | 'sources' | 'security' | 'media' | 'import' | 'add' | 'browse' | 'search' | 'collection' | 'movie-profile' | 'movie'
 
 /** The collection or movie picked as the first media, from a link or from browsing. */
 type SelectedMedia = {slug: string; title: string; url: string}
@@ -26,6 +28,12 @@ type SelectedMedia = {slug: string; title: string; url: string}
 type Props = {
     adminPasswordConfigured: boolean
     onComplete: () => void
+}
+
+/** The Source that works with any site comes first, since most people start there; the rest keep their order. */
+function onboardingSourceOrder(sources: SourceRead[]): SourceRead[] {
+    const anySite = (source: SourceRead) => source.domains.includes(ANY_DOMAIN)
+    return [...sources.filter(anySite), ...sources.filter((source) => !anySite(source))]
 }
 
 const STEP_LABELS = ['Welcome', 'Sources', 'Security', 'Your media']
@@ -47,6 +55,9 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
     const [selectedCollectionWasPresent, setSelectedCollectionWasPresent] = useState(false)
     const [selectedMovie, setSelectedMovie] = useState<SelectedMedia | null>(null)
     const [movieProfile, setMovieProfile] = useState<LocalMediaProfileRead | null>(null)
+    const [searchSourceId, setSearchSourceId] = useState<string | null>(null)
+    // A search result that is not a collection goes back to the links step, which looks it up.
+    const [addUrl, setAddUrl] = useState<string | undefined>(undefined)
     const [isCompleting, setIsCompleting] = useState(false)
     const completingRef = useRef(false)
     const [error, setError] = useState<string | null>(null)
@@ -71,7 +82,33 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
         }
     }, [onComplete])
 
-    const selectCollection = (collection: SelectedMedia) => {
+    // A fresh library gets the default Collection profiles only once its first collection needs one,
+    // and loses them again when the person goes back to choose an import instead.
+    const setFreshStartProfiles = async (wanted: boolean) => {
+        const response = await fetch(`${(window as any).appConfig.API_URL}/onboarding/start-fresh`, {
+            method: wanted ? 'POST' : 'DELETE',
+            credentials: 'include',
+        })
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        await queryClient.invalidateQueries({queryKey: ['localMediaProfiles']})
+    }
+
+    const backToMediaChoice = async () => {
+        setAddUrl(undefined)
+        try {
+            await setFreshStartProfiles(false)
+        } catch {
+            // Finishing onboarding without an import adds them anyway, so a leftover profile does no harm.
+        }
+        setStep('media')
+    }
+
+    const selectCollection = async (collection: SelectedMedia) => {
+        try {
+            await setFreshStartProfiles(true)
+        } catch {
+            // The wizard still lets the person make a profile of their own.
+        }
         const currentCollections = queryClient.getQueryData<CollectionRead[]>(['collections']) ?? []
         setSelectedCollectionWasPresent(currentCollections.some((item) => item.slug === collection.slug))
         setSelectedCollection(collection)
@@ -159,20 +196,25 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                         <span className="onboarding-eyebrow">Sources</span>
                         <h1>Where your media comes from</h1>
                         <p>
-                            VODLoft adds collections and movies from these services. Signing in is optional: it is only
-                            needed for content that requires an account, and you can do it later in Settings › Sources.
+                            VODLoft adds collections and movies from these services. Signing in or adding a cookies file
+                            is optional: it is only needed for content that requires an account, and you can do it later in
+                            Settings › Sources.
                         </p>
                     </div>
-                    {(sources ?? []).map((source) => {
+                    {onboardingSourceOrder(sources ?? []).map((source) => {
                         const {SignIn} = sourceComponents(source.id)
                         const canSignIn = sourceHas(source, SourceFeature.LOGIN) && SignIn
+                        const takesCookies = sourceHas(source, SourceFeature.COOKIES)
                         return (
                             <details className="onboarding-source" key={source.id} open={(sources?.length ?? 0) === 1}>
                                 <summary>
-                                    <strong>{source.name}</strong>
-                                    <small>{canSignIn ? 'Optional sign-in' : 'No sign-in needed'}</small>
+                                    <strong>{source.sitesLabel ? `${source.name} (${source.sitesLabel})` : source.name}</strong>
+                                    <small>
+                                        {canSignIn ? 'Optional sign-in' : takesCookies ? 'Optional cookies file' : 'No sign-in needed'}
+                                    </small>
                                 </summary>
                                 {canSignIn ? <SignIn/> : null}
+                                {takesCookies ? <SourceCookiesCard source={source}/> : null}
                             </details>
                         )
                     })}
@@ -256,9 +298,19 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                 <main className="onboarding-stage onboarding-stage-wide">
                     <AddMediaPage
                         onboarding
-                        onCollection={(target: MediaLinkTarget) => selectCollection(target)}
+                        initialUrl={addUrl}
+                        onCollection={(target: MediaLinkTarget) => void selectCollection(target)}
                         onMovie={(target: MediaLinkTarget) => selectMovie(target)}
-                        onBrowse={() => setStep('browse')}
+                        onBrowse={(sourceId) => {
+                            const source = sources?.find((item) => item.id === sourceId)
+                            if (sourceHas(source, SourceFeature.BROWSE)) {
+                                setStep('browse')
+                                return
+                            }
+                            setSearchSourceId(sourceId)
+                            setStep('search')
+                        }}
+                        onBack={() => void backToMediaChoice()}
                         onSkip={() => void completeOnboarding()}
                     />
                     {isCompleting && <div className="onboarding-completing" role="status">Finishing setup…</div>}
@@ -266,17 +318,36 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
             )}
 
             {step === 'browse' && (
-                <main className="onboarding-stage onboarding-stage-wide">
+                <main className="onboarding-stage">
                     <button className="btn onboarding-movie-back" type="button" onClick={() => setStep('add')}>
                         <FontAwesomeIcon icon={faIcon('fass', 'arrow-left')}/> Back to links
                     </button>
                     <BrowsePage
                         onboarding
-                        onCollectionSelect={(collection, url) => selectCollection({slug: collection.slug, title: collection.title, url})}
+                        onCollectionSelect={(collection, url) => void selectCollection({slug: collection.slug, title: collection.title, url})}
                         onMovieSelect={(movie, url) => selectMovie({slug: movie.slug, title: movie.title, url})}
                         onSkip={() => void completeOnboarding()}
                     />
                     {isCompleting && <div className="onboarding-completing" role="status">Finishing setup…</div>}
+                </main>
+            )}
+
+            {step === 'search' && searchSourceId && (
+                <main className="onboarding-stage onboarding-stage-narrow">
+                    <button className="btn onboarding-movie-back" type="button" onClick={() => setStep('add')}>
+                        <FontAwesomeIcon icon={faIcon('fass', 'arrow-left')}/> Back to links
+                    </button>
+                    <SourceSearchPage
+                        sourceId={searchSourceId}
+                        onChoose={(result) => {
+                            if (result.kind === 'collection') {
+                                void selectCollection({slug: result.slug, title: result.title, url: result.url})
+                                return
+                            }
+                            setAddUrl(result.url)
+                            setStep('add')
+                        }}
+                    />
                 </main>
             )}
 

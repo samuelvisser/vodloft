@@ -137,12 +137,14 @@ def request_scan(
 
 def queue_scan(session: Session, collection: Collection, local_media_profile: LocalMediaProfileBase) -> None:
     from task_manager.scheduler.operation_factory import create_operation
+    from task_manager.scheduler.operations import queue_operation_target_dispatch
 
     from backend.api.endpoints.collections.operations import CollectionExistingFilesScanOperation
 
-    create_operation(session, CollectionExistingFilesScanOperation(
+    operation = create_operation(session, CollectionExistingFilesScanOperation(
         collection, local_media_profile_id=local_media_profile.id,
     ))
+    queue_operation_target_dispatch(session, operation.id, operation.targets[0].slot_key)
 
 
 def _episode_facts(session: Session, collection: Collection, profile: LocalMediaProfileBase) -> list[EpisodeFacts]:

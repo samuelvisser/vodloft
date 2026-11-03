@@ -406,6 +406,9 @@ class Source(ABC):
     """What the Source calls the paid subscription some of its videos need, such as NPO Plus."""
     cookies_help: ClassVar[str | None] = None
     """What a cookies file does for this Source, for a Source with ``Feature.COOKIES``."""
+    sites_label: ClassVar[str | None] = None
+    """What the Source downloads from, in a few words, when its name does not say so, such as
+    "YouTube, and many more" for yt-dlp."""
     search_label: ClassVar[str | None] = None
     """What the search button names, when that is not the Source's name, such as YouTube for yt-dlp."""
     kind_names: ClassVar[Mapping[LinkKind, str]] = MappingProxyType({})
