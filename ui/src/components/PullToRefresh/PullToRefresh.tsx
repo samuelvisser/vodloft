@@ -3,10 +3,11 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faIcon } from '../../icons/faIcon'
 import './PullToRefresh.css'
 
-// How far the finger moves for each pixel the indicator moves, and how far the indicator must come down to reload.
-const RESISTANCE = 0.5
-const MAX_PULL = 110
-const TRIGGER = 70
+// How far the indicator moves for each pixel the finger moves, and how far it must come down to reload. The finger
+// has to travel about 300 pixels, so a scroll that bounces at the top of the page does not reload by accident.
+const RESISTANCE = 0.4
+const MAX_PULL = 150
+const TRIGGER = 120
 
 function installedApp(): boolean {
     return window.matchMedia?.('(display-mode: standalone)').matches || (navigator as { standalone?: boolean }).standalone === true
