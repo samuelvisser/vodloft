@@ -603,10 +603,19 @@ def run_summary(run: ImportRun) -> dict[str, Any]:
 
 # ---------- Running ----------
 
+def _start_operation(session: Session, definition) -> None:
+    """Record the operation and queue its task for when the session commits; recording it alone
+    leaves it waiting until VODLoft restarts."""
+    from task_manager.scheduler.operation_factory import create_operation
+    from task_manager.scheduler.operations import queue_operation_target_dispatch
+
+    operation = create_operation(session, definition)
+    for target in operation.targets:
+        queue_operation_target_dispatch(session, operation.id, target.slot_key)
+
+
 def start_run(session: Session, importer: Importer, options: ImportOptions) -> ImportRun:
     """Record the run and queue the task that applies it."""
-    from task_manager.scheduler.operation_factory import create_operation
-
     from backend.api.endpoints.imports.operations import ImportRunOperation
 
     running = session.scalar(select(ImportRun.id).where(
@@ -621,7 +630,7 @@ def start_run(session: Session, importer: Importer, options: ImportOptions) -> I
                     report=[], counts={})
     session.add(run)
     session.flush()
-    create_operation(session, ImportRunOperation(run, importer_name=importer.name))
+    _start_operation(session, ImportRunOperation(run, importer_name=importer.name))
     return run
 
 
@@ -1029,11 +1038,9 @@ def apply_run(session: Session, run_id: int) -> dict[str, int]:
             known = set(session.scalars(select(Episode.source_slug).where(Episode.collection_id == collection.id)))
             missing = {file["media_site_id"] for file in step.files} - known
             if missing and not _index_running(session, collection.id):
-                from task_manager.scheduler.operation_factory import create_operation
-
                 from backend.api.endpoints.collections.operations import CollectionSyncOperation
 
-                create_operation(session, CollectionSyncOperation(collection))
+                _start_operation(session, CollectionSyncOperation(collection))
             elif not missing and not _index_running(session, collection.id):
                 _queue_step(session, step)
     run.report = report.entries
@@ -1110,12 +1117,10 @@ def _apply_record_plan(session: Session, plan: ImportPlan, options: ImportOption
 
 
 def _queue_step(session: Session, step: ImportStep) -> None:
-    from task_manager.scheduler.operation_factory import create_operation
-
     from backend.api.endpoints.imports.operations import ImportStepOperation
 
     collection = session.get(Collection, step.collection_id)
-    create_operation(session, ImportStepOperation(collection, step_id=step.id))
+    _start_operation(session, ImportStepOperation(collection, step_id=step.id))
 
 
 def start_waiting_import_steps(session: Session, collection: Collection) -> int:

@@ -604,3 +604,27 @@ def test_the_apprise_server_becomes_a_destination_on_the_default_rules():
     assert [destination.name for destination in destinations] == ["Pinchflat", "Pinchflat 2"]
     rules = list(session.scalars(select(NotificationRule).where(NotificationRule.default_key.is_not(None))))
     assert rules and all(rule.destination_ids == [destinations[0].id, destinations[1].id] for rule in rules)
+
+
+def test_starting_an_import_and_its_waiting_steps_queues_their_tasks(installation, monkeypatch):
+    """Recording an operation alone leaves it waiting until VODLoft restarts."""
+    from backend.db.models import Collection
+    from backend.services import imports
+    from task_manager.scheduler import scheduler
+
+    session, _applied = installation
+    triggered: list[tuple[str, str, int | None]] = []
+    monkeypatch.setattr(scheduler, "trigger_now", lambda *, def_key, resource_type, resource_id, **_kwargs:
+                        triggered.append((def_key, resource_type, resource_id)))
+
+    run = imports.start_run(session, pinchflat.IMPORTER, imports.ImportOptions())
+    session.commit()
+    assert triggered == [("import_run", "system", 0)]
+
+    imports.apply_run(session, run.id)
+    collection = session.scalars(select(Collection).where(Collection.title == "Lofi")).one()
+    _index(session, collection, ["vid-eeeeeee"])
+    triggered.clear()
+    assert imports.start_waiting_import_steps(session, collection) == 1
+    session.commit()
+    assert triggered == [("import_adopt_files", "collection", collection.id)]
