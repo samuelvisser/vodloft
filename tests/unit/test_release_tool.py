@@ -98,3 +98,10 @@ def test_application_release_tag_is_pushed_separately(monkeypatch):
         ),
         ("git", "push", "origin", "v1.1.0"),
     ]
+
+
+def test_a_failing_command_without_captured_output_raises_a_release_error():
+    import pytest
+
+    with pytest.raises(release_tool.ReleaseError, match="exit code 3"):
+        release_tool.run(sys.executable, "-c", "raise SystemExit(3)", capture_output=False)

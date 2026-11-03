@@ -51,7 +51,8 @@ def run(
         capture_output=capture_output,
     )
     if check and result.returncode != 0:
-        detail = result.stderr.strip() or result.stdout.strip()
+        # Without capture_output the command's own output already went to the terminal.
+        detail = (result.stderr or "").strip() or (result.stdout or "").strip() or f"exit code {result.returncode}"
         raise ReleaseError(f"Command failed ({' '.join(args)}): {detail}")
     return result
 
