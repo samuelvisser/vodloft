@@ -526,6 +526,7 @@ def test_a_youtube_download_profile_cuts_sponsors_and_adds_your_own_options(list
     from backend.db.models.download_profile import DownloadProfile
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.services import download_plans
+    from backend.services.source_options import save_ytdlp_source_options
     from downloader import DownloadError
     from downloader.lifecycle import DownloadTracker
     from downloader.plan import YtdlpSponsorBlock
@@ -538,9 +539,9 @@ def test_a_youtube_download_profile_cuts_sponsors_and_adds_your_own_options(list
     profile = CollectionLocalMediaProfile(
         slug="collections", name="Collections", preferred_format="format_1080p",
         output_template="/downloads/shows/{{ collection_title }}/{{ episode_title }}.ext",
-        ytdlp_options="# faster\n--concurrent-fragments 4\n--extractor-args 'youtube:player_client=web'",
     )
     session.add(profile)
+    save_ytdlp_source_options(session, "# faster\n--concurrent-fragments 4\n--extractor-args 'youtube:player_client=web'")
     session.flush()
     session.add(DownloadProfile(collection_id=collection.id, local_media_profile_id=profile.id, ep_id_type_list=["ep"]))
     download = EpisodeMediaDownload(
@@ -572,7 +573,7 @@ def test_a_youtube_download_profile_cuts_sponsors_and_adds_your_own_options(list
     assert "--sponsorblock-remove" in plan.source.ytdlp_command
 
     # Options saved before a check refused them stop the download with the reason.
-    profile.ytdlp_options = "-o elsewhere.mp4"
+    save_ytdlp_source_options(session, "-o elsewhere.mp4")
     session.commit()
-    with pytest.raises(DownloadError, match="Local Media Profile 'Collections' can no longer be used. Line 1: -o"):
+    with pytest.raises(DownloadError, match="yt-dlp Source can no longer be used. Line 1: -o"):
         download_plans.prepare_download_plan(session, download.id, DownloadTracker())

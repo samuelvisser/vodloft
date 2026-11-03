@@ -2165,6 +2165,10 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .source-setting-copy .source-setting-error { margin-top: 6px; color: var(--error); }
 .source-setting-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .source-setting .btn { white-space: nowrap; }
+.source-setting--stacked { flex-direction: column; align-items: stretch; gap: 10px; }
+.source-setting--stacked .source-setting-actions { align-items: center; }
+.source-setting-saved { color: var(--muted); font-size: 13px; }
+.source-setting-error { margin: 0; color: var(--error); font-size: 13px; }
 @media (max-width: 640px) { .source-setting { flex-direction: column; } .source-setting-actions { justify-content: flex-start; } }
 .youtube-api .source-setting-copy { flex: 1; display: grid; gap: 10px; }
 .youtube-api .source-setting-copy h4 { display: flex; align-items: center; gap: 8px; }

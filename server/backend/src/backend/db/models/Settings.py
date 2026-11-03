@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, String, false, func
+from sqlalchemy import Boolean, String, Text, false, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.db import Base
@@ -24,6 +24,10 @@ class Settings(Base):
         server_default=false(),
         nullable=False,
         comment="Everyone signs in with their own account instead of the one shared password",
+    )
+    ytdlp_options: Mapped[str] = mapped_column(
+        Text, default="", server_default="", nullable=False,
+        comment="Your own yt-dlp options for every download of the yt-dlp Source, one or more per line",
     )
     alembic_version_num: Mapped[Optional[str]] = mapped_column(
         String(32),

@@ -18,11 +18,11 @@ type OptionLine = z.infer<typeof OptionLineSchema>
 export type SettingLink = {label: string; href?: string; elementId?: string}
 
 const SETTING_LABELS: Record<string, string> = {
-    quality: 'Quality',
-    subtitles: 'Subtitles',
-    thumbnails: 'Thumbnails',
-    metadata: 'Metadata',
-    file_names: 'the output template’s file names',
+    quality: 'Quality, on the Local Media Profile',
+    subtitles: 'Subtitles, on the Local Media Profile',
+    thumbnails: 'Episode thumbnail behavior, on the Local Media Profile',
+    metadata: 'Media metadata behavior, on the Local Media Profile',
+    file_names: 'the output template, on the Local Media Profile',
     sponsorblock: 'SponsorBlock, on the Download Profile',
     which_episodes: 'Which episodes, on the Download Profile',
     cookies: 'Cookies, in Settings under Sources',

@@ -4,6 +4,7 @@ import SourceCookiesCard from '../Source/SourceCookiesCard'
 import SourceDomainsCard from '../Source/SourceDomainsCard'
 import SourceProgramCard from '../Source/SourceProgramCard'
 import SourceSection from '../Source/SourceSection'
+import SourceYtdlpOptionsCard from '../Source/SourceYtdlpOptionsCard'
 import {sourceComponents} from '../Source/sourceComponents'
 import type {SettingsTabProps} from './SettingsTabTypes'
 
@@ -21,6 +22,7 @@ const FEATURE_LABELS: Record<string, string> = {
     [SourceFeature.SEARCH]: 'Search',
     [SourceFeature.QUICK_CHECK]: 'Quick checks',
     [SourceFeature.CATALOGUE_REFRESH]: 'Daily refresh',
+    format_choices: 'Quality choices',
 }
 
 // Features that are settings or details rather than kinds of content.
@@ -35,6 +37,7 @@ function SourceCard({source, tabProps}: {source: SourceRead; tabProps: SettingsT
         sourceHas(source, SourceFeature.PROGRAM_UPDATES) ? <SourceProgramCard key="program" source={source}/> : null,
         sourceHas(source, SourceFeature.COOKIES) ? <SourceCookiesCard key="cookies" source={source}/> : null,
         Settings ? <Settings key="settings" {...tabProps}/> : null,
+        sourceHas(source, SourceFeature.YTDLP_DOWNLOADS) ? <SourceYtdlpOptionsCard key="ytdlp-options" source={source}/> : null,
     ].filter(Boolean)
     return (
         <SourceSection

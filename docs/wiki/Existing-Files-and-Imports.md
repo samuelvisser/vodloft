@@ -108,8 +108,8 @@ auto subtitles becomes **only when there are no real ones** on the Download Prof
 Its SponsorBlock setting becomes SponsorBlock on each Download Profile: the categories Pinchflat removed are cut out,
 the ones it marked become chapters (see [[Download-Profiles#sponsorblock]]).
 
-Options in Pinchflat's yt-dlp option files that VODLoft has no setting for become the Local Media Profile's own yt-dlp
-options (see [[Local-Media-Profiles#your-own-yt-dlp-options]]), with the file each came from as a note. Lines VODLoft
+Options in Pinchflat's yt-dlp option files that VODLoft has no setting for become the Collection's own yt-dlp options,
+on its Edit page (see [[Settings#your-own-yt-dlp-options]]), with the file each came from as a note. Lines VODLoft
 blocks, such as `--exec`, are left out, and the report gives the reason.
 
 You can run the import again. Anything you changed in VODLoft since the last run is kept, and settings a newer

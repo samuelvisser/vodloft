@@ -520,15 +520,17 @@ def test_sponsorblock_and_unmapped_options_come_over(tmp_path):
     assert veritasium.download_profile["sponsorblock_segments"]["intro"] == "cut"
     assert veritasium.download_profile["sponsorblock_segments"]["outro"] == "keep"
     assert "sponsorblock_behaviour" not in {warning.subject for warning in channel.warnings}
-    assert channel.settings["ytdlp_options"].splitlines() == [
+    # Lines VODLoft has no setting for go to the Collections, not to the Local Media Profile.
+    assert "ytdlp_options" not in channel.settings
+    assert veritasium.settings["ytdlp_options"].splitlines() == [
         "--xattrs  # media-profile-1-config.txt",
         '--exec "echo done"  # media-profile-1-config.txt',
         "--embed-chapters  # media-profile-1-config.txt",
     ]
-    assert "ytdlp_options" not in playlist.settings
+    assert "ytdlp_options" not in _lofi.settings
 
     # VODLoft keeps the lines its own check passes, and reports the others with the reason.
-    checked = _with_checked_options(plan).profiles[0]
+    checked = _with_checked_options(plan).collections[0]
     assert checked.settings["ytdlp_options"].splitlines() == [
         "--xattrs  # media-profile-1-config.txt", "--embed-chapters  # media-profile-1-config.txt",
     ]

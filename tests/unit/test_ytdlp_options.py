@@ -65,15 +65,14 @@ def test_options_with_a_line_that_can_not_be_used_are_refused():
         ytdlp_option_arguments("-N 4\n-o x")
 
 
-def test_a_local_media_profile_refuses_a_blocked_option_with_its_reason():
+def test_the_ytdlp_source_refuses_a_blocked_option_with_its_reason():
     from pydantic import ValidationError
 
-    from backend.api.models.local_media_profile import LocalMediaProfileAPIBaseIn
+    from backend.api.models.source import YtdlpOptionsAPIUpdate
 
-    base = {"name": "Profile", "preferredFormat": "format_1080p", "outputTemplate": "{{ title }}/{{ title }}.{{ ext }}"}
-    assert LocalMediaProfileAPIBaseIn.model_validate({**base, "ytdlpOptions": "-N 4\n"}).ytdlp_options == "-N 4"
+    assert YtdlpOptionsAPIUpdate.model_validate({"text": "-N 4\n"}).text == "-N 4"
     with pytest.raises(ValidationError, match="Line 1: -o: VODLoft decides where files go"):
-        LocalMediaProfileAPIBaseIn.model_validate({**base, "ytdlpOptions": "-o out.mp4"})
+        YtdlpOptionsAPIUpdate.model_validate({"text": "-o out.mp4"})
 
 
 def test_the_check_endpoint_reports_each_line():
