@@ -36,10 +36,26 @@ export type RuleLike = {
     ignoreCase?: boolean
     durationOperator?: string | null
     durationSeconds?: number | null
+    episodeTypes?: string[] | null
+}
+
+/** Whether a rule says enough to count which episodes it leaves out. */
+export function ruleComplete(rule: RuleLike): boolean {
+    if (rule.field === 'types') return !!rule.episodeTypes?.length
+    if (rule.field === 'duration') return !!rule.durationSeconds && !!rule.durationOperator
+    return !!rule.pattern
 }
 
 /** "Skip if the title contains the word “trailer”", with the regex itself at the end. */
-export function ruleSentence(rule: RuleLike): Part[] {
+export function ruleSentence(rule: RuleLike, typeLabel: (key: string) => string = (key) => key): Part[] {
+    if (rule.field === 'types') {
+        const labels = (rule.episodeTypes ?? []).map(typeLabel)
+        const parts: Part[] = [{text: `${ACTION_WORDS[rule.action] ?? ACTION_WORDS.skip} `}, {text: 'episode type', strong: true}]
+        if (!labels.length) return [...parts, {text: ' is …'}]
+        return [...parts, {text: ' is '}, ...strongList(labels).flatMap((part) => (
+            part.text === ' and ' ? [{text: ' or '}] : [part]
+        ))]
+    }
     const parts: Part[] = [{text: `${ACTION_WORDS[rule.action] ?? ACTION_WORDS.skip} `}, {text: rule.field, strong: true}]
     if (rule.field === 'duration') {
         const operator = rule.durationOperator === 'longer' ? ' is longer than ' : ' is shorter than '
