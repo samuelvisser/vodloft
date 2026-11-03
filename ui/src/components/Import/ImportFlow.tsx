@@ -5,6 +5,8 @@ import toast from 'react-hot-toast'
 
 import FolderField from '../ExistingFiles/FolderField'
 import ProgressBar from '../common/ProgressBar'
+import OpaqueOutputTemplateCode from '../LocalMediaProfile/OpaqueOutputTemplateCode'
+import {TemplateCodeEditor, templateEditorExtensions} from '../LocalMediaProfile/OutputTemplateEditor'
 import {
     IMPORTERS_KEY,
     filesToOffer,
@@ -528,14 +530,26 @@ function ProfilePreview({profile, template, onTemplate}: {
         <div className={`import-profile is-${profile.support}`}>
             <div className="import-profile__title">
                 <strong>{profile.name}</strong>
-                <small>
-                    {profile.becomes === 'new' ? 'New profile' : `Uses ${profile.localMediaProfileName ?? 'an existing profile'}`}
-                    {' · '}{SUPPORT_LABELS[profile.support]}
-                </small>
+                <span className="import-profile__chips">
+                    <span className="import-chip">
+                        {profile.becomes === 'new' ? 'New profile' : `Uses ${profile.localMediaProfileName ?? 'an existing profile'}`}
+                    </span>
+                    <span className={`import-chip is-${profile.support}`}>{SUPPORT_LABELS[profile.support]}</span>
+                </span>
             </div>
             {editing ? (
                 <div className="import-template-editor">
-                    <textarea aria-label={`${profile.name} output template`} rows={3} value={draft} onChange={(event) => setDraft(event.target.value)}/>
+                    <TemplateCodeEditor
+                        id={`import-template-${profile.externalId}`}
+                        ariaLabel={`${profile.name} output template`}
+                        describedBy=""
+                        value={draft}
+                        placeholder="Output path template"
+                        extensions={templateEditorExtensions}
+                        invalid={false}
+                        onChange={setDraft}
+                        onBlur={() => {}}
+                    />
                     <div className="import-actions">
                         <button type="button" className="btn" onClick={() => setEditing(false)}>Cancel</button>
                         {template !== undefined && (
@@ -552,32 +566,82 @@ function ProfilePreview({profile, template, onTemplate}: {
                 </div>
             ) : (
                 <div className="import-template">
-                    <code>{profile.outputTemplate ?? 'No template'}</code>
+                    {profile.outputTemplate ? (
+                        <OpaqueOutputTemplateCode
+                            source={profile.outputTemplate}
+                            sourceMode="compact"
+                            renderMode="compact"
+                            label={`Output path template for ${profile.name}`}
+                            className="import-template__code"
+                        />
+                    ) : <code className="import-template__code">No template</code>}
                     <button type="button" className="btn" onClick={() => {
                         setDraft(template ?? profile.outputTemplate ?? '')
                         setEditing(true)
                     }}>Edit</button>
                 </div>
             )}
-            <p className={`import-proof${proof.error || proof.differences.length ? ' is-different' : ''}`}>
-                {proof.error
-                    ? proof.error
-                    : proof.total === 0
-                        ? 'No files to compare yet.'
-                        : `${proof.identical} of ${proof.total} existing files get the same path in VODLoft.`}
-            </p>
-            {proof.differences.length > 0 && (
-                <ul className="import-differences">
-                    {proof.differences.slice(0, 5).map((item) => (
-                        <li key={item.path}><code>{item.path}</code><code>{item.rendered}</code></li>
-                    ))}
+            <PathProof proof={proof}/>
+            {profile.warnings.length > 0 && (
+                <ul className="import-profile__warnings">
+                    {profile.warnings.map((warning, index) => <li key={index}>{warning.message}</li>)}
                 </ul>
             )}
-            {[...profile.report, ...profile.warnings.map((warning) => warning.message)].length > 0 && (
-                <ul className="import-notes">
-                    {profile.report.map((line, index) => <li key={`r${index}`}>{line}</li>)}
-                    {profile.warnings.map((warning, index) => <li key={`w${index}`}>{warning.message}</li>)}
-                </ul>
+            {profile.report.length > 0 && (
+                <details className="import-profile__more">
+                    <summary>How the template was converted ({profile.report.length})</summary>
+                    <ul className="import-notes">
+                        {profile.report.map((line, index) => <li key={index}>{line}</li>)}
+                    </ul>
+                </details>
+            )}
+        </div>
+    )
+}
+
+/** Where two paths first differ, so the rest of each can stand out. */
+function splitAtDifference(left: string, right: string): number {
+    let index = 0
+    while (index < left.length && index < right.length && left[index] === right[index]) index += 1
+    // Start at the folder or word the difference is in, so the highlight reads as whole names.
+    const boundary = Math.max(left.lastIndexOf('/', index - 1), left.lastIndexOf(' ', index - 1))
+    return boundary >= 0 ? boundary + 1 : 0
+}
+
+function PathPair({path, rendered}: {path: string, rendered: string}) {
+    const at = splitAtDifference(path, rendered)
+    return (
+        <li className="import-path-pair">
+            <span className="import-path-pair__label">Pinchflat</span>
+            <code><span className="is-same">{path.slice(0, at)}</span>{path.slice(at)}</code>
+            <span className="import-path-pair__label">VODLoft</span>
+            <code><span className="is-same">{rendered.slice(0, at)}</span><mark>{rendered.slice(at)}</mark></code>
+        </li>
+    )
+}
+
+function PathProof({proof}: {proof: ImportProfile['pathProof']}) {
+    if (proof.error) return <p className="import-proof is-different" role="alert">{proof.error}</p>
+    if (proof.total === 0) return <p className="import-proof">No files to compare yet.</p>
+    const all = proof.identical === proof.total
+    const different = proof.total - proof.identical
+    return (
+        <div className="import-proof-block">
+            <div className={`import-proof${all ? ' is-same' : ' is-different'}`}>
+                <span>{all ? 'Every existing file gets the same path in VODLoft' : 'Existing files that get the same path in VODLoft'}</span>
+                <strong>{proof.identical} of {proof.total}</strong>
+            </div>
+            <ProgressBar ariaLabel="Files with the same path" value={100 * proof.identical / proof.total}/>
+            {proof.differences.length > 0 && (
+                <details className="import-profile__more">
+                    <summary>
+                        {different} file{different === 1 ? ' gets' : 's get'} a different path
+                        {different > proof.differences.length ? `; the first ${proof.differences.length}` : ''}
+                    </summary>
+                    <ul className="import-differences">
+                        {proof.differences.map((item) => <PathPair key={item.path} path={item.path} rendered={item.rendered}/>)}
+                    </ul>
+                </details>
             )}
         </div>
     )

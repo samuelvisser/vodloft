@@ -129,7 +129,7 @@
 
 .import-checklist li.is-failed small,
 .import-warnings li.is-unsupported,
-.import-proof.is-different {
+p.import-proof.is-different {
     color: var(--danger-color, #dc2626);
 }
 
@@ -140,32 +140,124 @@
 
 .import-profile {
     display: grid;
-    gap: 0.5rem;
-    padding: 0.75rem;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+    padding: 1rem;
     border: 1px solid var(--border-color, rgba(127, 127, 127, 0.3));
     border-radius: 10px;
+    min-width: 0;
 }
 
 .import-profile__title {
     display: flex;
     flex-wrap: wrap;
     justify-content: space-between;
+    align-items: center;
     gap: 0.5rem;
 }
+
+.import-profile__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.import-chip {
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    background: rgba(100, 116, 139, 0.15);
+    color: var(--muted);
+}
+
+.import-chip.is-exact { background: rgba(34, 197, 94, 0.15); color: var(--success, #16a34a); }
+.import-chip.is-close { background: rgba(245, 158, 11, 0.18); color: var(--warning, #b45309); }
+.import-chip.is-unsupported { background: rgba(220, 38, 38, 0.14); color: var(--danger-color, #dc2626); }
 
 .import-template {
     display: flex;
-    gap: 0.5rem;
+    gap: 0.75rem;
     align-items: flex-start;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(100, 116, 139, 0.08);
 }
 
-.import-template code,
-.import-differences code {
+.import-proof-block {
+    display: grid;
+    gap: 6px;
+}
+
+div.import-proof {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 4px 12px;
+    font-size: 0.9rem;
+}
+
+div.import-proof.is-same strong { color: var(--success, #16a34a); }
+div.import-proof.is-different strong { color: var(--warning, #b45309); }
+
+.import-profile__more summary {
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.import-profile__more[open] summary {
+    margin-bottom: 8px;
+}
+
+.import-profile__warnings {
+    margin: 0;
+    padding-left: 1.2em;
+    color: var(--warning, #b45309);
+    font-size: 0.9rem;
+}
+
+.import-differences {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.import-path-pair {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 2px 10px;
+    padding: 8px 10px;
+    border-left: 3px solid rgba(245, 158, 11, 0.6);
+    border-radius: 6px;
+    background: rgba(100, 116, 139, 0.08);
+    font-size: 0.8rem;
+}
+
+.import-path-pair__label {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1.6;
+}
+
+.import-path-pair code {
+    min-width: 0;
     overflow-wrap: anywhere;
 }
 
-.import-template code {
-    flex: 1;
+.import-path-pair .is-same {
+    opacity: 0.55;
+}
+
+.import-path-pair mark {
+    background: rgba(245, 158, 11, 0.22);
+    color: inherit;
+    border-radius: 3px;
 }
 
 .import-template-editor {
@@ -173,9 +265,38 @@
     gap: 0.5rem;
 }
 
-.import-template-editor textarea {
-    width: 100%;
-    font-family: var(--font-mono, monospace);
+/* The template on one line, cut off with an ellipsis, as the Local Media Profiles table shows it. */
+.import-template {
+    align-items: center;
+}
+
+.import-template__code {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.import-template__code .cm-editor,
+.import-template__code .cm-scroller,
+.import-template__code .cm-content,
+.import-template__code .cm-line {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.import-template__code .cm-scroller {
+    overflow: hidden !important;
+}
+
+.import-template__code .cm-content,
+.import-template__code .cm-line {
+    padding: 0;
+    white-space: nowrap;
+}
+
+.import-template__code .cm-line {
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .import-proof {
@@ -183,11 +304,6 @@
     font-size: 0.9rem;
 }
 
-.import-differences li {
-    display: grid;
-    gap: 0.15rem;
-    font-size: 0.85rem;
-}
 
 .import-link {
     padding: 0;

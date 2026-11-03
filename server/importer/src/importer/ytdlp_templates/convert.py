@@ -723,7 +723,8 @@ def _prelude(
             continue
         try:
             statements, support, reason = converter.action(action)
-            printed = [f"{{% set {node.target.name} = {expression_source(node.node)} -%}}\n" for node in statements]
+            # One line, as the Local Media Profile editor saves a template.
+            printed = [f"{{% set {node.target.name} = {expression_source(node.node)} -%}}" for node in statements]
         except (_Unsupported, UnsafeEdit, re.error, ValueError) as exc:
             reason = getattr(exc, "reason", None) or str(exc) or "it could not be written as Jinja"
             reports.append(PartReport(source, "", "unsupported", f"From {action.origin}. Not converted: {reason}"))
@@ -731,7 +732,7 @@ def _prelude(
         lines.extend(printed)
         assignments.extend(statements)
         detail = f"From {action.origin}." + (f" {reason}" if reason else "")
-        reports.append(PartReport(source, "".join(printed).rstrip("\n"), support, detail))
+        reports.append(PartReport(source, "".join(printed), support, detail))
     return lines, assignments, tuple(reports)
 
 
