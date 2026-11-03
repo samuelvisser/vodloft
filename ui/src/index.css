@@ -212,6 +212,13 @@ a.collection-header:focus-visible {
 .episode-card {
   scroll-snap-align: start;
 }
+/* A link that reads as plain text until hovered, like the episode breadcrumb. */
+a.quiet-link { color: inherit; text-decoration: none; }
+a.quiet-link:hover { color: var(--link-color, #66267a); text-decoration: underline; }
+@media (prefers-color-scheme: dark) {
+  a.quiet-link:hover { color: #c084fc; }
+}
+
 /* Library videos use the episode card as a link. */
 a.episode-card { display: block; min-width: 0; color: inherit; text-decoration: none; }
 

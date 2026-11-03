@@ -226,9 +226,9 @@ export default function EpisodePage() {
         <section className="view episode-view" aria-labelledby="episode-title">
             <article className="episode-details" aria-label="Episode details">
                 <nav className="episode-breadcrumb" aria-label="Breadcrumb">
-                    <Link to="/library">Library</Link>
+                    <Link className="quiet-link" to="/library">Library</Link>
                     <FontAwesomeIcon icon={faIcon('fass', 'chevron-right')} aria-hidden="true"/>
-                    <Link to={`/collection/${collectionId}`}>{collection.title}</Link>
+                    <Link className="quiet-link" to={`/collection/${collectionId}`}>{collection.title}</Link>
                 </nav>
 
                 <div className="episode-cover">

@@ -148,7 +148,7 @@ export default function EditDownloadProfilePage() {
                     <div className="form-row">
                         <label>Collection</label>
                         <div style={{padding: '6px 0'}}>
-                            <Link to={`/collection/${downloadProfile?.collectionSlug}`}>{collectionTitle}</Link>
+                            <Link className="quiet-link" to={`/collection/${downloadProfile?.collectionSlug}`}>{collectionTitle}</Link>
                         </div>
                     </div>
 
