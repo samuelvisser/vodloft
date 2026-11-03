@@ -85,7 +85,7 @@ def installation(tmp_path, monkeypatch):
     monkeypatch.setattr(get_settings().download_settings, "download_root", downloads)
     monkeypatch.setattr(import_uploads, "imports_root", lambda: tmp_path / "imports")
     applied: list[tuple[str, object]] = []
-    monkeypatch.setattr(imports, "_apply_setting", lambda key, value: applied.append((key, value)))
+    monkeypatch.setattr(imports, "_apply_setting", lambda key, value, session=None: applied.append((key, value)))
     folder = tmp_path / "wireloft-config"
     folder.mkdir()
     wireloft_installation(folder, downloads)

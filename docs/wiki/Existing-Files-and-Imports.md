@@ -87,8 +87,8 @@ Each importer has its own card:
 ## Importing from Pinchflat
 
 Administrators can import a Pinchflat installation from **Settings → Import**. Upload Pinchflat's config folder
-(or a zip of it); VODLoft keeps only `db/pinchflat.db` and the yt-dlp option files, and skips `cookies.txt` and
-your YouTube API key unless you choose to bring them.
+(or a zip of it); VODLoft keeps only `db/pinchflat.db` and the yt-dlp option files, and skips `cookies.txt`, your YouTube API key
+and your Apprise server unless you choose to bring them.
 
 The preview shows which folder VODLoft found Pinchflat's downloads under, each source as a new or existing
 collection, each media profile as a profile with the template it becomes, and whether rendering that template gives
@@ -111,6 +111,19 @@ the ones it marked become chapters (see [[Download-Profiles#sponsorblock]]).
 Options in Pinchflat's yt-dlp option files that VODLoft has no setting for become the Collection's own yt-dlp options,
 on its Edit page (see [[Settings#your-own-yt-dlp-options]]), with the file each came from as a note. Lines VODLoft
 blocks, such as `--exec`, are left out, and the report gives the reason.
+
+A media profile's redownload delay becomes the upgrade check on its Download Profiles, looking again that many days
+after downloading; unlike Pinchflat, VODLoft only replaces the file when the new one is better (see
+[[Download-Profiles]]). A source's cookie behaviour becomes the Collection's **Use the cookies file** choice: *Disabled*
+is Never, *When needed* is Only when needed, *All operations* is Always. A source Pinchflat indexed less often than
+once a day gets that as the Collection's own schedule; one indexed daily or more often keeps VODLoft's checks, which
+look more often (see [[Collections-and-Library#checking-and-cookies-per-collection]]).
+
+Pinchflat's download speed limit becomes a custom speed limit under **Settings → Downloads** (see
+[[Settings#speed]]). Its Apprise server becomes a destination called *Pinchflat* under **Settings → Messages and
+actions**, added to the default rules, if you choose to bring it: like a sign-in, an Apprise URL holds passwords (see
+[[Messages-and-Actions]]). A lifecycle script is listed in the report but never copied, because it runs code: put it in
+`/config/scripts` and add it as a script action.
 
 You can run the import again. Anything you changed in VODLoft since the last run is kept, and settings a newer
 VODLoft can map, which it reported as unsupported before, are brought over.
