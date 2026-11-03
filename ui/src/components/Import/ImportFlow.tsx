@@ -768,9 +768,12 @@ function ProfilePreview({importerName, profile, collections, template, onTemplat
                 </div>
             )}
             {profile.keptSeparate && (
-                <p className="import-merge__apart">
-                    Not kept on {profile.baseName ?? 'its Pinchflat profile'}: {profile.keptSeparate.charAt(0).toLowerCase() + profile.keptSeparate.slice(1)}.
-                </p>
+                <div className="import-merge">
+                    <div>
+                        <span className="import-merge__label">Not kept on {profile.baseName ?? `its ${importerName} profile`}</span>{' '}
+                        {profile.keptSeparate}, so this collection keeps a profile of its own.
+                    </div>
+                </div>
             )}
             {editing ? (
                 <div className="import-template-editor">

@@ -589,8 +589,3 @@ div.import-proof.is-different strong { color: var(--warning, #b45309); }
     font-size: 0.9rem;
 }
 
-.import-merge__apart {
-    margin: 0;
-    font-size: 0.9rem;
-    opacity: 0.8;
-}
