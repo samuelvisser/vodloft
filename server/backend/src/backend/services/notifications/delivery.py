@@ -243,7 +243,7 @@ def _batches(session: Session, now: datetime) -> list[_Batch]:
 
 
 def _send(session: Session, batch: _Batch) -> Outcome | str:
-    """Send one batch. Push answers SENT, RETRY or EXPIRED; everything else an Outcome."""
+    """Send one batch. Push answers SENT, EXPIRED or an Outcome; everything else an Outcome."""
     message = compose(batch.events, daily=batch.daily)
     if batch.subscription is not None:
         key = vapid_key(session)
@@ -280,7 +280,7 @@ def _record(session: Session, batch: _Batch, outcome: Outcome | str, now: dateti
             if device is not None:
                 session.delete(device)
             return
-        outcome = Outcome(outcome == "SENT", None if outcome == "SENT" else "The push service did not accept it")
+        outcome = Outcome(outcome == "SENT", None if outcome == "SENT" else "The device is no longer subscribed")
     destination = session.get(NotificationDestination, batch.destination.id) if batch.destination else None
     if destination is not None:
         record_attempt(destination, delivered=outcome.delivered, error=outcome.error)

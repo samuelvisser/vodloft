@@ -325,10 +325,57 @@ def test_push_reaches_the_push_service(monkeypatch):
     assert result == "SENT" and sent == ["https://web.push.apple.com/device"]
 
 
+def _apple_push(monkeypatch, status: int, content: bytes = b""):
+    """Send one push to a fake Apple endpoint; returns the result and the requests made."""
+    import base64
+    import os
+    from types import SimpleNamespace
+
+    import requests
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    from backend.services.notifications import push
+
+    def encoded(data: bytes) -> str:
+        return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+    client = ec.generate_private_key(ec.SECP256R1()).public_key().public_bytes(
+        serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint,
+    )
+    subscription = {"endpoint": "https://web.push.apple.com/device", "keys": {"p256dh": encoded(client), "auth": encoded(os.urandom(16))}}
+    sent = []
+    monkeypatch.setattr(push, "decrypt_text", lambda _value: json.dumps(subscription))
+    monkeypatch.setattr(requests, "post", lambda url, **kwargs: sent.append(kwargs["headers"]) or SimpleNamespace(
+        status_code=status, content=content, text=content.decode(), headers={},
+    ))
+    result = push.send_push(ec.generate_private_key(ec.SECP256R1()), SimpleNamespace(encrypted_subscription="x"), {"title": "Test"})
+    return result, sent
+
+
+def test_push_signs_a_subject_apple_accepts(monkeypatch):
+    """Apple's push service answers 403 BadJwtToken to a subject at a .local address."""
+    import base64
+
+    result, (headers,) = _apple_push(monkeypatch, 201)
+    token = headers["Authorization"].split("t=")[1].split(",")[0]
+    claims = json.loads(base64.urlsafe_b64decode(token.split(".")[1] + "=="))
+    assert result == "SENT"
+    assert claims["sub"] == "https://github.com/samuelvisser/vodloft" and claims["aud"] == "https://web.push.apple.com"
+
+
+def test_a_refused_push_shows_the_push_service_reason(monkeypatch):
+    refused, _ = _apple_push(monkeypatch, 403, b'{"reason":"BadJwtToken"}')
+    assert (refused.delivered, refused.error, refused.retry) == (False, "The push service answered 403 (BadJwtToken)", False)
+    busy, _ = _apple_push(monkeypatch, 503)
+    assert (busy.error, busy.retry) == ("The push service answered 503", True)
+
+
 def test_a_crash_fails_at_once_and_a_retry_shows_when_it_is_tried_again(db, monkeypatch):
     """History must not show "Waiting" for a message that already failed."""
     from backend.api.endpoints.notifications.service import history
     from backend.services.notifications import Event, delivery
+    from backend.services.notifications.senders import Outcome
 
     _rule(db, "download_failed")
     _device(db, name="Phone")
@@ -344,8 +391,8 @@ def test_a_crash_fails_at_once_and_a_retry_shows_when_it_is_tried_again(db, monk
     assert (row.status, row.error, row.retry_at) == ("FAILED", "Sending failed (ValueError)", None)
 
     _emit(db, Event.DOWNLOAD_FAILED, dedupe_key="two")
-    monkeypatch.setattr(delivery, "send_push", lambda *_args: "RETRY")
+    monkeypatch.setattr(delivery, "send_push", lambda *_args: Outcome(False, "The push service answered 503"))
     delivery.deliver_pending(db, now=NOW + timedelta(minutes=1))
     retried = history(db)[0]
-    assert retried.status == "PENDING" and retried.error == "The push service did not accept it"
+    assert retried.status == "PENDING" and retried.error == "The push service answered 503"
     assert retried.retry_at is not None
