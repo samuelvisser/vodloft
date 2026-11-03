@@ -163,7 +163,9 @@
 
 /* Add / edit dialog */
 .notif-dialog { max-width: 620px; width: calc(100vw - 32px); }
-.notif-dialog .confirm-dialog-content { max-height: 70vh; overflow-y: auto; }
+/* The content scrolls, and a scroll box clips whatever reaches past its edges. A few pixels of
+   room keep the dropdowns' outline, focus ring and open menu's edge visible, as everywhere else. */
+.notif-dialog .confirm-dialog-content { max-height: 70vh; overflow-y: auto; padding: 4px 4px 12px; margin: 4px -4px 4px; }
 .notif-form { display: grid; gap: 14px; }
 .notif-form label { font-weight: 600; font-size: 14px; }
 .notif-masked { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
