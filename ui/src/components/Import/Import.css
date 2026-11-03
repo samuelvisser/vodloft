@@ -139,21 +139,50 @@ p.import-proof.is-different {
 }
 
 .import-profile {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0.75rem;
     padding: 1rem;
     border: 1px solid var(--border-color, rgba(127, 127, 127, 0.3));
     border-radius: 10px;
     min-width: 0;
 }
 
+.import-profile__body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+    min-width: 0;
+}
+
 .import-profile__title {
     display: flex;
     flex-wrap: wrap;
-    justify-content: space-between;
     align-items: center;
     gap: 0.5rem;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+
+.import-profile__title::-webkit-details-marker {
+    display: none;
+}
+
+.import-profile__title > strong {
+    margin-right: auto;
+}
+
+/* The same chevron as the settings cards: down when closed, up when open. */
+.import-profile__title::after {
+    content: '›';
+    color: var(--muted);
+    font-size: 22px;
+    line-height: 1;
+    transform: rotate(90deg);
+    transition: transform 140ms ease;
+}
+
+.import-profile[open] > .import-profile__title::after {
+    transform: rotate(-90deg);
 }
 
 .import-profile__chips {

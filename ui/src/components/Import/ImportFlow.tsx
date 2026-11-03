@@ -680,8 +680,8 @@ function ProfilePreview({profile, collections, template, onTemplate}: {
     const proof = profile.pathProof
 
     return (
-        <div className={`import-profile is-${profile.support}`}>
-            <div className="import-profile__title">
+        <details className={`import-profile is-${profile.support}`} open>
+            <summary className="import-profile__title">
                 <strong>{profile.name}</strong>
                 <span className="import-profile__chips">
                     <span className="import-chip">
@@ -689,7 +689,8 @@ function ProfilePreview({profile, collections, template, onTemplate}: {
                     </span>
                     <span className={`import-chip is-${profile.support}`}>{SUPPORT_LABELS[profile.support]}</span>
                 </span>
-            </div>
+            </summary>
+            <div className="import-profile__body">
             {profile.mergedFrom.length > 0 && (
                 <div className="import-merge">
                     <div>
@@ -773,7 +774,8 @@ function ProfilePreview({profile, collections, template, onTemplate}: {
                     </ul>
                 </details>
             )}
-        </div>
+            </div>
+        </details>
     )
 }
 
