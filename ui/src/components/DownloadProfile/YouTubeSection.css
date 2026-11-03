@@ -1,13 +1,35 @@
-.sponsorblock-switch {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
+.youtube-section {
+    display: grid;
+    gap: 16px;
+    --yt-border: rgba(100, 116, 139, 0.24);
+    --yt-highlight: rgba(14, 165, 233, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+    .youtube-section {
+        --yt-border: rgba(148, 163, 184, 0.22);
+        --yt-highlight: rgba(56, 189, 248, 0.16);
+    }
+}
+
+.youtube-section-heading {
+    margin: 0 0 -8px;
+    font-size: 1rem;
     font-weight: 600;
-    cursor: pointer;
+}
+
+/* The Local Media Profile links to the auto-generated subtitles row; it lights up briefly. */
+.youtube-section .form-row.is-highlighted {
+    margin: -8px;
+    padding: 8px;
+    border-radius: 8px;
+    background: var(--yt-highlight);
+    transition: background 0.6s ease;
 }
 
 .sponsorblock-grid {
     width: 100%;
+    max-width: 640px;
     margin-top: 12px;
     border-collapse: collapse;
 }
@@ -15,7 +37,7 @@
 .sponsorblock-grid th,
 .sponsorblock-grid td {
     padding: 6px 4px;
-    border-bottom: 1px solid var(--we-border);
+    border-bottom: 1px solid var(--yt-border);
     vertical-align: middle;
 }
 
@@ -72,11 +94,6 @@
     height: 10px;
     border-radius: 2px;
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
-}
-
-.sponsorblock-note {
-    margin: 10px 0 0;
-    font-size: 0.875rem;
 }
 
 @media (max-width: 640px) {

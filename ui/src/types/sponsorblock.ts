@@ -55,21 +55,3 @@ export const DEFAULT_SPONSORBLOCK_SEGMENTS: Record<SponsorBlockCategory, Sponsor
 export function sponsorBlockLabel(category: string): string {
     return category === 'poi_highlight' ? 'Highlight' : SponsorBlockCategoryReg.getLabelLoose(category)
 }
-
-/** One sentence for the closed SponsorBlock line. */
-export function sponsorBlockSentence(enabled: boolean, segments: Record<string, string>): string {
-    if (!enabled) return 'Download the whole video, without SponsorBlock'
-    const named = (action: SponsorBlockAction) => SponsorBlockCategoryReg.values
-        .filter((category) => segments[category] === action)
-        .map((category) => SponsorBlockCategoryReg.getLabel(category).toLowerCase())
-    const list = (items: string[]) => items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
-    const cut = named('cut')
-    const chapter = named('chapter')
-    const parts = [
-        cut.length ? `cut out ${list(cut)}` : '',
-        chapter.length ? `mark ${list(chapter)} as chapters` : '',
-    ].filter(Boolean)
-    if (!parts.length) return 'SponsorBlock is on, but every segment type is kept'
-    const sentence = parts.join('; ')
-    return sentence[0].toUpperCase() + sentence.slice(1)
-}
