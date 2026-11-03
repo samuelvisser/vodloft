@@ -126,6 +126,9 @@ def find_subscription(session: Session, endpoint: str) -> PushSubscription | Non
     return session.scalar(select(PushSubscription).where(PushSubscription.endpoint_hash == endpoint_hash(endpoint)))
 
 
+_TTL_SECONDS = 60
+
+
 def send_push(key: ec.EllipticCurvePrivateKey, subscription: PushSubscription, payload: dict) -> str:
     """Send one message to one device: SENT, RETRY, or EXPIRED when the browser revoked it."""
     decrypted = decrypt_text(subscription.encrypted_subscription)
@@ -148,7 +151,8 @@ def send_push(key: ec.EllipticCurvePrivateKey, subscription: PushSubscription, p
         subfile.chmod(0o600)
         notifier = NotifyVapid(
             subscriber=subscriber, targets=[subscriber], keyfile=str(keyfile), subfile=str(subfile),
-            include_image=False, ttl=3600, request_timeout=8, redirects=False,
+            # The push service keeps the message this long for a device that is offline; Apprise allows a minute.
+            include_image=False, ttl=_TTL_SECONDS, request_timeout=8, redirects=False,
         )
         if not notifier.subscriptions.load():
             return "EXPIRED"
