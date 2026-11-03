@@ -116,9 +116,8 @@ def test_audio_only_uses_stable_m4a_without_video_alternate():
 def test_feed_url_does_not_encode_video_delivery_mode():
     from backend.utils.feed_urls import build_rss_feed_url
 
-    request = SimpleNamespace(base_url="https://vodloft.example/")
     assert build_rss_feed_url(
-        request,
+        "https://vodloft.example/",
         token="token",
         collection_slug="collection",
     ) == "https://vodloft.example/feeds/rss/token/collection.xml"

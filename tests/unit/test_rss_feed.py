@@ -702,6 +702,21 @@ def test_create_stream_profile_generates_plain_stable_feed_url(db_session):
     assert "?" not in created.feed_url
 
 
+def test_regenerating_a_feed_url_puts_it_on_vodlofts_address(db_session):
+    from backend.api.endpoints.rss_stream_profiles.service import regenerate_stream_profile_rss_token
+
+    collection = _make_collection(db_session)
+    profile = _make_rss_profile(db_session, collection)
+    profile.feed_url = "http://wireloft.test/feeds/rss/token/collection.xml"  # As imported from WireLoft.
+
+    regenerated = regenerate_stream_profile_rss_token(
+        db_session, Access.full(), _FakeRequest("https://vodloft.test/"), profile.id,
+    )
+
+    assert profile.token != "token"
+    assert regenerated.feed_url == f"https://vodloft.test/feeds/rss/{profile.token}/{collection.slug}.xml"
+
+
 def test_stream_profile_custom_title_is_persisted_used_and_can_be_cleared(db_session):
     from backend.api.endpoints.feeds.service import render_rss_feed
     from backend.api.endpoints.rss_stream_profiles.service import (
