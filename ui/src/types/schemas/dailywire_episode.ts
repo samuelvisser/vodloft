@@ -9,7 +9,7 @@ export const DailywireEpisodeReadSchema = z.object({
     title: z.string(),
     description: z.string().nullable(),
     duration: z.number(),
-    backgroundImagePath: z.string(),
+    backgroundImagePath: z.string().nullable(),
     sharingUrl: z.string(),
     publishStatus: z.string(),
     isDownloadable: z.boolean(),

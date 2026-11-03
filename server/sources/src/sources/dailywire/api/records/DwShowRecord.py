@@ -10,7 +10,7 @@ from sources.dailywire.api.utils.thumbnails import normalize_thumbnail_aliases
 from sources.dailywire.api.utils.validators import ValOrNone
 
 
-class ProbableShowType(str, Enum):
+class ProbableCollectionType(str, Enum):
     unknown = "unknown"
     podcast = "podcast"
     series = "series"
@@ -57,26 +57,26 @@ class DwShowRecord(BaseRecord):
     def discard_duplicate_thumbnail_aliases(self):
         return normalize_thumbnail_aliases(self, default="portrait")
 
-    @computed_field(return_type=ProbableShowType)
+    @computed_field(return_type=ProbableCollectionType)
     @property
-    def probable_show_type(self) -> ProbableShowType:
+    def probable_collection_type(self) -> ProbableCollectionType:
         """
-        Determine probable show type based on latest_episodes.
+        Determine the probable collection type based on latest_episodes.
         """
         # Podcast if all seasons are year-labeled between 2015 and 2115
         seasons_list = [s for s in (self.seasons or []) if isinstance(s, DwSeasonRecord)]
         if seasons_list and all(isinstance(s.name, str) and len(s.name) == 4 and s.name.isdigit() and 2015 <= int(s.name) <= 2115 for s in seasons_list):
-            return ProbableShowType.podcast
+            return ProbableCollectionType.podcast
 
         # Podcast if the slug contains the literal word "podcast"
         if "podcast" in self.slug.lower():
-            return ProbableShowType.podcast
+            return ProbableCollectionType.podcast
 
         # Series if it contains either 'extras' or 'all episodes' season
         if any(s.slug in ("extras", "all-episodes") for s in (self.seasons or [])):
-            return ProbableShowType.series
+            return ProbableCollectionType.series
 
-        return ProbableShowType.series
+        return ProbableCollectionType.series
 
 
     @computed_field(return_type=ProbableEpisodeIdentification)
@@ -89,7 +89,7 @@ class DwShowRecord(BaseRecord):
         # identification here. If this behavior never changes, we might consider removing this (2026-07-22)
 
         # Numbered if this is a series
-        if self.probable_show_type == ProbableShowType.series:
+        if self.probable_collection_type == ProbableCollectionType.series:
             return ProbableEpisodeIdentification.numbered
 
         # Unknown if fewer than 5 episodes
