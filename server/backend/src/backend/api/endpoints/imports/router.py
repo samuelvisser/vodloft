@@ -44,6 +44,7 @@ def _options(body: ImportOptionsAPIRequest) -> ImportOptions:
         settings=tuple(body.settings) if body.settings is not None else None,
         enable_download_profiles=body.enable_download_profiles,
         match_existing_files=body.match_existing_files,
+        rename_existing_files=body.rename_existing_files,
         merge_profiles=body.merge_profiles,
         templates=body.templates,
     )

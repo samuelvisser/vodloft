@@ -353,5 +353,8 @@ def finish_scan(session: Session, scan: ExistingFileScan) -> int:
         })
     scan.held_download_profile_ids = []
     scan.status = FINISHED
+    from backend.services.imports import rename_after_matching
+
+    rename_after_matching(session, scan)
     session.flush()
     return enabled

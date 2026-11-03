@@ -232,6 +232,10 @@ p.import-proof.is-different {
     font-weight: 600;
 }
 
+.import-proof-differences__note {
+    margin: 0.5rem 0;
+}
+
 .import-differences.is-endless {
     max-height: min(70vh, 640px);
     overflow-y: auto;

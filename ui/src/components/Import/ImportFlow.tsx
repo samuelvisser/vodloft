@@ -38,7 +38,9 @@ const SUPPORT_LABELS: Record<ImportSupport, string> = {
     unsupported: 'Not supported',
 }
 
-const DEFAULT_OPTIONS: ImportOptions = {enableDownloadProfiles: false, matchExistingFiles: false, templates: {}}
+const DEFAULT_OPTIONS: ImportOptions = {
+    enableDownloadProfiles: false, matchExistingFiles: false, renameExistingFiles: false, templates: {},
+}
 
 function settingLabel(key: string): string {
     const last = key.split('.').slice(-2).join(' › ')
@@ -567,6 +569,28 @@ function PreviewStep({importer, onReplace, onFinished}: {
                 </div>
             )}
 
+            {!preview.records && (
+                <div className="settings-field settings-toggle-field settings-field--wide">
+                    <div className="settings-toggle-field__control">
+                        <div>
+                            <label htmlFor={`import-rename-${importer.key}`}>Rename existing files</label>
+                            <div className="settings-field__help">
+                                Move the imported files to the paths VODLoft's templates give them, the ones listed
+                                under each Local Media Profile. {options.matchExistingFiles
+                                    ? 'This waits until you are done reviewing the matches, so matched files are renamed too.'
+                                    : 'This starts once each collection\'s files are adopted.'} Pause {importer.name} first,
+                                because it no longer finds the files where it put them.
+                            </div>
+                        </div>
+                        <Switch
+                            id={`import-rename-${importer.key}`}
+                            checked={options.renameExistingFiles}
+                            onChange={(on) => setOptions({...options, renameExistingFiles: on})}
+                        />
+                    </div>
+                </div>
+            )}
+
             {error && <p className="form-error-card" role="alert">{error}</p>}
 
             <div className="import-actions">
@@ -880,6 +904,11 @@ function PathProof({proof}: {proof: ImportProfile['pathProof']}) {
                             <button type="button" className="btn" aria-expanded onClick={() => setExpanded(false)}>Show fewer</button>
                         )}
                     </div>
+                    <p className="form-info-card import-proof-differences__note">
+                        By default, VODLoft does not rename existing files. The list below shows where VODLoft would put
+                        each file if it downloaded it for the first time, so it is a check of how accurate the conversion
+                        is.
+                    </p>
                     {expanded ? (
                         <EndlessDifferences differences={proof.differences}/>
                     ) : (
