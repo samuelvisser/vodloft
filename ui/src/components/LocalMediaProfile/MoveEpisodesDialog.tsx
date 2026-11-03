@@ -307,6 +307,10 @@ export default function MoveEpisodesDialog({profile, sourceEmpty, onDeleteProfil
                             value={targetId}
                             onChange={(value) => { setTargetId(value); setChoices({}); setFinished(false) }}
                             isDisabled={running}
+                            // The dialog body scrolls, so its own menu would be clipped: draw it above the dialog.
+                            menuPortalTarget={document.body}
+                            menuPosition="fixed"
+                            styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
                             placeholder={others.length ? 'Choose a Local Media Profile' : 'No other Collection Local Media Profiles'}
                         />
                     </div>
