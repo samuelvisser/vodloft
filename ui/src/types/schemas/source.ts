@@ -205,3 +205,6 @@ export const CollectionDetailsReadSchema = z.object({
     seasons: z.array(z.object({slug: z.string(), name: z.string()})),
 })
 export type CollectionDetailsRead = z.infer<typeof CollectionDetailsReadSchema>
+
+/** The yt-dlp options a Source gives every download. */
+export const YtdlpOptionsReadSchema = z.object({text: z.string()})

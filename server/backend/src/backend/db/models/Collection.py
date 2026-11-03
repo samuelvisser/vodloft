@@ -30,7 +30,7 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     sharing_url: Mapped[str] = mapped_column(unique=True)
     ytdlp_options: Mapped[str] = mapped_column(
         Text, default="", server_default="",
-        comment="Your own yt-dlp options for this Collection, added after the Local Media Profile's",
+        comment="Your own yt-dlp options for this Collection, added after the yt-dlp Source's",
     )
     membership_level: Mapped[str]
     type: Mapped[str]

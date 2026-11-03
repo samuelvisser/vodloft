@@ -63,6 +63,7 @@ import {
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
     ResolvedLinkReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceDomainRead, SourceDomainReadSchema, SourceRead,
     SourceReadSchema,
+    YtdlpOptionsReadSchema,
 } from "../types/schemas/source";
 import {
     DailywireCatalogRead,
@@ -314,6 +315,36 @@ export function useSourceCookies(sourceId: string, enabled = true) {
             signal,
         ),
     })
+}
+
+
+/** The yt-dlp options a Source gives every download. */
+export function useSourceYtdlpOptions(sourceId: string) {
+    return useQuery<string, Error, string, readonly ['sourceYtdlpOptions', string]>({
+        queryKey: ['sourceYtdlpOptions', sourceId] as const,
+        queryFn: async ({signal}) => (await fetchParsed(
+            `${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceId)}/ytdlp-options`,
+            YtdlpOptionsReadSchema,
+            signal,
+        )).text,
+    })
+}
+
+/** Store the yt-dlp options a Source gives every download. A refused line comes back as the error. */
+export async function saveSourceYtdlpOptions(sourceId: string, text: string): Promise<string> {
+    const response = await fetch(`${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceId)}/ytdlp-options`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({text}),
+    })
+    if (response.status === 422) {
+        const body = await response.json().catch(() => null)
+        const problem = (body?.detail ?? [])[0]
+        throw new Error(problem?.msg ? String(problem.msg).replace(/^Value error, /, '') : 'These options could not be saved')
+    }
+    if (!response.ok) throw await responseError(response)
+    return YtdlpOptionsReadSchema.parse(await response.json()).text
 }
 
 /** Store a cookies.txt file for a Source, or remove it with null. */

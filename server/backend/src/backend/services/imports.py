@@ -68,7 +68,7 @@ _PROFILE_FIELDS = (
     "output_template", "preferred_format", "subtitle_mode", "thumbnail_mode", "metadata_mode",
     "collection_scope", "download_collection_assets", "indexing_values",
     "subtitle_languages", "subtitle_language_mode", "quality_goal", "video_codecs", "container", "audio_codec",
-    "audio_language", "ytdlp_options",
+    "audio_language",
 )
 _DOWNLOAD_PROFILE_FIELDS = (
     "ep_id_type_list", "download_days_in_past", "download_episode_count", "download_starting_from",
@@ -172,29 +172,31 @@ def _samples(paths: Sequence[str]) -> list[str]:
 
 def _with_checked_options(plan: ImportPlan) -> ImportPlan:
     """Keep the yt-dlp options an importer could not map that pass VODLoft's check, and report the others."""
-    profiles = []
-    for profile in plan.profiles:
-        text = profile.settings.get("ytdlp_options")
+    collections = []
+    for collection in plan.collections:
+        text = collection.settings.get("ytdlp_options")
         if not isinstance(text, str):
-            profiles.append(profile)
+            collections.append(collection)
             continue
         kept: list[str] = []
-        warnings = list(profile.warnings)
+        warnings = list(collection.warnings)
         refused = {line.line: line for line in check_ytdlp_options(text) if line.status != "valid"}
         for number, line in enumerate(text.splitlines(), start=1):
             if number in refused:
                 warnings.append(ImportWarning("yt-dlp options", f"{line.strip()}: {refused[number].message}"))
             else:
                 kept.append(line)
-        settings = {**profile.settings, "ytdlp_options": "\n".join(kept)}
+        settings = {**collection.settings, "ytdlp_options": "\n".join(kept)}
         if not kept:
             del settings["ytdlp_options"]
         else:
             warnings.append(ImportWarning(
-                "yt-dlp options", f"{len(kept)} option line(s) VODLoft has no setting for are kept as your own yt-dlp options", "close",
+                "yt-dlp options",
+                f"{len(kept)} option line(s) VODLoft has no setting for are kept as this Collection's own yt-dlp options",
+                "close",
             ))
-        profiles.append(replace(profile, settings=settings, warnings=tuple(warnings)))
-    return replace(plan, profiles=tuple(profiles))
+        collections.append(replace(collection, settings=settings, warnings=tuple(warnings)))
+    return replace(plan, collections=tuple(collections))
 
 
 def _with_templates(plan: ImportPlan, templates: Mapping[str, str]) -> ImportPlan:
@@ -319,7 +321,6 @@ def _profile_values(profile: CollectionLocalMediaProfile) -> dict[str, object]:
         "container": profile.container,
         "audio_codec": profile.audio_codec,
         "audio_language": profile.audio_language,
-        "ytdlp_options": profile.ytdlp_options,
         "indexing_values": [
             {"key": item.key, "name": item.name, "keep_numbers": item.keep_numbers}
             for item in get_indexing_value_definitions(profile)
@@ -849,6 +850,10 @@ def _upsert_collection(session: Session, plan: CollectionPlan, library, links, r
         library[_normalise_url(existing.sharing_url)] = existing
         report.add("created", plan.title, "Added to the Library", warnings=[_warning(warning) for warning in plan.warnings])
         report.counts["collections_created"] += 1
+    options = plan.settings.get("ytdlp_options")
+    if isinstance(options, str) and options and not existing.ytdlp_options:
+        # Added once; after that, the Collection's yt-dlp options are yours to change.
+        existing.ytdlp_options = options
     _remember(session, links, run.importer, "collection", plan.external_id, existing.id,
               link.written if link else {}, _unsupported(plan.warnings), run.id)
     return existing, created

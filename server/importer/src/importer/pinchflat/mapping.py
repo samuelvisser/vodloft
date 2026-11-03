@@ -212,7 +212,8 @@ def _template_root(template: str, path_map: PathMap) -> tuple[str, str, str | No
 _NOT_FORWARDED = frozenset({"outtmpl", "url"})
 
 
-def _profile_plan(variant: _Variant, data: PinchflatData, path_map: PathMap) -> ProfilePlan:
+def _profile_plan(variant: _Variant, data: PinchflatData, path_map: PathMap) -> tuple[ProfilePlan, str]:
+    """The Local Media Profile, and the option file lines VODLoft has no setting for, for its Collections."""
     profile = variant.profile
     warnings = _profile_warnings(profile)
     try:
@@ -228,6 +229,7 @@ def _profile_plan(variant: _Variant, data: PinchflatData, path_map: PathMap) -> 
         if option_set is not None else None
     report = convert_pinchflat(template, options)
 
+    custom: list[str] = []
     settings: dict[str, object] = {
         "preferred_format": (_RESOLUTIONS.get(profile.preferred_resolution or "1080p") or ("format_1080p",))[0],
         "collection_scope": "both",
@@ -243,7 +245,6 @@ def _profile_plan(variant: _Variant, data: PinchflatData, path_map: PathMap) -> 
             "embed_and_nfo" if embed and profile.download_nfo else "nfo" if profile.download_nfo
             else "embed" if embed else "no_metadata"
         )
-        custom: list[str] = []
         for option in option_set.reports:
             if option.option.origin == "Pinchflat":
                 continue
@@ -255,8 +256,6 @@ def _profile_plan(variant: _Variant, data: PinchflatData, path_map: PathMap) -> 
                     option.option.origin, f"{option.option.source}: {option.reason}",
                     "close" if option.handling == "close" else "unsupported",
                 ))
-        if custom:
-            settings["ytdlp_options"] = "\n".join(custom)
     if profile.preferred_resolution == "audio":
         settings["subtitle_mode"] = "no_subtitles"
     settings["download_collection_assets"] = bool(profile.download_source_images)
@@ -272,7 +271,7 @@ def _profile_plan(variant: _Variant, data: PinchflatData, path_map: PathMap) -> 
         original_template=variant.template,
         report=tuple(report.lines()[1:]),
         support=report.support,
-    )
+    ), "\n".join(custom)
 
 
 def _episode_types(profile: PinchflatProfile) -> list[str]:
@@ -306,7 +305,8 @@ def _sponsorblock(profile: PinchflatProfile) -> dict[str, object]:
     }
 
 
-def _collection_plan(source: PinchflatSource, profile: PinchflatProfile, profile_external_id: str, path_map: PathMap) -> CollectionPlan:
+def _collection_plan(source: PinchflatSource, profile: PinchflatProfile, profile_external_id: str, path_map: PathMap,
+                     ytdlp_options: str = "") -> CollectionPlan:
     warnings: list[ImportWarning] = []
     limits: dict[str, object] = {"download_days_in_past": 0, "download_episode_count": 0,
                                  "download_starting_from": None, "delete_older_episodes": False,
@@ -360,7 +360,9 @@ def _collection_plan(source: PinchflatSource, profile: PinchflatProfile, profile
                   "collection_type": source.collection_type,
                   # A channel's name is its author; the path proof fills {{ channel }} with it.
                   **({"author": source.collection_name}
-                     if source.collection_type == "channel" and source.collection_name else {})},
+                     if source.collection_type == "channel" and source.collection_name else {}),
+                  # VODLoft checks these as the Collection's own yt-dlp options, and reports the lines it can't use.
+                  **({"ytdlp_options": ytdlp_options} if ytdlp_options else {})},
         download_profile={
             "enable_profile": source.enabled and source.download_media,
             "ep_id_type_list": _episode_types(profile),
@@ -425,10 +427,11 @@ def _settings(data: PinchflatData, extras: Path | None) -> list[SettingPlan]:
 def plan_import(data: PinchflatData, *, option_directory: Path | None, extras: Path | None = None,
                 path_map: PathMap = DEFAULT_PATH_MAP) -> ImportPlan:
     variants = _variants(data, option_directory)
-    profiles = [_profile_plan(variant, data, path_map) for variant in variants]
-    by_source: dict[int, tuple[ProfilePlan, PinchflatProfile]] = {
-        source.id: (plan, variant.profile)
-        for variant, plan in zip(variants, profiles, strict=True) for source in variant.sources
+    planned = [_profile_plan(variant, data, path_map) for variant in variants]
+    profiles = [plan for plan, _custom in planned]
+    by_source: dict[int, tuple[ProfilePlan, PinchflatProfile, str]] = {
+        source.id: (plan, variant.profile, custom)
+        for variant, (plan, custom) in zip(variants, planned, strict=True) for source in variant.sources
     }
     collections: list[CollectionPlan] = []
     files: list[FilePlan] = []
@@ -438,8 +441,8 @@ def plan_import(data: PinchflatData, *, option_directory: Path | None, extras: P
     for source in data.sources:
         if source.id not in by_source:
             continue
-        plan, profile = by_source[source.id]
-        collections.append(_collection_plan(source, profile, plan.external_id, path_map))
+        plan, profile, custom = by_source[source.id]
+        collections.append(_collection_plan(source, profile, plan.external_id, path_map, custom))
         for item in items_by_source.get(source.id, ()):
             file_plan = _file_plan(item, source, plan.custom_indexes, path_map)
             if file_plan is not None:

@@ -12,7 +12,7 @@ from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.download_profile_types import EpisodeTagKey
 from backend.utils.helpers import generate_uuid
-from backend.api.models.local_media_profile import checked_ytdlp_options
+from backend.api.models.source import checked_ytdlp_options
 from sources.ytdlp_options import MAX_OPTIONS_LENGTH
 
 

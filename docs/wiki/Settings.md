@@ -188,6 +188,23 @@ The yt-dlp card shows the installed yt-dlp version and when it was last updated.
 
 **Cookies file** is optional. Some videos only play for a signed-in viewer, such as age-restricted or members-only videos. Export a `cookies.txt` file (Netscape format) from a browser where you are signed in, with a browser extension made for that, and choose it here. yt-dlp then uses it for every lookup and download. Treat the file like a password: it signs VODLoft in as you.
 
+#### Your own yt-dlp options
+
+Optional, and most people leave it empty. Extra yt-dlp options for every download of the yt-dlp Source (YouTube and
+the other sites yt-dlp handles, not The Daily Wire or NPO Start). Write them the way yt-dlp's own option files have
+them: one or more options per line, and lines starting with `#` are notes. Each line is checked with yt-dlp's own
+parser as you type, and gets one of these results:
+
+- **Passed to yt-dlp**: the line is used for every download.
+- **Blocked**, with the reason: options that would change where files go or what they are called (such as `-o` and
+  `-P`), pick the format past a Local Media Profile's Quality (`-f`), run other programs (`--exec`), or stop VODLoft
+  from following the download.
+- **VODLoft already has a setting for this**, naming that setting: for example subtitles, thumbnails, the container
+  or SponsorBlock.
+
+The options can only be saved when every line passes. A Collection can add its own options on its Edit page, for
+exceptions; they come after these, so for an option set in both places the Collection's wins.
+
 #### YouTube Data API key
 
 Optional. A free key from Google lets VODLoft list YouTube channels and find new videos much faster than yt-dlp alone. yt-dlp still downloads every file, and VODLoft keeps working without a key, or when the key's daily quota runs out; it is only slower then.

@@ -21,7 +21,7 @@ RELEASE_REVISIONS = (
 )
 VODLOFT_0_1_0_REVISION = "f4abb559e3ab"
 VODLOFT_0_5_0_REVISION = "817515eb8209"
-HEAD_REVISION = "e2f7a41c9d05"
+HEAD_REVISION = "a93c6e0d1f27"
 
 
 @pytest.fixture
@@ -276,3 +276,24 @@ def test_download_profiles_without_episode_types_stop_downloading(migration_data
         enabled = dict(connection.execute(text("SELECT id, enable_profile FROM download_profiles")).all())
     # An empty list used to download nothing; now it would mean every type.
     assert enabled == {1: 0, 2: 1}
+
+
+def test_ytdlp_options_move_from_local_media_profiles_to_the_source(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "e2f7a41c9d05")
+    with engine.begin() as connection:
+        for profile_id, options in ((5, "-N 4"), (6, ""), (7, "-N 4"), (8, "--xattrs")):
+            connection.execute(text(
+                "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, type, video_codecs, "
+                "ytdlp_options) VALUES (:id, :slug, :slug, '/downloads/{{ collection }}/' || :slug || '/{{ episode_title }}.ext', "
+                "'format_1080p', 'collection', '[]', :options)"
+            ), {"id": profile_id, "slug": f"p{profile_id}", "options": options})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT ytdlp_options FROM settings")).scalar_one() == "-N 4\n--xattrs"
+    assert "ytdlp_options" not in {column["name"] for column in inspect(engine).get_columns("local_media_profiles")}

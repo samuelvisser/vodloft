@@ -16,6 +16,7 @@ from backend.services.download_quality import (
     chosen_subtitle_tracks, custom_ytdlp_options, first_subtitle_is_default, ytdlp_quality, ytdlp_sponsorblock, ytdlp_subtitles,
 )
 from backend.types.download_profile_types import AutoSubtitles
+from backend.services.source_options import ytdlp_source_options
 from backend.services.movies import update_movie_extra_source_metadata
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.local_media_profile_types import LocalMediaProfileSubtitleMode, LocalMediaProfileType, PreferredFormat
@@ -75,7 +76,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     sponsorblock = ytdlp_sponsorblock(
         download_profile.sponsorblock_enabled, dict(download_profile.sponsorblock_segments),
     ) if download_profile is not None else YtdlpSponsorBlock()
-    option_texts = [(f"the Local Media Profile '{profile.name}'", profile.ytdlp_options)]
+    option_texts = [("the yt-dlp Source", ytdlp_source_options(session))]
     if episode is not None:
         option_texts.append((f"the Collection '{episode.collection.title}'", episode.collection.ytdlp_options))
     subtitle_request = ytdlp_subtitles(profile, AutoSubtitles.NEVER)

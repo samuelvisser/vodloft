@@ -8,7 +8,7 @@ from pydantic import Field, computed_field, field_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
 from sources import Feature, UnknownSourceError, get_source
-from sources.ytdlp_options import MAX_OPTIONS_LENGTH
+from sources.ytdlp_options import MAX_OPTIONS_LENGTH, OptionsRefused, ytdlp_option_arguments
 
 
 def source_features(source_key: str) -> list[str]:
@@ -105,6 +105,29 @@ class CookiesStatusAPIRead(ResponseBase):
 class CookiesAPIRead(ResponseBase):
     has_cookies: bool
     status: Optional[CookiesStatusAPIRead] = None
+
+
+def checked_ytdlp_options(value: str) -> str:
+    """Your own yt-dlp options, refused with the first line that can not be used."""
+    try:
+        ytdlp_option_arguments(value)
+    except OptionsRefused as exc:
+        raise ValueError(str(exc)) from None
+    return value.strip("\n")
+
+
+class YtdlpOptionsAPIRead(ResponseBase):
+    """The yt-dlp options a Source gives every download."""
+    text: str
+
+
+class YtdlpOptionsAPIUpdate(RequestBase):
+    text: str = Field(max_length=MAX_OPTIONS_LENGTH)
+
+    @field_validator("text")
+    @classmethod
+    def _validate_text(cls, value: str) -> str:
+        return checked_ytdlp_options(value)
 
 
 class YtdlpOptionsCheckAPIRequest(RequestBase):

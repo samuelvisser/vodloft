@@ -9,16 +9,6 @@ import {useLibraryDefaults} from '../../lib/settings'
 import ReadMore from '../../utils/ReadMore'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import SimpleSelect from '../common/SimpleSelect'
-import OptionsEditor from '../common/OptionsEditor/OptionsEditor'
-
-// Where the Local Media Profile's own settings are, for options that would repeat them.
-const SETTING_LINKS = {
-    quality: {label: 'Quality', elementId: 'quality-up-to'},
-    subtitles: {label: 'Subtitles', elementId: 'subtitle-lines'},
-    thumbnails: {label: 'Episode thumbnail behavior', elementId: 'local-media-thumbnail-mode'},
-    metadata: {label: 'Media metadata behavior', elementId: 'local-media-metadata-mode'},
-    file_names: {label: 'the output template’s file names', elementId: 'mp-path-help'},
-}
 
 const THUMBNAIL_MODE_LABELS = {
     no_thumbnail: 'No thumbnail',
@@ -225,42 +215,6 @@ export default function LocalMediaProfileCommonFields({
             </div>
 
             <SubtitleLines form={form} onSubtitleModeChange={onSubtitleModeChange}/>
-
-            {mode !== 'movie' && (
-                <div className="form-row">
-                    <label htmlFor="local-media-ytdlp-options">Your own yt-dlp options</label>
-                    <Controller
-                        control={control}
-                        name="ytdlpOptions"
-                        render={({field}) => (
-                            <OptionsEditor
-                                id="local-media-ytdlp-options"
-                                value={field.value ?? ''}
-                                onChange={field.onChange}
-                                onBlur={field.onBlur}
-                                invalid={!!errors.ytdlpOptions}
-                                describedBy={errors.ytdlpOptions ? 'local-media-ytdlp-options-errors' : 'local-media-ytdlp-options-help'}
-                                settingLinks={SETTING_LINKS}
-                            />
-                        )}
-                    />
-                    {errors.ytdlpOptions && (
-                        <div id="local-media-ytdlp-options-errors" className="error" role="alert" aria-live="polite">
-                            {String(errors.ytdlpOptions.message)}
-                        </div>
-                    )}
-                    <div className="help" id="local-media-ytdlp-options-help">
-                        <ReadMore summary="Extra options for downloads yt-dlp makes, such as YouTube’s. Most people leave this empty.">
-                            <p>Write options the way yt-dlp’s own option files have them: one or more per line, and lines starting with # are notes.
-                                Each line is checked with yt-dlp’s own parser as you type.</p>
-                            <p>A few options are <strong>blocked</strong>, with the reason: the ones that would change where files go or what they are called
-                                (such as <code>-o</code> and <code>-P</code>), pick the format past the Quality setting (<code>-f</code>), or run other programs (<code>--exec</code>).
-                                Options VODLoft already has a setting for point to that setting instead.</p>
-                            <p>A Collection can add its own options on top of these, on its Edit page. They only apply to Collections and videos from the yt-dlp Source, not to The Daily Wire or NPO Start.</p>
-                        </ReadMore>
-                    </div>
-                </div>
-            )}
         </>
     )
 }
