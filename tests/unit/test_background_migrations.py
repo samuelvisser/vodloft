@@ -308,3 +308,23 @@ def test_backend_run_validates_background_migration_state_before_uvicorn(
     assert "Background migration error:" in stderr
     assert f"Database is at background migration revision {unknown!r}" in stderr
     assert "does not contain that revision" in stderr
+
+
+def test_first_frame_thumbnails_migration_finishes_without_videos(monkeypatch):
+    from importlib import import_module
+
+    from backend.db.background_migrations import get_background_migration_history
+    from backend.db.background_migrations.runner import BackgroundMigrationContext
+
+    module = import_module("backend.db.background_migrations.versions.4e8a2c7f1d95_first_frame_thumbnails")
+    monkeypatch.setattr(module, "_item_ids", lambda: [])
+    migration = next(m for m in get_background_migration_history() if m.revision == module.revision)
+
+    class Progress:
+        def set(self, *_args, **_kwargs):
+            pass
+
+    context = BackgroundMigrationContext(
+        migration=migration, migration_index=1, migration_total=1, progress=Progress(),
+    )
+    asyncio.run(module.migrate(context))

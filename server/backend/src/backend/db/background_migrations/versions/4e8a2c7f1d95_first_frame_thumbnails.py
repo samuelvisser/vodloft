@@ -47,6 +47,8 @@ def _take(item_ids: list[int]) -> None:
 async def migrate(context) -> None:
     item_ids = _item_ids()
     total = len(item_ids)
+    if total == 0:
+        return
     for start in range(0, total, _BATCH):
         context.raise_if_cancelled()
         context.update_progress(start, total, _MESSAGE)
