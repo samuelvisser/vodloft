@@ -2,6 +2,7 @@ import {createSelectRegistry, SelectRegistry} from "../utils/selectRegistry";
 import {useMemo} from "react";
 import type {LocalMediaProfileRead} from "./schemas/local_media_profile";
 import type {LocalMediaProfileSubtitleMode} from "./schemas/local_media_profile_base";
+import {SourceFeature, type SourceFeatureValue, type SourceRead, sourceHas} from "./schemas/source";
 
 
 export const PreferredFormatReg = createSelectRegistry("PreferredFormat", {
@@ -73,11 +74,35 @@ export function isCollectionLocalMediaProfileAvailableFor(
     return scope === 'both' || scope === collectionType
 }
 
+/** The Feature a Source needs before a profile of this type can store its media. */
+const PROFILE_TYPE_SOURCE_FEATURES: Record<LocalMediaProfileType, SourceFeatureValue> = {
+    collection: SourceFeature.COLLECTIONS,
+    movie: SourceFeature.MOVIES,
+    video: SourceFeature.VIDEOS,
+}
+
+/** Every Source whose media a Local Media Profile of this type can store. */
+export function sourcesForLocalMediaProfileType(
+    sources: readonly SourceRead[] | undefined,
+    type: LocalMediaProfileType,
+): SourceRead[] {
+    return (sources ?? []).filter((source) => sourceHas(source, PROFILE_TYPE_SOURCE_FEATURES[type]))
+}
+
+/** A profile without a list of Sources is offered for every Source. */
+export function isLocalMediaProfileAvailableForSource(
+    profile: Pick<LocalMediaProfileRead, 'sourceKeys'>,
+    sourceKey: string | null | undefined,
+): boolean {
+    return !sourceKey || profile.sourceKeys == null || profile.sourceKeys.includes(sourceKey)
+}
+
 /** Build a select registry for Local Media Profiles from an array (no memoization). */
 export function buildLocalMediaProfileSelectRegistry(
     mediaProfiles: readonly LocalMediaProfileRead[] | undefined | null,
     type?: LocalMediaProfileType,
     collectionType?: CollectionLocalMediaProfileContext,
+    sourceKey?: string | null,
 ): SelectRegistry{
     const spec: Record<string, { label: string }> = {}
     const values: string[] = []
@@ -85,6 +110,7 @@ export function buildLocalMediaProfileSelectRegistry(
         for (const p of mediaProfiles) {
             if (type && p.type !== type) continue
             if (type === 'collection' && collectionType && !isCollectionLocalMediaProfileAvailableFor(p, collectionType)) continue
+            if (!isLocalMediaProfileAvailableForSource(p, sourceKey)) continue
             const id = (p as any).id
             const name = (p as any).name ?? String(id)
             if (typeof id === 'number') {
@@ -102,9 +128,10 @@ export function useLocalMediaProfileSelectRegistry(
     mediaProfiles: readonly LocalMediaProfileRead[] | undefined | null,
     type?: LocalMediaProfileType,
     collectionType?: CollectionLocalMediaProfileContext,
+    sourceKey?: string | null,
 ): SelectRegistry{
     return useMemo(
-        (): SelectRegistry => buildLocalMediaProfileSelectRegistry(mediaProfiles, type, collectionType),
-        [mediaProfiles, type, collectionType],
+        (): SelectRegistry => buildLocalMediaProfileSelectRegistry(mediaProfiles, type, collectionType, sourceKey),
+        [mediaProfiles, type, collectionType, sourceKey],
     )
 }

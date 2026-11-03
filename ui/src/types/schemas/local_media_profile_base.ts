@@ -55,6 +55,8 @@ export const LocalMediaProfileSchemaRequest = z.object({
     thumbnailMode: LocalMediaProfileThumbnailModeSchema.default('system'),
     metadataMode: LocalMediaProfileMetadataModeSchema.default('system'),
     subtitleMode: LocalMediaProfileSubtitleModeSchema.default('sidecar'),
+    /** The Sources the profile is offered for; null offers it for every Source, including ones added later. */
+    sourceKeys: z.array(z.string()).min(1, 'Choose at least one Source').nullable().default(null),
     ...QualityAndLanguageFields,
 })
 
@@ -93,6 +95,7 @@ export const LocalMediaProfileSchemaResponse = z.looseObject({
     subtitleMode: LocalMediaProfileSubtitleModeSchema.default('sidecar'),
     ...QualityAndLanguageFields,
     appendMediaTypeToFilename: z.boolean().optional().default(false),
+    sourceKeys: z.array(z.string()).nullable().optional().transform((value) => value ?? null),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
 })

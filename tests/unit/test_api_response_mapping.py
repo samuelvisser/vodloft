@@ -58,7 +58,9 @@ def test_download_profile_view_uses_relationship_aliases():
         ep_id_type_list=["ep", "aux"],
         created_at=NOW,
         updated_at=NOW,
-        collection=SimpleNamespace(title="Collection", slug="collection", type="series", episode_identifier="seasonal"),
+        collection=SimpleNamespace(
+            title="Collection", slug="collection", type="series", source_key="ytdlp", episode_identifier="seasonal",
+        ),
         local_media_profile=SimpleNamespace(name="Audio", preferred_format="audio"),
         download_with_countdown=False,
         redownload_final=False,
@@ -86,6 +88,7 @@ def test_download_profile_view_uses_relationship_aliases():
     assert view.collection_title == "Collection"
     assert view.local_media_profile_name == "Audio"
     assert view.collection_episode_identifier == "seasonal"
+    assert view.collection_source_key == "ytdlp"
     assert view.download_episode_count == 25
 
 

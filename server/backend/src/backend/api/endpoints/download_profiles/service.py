@@ -140,7 +140,11 @@ def _resolve_or_create_seasons_for_collection(s: Session, collection_id: int, se
 
 
 def create_download_profile(s: Session, body: DownloadProfileAPICreate) -> DownloadProfileAPIRead:
-    require_local_media_profile_type(s, body.local_media_profile_id, LocalMediaProfileType.COLLECTION)
+    collection = s.get(Collection, body.collection_id)
+    require_local_media_profile_type(
+        s, body.local_media_profile_id, LocalMediaProfileType.COLLECTION,
+        collection.source_key if collection is not None else None,
+    )
     require_unique_download_profile_episode_types(
         s,
         collection_id=body.collection_id,
@@ -163,7 +167,11 @@ def update_download_profile(s: Session, download_profile_id: int, body: Download
     if item is None:
         raise HTTPException(status_code=404, detail="Download profile not found")
 
-    require_local_media_profile_type(s, body.local_media_profile_id, LocalMediaProfileType.COLLECTION)
+    # A profile limited to other Sources after it was chosen stays usable where it already is.
+    require_local_media_profile_type(
+        s, body.local_media_profile_id, LocalMediaProfileType.COLLECTION,
+        item.collection.source_key if body.local_media_profile_id != item.local_media_profile_id else None,
+    )
     require_unique_download_profile_episode_types(
         s,
         collection_id=item.collection_id,

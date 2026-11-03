@@ -16,6 +16,7 @@ from fastapi import HTTPException
 from backend.db.models import Episode, Season, Collection, CollectionLocalMediaProfile
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.episode_types import EpisodePublishStatus
+from backend.services.local_media_profile_sources import profile_offered_for_source
 from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope
 from backend.types.collection_types import CollectionType
 from backend.api.endpoints.media_downloads.service import create_new_episode_download
@@ -347,6 +348,8 @@ def request_collection_download_all(
         raise HTTPException(status_code=422, detail="Select a Collection Local Media Profile")
     if profile.collection_scope not in (CollectionLocalMediaProfileScope.BOTH, collection.type):
         raise HTTPException(status_code=422, detail="Local Media Profile is not available for this collection type")
+    if not profile_offered_for_source(profile.source_keys, collection.source_key):
+        raise HTTPException(status_code=422, detail="Local Media Profile is not available for this Source")
 
     if not body.episode_types:
         raise HTTPException(status_code=422, detail="Select at least one episode type")

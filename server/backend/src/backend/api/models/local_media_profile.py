@@ -27,6 +27,7 @@ from backend.types.local_media_profile_types import (
     VideoContainer,
     goal_video_codecs,
 )
+from backend.services.local_media_profile_sources import sources_for_profile_type
 from backend.utils.output_template_formatting import normalize_output_template_expression_spacing
 from backend.utils.helpers import slugify
 
@@ -73,6 +74,8 @@ class LocalMediaProfileAPIBaseIn(RequestBase):
     audio_format: AudioFormat = AudioFormat.M4A
     audio_language: str | None = Field(default=None, max_length=16)
     output_template: str = Field(min_length=16, max_length=4096)
+    source_keys: list[str] | None = Field(default=None, max_length=50)
+    """The Sources the profile is offered for; None offers it for every Source."""
 
     @field_validator("subtitle_languages")
     @classmethod
@@ -95,6 +98,23 @@ class LocalMediaProfileAPIBaseIn(RequestBase):
         if not any(choice.allowed for choice in value):
             raise ValueError("Allow at least one video codec")
         return value
+
+    @model_validator(mode="after")
+    def _known_sources(self):
+        if self.source_keys is None:
+            return self
+        available = [source.id for source in sources_for_profile_type(self.type)]
+        if not self.source_keys:
+            raise ValueError("Choose at least one Source")
+        unknown = [key for key in self.source_keys if key not in available]
+        if unknown:
+            raise ValueError(f"This profile cannot be offered for {', '.join(unknown)}")
+        # Every Source chosen means every Source, so Sources added later are offered the profile too.
+        if set(self.source_keys) >= set(available):
+            self.source_keys = None
+        else:
+            self.source_keys = [key for key in available if key in self.source_keys]
+        return self
 
     @model_validator(mode="after")
     def _goal_sets_codecs(self):
@@ -126,7 +146,7 @@ class LocalMediaProfileAPIBaseIn(RequestBase):
 
 
 _KEPT_WHEN_UNSET = {
-    "subtitle_mode", "subtitle_languages", "subtitle_language_mode", "quality_goal", "video_codecs",
+    "source_keys", "subtitle_mode", "subtitle_languages", "subtitle_language_mode", "quality_goal", "video_codecs",
     "codec_fallback", "container", "audio_codec", "audio_format", "audio_language",
 }
 
@@ -154,6 +174,7 @@ class LocalMediaProfileAPIBaseOut(ResponseBase):
     audio_format: Union[AudioFormat, str]
     audio_language: str | None = None
     append_media_type_to_filename: bool
+    source_keys: list[str] | None = None
     created_at: datetime
     updated_at: datetime
 

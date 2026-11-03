@@ -52,6 +52,7 @@ from backend.db.models.media_download import (
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.types.episode_types import EpisodePublishStatus
+from backend.services.local_media_profile_sources import profile_offered_for_source
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.types.media_types import MediaType
 from downloader.storage.artifacts import remove_download_artifacts
@@ -628,7 +629,7 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
         raise HTTPException(status_code=422, detail="Episode media is still processing on Daily Wire")
     _ensure_downloadable(episode)
 
-    profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.COLLECTION)
+    profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.COLLECTION, episode.source_key)
     redownload_when_final = (
         body.redownload_when_final
         and episode.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN.value
@@ -677,7 +678,7 @@ def create_movie_download(
 ) -> MovieMediaDownload:
     """Persist a download target for an indexed movie."""
     _ensure_downloadable(movie)
-    profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.MOVIE)
+    profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.MOVIE, movie.source_key)
     if not movie.is_downloadable:
         source_name = get_source(movie.source_key).name
         raise HTTPException(status_code=422, detail=f"{source_name} marks this movie as unavailable for download")
@@ -728,7 +729,7 @@ def create_movie_extra_download(
     body: MediaDownloadAPICreate,
 ) -> MovieExtraMediaDownload:
     """Persist a download target for an extra of an indexed movie."""
-    profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.MOVIE)
+    profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.MOVIE, movie.source_key)
     movie_extra: Optional[MovieExtra] = (
         s.query(MovieExtra)
         .filter(MovieExtra.movie_id == movie.id, MovieExtra.slug == movie_extra_slug)
@@ -783,7 +784,7 @@ def create_video_download(
 ) -> VideoMediaDownload:
     """Persist a download target for a single video."""
     _ensure_downloadable(video)
-    profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.VIDEO)
+    profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.VIDEO, video.source_key)
     existing: Optional[VideoMediaDownload] = (
         s.query(VideoMediaDownload)
         .filter(
@@ -830,13 +831,15 @@ _PROFILE_TYPE_LABELS = {
 }
 
 
-def _get_profile(s: Session, profile_id: int, expected_type: LocalMediaProfileType) -> LocalMediaProfileBase:
+def _get_profile(s: Session, profile_id: int, expected_type: LocalMediaProfileType, source_key: str) -> LocalMediaProfileBase:
     profile: Optional[LocalMediaProfileBase] = s.get(LocalMediaProfileBase, profile_id)
     if profile is None:
         raise HTTPException(status_code=404, detail="Local media profile not found")
     if profile.type != expected_type.value:
         label = _PROFILE_TYPE_LABELS[expected_type]
         raise HTTPException(status_code=422, detail=f"{label} require a {expected_type.value.title()} Local Media Profile")
+    if not profile_offered_for_source(profile.source_keys, source_key):
+        raise HTTPException(status_code=422, detail=f"Local Media Profile '{profile.name}' is not available for this Source")
     return profile
 
 
