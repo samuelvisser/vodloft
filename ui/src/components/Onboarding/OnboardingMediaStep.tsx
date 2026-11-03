@@ -4,6 +4,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import '../Import/Import.css'
 import ImportFlow from '../Import/ImportFlow'
 import {useImporters} from '../../lib/imports'
+import type {ImportRun} from '../../types/schemas/imports'
 import {faIcon} from '../../icons/faIcon'
 
 type Props = {
@@ -11,7 +12,8 @@ type Props = {
     onBack: () => void
     onImport: () => void
     onStartFresh: () => void
-    onImported: () => void
+    /** Finish onboarding, then open ``path`` (the home page when left out). */
+    onImported: (path?: string) => void
 }
 
 /** "Your media": start a library fresh, or move one over from Pinchflat or WireLoft. */
@@ -19,6 +21,14 @@ export default function OnboardingMediaStep({importing, onBack, onImport, onStar
     const importers = useImporters()
     const [chosen, setChosen] = useState<string | null>(null)
     const importer = importers.data?.find((item) => item.key === chosen)
+    // Once an import has started, VODLoft carries on with it; there is nothing left to start fresh.
+    const [started, setStarted] = useState(false)
+
+    function onRunStatus(run: ImportRun) {
+        setStarted(true)
+        // A Pinchflat import goes on to index each Collection, which the settings page shows as it happens.
+        if (run.status === 'waiting' && importer?.key === 'pinchflat') onImported(`/settings?tab=import&open=${importer.key}`)
+    }
 
     if (importing && importer) {
         return (
@@ -31,12 +41,15 @@ export default function OnboardingMediaStep({importing, onBack, onImport, onStar
                         are; VODLoft takes them over in place.
                     </p>
                 </div>
-                <ImportFlow importer={importer} onFinished={(run) => run.status === 'finished' && onImported()}/>
+                <ImportFlow importer={importer} onRunStatus={onRunStatus}
+                            onFinished={(run) => run.status === 'finished' && onImported()}/>
                 <div className="onboarding-stage-actions">
                     <button className="btn" type="button" onClick={onBack}>Back</button>
-                    <button className="btn" type="button" onClick={onStartFresh}>
-                        Skip and start fresh
-                    </button>
+                    {started ? (
+                        <button className="btn" type="button" onClick={() => onImported()}>Open VODLoft now</button>
+                    ) : (
+                        <button className="btn" type="button" onClick={onStartFresh}>Skip and start fresh</button>
+                    )}
                 </div>
             </>
         )

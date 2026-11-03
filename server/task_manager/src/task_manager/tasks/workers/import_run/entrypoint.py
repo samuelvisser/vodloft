@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 
 from controller.db_utils import db_session
+from task_manager.scheduler.operation_context import operation_context
 from task_manager.scheduler.registry import task
 from task_manager.scheduler.results import TaskResult
 
@@ -11,7 +12,9 @@ def _run(import_run_id: int) -> TaskResult:
     from backend.db.models import ImportRun
     from backend.services.imports import WAITING, apply_run
 
-    with db_session() as session:
+    # The work an import starts, such as indexing each new Collection, has operations of its own. Inheriting
+    # the import's operation would drop every task that starts after the import's own task has finished.
+    with operation_context(()), db_session() as session:
         counts = apply_run(session, import_run_id)
         run = session.get(ImportRun, import_run_id)
         waits_for_indexing = run is not None and run.status == WAITING
@@ -32,7 +35,8 @@ def _adopt(import_step_id: int) -> TaskResult:
     from backend.services.imports import fail_step, run_step
 
     try:
-        with db_session() as session:
+        # Like the import itself: the Download Profile run it starts must outlive this task's operation.
+        with operation_context(()), db_session() as session:
             counts = run_step(session, import_step_id)
     except Exception as exc:
         # The files adopted so far stay adopted; the import shows this Collection as failed instead of waiting.

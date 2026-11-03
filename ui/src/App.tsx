@@ -95,9 +95,9 @@ export default function App() {
     return (
       <OnboardingFlow
         adminPasswordConfigured={onboardingStatus.adminPasswordConfigured}
-        onComplete={() => {
+        onComplete={(path) => {
           setOnboardingStatus((current) => current ? { ...current, completed: true } : current)
-          navigate('/', { replace: true })
+          navigate(path ?? '/', { replace: true })
           toast.success(
             'VODLoft is setup. Look around a little and explore your very own media manager. Enjoy!',
             { duration: 8000 },
