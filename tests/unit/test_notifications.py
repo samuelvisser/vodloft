@@ -323,3 +323,29 @@ def test_push_reaches_the_push_service(monkeypatch):
 
     result = push.send_push(ec.generate_private_key(ec.SECP256R1()), SimpleNamespace(encrypted_subscription="x"), {"title": "Test"})
     assert result == "SENT" and sent == ["https://web.push.apple.com/device"]
+
+
+def test_a_crash_fails_at_once_and_a_retry_shows_when_it_is_tried_again(db, monkeypatch):
+    """History must not show "Waiting" for a message that already failed."""
+    from backend.api.endpoints.notifications.service import history
+    from backend.services.notifications import Event, delivery
+
+    _rule(db, "download_failed")
+    _device(db, name="Phone")
+    _emit(db, Event.DOWNLOAD_FAILED, dedupe_key="one")
+    monkeypatch.setattr(delivery, "vapid_key", lambda session: None)
+
+    def broken(*_args):
+        raise ValueError("misconfigured")
+
+    monkeypatch.setattr(delivery, "send_push", broken)
+    delivery.deliver_pending(db, now=NOW + timedelta(minutes=1))
+    (row,) = history(db)
+    assert (row.status, row.error, row.retry_at) == ("FAILED", "Sending failed (ValueError)", None)
+
+    _emit(db, Event.DOWNLOAD_FAILED, dedupe_key="two")
+    monkeypatch.setattr(delivery, "send_push", lambda *_args: "RETRY")
+    delivery.deliver_pending(db, now=NOW + timedelta(minutes=1))
+    retried = history(db)[0]
+    assert retried.status == "PENDING" and retried.error == "The push service did not accept it"
+    assert retried.retry_at is not None

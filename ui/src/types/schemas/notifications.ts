@@ -100,6 +100,8 @@ export const DeliveryReadSchema = z.object({
     status: z.enum(['PENDING', 'SENT', 'FAILED', 'CANCELED']),
     error: z.string().nullable(),
     at: ApiDateTimeSchema,
+    /** When a failed attempt is tried again; only while it waits for that. */
+    retryAt: ApiDateTimeSchema.nullable().optional(),
 })
 export type DeliveryRead = z.infer<typeof DeliveryReadSchema>
 

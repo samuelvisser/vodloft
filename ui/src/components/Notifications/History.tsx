@@ -7,6 +7,11 @@ const STATUS_LABELS: Record<DeliveryRead['status'], string> = {
     CANCELED: 'Not sent',
 }
 
+/** A failed attempt that VODLoft tries again, rather than one still waiting for its first try. */
+function retrying(delivery: DeliveryRead): boolean {
+    return delivery.status === 'PENDING' && !!delivery.retryAt
+}
+
 /** What was sent lately, newest first, with the reason when something failed. */
 export default function History({deliveries, empty}: {deliveries: DeliveryRead[]; empty: string}) {
     if (deliveries.length === 0) return <p className="notif-empty">{empty}</p>
@@ -23,10 +28,13 @@ export default function History({deliveries, empty}: {deliveries: DeliveryRead[]
                             <td>{delivery.title}</td>
                             <td>{delivery.destination}</td>
                             <td>
-                                <span className={`notif-delivery notif-delivery--${delivery.status.toLowerCase()}`}>
-                                    {STATUS_LABELS[delivery.status]}
+                                <span className={`notif-delivery notif-delivery--${retrying(delivery) ? 'failed' : delivery.status.toLowerCase()}`}>
+                                    {retrying(delivery) ? 'Failed, trying again' : STATUS_LABELS[delivery.status]}
                                 </span>
                                 {delivery.error ? <small>{delivery.error}</small> : null}
+                                {retrying(delivery) ? (
+                                    <small>Next try at {delivery.retryAt!.toLocaleTimeString(undefined, {hour: '2-digit', minute: '2-digit'})}</small>
+                                ) : null}
                             </td>
                         </tr>
                     ))}

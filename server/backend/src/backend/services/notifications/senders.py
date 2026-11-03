@@ -31,6 +31,8 @@ _LOG_PREFIX = re.compile(r"^\d{4}-\d\d-\d\d [\d:,]+ - [A-Z]+ - ")
 class Outcome:
     delivered: bool
     error: str | None = None
+    retry: bool = True
+    """False when trying again cannot help, such as a fault in VODLoft itself."""
 
 
 def _short(error: str) -> str:

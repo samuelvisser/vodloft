@@ -212,6 +212,8 @@ class DeliveryRead(ResponseBase):
     status: str
     error: str | None
     at: datetime
+    retry_at: datetime | None = None
+    """When a failed attempt is tried again; set only while it is waiting for that."""
 
 
 class DeviceRead(ResponseBase):
