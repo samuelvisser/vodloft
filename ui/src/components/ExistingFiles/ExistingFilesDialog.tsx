@@ -5,7 +5,7 @@ import toast from 'react-hot-toast'
 import {faIcon} from '../../icons/faIcon'
 import SimpleSelect from '../common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
-import type {ExistingFile, ExistingFilesScan} from '../../types/schemas/existing_files'
+import type {ExistingFile, ExistingFileEpisode, ExistingFilesScan} from '../../types/schemas/existing_files'
 import ExistingFilesSetup, {ExistingFilesSetupValue, layoutTemplate} from './ExistingFilesSetup'
 import {adoptFiles, finishScan, startScan, useExistingFilesScan} from './api'
 import './ExistingFiles.css'
@@ -22,17 +22,17 @@ type Props = {
     onRename?: (localMediaProfileId: number) => void
 }
 
-type Filter = 'certain' | 'likely' | 'review' | 'unmatched' | 'adopted'
-const FILTER_LABELS: Record<Filter, string> = {
+export type Filter = 'certain' | 'likely' | 'review' | 'unmatched' | 'adopted'
+export const FILTER_LABELS: Record<Filter, string> = {
     certain: 'Matched for certain',
     likely: 'Likely',
     review: 'Please check',
     unmatched: 'Not matched',
     adopted: 'Adopted',
 }
-const SHOWN = 200
+export const SHOWN = 200
 
-function filterOf(file: ExistingFile): Filter {
+export function filterOf(file: ExistingFile): Filter {
     if (file.adopted) return 'adopted'
     return file.confidence ?? 'unmatched'
 }
@@ -246,7 +246,9 @@ export default function ExistingFilesDialog({collectionSlug, collectionTitle, pr
 }
 
 type ResultsProps = {
-    scan: ExistingFilesScan
+    scan: Pick<ExistingFilesScan, 'folder' | 'heldDownloadProfiles' | 'episodesWithoutFile'> & {counts?: ExistingFilesScan['counts']}
+    /** Name each episode's Collection, for a review of several Collections. */
+    showCollection?: boolean
     filter: Filter
     setFilter: (filter: Filter) => void
     visible: ExistingFile[]
@@ -256,7 +258,7 @@ type ResultsProps = {
     setPick: (path: string, episodeId: number | null) => void
 }
 
-function Results({scan, filter, setFilter, visible, more, onMore, picks, setPick}: ResultsProps) {
+export function Results({scan, showCollection = false, filter, setFilter, visible, more, onMore, picks, setPick}: ResultsProps) {
     const counts = scan.counts!
     return (
         <div className="existing-files-results">
@@ -289,9 +291,10 @@ function Results({scan, filter, setFilter, visible, more, onMore, picks, setPick
                             <span role="cell" className="existing-files-path" title={file.path}>{fileName(file.path, scan.folder)}</span>
                             <span role="cell">
                                 {(filter === 'review' || filter === 'unmatched') ? (
-                                    <EpisodePick file={file} value={picks[file.path]} onChange={(id) => setPick(file.path, id)}/>
+                                    <EpisodePick file={file} showCollection={showCollection} value={picks[file.path]}
+                                                 onChange={(id) => setPick(file.path, id)}/>
                                 ) : (
-                                    file.episode ? <EpisodeLabel episode={file.episode}/> : 'no match'
+                                    file.episode ? <EpisodeLabel episode={file.episode} showCollection={showCollection}/> : 'no match'
                                 )}
                                 {file.note && <div className="help">{file.note}</div>}
                             </span>
@@ -307,11 +310,19 @@ function Results({scan, filter, setFilter, visible, more, onMore, picks, setPick
     )
 }
 
-function EpisodeLabel({episode}: {episode: {title: string, date?: string | null}}) {
-    return <>{episode.title}{episode.date && <span className="existing-files-date"> · {episode.date}</span>}</>
+function EpisodeLabel({episode, showCollection}: {episode: ExistingFileEpisode, showCollection: boolean}) {
+    return (
+        <>
+            {episode.title}
+            {episode.date && <span className="existing-files-date"> · {episode.date}</span>}
+            {showCollection && <span className="existing-files-date"> · {episode.collectionTitle}</span>}
+        </>
+    )
 }
 
-function EpisodePick({file, value, onChange}: {file: ExistingFile, value?: number, onChange: (id: number | null) => void}) {
+type EpisodePickProps = {file: ExistingFile, showCollection: boolean, value?: number, onChange: (id: number | null) => void}
+
+function EpisodePick({file, showCollection, value, onChange}: EpisodePickProps) {
     const options = [...(file.episode ? [file.episode] : []), ...file.candidates]
         .filter((episode, index, all) => all.findIndex((other) => other.id === episode.id) === index)
     const registry = useMemo(() => createSelectRegistry(
@@ -319,11 +330,11 @@ function EpisodePick({file, value, onChange}: {file: ExistingFile, value?: numbe
         {
             '': {label: "Don't adopt"},
             ...Object.fromEntries(options.map((episode) => [
-                String(episode.id), {label: `${episode.title}${episode.date ? ` (${episode.date})` : ''}`},
+                String(episode.id), {label: `${episode.title}${episode.date ? ` (${episode.date})` : ''}${showCollection ? ` · ${episode.collectionTitle}` : ''}`},
             ])),
         },
         ['', ...options.map((episode) => String(episode.id))],
-    ), [options.map((episode) => episode.id).join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
+    ), [options.map((episode) => episode.id).join(','), showCollection]) // eslint-disable-line react-hooks/exhaustive-deps
     if (options.length === 0) return <span className="help">No episode looks like this file.</span>
     return (
         <SimpleSelect

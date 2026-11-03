@@ -16,6 +16,7 @@ from backend.services.existing_files import (
     default_folder,
     finish_scan,
     list_folders,
+    profile_review,
     request_scan,
     scan_view,
 )
@@ -26,6 +27,7 @@ from ....models.existing_files import (
     ExistingFilesFinishAPIRequest,
     ExistingFilesFinishAPIResult,
     ExistingFilesOpenScanAPIRead,
+    ExistingFilesProfileReviewAPIRead,
     ExistingFilesScanAPIRead,
     ExistingFilesScanAPIRequest,
     ExistingFilesScanSummaryAPIRead,
@@ -94,6 +96,16 @@ def existing_files_open():
             })
             for scan, collection, profile in rows
         ]
+
+
+@router.get(
+    "/existing-files/profiles/{local_media_profile_id}", dependencies=_MANAGE,
+    response_model=ExistingFilesProfileReviewAPIRead,
+)
+def existing_files_profile(local_media_profile_id: int):
+    """The open scans of one Local Media Profile, as one review of its whole folder."""
+    with db_session() as s:
+        return ExistingFilesProfileReviewAPIRead.model_validate(profile_review(s, _profile(s, local_media_profile_id)))
 
 
 @router.get("/{collection_slug}/existing-files/scans", dependencies=_MANAGE, response_model=list[ExistingFilesScanSummaryAPIRead])

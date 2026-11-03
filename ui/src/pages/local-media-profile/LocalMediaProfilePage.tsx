@@ -9,6 +9,8 @@ import ActionConfirmDialogue from '../../components/ActionConfirmDialogue/Action
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import OpaqueOutputTemplateCode from '../../components/LocalMediaProfile/OpaqueOutputTemplateCode'
+import ProfileExistingFilesDialog from '../../components/ExistingFiles/ProfileExistingFilesDialog'
+import {useOpenExistingFilesScans} from '../../components/ExistingFiles/api'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
 import {useLocalMediaProfileView} from '../../lib/queries'
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
@@ -42,9 +44,14 @@ export default function LocalMediaProfilePage() {
     const [deleteProfileConfirm, setDeleteProfileConfirm] = useState(false)
     const [deletingProfile, setDeletingProfile] = useState(false)
     const [operationControlBusy, setOperationControlBusy] = useState<string | null>(null)
+    const [reviewOpen, setReviewOpen] = useState(false)
 
     const profile = data?.profile
     const statistics = data?.statistics
+    const {data: openScans} = useOpenExistingFilesScans()
+    const reviews = (openScans ?? []).filter((scan) => scan.localMediaProfileId === profile?.id)
+    const found = reviews.reduce((total, scan) => total + scan.counts.certain + scan.counts.likely + scan.counts.review, 0)
+    const adoptedFiles = reviews.reduce((total, scan) => total + scan.counts.adopted, 0)
 
     const renameOperation = useActiveOperation(
         'local_media_profile.rename_files',
@@ -179,6 +186,24 @@ export default function LocalMediaProfilePage() {
             <div className="view-header">
                 <h1 id="local-media-profile-title">{profile.name}</h1>
             </div>
+
+            {reviews.length > 0 && (
+                <div className="form-info-card existing-files-banner" role="status">
+                    <span>
+                        <FontAwesomeIcon icon={faIcon('fass', 'file-import')} aria-hidden="true"/>{' '}
+                        <strong>Match existing files:</strong> {found} existing file{found === 1 ? '' : 's'} found
+                        for {reviews.length} collection{reviews.length === 1 ? '' : 's'}, {adoptedFiles} adopted.
+                    </span>
+                    <button type="button" className="btn" onClick={() => setReviewOpen(true)}>Review</button>
+                </div>
+            )}
+            {reviewOpen && (
+                <ProfileExistingFilesDialog
+                    localMediaProfileId={profile.id}
+                    localMediaProfileName={profile.name}
+                    onClose={() => setReviewOpen(false)}
+                />
+            )}
 
             <article className="local-media-profile-details" aria-label="Local Media Profile details">
                 <header className="local-media-profile-page-header">

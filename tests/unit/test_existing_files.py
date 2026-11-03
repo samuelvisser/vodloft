@@ -321,3 +321,46 @@ def test_folders_and_default_folder(library):
     assert list_folders("/downloads/YouTube")["parent"] == "/downloads/"
     with pytest.raises(ExistingFilesError):
         list_folders("/downloads/missing")
+
+
+def test_a_collection_review_only_shows_its_own_folder_and_the_profile_review_shows_all(library, monkeypatch):
+    from backend.db.models import Collection, DownloadProfile
+    from backend.services import existing_files
+    from backend.types.collection_types import CollectionType, EpisodeIdentifier
+
+    session, collection, profile, download_profile, _episodes, root = library
+    monkeypatch.setattr(existing_files, "queue_scan", lambda *args: None)
+    other = Collection(
+        source_key="ytdlp", uuid="o", slug="smarter-every-day", title="Smarter Every Day", description="",
+        sharing_url="https://www.youtube.com/@smartereveryday", membership_level="FREE",
+        type=CollectionType.SERIES.value, episode_identifier=EpisodeIdentifier.NUMBERED.value,
+        author_name="Destin", author_slug="destin",
+    )
+    other_download_profile = DownloadProfile(collection=other, local_media_profile=profile, enable_profile=True)
+    session.add_all([other, other_download_profile])
+    (root / "YouTube" / "Smarter Every Day").mkdir()
+    (root / "YouTube" / "Smarter Every Day" / "Slow motion.mp4").write_bytes(b"e")
+    session.commit()
+
+    # Both Collections scan the folder they share.
+    for owner, holds in ((collection, download_profile), (other, other_download_profile)):
+        existing_files.request_scan(session, owner, profile, folder="/downloads/YouTube", hold=[holds])
+        session.commit()
+        existing_files.run_scan(session, collection_id=owner.id, local_media_profile_id=profile.id)
+    scans = {scan.collection_id: scan for scan in session.scalars(select(existing_files.ExistingFileScan))}
+
+    # Veritasium's review lists its own unmatched file, not the one of Smarter Every Day.
+    view = existing_files.scan_view(session, scans[collection.id])
+    unmatched = sorted(item["path"] for item in view["files"] if item["episode"] is None)
+    assert unmatched == ["/downloads/YouTube/Veritasium/bonus.mp4"]
+    assert view["counts"]["unmatched"] == 1
+
+    # The profile's review is the whole folder, each file once with its best match.
+    review = existing_files.profile_review(session, profile)
+    paths = [item["path"] for item in review["files"]]
+    assert len(paths) == len(set(paths)) == 5
+    assert review["counts"]["unmatched"] == 2
+    assert review["counts"]["certain"] == view["counts"]["certain"]
+    sewing = next(item for item in review["files"] if "Sewing" in item["path"])
+    assert sewing["episode"]["collection_slug"] == "veritasium"
+    assert [item["collection_slug"] for item in review["collections"]] == ["smarter-every-day", "veritasium"]

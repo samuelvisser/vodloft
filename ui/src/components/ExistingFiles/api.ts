@@ -2,6 +2,8 @@ import {useQuery} from '@tanstack/react-query'
 import {
     ExistingFilesOpenScan,
     ExistingFilesOpenScanSchema,
+    ExistingFilesProfileReview,
+    ExistingFilesProfileReviewSchema,
     ExistingFilesScan,
     ExistingFilesScanSchema,
     ExistingFilesScanSummary,
@@ -63,6 +65,18 @@ export function useOpenExistingFilesScans() {
         queryKey: ['existingFilesOpen'],
         queryFn: () => request('/collections/existing-files/open', ExistingFilesOpenScanSchema.array()),
         refetchInterval: (query) => (query.state.data ?? []).some(
+            (scan) => scan.status === 'waiting' || scan.status === 'scanning',
+        ) ? 4000 : false,
+    })
+}
+
+/** Every open scan of one Local Media Profile, as one review of its whole folder. */
+export function useProfileExistingFiles(localMediaProfileId: number | undefined) {
+    return useQuery<ExistingFilesProfileReview, Error>({
+        queryKey: ['existingFilesProfile', localMediaProfileId],
+        enabled: Boolean(localMediaProfileId),
+        queryFn: () => request(`/collections/existing-files/profiles/${localMediaProfileId}`, ExistingFilesProfileReviewSchema),
+        refetchInterval: (query) => (query.state.data?.collections ?? []).some(
             (scan) => scan.status === 'waiting' || scan.status === 'scanning',
         ) ? 4000 : false,
     })

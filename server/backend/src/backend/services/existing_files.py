@@ -8,9 +8,10 @@ the scan is finished, so they only see the episodes that still have no file.
 """
 from __future__ import annotations
 
+import os
 from collections.abc import Iterable, Sequence
 from dataclasses import asdict
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from sqlalchemy import func, select
@@ -37,6 +38,8 @@ SCAN_TASK_KEY = "scan_existing_files"
 _INDEX_OPERATION_KINDS = ("collection.index", "collection.sync")
 _ACTIVE = ("QUEUED", "RUNNING", "WAITING")
 _SIDECAR_LIMIT = 4 * 1024 * 1024
+_FOLDER_SAMPLE = 20
+_KINDS = ("adopted", "certain", "likely", "review", "unmatched")
 _EVIDENCE_NAMES = {
     "recorded": "Recorded path", "expected_path": "Expected path", "id_in_name": "Id in name",
     "sidecar": "Sidecar", "template": "Template", "title_date": "Title and date",
@@ -244,10 +247,58 @@ def start_waiting_scans(session: Session, collection: Collection) -> int:
     return started
 
 
-def scan_view(session: Session, scan: ExistingFileScan) -> dict[str, Any]:
-    """The scan with the titles and dates of the episodes it names, for the matching screen."""
-    ids = {item["episode_id"] for item in scan.results if item.get("episode_id")}
-    ids |= {candidate for item in scan.results for candidate in item.get("candidates", ())}
+def _collection_folders(session: Session, scan: ExistingFileScan, collection: Collection) -> list[str]:
+    """The folders that hold this Collection's files, as /downloads/ paths.
+
+    These are where its matches and downloads are, and where a few of its episodes
+    would be saved. Several Collections can share one Local Media Profile folder, so
+    the files outside these folders belong to someone else.
+    """
+    folders = {str(PurePosixPath(item["path"]).parent) for item in scan.results if item.get("episode_id")}
+    profile = session.get(LocalMediaProfileBase, scan.local_media_profile_id)
+    downloads = session.scalars(select(MediaDownloadBase.file_path).join(
+        Episode, Episode.id == MediaDownloadBase.media_item_id,
+    ).where(
+        Episode.collection_id == collection.id,
+        MediaDownloadBase.local_media_profile_id == scan.local_media_profile_id,
+        MediaDownloadBase.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value,
+    ).limit(_FOLDER_SAMPLE))
+    expected = []
+    if profile is not None:
+        for episode in session.scalars(select(Episode).where(Episode.collection_id == collection.id)
+                                       .order_by(Episode.published_date.desc()).limit(_FOLDER_SAMPLE)):
+            try:
+                expected.append(resolve_episode_output_path(
+                    profile.output_template, episode=episode, local_media_profile=profile,
+                ))
+            except (CustomIndexNotReadyError, ValueError, OSError):
+                continue
+    for path in [*downloads, *expected]:
+        try:
+            folders.add(str(PurePosixPath(virtual_path(Path(path))).parent))
+        except (AdoptionError, OSError, ValueError):
+            continue
+    if not folders:
+        return []
+    root = (scan.folder or "/downloads").rstrip("/")
+    common = os.path.commonpath(sorted(folders))
+    # One folder for the whole Collection, unless its files only meet in the shared folder itself.
+    return [common] if common.startswith(root + "/") else sorted(folders)
+
+
+def scan_view(session: Session, scan: ExistingFileScan, *, whole_folder: bool = False) -> dict[str, Any]:
+    """The scan with the titles and dates of the episodes it names, for the matching screen.
+
+    Files that match none of the Collection's episodes are only listed when they are in
+    the Collection's own folders, unless ``whole_folder`` asks for every file the scan read.
+    """
+    collection = session.get(Collection, scan.collection_id)
+    results = scan.results
+    if not whole_folder and any(not item.get("episode_id") for item in results):
+        folders = tuple(folder + "/" for folder in _collection_folders(session, scan, collection))
+        results = [item for item in results if item.get("episode_id") or item["path"].startswith(folders)]
+    ids = {item["episode_id"] for item in results if item.get("episode_id")}
+    ids |= {candidate for item in results for candidate in item.get("candidates", ())}
     episodes = {
         episode.id: episode
         for episode in session.scalars(select(Episode).where(Episode.id.in_(ids)))
@@ -265,12 +316,12 @@ def scan_view(session: Session, scan: ExistingFileScan) -> dict[str, Any]:
         )
     ) or 0
     matched = {
-        item["episode_id"] for item in scan.results
+        item["episode_id"] for item in results
         if item.get("episode_id") and item.get("confidence") in ("certain", "likely") and not item.get("adopted")
     }
-    counts = {key: 0 for key in ("certain", "likely", "review", "unmatched", "adopted")}
-    for item in scan.results:
-        counts["adopted" if item.get("adopted") else item.get("confidence") or "unmatched"] += 1
+    counts = {key: 0 for key in _KINDS}
+    for item in results:
+        counts[_kind(item)] += 1
 
     def episode(episode_id: int | None) -> dict[str, Any] | None:
         found = episodes.get(episode_id) if episode_id else None
@@ -279,6 +330,7 @@ def scan_view(session: Session, scan: ExistingFileScan) -> dict[str, Any]:
         return {
             "id": found.id, "slug": found.slug, "title": found.title,
             "date": found.published_date.date().isoformat() if found.published_date else None,
+            "collection_slug": collection.slug, "collection_title": collection.title,
         }
 
     return {
@@ -301,7 +353,61 @@ def scan_view(session: Session, scan: ExistingFileScan) -> dict[str, Any]:
                 "note": item.get("note"),
                 "adopted": bool(item.get("adopted")),
             }
-            for item in scan.results
+            for item in results
+        ],
+    }
+
+
+def _kind(file: dict[str, Any]) -> str:
+    return "adopted" if file.get("adopted") else file.get("confidence") or "unmatched"
+
+
+def profile_review(session: Session, profile: LocalMediaProfileBase) -> dict[str, Any]:
+    """Every open scan of one Local Media Profile as one review of its whole folder.
+
+    A file several Collections' scans read is listed once, with its best match; the
+    episodes the other scans offered for it stay as candidates.
+    """
+    rows = session.execute(
+        select(ExistingFileScan, Collection).join(Collection, Collection.id == ExistingFileScan.collection_id)
+        .where(ExistingFileScan.local_media_profile_id == profile.id, ExistingFileScan.status != FINISHED)
+        .order_by(Collection.title)
+    ).all()
+    files: dict[str, dict[str, Any]] = {}
+    offered: dict[str, dict[int, dict[str, Any]]] = {}
+    without_file = held = 0
+    for scan, _collection in rows:
+        if scan.status != READY:
+            continue
+        view = scan_view(session, scan, whole_folder=True)
+        without_file += view["episodes_without_file"]
+        held += view["held_download_profiles"]
+        for file in view["files"]:
+            choices = offered.setdefault(file["path"], {})
+            for candidate in [file["episode"], *file["candidates"]]:
+                if candidate is not None:
+                    choices.setdefault(candidate["id"], candidate)
+            current = files.get(file["path"])
+            if current is None or _KINDS.index(_kind(file)) < _KINDS.index(_kind(current)):
+                files[file["path"]] = file
+    for path, file in files.items():
+        mine = file["episode"]["id"] if file["episode"] else None
+        file["candidates"] = [episode for id_, episode in offered[path].items() if id_ != mine]
+    counts = {key: 0 for key in _KINDS}
+    for file in files.values():
+        counts[_kind(file)] += 1
+    statuses = {scan.status for scan, _collection in rows}
+    return {
+        "status": next((status for status in (READY, SCANNING, WAITING, FAILED) if status in statuses), FINISHED),
+        "folder": default_folder(profile.output_template),
+        "local_media_profile_id": profile.id,
+        "held_download_profiles": held,
+        "counts": counts,
+        "episodes_without_file": without_file,
+        "files": sorted(files.values(), key=lambda file: file["path"]),
+        "collections": [
+            {"collection_slug": collection.slug, "collection_title": collection.title, "status": scan.status}
+            for scan, collection in rows
         ],
     }
 
