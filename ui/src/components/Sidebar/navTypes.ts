@@ -1,3 +1,4 @@
+import type { ComponentType } from 'react'
 import type { IconProp } from '@fortawesome/fontawesome-svg-core'
 import type { Area, Level } from '../../lib/access'
 
@@ -11,6 +12,8 @@ export type BaseNav = {
 export type NavLinkItem = BaseNav & {
   path: string
   end?: boolean
+  /** Drawn over the icon, for a live marker such as running downloads. */
+  iconOverlay?: ComponentType
   children?: never
 }
 

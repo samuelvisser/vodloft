@@ -78,6 +78,45 @@ body {
 }
 
 .nav-item .icon { font-size: 18px; }
+.nav-item .icon { position: relative; display: inline-flex; }
+
+/* Running downloads: a faint arc turning around the Downloads icon. */
+.nav-activity-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1.44em;
+  height: 1.44em;
+  margin: -0.72em 0 0 -0.72em;
+  overflow: visible;
+  pointer-events: none;
+  animation: nav-activity-spin 3.2s linear infinite;
+}
+.nav-activity-ring circle {
+  fill: none;
+  stroke: #fff;
+  stroke-opacity: 0.28;
+  stroke-width: 0.9;
+  stroke-linecap: round;
+  stroke-dasharray: 17.5 64.2;
+}
+.nav-activity-dot {
+  display: none;
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #60a5fa;
+  box-shadow: 0 0 0 2px var(--sidebar-bg);
+  pointer-events: none;
+}
+@keyframes nav-activity-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .nav-activity-ring { display: none; }
+  .nav-activity-dot { display: block; }
+}
 
 .nav-item:hover { background: var(--sidebar-hover); }
 .nav-item.active {

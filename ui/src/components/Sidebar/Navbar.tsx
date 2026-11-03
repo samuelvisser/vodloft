@@ -17,6 +17,7 @@ export default function Navbar({ items }: NavbarProps) {
             <Submenu key={submenu.label} label={submenu.label} icon={submenu.icon} items={submenu.children} />
           )
         }
+        const IconOverlay = item.iconOverlay
         return (
           <NavLink
             key={item.path}
@@ -26,6 +27,7 @@ export default function Navbar({ items }: NavbarProps) {
           >
             <span className="icon" aria-hidden>
               <FontAwesomeIcon icon={item.icon} />
+              {IconOverlay && <IconOverlay />}
             </span>
             <span>{item.label}</span>
           </NavLink>
