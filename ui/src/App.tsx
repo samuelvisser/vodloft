@@ -6,6 +6,7 @@ import Footer from './components/Sidebar/Footer'
 import OnboardingFlow from './components/Onboarding/OnboardingFlow'
 import BackgroundMigrationBanner from './components/BackgroundMigrationBanner/BackgroundMigrationBanner'
 import LoginPage from './pages/LoginPage'
+import PullToRefresh from './components/PullToRefresh/PullToRefresh'
 import OperationNotifier from './components/OperationNotifier/OperationNotifier'
 import {operationNotificationDefinitions} from './components/OperationNotifier/OperationNotificationDefinitions'
 import FrontendPuller from './lib/puller'
@@ -109,6 +110,7 @@ export default function App() {
     <FrontendPuller onUnauthorized={() => setAuthState('no')}>
       <OperationNotifier definitions={operationNotificationDefinitions}>
         <div className="app">
+          <PullToRefresh />
           <Sidebar />
           <main className="content" role="main">
             {/* Deliberately mounted only after onboarding so first-run setup never shows this banner. */}
