@@ -486,7 +486,8 @@ function PreviewStep({importer, onReplace, onFinished}: {
                             </div>
                         </div>
                     )}
-                    {preview.profiles.map((profile) => (
+                    {/* The same order as the Collections list, which groups by profile name. */}
+                    {[...preview.profiles].sort((a, b) => byName(a.name, b.name)).map((profile) => (
                         <ProfilePreview
                             key={profile.externalId}
                             profile={profile}
@@ -621,6 +622,9 @@ const BECOMES_LABELS: Record<string, string> = {
     in_library: 'In your library',
 }
 
+/** Names in the order a person expects: case-insensitive, with numbers in number order. */
+const byName = (a: string, b: string) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'})
+
 /** The collections to import, grouped by the Local Media Profile each one gets. */
 function CollectionList({collections, chosen, onToggle, onChooseAll}: {
     collections: CollectionRow[]
@@ -634,7 +638,6 @@ function CollectionList({collections, chosen, onToggle, onChooseAll}: {
         groups.set(key, [...(groups.get(key) ?? []), item])
     }
     // By profile name, then by collection title; collections without a profile come last.
-    const byName = (a: string, b: string) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'})
     const sorted = [...groups.entries()]
         .sort(([a], [b]) => (a === '') !== (b === '') ? (a === '' ? 1 : -1) : byName(a, b))
         .map(([name, rows]) => [name, [...rows].sort((a, b) => byName(a.title, b.title))] as const)
