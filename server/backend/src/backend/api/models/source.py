@@ -106,6 +106,12 @@ class CookiesAPIRead(ResponseBase):
     status: Optional[CookiesStatusAPIRead] = None
 
 
+class SiteOptionsAPIRead(ResponseBase):
+    """What the site of one collection offers beyond its Source's usual choices."""
+
+    auto_subtitles: bool
+
+
 class EpisodeTagAPIRead(ResponseBase):
     key: str
     label: str

@@ -8,6 +8,7 @@ from backend.security.access import Area, Level
 from backend.security import deps
 from backend.security.deps import requires, requires_any
 from backend.db.models import Collection
+from backend.api.models.source import SiteOptionsAPIRead
 
 router = APIRouter(prefix="/download-profiles", tags=["Download Profiles"])
 
@@ -51,6 +52,23 @@ def download_profiles_skipped_by_filter(collection_id: int, request: Request):
         if collection is None or not deps.request_access(request).allows_source(collection.source_key):
             raise HTTPException(status_code=404, detail="Collection not found")
         return skipped_by_filter(s, collection_id)
+
+
+@router.get("/site-options/{collection_id}", dependencies=[requires_any((Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW))], response_model=SiteOptionsAPIRead)
+def download_profiles_site_options(collection_id: int, request: Request):
+    """Choices only some sites offer, such as YouTube's auto-generated subtitles, for a saved Collection."""
+    with db_session() as s:
+        collection = s.get(Collection, collection_id)
+        if collection is None or not deps.request_access(request).allows_source(collection.source_key):
+            raise HTTPException(status_code=404, detail="Collection not found")
+        return SiteOptionsAPIRead(auto_subtitles=get_source(collection.source_key).auto_subtitles_for(collection.sharing_url))
+
+
+@router.get("/auto-subtitles/{local_media_profile_id}", dependencies=[requires_any((Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.LOCAL_MEDIA_PROFILES, Level.VIEW))], response_model=list[AutoSubtitlesUseAPIRead])
+def download_profiles_auto_subtitles(local_media_profile_id: int, request: Request):
+    """The YouTube Download Profiles that use a Local Media Profile, with their auto-generated subtitle choice."""
+    with db_session() as s:
+        return auto_subtitles_uses(s, local_media_profile_id, deps.request_access(request))
 
 
 @router.get("/{download_profile_id}", dependencies=[requires_any((Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=DownloadProfileAPIRead)

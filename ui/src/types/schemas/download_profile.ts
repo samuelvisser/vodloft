@@ -70,6 +70,7 @@ export const DownloadProfileSchemaRequest = z.object({
     downloadStartingFrom: z.iso.date().nullable().default(null),
     deleteOlderEpisodes: z.boolean().default(true),
     retentionFrom: z.enum(['published', 'downloaded']).default('published'),
+    autoSubtitles: z.enum(['never', 'fallback', 'always']).default('fallback'),
     seasons: z.array(SeasonDetachedSchema).default([]),
     includeUpcomingSeasons: z.boolean().default(true),
     rules: z.array(EpisodeRuleSchema).default([]),
@@ -165,6 +166,7 @@ export const DownloadProfileReadSchema = z.looseObject({
     downloadStartingFrom: z.iso.date().nullable(),
     deleteOlderEpisodes: z.boolean(),
     retentionFrom: z.string(),
+    autoSubtitles: z.string().default('fallback'),
     seasons: z.array(SeasonReadSchema),
     includeUpcomingSeasons: z.boolean(),
     rules: z.array(z.looseObject({
@@ -208,3 +210,14 @@ export const SkippedByFilterSchema = z.object({
     rule: EpisodeRuleSchema,
 })
 export type SkippedByFilter = z.infer<typeof SkippedByFilterSchema>
+
+export const AutoSubtitlesUseSchema = z.object({
+    downloadProfileId: z.number(),
+    collectionId: z.number(),
+    collectionTitle: z.string(),
+    episodeTypes: z.array(z.string()),
+    autoSubtitles: z.string(),
+})
+export type AutoSubtitlesUse = z.infer<typeof AutoSubtitlesUseSchema>
+
+export const SiteOptionsSchema = z.object({autoSubtitles: z.boolean()})

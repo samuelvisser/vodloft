@@ -66,10 +66,12 @@ _PROOF_DIFFERENCES = 20
 _PROFILE_FIELDS = (
     "output_template", "preferred_format", "subtitle_mode", "thumbnail_mode", "metadata_mode",
     "collection_scope", "download_collection_assets", "indexing_values",
+    "subtitle_languages", "subtitle_language_mode", "quality_goal", "video_codecs", "container", "audio_codec",
+    "audio_language",
 )
 _DOWNLOAD_PROFILE_FIELDS = (
     "ep_id_type_list", "download_days_in_past", "download_episode_count", "download_starting_from",
-    "delete_older_episodes", "retention_from",
+    "delete_older_episodes", "retention_from", "auto_subtitles",
 )
 _DEFAULT_SETTINGS = frozenset({"downloads.filename_restriction_mode", "ytdlp.youtube_api_key"})
 
@@ -282,6 +284,13 @@ def _profile_values(profile: CollectionLocalMediaProfile) -> dict[str, object]:
         "metadata_mode": profile.metadata_mode,
         "collection_scope": profile.collection_scope,
         "download_collection_assets": profile.download_collection_assets,
+        "subtitle_languages": list(profile.subtitle_languages),
+        "subtitle_language_mode": profile.subtitle_language_mode,
+        "quality_goal": profile.quality_goal,
+        "video_codecs": [dict(choice) for choice in profile.video_codecs],
+        "container": profile.container,
+        "audio_codec": profile.audio_codec,
+        "audio_language": profile.audio_language,
         "indexing_values": [
             {"key": item.key, "name": item.name, "keep_numbers": item.keep_numbers}
             for item in get_indexing_value_definitions(profile)

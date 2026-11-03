@@ -102,6 +102,10 @@ A source's title filter becomes an **Only download** filter on the title, and it
 **Skip** filters on the duration (see [[Download-Profiles#which-episodes]]). Its retention period deletes downloads that
 many days after downloading, as Pinchflat did, and videos you told Pinchflat never to delete are kept.
 
+A media profile's resolution becomes the Local Media Profile's **Up to** step, its subtitle languages its language
+list, its audio track its audio language, and MKV its container (see [[Local-Media-Profiles#quality]]). Downloading
+auto subtitles becomes **only when there are no real ones** on the Download Profile, which is what Pinchflat did.
+
 You can run the import again. Anything you changed in VODLoft since the last run is kept, and settings a newer
 VODLoft can map, which it reported as unsupported before, are brought over.
 

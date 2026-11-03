@@ -294,7 +294,7 @@ def test_a_ytdlp_playback_plans_a_ytdlp_download(video_sources, session, monkeyp
     plan = download_plans.prepare_download_plan(session, download.id, DownloadTracker())
     assert plan.source.url == "https://clips.example/v/abc"
     assert plan.source.ytdlp_command[:3] == ("yt-dlp", "--cookies", "c.txt")
-    assert "res:720,vcodec:h264,acodec:m4a" in plan.source.ytdlp_command
+    assert "res:720,vcodec:h264,acodec:aac" in plan.source.ytdlp_command
     assert str(plan.requested_destination).endswith("/videos/A Channel/2026-03-04 - Clip abc [abc].mp4")
 
 
@@ -325,3 +325,61 @@ def test_a_ytdlp_download_asks_ytdlp_for_subtitles_as_the_profile_says(video_sou
     else:
         assert [(asset.source_format, asset.publish) for asset in subtitles] == [("ytdlp", publish)]
     assert plan.subtitle_asset_ids == embedded
+
+
+def test_a_ytdlp_download_follows_the_profile_quality_and_subtitle_languages(video_sources, session, monkeypatch):
+    from backend.api.endpoints.media_downloads.service import create_video_download
+    from backend.api.models.media_download import MediaDownloadAPICreate
+    from backend.services import download_plans
+    from backend.services.videos import index_video
+    from downloader.lifecycle import DownloadTracker
+    from sources import PlaybackKind
+
+    monkeypatch.setattr(video_sources, "video_playback", lambda *, slug, url: Playback(url=url, kind=PlaybackKind.YTDLP, command=("yt-dlp",)))
+    profile = _video_profile(
+        session, preferred_format="format_1440p", subtitle_mode="sidecar",
+        subtitle_languages=["nl", "en"], subtitle_language_mode="listed", quality_goal="custom",
+        video_codecs=[{"codec": "av1", "allowed": True}, {"codec": "vp9", "allowed": False},
+                      {"codec": "h264", "allowed": True}, {"codec": "h265", "allowed": False}],
+        container="mkv", audio_codec="opus", audio_language="nl",
+    )
+    video, _ = index_video(session, "clips", video_sources.video_details("https://clips.example/v/abc"))
+    download = create_video_download(session, video, MediaDownloadAPICreate(local_media_profile_id=profile.id))
+    session.commit()
+
+    plan = download_plans.prepare_download_plan(session, download.id, DownloadTracker())
+    command = plan.source.ytdlp_command
+    assert "res:1440,vcodec:av01,acodec:opus" in command
+    assert any("av0?1|avc|h264" in part and "language^=nl" in part for part in command)
+    assert plan.source.extension == "mkv"
+    # A single video has no Download Profile, so no auto-generated subtitles.
+    assert (plan.source.ytdlp_subtitles.languages, plan.source.ytdlp_subtitles.auto_generated) == (("nl", "en"), "never")
+
+
+@pytest.mark.parametrize(("container", "audio_only", "embeds"), [("mkv", False, True), ("mp4", False, True), ("opus", True, False)])
+def test_a_ytdlp_download_plans_thumbnails_and_nfo_in_every_container(video_sources, session, monkeypatch, container, audio_only, embeds):
+    from backend.api.endpoints.media_downloads.service import create_video_download
+    from backend.api.models.media_download import MediaDownloadAPICreate
+    from backend.services import download_plans
+    from backend.services.videos import index_video
+    from downloader.lifecycle import DownloadTracker
+    from sources import PlaybackKind
+
+    monkeypatch.setattr(video_sources, "video_playback", lambda *, slug, url: Playback(url=url, kind=PlaybackKind.YTDLP, command=("yt-dlp",)))
+    profile = _video_profile(
+        session, preferred_format="format_audio_only" if audio_only else "format_1080p",
+        thumbnail_mode="embed_and_sidecar", metadata_mode="embed_and_nfo", subtitle_mode="no_subtitles",
+        quality_goal="custom", container="mkv" if container == "mkv" else "mp4", audio_format="opus" if audio_only else "m4a",
+    )
+    video, _ = index_video(session, "clips", video_sources.video_details("https://clips.example/v/abc"))
+    download = create_video_download(session, video, MediaDownloadAPICreate(local_media_profile_id=profile.id))
+    session.commit()
+
+    plan = download_plans.prepare_download_plan(session, download.id, DownloadTracker())
+    assert plan.source.extension == container
+    assets = {asset.id: asset for asset in plan.assets}
+    assert assets["artwork"].url == "https://img.clips.example/abc.jpg" and assets["artwork"].publish
+    assert assets["nfo"].target_suffix == ".nfo" and b"<title>" in assets["nfo"].content
+    # An Opus file gets the thumbnail and NFO beside it; VODLoft can't embed into it.
+    assert (plan.artwork_asset_id == "artwork") is embeds
+    assert bool(plan.metadata_tags) is embeds

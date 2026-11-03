@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.models.source import (
+    SiteOptionsAPIRead,
     ApiKeyAPIUpdate, ApiStatusAPIRead, CookiesAPIRead, EpisodeTagAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultsAPIRead,
     CollectionDetailsAPIRead, SourceAPIRead, SourceDomainAPIRead, SourceDomainAPIUpdate,
 )
@@ -76,6 +77,16 @@ def episode_tags(source_id: str, url: str | None = Query(default=None, max_lengt
     except UnknownSourceError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return [EpisodeTagAPIRead.model_validate(tag) for tag in source.episode_tags_for(url)]
+
+
+@router.get("/sources/{source_id}/site-options", dependencies=[requires_any((Area.LIBRARY, Level.VIEW), (Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW))], response_model=SiteOptionsAPIRead)
+def site_options(source_id: str, url: str = Query(min_length=1, max_length=2048)):
+    """Choices only some sites of a Source offer, such as YouTube's auto-generated subtitles, for the collection at ``url``."""
+    try:
+        source = get_source(source_id)
+    except UnknownSourceError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return SiteOptionsAPIRead(auto_subtitles=source.auto_subtitles_for(url))
 
 
 @router.get("/sources/{source_id}/collection", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=CollectionDetailsAPIRead)

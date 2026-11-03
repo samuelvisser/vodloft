@@ -195,6 +195,7 @@ def execute_download_plan(
                     transfer = partial(
                         download_ytdlp, command=plan.source.ytdlp_command,
                         subtitles_dir=workspace.workspace if ytdlp_subtitles else None,
+                        subtitles=plan.source.ytdlp_subtitles,
                     )
                 else:
                     transfer = download_hls_bundle if plan.source.hls_bundle else download_hls if plan.source.use_hls else download_file
@@ -228,7 +229,7 @@ def execute_download_plan(
         if plan.metadata_tags or plan.artwork_asset_id is not None or plan.subtitle_asset_ids:
             artwork = assets.get(plan.artwork_asset_id) if plan.artwork_asset_id is not None else None
             subtitle_assets = tuple(
-                (asset.spec.language or "und", str(asset.path), asset.spec.forced)
+                (asset.spec.language or "und", str(asset.path), asset.spec.forced, asset.spec.title)
                 for asset_id in plan.subtitle_asset_ids
                 for asset in assets.all(asset_id)
             )
@@ -236,7 +237,7 @@ def execute_download_plan(
                 embed_media(
                     str(media_path), metadata=dict(plan.metadata_tags),
                     thumbnail_path=str(artwork.path) if artwork is not None else None,
-                    subtitles=subtitle_assets,
+                    subtitles=subtitle_assets, first_subtitle_default=plan.first_subtitle_default,
                     audio_only=plan.source.audio_only, ffmpeg_path=plan.ffmpeg_path,
                     should_cancel=tracker.is_canceled,
                 )

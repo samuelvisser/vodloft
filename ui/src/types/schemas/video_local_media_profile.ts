@@ -24,7 +24,7 @@ const VideoLocalMediaProfileBaseSchema = LocalMediaProfileSchemaRequest.extend({
     preferredFormat: z.enum(VideoPreferredFormatReg.values).default('format_1080p'),
 })
 
-// Single videos come from yt-dlp, which VODLoft does not fetch subtitles for yet.
+// New Video profiles start without subtitles; they can be turned on like any other profile.
 export const VideoLocalMediaProfileCreateSchema = VideoLocalMediaProfileBaseSchema.extend({
     ...LocalMediaProfileCreateBaseSchema.shape,
     subtitleMode: LocalMediaProfileSubtitleModeSchema.default('no_subtitles'),

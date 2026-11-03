@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable, Optional
+from typing import Callable, NamedTuple, Optional
 
 
 class MediaKind(str, Enum):
@@ -85,6 +85,13 @@ class DownloadProgress:
         return None
 
 
+class WrittenSubtitle(NamedTuple):
+    """A subtitle a download wrote as SRT next to the media."""
+    language: str
+    path: str
+    auto_generated: bool = False
+
+
 @dataclass(frozen=True)
 class DownloadResult:
     """Outcome of a completed download."""
@@ -92,8 +99,8 @@ class DownloadResult:
     path: str
     bytes_downloaded: int
     segments_downloaded: Optional[int] = None
-    subtitles: tuple[tuple[str, str], ...] = ()
-    """(language, SRT path) of each subtitle the download wrote alongside the media."""
+    subtitles: tuple[WrittenSubtitle, ...] = ()
+    """Each subtitle the download wrote alongside the media, in order of preference."""
 
 
 # Called periodically during a download with a progress snapshot.

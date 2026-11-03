@@ -12,12 +12,13 @@ import re
 import shutil
 import subprocess
 import threading
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 from .errors import DownloadCancelled, DownloadError, EncryptedMediaError, FileTooLargeError, MediaUnavailableError
-from .models import CancelCheck, DownloadProgress, DownloadResult, ProgressCallback
-from .plan import ResolvedDownloadSource
+from .models import CancelCheck, DownloadProgress, DownloadResult, ProgressCallback, WrittenSubtitle
+from .plan import ResolvedDownloadSource, YtdlpSubtitles
 from .source import FORMAT_HEIGHTS
 from .subtitles import webvtt_to_srt
 
@@ -25,29 +26,95 @@ logger = logging.getLogger(__name__)
 
 _PROGRESS = "[vodloft-progress]"
 _FILE = "[vodloft-file]"
-# Only subtitles a person uploaded, in every language, never YouTube's live
-# chat. --ignore-errors turns a subtitle that fails to download into a warning;
-# any other error still ends yt-dlp with a non-zero exit status.
-YTDLP_SUBTITLE_OPTIONS = (
-    "--write-subs", "--sub-langs", "all,-live_chat", "--sub-format", "srt/vtt/best", "--ignore-errors",
-)
-_SUBTITLE_FILE = re.compile(r"^media\.(?P<language>[A-Za-z0-9][A-Za-z0-9_-]{0,34})\.(?P<format>srt|vtt)$")
+_SUBTITLE_FORMAT = ("--sub-format", "srt/vtt/best")
+# Every language, never YouTube's live chat.
+_EVERY_LANGUAGE = "all,-live_chat"
+# media.<language>.<format> from the download; auto.<language>.<format> from
+# the second pass that fetches auto-generated subtitles on their own.
+_SUBTITLE_FILE = re.compile(r"^(?P<stem>media|auto)\.(?P<language>[A-Za-z0-9][A-Za-z0-9_-]{0,34})\.(?P<format>srt|vtt)$")
 _MAX_SUBTITLE_BYTES = 32 * 1024 * 1024
 _UNAVAILABLE_MARKERS = ("video unavailable", "private video", "has been removed", "not available", "http error 404")
 
+VIDEO_CODECS = ("av1", "vp9", "h264", "h265")
+# How yt-dlp names each codec in a format sort, and a filter matching it.
+_SORT_NAMES = {"av1": "av01", "vp9": "vp9", "h264": "h264", "h265": "h265"}
+_CODEC_PATTERNS = {"av1": "av0?1", "vp9": "vp0?9", "h264": "avc|h264", "h265": "hev|hvc|h265"}
+_AUDIO_SORT_NAMES = {"aac": "aac", "opus": "opus"}
+AUDIO_FORMATS = ("m4a", "opus", "mp3")
 
-def ytdlp_format_options(preferred_format: str, *, audio_only: bool) -> tuple[str, ...]:
-    """yt-dlp options for a Local Media Profile's format, always ending in MP4 or M4A."""
+
+@dataclass(frozen=True)
+class YtdlpQuality:
+    """A Local Media Profile's quality choices, for a site yt-dlp downloads from.
+
+    The default takes the highest resolution in any codec, preferring H.264,
+    as MP4 with AAC.
+    """
+    video_codecs: tuple[str, ...] = ("h264", "vp9", "av1", "h265")
+    """The codecs that may be used, most wanted first."""
+    strict: bool = False
+    """Skip a video that has none of ``video_codecs`` instead of taking the best version there is."""
+    container: str = "mp4"
+    audio_codec: str = "aac"
+    audio_format: str = "m4a"
+    """The file format of an audio only download."""
+    audio_language: str | None = None
+    """A dubbed audio track's language; None keeps the language the video was made in."""
+    prefer_small: bool = False
+    """Of two versions at the same resolution and codec, take the smaller one."""
+
+    def __post_init__(self) -> None:
+        if not self.video_codecs or any(codec not in VIDEO_CODECS for codec in self.video_codecs):
+            raise DownloadError(f"Unsupported video codecs {self.video_codecs!r}")
+        if len(set(self.video_codecs)) != len(self.video_codecs):
+            raise DownloadError("Each video codec can be chosen once")
+        if self.container not in ("mp4", "mkv"):
+            raise DownloadError(f"Unsupported video container '{self.container}'")
+        if self.audio_codec not in _AUDIO_SORT_NAMES:
+            raise DownloadError(f"Unsupported audio codec '{self.audio_codec}'")
+        if self.audio_format not in AUDIO_FORMATS:
+            raise DownloadError(f"Unsupported audio format '{self.audio_format}'")
+        if self.audio_language is not None and not re.fullmatch(r"[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*", self.audio_language):
+            raise DownloadError(f"Unsupported audio language '{self.audio_language}'")
+
+
+def _with_language(selector: str, language: str | None) -> list[str]:
+    """``selector`` in the audio language first, then in any language."""
+    if language is None:
+        return [selector]
+    return [f"{selector}[language^={language}]", selector]
+
+
+def ytdlp_format_options(
+    preferred_format: str, *, audio_only: bool, quality: YtdlpQuality = YtdlpQuality(),
+) -> tuple[str, ...]:
+    """yt-dlp options for a Local Media Profile's resolution and quality choices.
+
+    The resolution is a ceiling: yt-dlp takes the highest resolution up to it,
+    or the lowest there is when none fits. Only the allowed codecs are taken,
+    unless the profile takes the best version there is when none of them exists.
+    """
+    language = quality.audio_language
     if audio_only:
-        return ("-f", "bestaudio[ext=m4a]/bestaudio/best", "-x", "--audio-format", "m4a")
+        preferred = {"m4a": "ba[ext=m4a]", "opus": "ba[acodec=opus]", "mp3": "ba"}[quality.audio_format]
+        choices = [*_with_language(preferred, language), *_with_language("ba", language), "b"]
+        return ("-f", "/".join(dict.fromkeys(choices)), "-x", "--audio-format", quality.audio_format)
     height = FORMAT_HEIGHTS.get(preferred_format)
     if height is None:
         raise DownloadError(f"Unsupported preferred format '{preferred_format}'")
-    # Prefer the requested height and MP4-friendly codecs, but take whatever
-    # exists over failing: a 720p-only video still downloads for a 1080p profile.
+    allowed = f"[vcodec~='^({'|'.join(_CODEC_PATTERNS[codec] for codec in quality.video_codecs)})']"
+    choices = [f"bv*{allowed}+{audio}" for audio in _with_language("ba", language)] + [f"b{allowed}"]
+    if not quality.strict:
+        choices += [f"bv*+{audio}" for audio in _with_language("ba", language)] + ["b"]
+    # The resolution comes first, so a higher resolution in a less wanted codec
+    # beats a lower one in the first codec. The sort can only name the first
+    # codec; the filter above keeps the others to the allowed ones.
+    sort = [f"res:{height}", f"vcodec:{_SORT_NAMES[quality.video_codecs[0]]}", f"acodec:{_AUDIO_SORT_NAMES[quality.audio_codec]}"]
+    if quality.prefer_small:
+        sort += ["+size", "+br"]
     return (
-        "-f", "bv*+ba/b", "-S", f"res:{height},vcodec:h264,acodec:m4a",
-        "--merge-output-format", "mp4", "--remux-video", "mp4",
+        "-f", "/".join(choices), "-S", ",".join(sort),
+        "--merge-output-format", quality.container, "--remux-video", quality.container,
     )
 
 
@@ -57,25 +124,47 @@ def resolve_ytdlp_source(
     command: tuple[str, ...],
     preferred_format: str,
     audio_only: bool,
+    quality: YtdlpQuality = YtdlpQuality(),
+    subtitles: YtdlpSubtitles = YtdlpSubtitles(),
     ffmpeg_path: str = "ffmpeg",
 ) -> ResolvedDownloadSource:
     if not command:
         raise DownloadError("A yt-dlp download needs the yt-dlp command")
     if preferred_format == "format_hls":
         raise DownloadError("yt-dlp downloads cannot be kept as an HLS bundle")
-    options = ytdlp_format_options(preferred_format, audio_only=audio_only)
+    options = ytdlp_format_options(preferred_format, audio_only=audio_only, quality=quality)
     if os.sep in ffmpeg_path:
         options += ("--ffmpeg-location", ffmpeg_path)
     height = FORMAT_HEIGHTS.get(preferred_format)
     return ResolvedDownloadSource(
         url=url,
-        format_downloaded="audio" if audio_only else f"up to {height}p",
+        format_downloaded=f"audio {quality.audio_format}" if audio_only else f"up to {height}p",
         use_hls=False,
         remux_to_mp4=False,
-        extension="m4a" if audio_only else "mp4",
+        extension=quality.audio_format if audio_only else quality.container,
         audio_only=audio_only,
         ytdlp_command=(*command, *options),
+        ytdlp_subtitles=subtitles,
     )
+
+
+def _language_patterns(subtitles: YtdlpSubtitles) -> str:
+    """yt-dlp's --sub-langs: each listed language with its regional variants, such as en and en-US."""
+    if not subtitles.languages:
+        return _EVERY_LANGUAGE
+    return ",".join(f"{re.escape(language)}(-[A-Za-z0-9]+)*" for language in subtitles.languages)
+
+
+def ytdlp_subtitle_options(subtitles: YtdlpSubtitles) -> tuple[str, ...]:
+    """Options for the subtitles written during the download.
+
+    With both real and auto-generated subtitles asked for, yt-dlp uses the
+    real one of a language when there is one, so ``fallback`` is just that.
+    --ignore-errors turns a subtitle that fails to download into a warning;
+    any other error still ends yt-dlp with a non-zero exit status.
+    """
+    auto = ("--write-auto-subs",) if subtitles.auto_generated == "fallback" else ()
+    return ("--write-subs", *auto, "--sub-langs", _language_patterns(subtitles), *_SUBTITLE_FORMAT, "--ignore-errors")
 
 
 QUICK_VIDEO_CODECS = ("h264", "h265", "vp9", "av1")
@@ -189,6 +278,9 @@ def is_unsupported_url_message(message: str) -> bool:
 
 def _error(output: list[str]) -> DownloadError:
     message = error_message(output)
+    if "requested format is not available" in message.lower():
+        # Only a profile that skips videos without an allowed codec asks for a format that may not exist.
+        return DownloadError("This video has none of the allowed video codecs, so it was skipped")
     if is_drm_message(message):
         return EncryptedMediaError(f"This video is protected by DRM and cannot be downloaded ({message})")
     if any(marker in message.lower() for marker in _UNAVAILABLE_MARKERS):
@@ -203,14 +295,38 @@ def _number(value: str) -> int | None:
         return None
 
 
-def _keep_subtitles(work: Path, target: Path) -> tuple[tuple[str, str], ...]:
-    """Each subtitle yt-dlp wrote, as SRT in ``target``; one that can't be read is left out."""
-    kept: dict[str, str] = {}
+def _base_language(language: str) -> str:
+    return language.split("-", 1)[0].lower()
+
+
+def _choose_subtitles(found: dict[str, Path], subtitles: YtdlpSubtitles) -> list[tuple[str, Path]]:
+    """The subtitles to keep from what yt-dlp wrote, by language, in order of preference."""
+    if not subtitles.languages:
+        return list(found.items())
+    chosen = []
+    for wanted in subtitles.languages:
+        # The language itself beats a regional variant: en before en-US.
+        matches = sorted(
+            (language for language in found if _base_language(language) == _base_language(wanted) or language.lower() == wanted.lower()),
+            key=lambda language: (language.lower() != wanted.lower(), language),
+        )
+        if matches:
+            chosen.append((wanted, found[matches[0]]))
+            if subtitles.first_only:
+                break
+    return chosen
+
+
+def _readable_subtitles(work: Path, stem: str) -> dict[str, tuple[Path, bytes]]:
+    """Each subtitle yt-dlp wrote under ``stem``, as SRT; one that can't be read is left out."""
+    readable: dict[str, tuple[Path, bytes]] = {}
     for path in sorted(work.iterdir()):
         match = _SUBTITLE_FILE.match(path.name)
-        if match is None:
+        if match is None or match.group("stem") != stem:
             continue
         language = match.group("language")
+        if language in readable:
+            continue
         try:
             if path.stat().st_size > _MAX_SUBTITLE_BYTES:
                 raise DownloadError("The subtitle is larger than allowed")
@@ -221,12 +337,44 @@ def _keep_subtitles(work: Path, target: Path) -> tuple[tuple[str, str], ...]:
         except (DownloadError, OSError, UnicodeDecodeError) as exc:
             logger.info("Leaving out the %s subtitle yt-dlp wrote: %s", language, exc)
             continue
-        if language in kept:
-            continue
-        destination = target / f"ytdlp-subtitle.{language}.srt"
-        destination.write_bytes(content)
-        kept[language] = str(destination)
-    return tuple(kept.items())
+        readable[language] = (path, content)
+    return readable
+
+
+def _keep_subtitles(work: Path, target: Path, subtitles: YtdlpSubtitles) -> tuple[WrittenSubtitle, ...]:
+    """The subtitles the profile wants from what yt-dlp wrote, as SRT files in ``target``."""
+    kept: list[WrittenSubtitle] = []
+    for stem, auto_generated in (("media", False), ("auto", True)):
+        readable = _readable_subtitles(work, stem)
+        found = {language: path for language, (path, _content) in readable.items()}
+        contents = {path: content for path, content in readable.values()}
+        for language, path in _choose_subtitles(found, subtitles):
+            destination = target / f"ytdlp-subtitle.{language}{'.auto' if auto_generated else ''}.srt"
+            destination.write_bytes(contents[path])
+            kept.append(WrittenSubtitle(language, str(destination), auto_generated))
+    return tuple(kept)
+
+
+def _write_auto_generated(url: str, work: Path, command: tuple[str, ...], subtitles: YtdlpSubtitles) -> None:
+    """Fetch auto-generated subtitles on their own, next to the real ones the download wrote.
+
+    yt-dlp gives one subtitle per language, preferring the real one, so the
+    auto-generated tracks of ``always`` need a run of their own. It downloads
+    no media, and its failure only leaves those tracks out.
+    """
+    argv = [
+        *command, "--no-playlist", "--skip-download", "--ignore-no-formats-error",
+        "-P", str(work), "-o", "auto.%(ext)s",
+        "--write-auto-subs", "--sub-langs", _language_patterns(subtitles), *_SUBTITLE_FORMAT, "--ignore-errors",
+        "--", url,
+    ]
+    try:
+        result = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace", timeout=600)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        logger.info("Could not fetch the auto-generated subtitles of %s: %s", url, exc)
+        return
+    if result.returncode != 0:
+        logger.info("Could not fetch the auto-generated subtitles of %s: %s", url, error_message(result.stdout))
 
 
 def download_ytdlp(
@@ -237,12 +385,13 @@ def download_ytdlp(
         progress: Optional[ProgressCallback] = None,
         should_cancel: Optional[CancelCheck] = None,
         subtitles_dir: Path | None = None,
+        subtitles: YtdlpSubtitles = YtdlpSubtitles(),
 ) -> DownloadResult:
     """Run yt-dlp for ``url`` and move the file it produces to ``dest_path``.
 
-    With ``subtitles_dir``, yt-dlp also writes the video's subtitles; each one
-    is saved there as SRT and listed in the result. A subtitle that fails
-    never fails the download.
+    With ``subtitles_dir``, yt-dlp also writes the video's subtitles that
+    ``subtitles`` asks for; each one is saved there as SRT and listed in the
+    result. A subtitle that fails never fails the download.
     """
     if should_cancel and should_cancel():
         raise DownloadCancelled("Download cancelled")
@@ -256,7 +405,7 @@ def download_ytdlp(
         f"download:{_PROGRESS} %(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s",
         "--print", f"after_move:{_FILE} %(filepath)s",
         "-P", str(work), "-o", "media.%(ext)s",
-        *(YTDLP_SUBTITLE_OPTIONS if subtitles_dir is not None else ()),
+        *(ytdlp_subtitle_options(subtitles) if subtitles_dir is not None else ()),
         "--", url,
     ]
     lines: queue.Queue[str | None] = queue.Queue()
@@ -319,10 +468,14 @@ def download_ytdlp(
             raise DownloadError("yt-dlp finished without producing a file")
         size = Path(produced).stat().st_size
         os.replace(produced, dest_path)
-        subtitles = _keep_subtitles(work, subtitles_dir) if subtitles_dir is not None else ()
+        written: tuple[WrittenSubtitle, ...] = ()
+        if subtitles_dir is not None:
+            if subtitles.auto_generated == "always" and not (should_cancel and should_cancel()):
+                _write_auto_generated(url, work, command, subtitles)
+            written = _keep_subtitles(work, subtitles_dir, subtitles)
         if progress:
             progress(DownloadProgress(bytes_downloaded=size, total_bytes=size))
-        return DownloadResult(path=dest_path, bytes_downloaded=size, subtitles=subtitles)
+        return DownloadResult(path=dest_path, bytes_downloaded=size, subtitles=written)
     finally:
         if process.poll() is None:
             process.terminate()

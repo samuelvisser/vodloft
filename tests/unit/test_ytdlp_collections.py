@@ -477,3 +477,45 @@ def test_a_bundle_that_matches_existing_files_holds_its_download_profile(listed,
     scan = session.scalar(select(ExistingFileScan))
     assert profile.enable_profile is False
     assert (scan.status, scan.folder, scan.held_download_profile_ids) == ("waiting", "/downloads/YouTube", [profile.id])
+
+
+def test_a_youtube_download_profile_chooses_auto_generated_subtitles(listed, session, monkeypatch):
+    from types import SimpleNamespace
+
+    from backend.api.endpoints.download_profiles.service import auto_subtitles_uses
+    from backend.db.models import CollectionLocalMediaProfile
+    from backend.db.models.download_profile import DownloadProfile
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from backend.services import download_plans
+    from downloader.lifecycle import DownloadTracker
+    from task_manager.tasks.helpers.listed_collections import index_listed_collection
+
+    collection = _collection(session)
+    listed.videos = [_video("a", 2024, 2, 3)]
+    index_listed_collection(session, collection_id=collection.id, source=listed)
+    profile = CollectionLocalMediaProfile(
+        slug="collections", name="Collections", preferred_format="format_1080p", subtitle_mode="sidecar",
+        subtitle_languages=["nl", "en"], output_template="/downloads/shows/{{ collection_title }}/{{ episode_title }}.ext",
+    )
+    session.add(profile)
+    session.flush()
+    download_profile = DownloadProfile(
+        collection_id=collection.id, local_media_profile_id=profile.id, ep_id_type_list=["ep"], auto_subtitles="always",
+    )
+    session.add(download_profile)
+    download = EpisodeMediaDownload(
+        media=collection.episodes[0], local_media_profile=profile, type="episode", file_path="/downloads/x.ext",
+    )
+    session.add(download)
+    session.commit()
+    everyone = SimpleNamespace(allows_source=lambda _key: True)
+
+    # Only a site that makes auto-generated subtitles gets them, and the Local Media Profile lists it there.
+    assert auto_subtitles_uses(session, profile.id, everyone) == []
+    assert download_plans.prepare_download_plan(session, download.id, DownloadTracker()).source.ytdlp_subtitles.auto_generated == "never"
+
+    monkeypatch.setattr(ListedSource, "auto_subtitles_for", lambda self, url: "youtube.com" in url)
+    plan = download_plans.prepare_download_plan(session, download.id, DownloadTracker())
+    assert (plan.source.ytdlp_subtitles.languages, plan.source.ytdlp_subtitles.auto_generated) == (("nl", "en"), "always")
+    uses = auto_subtitles_uses(session, profile.id, everyone)
+    assert [(use.collection_title, use.auto_subtitles, use.episode_types) for use in uses] == [("A playlist", "always", [])]

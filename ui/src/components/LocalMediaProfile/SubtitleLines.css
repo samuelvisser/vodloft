@@ -1,0 +1,124 @@
+.subtitle-lines {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+}
+
+.subtitle-lines__label {
+    font-weight: 600;
+}
+
+.subtitle-lines .quality-radios {
+    display: grid;
+    gap: 6px;
+}
+
+.subtitle-lines .quality-radio {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+}
+
+.subtitle-lines .quality-radio span {
+    display: grid;
+}
+
+.subtitle-lines .quality-radio small {
+    color: var(--muted);
+}
+
+.subtitle-lines__fold {
+    color: var(--muted);
+    width: 12px;
+}
+
+.subtitle-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.subtitle-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border: 1px solid var(--we-border);
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: grab;
+}
+
+.subtitle-chip.is-dragging {
+    background: var(--we-accent-soft);
+}
+
+.subtitle-chip__grip,
+.subtitle-chip__number {
+    color: var(--muted);
+    font-weight: 400;
+}
+
+.subtitle-chip button {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 2px;
+}
+
+.subtitle-chips__add {
+    min-width: 220px;
+}
+
+.subtitle-uses-wrap {
+    display: grid;
+    gap: 8px;
+    margin: 0 14px 14px;
+}
+
+.subtitle-uses {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+}
+
+.subtitle-use {
+    flex: 0 0 170px;
+    display: grid;
+    gap: 6px;
+    align-content: start;
+    padding: 12px 14px;
+    border: 1px solid var(--we-border);
+    border-radius: 12px;
+}
+
+.subtitle-use__choice {
+    justify-self: start;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: var(--we-badge);
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.subtitle-use__choice.is-always,
+.subtitle-use__choice.is-fallback {
+    background: var(--we-accent-soft);
+    color: var(--we-accent);
+}
+
+/* These lines have no count, so on a phone the ✎ stays on the sentence's row. */
+@media (max-width: 640px) {
+    .subtitle-lines .which-episodes-sentence,
+    #youtube-subtitles .which-episodes-sentence {
+        flex-wrap: nowrap;
+    }
+
+    .subtitle-lines .which-episodes-text,
+    #youtube-subtitles .which-episodes-text {
+        flex-basis: auto;
+    }
+}

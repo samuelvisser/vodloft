@@ -318,12 +318,17 @@ export default function WhichEpisodes({
                 })}
                 {result && (
                     <li className="which-episodes-footer">
-                        <span>
-                            <b>{result.downloaded} of {result.total}</b> indexed episodes will be downloaded
-                            {result.unavailable > 0 && <span className="which-episodes-muted"> ({result.unavailable} can’t be downloaded)</span>}
+                        <span className="which-episodes-total">
+                            <span className="which-episodes-total__label">Total</span>
+                            <span>
+                                <b className="which-episodes-total__count">{result.downloaded} of {result.total}</b> indexed episodes will be downloaded
+                                {result.unavailable > 0 && <span className="which-episodes-muted"> ({result.unavailable} can’t be downloaded)</span>}
+                            </span>
                         </span>
-                        <button type="button" className="btn btn-link" aria-expanded={showWhich} onClick={() => setShowWhich((value) => !value)}>
-                            {showWhich ? 'Hide' : 'Show which'}
+                        <button type="button" className="which-episodes-show" aria-expanded={showWhich} onClick={() => setShowWhich((value) => !value)}>
+                            <FontAwesomeIcon icon={faIcon('fass', 'list')}/>
+                            {showWhich ? 'Hide the list' : 'Show which'}
+                            <FontAwesomeIcon icon={faIcon('fass', showWhich ? 'chevron-up' : 'chevron-down')}/>
                         </button>
                     </li>
                 )}

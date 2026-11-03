@@ -223,6 +223,9 @@ class YtDlpSource(Source):
         """Shorts and livestreams are YouTube's; other sites only have videos."""
         return _YOUTUBE_TAGS if url is None or _is_youtube(url) else (_VIDEO_TAG,)
 
+    def auto_subtitles_for(self, url: str) -> bool:
+        return _is_youtube(url)
+
     def _info(self, url: str) -> dict:
         """The video info for a link. Adding a video right after looking up its link reuses the lookup."""
         now = time.monotonic()
