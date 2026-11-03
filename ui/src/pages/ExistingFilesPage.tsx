@@ -30,6 +30,8 @@ export default function ExistingFilesPage() {
     const ready = (scans ?? []).filter((scan) => scan.status === 'ready')
     const toAdopt = ready.filter((scan) => sure(scan) > 0)
     const adoptable = toAdopt.reduce((total, scan) => total + sure(scan), 0)
+    // A finished scan that found nothing to adopt or check has nothing to show; "Done with all" still finishes it.
+    const shown = (scans ?? []).filter((scan) => scan.status !== 'ready' || sure(scan) + scan.counts.review > 0)
     const working = (scans ?? []).filter((scan) => scan.status === 'waiting' || scan.status === 'scanning').length
 
     async function refresh() {
@@ -100,6 +102,9 @@ export default function ExistingFilesPage() {
             {error && <p className="form-error-card" role="alert">{error.message}</p>}
             {isLoading && <ProgressBar ariaLabel="Loading" value={null}/>}
             {scans && scans.length === 0 && <p className="help">Nothing to review. Every scan is done.</p>}
+            {scans && scans.length > 0 && shown.length === 0 && (
+                <p className="help">No files to review. Done with all starts the downloads that are waiting.</p>
+            )}
 
             {scans && scans.length > 0 && (
                 <>
@@ -117,7 +122,7 @@ export default function ExistingFilesPage() {
                                      detail={`${busy.label}: ${busy.done} of ${busy.total} collections`}/>
                     )}
                     <ul className="existing-files-page__list">
-                        {scans.map((scan) => (
+                        {shown.map((scan) => (
                             <li key={`${scan.collectionSlug}-${scan.localMediaProfileId}`} className="existing-files-page__item">
                                 <div className="existing-files-page__title">
                                     <Link to={`/collection/${scan.collectionSlug}`}>{scan.collectionTitle}</Link>

@@ -1,5 +1,6 @@
 import {useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode} from 'react'
 import Switch from 'react-switch'
+import {Link} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 
@@ -415,7 +416,9 @@ function PreviewStep({importer, onReplace, onFinished, onRunStatus}: {
                         <ProgressBar ariaLabel="Reading the upload"/>
                         <p className="import-run__activity" role="status">Reading the upload…</p>
                         {/* Cancelling removes the upload, so a late answer has nothing left to show. */}
-                        <button type="button" className="btn" onClick={() => void onReplace()}>Cancel</button>
+                        <div className="import-actions">
+                            <button type="button" className="btn" onClick={() => void onReplace()}>Cancel</button>
+                        </div>
                     </>
                 )}
                 {error && (
@@ -1082,9 +1085,13 @@ function RunView({importer, run, onRun, onBack}: {
                         Download report
                     </button>
                     {run.status === 'finished' && off > 0 && (
-                        <button type="button" className="btn btn-primary" disabled={enabling} onClick={() => void enableDownloadProfiles()}>
+                        <button type="button" className="btn btn-primary" disabled={enabling} onClick={() => void enableDownloadProfiles()}
+                                title={`Only the Download Profiles that were on in ${importer.name}`}>
                             Turn on {off} Download Profile{off === 1 ? '' : 's'}
                         </button>
+                    )}
+                    {run.steps.some((step) => step.matching) && (
+                        <Link className="btn" to="/existing-files">Match existing files</Link>
                     )}
                     {done && <button type="button" className="btn" onClick={onBack}>Back</button>}
                 </div>

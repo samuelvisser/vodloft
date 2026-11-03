@@ -843,7 +843,7 @@ def test_a_step_that_fails_shows_as_failed_and_the_import_finishes(installation)
     assert view["status"] == "finished"
 
 
-def test_a_finished_import_turns_on_all_its_download_profiles_at_once(installation):
+def test_a_finished_import_turns_on_the_download_profiles_that_were_on_in_pinchflat(installation):
     from backend.db.models import Collection, DownloadProfile, ImportRun
     from backend.services import imports
 
@@ -855,11 +855,11 @@ def test_a_finished_import_turns_on_all_its_download_profiles_at_once(installati
     _adopt_waiting(session)
     run = session.get(ImportRun, run.id)
     assert run.status == "finished"
-    total = len(list(session.scalars(select(DownloadProfile))))
-    assert total
-    assert imports.run_view(session, run)["download_profiles"] == {"total": total, "on": 0}
+    # Lofi's source is off in Pinchflat, so the button leaves it off.
+    assert imports.run_view(session, run)["download_profiles"] == {"total": 1, "on": 0}
 
-    assert imports.enable_run_download_profiles(session, run) == total
+    assert imports.enable_run_download_profiles(session, run) == 1
     session.commit()
-    assert imports.run_view(session, run)["download_profiles"] == {"total": total, "on": total}
-    assert all(profile.enable_profile for profile in session.scalars(select(DownloadProfile)))
+    assert imports.run_view(session, run)["download_profiles"] == {"total": 1, "on": 1}
+    enabled = {profile.collection.title: profile.enable_profile for profile in session.scalars(select(DownloadProfile))}
+    assert enabled == {"Veritasium": True, "Lofi": False}
