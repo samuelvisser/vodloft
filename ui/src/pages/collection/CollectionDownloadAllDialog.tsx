@@ -199,7 +199,6 @@ export default function CollectionDownloadAllDialog({
       }}
     >
       <p>Download the selected episodes from "{collectionTitle}". Existing downloaded files will not be replaced.</p>
-      <p>Downloads will wait for any countdown and configured post-publication delay before starting.</p>
       {collectionType === 'series' ? (
         <div className="form-row">
           <div className="collection-download-all-label-row">
