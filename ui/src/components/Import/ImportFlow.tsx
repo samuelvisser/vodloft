@@ -589,8 +589,31 @@ function countsLine(counts: Record<string, number>): string {
     return Object.entries(counts).filter(([, value]) => value).map(([key, value]) => `${value} ${key.replace(/_/g, ' ')}`).join(', ')
 }
 
+/** How long the run has been going, ticking every second while it is not done. */
+function useElapsed(since: string, running: boolean): string {
+    const [now, setNow] = useState(() => Date.now())
+    useEffect(() => {
+        if (!running) return
+        const timer = window.setInterval(() => setNow(Date.now()), 1000)
+        return () => window.clearInterval(timer)
+    }, [running])
+    const seconds = Math.max(0, Math.round((now - new Date(since).getTime()) / 1000))
+    const minutes = Math.floor(seconds / 60)
+    return minutes ? `${minutes}m ${seconds % 60}s` : `${seconds}s`
+}
+
 function RunView({importer, run, onBack}: {importer: Importer, run: ImportRun, onBack: () => void}) {
     const done = run.status === 'finished' || run.status === 'failed'
+    const elapsed = useElapsed(run.createdAt, !done)
+    const waitingSteps = run.steps.filter((step) => step.status === 'waiting').length
+    const finishedSteps = run.steps.length - waitingSteps
+    // Until a step finishes there is no share to show, so the bar sweeps to show the import is busy.
+    const progress = run.status === 'waiting' && finishedSteps > 0 ? Math.round(100 * finishedSteps / run.steps.length) : null
+    const activity = run.status === 'running'
+        ? `Bringing over settings, profiles, collections and downloads. A large library can take a few minutes. Running for ${elapsed}.`
+        : run.status === 'waiting'
+            ? `${waitingSteps} of ${run.steps.length} collection${run.steps.length === 1 ? '' : 's'} waiting to be indexed; their files are adopted right after. Running for ${elapsed}.`
+            : null
     return (
         <div className="import-step import-run" aria-live="polite">
             <div className="import-preview__header">
@@ -605,7 +628,8 @@ function RunView({importer, run, onBack}: {importer: Importer, run: ImportRun, o
                     {done && <button type="button" className="btn" onClick={onBack}>Back</button>}
                 </div>
             </div>
-            {!done && <ProgressBar ariaLabel="Import progress" value={run.steps.length ? Math.round(100 * run.steps.filter((step) => step.status !== 'waiting').length / run.steps.length) : 0}/>}
+            {!done && <ProgressBar ariaLabel="Import progress" value={progress} detail={activity ?? undefined}/>}
+            {activity && <p className="import-run__activity">{activity}</p>}
             {run.error && <p className="form-error-card" role="alert">{run.error}</p>}
             {run.steps.length > 0 && (
                 <ul className="import-checklist">

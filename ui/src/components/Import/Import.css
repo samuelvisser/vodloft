@@ -207,3 +207,9 @@
         display: none;
     }
 }
+
+.import-run__activity {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+}
