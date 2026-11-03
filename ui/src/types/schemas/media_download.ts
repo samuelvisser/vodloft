@@ -43,6 +43,10 @@ export const MediaDownloadReadSchema = z.looseObject({
     automaticRetrySuppressed: z.boolean(),
     downloadedBytes: z.int().nullable(),
     formatDownloaded: z.string().nullable(),
+    /** Null when the download did not ask SponsorBlock. */
+    sponsorblockSegments: z.array(z.object({
+        category: z.string(), start: z.number(), end: z.number(), action: z.string(),
+    })).nullable().optional(),
     downloadedAt: ApiDateTimeSchema.nullable(),
     redownloadWhenFinal: z.boolean().nullable().optional(),
     kept: z.boolean().nullable().optional(),

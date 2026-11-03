@@ -277,11 +277,11 @@ _UNSUPPORTED: dict[str, str] = {
     "merge_output_format": "Existing files keep their extension; new downloads follow VODLoft's container setting",
     "remuxvideo": "Existing files keep their extension; new downloads follow VODLoft's container setting",
     "recodevideo": "Existing files keep their extension; new downloads follow VODLoft's container setting",
-    "subtitleslangs": "VODLoft downloads every language a video has; a language list is planned",
-    "writeautomaticsub": "Auto-generated subtitles are planned",
+    "subtitleslangs": "The Local Media Profile's subtitle languages",
+    "writeautomaticsub": "Auto-generated subtitles are set on each YouTube Download Profile",
     "match_filter": "VODLoft has no download filters yet",
-    "sponsorblock_remove": "SponsorBlock is planned",
-    "sponsorblock_mark": "SponsorBlock is planned",
+    "sponsorblock_remove": "SponsorBlock is set on each YouTube Download Profile",
+    "sponsorblock_mark": "SponsorBlock is set on each YouTube Download Profile",
     "ratelimit": "VODLoft has no download speed limit",
     "cookiefile": "Cookies are imported with the rest of the Pinchflat data, not from an option",
     "addchapters": "VODLoft does not embed chapters yet",
@@ -295,8 +295,8 @@ _UNSUPPORTED: dict[str, str] = {
 _FROM_PINCHFLAT_SETTINGS = {
     **dict.fromkeys(("format", "format_sort", "merge_output_format", "remuxvideo", "extractaudio", "audioformat"),
                     "Pinchflat's quality setting becomes the profile's quality"),
-    **dict.fromkeys(("subtitleslangs", "writeautomaticsub"), "Pinchflat's subtitle setting, reported with the profile"),
-    **dict.fromkeys(("sponsorblock_remove", "sponsorblock_mark"), "Pinchflat's SponsorBlock setting, reported with the profile"),
+    **dict.fromkeys(("subtitleslangs", "writeautomaticsub"), "Pinchflat's subtitle setting becomes the profile's subtitle languages"),
+    **dict.fromkeys(("sponsorblock_remove", "sponsorblock_mark"), "Pinchflat's SponsorBlock setting becomes SponsorBlock on the Download Profile"),
 }
 PINCHFLAT_META_DATE = ("%(upload_date>%Y-%m-%d)s:(?P<meta_date>.+)",)
 """The --parse-metadata Pinchflat always passes."""

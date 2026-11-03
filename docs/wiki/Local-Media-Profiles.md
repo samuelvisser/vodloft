@@ -83,6 +83,16 @@ Profiles from before VODLoft 0.7.0 keep what they downloaded: up to their resolu
 
 A profile represents one local variant. If you want both audio and 1080p copies of the same episode, create separate Local Media Profiles and use them from separate Download Profiles.
 
+## Your own yt-dlp options
+
+Downloads from sites yt-dlp handles, such as YouTube, can take extra yt-dlp options. Most people leave this empty. Write them the way yt-dlp's own option files have them: one or more options per line, and lines starting with `#` are notes. Each line is checked with yt-dlp's own parser as you type, and gets one of these results:
+
+- **Passed to yt-dlp**: the line is used for every download yt-dlp makes with this profile.
+- **Blocked**, with the reason: options that would change where files go or what they are called (such as `-o` and `-P`), pick the format past the Quality setting (`-f`), run other programs (`--exec`), or stop VODLoft from following the download.
+- **VODLoft already has a setting for this**, with a link to that setting: for example subtitles, thumbnails, the container or SponsorBlock.
+
+A profile can only be saved when every line passes. A Collection can add its own options on its Edit page, for exceptions; they come after the profile's options, so for an option set in both places the Collection's wins. They only apply to Collections and videos from the yt-dlp Source (YouTube and the other sites yt-dlp handles), not to The Daily Wire or NPO Start.
+
 ## Output templates
 
 The output template controls the folder structure and filename. VODLoft uses Jinja variables so one template can produce a unique path for every episode, movie, or extra.

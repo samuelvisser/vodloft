@@ -3,11 +3,13 @@ from datetime import date, datetime
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import Column, Date, ForeignKey, JSON, String, Table, func
+from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
+from backend.types.download_profile_types import DEFAULT_SPONSORBLOCK_SEGMENTS
 
 if TYPE_CHECKING:
     from backend.db.models import EpisodeMediaDownload, LocalMediaProfileBase, Season, Collection
@@ -58,6 +60,11 @@ class DownloadProfile(Base, HasTaskResourcesMixin):
     auto_subtitles: Mapped[str] = mapped_column(
         String(16), default="fallback", server_default="fallback",
         comment="YouTube's auto-generated subtitles: never, fallback (when there is no real one) or always",
+    )
+    sponsorblock_enabled: Mapped[bool] = mapped_column(default=True, server_default="0")
+    sponsorblock_segments: Mapped[dict[str, str]] = mapped_column(
+        MutableDict.as_mutable(JSON), default=lambda: dict(DEFAULT_SPONSORBLOCK_SEGMENTS), nullable=False,
+        comment="SponsorBlock segment type to keep, chapter or cut, for YouTube Collections",
     )
 
     # Season filter, used only when the collection is identified by season

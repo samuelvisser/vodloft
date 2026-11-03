@@ -5,7 +5,9 @@ the format selection, runs it into a private directory and reports progress.
 """
 from __future__ import annotations
 
+import json
 import logging
+import math
 import os
 import queue
 import re
@@ -17,8 +19,8 @@ from pathlib import Path
 from typing import Optional
 
 from .errors import DownloadCancelled, DownloadError, EncryptedMediaError, FileTooLargeError, MediaUnavailableError
-from .models import CancelCheck, DownloadProgress, DownloadResult, ProgressCallback, WrittenSubtitle
-from .plan import ResolvedDownloadSource, YtdlpSubtitles
+from .models import CancelCheck, DownloadProgress, DownloadResult, ProgressCallback, SponsorSegment, WrittenSubtitle
+from .plan import ResolvedDownloadSource, YtdlpSponsorBlock, YtdlpSubtitles
 from .source import FORMAT_HEIGHTS
 from .subtitles import webvtt_to_srt
 
@@ -26,6 +28,9 @@ logger = logging.getLogger(__name__)
 
 _PROGRESS = "[vodloft-progress]"
 _FILE = "[vodloft-file]"
+_SPONSORBLOCK = "[vodloft-sponsorblock]"
+# SponsorBlock's Highlight is a moment, not a part to skip: always a chapter.
+_HIGHLIGHT = "poi_highlight"
 _SUBTITLE_FORMAT = ("--sub-format", "srt/vtt/best")
 # Every language, never YouTube's live chat.
 _EVERY_LANGUAGE = "all,-live_chat"
@@ -118,6 +123,16 @@ def ytdlp_format_options(
     )
 
 
+def ytdlp_sponsorblock_options(sponsorblock: YtdlpSponsorBlock) -> tuple[str, ...]:
+    """yt-dlp options that mark SponsorBlock segments as chapters and cut others out."""
+    if not sponsorblock.enabled:
+        return ()
+    options: tuple[str, ...] = ("--sponsorblock-mark", ",".join((*sponsorblock.chapter, _HIGHLIGHT)))
+    if sponsorblock.cut:
+        options += ("--sponsorblock-remove", ",".join(sponsorblock.cut))
+    return options
+
+
 def resolve_ytdlp_source(
     url: str,
     *,
@@ -126,13 +141,20 @@ def resolve_ytdlp_source(
     audio_only: bool,
     quality: YtdlpQuality = YtdlpQuality(),
     subtitles: YtdlpSubtitles = YtdlpSubtitles(),
+    sponsorblock: YtdlpSponsorBlock = YtdlpSponsorBlock(),
+    custom_options: tuple[str, ...] = (),
     ffmpeg_path: str = "ffmpeg",
 ) -> ResolvedDownloadSource:
+    """``custom_options`` are the user's own yt-dlp options; VODLoft's own come after them and win."""
     if not command:
         raise DownloadError("A yt-dlp download needs the yt-dlp command")
     if preferred_format == "format_hls":
         raise DownloadError("yt-dlp downloads cannot be kept as an HLS bundle")
-    options = ytdlp_format_options(preferred_format, audio_only=audio_only, quality=quality)
+    options = (
+        *custom_options,
+        *ytdlp_format_options(preferred_format, audio_only=audio_only, quality=quality),
+        *ytdlp_sponsorblock_options(sponsorblock),
+    )
     if os.sep in ffmpeg_path:
         options += ("--ffmpeg-location", ffmpeg_path)
     height = FORMAT_HEIGHTS.get(preferred_format)
@@ -145,6 +167,7 @@ def resolve_ytdlp_source(
         audio_only=audio_only,
         ytdlp_command=(*command, *options),
         ytdlp_subtitles=subtitles,
+        ytdlp_sponsorblock=sponsorblock,
     )
 
 
@@ -377,6 +400,26 @@ def _write_auto_generated(url: str, work: Path, command: tuple[str, ...], subtit
         logger.info("Could not fetch the auto-generated subtitles of %s: %s", url, error_message(result.stdout))
 
 
+def _sponsor_segments(text: str, sponsorblock: YtdlpSponsorBlock) -> tuple[SponsorSegment, ...]:
+    """The segments yt-dlp printed, with what the download did to each."""
+    try:
+        found = json.loads(text)
+    except ValueError:
+        return ()
+    segments: list[SponsorSegment] = []
+    for entry in found if isinstance(found, list) else ():
+        if not isinstance(entry, dict):
+            continue
+        category, start, end = entry.get("category"), entry.get("start_time"), entry.get("end_time")
+        if not isinstance(category, str) or not all(
+            isinstance(value, (int, float)) and math.isfinite(value) for value in (start, end)
+        ):
+            continue
+        action = "cut" if category in sponsorblock.cut else "chapter"
+        segments.append(SponsorSegment(category, round(float(start), 3), round(float(end), 3), action))
+    return tuple(sorted(segments, key=lambda segment: (segment.start, segment.end)))
+
+
 def download_ytdlp(
         url: str,
         dest_path: str,
@@ -386,6 +429,7 @@ def download_ytdlp(
         should_cancel: Optional[CancelCheck] = None,
         subtitles_dir: Path | None = None,
         subtitles: YtdlpSubtitles = YtdlpSubtitles(),
+        sponsorblock: YtdlpSponsorBlock = YtdlpSponsorBlock(),
 ) -> DownloadResult:
     """Run yt-dlp for ``url`` and move the file it produces to ``dest_path``.
 
@@ -404,6 +448,7 @@ def download_ytdlp(
         "--progress-template",
         f"download:{_PROGRESS} %(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s",
         "--print", f"after_move:{_FILE} %(filepath)s",
+        *(("--print", f"after_move:{_SPONSORBLOCK} %(sponsorblock_chapters)j") if sponsorblock.enabled else ()),
         "-P", str(work), "-o", "media.%(ext)s",
         *(ytdlp_subtitle_options(subtitles) if subtitles_dir is not None else ()),
         "--", url,
@@ -411,6 +456,7 @@ def download_ytdlp(
     lines: queue.Queue[str | None] = queue.Queue()
     output: list[str] = []
     produced: str | None = None
+    segments: tuple[SponsorSegment, ...] | None = None
     finished = 0
     current = 0
     current_total: int | None = None
@@ -456,6 +502,8 @@ def download_ytdlp(
                     ))
             elif line.startswith(_FILE):
                 produced = line.removeprefix(_FILE).strip()
+            elif line.startswith(_SPONSORBLOCK):
+                segments = _sponsor_segments(line.removeprefix(_SPONSORBLOCK).strip(), sponsorblock)
             else:
                 output.append(line)
                 del output[:-50]
@@ -475,7 +523,7 @@ def download_ytdlp(
             written = _keep_subtitles(work, subtitles_dir, subtitles)
         if progress:
             progress(DownloadProgress(bytes_downloaded=size, total_bytes=size))
-        return DownloadResult(path=dest_path, bytes_downloaded=size, subtitles=written)
+        return DownloadResult(path=dest_path, bytes_downloaded=size, subtitles=written, sponsorblock=segments)
     finally:
         if process.poll() is None:
             process.terminate()

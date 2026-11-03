@@ -8,6 +8,7 @@ from pydantic import Field, computed_field, field_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
 from sources import Feature, UnknownSourceError, get_source
+from sources.ytdlp_options import MAX_OPTIONS_LENGTH
 
 
 def source_features(source_key: str) -> list[str]:
@@ -106,10 +107,27 @@ class CookiesAPIRead(ResponseBase):
     status: Optional[CookiesStatusAPIRead] = None
 
 
+class YtdlpOptionsCheckAPIRequest(RequestBase):
+    """Your own yt-dlp options, as typed so far."""
+
+    text: str = Field(max_length=MAX_OPTIONS_LENGTH)
+
+
+class YtdlpOptionLineAPIRead(ResponseBase):
+    """One line of your own yt-dlp options and what VODLoft makes of it."""
+
+    line: int
+    text: str
+    status: Literal["valid", "blocked", "has_setting", "invalid"]
+    message: str
+    setting: Optional[str] = None
+
+
 class SiteOptionsAPIRead(ResponseBase):
     """What the site of one collection offers beyond its Source's usual choices."""
 
     auto_subtitles: bool
+    sponsorblock: bool
 
 
 class EpisodeTagAPIRead(ResponseBase):

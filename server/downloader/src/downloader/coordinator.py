@@ -196,6 +196,7 @@ def execute_download_plan(
                         download_ytdlp, command=plan.source.ytdlp_command,
                         subtitles_dir=workspace.workspace if ytdlp_subtitles else None,
                         subtitles=plan.source.ytdlp_subtitles,
+                        sponsorblock=plan.source.ytdlp_sponsorblock,
                     )
                 else:
                     transfer = download_hls_bundle if plan.source.hls_bundle else download_hls if plan.source.use_hls else download_file
@@ -333,7 +334,7 @@ def execute_download_plan(
         tracker.ensure_active()
         successful = True
         return DownloadExecution(
-            DownloadResult(str(destination), result.bytes_downloaded, result.segments_downloaded),
+            DownloadResult(str(destination), result.bytes_downloaded, result.segments_downloaded, sponsorblock=result.sponsorblock),
             plan.source.format_downloaded, identity, tuple(published), workspace, journal,
             replacement_journal=replacement_journal,
         )

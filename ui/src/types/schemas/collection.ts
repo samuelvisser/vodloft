@@ -126,6 +126,8 @@ export const CollectionReadSchema = z.looseObject({
     thumbnailLandscapePath: z.string().nullable().optional(),
     thumbnailPortraitPath: z.string().nullable().optional(),
     thumbnailSquarePath: z.string().nullable().optional(),
+    /** Your own yt-dlp options for this Collection, added after its Local Media Profile's. */
+    ytdlpOptions: z.string().default(''),
     customMetadata: z.record(z.string(), z.string()).default({}),
 
     createdAt: ApiDateTimeSchema,

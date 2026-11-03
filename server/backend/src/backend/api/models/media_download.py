@@ -61,6 +61,15 @@ class MediaDownloadAssetAPIRead(ResponseBase):
     fingerprint: str | None
 
 
+class SponsorSegmentAPIRead(ResponseBase):
+    """A SponsorBlock segment of the video as published, in seconds, and what the download did with it."""
+
+    category: str
+    start: float
+    end: float
+    action: str
+
+
 # ---------- Persistent artifact output ----------
 class _MediaDownloadAPIBaseOut(ResponseBase):
     model_config = response_model_config(nested_source="download")
@@ -79,6 +88,8 @@ class _MediaDownloadAPIBaseOut(ResponseBase):
     automatic_retry_suppressed: bool
     downloaded_bytes: Optional[int]
     format_downloaded: Optional[str]
+    sponsorblock_segments: Optional[list[SponsorSegmentAPIRead]] = None
+    """None when SponsorBlock was not asked; empty when it had no segments."""
     downloaded_at: Optional[datetime]
     redownload_when_final: Optional[bool] = None
     kept: Optional[bool] = None

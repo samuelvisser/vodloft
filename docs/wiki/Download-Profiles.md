@@ -129,12 +129,28 @@ If you only want the finished episode, leave countdown downloading disabled.
 
 ## YouTube
 
-Download Profiles of YouTube Collections have a YouTube section under Which episodes. It only appears when the Local Media Profile stores subtitles.
+Download Profiles of YouTube Collections have a YouTube section under Which episodes, with auto-generated subtitles and SponsorBlock.
+
+### Auto-generated subtitles
+
+This line only appears when the Local Media Profile stores subtitles.
 
 **Use auto-generated subtitles** never, only when there are no real ones (the default), or always. YouTube makes subtitles automatically for most videos; they follow the subtitle languages of the Local Media Profile.
 
 - **Only when there are no real ones** uses an auto-generated subtitle for a language that has no subtitle a person made.
 - **Always** also adds it next to a real one, as its own track marked auto-generated (`Episode.nl.auto.srt` beside the media).
+
+### SponsorBlock
+
+[SponsorBlock](https://sponsor.ajay.app) is a community database of parts of YouTube videos: sponsor reads, "like and subscribe" reminders, intros and so on. Switch it on, then choose for each type of part:
+
+- **Keep**: left as it is.
+- **Chapter**: becomes a named chapter that your player can skip. Nothing is removed, so this is the safe choice.
+- **Cut out**: removed from the file. This is final; the cut part isn't kept anywhere.
+
+The types are Sponsor, Self-promotion, Interaction reminder, Intro, Outro, Preview and recap, Filler and Non-music section. SponsorBlock's Highlight is always a chapter. A new YouTube Download Profile cuts out sponsors, self-promotion and interaction reminders, and makes chapters of intros, outros and previews. Profiles from before VODLoft 0.7.0 start with SponsorBlock off.
+
+Most parts are submitted in the days after a video comes out, so a download made right after upload may find few of them. The episode page shows what a download found on a timeline: each part, whether it became a chapter or was cut out, and how much shorter the file is.
 
 An episode you download by hand follows the Collection's Download Profile for the same Local Media Profile.
 

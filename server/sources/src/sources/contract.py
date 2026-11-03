@@ -49,6 +49,9 @@ class Feature(StrEnum):
     container and codec, and "Best" is whatever the Source's program picks on
     its own. Without it, "Best" is MP4 video at the highest resolution and the
     other choices are not offered."""
+    YTDLP_DOWNLOADS = "ytdlp_downloads"
+    """Your own yt-dlp options apply to this Source's downloads. Only the yt-dlp Source has it: NPO Start
+    also downloads with yt-dlp, but as a Source of its own it takes no yt-dlp options."""
     CATALOGUE_REFRESH = "catalogue_refresh"
     """Refreshing the titles, descriptions and thumbnails of a listed collection's
     episodes, and telling which ones the Source no longer has, with ``refresh_items``."""
@@ -400,6 +403,10 @@ class Source(ABC):
 
     def auto_subtitles_for(self, url: str) -> bool:
         """The site of the collection or video at this link makes auto-generated subtitles, as YouTube does."""
+        return False
+
+    def sponsorblock_for(self, url: str) -> bool:
+        """SponsorBlock has segments for the videos of the collection or video at this link: only YouTube's."""
         return False
 
     def episode_tag(self, key: str | None) -> EpisodeTag | None:

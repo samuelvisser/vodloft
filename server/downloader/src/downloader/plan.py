@@ -32,6 +32,30 @@ class YtdlpSubtitles:
     ``always`` adds it as a track of its own as well."""
 
 
+SPONSORBLOCK_CATEGORIES = (
+    "sponsor", "selfpromo", "interaction", "intro", "outro", "preview", "filler", "music_offtopic",
+)
+"""SponsorBlock's segment types that can be kept, marked as a chapter or cut out."""
+
+
+@dataclass(frozen=True)
+class YtdlpSponsorBlock:
+    """Which SponsorBlock segment types yt-dlp marks as chapters, and which it cuts out of the file."""
+    chapter: tuple[str, ...] = ()
+    cut: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        unknown = set(self.chapter) | set(self.cut)
+        if unknown - set(SPONSORBLOCK_CATEGORIES):
+            raise DownloadError(f"Unknown SponsorBlock segment types {sorted(unknown - set(SPONSORBLOCK_CATEGORIES))!r}")
+        if set(self.chapter) & set(self.cut):
+            raise DownloadError("A SponsorBlock segment type is either a chapter or cut out")
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.chapter or self.cut)
+
+
 @dataclass(frozen=True)
 class ResolvedDownloadSource:
     url: str
@@ -47,6 +71,7 @@ class ResolvedDownloadSource:
     ytdlp_command: tuple[str, ...] = ()
     """When set, yt-dlp downloads ``url`` (a web page) with this command line."""
     ytdlp_subtitles: YtdlpSubtitles = YtdlpSubtitles()
+    ytdlp_sponsorblock: YtdlpSponsorBlock = YtdlpSponsorBlock()
 
 
 @dataclass(frozen=True)

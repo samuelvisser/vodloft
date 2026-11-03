@@ -105,6 +105,12 @@ many days after downloading, as Pinchflat did, and videos you told Pinchflat nev
 A media profile's resolution becomes the Local Media Profile's **Up to** step, its subtitle languages its language
 list, its audio track its audio language, and MKV its container (see [[Local-Media-Profiles#quality]]). Downloading
 auto subtitles becomes **only when there are no real ones** on the Download Profile, which is what Pinchflat did.
+Its SponsorBlock setting becomes SponsorBlock on each Download Profile: the categories Pinchflat removed are cut out,
+the ones it marked become chapters (see [[Download-Profiles#sponsorblock]]).
+
+Options in Pinchflat's yt-dlp option files that VODLoft has no setting for become the Local Media Profile's own yt-dlp
+options (see [[Local-Media-Profiles#your-own-yt-dlp-options]]), with the file each came from as a note. Lines VODLoft
+blocks, such as `--exec`, are left out, and the report gives the reason.
 
 You can run the import again. Anything you changed in VODLoft since the last run is kept, and settings a newer
 VODLoft can map, which it reported as unsupported before, are brought over.

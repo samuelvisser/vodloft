@@ -61,7 +61,11 @@ def download_profiles_site_options(collection_id: int, request: Request):
         collection = s.get(Collection, collection_id)
         if collection is None or not deps.request_access(request).allows_source(collection.source_key):
             raise HTTPException(status_code=404, detail="Collection not found")
-        return SiteOptionsAPIRead(auto_subtitles=get_source(collection.source_key).auto_subtitles_for(collection.sharing_url))
+        source = get_source(collection.source_key)
+        return SiteOptionsAPIRead(
+            auto_subtitles=source.auto_subtitles_for(collection.sharing_url),
+            sponsorblock=source.sponsorblock_for(collection.sharing_url),
+        )
 
 
 @router.get("/auto-subtitles/{local_media_profile_id}", dependencies=[requires_any((Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.LOCAL_MEDIA_PROFILES, Level.VIEW))], response_model=list[AutoSubtitlesUseAPIRead])

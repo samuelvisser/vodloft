@@ -8,12 +8,16 @@ import {useCollection} from '../../lib/queries'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import {faIcon} from '../../icons/faIcon'
+import OptionsEditor from '../../components/common/OptionsEditor/OptionsEditor'
+import ReadMore from '../../utils/ReadMore'
+import {hasSourceFeature, SourceFeature} from '../../types/schemas/source'
 
 type RouteParams = { id?: string }
 
 type FormState = CollectionFormValue & {
   url: string
   localMediaProfileId: string
+  ytdlpOptions: string
 }
 
 export default function EditCollectionPage() {
@@ -22,12 +26,14 @@ export default function EditCollectionPage() {
   const qc = useQueryClient()
   const [metadataOpen, setMetadataOpen] = useState(false)
   const [urlCopied, setUrlCopied] = useState(false)
+  const [optionsError, setOptionsError] = useState<string | null>(null)
   const {data: collection} = useCollection(id)
   const initializedCollectionId = useRef<string | undefined>(undefined)
 
   const [form, setForm] = useState<FormState>(() => ({
     url: id ? `https://www.dailywire.com/show/${id}` : '',
     localMediaProfileId: 'p1',
+    ytdlpOptions: '',
     ...defaultCollectionFormValue,
   }))
 
@@ -53,6 +59,7 @@ export default function EditCollectionPage() {
       url: collection.sharingUrl,
       name: collection.title,
       author: collection.authorName,
+      ytdlpOptions: collection.ytdlpOptions ?? '',
     }))
   }, [id, collection])
 
@@ -82,6 +89,8 @@ export default function EditCollectionPage() {
     return () => controller.abort()
   }, [])
 
+  const usesYtdlp = hasSourceFeature(collection, SourceFeature.YTDLP_DOWNLOADS)
+
   const onCancel = () => navigate(`/collection/${id ?? ''}`)
   const onSave = async () => {
     if (!id || !collection) return
@@ -97,6 +106,7 @@ export default function EditCollectionPage() {
       thumbnailLandscapePath: collection.thumbnailLandscapePath ?? null,
       thumbnailPortraitPath: collection.thumbnailPortraitPath ?? null,
       thumbnailSquarePath: collection.thumbnailSquarePath ?? null,
+      ...(usesYtdlp ? {ytdlpOptions: form.ytdlpOptions} : {}),
     }
     const r = await fetch(`${(window as any).appConfig.API_URL}/collections/${id}`, {
       method: 'PATCH',
@@ -104,6 +114,14 @@ export default function EditCollectionPage() {
       credentials: 'include',
       body: JSON.stringify(payload),
     })
+    if (r.status === 422) {
+      const body = await r.json().catch(() => null)
+      const problem = (body?.detail ?? []).find((item: any) => Array.isArray(item?.loc) && item.loc.includes('ytdlpOptions'))
+      if (problem) {
+        setOptionsError(String(problem.msg).replace(/^Value error, /, ''))
+        return
+      }
+    }
     if (!r.ok) {
       const msg = `Failed to save collection (HTTP ${r.status})`
       console.error(msg)
@@ -205,6 +223,31 @@ export default function EditCollectionPage() {
           value={form}
           onChange={(v: CollectionFormValue) => setForm((prev) => ({ ...prev, ...v }))}
         />
+
+        {usesYtdlp && (
+          <div className="form-row">
+            <label htmlFor="collection-ytdlp-options">Your own yt-dlp options</label>
+            <OptionsEditor
+              id="collection-ytdlp-options"
+              value={form.ytdlpOptions}
+              onChange={(value) => {
+                setOptionsError(null)
+                setForm((prev) => ({ ...prev, ytdlpOptions: value }))
+              }}
+              invalid={!!optionsError}
+              describedBy={optionsError ? 'collection-ytdlp-options-errors' : 'collection-ytdlp-options-help'}
+            />
+            {optionsError && (
+              <div id="collection-ytdlp-options-errors" className="error" role="alert" aria-live="polite">{optionsError}</div>
+            )}
+            <div className="help" id="collection-ytdlp-options-help">
+              <ReadMore summary="Exceptions for this Collection, on top of its Local Media Profile’s options. Most Collections leave this empty.">
+                <p>These lines come after the Local Media Profile’s own yt-dlp options, so for an option set in both places this Collection’s wins.
+                  Each line is checked with yt-dlp’s own parser, and the same options are blocked as on the Local Media Profile.</p>
+              </ReadMore>
+            </div>
+          </div>
+        )}
 
         <div className="actions">
           <button type="button" className="btn" onClick={onCancel}>Cancel</button>

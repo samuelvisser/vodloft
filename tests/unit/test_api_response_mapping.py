@@ -68,6 +68,8 @@ def test_download_profile_view_uses_relationship_aliases():
         delete_older_episodes=True,
         retention_from="published",
         auto_subtitles="fallback",
+        sponsorblock_enabled=False,
+        sponsorblock_segments={},
         seasons=[],
         include_upcoming_seasons=True,
         rules=[],

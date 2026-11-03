@@ -28,6 +28,7 @@ from backend.types.local_media_profile_types import (
     goal_video_codecs,
 )
 from backend.utils.output_template_formatting import normalize_output_template_expression_spacing
+from sources.ytdlp_options import MAX_OPTIONS_LENGTH, OptionsRefused, ytdlp_option_arguments
 from backend.utils.helpers import slugify
 
 
@@ -38,6 +39,15 @@ def _language_code(value: str) -> str:
     if not _LANGUAGE_CODE.fullmatch(value):
         raise ValueError(f"'{value}' is not a language code such as 'en' or 'pt-BR'")
     return value
+
+
+def checked_ytdlp_options(value: str) -> str:
+    """Your own yt-dlp options, refused with the first line that can not be used."""
+    try:
+        ytdlp_option_arguments(value)
+    except OptionsRefused as exc:
+        raise ValueError(str(exc)) from None
+    return value.strip("\n")
 
 
 class VideoCodecChoiceAPI(RequestBase):
@@ -72,7 +82,13 @@ class LocalMediaProfileAPIBaseIn(RequestBase):
     audio_codec: AudioCodec = AudioCodec.AAC
     audio_format: AudioFormat = AudioFormat.M4A
     audio_language: str | None = Field(default=None, max_length=16)
+    ytdlp_options: str = Field(default="", max_length=MAX_OPTIONS_LENGTH)
     output_template: str = Field(min_length=16, max_length=4096)
+
+    @field_validator("ytdlp_options")
+    @classmethod
+    def _validate_ytdlp_options(cls, value: str) -> str:
+        return checked_ytdlp_options(value)
 
     @field_validator("subtitle_languages")
     @classmethod
@@ -127,7 +143,7 @@ class LocalMediaProfileAPIBaseIn(RequestBase):
 
 _KEPT_WHEN_UNSET = {
     "subtitle_mode", "subtitle_languages", "subtitle_language_mode", "quality_goal", "video_codecs",
-    "codec_fallback", "container", "audio_codec", "audio_format", "audio_language",
+    "codec_fallback", "container", "audio_codec", "audio_format", "audio_language", "ytdlp_options",
 }
 
 
@@ -153,6 +169,7 @@ class LocalMediaProfileAPIBaseOut(ResponseBase):
     audio_codec: Union[AudioCodec, str]
     audio_format: Union[AudioFormat, str]
     audio_language: str | None = None
+    ytdlp_options: str = ""
     append_media_type_to_filename: bool
     created_at: datetime
     updated_at: datetime

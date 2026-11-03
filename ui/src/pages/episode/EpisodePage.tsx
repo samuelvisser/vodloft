@@ -20,6 +20,7 @@ import {faIcon} from '../../icons/faIcon'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
 import {RemovedBadge} from '../../components/common/RemovedFromSource'
 import {SubscriptionBadge, SubscriptionNotice, useSubscriptionLocked} from '../../components/common/NeedsSubscription'
+import SponsorBlockTimeline from '../../components/Episode/SponsorBlockTimeline'
 
 
 const OPERATION_STARTING_MESSAGE = 'This task is starting...'
@@ -338,6 +339,18 @@ export default function EpisodePage() {
                                 })}
                             </div>
                         )}
+                        {(downloads ?? [])
+                            .filter((download) => download.artifactStatus === 'available' && download.sponsorblockSegments)
+                            .map((download, _index, shown) => (
+                                <SponsorBlockTimeline
+                                    key={download.id}
+                                    segments={download.sponsorblockSegments ?? []}
+                                    duration={episode.duration}
+                                    title={shown.length > 1
+                                        ? `SponsorBlock: ${collectionProfiles?.find((profile) => profile.id === download.localMediaProfileId)?.name ?? 'download'}`
+                                        : 'SponsorBlock'}
+                                />
+                            ))}
                     </div>
                 )}
             </article>

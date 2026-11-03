@@ -81,3 +81,39 @@ class AutoSubtitles(StrEnum):
     NEVER = "never"
     FALLBACK = "fallback"
     ALWAYS = "always"
+
+
+class SponsorBlockAction(StrEnum):
+    """What a download does with one type of SponsorBlock segment."""
+
+    KEEP = "keep"
+    CHAPTER = "chapter"
+    """A named chapter a player can skip."""
+    CUT = "cut"
+    """Removed from the file for good."""
+
+
+class SponsorBlockCategory(StrEnum):
+    """SponsorBlock's segment types, in the order they are shown."""
+
+    SPONSOR = "sponsor"
+    SELFPROMO = "selfpromo"
+    INTERACTION = "interaction"
+    INTRO = "intro"
+    OUTRO = "outro"
+    PREVIEW = "preview"
+    FILLER = "filler"
+    MUSIC_OFFTOPIC = "music_offtopic"
+
+
+DEFAULT_SPONSORBLOCK_SEGMENTS: dict[str, str] = {
+    SponsorBlockCategory.SPONSOR.value: SponsorBlockAction.CUT.value,
+    SponsorBlockCategory.SELFPROMO.value: SponsorBlockAction.CUT.value,
+    SponsorBlockCategory.INTERACTION.value: SponsorBlockAction.CUT.value,
+    SponsorBlockCategory.INTRO.value: SponsorBlockAction.CHAPTER.value,
+    SponsorBlockCategory.OUTRO.value: SponsorBlockAction.CHAPTER.value,
+    SponsorBlockCategory.PREVIEW.value: SponsorBlockAction.CHAPTER.value,
+    SponsorBlockCategory.FILLER.value: SponsorBlockAction.KEEP.value,
+    SponsorBlockCategory.MUSIC_OFFTOPIC.value: SponsorBlockAction.KEEP.value,
+}
+"""A new YouTube Download Profile cuts out ads and reminders and marks intros, outros and recaps as chapters."""

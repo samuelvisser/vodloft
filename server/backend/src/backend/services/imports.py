@@ -36,6 +36,7 @@ from config.settings.submodels import FilenameRestrictionMode
 from importer.contract import CollectionPlan, FilePlan, Importer, ImportPlan, ImportWarning, ProfilePlan
 from importer.paths import DEFAULT_PATH_MAP, PathMap, detect_path_map, map_path, path_map_candidates
 from importer.registry import get_importer as _registered_importer
+from sources.ytdlp_options import check_ytdlp_options
 
 from backend.db.models import (
     Collection, CollectionLocalMediaProfile, DownloadProfile, DownloadProfileRule, Episode, ImportLink, ImportRun, ImportStep,
@@ -67,11 +68,11 @@ _PROFILE_FIELDS = (
     "output_template", "preferred_format", "subtitle_mode", "thumbnail_mode", "metadata_mode",
     "collection_scope", "download_collection_assets", "indexing_values",
     "subtitle_languages", "subtitle_language_mode", "quality_goal", "video_codecs", "container", "audio_codec",
-    "audio_language",
+    "audio_language", "ytdlp_options",
 )
 _DOWNLOAD_PROFILE_FIELDS = (
     "ep_id_type_list", "download_days_in_past", "download_episode_count", "download_starting_from",
-    "delete_older_episodes", "retention_from", "auto_subtitles",
+    "delete_older_episodes", "retention_from", "auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments",
 )
 _DEFAULT_SETTINGS = frozenset({"downloads.filename_restriction_mode", "ytdlp.youtube_api_key"})
 
@@ -169,6 +170,33 @@ def _samples(paths: Sequence[str]) -> list[str]:
     return [paths[int(index * step)] for index in range(_SAMPLES)]
 
 
+def _with_checked_options(plan: ImportPlan) -> ImportPlan:
+    """Keep the yt-dlp options an importer could not map that pass VODLoft's check, and report the others."""
+    profiles = []
+    for profile in plan.profiles:
+        text = profile.settings.get("ytdlp_options")
+        if not isinstance(text, str):
+            profiles.append(profile)
+            continue
+        kept: list[str] = []
+        warnings = list(profile.warnings)
+        refused = {line.line: line for line in check_ytdlp_options(text) if line.status != "valid"}
+        for number, line in enumerate(text.splitlines(), start=1):
+            if number in refused:
+                warnings.append(ImportWarning("yt-dlp options", f"{line.strip()}: {refused[number].message}"))
+            else:
+                kept.append(line)
+        settings = {**profile.settings, "ytdlp_options": "\n".join(kept)}
+        if not kept:
+            del settings["ytdlp_options"]
+        else:
+            warnings.append(ImportWarning(
+                "yt-dlp options", f"{len(kept)} option line(s) VODLoft has no setting for are kept as your own yt-dlp options", "close",
+            ))
+        profiles.append(replace(profile, settings=settings, warnings=tuple(warnings)))
+    return replace(plan, profiles=tuple(profiles))
+
+
 def _with_templates(plan: ImportPlan, templates: Mapping[str, str]) -> ImportPlan:
     if not templates:
         return plan
@@ -197,7 +225,7 @@ def load_plan(importer: Importer, options: ImportOptions) -> LoadedPlan:
     if chosen != DEFAULT_PATH_MAP:
         plan = importer.read(work_location(importer, chosen))
     found = sum(1 for sample in samples if (mapped := map_path(sample, chosen)) and _exists(mapped))
-    return LoadedPlan(_with_templates(plan, options.templates), chosen, len(samples), found)
+    return LoadedPlan(_with_templates(_with_checked_options(plan), options.templates), chosen, len(samples), found)
 
 
 # ---------- Ledger ----------
@@ -291,6 +319,7 @@ def _profile_values(profile: CollectionLocalMediaProfile) -> dict[str, object]:
         "container": profile.container,
         "audio_codec": profile.audio_codec,
         "audio_language": profile.audio_language,
+        "ytdlp_options": profile.ytdlp_options,
         "indexing_values": [
             {"key": item.key, "name": item.name, "keep_numbers": item.keep_numbers}
             for item in get_indexing_value_definitions(profile)
@@ -309,6 +338,7 @@ def _profile_wanted(plan: ProfilePlan) -> dict[str, object]:
 
 def _download_profile_values(profile: DownloadProfile) -> dict[str, object]:
     values = {name: getattr(profile, name) for name in _DOWNLOAD_PROFILE_FIELDS}
+    values["sponsorblock_segments"] = dict(values["sponsorblock_segments"])
     starting = values["download_starting_from"]
     values["download_starting_from"] = starting.isoformat() if isinstance(starting, date) else starting
     return values

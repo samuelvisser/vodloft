@@ -155,7 +155,7 @@ export default function SubtitleLines({form, onSubtitleModeChange}: Props) {
     })
 
     return (
-        <div className="form-row which-episodes subtitle-lines">
+        <div className="form-row which-episodes subtitle-lines" id="subtitle-lines">
             <span className="subtitle-lines__label">Subtitles</span>
             <ul className="which-episodes-lines">
                 {line('where', [{text: 'Store subtitles '}, {text: WHERE_WORDS[subtitleMode] ?? subtitleMode, strong: true}], (

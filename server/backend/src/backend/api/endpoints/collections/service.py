@@ -214,7 +214,8 @@ def update_collection(s: Session, collection_slug: str, body: CollectionAPIUpdat
     if collection is None:
         raise HTTPException(status_code=404, detail="Collection not found")
 
-    update_database_fields(collection, body, exclude_fields={"membership_level"} if body.membership_level is None else None)
+    left_out = {name for name in ("membership_level", "ytdlp_options") if getattr(body, name) is None}
+    update_database_fields(collection, body, exclude_fields=left_out or None)
     s.flush()
     request_collection_custom_index_reconciliation(s, collection.id)
 

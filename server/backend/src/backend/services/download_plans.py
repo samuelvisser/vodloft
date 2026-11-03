@@ -8,11 +8,13 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from backend.services.no_ascii_names import settle_no_ascii_name
-from backend.db.models import Episode, Movie, MovieExtra, Video
+from backend.db.models import DownloadProfile, Episode, Movie, MovieExtra, Video
 from backend.db.models.media_download import MediaDownloadBase
 from backend.services.download_metadata import build_episode_metadata, build_movie_metadata, build_video_metadata, select_thumbnail_url
 from backend.services.download_options import effective_download_mode, effective_metadata_mode, effective_thumbnail_mode
-from backend.services.download_quality import chosen_subtitle_tracks, first_subtitle_is_default, ytdlp_quality, ytdlp_subtitles
+from backend.services.download_quality import (
+    chosen_subtitle_tracks, custom_ytdlp_options, first_subtitle_is_default, ytdlp_quality, ytdlp_sponsorblock, ytdlp_subtitles,
+)
 from backend.types.download_profile_types import AutoSubtitles
 from backend.services.movies import update_movie_extra_source_metadata
 from backend.types.dailywire_user_info import DwMembershipLevel
@@ -26,7 +28,7 @@ from downloader import (
 )
 from downloader.lifecycle import DownloadTracker
 from downloader.metadata import render_nfo
-from downloader.plan import DownloadPlan, SidecarSpec, build_download_plan
+from downloader.plan import DownloadPlan, SidecarSpec, YtdlpSponsorBlock, build_download_plan
 from downloader.source import resolve_download_source
 from downloader.ytdlp import resolve_ytdlp_source
 from sources import Feature, PlaybackKind, get_source
@@ -66,7 +68,16 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     metadata_mode = effective_metadata_mode(profile)
     subtitle_mode = LocalMediaProfileSubtitleMode(profile.subtitle_mode)
     quality = ytdlp_quality(profile)
-    auto_subtitles = _auto_subtitles(download, episode)
+    download_profile = _download_profile(download, episode)
+    auto_subtitles = AutoSubtitles(download_profile.auto_subtitles) if download_profile is not None else (
+        AutoSubtitles.FALLBACK if episode is not None else AutoSubtitles.NEVER
+    )
+    sponsorblock = ytdlp_sponsorblock(
+        download_profile.sponsorblock_enabled, dict(download_profile.sponsorblock_segments),
+    ) if download_profile is not None else YtdlpSponsorBlock()
+    option_texts = [(f"the Local Media Profile '{profile.name}'", profile.ytdlp_options)]
+    if episode is not None:
+        option_texts.append((f"the Collection '{episode.collection.title}'", episode.collection.ytdlp_options))
     subtitle_request = ytdlp_subtitles(profile, AutoSubtitles.NEVER)
     first_default = first_subtitle_is_default(profile)
     remux, ffmpeg_path, temporary_root = settings.remux_video_to_mp4, settings.ffmpeg_path, str(settings.temporary_download_root)
@@ -92,7 +103,10 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
                 subtitle_request = ytdlp_subtitles(profile, auto_subtitles)
             source = resolve_ytdlp_source(
                 playback.url, command=playback.command, preferred_format=preferred, audio_only=audio_only,
-                quality=quality, subtitles=subtitle_request, ffmpeg_path=ffmpeg_path,
+                quality=quality, subtitles=subtitle_request,
+                sponsorblock=sponsorblock if media_source.sponsorblock_for(page_url) else YtdlpSponsorBlock(),
+                custom_options=custom_ytdlp_options(*option_texts) if media_source.has(Feature.YTDLP_DOWNLOADS) else (),
+                ffmpeg_path=ffmpeg_path,
             )
         else:
             tracker.preparing("inspect_stream")
@@ -254,17 +268,16 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     )
 
 
-def _auto_subtitles(download: MediaDownloadBase, episode: Episode | None) -> AutoSubtitles:
-    """The auto-generated subtitle choice of the Download Profile behind an episode download.
+def _download_profile(download: MediaDownloadBase, episode: Episode | None) -> DownloadProfile | None:
+    """The Download Profile behind an episode download, for its YouTube choices.
 
     An episode downloaded by hand follows the Collection's Download Profile
     that uses the same Local Media Profile; a single video has none.
     """
     if episode is None:
-        return AutoSubtitles.NEVER
-    profile = getattr(download, "download_profile", None) or next(
+        return None
+    return getattr(download, "download_profile", None) or next(
         (candidate for candidate in episode.collection.download_profiles
          if candidate.local_media_profile_id == download.local_media_profile_id),
         None,
     )
-    return AutoSubtitles(profile.auto_subtitles) if profile is not None else AutoSubtitles.FALLBACK

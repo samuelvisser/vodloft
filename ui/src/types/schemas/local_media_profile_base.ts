@@ -46,6 +46,7 @@ const QualityAndLanguageFields = {
     audioCodec: z.enum(['aac', 'opus']).default('aac'),
     audioFormat: z.enum(['m4a', 'opus', 'mp3']).default('m4a'),
     audioLanguage: LanguageCodeSchema.nullable().default(null),
+    ytdlpOptions: z.string().max(8000, 'Keep your own yt-dlp options under 8000 characters').default(''),
 }
 
 // ---------- Strict request (create/update) ----------
