@@ -463,11 +463,12 @@ function PreviewStep({importer, onReplace, onFinished}: {
                         <div className="settings-field settings-toggle-field settings-field--wide">
                             <div className="settings-toggle-field__control">
                                 <div>
-                                    <label htmlFor={`import-merge-${importer.key}`}>Merge matching profiles</label>
+                                    <label htmlFor={`import-merge-${importer.key}`}>Keep collections with their own template on their Pinchflat profile</label>
                                     <div className="settings-field__help">
-                                        Profiles with the same settings whose templates differ only by a folder or a
-                                        name become one profile. Each collection keeps its own folder or name as a
-                                        custom collection field, so no file gets another path.
+                                        A Pinchflat source that overrides its media profile's template stays on that
+                                        profile: the folder or name it changes becomes a custom collection field.
+                                        Media profiles with the same settings and nearly the same template share one
+                                        profile the same way. This only happens when no file gets another path.
                                     </div>
                                 </div>
                                 <Switch
@@ -692,7 +693,7 @@ function ProfilePreview({profile, collections, template, onTemplate}: {
             {profile.mergedFrom.length > 0 && (
                 <div className="import-merge">
                     <div>
-                        <span className="import-merge__label">Merged from</span>{' '}
+                        <span className="import-merge__label">Kept together</span>{' '}
                         {profile.mergedFrom.join(', ')}
                     </div>
                     {profile.fields.length > 0 && (
@@ -711,7 +712,7 @@ function ProfilePreview({profile, collections, template, onTemplate}: {
             )}
             {profile.keptSeparate && (
                 <p className="import-merge__apart">
-                    Kept apart from {profile.baseName ?? 'the other profiles'}: {profile.keptSeparate.charAt(0).toLowerCase() + profile.keptSeparate.slice(1)}.
+                    Not kept on {profile.baseName ?? 'its Pinchflat profile'}: {profile.keptSeparate.charAt(0).toLowerCase() + profile.keptSeparate.slice(1)}.
                 </p>
             )}
             {editing ? (

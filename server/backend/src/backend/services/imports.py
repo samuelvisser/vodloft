@@ -1122,7 +1122,7 @@ def apply_run(session: Session, run_id: int) -> dict[str, int]:
                 report.add("merged", profile_plan.name, profile_plan.report[-1])
             elif profile_plan.kept_separate:
                 report.add("kept_separate", profile_plan.name,
-                           f"Kept apart from {profile_plan.base_name}: {profile_plan.kept_separate}")
+                           f"Not kept on {profile_plan.base_name}: {profile_plan.kept_separate}")
     session.flush()
 
     files_by_collection: dict[str, list[FilePlan]] = defaultdict(list)
