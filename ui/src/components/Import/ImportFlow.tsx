@@ -1,5 +1,6 @@
 import {useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode} from 'react'
 import Switch from 'react-switch'
+import {Link} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 
@@ -1088,6 +1089,9 @@ function RunView({importer, run, onRun, onBack}: {
                                 title={`Only the Download Profiles that were on in ${importer.name}`}>
                             Turn on {off} Download Profile{off === 1 ? '' : 's'}
                         </button>
+                    )}
+                    {run.steps.some((step) => step.matching) && (
+                        <Link className="btn" to="/existing-files">Match existing files</Link>
                     )}
                     {done && <button type="button" className="btn" onClick={onBack}>Back</button>}
                 </div>
