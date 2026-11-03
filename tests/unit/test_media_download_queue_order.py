@@ -1140,13 +1140,13 @@ def test_workflow_orders_active_downloads_by_execution_start_across_pages():
         engine.dispose()
 
 
-def test_workflow_orders_publication_waits_between_running_and_queued_downloads():
+def test_workflow_orders_publication_waits_in_dispatch_queue_order():
     from sqlalchemy import select
 
     from backend.api.endpoints.media_downloads.service import get_media_downloads_page
     from task_manager.scheduler.db import TaskDefinition, TaskRun
     from task_manager.scheduler.operations import link_run_to_operations, refresh_operation
-    from task_manager.scheduler.types import ResourceType, TaskStatus
+    from task_manager.scheduler.types import OperationSource, ResourceType, TaskStatus
     from task_manager.tasks.media_download_operations import (
         _set_media_download_countdown_wait,
         create_media_download_operation,
@@ -1154,12 +1154,14 @@ def test_workflow_orders_publication_waits_between_running_and_queued_downloads(
 
     session, engine = _session()
     try:
-        # Delays are created first, so creation order alone would sort them early.
+        # Delayed downloads sort where they will dispatch once the wait ends:
+        # after manually prioritized work, in creation order with the rest.
         countdown_delay = _make_download(session, slug="delay-no-deadline")
         late_delay = _make_download(session, slug="delay-late")
         soon_delay = _make_download(session, slug="delay-soon")
         running = _make_download(session, slug="delay-running")
         queued = _make_download(session, slug="delay-queued")
+        prioritized = _make_download(session, slug="delay-prioritized")
 
         now = datetime.now(timezone.utc)
         create_media_download_operation(
@@ -1208,6 +1210,7 @@ def test_workflow_orders_publication_waits_between_running_and_queued_downloads(
         )
         refresh_operation(session, operation.id)
         create_media_download_operation(session, queued)
+        create_media_download_operation(session, prioritized, source=OperationSource.UI)
         session.commit()
 
         def page(cursor=None):
@@ -1225,8 +1228,22 @@ def test_workflow_orders_publication_waits_between_running_and_queued_downloads(
                 break
 
         assert [row.id for row in rows] == [
-            running.id, soon_delay.id, late_delay.id, countdown_delay.id, queued.id,
+            running.id,
+            prioritized.id,
+            late_delay.id,
+            soon_delay.id,
+            countdown_delay.id,
+            queued.id,
         ]
+        # Only dispatchable downloads get a visible queue position.
+        assert {row.id: row.queue_position for row in rows} == {
+            running.id: None,
+            prioritized.id: 1,
+            late_delay.id: None,
+            soon_delay.id: None,
+            countdown_delay.id: None,
+            queued.id: 2,
+        }
     finally:
         session.close()
         engine.dispose()

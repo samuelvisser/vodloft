@@ -24,7 +24,6 @@ from task_manager.scheduler.db import (
     TaskOperationRun,
     TaskRun,
 )
-from task_manager.scheduler.operations import OPERATION_ADMISSION_WAIT_CONTEXT_KEY
 from task_manager.scheduler.types import OperationStatus, ResourceType, TaskStatus
 from task_manager.tasks.media_download_operations import (
     media_download_queue_position_subquery,
@@ -325,6 +324,8 @@ def _download_status_source() -> Subquery:
     latest_run_ids = _latest_download_run_ids()
     active_operation = _latest_active_download_operation()
     queue = media_download_queue_position_subquery()
+    # Delayed downloads sort where they will dispatch once their wait ends.
+    sort_queue = media_download_queue_position_subquery(include_admission_waits=True)
 
     return (
         select(
@@ -340,10 +341,8 @@ def _download_status_source() -> Subquery:
             active_operation.c.operation_started_at,
             active_operation.c.operation_created_at,
             queue.c.queue_position.label("queue_position"),
+            sort_queue.c.queue_position.label("sort_queue_position"),
             _awaiting_admission(active_operation),
-            active_operation.c.operation_context[
-                OPERATION_ADMISSION_WAIT_CONTEXT_KEY
-            ]["until"].as_float().label("admission_wait_until"),
             _effective_download_status(active_operation),
         )
         .outerjoin(
@@ -358,6 +357,10 @@ def _download_status_source() -> Subquery:
         .outerjoin(
             queue,
             queue.c.media_download_id == MediaDownloadBase.id,
+        )
+        .outerjoin(
+            sort_queue,
+            sort_queue.c.media_download_id == MediaDownloadBase.id,
         )
         .subquery()
     )
@@ -388,17 +391,23 @@ def _is_executing(status_source):
     )
 
 
+def _is_queued(status_source):
+    return or_(
+        status_source.c.status == "pending",
+        status_source.c.awaiting_admission.is_(True),
+    )
+
+
 def _workflow_bucket(status_source):
-    """Running work, then admission waits, then the dispatch queue, then the rest.
+    """Running work, then the dispatch queue, then the rest.
 
     Admission waits (publication delay, countdown) have not started yet, so
-    they never sort between downloads that are actually executing.
+    they belong to the queue rather than to downloads that are executing.
     """
     return case(
         (_is_executing(status_source), 0),
-        (status_source.c.awaiting_admission.is_(True), 1),
-        (status_source.c.status == "pending", 2),
-        else_=3,
+        (_is_queued(status_source), 1),
+        else_=2,
     ).label("workflow_bucket")
 
 
@@ -476,19 +485,11 @@ def _workflow_terminal_at(status_source):
 
 
 def _workflow_queue_position(status_source):
-    """Order within the queued and admission-wait buckets.
-
-    Queued downloads follow the dispatcher. Admission waits follow the moment
-    they may start, soonest first; waits without a deadline (countdowns) last.
-    """
+    """Dispatcher order, with admission waits at the place they will take."""
     return case(
         (
-            status_source.c.status == "pending",
-            func.coalesce(status_source.c.queue_position, -1),
-        ),
-        (
-            status_source.c.awaiting_admission.is_(True),
-            func.coalesce(status_source.c.admission_wait_until, 1e18),
+            _is_queued(status_source),
+            func.coalesce(status_source.c.sort_queue_position, -1),
         ),
         else_=0,
     ).label("workflow_queue")

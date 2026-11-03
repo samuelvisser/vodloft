@@ -1051,8 +1051,12 @@ def _ordered_queued_media_download_operations(
     return list(session.scalars(stmt))
 
 
-def media_download_queue_position_subquery():
-    """Return a SQL subquery mapping unreserved queued downloads to 1-based positions."""
+def media_download_queue_position_subquery(*, include_admission_waits: bool = False):
+    """Return a SQL subquery mapping unreserved queued downloads to 1-based positions.
+
+    With ``include_admission_waits``, downloads that wait for admission (such as
+    a publication delay) are ranked too, at the place they take once the wait ends.
+    """
     queue_order = (
         case((TaskOperation.prioritized_at.is_not(None), 0), else_=1),
         TaskOperation.prioritized_at.desc(),
@@ -1076,7 +1080,11 @@ def media_download_queue_position_subquery():
         )
         .where(
             TaskOperation.kind == MEDIA_DOWNLOAD_OPERATION_KIND,
-            TaskOperation.status == OperationStatus.QUEUED.value,
+            TaskOperation.status.in_(
+                (OperationStatus.QUEUED.value, OperationStatus.WAITING.value)
+                if include_admission_waits
+                else (OperationStatus.QUEUED.value,)
+            ),
             TaskOperation.resource_type == ResourceType.MEDIA_DOWNLOAD.value,
             TaskOperation.resource_id.is_not(None),
             TaskOperationTarget.resource_type == ResourceType.MEDIA_DOWNLOAD.value,
