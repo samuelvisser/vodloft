@@ -24,6 +24,9 @@ export const SourceFeature = {
 } as const
 export type SourceFeatureValue = typeof SourceFeature[keyof typeof SourceFeature]
 
+/** The domain a Source names when it works with any site. */
+export const ANY_DOMAIN = '*'
+
 /** The Daily Wire, whose catalog and show endpoints the UI calls by name. */
 export const DAILYWIRE_SOURCE_KEY = 'dailywire'
 
@@ -45,6 +48,8 @@ export const SourceReadSchema = z.object({
     name: z.string(),
     domains: z.array(z.string()),
     features: z.array(z.string()),
+    /** What the Source downloads from, when its name does not say so, such as YouTube, and many more. */
+    sitesLabel: z.string().nullable().optional(),
     searchLabel: z.string().nullable().optional(),
     /** What the Source calls a kind of media in its own catalogue, such as Show for a Daily Wire collection. */
     kindNames: z.record(z.string(), z.string()).optional(),

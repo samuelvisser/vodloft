@@ -1,5 +1,5 @@
 import {useSources} from '../../lib/queries'
-import {SourceFeature, SourceRead, sourceHas} from '../../types/schemas/source'
+import {ANY_DOMAIN, SourceFeature, SourceRead, sourceHas} from '../../types/schemas/source'
 import SourceCookiesCard from '../Source/SourceCookiesCard'
 import SourceDomainsCard from '../Source/SourceDomainsCard'
 import SourceProgramCard from '../Source/SourceProgramCard'
@@ -42,7 +42,7 @@ function SourceCard({source, tabProps}: {source: SourceRead; tabProps: SettingsT
     return (
         <SourceSection
             title={source.name}
-            description={source.domains.includes('*') ? 'Many sites' : source.domains.join(', ')}
+            description={source.domains.includes(ANY_DOMAIN) ? 'Many sites' : source.domains.join(', ')}
             summaryExtra={
                 <span className="source-feature-list" role="list" aria-label={`What ${source.name} supports`}>
                     {source.features.filter((feature) => !SETTING_FEATURES.includes(feature)).map((feature) => (

@@ -19,7 +19,10 @@ type AddMediaPageProps = {
     onCollection?: (target: MediaLinkTarget) => void
     onMovie?: (target: MediaLinkTarget) => void
     onBrowse?: (sourceId: string) => void
+    onBack?: () => void
     onSkip?: () => void
+    /** The link to look up right away, when it does not come from the page's own address. */
+    initialUrl?: string
 }
 
 const KIND_LABEL: Record<ResolvedLinkRead['kind'], string> = {
@@ -29,7 +32,7 @@ const KIND_LABEL: Record<ResolvedLinkRead['kind'], string> = {
     video: 'Video',
 }
 
-export default function AddMediaPage({onboarding = false, onCollection, onMovie, onBrowse, onSkip}: AddMediaPageProps = {}) {
+export default function AddMediaPage({onboarding = false, onCollection, onMovie, onBrowse, onBack, onSkip, initialUrl}: AddMediaPageProps = {}) {
     const navigate = useNavigate()
     const [params] = useSearchParams()
     const {data: sources} = useSources()
@@ -38,7 +41,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
     const {data: localVideos} = useVideos()
     const queryClient = useQueryClient()
     const [addingVideo, setAddingVideo] = useState(false)
-    const [url, setUrl] = useState(params.get('url') ?? '')
+    const [url, setUrl] = useState(initialUrl ?? params.get('url') ?? '')
     const [link, setLink] = useState<ResolvedLinkRead | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [resolving, setResolving] = useState(false)
@@ -73,7 +76,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
     }
 
     useEffect(() => {
-        const initial = params.get('url')
+        const initial = initialUrl ?? params.get('url')
         if (initial) void lookUp(initial)
         return () => requestRef.current?.abort()
         // Only look up the link the page was opened with.
@@ -147,11 +150,11 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
         else navigate(`/add-collection?url=${encodeURIComponent(target.url)}`)
     }
 
-    // A Source with a catalogue is browsed; one without is searched. Onboarding only browses.
-    const browseSources = (sources ?? []).filter((source) => canUseSource(source.id) && (sourceHas(source, SourceFeature.BROWSE) || (!onboarding && sourceHas(source, SourceFeature.SEARCH))))
+    // A Source with a catalogue is browsed; one without is searched.
+    const browseSources = (sources ?? []).filter((source) => canUseSource(source.id) && (sourceHas(source, SourceFeature.BROWSE) || sourceHas(source, SourceFeature.SEARCH)))
     const browse = (source: SourceRead) => {
-        if (!sourceHas(source, SourceFeature.BROWSE)) navigate(`/browse/${encodeURIComponent(source.id)}`)
-        else if (onBrowse) onBrowse(source.id)
+        if (onBrowse) onBrowse(source.id)
+        else if (!sourceHas(source, SourceFeature.BROWSE)) navigate(`/browse/${encodeURIComponent(source.id)}`)
         else navigate('/browse')
     }
 
@@ -181,8 +184,11 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                         lets you confirm everything before anything is saved.
                     </p>
                 </div>
-                {onSkip && (
-                    <button className="btn" type="button" onClick={onSkip}>Skip for now</button>
+                {(onBack || onSkip) && (
+                    <div className="add-media-header-actions">
+                        {onBack && <button className="btn" type="button" onClick={onBack}>Back</button>}
+                        {onSkip && <button className="btn" type="button" onClick={onSkip}>Skip for now</button>}
+                    </div>
                 )}
             </div>
 

@@ -71,30 +71,45 @@ def _seed_local_media_profiles(session: Session) -> None:
     ))
 
 
+_FRESH_START_PROFILE_SLUGS = ("vodloft-collections-video", "vodloft-collections-audio")
+
+
 def seed_fresh_start_profiles(session: Session) -> None:
     """The default Collection profiles, for a library that starts fresh instead of importing one.
 
-    Onboarding adds them on "Start fresh", or when it finishes without an import, so a library
-    imported during onboarding only holds the imported profiles (plus Movies and Videos).
+    Onboarding adds them once a fresh library first needs one, such as for its first collection, or
+    when it finishes without an import, so a library imported during onboarding only holds the
+    imported profiles (plus Movies and Videos).
     """
     from backend.db.models import CollectionLocalMediaProfile
 
     _add_missing_profiles(session, (
         CollectionLocalMediaProfile(
-            slug="vodloft-collections-video",
+            slug=_FRESH_START_PROFILE_SLUGS[0],
             name="VODLoft Collections (Video)",
             subtitle_mode="sidecar",
             output_template=_COLLECTION_VIDEO_TEMPLATE,
             preferred_format="format_1080p",
         ),
         CollectionLocalMediaProfile(
-            slug="vodloft-collections-audio",
+            slug=_FRESH_START_PROFILE_SLUGS[1],
             name="VODLoft Collections (Audio)",
             subtitle_mode="sidecar",
             output_template=_COLLECTION_AUDIO_TEMPLATE,
             preferred_format="format_audio_only",
         ),
     ))
+
+
+def remove_fresh_start_profiles(session: Session) -> None:
+    """Take the default Collection profiles away again, for a person who goes back in onboarding
+    to choose between starting fresh and importing."""
+    from backend.db.models import CollectionLocalMediaProfile
+
+    for profile in session.scalars(
+        select(CollectionLocalMediaProfile).where(CollectionLocalMediaProfile.slug.in_(_FRESH_START_PROFILE_SLUGS))
+    ):
+        session.delete(profile)
 
 
 def _seed_notification_rules(session: Session) -> None:

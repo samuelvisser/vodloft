@@ -30,10 +30,18 @@ function SearchNotice({notice}: {notice: SearchNoticeRead}) {
     )
 }
 
+type SourceSearchPageProps = {
+    /** The Source to search, when it does not come from the page's address. */
+    sourceId?: string
+    /** What choosing a result does, instead of opening the page that adds it. */
+    onChoose?: (result: SearchResultRead) => void
+}
+
 /** Browse a Source that has no catalogue by searching it. */
-export default function SourceSearchPage() {
+export default function SourceSearchPage({sourceId: givenSourceId, onChoose}: SourceSearchPageProps = {}) {
     const navigate = useNavigate()
-    const {sourceId} = useParams()
+    const routeParams = useParams()
+    const sourceId = givenSourceId ?? routeParams.sourceId
     const [params, setParams] = useSearchParams()
     const source = useSourceLookup().get(sourceId ?? '')
     const canSearch = sourceHas(source, SourceFeature.SEARCH) && canUseSource(source?.id ?? '')
@@ -58,6 +66,10 @@ export default function SourceSearchPage() {
     const sourceName = searchName(source) ?? sourceId ?? 'this service'
 
     const choose = (result: SearchResultRead) => {
+        if (onChoose) {
+            onChoose(result)
+            return
+        }
         if (result.kind === 'collection') {
             const local = localCollections?.find((collection) => collection.sourceKey === sourceId && collection.slug === result.slug)
             navigate(local ? `/collection/${local.slug}` : `/add-collection?url=${encodeURIComponent(result.url)}`)
