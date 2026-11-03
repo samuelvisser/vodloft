@@ -21,7 +21,7 @@ RELEASE_REVISIONS = (
 )
 VODLOFT_0_1_0_REVISION = "f4abb559e3ab"
 VODLOFT_0_5_0_REVISION = "817515eb8209"
-HEAD_REVISION = "4b8e1d27a6c3"
+HEAD_REVISION = "c89f1a5ea2ba"
 
 
 @pytest.fixture
@@ -306,3 +306,74 @@ def test_ytdlp_options_move_from_local_media_profiles_to_the_source(migration_da
     with engine.connect() as connection:
         assert connection.execute(text("SELECT ytdlp_options FROM settings")).scalar_one() == "-N 4\n--xattrs"
     assert "ytdlp_options" not in {column["name"] for column in inspect(engine).get_columns("local_media_profiles")}
+
+
+def test_imported_seasons_get_their_slug_back_and_the_duplicate_is_merged(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "4b8e1d27a6c3")
+    with engine.begin() as connection:
+        for collection_id in (1, 2, 3, 4):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key) VALUES (:id, :uuid, :slug, :slug, 'https://example.test/' || :slug, "
+                "'free', 'series', 'seasonal', 'Author', 'author', 'dailywire')"
+            ), {"id": collection_id, "uuid": f"uuid-{collection_id}", "slug": f"show-{collection_id}"})
+        seasons = (
+            # (id, collection, index, slug, imported)
+            (1, 1, 1, "extras", True),
+            (2, 2, 1, "extras-2", True),
+            (3, 3, 1, "extras-3", True),
+            (4, 3, 2, "show-3-season-1", True),
+            (5, 3, 3, "extras", False),  # Added again by indexing.
+            (6, 4, 1, "season-2", True),  # The Source's own slug: no season elsewhere is called "season".
+        )
+        for season_id, collection_id, index, slug, imported in seasons:
+            connection.execute(text(
+                "INSERT INTO seasons (id, collection_id, \"index\", slug, name, season_type, season_number) "
+                "VALUES (:id, :collection, :index, :slug, :name, 'extra', 0)"
+            ), {"id": season_id, "collection": collection_id, "index": index, "slug": slug,
+                "name": "Extras" if slug.startswith("extras") else slug})
+            if imported:
+                connection.execute(text(
+                    "INSERT INTO import_links (importer, kind, external_id, entity_id, written, unsupported) "
+                    "VALUES ('wireloft', 'season', :id, :id, '{}', '[]')"
+                ), {"id": season_id})
+        connection.execute(text(
+            "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, type, video_codecs) VALUES "
+            "(5, 'p', 'P', '/downloads/{{ collection }}/{{ episode_title }}.ext', 'format_1080p', 'collection', '[]')"
+        ))
+        for profile_id in (1, 2):
+            connection.execute(text(
+                "INSERT INTO download_profiles (id, collection_id, local_media_profile_id, enable_profile, ep_id_type_list, "
+                "download_with_countdown, redownload_final, download_days_in_past, download_episode_count, "
+                "delete_older_episodes, include_upcoming_seasons, sponsorblock_segments) "
+                "VALUES (:id, 3, 5, 1, '[]', 0, 0, 0, 0, 0, 1, '{}')"
+            ), {"id": profile_id})
+        # Profile 1 had the imported season and got the duplicate as an upcoming season; profile 2 only the duplicate.
+        for profile_id, season_id in ((1, 3), (1, 5), (2, 5)):
+            connection.execute(text(
+                "INSERT INTO download_profile_seasons (download_profile_id, season_id) VALUES (:profile, :season)"
+            ), {"profile": profile_id, "season": season_id})
+        for episode_id, season_id in ((10, 3), (11, 5)):
+            connection.execute(text(
+                "INSERT INTO media_items (id, uuid, type, source_key) VALUES (:id, :uuid, 'episode', 'dailywire')"
+            ), {"id": episode_id, "uuid": f"episode-{episode_id}"})
+            connection.execute(text(
+                "INSERT INTO media_items_episode (id, collection_id, season_id, \"index\", episode_identifier, slug, "
+                "publish_status, sharing_url, source_slug) VALUES (:id, 3, :season, :id, :identifier, :slug, "
+                "'published_final', 'https://example.test', :slug)"
+            ), {"id": episode_id, "season": season_id, "identifier": f"trailer.{episode_id}", "slug": f"e{episode_id}"})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        assert dict(connection.execute(text("SELECT id, slug FROM seasons")).all()) == {
+            1: "extras", 2: "extras", 3: "extras", 4: "show-3-season-1", 6: "season-2",
+        }
+        assert dict(connection.execute(text("SELECT id, season_id FROM media_items_episode")).all()) == {10: 3, 11: 3}
+        assert sorted(connection.execute(text(
+            "SELECT download_profile_id, season_id FROM download_profile_seasons"
+        )).all()) == [(1, 3), (2, 3)]

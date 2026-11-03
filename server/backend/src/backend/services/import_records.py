@@ -70,6 +70,8 @@ _MODELS: dict[str, type] = {
 }
 _DOWNLOAD_MODELS = {"episode": EpisodeMediaDownload, "movie": MovieMediaDownload, "movie_extra": MovieExtraMediaDownload}
 _SLUGGED = {"collection", "season", "episode", "movie", "movie_extra_source"}
+# A season's slug is unique only within its collection; the other slugs are unique across VODLoft.
+_SLUG_SCOPE = {"season": ("collection_id",)}
 _NOT_COMPARED = {"artifact_stat_dev", "artifact_stat_ino"}
 _WIRELOFT_HLS_MARKER = ".wireloft-hls-bundle"
 _VODLOFT_HLS_MARKER = ".vodloft-hls-bundle"
@@ -208,9 +210,11 @@ class _Applier:
             )
         return values
 
-    def _unique_slug(self, model: type, slug: str) -> str:
+    def _unique_slug(self, record: RecordPlan, model: type, values: dict[str, object]) -> str:
+        slug = str(values["slug"])
+        scope = [getattr(model, column) == values[column] for column in _SLUG_SCOPE.get(record.kind, ())]
         candidate, number = slug, 1
-        while self.session.scalar(select(model.id).where(model.slug == candidate).limit(1)) is not None:
+        while self.session.scalar(select(model.id).where(model.slug == candidate, *scope).limit(1)) is not None:
             number += 1
             candidate = f"{slug}-{number}"
         return candidate
@@ -274,7 +278,7 @@ class _Applier:
             return
         if existing is None:
             if record.kind in _SLUGGED and values.get("slug"):
-                values["slug"] = self._unique_slug(model, str(values["slug"]))
+                values["slug"] = self._unique_slug(record, model, values)
             if record.kind == "download_profile":
                 wanted_on = bool(values.get("enable_profile"))
                 values["enable_profile"] = False
