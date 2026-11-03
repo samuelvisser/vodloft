@@ -152,7 +152,7 @@ export default function ExistingFilesDialog({collectionSlug, collectionTitle, pr
                     <h2 id={`${profileSelectId}-title`} className="modal-title">Match existing files</h2>
                 </div>
                 <div className="existing-files-body">
-                    <p className="help">
+                    <p className="existing-files-intro">
                         VODLoft adopts the files it recognises for "{collectionTitle}" and won't download those
                         episodes again.
                     </p>
