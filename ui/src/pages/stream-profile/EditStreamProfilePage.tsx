@@ -1,7 +1,7 @@
 import {useCallback, useEffect, useMemo, useState} from 'react'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
-import {useNavigate, useParams} from 'react-router-dom'
+import {Link, useNavigate, useParams} from 'react-router-dom'
 import {useQuery, useQueryClient} from '@tanstack/react-query'
 import {useDownloadProfilesView} from '../../lib/queries'
 import {StreamProfileReadView} from '../../types/schemas/stream_profile_base'
@@ -116,7 +116,7 @@ export default function EditStreamProfilePage() {
                 </div>
                 <p>Profile not found.</p>
                 <div className="actions" style={{marginTop: 12}}>
-                    <button type="button" className="btn" onClick={() => navigate('/stream-profiles')}>Back</button>
+                    <Link className="btn" to="/stream-profiles">Back</Link>
                 </div>
             </section>
         )

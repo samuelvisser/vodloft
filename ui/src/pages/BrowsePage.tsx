@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useRef, useState} from 'react'
 import {canUseSource} from '../lib/access'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {useNavigate, useSearchParams} from 'react-router-dom'
+import {Link, useNavigate, useSearchParams} from 'react-router-dom'
 import {faIcon} from '../icons/faIcon'
 import {ClearInputButton} from '../components/common/ClearInputButton'
 
@@ -125,7 +125,7 @@ export default function BrowsePage({onboarding = false, onCollectionSelect, onMo
             <section className="view browse-view" aria-labelledby="browse-title">
                 <h1 id="browse-title">Browse</h1>
                 <p>{mayUse ? `${sourceName} cannot be browsed.` : `Your account may not use ${sourceName}.`} Paste a link on the Add media page instead.</p>
-                <button className="btn btn-primary" type="button" onClick={() => navigate('/add')}>Add media</button>
+                <Link className="btn btn-primary" to="/add">Add media</Link>
             </section>
         )
     }

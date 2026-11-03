@@ -83,7 +83,7 @@ export default function SourceSearchPage({sourceId: givenSourceId, onChoose}: So
             <section className="view browse-view" aria-labelledby="browse-title">
                 <h1 id="browse-title">Browse</h1>
                 <p>{sourceName} cannot be searched. Paste a link on the Add media page instead.</p>
-                <button className="btn btn-primary" type="button" onClick={() => navigate('/add')}>Add media</button>
+                <Link className="btn btn-primary" to="/add">Add media</Link>
             </section>
         )
     }

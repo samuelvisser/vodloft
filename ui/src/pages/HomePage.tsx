@@ -1,7 +1,7 @@
 import {useMemo} from 'react'
 import {can} from '../lib/access'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {useNavigate} from 'react-router-dom'
+import {Link} from 'react-router-dom'
 import {faIcon} from '../icons/faIcon'
 
 import DownloadProgressStatus from '../components/DownloadProgress/DownloadProgressStatus'
@@ -44,7 +44,6 @@ function mediaContext(download: MediaDownloadViewRead) {
 }
 
 export default function HomePage() {
-    const navigate = useNavigate()
     const {data: collections} = useCollections()
     const {data: movies} = useMovies()
     const {data: profiles} = useLocalMediaProfiles()
@@ -120,10 +119,10 @@ export default function HomePage() {
             .slice(0, RECENT_ACTIVITY_LIMIT)
     }, [indexedEpisodes, recentDownloadsQuery.data])
 
-    const openDownload = (download: MediaDownloadViewRead) => {
-        if (download.movieSlug) navigate(`/movie/${download.movieSlug}`)
-        else if (download.collectionSlug && download.episodeSlug) navigate(`/collection/${download.collectionSlug}/episode/${download.episodeSlug}`)
-        else navigate('/downloads')
+    const downloadHref = (download: MediaDownloadViewRead) => {
+        if (download.movieSlug) return `/movie/${download.movieSlug}`
+        if (download.collectionSlug && download.episodeSlug) return `/collection/${download.collectionSlug}/episode/${download.episodeSlug}`
+        return '/downloads'
     }
 
     return (
@@ -134,9 +133,9 @@ export default function HomePage() {
                     <p className="view-description">What VODLoft is doing now and anything that needs your attention.</p>
                 </div>
                 {can('add_media') && (
-                    <button className="btn btn-primary" onClick={() => navigate('/add')}>
+                    <Link className="btn btn-primary" to="/add">
                         <FontAwesomeIcon icon={faIcon('fass', 'plus')}/> Add media
-                    </button>
+                    </Link>
                 )}
             </div>
 
@@ -149,10 +148,10 @@ export default function HomePage() {
             </div>
 
             <div className="operation-stats" aria-label="VODLoft status summary">
-                <button type="button" onClick={() => navigate(downloadsUrlForStatusFilters('downloading', 'local_processing'))}><span>Active</span><strong>{IN_PROGRESS.reduce((total, status) => total + (downloadsQuery.facets[status] ?? 0), 0)}</strong></button>
-                <button type="button" onClick={() => navigate(downloadsUrlForStatusFilters('pending'))}><span>Queued</span><strong>{downloadsQuery.facets.pending ?? 0}</strong></button>
-                <button type="button" onClick={() => navigate(downloadsUrlForStatusFilters('error', 'missing', 'corrupted'))}><span>Failed</span><strong>{problemsQuery.total}</strong></button>
-                <button type="button" onClick={() => navigate('/library')}><span>Library</span><strong>{(collections?.length || 0) + (movies?.length || 0)}</strong></button>
+                <Link to={downloadsUrlForStatusFilters('downloading', 'local_processing')}><span>Active</span><strong>{IN_PROGRESS.reduce((total, status) => total + (downloadsQuery.facets[status] ?? 0), 0)}</strong></Link>
+                <Link to={downloadsUrlForStatusFilters('pending')}><span>Queued</span><strong>{downloadsQuery.facets.pending ?? 0}</strong></Link>
+                <Link to={downloadsUrlForStatusFilters('error', 'missing', 'corrupted')}><span>Failed</span><strong>{problemsQuery.total}</strong></Link>
+                <Link to="/library"><span>Library</span><strong>{(collections?.length || 0) + (movies?.length || 0)}</strong></Link>
             </div>
 
             {downloadError && <div className="form-error-card" role="alert">Could not load download status: {downloadError.message}</div>}
@@ -162,12 +161,12 @@ export default function HomePage() {
                     className={`operation-section${activeSectionIsEmpty ? ' mobile-empty-section' : ''}`}
                     aria-labelledby="active-downloads-title"
                 >
-                    <div className="operation-section-header"><h2 id="active-downloads-title">Downloading now</h2><button type="button" onClick={() => navigate('/downloads')}>All downloads</button></div>
+                    <div className="operation-section-header"><h2 id="active-downloads-title">Downloading now</h2><Link to="/downloads">All downloads</Link></div>
                     {active.length ? active.map((download) => (
-                        <button className="operation-download" type="button" key={download.id} onClick={() => openDownload(download)}>
+                        <Link className="operation-download" key={download.id} to={downloadHref(download)}>
                             <span className="operation-icon"><FontAwesomeIcon icon={faIcon('fass', download.movieSlug ? 'clapperboard' : 'podcast')}/></span>
                             <span className="operation-download-copy"><strong>{mediaTitle(download)}</strong><small>{mediaContext(download)} • {download.localMediaProfileName}</small><DownloadProgressStatus download={download} compact details={false}/></span>
-                        </button>
+                        </Link>
                     )) : <div className="operation-empty"><FontAwesomeIcon icon={faIcon('fass', 'check')}/><span>No active downloads</span></div>}
                 </section>
 
@@ -177,24 +176,24 @@ export default function HomePage() {
                 >
                     <div className="operation-section-header"><h2 id="attention-title">Needs attention</h2></div>
                     {profiles?.length === 0 && (
-                        <button className="operation-alert" type="button" onClick={() => navigate('/add-local-media-profile')}>
+                        <Link className="operation-alert" to="/add-local-media-profile">
                             <FontAwesomeIcon icon={faIcon('fass', 'folder-plus')}/><span><strong>No Local Media Profile</strong><small>Create one before downloading episodes or movies.</small></span><span>Fix</span>
-                        </button>
+                        </Link>
                     )}
                     {sourceProblems.map((problem) => (
-                        <button className="operation-alert" type="button" key={`source-${problem.sourceKey}-${problem.title}`} onClick={() => navigate('/settings?tab=sources')}>
+                        <Link className="operation-alert" key={`source-${problem.sourceKey}-${problem.title}`} to="/settings?tab=sources">
                             <FontAwesomeIcon icon={faIcon('fass', 'triangle-exclamation')}/><span><strong>{problem.title}</strong><small>{problem.detail}</small></span><span>Fix</span>
-                        </button>
+                        </Link>
                     ))}
                     {metadataProblems.slice(0, HOME_SECTION_LIMIT).map((movie) => (
-                        <button className="operation-alert" type="button" key={`movie-metadata-${movie.id}`} onClick={() => navigate(`/movie/${movie.slug}`)}>
+                        <Link className="operation-alert" key={`movie-metadata-${movie.id}`} to={`/movie/${movie.slug}`}>
                             <FontAwesomeIcon icon={faIcon('fass', 'triangle-exclamation')}/><span><strong>{movie.title} metadata</strong><small>{movie.releaseDateLookupError || 'TMDB release-date lookup failed. Open the movie to retry.'}</small></span><span>View</span>
-                        </button>
+                        </Link>
                     ))}
                     {problems.slice(0, HOME_SECTION_LIMIT).map((download) => (
-                        <button className="operation-alert" type="button" key={download.id} onClick={() => openDownload(download)}>
+                        <Link className="operation-alert" key={download.id} to={downloadHref(download)}>
                             <FontAwesomeIcon icon={faIcon('fass', 'triangle-exclamation')}/><span><strong>{mediaTitle(download)}</strong><small>{download.errorMessage || `Download is ${download.downloadStatus}`}</small></span><span>View</span>
-                        </button>
+                        </Link>
                     ))}
                     {!hasAttention && <div className="operation-empty"><FontAwesomeIcon icon={faIcon('fass', 'circle-check')}/><span>Nothing needs attention</span></div>}
                 </section>
@@ -206,22 +205,21 @@ export default function HomePage() {
                     if (activity.kind === 'download') {
                         const {download} = activity
                         return (
-                            <button className="recent-download" type="button" key={`download-${download.id}`} onClick={() => openDownload(download)}>
+                            <Link className="recent-download" key={`download-${download.id}`} to={downloadHref(download)}>
                                 <FontAwesomeIcon icon={faIcon('fass', 'circle-check')}/><span><strong>{mediaTitle(download)}</strong><small>{mediaContext(download)} • {download.localMediaProfileName}</small></span><time>{activity.occurredAt.toLocaleString()}</time>
-                            </button>
+                            </Link>
                         )
                     }
 
                     const {episode} = activity
                     return (
-                        <button
+                        <Link
                             className="recent-download recent-indexed-episode"
-                            type="button"
                             key={`episode-indexed-${episode.id}`}
-                            onClick={() => navigate(`/collection/${episode.collectionSlug}/episode/${episode.slug}`)}
+                            to={`/collection/${episode.collectionSlug}/episode/${episode.slug}`}
                         >
                             <FontAwesomeIcon icon={faIcon('fass', 'circle-plus')}/><span><strong>{episode.title}</strong><small>{episode.collectionTitle} • Indexed</small></span><time>{activity.occurredAt.toLocaleString()}</time>
-                        </button>
+                        </Link>
                     )
                 }) : <div className="operation-empty"><span>No recent activity yet</span></div>}
             </section>

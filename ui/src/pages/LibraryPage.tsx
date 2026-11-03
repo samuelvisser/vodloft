@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useState} from 'react'
 import {can} from '../lib/access'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {Link, useNavigate, useSearchParams} from 'react-router-dom'
+import {Link, useSearchParams} from 'react-router-dom'
 import {faIcon} from '../icons/faIcon'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
@@ -102,7 +102,6 @@ function formatVideoDuration(seconds: number) {
 }
 
 export default function LibraryPage() {
-    const navigate = useNavigate()
     const [params, setParams] = useSearchParams()
     const [collectionTypeFilter, setCollectionTypeFilter] = useState(loadLibraryCollectionTypeFilter)
     const [sourceFilter, setSourceFilter] = useState(loadLibrarySourceFilter)
@@ -193,10 +192,10 @@ export default function LibraryPage() {
                     <p className="view-description">Collections, movies and videos indexed by VODLoft.</p>
                 </div>
                 {can('add_media') && (
-                    <button className="btn btn-primary" onClick={() => navigate('/add')}>
+                    <Link className="btn btn-primary" to="/add">
                         <FontAwesomeIcon icon={faIcon('fass', 'plus')}/>
                         Add media
-                    </button>
+                    </Link>
                 )}
             </div>
 
@@ -236,7 +235,7 @@ export default function LibraryPage() {
                     <FontAwesomeIcon icon={faIcon('fass', 'book-open')}/>
                     <h2>Your library is empty</h2>
                     <p>Paste a link to a collection, a movie or a video to add it.</p>
-                    {can('add_media') && <button className="btn btn-primary" onClick={() => navigate('/add')}>Add media</button>}
+                    {can('add_media') && <Link className="btn btn-primary" to="/add">Add media</Link>}
                 </div>
             ) : activeType === 'collections' && hasCollections ? (
                 filteredCollections.length > 0 ? (

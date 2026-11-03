@@ -1,6 +1,6 @@
 import {useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode} from 'react'
 import Switch from 'react-switch'
-import {useNavigate} from 'react-router-dom'
+import {Link} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 
@@ -1048,7 +1048,6 @@ function RunView({importer, run, onRun, onBack}: {
         }
     }
     const {findActive} = useOperations()
-    const navigate = useNavigate()
     // A waiting step is first indexed, then its files are adopted: each runs as an operation on the Collection.
     const waitingLabel = (collectionId: number | null | undefined, indexed: boolean): string => {
         if (collectionId != null && findActive('import.adopt_files', 'collection', collectionId)) return 'Adopting files…'
@@ -1092,7 +1091,7 @@ function RunView({importer, run, onRun, onBack}: {
                         </button>
                     )}
                     {run.steps.some((step) => step.matching) && (
-                        <button type="button" className="btn" onClick={() => navigate('/existing-files')}>Match existing files</button>
+                        <Link className="btn" to="/existing-files">Match existing files</Link>
                     )}
                     {done && <button type="button" className="btn" onClick={onBack}>Back</button>}
                 </div>

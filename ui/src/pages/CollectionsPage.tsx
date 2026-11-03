@@ -1,5 +1,5 @@
-import {useCallback, useRef} from 'react'
-import {useNavigate} from 'react-router-dom'
+import {useRef} from 'react'
+import {Link} from 'react-router-dom'
 import {useCollections} from '../lib/queries'
 import {CollectionRead} from '../types/schemas/collection'
 import DataTable, {Column} from '../components/DataTable/DataTable'
@@ -8,8 +8,6 @@ import {EpisodeIdentifierReg, CollectionTypeReg} from "../types/collection";
 import {faIcon} from '../icons/faIcon'
 
 export default function CollectionsPage() {
-    const navigate = useNavigate()
-    const onAdd = useCallback(() => navigate('/add-collection'), [navigate])
 
     const {data: collections, isLoading, error} = useCollections()
 
@@ -41,7 +39,7 @@ export default function CollectionsPage() {
         <section className="view" aria-labelledby="collections-title">
             <div className="view-header">
                 <h1 id="collections-title">Collections</h1>
-                <button className="btn btn-primary" onClick={onAdd}>Add collection</button>
+                <Link className="btn btn-primary" to="/add-collection">Add collection</Link>
             </div>
 
             <div className="form-row">
@@ -65,10 +63,10 @@ export default function CollectionsPage() {
                         </>
                     )}
                     mobileRowActionLabel="Open collection"
-                    onRowClick={(s) => navigate(`/collection/${s.slug}`)}
+                    rowHref={(s) => `/collection/${s.slug}`}
                     actions={(s) => [
                         {
-                            onClick: () => navigate(`/edit-collection/${s.slug}`),
+                            href: `/edit-collection/${s.slug}`,
                             icon: faIcon('fass', 'pen-to-square'),
                             text: 'Edit',
                             classes: 'btn',

@@ -1,7 +1,7 @@
 import {sourceControls} from '../../lib/sourceControls'
 import {addedByLabel, can} from '../../lib/access'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useDownloadProfilesView, useEpisodePages, useCollection, useLocalMediaProfiles, useCollectionDownloads, useCollectionSeasons, useSkippedByFilter, useSourceLookup, useStreamProfilesView } from '../../lib/queries'
 import SourceBadge from '../../components/Source/SourceBadge'
@@ -366,7 +366,6 @@ export default function CollectionPage() {
   }
 
   const onDelete = () => setConfirm(true)
-  const onEdit = () => navigate(`/edit-collection/${id}`)
 
   const syncNow = async () => {
     if (syncBusy) {
@@ -458,10 +457,10 @@ export default function CollectionPage() {
             )}
             {can('library', 'manage') && (
               <>
-            <button type="button" className="btn" title="Edit show" onClick={onEdit}>
+            <Link className="btn" title="Edit show" to={`/edit-collection/${id}`}>
               <FontAwesomeIcon icon={faIcon('fass', 'pen-to-square')} aria-hidden="true"/>
               <span>Edit</span>
-            </button>
+            </Link>
             <button type="button" className="btn btn-danger" onClick={onDelete}>
               <FontAwesomeIcon icon={faIcon('fass', 'trash')} aria-hidden="true"/>
               <span>Delete</span>
@@ -540,12 +539,12 @@ export default function CollectionPage() {
                   label: 'Create download profile',
                   icon: faIcon('fass', 'download'),
                   separatorBefore: true,
-                  onSelect: () => navigate(`/add-download-profile?collection=${encodeURIComponent(id)}`),
+                  href: `/add-download-profile?collection=${encodeURIComponent(id)}`,
                 },
                 {
                   label: 'Create stream profile',
                   icon: faIcon('fass', 'rss'),
-                  onSelect: () => navigate(`/add-stream-profile?collection=${encodeURIComponent(id)}`),
+                  href: `/add-stream-profile?collection=${encodeURIComponent(id)}`,
                 },
               ]}
             />
@@ -578,16 +577,15 @@ export default function CollectionPage() {
                   </div>
                   <div className="collection-profile-links">
                     {attachedDownloadProfiles.map((profile) => (
-                      <button
+                      <Link
                         key={profile.id}
-                        type="button"
                         className="collection-profile-chip"
-                        onClick={() => navigate(`/edit-download-profile/${profile.id}`, {state: profile})}
+                        to={`/edit-download-profile/${profile.id}`}
                         title={`Open ${preferredFormatLabel(profile.localMediaProfilePreferredFormat)} download profile`}
                       >
                         <span>{preferredFormatLabel(profile.localMediaProfilePreferredFormat)}</span>
                         <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')} aria-hidden="true"/>
-                      </button>
+                      </Link>
                     ))}
                   </div>
                 </div>
@@ -606,15 +604,14 @@ export default function CollectionPage() {
                       const label = `${profile.type.toUpperCase()} ${preferredFormatLabel(profile.preferredFormat)}`
                       return (
                         <div key={`${profile.type}-${profile.id}`} className="collection-profile-chip-group">
-                          <button
-                            type="button"
+                          <Link
                             className="collection-profile-chip collection-profile-chip-main"
-                            onClick={() => navigate(`/edit-stream-profile/${profile.type}/${profile.id}`, {state: profile})}
+                            to={`/edit-stream-profile/${profile.type}/${profile.id}`}
                             title={`Open ${label}`}
                           >
                             <span>{label}</span>
                             <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')} aria-hidden="true"/>
-                          </button>
+                          </Link>
                           {profile.type === 'rss' && feedUrl && (
                             <button
                               type="button"

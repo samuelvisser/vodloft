@@ -1,7 +1,7 @@
 import {useCallback, useEffect, useMemo} from 'react'
 import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
-import {useNavigate, useParams} from 'react-router-dom'
+import {Link, useNavigate, useParams} from 'react-router-dom'
 import {useDownloadProfilesByCollectionSlug, useLocalMediaProfiles, useCollectionSeasons} from '../../lib/queries'
 import DownloadProfileForm from '../../components/DownloadProfile/DownloadProfileForm'
 import {
@@ -121,7 +121,7 @@ export default function EditDownloadProfilePage() {
                 </div>
                 <p>Profile not found.</p>
                 <div className="actions" style={{marginTop: 12}}>
-                    <button type="button" className="btn" onClick={() => navigate('/download-profiles')}>Back</button>
+                    <Link className="btn" to="/download-profiles">Back</Link>
                 </div>
             </section>
         )
