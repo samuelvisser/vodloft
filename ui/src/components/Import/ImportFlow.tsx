@@ -13,6 +13,7 @@ import {
     IMPORTERS_KEY,
     filesToOffer,
     previewImport,
+    enableRunDownloadProfiles,
     readRun,
     removeUpload,
     runReportText,
@@ -322,8 +323,12 @@ function PreviewStep({importer, onReplace, onFinished, onRunStatus}: {
 
     useEffect(() => {
         // An import that is still going is shown as it is; reading the upload again waits until you go back.
+        // So is the last import of this upload once it is done, until a new upload is sent.
         const last = importer.lastRun
-        if (last && (last.status === 'running' || last.status === 'waiting')) {
+        const uploadedAt = importer.upload.upload?.uploadedAt
+        const sameUpload = Boolean(last?.uploadedAt && uploadedAt
+            && new Date(last.uploadedAt).getTime() === new Date(uploadedAt).getTime())
+        if (last && (last.status === 'running' || last.status === 'waiting' || sameUpload)) {
             void readRun(importer.key, last.id).then(setRun).catch(() => void load(DEFAULT_OPTIONS))
             return
         }
@@ -397,7 +402,7 @@ function PreviewStep({importer, onReplace, onFinished, onRunStatus}: {
     }, [preview])
 
     if (run) {
-        return <RunView importer={importer} run={run} onBack={() => {
+        return <RunView importer={importer} run={run} onRun={setRun} onBack={() => {
             setRun(null)
             if (!preview) void load(options)
         }}/>
@@ -1013,7 +1018,25 @@ function useElapsed(since: string, running: boolean): string {
     return minutes ? `${minutes}m ${seconds % 60}s` : `${seconds}s`
 }
 
-function RunView({importer, run, onBack}: {importer: Importer, run: ImportRun, onBack: () => void}) {
+function RunView({importer, run, onRun, onBack}: {
+    importer: Importer
+    run: ImportRun
+    onRun: (run: ImportRun) => void
+    onBack: () => void
+}) {
+    const [enabling, setEnabling] = useState(false)
+    const off = run.downloadProfiles.total - run.downloadProfiles.on
+    async function enableDownloadProfiles() {
+        setEnabling(true)
+        try {
+            onRun(await enableRunDownloadProfiles(importer.key, run.id))
+            toast.success(`Turned on ${off} Download Profile${off === 1 ? '' : 's'}`)
+        } catch (exc) {
+            toast.error(exc instanceof Error ? exc.message : 'The Download Profiles could not be turned on')
+        } finally {
+            setEnabling(false)
+        }
+    }
     const {findActive} = useOperations()
     // A waiting step is first indexed, then its files are adopted: each runs as an operation on the Collection.
     const waitingLabel = (collectionId: number | null | undefined, indexed: boolean): string => {
@@ -1051,6 +1074,11 @@ function RunView({importer, run, onBack}: {importer: Importer, run: ImportRun, o
                     <button type="button" className="btn" onClick={() => download(`${importer.key}-import-${run.id}.txt`, runReportText(importer.name, run))}>
                         Download report
                     </button>
+                    {run.status === 'finished' && off > 0 && (
+                        <button type="button" className="btn btn-primary" disabled={enabling} onClick={() => void enableDownloadProfiles()}>
+                            Turn on {off} Download Profile{off === 1 ? '' : 's'}
+                        </button>
+                    )}
                     {done && <button type="button" className="btn" onClick={onBack}>Back</button>}
                 </div>
             </div>

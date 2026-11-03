@@ -1519,6 +1519,41 @@ def _matching_view(session: Session, step: ImportStep) -> dict[str, Any] | None:
     return {"status": scan.status, "found": found}
 
 
+def _run_download_profiles(session: Session, run: ImportRun) -> list[DownloadProfile]:
+    """The Download Profiles the run brought over, without the ones a Match existing files review still holds."""
+    ids = set(session.scalars(select(ImportLink.entity_id).where(
+        ImportLink.run_id == run.id, ImportLink.kind == "download_profile", ImportLink.entity_id.is_not(None),
+    )))
+    held: set[int] = set()
+    for step in session.scalars(select(ImportStep).where(ImportStep.run_id == run.id)):
+        if step.download_profile_id is None:
+            continue
+        ids.add(step.download_profile_id)
+        matching = _matching_view(session, step)
+        if matching is not None and matching["status"] != "finished":
+            held.add(step.download_profile_id)
+    if not ids - held:
+        return []
+    return list(session.scalars(select(DownloadProfile).where(DownloadProfile.id.in_(ids - held)).order_by(DownloadProfile.id)))
+
+
+def enable_run_download_profiles(session: Session, run: ImportRun) -> int:
+    """Turn on every Download Profile a finished run brought over; how many were off."""
+    if run.status != FINISHED:
+        raise ImportServiceError("The import is not finished yet")
+    enabled = 0
+    for download_profile in _run_download_profiles(session, run):
+        if download_profile.enable_profile:
+            continue
+        download_profile.enable_profile = True
+        enabled += 1
+        queue_event(session, "download_profile.updated", {
+            "resource_id": download_profile.id, "id": download_profile.id,
+            "collection_id": download_profile.collection_id,
+        })
+    return enabled
+
+
 def _indexed(session: Session, collection_id: int) -> bool:
     """Whether the Collection's first index finished, so its step only waits for its files to be adopted."""
     from task_manager.scheduler.db import TaskOperation
@@ -1549,4 +1584,10 @@ def run_view(session: Session, run: ImportRun) -> dict[str, Any]:
             and not (step.result or {}).get("matching"),
             "matching": _matching_view(session, step),
         })
-    return {**run_summary(run), "options": run.options, "version": run.version, "report": run.report, "steps": steps}
+    download_profiles = _run_download_profiles(session, run)
+    return {
+        **run_summary(run), "options": run.options, "version": run.version, "report": run.report, "steps": steps,
+        "download_profiles": {
+            "total": len(download_profiles), "on": sum(1 for item in download_profiles if item.enable_profile),
+        },
+    }

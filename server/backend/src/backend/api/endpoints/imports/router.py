@@ -17,7 +17,8 @@ from backend.services.import_uploads import (
     write_chunk,
 )
 from backend.services.imports import (
-    ImportOptions, ImportServiceError, get_importer, preview, run_summary, run_view, start_run,
+    ImportOptions, ImportServiceError, enable_run_download_profiles, get_importer, preview, run_summary, run_view,
+    start_run,
 )
 from importer.registry import all_importers
 
@@ -165,4 +166,20 @@ def import_run_read(importer_key: str, run_id: int):
         run = s.get(ImportRun, run_id)
         if run is None or run.importer != importer.key:
             raise HTTPException(status_code=404, detail="Import run not found")
+        return ImportRunAPIRead.model_validate(run_view(s, run))
+
+
+@router.post("/{importer_key}/runs/{run_id}/enable-download-profiles", dependencies=_ADMIN, response_model=ImportRunAPIRead)
+def import_run_enable_download_profiles(importer_key: str, run_id: int):
+    """Turn on every Download Profile a finished import brought over."""
+    importer = _importer(importer_key)
+    with db_session() as s:
+        run = s.get(ImportRun, run_id)
+        if run is None or run.importer != importer.key:
+            raise HTTPException(status_code=404, detail="Import run not found")
+        try:
+            enable_run_download_profiles(s, run)
+        except ImportServiceError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        s.commit()
         return ImportRunAPIRead.model_validate(run_view(s, run))

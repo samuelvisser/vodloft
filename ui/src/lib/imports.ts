@@ -57,6 +57,10 @@ export function readRun(key: string, id: number): Promise<ImportRun> {
     return request(`/${key}/runs/${id}`, (data) => ImportRunSchema.parse(data))
 }
 
+export function enableRunDownloadProfiles(key: string, id: number): Promise<ImportRun> {
+    return request(`/${key}/runs/${id}/enable-download-profiles`, (data) => ImportRunSchema.parse(data), {method: 'POST'})
+}
+
 export function previewImport(key: string, options: ImportOptions): Promise<ImportPreview> {
     return request(`/${key}/preview`, (data) => ImportPreviewSchema.parse(data), json(options))
 }
