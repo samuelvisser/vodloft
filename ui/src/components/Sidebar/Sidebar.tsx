@@ -1,6 +1,7 @@
 import {NavLink} from 'react-router-dom'
 import Footer from './Footer'
 import Navbar from './Navbar'
+import DownloadsActivity from './DownloadsActivity'
 import type { NavItem } from './navTypes'
 import {faIcon} from '../../icons/faIcon'
 import {can, canAnySettings} from '../../lib/access'
@@ -11,7 +12,7 @@ const items: NavItem[] = [
     {path: '/library', label: 'Library', icon: faIcon('fass', 'books'), access: ['library']},
     {path: '/browse', label: 'Browse', icon: faIcon('fass', 'magnifying-glass'), access: () => can('add_media') && !can('library')},
     {path: '/quick-download', label: 'Quick download', icon: faIcon('fass', 'bolt'), access: ['quick_downloads']},
-    {path: '/downloads', label: 'Downloads', icon: faIcon('fass', 'circle-down'), access: ['managed_downloads']},
+    {path: '/downloads', label: 'Downloads', icon: faIcon('fass', 'circle-down'), access: ['managed_downloads'], iconOverlay: DownloadsActivity},
     {
         label: 'Profiles',
         icon: faIcon('fass', 'layer-group'),
