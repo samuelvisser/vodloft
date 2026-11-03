@@ -37,6 +37,24 @@ export function filterOf(file: ExistingFile): Filter {
     return file.confidence ?? 'unmatched'
 }
 
+function options(file: ExistingFile) {
+    return [...(file.episode ? [file.episode] : []), ...file.candidates]
+        .filter((episode, index, all) => all.findIndex((other) => other.id === episode.id) === index)
+}
+
+/** The files to check that fit exactly one episode no other file was picked for or fits alone. */
+function onlyMatches(files: ExistingFile[], picks: Record<string, number>): [string, number][] {
+    const singles = files
+        .filter((file) => filterOf(file) === 'review' && !picks[file.path])
+        .map((file) => [file.path, options(file)] as const)
+        .filter(([, choices]) => choices.length === 1)
+        .map(([path, choices]) => [path, choices[0].id] as [string, number])
+    const taken = new Set(Object.values(picks))
+    const counts = new Map<number, number>()
+    for (const [, id] of singles) counts.set(id, (counts.get(id) ?? 0) + 1)
+    return singles.filter(([, id]) => !taken.has(id) && counts.get(id) === 1)
+}
+
 function fileName(path: string, folder?: string | null) {
     const base = (folder ?? '').replace(/\/$/, '')
     return base && path.startsWith(`${base}/`) ? path.slice(base.length + 1) : path
@@ -194,6 +212,7 @@ export default function ExistingFilesDialog({collectionSlug, collectionTitle, pr
                     {scan && counts && !editing && (scan.status === 'ready' || scan.status === 'finished') && (
                         <Results
                             scan={scan}
+                            files={files}
                             filter={filter}
                             setFilter={(value) => { setFilter(value); setShown(SHOWN) }}
                             visible={visible.slice(0, shown)}
@@ -249,6 +268,7 @@ type ResultsProps = {
     scan: Pick<ExistingFilesScan, 'folder' | 'heldDownloadProfiles' | 'episodesWithoutFile'> & {counts?: ExistingFilesScan['counts']}
     /** Name each episode's Collection, for a review of several Collections. */
     showCollection?: boolean
+    files: ExistingFile[]
     filter: Filter
     setFilter: (filter: Filter) => void
     visible: ExistingFile[]
@@ -258,8 +278,9 @@ type ResultsProps = {
     setPick: (path: string, episodeId: number | null) => void
 }
 
-export function Results({scan, showCollection = false, filter, setFilter, visible, more, onMore, picks, setPick}: ResultsProps) {
+export function Results({scan, showCollection = false, files, filter, setFilter, visible, more, onMore, picks, setPick}: ResultsProps) {
     const counts = scan.counts!
+    const singles = filter === 'review' ? onlyMatches(files, picks) : []
     return (
         <div className="existing-files-results">
             <div className="existing-files-counts" role="tablist" aria-label="Matches">
@@ -274,6 +295,13 @@ export function Results({scan, showCollection = false, filter, setFilter, visibl
                     <strong>{scan.episodesWithoutFile}</strong> <span>Episodes with no file</span>
                 </div>
             </div>
+            {singles.length > 0 && (
+                <div className="existing-files-actions">
+                    <button type="button" className="btn" onClick={() => singles.forEach(([path, id]) => setPick(path, id))}>
+                        Pick the only match for {singles.length} file{singles.length === 1 ? '' : 's'}
+                    </button>
+                </div>
+            )}
             {scan.heldDownloadProfiles > 0 && (
                 <div className="help">The Download Profile waits until you are done here, then only downloads the episodes without a file.</div>
             )}
@@ -323,19 +351,18 @@ function EpisodeLabel({episode, showCollection}: {episode: ExistingFileEpisode, 
 type EpisodePickProps = {file: ExistingFile, showCollection: boolean, value?: number, onChange: (id: number | null) => void}
 
 function EpisodePick({file, showCollection, value, onChange}: EpisodePickProps) {
-    const options = [...(file.episode ? [file.episode] : []), ...file.candidates]
-        .filter((episode, index, all) => all.findIndex((other) => other.id === episode.id) === index)
+    const choices = options(file)
     const registry = useMemo(() => createSelectRegistry(
         'ExistingFileEpisode',
         {
             '': {label: "Don't adopt"},
-            ...Object.fromEntries(options.map((episode) => [
+            ...Object.fromEntries(choices.map((episode) => [
                 String(episode.id), {label: `${episode.title}${episode.date ? ` (${episode.date})` : ''}${showCollection ? ` · ${episode.collectionTitle}` : ''}`},
             ])),
         },
-        ['', ...options.map((episode) => String(episode.id))],
-    ), [options.map((episode) => episode.id).join(','), showCollection]) // eslint-disable-line react-hooks/exhaustive-deps
-    if (options.length === 0) return <span className="help">No episode looks like this file.</span>
+        ['', ...choices.map((episode) => String(episode.id))],
+    ), [choices.map((episode) => episode.id).join(','), showCollection]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (choices.length === 0) return <span className="help">No episode looks like this file.</span>
     return (
         <SimpleSelect
             className="existing-files-pick"
