@@ -189,6 +189,20 @@ p.import-proof.is-different {
     gap: 6px;
 }
 
+.import-proof-differences {
+    display: grid;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.import-proof-differences__title {
+    font-weight: 600;
+}
+
+.import-differences__more {
+    justify-self: start;
+}
+
 div.import-proof {
     display: flex;
     flex-wrap: wrap;

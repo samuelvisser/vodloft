@@ -620,7 +620,10 @@ function PathPair({path, rendered}: {path: string, rendered: string}) {
     )
 }
 
+const FEW_DIFFERENCES = 3
+
 function PathProof({proof}: {proof: ImportProfile['pathProof']}) {
+    const [expanded, setExpanded] = useState(false)
     if (proof.error) return <p className="import-proof is-different" role="alert">{proof.error}</p>
     if (proof.total === 0) return <p className="import-proof">No files to compare yet.</p>
     const all = proof.identical === proof.total
@@ -633,15 +636,22 @@ function PathProof({proof}: {proof: ImportProfile['pathProof']}) {
             </div>
             <ProgressBar ariaLabel="Files with the same path" value={100 * proof.identical / proof.total}/>
             {proof.differences.length > 0 && (
-                <details className="import-profile__more">
-                    <summary>
+                <div className="import-proof-differences">
+                    <div className="import-proof-differences__title">
                         {different} file{different === 1 ? ' gets' : 's get'} a different path
-                        {different > proof.differences.length ? `; the first ${proof.differences.length}` : ''}
-                    </summary>
+                        {expanded && different > proof.differences.length ? `; these are the first ${proof.differences.length}` : ''}
+                    </div>
                     <ul className="import-differences">
-                        {proof.differences.map((item) => <PathPair key={item.path} path={item.path} rendered={item.rendered}/>)}
+                        {proof.differences.slice(0, expanded ? undefined : FEW_DIFFERENCES)
+                            .map((item) => <PathPair key={item.path} path={item.path} rendered={item.rendered}/>)}
                     </ul>
-                </details>
+                    {proof.differences.length > FEW_DIFFERENCES && (
+                        <button type="button" className="btn import-differences__more" aria-expanded={expanded}
+                                onClick={() => setExpanded(!expanded)}>
+                            {expanded ? 'Show fewer' : `Show ${proof.differences.length - FEW_DIFFERENCES} more`}
+                        </button>
+                    )}
+                </div>
             )}
         </div>
     )
