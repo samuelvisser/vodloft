@@ -40,6 +40,7 @@ from importer.paths import DEFAULT_PATH_MAP, PathMap, detect_path_map, map_path,
 from importer.registry import get_importer as _registered_importer
 from sources.ytdlp_options import check_ytdlp_options
 
+from backend.db.core import begin_write_transaction
 from backend.db.models import (
     Collection, CollectionLocalMediaProfile, DownloadProfile, DownloadProfileRule, Episode, ExistingFileScan, ImportLink, ImportRun, ImportStep,
     LocalMediaProfileBase, MediaDownloadBase, MovieLocalMediaProfile,
@@ -1315,8 +1316,22 @@ def _suppress(session: Session, episode: Episode, profile: CollectionLocalMediaP
     return True
 
 
+def _begin_write(session: Session) -> None:
+    """Commit what came before and start a transaction that writes.
+
+    With SQLite, a transaction that reads first and only then writes fails at once
+    with "database is locked" when another job committed in between, which
+    indexing and progress updates do all the time. Reserving the write up front
+    waits for the other job instead.
+    """
+    if session.in_transaction():
+        session.commit()
+    begin_write_transaction(session)
+
+
 def run_step(session: Session, step_id: int) -> dict[str, int]:
     """Number, adopt and hold back the episodes of one imported Collection."""
+    _begin_write(session)
     step = session.get(ImportStep, step_id)
     if step is None or step.status != STEP_WAITING:
         return {}
@@ -1332,7 +1347,6 @@ def run_step(session: Session, step_id: int) -> dict[str, int]:
     # Each file is committed on its own: adopting reads the file from disk, and one transaction for a
     # whole Collection would hold SQLite's write lock that long, so other steps and indexes time out.
     # Adopting again is a no-op, so a step that stops halfway picks up where it was.
-    session.commit()
     problems: list[dict[str, str]] = []
     for file in step.files:
         episode = episodes.get(file["media_site_id"])
@@ -1343,11 +1357,12 @@ def run_step(session: Session, step_id: int) -> dict[str, int]:
                     problems.append({"path": file["path"], "error": "The video is not in the Collection (removed or private)"})
             continue
         if file["kind"] == "suppressed":
+            _begin_write(session)
             counts["suppressed"] += int(_suppress(session, episode, profile))
-            session.commit()
             continue
         if file["kind"] != "file":
             continue
+        _begin_write(session)
         try:
             with session.begin_nested():
                 adopted = adopt(session, media=episode, local_media_profile=profile, path=real_path(file["path"]),
@@ -1360,7 +1375,7 @@ def run_step(session: Session, step_id: int) -> dict[str, int]:
         if file.get("kept") and isinstance(adopted.download, EpisodeMediaDownload):
             adopted.download.kept = True
         counts["adopted" if adopted.created else "already_adopted"] += 1
-        session.commit()
+    _begin_write(session)
     download_profile = session.get(DownloadProfile, step.download_profile_id) if step.download_profile_id else None
     if download_profile is not None:
         counts["would_download"] = _would_download(session, download_profile)
