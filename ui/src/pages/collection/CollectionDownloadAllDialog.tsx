@@ -14,6 +14,7 @@ import {buildLocalMediaProfileSelectRegistry} from '../../types/local_media_prof
 import type {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import type {SeasonRead} from '../../types/schemas/season'
 import {createSelectRegistry} from '../../utils/selectRegistry'
+import NumberInput from '../../components/common/NumberInput'
 import './CollectionDownloadAllDialog.css'
 
 const LimitByReg = createSelectRegistry('DownloadAllLimitBy', {
@@ -300,11 +301,9 @@ export default function CollectionDownloadAllDialog({
                     name="downloadDaysInPast"
                     control={control}
                     render={({field}) => (
-                      <input
+                      <NumberInput
                         {...field}
                         id={`${selectId}-days`}
-                        className="input"
-                        type="number"
                         min={1}
                         step={1}
                         disabled={starting}
@@ -324,11 +323,9 @@ export default function CollectionDownloadAllDialog({
                     name="downloadEpisodeCount"
                     control={control}
                     render={({field}) => (
-                      <input
+                      <NumberInput
                         {...field}
                         id={`${selectId}-count`}
-                        className="input"
-                        type="number"
                         min={1}
                         step={1}
                         disabled={starting}

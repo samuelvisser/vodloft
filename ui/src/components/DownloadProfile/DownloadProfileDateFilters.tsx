@@ -4,6 +4,7 @@ import ReadMore from '../../utils/ReadMore'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import DateInput from '../common/DateInput'
 import SimpleSelect from '../common/SimpleSelect'
+import NumberInput from '../common/NumberInput'
 
 type Props = {
     form: UseFormReturn<any>
@@ -118,10 +119,8 @@ export default function DownloadProfileDateFilters({form}: Props) {
             {limitMode === 'date' && (
                 <div className="form-row">
                     <label htmlFor="days-in-past">{dateField === 'downloaded' ? 'Keep each download for … days' : 'Days'}</label>
-                    <input
+                    <NumberInput
                         id="days-in-past"
-                        className="input"
-                        type="number"
                         inputMode="numeric"
                         min={1}
                         step={1}
@@ -148,10 +147,8 @@ export default function DownloadProfileDateFilters({form}: Props) {
             {limitMode === 'episodes' && (
                 <div className="form-row">
                     <label htmlFor="episode-count">Episodes</label>
-                    <input
+                    <NumberInput
                         id="episode-count"
-                        className="input"
-                        type="number"
                         inputMode="numeric"
                         min={1}
                         step={1}

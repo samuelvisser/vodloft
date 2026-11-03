@@ -32,6 +32,7 @@ import {
     type TextBlock,
     type Where,
 } from './regexModel'
+import NumberInput from '../common/NumberInput'
 import {useRegexCheck} from './useRegexCheck'
 import './RegexEditor.css'
 
@@ -193,9 +194,7 @@ function NumberField({value, onChange, min = 0, placeholder, disabled}: {
     disabled?: boolean
 }) {
     return (
-        <input
-            className="input"
-            type="number"
+        <NumberInput
             min={min}
             value={value ?? ''}
             placeholder={placeholder}

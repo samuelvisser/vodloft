@@ -4,6 +4,7 @@ import TimeInterval from '../../utils/TimeInterval'
 import type {TimeUnit} from '../../utils/TimeInterval'
 import SimpleSelect from '../common/SimpleSelect'
 import type {SelectRegistry} from '../../utils/selectRegistry'
+import NumberInput from '../common/NumberInput'
 
 
 export function SettingsSection({
@@ -163,10 +164,9 @@ export function NumberField({
     return (
         <FieldShell label={label} htmlFor={id} help={help} environmentVariable={environmentVariable}>
             <div className="settings-number-input">
-                <input
+                <NumberInput
                     id={id}
-                    className="input settings-input"
-                    type="number"
+                    wrapperClassName="settings-input"
                     value={isValidNumber ? value : ''}
                     min={min}
                     max={max}

@@ -11,6 +11,7 @@ import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import SimpleSelect from '../common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import {getZodDefaults} from '../../utils/defaultZod'
+import NumberInput from '../common/NumberInput'
 
 const DeleteOlderThanReg = createSelectRegistry('BulkDeleteOlderThan', {
     all: {label: 'Delete all'},
@@ -233,10 +234,8 @@ export default function ActionConfirmDialogue({
                                 control={control}
                                 name="deleteOlderThanDays"
                                 render={({field}) => (
-                                    <input
+                                    <NumberInput
                                         id={`${olderThanId}-days`}
-                                        className="input"
-                                        type="number"
                                         min={1}
                                         step={1}
                                         inputMode="numeric"
@@ -264,10 +263,8 @@ export default function ActionConfirmDialogue({
                                 control={control}
                                 name="deleteOlderThanLatestDownloads"
                                 render={({field}) => (
-                                    <input
+                                    <NumberInput
                                         id={`${olderThanId}-count`}
-                                        className="input"
-                                        type="number"
                                         min={1}
                                         step={1}
                                         inputMode="numeric"

@@ -1330,17 +1330,14 @@ th[aria-sort="descending"] .th-sort-icon { opacity: 1; }
   display: inline-flex;
   align-items: center;
 }
-.time-interval-field .input {
-  width: 90px;
-  padding-right: 40px;
-  text-align: right;
+.time-interval-field .number-input {
+  width: calc(92px + var(--number-input-stepper-width));
 }
-.time-interval-unit {
-  position: absolute;
-  right: 12px;
-  color: var(--muted);
-  font-size: 12px;
-  pointer-events: none;
+.time-interval-field .number-input__input {
+  padding-right: 4px;
+}
+.time-interval-field .number-input__suffix {
+  padding-right: 6px;
 }
 .time-interval-sep {
   color: var(--muted);

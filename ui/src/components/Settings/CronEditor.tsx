@@ -18,6 +18,7 @@ import {
     useControlOperation,
     useStartOperation,
 } from '../../lib/operations'
+import NumberInput from '../common/NumberInput'
 import './CronEditor.css'
 
 
@@ -167,9 +168,8 @@ function CronNumberInput({
     onChange: (value: number | null) => void
 }) {
     return (
-        <input
-            className="input settings-input"
-            type="number"
+        <NumberInput
+            wrapperClassName="settings-input"
             min={min}
             max={max}
             disabled={disabled}

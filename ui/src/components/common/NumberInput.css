@@ -1,0 +1,125 @@
+/* Number field with VODLoft's own up/down buttons; the browser's spinners are hidden. */
+:root {
+    --number-input-stepper-width: 20px;
+}
+
+.number-input {
+    display: flex;
+    align-items: stretch;
+    min-width: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+.number-input:focus-within {
+    border-color: #60a5fa;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.25);
+}
+
+.number-input[data-invalid="true"] {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+
+.number-input[data-disabled="true"] {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.number-input__input {
+    display: block;
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    margin: 0;
+    padding: 10px 12px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--text);
+    font-family: inherit;
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.number-input__input:focus {
+    outline: none;
+}
+
+.number-input__input:disabled {
+    cursor: not-allowed;
+}
+
+.number-input__input::-webkit-inner-spin-button,
+.number-input__input::-webkit-outer-spin-button {
+    margin: 0;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.number-input__suffix {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    padding-right: 8px;
+    color: var(--muted);
+    font-size: 12px;
+    cursor: text;
+    user-select: none;
+}
+
+.number-input__steppers {
+    display: flex;
+    flex: 0 0 var(--number-input-stepper-width);
+    flex-direction: column;
+    border-left: 1px solid rgba(148, 163, 184, 0.24);
+}
+
+.number-input__stepper {
+    display: flex;
+    flex: 1 1 0;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-size: 10px;
+    line-height: 1;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    transition: background-color 120ms ease, color 120ms ease;
+}
+
+.number-input__stepper + .number-input__stepper {
+    border-top: 1px solid rgba(148, 163, 184, 0.24);
+}
+
+.number-input__stepper:hover:not(:disabled) {
+    background: rgba(96, 165, 250, 0.14);
+    color: var(--text);
+}
+
+.number-input__stepper:active:not(:disabled) {
+    background: rgba(96, 165, 250, 0.26);
+    color: var(--text);
+}
+
+.number-input__stepper:disabled {
+    cursor: not-allowed;
+}
+
+/* Bigger targets for fingers. */
+@media (pointer: coarse) {
+    :root {
+        --number-input-stepper-width: 36px;
+    }
+
+    .number-input__stepper {
+        font-size: 12px;
+    }
+}
