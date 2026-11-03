@@ -149,6 +149,7 @@ export const ImportRunSchema = ImportRunSummarySchema.extend({
         collectionSlug: z.string().nullish(),
         collectionTitle: z.string().nullish(),
         status: z.enum(['waiting', 'done', 'failed']),
+        indexed: z.boolean().default(false),
         files: z.int(),
         counts: z.record(z.string(), z.number()),
         problems: z.array(z.looseObject({path: z.string().nullish(), error: z.string()})),

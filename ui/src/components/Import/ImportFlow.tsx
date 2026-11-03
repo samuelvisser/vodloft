@@ -989,9 +989,10 @@ function useElapsed(since: string, running: boolean): string {
 function RunView({importer, run, onBack}: {importer: Importer, run: ImportRun, onBack: () => void}) {
     const {findActive} = useOperations()
     // A waiting step is first indexed, then its files are adopted: each runs as an operation on the Collection.
-    const waitingLabel = (collectionId: number | null | undefined): string => {
+    const waitingLabel = (collectionId: number | null | undefined, indexed: boolean): string => {
+        if (collectionId != null && findActive('import.adopt_files', 'collection', collectionId)) return 'Adopting files…'
+        if (indexed) return 'Indexed; adopting files next'
         if (collectionId == null) return 'Waiting for indexing'
-        if (findActive('import.adopt_files', 'collection', collectionId)) return 'Adopting files…'
         const indexing = findActive('collection.index', 'collection', collectionId)
         if (indexing?.status === 'RUNNING') {
             return typeof indexing.progress === 'number' ? `Indexing… ${indexing.progress}%` : 'Indexing…'
@@ -1033,7 +1034,7 @@ function RunView({importer, run, onBack}: {importer: Importer, run: ImportRun, o
                         <li key={index} className={`is-${step.status}`}>
                             <span>{step.collectionTitle ?? step.collectionSlug}</span>
                             <small>
-                                {step.status === 'waiting' ? waitingLabel(step.collectionId) : step.status === 'failed' ? 'Failed' : countsLine(step.counts) || 'Done'}
+                                {step.status === 'waiting' ? waitingLabel(step.collectionId, step.indexed) : step.status === 'failed' ? 'Failed' : countsLine(step.counts) || 'Done'}
                                 {step.problems.length ? ` · ${step.problems.length} problem${step.problems.length === 1 ? '' : 's'}` : ''}
                             </small>
                         </li>

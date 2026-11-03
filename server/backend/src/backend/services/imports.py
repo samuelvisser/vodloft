@@ -1519,6 +1519,18 @@ def _matching_view(session: Session, step: ImportStep) -> dict[str, Any] | None:
     return {"status": scan.status, "found": found}
 
 
+def _indexed(session: Session, collection_id: int) -> bool:
+    """Whether the Collection's first index finished, so its step only waits for its files to be adopted."""
+    from task_manager.scheduler.db import TaskOperation
+    from task_manager.scheduler.types import OperationStatus
+
+    return session.scalar(select(TaskOperation.id).where(
+        TaskOperation.kind == "collection.index", TaskOperation.resource_type == "collection",
+        TaskOperation.resource_id == collection_id,
+        TaskOperation.status.in_((OperationStatus.SUCCEEDED.value, OperationStatus.PARTIAL.value)),
+    ).limit(1)) is not None
+
+
 def run_view(session: Session, run: ImportRun) -> dict[str, Any]:
     """A run with its report and what happened to each Collection's files."""
     steps = []
@@ -1529,6 +1541,7 @@ def run_view(session: Session, run: ImportRun) -> dict[str, Any]:
             "collection_slug": collection.slug if collection else None,
             "collection_title": collection.title if collection else None,
             "status": step.status,
+            "indexed": step.status != STEP_WAITING or _indexed(session, step.collection_id),
             "files": sum(1 for file in step.files if file.get("kind") == "file"),
             "counts": (step.result or {}).get("counts", {}),
             "problems": (step.result or {}).get("problems", []),

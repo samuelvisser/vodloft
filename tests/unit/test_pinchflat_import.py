@@ -832,6 +832,8 @@ def test_a_step_that_fails_shows_as_failed_and_the_import_finishes(installation)
     session, _applied = installation
     run = _run(session, imports.ImportOptions())
     steps = list(session.scalars(select(ImportStep).where(ImportStep.run_id == run.id)))
+    waiting = imports.run_view(session, session.get(ImportRun, run.id))
+    assert [step["indexed"] for step in waiting["steps"]] == [False] * len(steps)
     for step in steps:
         imports.fail_step(session, step.id, "database is locked")
 

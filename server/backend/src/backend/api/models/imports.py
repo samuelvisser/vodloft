@@ -234,6 +234,7 @@ class ImportStepAPIRead(ResponseBase):
     collection_slug: Optional[str] = None
     collection_title: Optional[str] = None
     status: Literal["waiting", "done", "failed"]
+    indexed: bool = Field(default=False, description="Whether the Collection is indexed, so only its files are left")
     files: int
     counts: dict[str, int]
     problems: list[ImportProblemAPIRead]
