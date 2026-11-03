@@ -12,7 +12,7 @@ import OpaqueOutputTemplateCode from '../../components/LocalMediaProfile/OpaqueO
 import ProfileExistingFilesDialog from '../../components/ExistingFiles/ProfileExistingFilesDialog'
 import {scanProfile, useOpenExistingFilesScans} from '../../components/ExistingFiles/api'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
-import {useLocalMediaProfileView} from '../../lib/queries'
+import {useLocalMediaProfileView, useSourceLookup} from '../../lib/queries'
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import {
     OperationControlError,
@@ -35,6 +35,7 @@ export default function LocalMediaProfilePage() {
     const {slug} = useParams<{slug: string}>()
     const navigate = useNavigate()
     const queryClient = useQueryClient()
+    const sourceLookup = useSourceLookup()
     const controlOperation = useControlOperation()
     const {data, isLoading, error} = useLocalMediaProfileView(slug)
 
@@ -192,6 +193,7 @@ export default function LocalMediaProfilePage() {
     const availableFor = profile.type === 'collection'
         ? CollectionLocalMediaProfileScopeReg.getLabelLoose(profile.collectionScope)
         : 'Movies'
+    const onlySources = profile.sourceKeys ? `${profile.sourceKeys.map((key) => sourceLookup.name(key)).join(', ')} only` : null
 
     return (
         <section className="view local-media-profile-view" aria-labelledby="local-media-profile-title">
@@ -224,7 +226,7 @@ export default function LocalMediaProfilePage() {
                             {LocalMediaProfileTypeReg.getLabelLoose(profile.type)} Local Media Profile
                         </div>
                         <div className="local-media-profile-meta">
-                            {PreferredFormatReg.getLabelLoose(profile.preferredFormat)} · {availableFor}
+                            {PreferredFormatReg.getLabelLoose(profile.preferredFormat)} · {availableFor}{onlySources && ` · ${onlySources}`}
                         </div>
                     </div>
 

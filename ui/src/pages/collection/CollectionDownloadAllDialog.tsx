@@ -10,7 +10,7 @@ import SimpleSelect from '../../components/common/SimpleSelect'
 import {faIcon} from '../../icons/faIcon'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
 import {useCollectionEpisodeTags} from '../../lib/queries'
-import {buildLocalMediaProfileSelectRegistry} from '../../types/local_media_profile'
+import {buildLocalMediaProfileSelectRegistry, isLocalMediaProfileAvailableForSource} from '../../types/local_media_profile'
 import type {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import type {SeasonRead} from '../../types/schemas/season'
 import {createSelectRegistry} from '../../utils/selectRegistry'
@@ -39,6 +39,7 @@ type Props = {
   collectionSlug: string
   collectionTitle: string
   collectionType: 'podcast' | 'series'
+  sourceKey: string
   seasons: readonly SeasonRead[]
   localMediaProfiles: readonly LocalMediaProfileRead[]
   onDismiss: () => void
@@ -48,6 +49,7 @@ export default function CollectionDownloadAllDialog({
   collectionSlug,
   collectionTitle,
   collectionType,
+  sourceKey,
   seasons,
   localMediaProfiles,
   onDismiss,
@@ -60,8 +62,9 @@ export default function CollectionDownloadAllDialog({
     () => localMediaProfiles.filter((profile) => (
       profile.type === 'collection'
       && (profile.collectionScope === 'both' || profile.collectionScope === collectionType)
+      && isLocalMediaProfileAvailableForSource(profile, sourceKey)
     )),
-    [localMediaProfiles, collectionType],
+    [localMediaProfiles, collectionType, sourceKey],
   )
   const profileRegistry = useMemo(
     () => buildLocalMediaProfileSelectRegistry(compatibleProfiles, 'collection', collectionType),

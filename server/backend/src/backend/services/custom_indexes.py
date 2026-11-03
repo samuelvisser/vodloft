@@ -4,12 +4,13 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
-from sqlalchemy import delete, or_, select, true, update
+from sqlalchemy import and_, delete, or_, select, true, update
 from sqlalchemy.orm import Session
 
 from backend.db.models import CustomIndexState, Episode, Metadata, Collection, CollectionLocalMediaProfile
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.services.local_media_profile_sources import profile_offered_for_source
 from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope
 from backend.utils.custom_index import (
     CustomIndexNotReadyError,
@@ -54,7 +55,10 @@ class CustomIndexReconciliationResult:
 
 
 def profile_applies_to_collection(profile: CollectionLocalMediaProfile, collection: Collection) -> bool:
-    return profile.collection_scope == CollectionLocalMediaProfileScope.BOTH or profile.collection_scope == collection.type
+    return (
+        profile.collection_scope in (CollectionLocalMediaProfileScope.BOTH, collection.type)
+        and profile_offered_for_source(profile.source_keys, collection.source_key)
+    )
 
 
 def profile_collection_scope_filter_for_collection_type(collection_type: str):
@@ -67,9 +71,10 @@ def profile_collection_scope_filter_for_collection_type(collection_type: str):
 
 def profile_collection_scope_filter(profile: CollectionLocalMediaProfile):
     """SQL predicate for Collections that are in one Local Media Profile's scope."""
-    if profile.collection_scope == CollectionLocalMediaProfileScope.BOTH:
-        return true()
-    return Collection.type == profile.collection_scope
+    scope = true() if profile.collection_scope == CollectionLocalMediaProfileScope.BOTH else Collection.type == profile.collection_scope
+    if profile.source_keys is None:
+        return scope
+    return and_(scope, Collection.source_key.in_(profile.source_keys))
 
 
 def profile_uses_custom_indexes(profile: CollectionLocalMediaProfile) -> bool:

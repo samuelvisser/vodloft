@@ -11,6 +11,7 @@ class DownloadProfileAPIReadView(DownloadProfileAPIRead):
     collection_title: str = Field(validation_alias=AliasPath("profile", "collection", "title"))
     collection_slug: str = Field(validation_alias=AliasPath("profile", "collection", "slug"))
     collection_type: str = Field(validation_alias=AliasPath("profile", "collection", "type"))
+    collection_source_key: str = Field(validation_alias=AliasPath("profile", "collection", "source_key"))
     collection_episode_identifier: str = Field(
         validation_alias=AliasPath("profile", "collection", "episode_identifier")
     )

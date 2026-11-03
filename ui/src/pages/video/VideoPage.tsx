@@ -19,6 +19,7 @@ import '../episode/EpisodePage.css'
 import {siteName} from '../../lib/siteName'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
 import {SubscriptionBadge, SubscriptionNotice, useSubscriptionLocked} from '../../components/common/NeedsSubscription'
+import {isLocalMediaProfileAvailableForSource} from '../../types/local_media_profile'
 
 function formatDuration(seconds: number) {
     if (!seconds) return null
@@ -55,7 +56,11 @@ export default function VideoPage() {
     }
     if (!video) return <section className="view episode-view" aria-busy="true"><p>Loading video…</p></section>
 
-    const videoProfiles = profiles?.filter((profile) => profile.type === 'video')
+    // A profile limited to other Sources still shows the download it already made.
+    const videoProfiles = profiles?.filter((profile) => profile.type === 'video' && (
+        isLocalMediaProfileAvailableForSource(profile, video.sourceKey)
+        || !!downloads?.some((download) => download.localMediaProfileId === profile.id)
+    ))
     const downloadByProfileId = new Map<number, MediaDownloadViewRead>(
         (downloads ?? []).map((download) => [download.localMediaProfileId, download]),
     )
