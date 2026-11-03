@@ -115,6 +115,7 @@ export default function ProfileExistingFilesDialog({localMediaProfileId, localMe
                     {review && (
                         <Results
                             scan={review}
+                            files={files}
                             showCollection
                             filter={filter}
                             setFilter={(value) => { setFilter(value); setShown(SHOWN) }}
