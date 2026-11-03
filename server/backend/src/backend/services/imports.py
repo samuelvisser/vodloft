@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import logging
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
@@ -74,7 +75,13 @@ _DOWNLOAD_PROFILE_FIELDS = (
     "ep_id_type_list", "download_days_in_past", "download_episode_count", "download_starting_from",
     "delete_older_episodes", "retention_from", "auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments",
 )
-_DEFAULT_SETTINGS = frozenset({"downloads.filename_restriction_mode", "ytdlp.youtube_api_key"})
+_OPTIONAL_DOWNLOAD_PROFILE_FIELDS = ("upgrade_check", "upgrade_after_days", "upgrade_repeat")
+"""Download Profile fields an importer only sends when the other program had the setting."""
+_COLLECTION_FIELDS = ("cookies_mode", "check_frequency", "check_cron")
+_DEFAULT_SETTINGS = frozenset({
+    "downloads.filename_restriction_mode", "ytdlp.youtube_api_key",
+    "settings.download_settings.speed_limit_mode", "settings.download_settings.speed_limit_mbps",
+})
 
 
 class ImportServiceError(ValueError):
@@ -338,7 +345,7 @@ def _profile_wanted(plan: ProfilePlan) -> dict[str, object]:
 
 
 def _download_profile_values(profile: DownloadProfile) -> dict[str, object]:
-    values = {name: getattr(profile, name) for name in _DOWNLOAD_PROFILE_FIELDS}
+    values = {name: getattr(profile, name) for name in (*_DOWNLOAD_PROFILE_FIELDS, *_OPTIONAL_DOWNLOAD_PROFILE_FIELDS)}
     values["sponsorblock_segments"] = dict(values["sponsorblock_segments"])
     starting = values["download_starting_from"]
     values["download_starting_from"] = starting.isoformat() if isinstance(starting, date) else starting
@@ -346,7 +353,11 @@ def _download_profile_values(profile: DownloadProfile) -> dict[str, object]:
 
 
 def _download_profile_wanted(plan: CollectionPlan) -> dict[str, object]:
-    return {name: (plan.download_profile or {}).get(name) for name in _DOWNLOAD_PROFILE_FIELDS}
+    fields = plan.download_profile or {}
+    return {
+        **{name: fields.get(name) for name in _DOWNLOAD_PROFILE_FIELDS},
+        **{name: fields[name] for name in _OPTIONAL_DOWNLOAD_PROFILE_FIELDS if name in fields},
+    }
 
 
 def _download_profile_rules(plan: CollectionPlan) -> list[DownloadProfileRule]:
@@ -642,7 +653,7 @@ def _camel(name: str) -> str:
     return head + "".join(part.title() for part in rest)
 
 
-def _apply_setting(key: str, value: object) -> None:
+def _apply_setting(key: str, value: object, session: Session | None = None) -> None:
     """Change one VODLoft setting the way the Settings screen does."""
     if key.startswith("settings."):
         from backend.api.endpoints.settings.service import save_ui_settings
@@ -671,6 +682,9 @@ def _apply_setting(key: str, value: object) -> None:
         values.download_settings.filename_restriction_mode = FilenameRestrictionMode(str(value))
         save_ui_settings(SettingsAPIUpdate(values=values, changed_fields=["downloadSettings.filenameRestrictionMode"]))
         return
+    if key == "notifications.apprise" and session is not None:
+        _import_apprise(session, str(value))
+        return
     from sources import get_source
 
     source = get_source("ytdlp")
@@ -680,6 +694,36 @@ def _apply_setting(key: str, value: object) -> None:
         source.save_cookies(Path(str(value)).read_bytes())
     else:
         raise ImportServiceError(f"VODLoft can't apply the setting {key}")
+
+
+IMPORTED_DESTINATION = "Pinchflat"
+
+
+def _import_apprise(session: Session, urls: str) -> None:
+    """Each Apprise URL as a destination, added to the default rules; one that is already there is left alone."""
+    from backend.db.models import NotificationDestination, NotificationRule
+    from backend.services.notifications.destinations import Kind, check_config, create_destination
+    from backend.services.notifications.rules import restore_default_rules
+
+    known = set(session.scalars(select(NotificationDestination.masked)))
+    names = set(session.scalars(select(NotificationDestination.name)))
+    added: list[int] = []
+    for url in (part for part in re.split(r"[\s,]+", urls) if part):
+        if check_config(Kind.APPRISE, {"url": url}).masked[:255] in known:
+            continue
+        name = next(
+            candidate for number in range(1, 100)
+            if (candidate := IMPORTED_DESTINATION if number == 1 else f"{IMPORTED_DESTINATION} {number}") not in names
+        )
+        names.add(name)
+        added.append(create_destination(session, kind=Kind.APPRISE, name=name, config={"url": url}).id)
+    if added:
+        restore_default_rules(session)
+        for rule in session.scalars(select(NotificationRule).where(
+            NotificationRule.personal.is_(False), NotificationRule.default_key.is_not(None),
+        )):
+            rule.destination_ids = [*rule.destination_ids, *added]
+        session.flush()
 
 
 def _current_setting(key: str) -> object:
@@ -713,7 +757,7 @@ def _apply_settings(session: Session, plan: ImportPlan, options: ImportOptions, 
             _remember(session, links, run.importer, "setting", item.key, 0, hashes, [], run.id)
             continue
         try:
-            _apply_setting(item.key, item.value)
+            _apply_setting(item.key, item.value, session)
         except Exception as exc:  # noqa: BLE001  (a setting that fails is reported, the import goes on)
             report.add("failed", item.key, f"Could not apply: {exc}")
             continue
@@ -854,8 +898,21 @@ def _upsert_collection(session: Session, plan: CollectionPlan, library, links, r
     if isinstance(options, str) and options and not existing.ytdlp_options:
         # Added once; after that, the Collection's yt-dlp options are yours to change.
         existing.ytdlp_options = options
+    # Cookies and check frequency follow the other program until you change them in VODLoft.
+    wanted = {name: plan.settings[name] for name in _COLLECTION_FIELDS if name in plan.settings}
+    if wanted.get("check_frequency") is not None and "check_cron" not in wanted:
+        wanted["check_cron"] = None
+    current = {name: getattr(existing, name) for name in wanted}
+    write, hashes, changes = _merge_fields(current, wanted, link if not created else None, ())
+    for name, value in write.items():
+        setattr(existing, name, value)
+    if not created:
+        _report_changes(report, plan.title, changes)
+    if "check_frequency" in write or "check_cron" in write:
+        session.flush()
+        queue_event(session, "collection.updated", {"resource_id": existing.id, "id": existing.id, "slug": existing.slug})
     _remember(session, links, run.importer, "collection", plan.external_id, existing.id,
-              link.written if link else {}, _unsupported(plan.warnings), run.id)
+              {**(link.written if link else {}), **hashes}, _unsupported(plan.warnings), run.id)
     return existing, created
 
 

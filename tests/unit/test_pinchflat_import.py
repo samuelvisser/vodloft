@@ -88,7 +88,7 @@ def test_the_reader_reads_a_pinchflat_database(tmp_path):
     assert data.version == NEWEST_KNOWN_VERSION
     assert [source.name for source in data.sources] == ["Veritasium", "Lofi"]
     assert [item.media_id for item in data.items if item.media_filepath] == ["vid-aaaaaaa", "vid-bbbbbbb", "vid-eeeeeee"]
-    assert data.settings.youtube_api_key == "test-key" and data.settings.apprise_configured
+    assert data.settings.youtube_api_key == "test-key" and data.settings.apprise_server == "apprise://x"
 
 
 def test_the_reader_refuses_a_newer_or_a_foreign_database(tmp_path):
@@ -138,7 +138,7 @@ def test_the_plan_converts_profiles_and_maps_sources_and_items(tmp_path):
     assert by_id["vid-eeeeeee"].custom_index_values == {"playlist": 3}
     settings = {setting.key: setting for setting in plan.settings}
     assert settings["ytdlp.youtube_api_key"].secret
-    assert settings["apprise_server"].support == "unsupported"
+    assert settings["notifications.apprise"].secret and settings["notifications.apprise"].support == "exact"
 
 
 def test_filters_retention_and_prevent_culling_become_which_episodes(tmp_path):
@@ -300,7 +300,7 @@ def installation(tmp_path, monkeypatch):
     monkeypatch.setattr(get_settings().download_settings, "download_root", downloads)
     monkeypatch.setattr(import_uploads, "imports_root", lambda: tmp_path / "imports")
     applied: list[tuple[str, object]] = []
-    monkeypatch.setattr(imports, "_apply_setting", lambda key, value: applied.append((key, value)))
+    monkeypatch.setattr(imports, "_apply_setting", lambda key, value, session=None: applied.append((key, value)))
 
     for relative in ("YouTube/Veritasium/s2024e030299 - First [vid-aaaaaaa].mp4",
                      "YouTube/Veritasium/s2024e030298 - Second [vid-bbbbbbb].mkv",
@@ -536,3 +536,71 @@ def test_sponsorblock_and_unmapped_options_come_over(tmp_path):
     ]
     refused = [warning.message for warning in checked.warnings if warning.subject == "yt-dlp options"]
     assert any(message.startswith('--exec "echo done"') and "Runs other programs" in message for message in refused)
+
+
+def _with_0_7_settings(path: Path) -> Path:
+    connection = sqlite3.connect(path)
+    connection.execute("ALTER TABLE sources ADD COLUMN index_frequency_minutes INTEGER")
+    connection.execute("UPDATE sources SET cookie_behaviour = 'when_needed', index_frequency_minutes = 10080 WHERE id = 1")
+    connection.execute("UPDATE sources SET cookie_behaviour = 'all_operations', index_frequency_minutes = 60 WHERE id = 2")
+    connection.execute("UPDATE media_profiles SET redownload_delay_days = 3 WHERE id = 1")
+    connection.execute("UPDATE settings SET download_throughput_limit = '4M'")
+    connection.commit()
+    connection.close()
+    return path
+
+
+def test_the_0_7_settings_map_onto_vodloft(tmp_path):
+    extras = tmp_path / "extras"
+    (extras / "user-scripts").mkdir(parents=True)
+    (extras / "user-scripts" / "lifecycle").write_text("#!/bin/sh\n")
+    data = read_pinchflat(_with_0_7_settings(_pinchflat_db(tmp_path / "pinchflat.db")))
+    plan = plan_import(data, option_directory=None, extras=extras)
+
+    veritasium, lofi = plan.collections
+    assert veritasium.settings["cookies_mode"] == "automatic" and lofi.settings["cookies_mode"] == "always"
+    # A week between indexes is less often than VODLoft's default; hourly is not.
+    assert (veritasium.settings["check_frequency"], veritasium.settings["check_cron"]) == ("own", "0 4 */7 * *")
+    assert "check_frequency" not in lofi.settings
+    assert (veritasium.download_profile["upgrade_check"], veritasium.download_profile["upgrade_after_days"]) == (True, 3)
+    assert "upgrade_check" not in lofi.download_profile
+    settings = {setting.key: setting for setting in plan.settings}
+    assert settings["settings.download_settings.speed_limit_mode"].value == "custom"
+    assert settings["settings.download_settings.speed_limit_mbps"].value == 4.19
+    assert settings["lifecycle_script"].support == "unsupported"
+    assert "download_throughput_limit" not in settings and "apprise_server" not in settings
+
+
+def test_collection_settings_come_over_and_a_change_in_vodloft_is_kept(installation, tmp_path):
+    from backend.db.models import Collection
+    from backend.services import import_uploads, imports
+
+    session, _applied = installation
+    database = _with_0_7_settings(_pinchflat_db(tmp_path / "pinchflat-0-7.db"))
+    import_uploads.begin_upload(pinchflat.IMPORTER, [("db/pinchflat.db", database.stat().st_size)], include_secrets=False)
+    import_uploads.write_chunk(pinchflat.IMPORTER, "db/pinchflat.db", 0, database.read_bytes())
+    import_uploads.finish_upload(pinchflat.IMPORTER)
+    _run(session, imports.ImportOptions())
+    collections = {collection.title: collection for collection in session.scalars(select(Collection))}
+    veritasium = collections["Veritasium"]
+    assert (veritasium.cookies_mode, veritasium.check_frequency, veritasium.check_cron) == ("automatic", "own", "0 4 */7 * *")
+    assert collections["Lofi"].cookies_mode == "always" and collections["Lofi"].check_frequency == "default"
+
+    veritasium.cookies_mode = "never"
+    session.commit()
+    _run(session, imports.ImportOptions())
+    session.refresh(veritasium)
+    assert veritasium.cookies_mode == "never" and veritasium.check_frequency == "own"
+
+
+def test_the_apprise_server_becomes_a_destination_on_the_default_rules():
+    from backend.db.models import NotificationDestination, NotificationRule
+    from backend.services import imports
+
+    session = _session()
+    imports._import_apprise(session, "ntfy://ntfy.sh/vodloft-test discord://123/abc")
+    imports._import_apprise(session, "ntfy://ntfy.sh/vodloft-test")
+    destinations = list(session.scalars(select(NotificationDestination).order_by(NotificationDestination.id)))
+    assert [destination.name for destination in destinations] == ["Pinchflat", "Pinchflat 2"]
+    rules = list(session.scalars(select(NotificationRule).where(NotificationRule.default_key.is_not(None))))
+    assert rules and all(rule.destination_ids == [destinations[0].id, destinations[1].id] for rule in rules)

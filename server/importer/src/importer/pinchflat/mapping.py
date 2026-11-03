@@ -137,10 +137,6 @@ def _profile_warnings(profile: PinchflatProfile) -> list[ImportWarning]:
         warnings.append(ImportWarning(
             "sub_langs", f"VODLoft lists languages by code, so it leaves out {', '.join(left_out)}", "close",
         ))
-    if profile.redownload_delay_days:
-        warnings.append(ImportWarning(
-            "redownload_delay_days", f"VODLoft does not download a video again after {profile.redownload_delay_days} days yet",
-        ))
     if _audio_language(profile.audio_track) is None and (profile.audio_track or "") not in ("", "default", "original"):
         warnings.append(ImportWarning("audio_track", f"VODLoft chooses audio by language code, not {profile.audio_track}; it keeps the original"))
     if profile.media_container and profile.media_container not in ("mp4", "mkv"):
@@ -305,6 +301,33 @@ def _sponsorblock(profile: PinchflatProfile) -> dict[str, object]:
     }
 
 
+_COOKIES = {"disabled": "never", "when_needed": "automatic", "all_operations": "always"}
+"""Pinchflat's cookie behaviour as VODLoft's per-Collection cookies choice."""
+
+PINCHFLAT_INDEX_MINUTES = 24 * 60
+"""Pinchflat lists a source once a day unless told otherwise."""
+
+
+def _checking(source: PinchflatSource, warnings: list[ImportWarning]) -> dict[str, object]:
+    """Pinchflat's index frequency, as a Collection's own schedule only when it checked less often than daily.
+
+    VODLoft checks YouTube channels more often than Pinchflat's daily default on its own, so a source indexed
+    daily or more often keeps VODLoft's default.
+    """
+    minutes = source.index_frequency_minutes
+    if minutes is None or 0 < minutes <= PINCHFLAT_INDEX_MINUTES:
+        return {}
+    if minutes < 0:
+        warnings.append(ImportWarning(
+            "index_frequency_minutes",
+            "Pinchflat never looked for new videos in this source; VODLoft does, so turn its Download Profile off "
+            "if nothing new should be downloaded", "close",
+        ))
+        return {}
+    days = max(2, round(minutes / PINCHFLAT_INDEX_MINUTES))
+    return {"check_frequency": "own", "check_cron": f"0 4 */{days} * *"}
+
+
 def _collection_plan(source: PinchflatSource, profile: PinchflatProfile, profile_external_id: str, path_map: PathMap,
                      ytdlp_options: str = "") -> CollectionPlan:
     warnings: list[ImportWarning] = []
@@ -342,8 +365,16 @@ def _collection_plan(source: PinchflatSource, profile: PinchflatProfile, profile
     if source.max_duration_seconds:
         rules.append({"action": "skip", "field": "duration", "duration_operator": "longer",
                       "duration_seconds": source.max_duration_seconds})
-    if source.cookie_behaviour not in (None, "", "disabled"):
-        warnings.append(ImportWarning("cookie_behaviour", "VODLoft uses its cookies for every video or none, not per Collection yet"))
+    checking = _checking(source, warnings)
+    upgrade: dict[str, object] = {}
+    if profile.redownload_delay_days:
+        # Pinchflat downloads once more after the delay; the upgrade check does too, but keeps the better file.
+        upgrade = {"upgrade_check": True, "upgrade_after_days": profile.redownload_delay_days, "upgrade_repeat": "once"}
+        warnings.append(ImportWarning(
+            "redownload_delay_days",
+            f"The upgrade check looks again {profile.redownload_delay_days} days after downloading, and replaces the "
+            "file only when the new one is better", "close",
+        ))
     audio = profile.preferred_resolution == "audio"
     assets = tuple(
         (kind, mapped) for kind, path in (
@@ -362,7 +393,9 @@ def _collection_plan(source: PinchflatSource, profile: PinchflatProfile, profile
                   **({"author": source.collection_name}
                      if source.collection_type == "channel" and source.collection_name else {}),
                   # VODLoft checks these as the Collection's own yt-dlp options, and reports the lines it can't use.
-                  **({"ytdlp_options": ytdlp_options} if ytdlp_options else {})},
+                  **({"ytdlp_options": ytdlp_options} if ytdlp_options else {}),
+                  "cookies_mode": _COOKIES.get(source.cookie_behaviour or "disabled", "never"),
+                  **checking},
         download_profile={
             "enable_profile": source.enabled and source.download_media,
             "ep_id_type_list": _episode_types(profile),
@@ -372,6 +405,7 @@ def _collection_plan(source: PinchflatSource, profile: PinchflatProfile, profile
             # yt-dlp takes an uploaded subtitle over an auto-generated one, as VODLoft's fallback does.
             "auto_subtitles": "fallback" if profile.download_auto_subs else "never",
             **_sponsorblock(profile),
+            **upgrade,
             **limits,
         },
         warnings=tuple(warnings),
@@ -416,12 +450,43 @@ def _settings(data: PinchflatData, extras: Path | None) -> list[SettingPlan]:
     if data.settings.extractor_sleep_interval_seconds:
         settings.append(SettingPlan("extractor_sleep_interval_seconds", data.settings.extractor_sleep_interval_seconds,
                                     "close", "VODLoft paces its own requests to YouTube"))
-    if data.settings.download_throughput_limit:
-        settings.append(SettingPlan("download_throughput_limit", data.settings.download_throughput_limit,
-                                    "unsupported", "VODLoft has no download speed limit yet"))
-    if data.settings.apprise_configured:
-        settings.append(SettingPlan("apprise_server", None, "unsupported", "VODLoft does not send notifications yet"))
+    limit = _megabytes_per_second(data.settings.download_throughput_limit)
+    if limit is not None:
+        settings.append(SettingPlan(
+            "settings.download_settings.speed_limit_mode", "custom",
+            note="Pinchflat limited download speed, so VODLoft does too",
+        ))
+        settings.append(SettingPlan(
+            "settings.download_settings.speed_limit_mbps", limit,
+            note=f"Pinchflat's {data.settings.download_throughput_limit} for all downloads together",
+        ))
+    elif data.settings.download_throughput_limit:
+        settings.append(SettingPlan("download_throughput_limit", data.settings.download_throughput_limit, "unsupported",
+                                    "Not a speed VODLoft can read; set one in Settings › Downloads"))
+    if data.settings.apprise_server:
+        settings.append(SettingPlan(
+            "notifications.apprise", data.settings.apprise_server, secret=True,
+            note="Becomes the destination Pinchflat in Messages and actions, added to the default rules",
+        ))
+    if extras is not None and (extras / "user-scripts" / "lifecycle").is_file():
+        settings.append(SettingPlan(
+            "lifecycle_script", None, "unsupported",
+            "Scripts run code, so VODLoft does not copy them. Put it in /config/scripts and add it as a script "
+            "action in Settings › Messages and actions",
+        ))
     return settings
+
+
+_RATE = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*([kmgKMG]?)(?:i?[bB])?\s*$")
+
+
+def _megabytes_per_second(rate: str | None) -> float | None:
+    """yt-dlp's --limit-rate, such as 4.2M or 500K (powers of 1024), in VODLoft's MB/s."""
+    match = _RATE.match(rate or "")
+    if not match:
+        return None
+    number = float(match.group(1)) * 1024 ** " KMG".index(match.group(2).upper() or " ")
+    return max(round(number / 1_000_000, 2), 0.01) if number > 0 else None
 
 
 def plan_import(data: PinchflatData, *, option_directory: Path | None, extras: Path | None = None,
@@ -473,6 +538,8 @@ UPLOAD_FILES = (
     UploadFile("db/pinchflat.db-wal"),
     UploadFile("extras/yt-dlp-configs/*.txt"),
     UploadFile("extras/cookies.txt", secret=True),
+    # Only to tell that there is one: VODLoft never copies or runs it.
+    UploadFile("extras/user-scripts/lifecycle"),
 )
 """What a Pinchflat upload takes from its /config folder; its metadata folder of thumbnails is left out."""
 

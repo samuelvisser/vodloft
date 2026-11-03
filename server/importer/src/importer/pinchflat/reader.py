@@ -72,6 +72,8 @@ class PinchflatSource:
     min_duration_seconds: int | None = None
     max_duration_seconds: int | None = None
     cookie_behaviour: str | None = None
+    index_frequency_minutes: int | None = None
+    """How often Pinchflat lists the source; -1 is never."""
     series_directory: str | None = None
     nfo_filepath: str | None = None
     poster_filepath: str | None = None
@@ -111,7 +113,8 @@ class PinchflatSettings:
     extractor_sleep_interval_seconds: float | None = None
     download_throughput_limit: str | None = None
     youtube_api_key: str | None = None
-    apprise_configured: bool = False
+    apprise_server: str | None = None
+    """Pinchflat's Apprise URLs, which hold sign-ins."""
     yt_dlp_version: str | None = None
 
 
@@ -252,6 +255,7 @@ def _source(row: dict[str, Any]) -> PinchflatSource:
         min_duration_seconds=_int(row.get("min_duration_seconds")),
         max_duration_seconds=_int(row.get("max_duration_seconds")),
         cookie_behaviour=row.get("cookie_behaviour"),
+        index_frequency_minutes=_int(row.get("index_frequency_minutes")),
         series_directory=row.get("series_directory"), nfo_filepath=row.get("nfo_filepath"),
         poster_filepath=row.get("poster_filepath"), fanart_filepath=row.get("fanart_filepath"),
         banner_filepath=row.get("banner_filepath"),
@@ -281,7 +285,7 @@ def _settings(rows: list[dict[str, Any]]) -> PinchflatSettings:
         extractor_sleep_interval_seconds=float(sleep) if sleep not in (None, "") else None,
         download_throughput_limit=row.get("download_throughput_limit") or None,
         youtube_api_key=(row.get("youtube_api_key") or "").strip() or None,
-        apprise_configured=bool((row.get("apprise_server") or "").strip()),
+        apprise_server=(row.get("apprise_server") or "").strip() or None,
         yt_dlp_version=row.get("yt_dlp_version"),
     )
 
