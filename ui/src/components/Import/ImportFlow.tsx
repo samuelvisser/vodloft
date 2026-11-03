@@ -414,6 +414,8 @@ function PreviewStep({importer, onReplace, onFinished, onRunStatus}: {
                     <>
                         <ProgressBar ariaLabel="Reading the upload"/>
                         <p className="import-run__activity" role="status">Reading the upload…</p>
+                        {/* Cancelling removes the upload, so a late answer has nothing left to show. */}
+                        <button type="button" className="btn" onClick={() => void onReplace()}>Cancel</button>
                     </>
                 )}
                 {error && (
@@ -805,8 +807,12 @@ function ProfilePreview({importerName, profile, collections, template, onTemplat
             {profile.keptSeparate && (
                 <div className="import-merge">
                     <div>
-                        <span className="import-merge__label">Not kept on {profile.baseName ?? `its ${importerName} profile`}</span>{' '}
-                        {profile.keptSeparate}, so this collection keeps a profile of its own.
+                        <span className="import-merge__label">
+                            Not kept on {profile.baseName ?? (profile.mergedFrom.length ? mergedNames(profile.mergedFrom) : `its ${importerName} profile`)}
+                        </span>{' '}
+                        {profile.keptSeparate}, so {collections.length === 1
+                            ? 'this collection keeps a profile of its own'
+                            : 'these collections share a profile of their own'}.
                     </div>
                 </div>
             )}
