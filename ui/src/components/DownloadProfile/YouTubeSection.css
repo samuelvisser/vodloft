@@ -3,12 +3,21 @@
     gap: 16px;
     --yt-border: rgba(100, 116, 139, 0.24);
     --yt-highlight: rgba(14, 165, 233, 0.12);
+    --yt-card-bg: rgba(148, 163, 184, 0.06);
+    --yt-control-border: rgba(100, 116, 139, 0.35);
+    --yt-choice-on: #2563eb;
+    --yt-choice-on-text: #fff;
+    --yt-choice-cut: #dc2626;
 }
 
 @media (prefers-color-scheme: dark) {
     .youtube-section {
         --yt-border: rgba(148, 163, 184, 0.22);
         --yt-highlight: rgba(56, 189, 248, 0.16);
+        --yt-card-bg: rgba(255, 255, 255, 0.035);
+        --yt-control-border: rgba(148, 163, 184, 0.28);
+        --yt-choice-on: rgba(59, 130, 246, 0.28);
+        --yt-choice-cut: rgba(239, 68, 68, 0.28);
     }
 }
 
@@ -27,65 +36,57 @@
     transition: background 0.6s ease;
 }
 
-.sponsorblock-grid {
-    width: 100%;
-    max-width: 640px;
-    margin-top: 12px;
-    border-collapse: collapse;
+/* SponsorBlock: a card per group, three across on wide screens, with Keep | Chapter | Cut out per type. */
+.sponsorblock-groups {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+    gap: 12px;
+    margin-top: 4px;
 }
 
-.sponsorblock-grid th,
-.sponsorblock-grid td {
-    padding: 6px 4px;
-    border-bottom: 1px solid var(--yt-border);
-    vertical-align: middle;
-}
-
-.sponsorblock-grid thead th {
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-align: center;
-    color: var(--muted);
-}
-
-.sponsorblock-grid td {
-    width: 64px;
-    text-align: center;
-}
-
-.sponsorblock-grid td input {
-    width: 18px;
-    height: 18px;
+.sponsorblock-group {
     margin: 0;
-    cursor: pointer;
+    padding: 4px 12px 6px;
+    min-width: 0;
+    border: 1px solid var(--yt-border);
+    border-radius: 10px;
+    background: var(--yt-card-bg);
 }
 
-.sponsorblock-grid tbody th[scope="row"] {
-    text-align: left;
-    font-weight: 400;
-}
-
-.sponsorblock-grid__name {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 600;
-}
-
-.sponsorblock-grid tbody th[scope="row"] small {
-    display: block;
-    margin-left: 18px;
-    color: var(--muted);
-}
-
-.sponsorblock-grid__group th {
-    padding-top: 12px;
-    font-size: 0.75rem;
+.sponsorblock-group legend {
+    float: left;
+    width: 100%;
+    margin: 6px 0 2px;
+    padding: 0;
+    font-size: 0.7rem;
     font-weight: 600;
     letter-spacing: 0.05em;
-    text-align: left;
     text-transform: uppercase;
     color: var(--muted);
+}
+
+.sponsorblock-row {
+    clear: both;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--yt-border);
+}
+
+.sponsorblock-row:last-child {
+    border-bottom: 0;
+}
+
+.sponsorblock-row__name {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: help;
 }
 
 .sponsorblock-swatch {
@@ -96,8 +97,55 @@
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
 }
 
-@media (max-width: 640px) {
-    .sponsorblock-grid td {
-        width: 52px;
-    }
+.sponsorblock-choice {
+    display: inline-flex;
+    flex: none;
+    overflow: hidden;
+    border: 1px solid var(--yt-control-border);
+    border-radius: 8px;
+}
+
+.sponsorblock-choice label {
+    position: relative;
+    cursor: pointer;
+}
+
+.sponsorblock-choice label + label {
+    border-left: 1px solid var(--yt-control-border);
+}
+
+.sponsorblock-choice input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    opacity: 0;
+}
+
+.sponsorblock-choice span {
+    display: block;
+    padding: 3px 7px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--muted);
+}
+
+.sponsorblock-choice label:hover span {
+    color: var(--text);
+}
+
+.sponsorblock-choice input:checked + span {
+    background: var(--yt-choice-on);
+    color: var(--yt-choice-on-text);
+}
+
+/* Cut out is final, so it stands out in red. */
+.sponsorblock-choice input[value="cut"]:checked + span {
+    background: var(--yt-choice-cut);
+}
+
+.sponsorblock-choice input:focus-visible + span {
+    outline: 2px solid #60a5fa;
+    outline-offset: -2px;
 }

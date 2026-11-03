@@ -525,7 +525,7 @@ def test_a_youtube_download_profile_chooses_auto_generated_subtitles(listed, ses
     assert [(use.collection_title, use.auto_subtitles, use.episode_types) for use in uses] == [("A playlist", "always", [])]
 
 
-def test_a_youtube_download_profile_cuts_sponsors_and_adds_your_own_options(listed, session, monkeypatch):
+def test_a_youtube_download_profile_marks_sponsors_and_adds_your_own_options(listed, session, monkeypatch):
     from backend.db.models import CollectionLocalMediaProfile
     from backend.db.models.download_profile import DownloadProfile
     from backend.db.models.media_download import EpisodeMediaDownload
@@ -568,13 +568,12 @@ def test_a_youtube_download_profile_cuts_sponsors_and_adds_your_own_options(list
         "--concurrent-fragments", "4", "--extractor-args", "youtube:player_client=web", "--concurrent-fragments", "8",
     )
 
-    # A new profile's default: cut out ads and reminders, chapters for intros, outros and recaps.
+    # A new profile's default: chapters for sponsors, intros and outros; nothing is cut out.
     monkeypatch.setattr(ListedSource, "sponsorblock_for", lambda self, url: "youtube.com" in url)
     plan = download_plans.prepare_download_plan(session, download.id, DownloadTracker())
-    assert plan.source.ytdlp_sponsorblock == YtdlpSponsorBlock(
-        chapter=("intro", "outro", "preview"), cut=("sponsor", "selfpromo", "interaction"),
-    )
-    assert "--sponsorblock-remove" in plan.source.ytdlp_command
+    assert plan.source.ytdlp_sponsorblock == YtdlpSponsorBlock(chapter=("sponsor", "intro", "outro"))
+    assert "--sponsorblock-mark" in plan.source.ytdlp_command
+    assert "--sponsorblock-remove" not in plan.source.ytdlp_command
 
     # Options saved before a check refused them stop the download with the reason.
     save_ytdlp_source_options(session, "-o elsewhere.mp4")

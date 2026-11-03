@@ -179,7 +179,7 @@ This setting only appears when the Local Media Profile stores subtitles.
 - **Chapter**: becomes a named chapter that your player can skip. Nothing is removed, so this is the safe choice.
 - **Cut out**: removed from the file. This is final; the cut part isn't kept anywhere.
 
-The types are Sponsor, Self-promotion, Interaction reminder, Intro, Outro, Preview and recap, Filler and Non-music section. SponsorBlock's Highlight is always a chapter. A new YouTube Download Profile cuts out sponsors, self-promotion and interaction reminders, and makes chapters of intros, outros and previews. Profiles from before VODLoft 0.7.0 start with SponsorBlock off.
+The types are Sponsor, Self-promotion, Interaction reminder, Intro, Outro, Preview and recap, Filler and Non-music section. SponsorBlock's Highlight is always a chapter. A new YouTube Download Profile makes chapters of sponsors, intros and outros, and keeps everything else. Profiles from before VODLoft 0.7.0 start with SponsorBlock off.
 
 Most parts are submitted in the days after a video comes out, so a download made right after upload may find few of them. The episode page shows what a download found on a timeline: each part, whether it became a chapter or was cut out, and how much shorter the file is.
 
