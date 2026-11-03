@@ -108,6 +108,7 @@ async def application_lifespan(app: FastAPI):
 
     started = False
     recovery_started = False
+    notification_worker = None
     try:
         controller.start_controller()
         started = True
@@ -120,8 +121,15 @@ async def application_lifespan(app: FastAPI):
         )
         recovery_thread.start()
         recovery_started = True
+
+        from backend.services.notifications.worker import start_notification_worker
+        notification_worker = start_notification_worker()
         yield
     finally:
+        if notification_worker is not None:
+            stop_event, worker_thread = notification_worker
+            stop_event.set()
+            worker_thread.join(timeout=10)
         if not recovery_started:
             filesystem_pause.release()
         if started:
@@ -270,6 +278,9 @@ def create_app() -> FastAPI:
         assets_router,
         health_router,
         regex_router,
+        notification_router,
+        account_notification_router,
+        push_router,
     )
     from backend.api.endpoints.auth.router import router as auth_router
 
@@ -310,5 +321,8 @@ def create_app() -> FastAPI:
     app.include_router(logs_router, prefix="/api")
     app.include_router(user_router, prefix="/api")
     app.include_router(assets_router, prefix="/api")
+    app.include_router(notification_router, prefix="/api")
+    app.include_router(account_notification_router, prefix="/api")
+    app.include_router(push_router, prefix="/api")
 
     return app

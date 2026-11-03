@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Optional
 
 from .errors import DownloadCancelled, DownloadError, EncryptedMediaError, FileTooLargeError, MediaUnavailableError
-from .models import CancelCheck, DownloadProgress, DownloadResult, ProgressCallback, SponsorSegment, WrittenSubtitle
+from .models import CancelCheck, DownloadProgress, DownloadResult, ProgressCallback, SponsorSegment, VideoStream, WrittenSubtitle
 from .plan import ResolvedDownloadSource, YtdlpSponsorBlock, YtdlpSubtitles
 from .source import FORMAT_HEIGHTS
 from .subtitles import webvtt_to_srt
@@ -29,6 +29,8 @@ logger = logging.getLogger(__name__)
 _PROGRESS = "[vodloft-progress]"
 _FILE = "[vodloft-file]"
 _SPONSORBLOCK = "[vodloft-sponsorblock]"
+_VIDEO = "[vodloft-video]"
+_CODECS = (("avc", "h264"), ("h264", "h264"), ("hev", "h265"), ("hvc", "h265"), ("h265", "h265"), ("vp09", "vp9"), ("vp9", "vp9"), ("av01", "av1"), ("av1", "av1"))
 # SponsorBlock's Highlight is a moment, not a part to skip: always a chapter.
 _HIGHLIGHT = "poi_highlight"
 _SUBTITLE_FORMAT = ("--sub-format", "srt/vtt/best")
@@ -400,6 +402,24 @@ def _write_auto_generated(url: str, work: Path, command: tuple[str, ...], subtit
         logger.info("Could not fetch the auto-generated subtitles of %s: %s", url, error_message(result.stdout))
 
 
+def video_codec_name(vcodec: str) -> str:
+    """A codec as VODLoft names it, from yt-dlp's ``vcodec`` such as ``avc1.640028``."""
+    lowered = vcodec.lower()
+    for prefix, name in _CODECS:
+        if lowered.startswith(prefix):
+            return name
+    return lowered.split(".", 1)[0]
+
+
+def _video_stream(text: str) -> VideoStream | None:
+    """The kept video stream from yt-dlp's ``width height vcodec`` line."""
+    width, height, vcodec = (text.split() + ["NA"] * 3)[:3]
+    sides = [side for side in (_number(width), _number(height)) if side]
+    if not sides or vcodec in {"NA", "none"}:
+        return None
+    return VideoStream(min(sides), video_codec_name(vcodec))
+
+
 def _sponsor_segments(text: str, sponsorblock: YtdlpSponsorBlock) -> tuple[SponsorSegment, ...]:
     """The segments yt-dlp printed, with what the download did to each."""
     try:
@@ -449,6 +469,7 @@ def download_ytdlp(
         f"download:{_PROGRESS} %(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s",
         "--print", f"after_move:{_FILE} %(filepath)s",
         *(("--print", f"after_move:{_SPONSORBLOCK} %(sponsorblock_chapters)j") if sponsorblock.enabled else ()),
+        "--print", f"after_move:{_VIDEO} %(width)s %(height)s %(vcodec)s",
         "-P", str(work), "-o", "media.%(ext)s",
         *(ytdlp_subtitle_options(subtitles) if subtitles_dir is not None else ()),
         "--", url,
@@ -457,6 +478,7 @@ def download_ytdlp(
     output: list[str] = []
     produced: str | None = None
     segments: tuple[SponsorSegment, ...] | None = None
+    video: VideoStream | None = None
     finished = 0
     current = 0
     current_total: int | None = None
@@ -502,6 +524,8 @@ def download_ytdlp(
                     ))
             elif line.startswith(_FILE):
                 produced = line.removeprefix(_FILE).strip()
+            elif line.startswith(_VIDEO):
+                video = _video_stream(line.removeprefix(_VIDEO).strip())
             elif line.startswith(_SPONSORBLOCK):
                 segments = _sponsor_segments(line.removeprefix(_SPONSORBLOCK).strip(), sponsorblock)
             else:
@@ -523,7 +547,7 @@ def download_ytdlp(
             written = _keep_subtitles(work, subtitles_dir, subtitles)
         if progress:
             progress(DownloadProgress(bytes_downloaded=size, total_bytes=size))
-        return DownloadResult(path=dest_path, bytes_downloaded=size, subtitles=written, sponsorblock=segments)
+        return DownloadResult(path=dest_path, bytes_downloaded=size, subtitles=written, sponsorblock=segments, video=video)
     finally:
         if process.poll() is None:
             process.terminate()

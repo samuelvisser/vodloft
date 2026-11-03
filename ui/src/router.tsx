@@ -36,6 +36,7 @@ import MoviePage from './pages/movie/MoviePage'
 import EditMoviePage from './pages/movie/EditMoviePage'
 import VideoPage from './pages/video/VideoPage'
 import AccountPage from './pages/AccountPage'
+import AccountNotificationsPage from './pages/AccountNotificationsPage'
 import RegexEditorTestPage from './pages/RegexEditorTestPage'
 import { allows, getAccess, homePath, canAnySettings, type Area, type Level } from './lib/access'
 
@@ -101,6 +102,7 @@ export const router = createBrowserRouter(
       <Route path="collection/:id/episode/:episodeId" element={g('library', <EpisodePage />)} />
       <Route path="edit-collection/:id" element={g('library', <EditCollection />, 'manage')} />
       <Route path="account" element={<AccountPage />} />
+      <Route path="account/notifications" element={<AccountNotificationsPage />} />
       <Route path="tools/regex" element={g('download_profiles', <RegexEditorTestPage />)} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Route>,

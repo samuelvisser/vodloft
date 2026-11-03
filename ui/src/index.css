@@ -771,6 +771,12 @@ select,
 
 
 /* Episode title (below thumbnail) - two-line clamp like YouTube */
+.episode-upgrade {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .episode-skipped {
   margin-top: 3px;
   font-size: 12px;

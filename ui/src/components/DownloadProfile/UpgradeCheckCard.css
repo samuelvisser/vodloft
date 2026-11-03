@@ -1,0 +1,64 @@
+.upgrade-check-body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 8px;
+    padding: 14px;
+    border: 1px solid var(--border, rgba(100, 116, 139, 0.25));
+    border-radius: 12px;
+}
+
+.upgrade-check-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 4px 12px;
+}
+
+.upgrade-check-row .help {
+    grid-column: 1 / -1;
+}
+
+.upgrade-check-fields {
+    display: grid;
+    grid-template-columns: minmax(0, 10rem) minmax(0, 1fr);
+    gap: 12px;
+}
+
+.upgrade-check-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.upgrade-check-improvements {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.upgrade-check-improvements legend {
+    margin-bottom: 6px;
+    font-weight: 600;
+}
+
+.upgrade-check-choice {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    cursor: pointer;
+}
+
+.upgrade-check-choice-help {
+    color: var(--muted);
+    font-size: 0.9em;
+}
+
+@media (max-width: 560px) {
+    .upgrade-check-fields {
+        grid-template-columns: 1fr;
+    }
+}

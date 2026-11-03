@@ -94,6 +94,12 @@ class _MediaDownloadAPIBaseOut(ResponseBase):
     redownload_when_final: Optional[bool] = None
     kept: Optional[bool] = None
     """Kept by hand: retention never deletes it. Only episodes have it."""
+    video_height: Optional[int] = None
+    video_codec: Optional[str] = None
+    upgrade_check_at: Optional[datetime] = None
+    """When the upgrade check looks for a better version next. Only episodes have it."""
+    upgrade_result: Optional[str] = None
+    """What the last upgrade check found: upgraded or checked. Only episodes have it."""
 
 
 class MediaDownloadAPIRead(_MediaDownloadAPIBaseOut):

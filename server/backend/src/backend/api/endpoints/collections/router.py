@@ -65,7 +65,7 @@ def collection_create(body: CollectionAPICreate, access: Access = signed_in()) -
     access.check_link_at(body.source_key, body.sharing_url)
     with db_session() as s:
         try:
-            result = create_collection(s, body)
+            result = create_collection(s, body, added_by_id=access.user_id)
             s.commit()
 
             return result

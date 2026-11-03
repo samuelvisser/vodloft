@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING, TypeAlias
 
-from sqlalchemy import Text, func
+from sqlalchemy import ForeignKey, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
@@ -35,6 +35,9 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     membership_level: Mapped[str]
     type: Mapped[str]
     episode_identifier: Mapped[str]
+    added_by_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), comment="Who added the Collection, for their own notifications",
+    )
     author_name: Mapped[str]
     author_slug: Mapped[str]
     author_headshot_path: Mapped[Optional[str]]

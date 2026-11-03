@@ -9,6 +9,7 @@ from backend.security import deps
 from backend.security.deps import requires, requires_any
 from backend.db.models import Collection
 from backend.api.models.source import SiteOptionsAPIRead
+from sources import Feature, get_source
 
 router = APIRouter(prefix="/download-profiles", tags=["Download Profiles"])
 
@@ -65,6 +66,7 @@ def download_profiles_site_options(collection_id: int, request: Request):
         return SiteOptionsAPIRead(
             auto_subtitles=source.auto_subtitles_for(collection.sharing_url),
             sponsorblock=source.sponsorblock_for(collection.sharing_url),
+            upgrade_checks=source.has(Feature.UPGRADE_CHECKS),
         )
 
 

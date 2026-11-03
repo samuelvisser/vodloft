@@ -151,6 +151,8 @@ class SiteOptionsAPIRead(ResponseBase):
 
     auto_subtitles: bool
     sponsorblock: bool
+    upgrade_checks: bool = False
+    """The upgrade check can download its episodes again when a better version is out."""
 
 
 class EpisodeTagAPIRead(ResponseBase):

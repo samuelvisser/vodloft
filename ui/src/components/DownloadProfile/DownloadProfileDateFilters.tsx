@@ -4,17 +4,9 @@ import ReadMore from '../../utils/ReadMore'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import DateInput from '../common/DateInput'
 import SimpleSelect from '../common/SimpleSelect'
-import {useCollections, useSourceLookup} from '../../lib/queries'
-import {sourceControls} from '../../lib/sourceControls'
 
 type Props = {
     form: UseFormReturn<any>
-    /** The saved collection the profile is for. */
-    collectionId?: number
-    /** The Source of a collection that is not saved yet. */
-    sourceKey?: string
-    /** ``countdown``: only the countdown download choices, which sit above Which episodes. ``dates``: the date window. */
-    part: 'countdown' | 'dates'
 }
 
 // Read after the line's header, "Only download if published …".
@@ -25,19 +17,9 @@ const LimitModeReg = createSelectRegistry('DownloadLimitMode', {
 })
 type LimitMode = (typeof LimitModeReg)['values'][number]
 
-/** Filters on when episodes were published, for every collection, and the countdown download choices. */
-export default function DownloadProfileDateFilters({form, collectionId, sourceKey, part}: Props) {
+/** The date line of Which episodes: when episodes were published, or how long each download is kept. */
+export default function DownloadProfileDateFilters({form}: Props) {
     const {control, register, watch, setValue, clearErrors, formState: {errors}} = form
-
-    // If countdown is disabled, redownload final becomes irrelevant and is hidden
-    const withCountdown = watch('downloadWithCountdown')
-
-    // Countdowns only appear on the live episodes some Sources publish.
-    const {data: collections} = useCollections()
-    const collection = collections?.find((item) => item.id === collectionId)
-    const newCollectionSource = useSourceLookup().get(sourceKey)
-    const controls = sourceControls(collection ?? (newCollectionSource ? {sourceFeatures: newCollectionSource.features} : undefined))
-    const offersCountdown = controls.countdownDownloads || !!withCountdown
 
     const watchedDaysRaw = watch('downloadDaysInPast') ?? 0
     const watchedEpisodeCountRaw = watch('downloadEpisodeCount') ?? 0
@@ -86,76 +68,6 @@ export default function DownloadProfileDateFilters({form, collectionId, sourceKe
         const dd = String(d.getDate()).padStart(2, '0')
         return `${yyyy}-${mm}-${dd}`
     })()
-
-    if (part === 'countdown') {
-        return (
-            <>
-            {offersCountdown && (
-            <div className="form-row">
-                <label htmlFor="with-countdown">Download with countdown</label>
-                <Controller
-                    control={control}
-                    name="downloadWithCountdown"
-                    render={({field}) => (
-                        <Switch
-                            id="with-countdown"
-                            checked={!!field.value}
-                            onChange={(checked) => field.onChange(checked)}
-                            onColor="#0ea5e9"
-                            offColor="#d1d5db"
-                            uncheckedIcon={false}
-                            checkedIcon={false}
-                            aria-invalid={!!errors.downloadWithCountdown}
-                            aria-describedby={errors.downloadWithCountdown ? 'with-countdown-errors' : 'with-countdown-help'}
-                        />
-                    )}
-                />
-                {errors.downloadWithCountdown && (
-                    <div id="with-countdown-errors" className="error" role="alert" aria-live="polite">
-                        {errors.downloadWithCountdown.message as string}
-                    </div>
-                )}
-                <div className="help" id="with-countdown-help">
-                    <ReadMore summary={<span>Download with the countdown meant for live collections</span>}>
-                        Some live podcast episodes appear with a countdown timer before the final media is available. Enabling
-                        this option will download the episode while the countdown is still present. If enabled, you may also choose
-                        to re-download the final version after the countdown disappears (usually in about 1,5 to 2 hours after
-                        the episode was published).
-                    </ReadMore>
-                </div>
-            </div>
-            )}
-
-            {offersCountdown && withCountdown && (
-                <div className="form-row">
-                    <label htmlFor="redownload-final">Redownload final version</label>
-                    <Controller
-                        control={control}
-                        name="redownloadFinal"
-                        render={({field}) => (
-                            <Switch
-                                id="redownload-final"
-                                checked={!!field.value}
-                                onChange={(checked) => field.onChange(checked)}
-                                onColor="#0ea5e9"
-                                offColor="#d1d5db"
-                                uncheckedIcon={false}
-                                checkedIcon={false}
-                                aria-invalid={!!errors.redownloadFinal}
-                                aria-describedby={errors.redownloadFinal ? 'redownload-final-errors' : undefined}
-                            />
-                        )}
-                    />
-                    {errors.redownloadFinal && (
-                        <div id="redownload-final-errors" className="error" role="alert" aria-live="polite">
-                            {errors.redownloadFinal.message as string}
-                        </div>
-                    )}
-                </div>
-            )}
-            </>
-        )
-    }
 
     return (
         <>

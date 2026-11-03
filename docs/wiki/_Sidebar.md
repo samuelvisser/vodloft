@@ -15,6 +15,7 @@
 - [[Existing-Files-and-Imports]]
 - [[Quick-Download]]
 - [[Podcast-RSS-Feeds]]
+- [[Messages-and-Actions]]
 
 **How VODLoft stays current**
 - [[Daily-Wire-Integration]]

@@ -52,6 +52,9 @@ class Feature(StrEnum):
     YTDLP_DOWNLOADS = "ytdlp_downloads"
     """Your own yt-dlp options apply to this Source's downloads. Only the yt-dlp Source has it: NPO Start
     also downloads with yt-dlp, but as a Source of its own it takes no yt-dlp options."""
+    UPGRADE_CHECKS = "upgrade_checks"
+    """Telling what a downloaded episode is offered as now, with ``upgrade_offer``, so the upgrade check
+    only downloads it again when something improved."""
     CATALOGUE_REFRESH = "catalogue_refresh"
     """Refreshing the titles, descriptions and thumbnails of a listed collection's
     episodes, and telling which ones the Source no longer has, with ``refresh_items``."""
@@ -220,6 +223,26 @@ class VideoFormats:
     audio_size_bytes: int | None = None
     """The size of the best audio stream, when the Source says."""
     duration: float | None = None
+
+
+@dataclass(frozen=True)
+class SponsorBlockSegment:
+    """One SponsorBlock segment of a video, in seconds."""
+
+    category: str
+    start: float
+    end: float
+
+
+@dataclass(frozen=True)
+class UpgradeOffer:
+    """What a video is offered as right now, for the upgrade check."""
+
+    videos: tuple[VideoFormat, ...] = ()
+    subtitle_languages: frozenset[str] = frozenset()
+    """The languages of the site's own subtitles, without auto-generated ones."""
+    sponsorblock: tuple[SponsorBlockSegment, ...] | None = None
+    """The SponsorBlock segments of the asked types, or None when SponsorBlock was not asked."""
 
 
 @dataclass(frozen=True)
@@ -449,6 +472,11 @@ class Source(ABC):
     def video_formats(self, url: str) -> VideoFormats:
         """The streams a single video is offered in. Only Sources with ``Feature.FORMAT_CHOICES`` implement it."""
         raise NotImplementedError(f"{self.name} offers no format choices")
+
+    def upgrade_offer(self, url: str, *, sponsorblock_categories: Sequence[str] = ()) -> UpgradeOffer:
+        """What a video is offered as now, asking SponsorBlock for the given segment types.
+        Only Sources with ``Feature.UPGRADE_CHECKS`` implement it."""
+        raise NotImplementedError(f"{self.name} has no upgrade checks")
 
     def video_playback(self, *, slug: str, url: str) -> Playback:
         """Resolve the playable URL of a single video, or of an episode of a collection

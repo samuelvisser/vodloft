@@ -1,6 +1,6 @@
 # Settings
 
-Most VODLoft configuration can be changed from the **Settings** page. The interface groups normal options into General, Downloads, Automation, Sources, and Advanced tabs and explains environment-variable overrides when they are active.
+Most VODLoft configuration can be changed from the **Settings** page. The interface groups normal options into General, Downloads, Quick download, Automation, Messages and actions, Sources, Users, Import and Advanced tabs, and explains environment-variable overrides when they are active. Notifications, media server refreshes, webhooks and scripts have their own page: [[Messages-and-Actions]].
 
 This page is the complete 1.1 reference for settings users may need to configure.
 

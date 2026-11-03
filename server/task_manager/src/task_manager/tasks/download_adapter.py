@@ -15,6 +15,8 @@ from sqlalchemy.orm import Session
 from backend.db.models import Episode
 from backend.db.models.media_download import MediaDownloadAsset, MediaDownloadBase
 from backend.services.download_plans import prepare_download_plan
+from backend.services.upgrade_check import schedule_first_upgrade_check
+from backend.services.notifications.emitters import episode_downloaded
 from backend.services.media_download_history import (
     download_attempt_metadata, record_media_download_history,
     record_media_download_history_if_exists, record_media_download_operation_history_once,
@@ -22,6 +24,7 @@ from backend.services.media_download_history import (
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from config import get_settings
+from sources import get_source
 from sources.pacing import RequestCancelled, request_context
 from downloader import DownloadCancelled, EncryptedMediaError, SubscriptionRequiredError
 from downloader.capacity import resources
@@ -234,10 +237,18 @@ def run_download(
             download.format_downloaded = execution.format_downloaded
             segments = execution.result.sponsorblock
             download.sponsorblock_segments = None if segments is None else [segment._asdict() for segment in segments]
+            video = execution.result.video
+            download.video_height, download.video_codec = (video.height, video.codec) if video is not None else (None, None)
+            download.subtitle_languages = (
+                [subtitle.language for subtitle in execution.result.subtitles if not subtitle.auto_generated]
+                if plan.source.ytdlp_command else None
+            )
             finished = datetime.now(timezone.utc)
             download.downloaded_at = finished
             if isinstance(download.media, Episode):
                 download.downloaded_publish_status = publish_status
+                schedule_first_upgrade_check(download, get_source(download.media.source_key), finished)
+                episode_downloaded(session, download.media, path=execution.result.path, replaced=is_redownload)
             result_data = {
                 "media_download_id": media_download_id, "is_redownload": is_redownload,
                 "file_path": execution.result.path, "downloaded_bytes": execution.result.bytes_downloaded,

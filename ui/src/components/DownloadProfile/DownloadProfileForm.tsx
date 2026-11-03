@@ -9,6 +9,7 @@ import {episodeTagLabel} from "../../types/schemas/source";
 import {useEffect, useMemo} from "react";
 import WhichEpisodes from "./WhichEpisodes";
 import YouTubeSection from "./YouTubeSection";
+import UpgradeCheckCard from "./UpgradeCheckCard";
 
 type Props = {
     form: UseFormReturn<any>
@@ -105,8 +106,6 @@ export default function DownloadProfileForm({form, episodeIdentifier, seasons, c
                 </div>
             </div>
 
-            <DownloadProfileDateFilters form={form} collectionId={collectionId} sourceKey={sourceKey} part="countdown"/>
-
             <WhichEpisodes
                 form={form}
                 episodeIdentifier={episodeIdentifier}
@@ -161,8 +160,9 @@ export default function DownloadProfileForm({form, episodeIdentifier, seasons, c
                     </div>
                 )}
                 seasonsField={<DownloadProfileSeasonFilter form={form} seasons={seasons ?? []}/>}
-                datesField={<DownloadProfileDateFilters form={form} collectionId={collectionId} sourceKey={sourceKey} part="dates"/>}
+                datesField={<DownloadProfileDateFilters form={form}/>}
             />
+            <UpgradeCheckCard form={form} collectionId={collectionId} sourceKey={sourceKey} collectionUrl={collectionUrl}/>
             <YouTubeSection form={form} collectionId={collectionId} sourceKey={sourceKey} collectionUrl={collectionUrl}/>
         </>
     )

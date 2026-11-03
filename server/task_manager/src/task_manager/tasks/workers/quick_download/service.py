@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import threading
 from contextlib import contextmanager
 from dataclasses import asdict
@@ -26,6 +27,8 @@ from task_manager.scheduler.results import TaskResult
 from task_manager.tasks.download_adapter import DownloadProgressReporter
 from task_manager.tasks.media_download_operations import on_media_download_transfer_complete
 from task_manager.tasks.quick_download_operations import mark_quick_download_started
+
+logger = logging.getLogger(__name__)
 
 _FOLDER_LOCKS: dict[str, threading.Lock] = {}
 _FOLDER_LOCKS_GUARD = threading.Lock()
@@ -85,6 +88,7 @@ def run_quick_download(request_input: dict[str, Any], *, progress=None) -> TaskR
             write_manifest(folder, manifest)
             ready = True
         history.record_outcome(request.id, history.READY, size_bytes=manifest.size_bytes)
+        _tell_owner(request)
         return TaskResult(
             summary=f"{request.title} is ready to download",
             data={
@@ -116,3 +120,19 @@ def run_quick_download(request_input: dict[str, Any], *, progress=None) -> TaskR
             execution.cleanup_workspace()
         if not ready and folder is not None:
             remove_quick_folder(folder)
+
+
+def _tell_owner(request) -> None:
+    """Messages and actions: the person who asked for it may want to know it is ready."""
+    from backend.db import get_session
+    from backend.services.notifications.emitters import quick_download_finished
+
+    session = get_session()
+    try:
+        quick_download_finished(session, owner=request.owner, title=request.title)
+        session.commit()
+    except Exception:
+        session.rollback()
+        logger.exception("Could not record that quick download %s finished", request.id)
+    finally:
+        session.close()

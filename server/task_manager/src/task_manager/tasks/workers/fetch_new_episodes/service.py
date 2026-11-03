@@ -549,6 +549,8 @@ def _queue_monitor_requests(s: Session, requests) -> None:
 
 
 def _queue_collection_indexed(s: Session, *, collection: Collection, indexed_count: int) -> None:
+    from backend.services.notifications.emitters import new_episodes_found
+    new_episodes_found(s, collection, indexed_count)
     queue_event(s, COLLECTION_INDEXED_EVENT, {
         "resource_id": collection.id,
         "id": collection.id,

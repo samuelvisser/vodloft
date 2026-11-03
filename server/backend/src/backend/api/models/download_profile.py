@@ -17,6 +17,9 @@ from backend.types.download_profile_types import (
     RetentionFrom,
     SponsorBlockAction,
     SponsorBlockCategory,
+    DEFAULT_UPGRADE_IMPROVEMENTS,
+    UpgradeImprovement,
+    UpgradeRepeat,
 )
 
 
@@ -83,6 +86,12 @@ class DownloadProfileAPIBaseIn(RequestBase):
     sponsorblock_segments: dict[SponsorBlockCategory, SponsorBlockAction] = Field(
         default_factory=lambda: dict(DEFAULT_SPONSORBLOCK_SEGMENTS),
     )
+    upgrade_check: bool = True
+    upgrade_after_days: int = Field(default=7, ge=1, le=365)
+    upgrade_repeat: UpgradeRepeat = UpgradeRepeat.ONCE
+    upgrade_improvements: list[UpgradeImprovement] = Field(
+        default_factory=lambda: list(DEFAULT_UPGRADE_IMPROVEMENTS), max_length=len(UpgradeImprovement),
+    )
 
     seasons: list[SeasonAPIRequestDetached]
     include_upcoming_seasons: bool
@@ -94,6 +103,11 @@ class DownloadProfileAPIBaseIn(RequestBase):
         if set(value) != {category.value for category in SponsorBlockCategory}:
             raise ValueError("Choose Keep, Chapter or Cut out for every SponsorBlock segment type")
         return value
+
+    @field_validator("upgrade_improvements")
+    @classmethod
+    def _unique_improvements(cls, value: list) -> list:
+        return list(dict.fromkeys(value))
 
     @model_validator(mode="after")
     def _validate_download_limit(self):
@@ -144,6 +158,10 @@ class DownloadProfileAPIBaseOut(ResponseBase):
     auto_subtitles: AutoSubtitles
     sponsorblock_enabled: bool
     sponsorblock_segments: dict[str, SponsorBlockAction]
+    upgrade_check: bool
+    upgrade_after_days: int
+    upgrade_repeat: UpgradeRepeat
+    upgrade_improvements: list[UpgradeImprovement]
 
     seasons: list[SeasonAPIRead]
     include_upcoming_seasons: bool

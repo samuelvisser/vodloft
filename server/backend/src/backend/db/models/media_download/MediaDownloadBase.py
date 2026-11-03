@@ -95,6 +95,11 @@ class MediaDownloadBase(HasMetadataMixin, HasTaskResourcesMixin, Base):
         JSON, nullable=True,
         comment="The SponsorBlock segments of the video as published, and whether each became a chapter or was cut",
     )
+    video_height: Mapped[Optional[int]] = mapped_column(comment="The smaller side of the kept video stream, in pixels")
+    video_codec: Mapped[Optional[str]] = mapped_column(String(20), comment="The codec of the kept video stream")
+    subtitle_languages: Mapped[Optional[list[str]]] = mapped_column(
+        JSON, nullable=True, comment="The languages of the site's own subtitles the download kept",
+    )
     downloaded_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()

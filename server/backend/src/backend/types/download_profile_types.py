@@ -77,6 +77,32 @@ class RetentionFrom(StrEnum):
     DOWNLOADED = "downloaded"
 
 
+class UpgradeRepeat(StrEnum):
+    """How often the upgrade check looks at a download again."""
+    ONCE = "once"
+    TWICE = "twice"
+    """Once more, 30 days after the first check."""
+    EVERY = "every"
+    """Every "check after" days, up to three times."""
+
+
+class UpgradeImprovement(StrEnum):
+    """What the upgrade check counts as a better version."""
+    RESOLUTION = "resolution"
+    SPONSORBLOCK = "sponsorblock"
+    SUBTITLES = "subtitles"
+    CODEC = "codec"
+
+
+class UpgradeResult(StrEnum):
+    """What the last upgrade check of a download found."""
+    UPGRADED = "upgraded"
+    CHECKED = "checked"
+
+
+DEFAULT_UPGRADE_IMPROVEMENTS = (UpgradeImprovement.RESOLUTION.value, UpgradeImprovement.SPONSORBLOCK.value)
+
+
 class AutoSubtitles(StrEnum):
     """Whether a YouTube Download Profile downloads auto-generated subtitles."""
     NEVER = "never"

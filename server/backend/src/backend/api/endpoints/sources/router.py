@@ -88,7 +88,10 @@ def site_options(source_id: str, url: str = Query(min_length=1, max_length=2048)
         source = get_source(source_id)
     except UnknownSourceError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return SiteOptionsAPIRead(auto_subtitles=source.auto_subtitles_for(url), sponsorblock=source.sponsorblock_for(url))
+    return SiteOptionsAPIRead(
+        auto_subtitles=source.auto_subtitles_for(url), sponsorblock=source.sponsorblock_for(url),
+        upgrade_checks=source.has(Feature.UPGRADE_CHECKS),
+    )
 
 
 @router.post("/sources/ytdlp-options/check", dependencies=[requires_any((Area.SOURCES, Level.MANAGE), (Area.LIBRARY, Level.MANAGE))], response_model=list[YtdlpOptionLineAPIRead])

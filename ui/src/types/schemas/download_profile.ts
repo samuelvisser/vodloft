@@ -73,6 +73,10 @@ export const DownloadProfileSchemaRequest = z.object({
     autoSubtitles: z.enum(['never', 'fallback', 'always']).default('fallback'),
     sponsorblockEnabled: z.boolean().default(true),
     sponsorblockSegments: z.record(z.string(), z.enum(['keep', 'chapter', 'cut'])).default(() => ({...DEFAULT_SPONSORBLOCK_SEGMENTS})),
+    upgradeCheck: z.boolean().default(true),
+    upgradeAfterDays: z.int('Enter a number of days').min(1, 'Check after at least 1 day').max(365, 'Check within a year').default(7),
+    upgradeRepeat: z.enum(['once', 'twice', 'every']).default('once'),
+    upgradeImprovements: z.array(z.enum(['resolution', 'sponsorblock', 'subtitles', 'codec'])).default(() => ['resolution' as const, 'sponsorblock' as const]),
     seasons: z.array(SeasonDetachedSchema).default([]),
     includeUpcomingSeasons: z.boolean().default(true),
     rules: z.array(EpisodeRuleSchema).default([]),
@@ -171,6 +175,10 @@ export const DownloadProfileReadSchema = z.looseObject({
     autoSubtitles: z.string().default('fallback'),
     sponsorblockEnabled: z.boolean().default(false),
     sponsorblockSegments: z.record(z.string(), z.enum(['keep', 'chapter', 'cut'])).default(() => ({...DEFAULT_SPONSORBLOCK_SEGMENTS})),
+    upgradeCheck: z.boolean(),
+    upgradeAfterDays: z.int(),
+    upgradeRepeat: z.enum(['once', 'twice', 'every']),
+    upgradeImprovements: z.array(z.enum(['resolution', 'sponsorblock', 'subtitles', 'codec'])),
     seasons: z.array(SeasonReadSchema),
     includeUpcomingSeasons: z.boolean(),
     rules: z.array(z.looseObject({
@@ -224,4 +232,4 @@ export const AutoSubtitlesUseSchema = z.object({
 })
 export type AutoSubtitlesUse = z.infer<typeof AutoSubtitlesUseSchema>
 
-export const SiteOptionsSchema = z.object({autoSubtitles: z.boolean(), sponsorblock: z.boolean()})
+export const SiteOptionsSchema = z.object({autoSubtitles: z.boolean(), sponsorblock: z.boolean(), upgradeChecks: z.boolean()})

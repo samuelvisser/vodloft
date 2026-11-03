@@ -20,7 +20,7 @@ def collection_create_as_bundle(body: CollectionAPICreateBundle, request: Reques
         raise HTTPException(status_code=403, detail="You may not create Stream Profiles.")
     with db_session() as s:
         try:
-            result = create_collection_bundle(s, request, body)
+            result = create_collection_bundle(s, request, body, added_by_id=access.user_id)
             s.commit()
             return result
         except Exception:
