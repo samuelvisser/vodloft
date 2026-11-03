@@ -35,6 +35,7 @@ from backend.types.stream_profile_types import (
     RSS_HLS_OUTPUT_MODES,
     RssVideoOutputMode,
 )
+from backend.utils.feed_urls import request_base_url
 from config.network import is_no_internet_error
 from sources import EpisodeTag, Source, UnknownSourceError, get_source
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
@@ -1046,8 +1047,7 @@ def render_rss_feed(
     effective_title = RssStreamProfileAPIRead.model_validate(profile).effective_title
     items = get_feed_items(s, profile)
 
-    base = str(request.base_url).rstrip("/")
-    media_base_url = f"{base}/feeds/rss/{profile.token}"
+    media_base_url = f"{request_base_url(request)}/feeds/rss/{profile.token}"
 
     rss = Element(
         "rss",

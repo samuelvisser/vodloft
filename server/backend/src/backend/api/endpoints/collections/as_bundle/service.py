@@ -20,7 +20,7 @@ from backend.db.models.download_profile import DownloadProfile
 from backend.db.models.stream_profile import RssStreamProfile
 from backend.services.adoption import AdoptionError
 from backend.services.existing_files import ExistingFilesError, request_scan
-from backend.utils.feed_urls import build_rss_feed_url
+from backend.utils.feed_urls import build_rss_feed_url, request_base_url
 from backend.utils.helpers import generate_stream_profile_token
 from task_manager.scheduler.requester import current_requester
 from backend.types.dailywire_user_info import DwMembershipLevel
@@ -132,7 +132,7 @@ def create_collection_bundle(
         stream_profile.token = token
         stream_profile.feed_url = (
             feed_url
-            or build_rss_feed_url(request, token=token, collection_slug=collection.slug)
+            or build_rss_feed_url(request_base_url(request), token=token, collection_slug=collection.slug)
         )
         stream_profile.collection = collection
         stream_profile.owner_user_id = current_requester.get()

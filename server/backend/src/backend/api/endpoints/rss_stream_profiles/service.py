@@ -15,7 +15,7 @@ from backend.db.models import Collection
 from backend.db.models.stream_profile import RssStreamProfile
 from backend.types.local_media_profile_types import PreferredFormat
 from backend.types.stream_profile_types import RSS_HLS_OUTPUT_MODES
-from backend.utils.feed_urls import build_rss_feed_url
+from backend.utils.feed_urls import build_rss_feed_url, request_base_url
 from backend.security.access import Access
 from backend.services.stream_profile_owners import check_owner, owned_by
 from backend.utils.helpers import generate_stream_profile_token
@@ -87,7 +87,7 @@ def create_stream_profile_rss(
 
     token = generate_stream_profile_token()
     feed_url = (body.feed_url or "").strip() or build_rss_feed_url(
-        request,
+        request_base_url(request),
         token=token,
         collection_slug=collection.slug,
     )
@@ -140,7 +140,11 @@ def regenerate_stream_profile_rss_token(
         request: Request,
         stream_profile_id: int,
 ) -> RssStreamProfileAPIRead:
-    """Rotate a profile's secret token and invalidate its previous feed URLs."""
+    """Rotate a profile's secret token and invalidate its previous feed URLs.
+
+    The new feed URL is always built on the address VODLoft was reached on, so
+    regenerating also replaces an address the profile was imported with.
+    """
     item: Optional[RssStreamProfile] = (
         s.query(RssStreamProfile)
         .filter_by(id=stream_profile_id)
@@ -150,16 +154,12 @@ def regenerate_stream_profile_rss_token(
         raise HTTPException(status_code=404, detail="Stream profile not found")
     check_owner(item, access)
 
-    old_token = item.token
     item.token = generate_stream_profile_token()
-    if old_token in item.feed_url:
-        item.feed_url = item.feed_url.replace(old_token, item.token)
-    else:
-        item.feed_url = build_rss_feed_url(
-            request,
-            token=item.token,
-            collection_slug=item.collection.slug,
-        )
+    item.feed_url = build_rss_feed_url(
+        request_base_url(request),
+        token=item.token,
+        collection_slug=item.collection.slug,
+    )
 
     s.flush()
     return RssStreamProfileAPIRead.model_validate(item)

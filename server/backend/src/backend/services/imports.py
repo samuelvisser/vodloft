@@ -117,6 +117,8 @@ class ImportOptions:
     """Merge profiles that name files the same way apart from a folder or name; None decides by the last run."""
     templates: Mapping[str, str] = field(default_factory=dict)
     """Output templates the person edited, by profile external id."""
+    feed_base_url: str | None = None
+    """VODLoft's own address, from the request that started the run: imported feeds get their URL on it."""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -128,6 +130,7 @@ class ImportOptions:
             "rename_existing_files": self.rename_existing_files,
             "merge_profiles": self.merge_profiles,
             "templates": dict(self.templates),
+            "feed_base_url": self.feed_base_url,
         }
 
     @classmethod
@@ -145,6 +148,7 @@ class ImportOptions:
             # A run from before merging existed made one profile per variant; later runs keep that.
             merge_profiles=bool(data.get("merge_profiles", False)) if data else None,
             templates=dict(data.get("templates") or {}),
+            feed_base_url=data.get("feed_base_url"),
         )
 
 
@@ -1240,7 +1244,8 @@ def _apply_record_plan(session: Session, plan: ImportPlan, options: ImportOption
     chosen = set(options.collections) if options.collections is not None else None
     skip = {record.external_id for record in plan.records
             if record.kind == "collection" and chosen is not None and record.external_id not in chosen}
-    result = apply_records(session, plan, profiles, links, run, skip_collections=skip)
+    result = apply_records(session, plan, profiles, links, run, skip_collections=skip,
+                           feed_base_url=options.feed_base_url)
     report.entries.extend(result.entries)
     report.counts.update(result.counts)
     # Every download is adopted now, so a Download Profile that should be on can be.

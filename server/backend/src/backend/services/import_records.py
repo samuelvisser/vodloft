@@ -50,6 +50,7 @@ from backend.services.adoption import AdoptionError, real_path
 from backend.services.media_download_history import record_media_download_history
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
+from backend.utils.feed_urls import build_rss_feed_url
 from downloader.storage.identity import inspect_artifact
 
 if TYPE_CHECKING:
@@ -135,8 +136,10 @@ class _Unresolved(LookupError):
 
 class _Applier:
     def __init__(self, session: Session, plan: ImportPlan, profiles: dict[str, LocalMediaProfileBase | None],
-                 links: dict[tuple[str, str], "ImportLink"], run, skip_collections: set[str]) -> None:
+                 links: dict[tuple[str, str], "ImportLink"], run, skip_collections: set[str],
+                 feed_base_url: str | None) -> None:
         self.session = session
+        self.feed_base_url = feed_base_url
         self.plan = plan
         self.profiles = profiles
         self.links = links
@@ -197,6 +200,12 @@ class _Applier:
         for name, reference in record.references.items():
             if name in attributes:
                 values[attributes[name][0]] = self.resolve(reference)
+        if model is RssStreamProfile and self.feed_base_url:
+            # The other program's feed URL names its own address; the feed now lives on VODLoft's.
+            collection = self.session.get(Collection, values["collection_id"])
+            values["feed_url"] = build_rss_feed_url(
+                self.feed_base_url, token=str(values["token"]), collection_slug=collection.slug,
+            )
         return values
 
     def _unique_slug(self, model: type, slug: str) -> str:
@@ -422,9 +431,10 @@ def _rename_hls_marker(master: Path) -> None:
 def apply_records(
     session: Session, plan: ImportPlan, profiles: dict[str, LocalMediaProfileBase | None],
     links: dict[tuple[str, str], "ImportLink"], run, *, skip_collections: set[str] | None = None,
+    feed_base_url: str | None = None,
 ) -> RecordResult:
     """Create or link every record of ``plan``, in its order."""
-    applier = _Applier(session, plan, profiles, links, run, skip_collections or set())
+    applier = _Applier(session, plan, profiles, links, run, skip_collections or set(), feed_base_url)
     for record in plan.records:
         applier.apply(record)
     session.flush()

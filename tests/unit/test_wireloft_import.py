@@ -167,6 +167,32 @@ def test_a_wireloft_import_keeps_names_numbers_feeds_and_files_and_repeats_clean
         assert len(list(session.scalars(select(model)))) == (2 if model is LocalMediaProfileBase else 1)
 
 
+def test_an_imported_feed_gets_its_url_on_vodlofts_address(installation):
+    from backend.db.models.stream_profile.RssStreamProfile import RssStreamProfile
+    from backend.services import imports
+
+    session, _applied = installation
+    options = imports.ImportOptions(feed_base_url="https://vodloft.test/")
+
+    run = _run(session, imports.ImportOptions())
+    assert run.status == "finished", run.report
+    feed = session.scalar(select(RssStreamProfile))
+    assert feed.feed_url == "https://wireloft.test/feed.xml"  # A run without VODLoft's address keeps WireLoft's.
+
+    # The next run moves the feed URL the person did not change onto VODLoft's address, keeping its token.
+    rerun = _run(session, options)
+    assert rerun.status == "finished", rerun.report
+    session.refresh(feed)
+    assert feed.feed_url == f"https://vodloft.test/feeds/rss/feed-token/{feed.collection.slug}.xml"
+
+    # A feed URL the person changed in VODLoft is theirs to keep.
+    feed.feed_url = "https://my.example/feed.xml"
+    session.commit()
+    _run(session, options)
+    session.refresh(feed)
+    assert feed.feed_url == "https://my.example/feed.xml"
+
+
 def test_a_show_already_in_vodloft_is_linked_and_a_taken_feed_token_is_refused(installation):
     from backend.db.models import Collection
     from backend.db.models.stream_profile.RssStreamProfile import RssStreamProfile

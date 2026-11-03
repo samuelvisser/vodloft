@@ -20,6 +20,7 @@ from backend.services.imports import (
     ImportOptions, ImportServiceError, enable_run_download_profiles, get_importer, preview, run_summary, run_view,
     start_run,
 )
+from backend.utils.feed_urls import request_base_url
 from importer.registry import all_importers
 
 from ...models.imports import (
@@ -38,7 +39,7 @@ def _importer(key: str):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-def _options(body: ImportOptionsAPIRequest) -> ImportOptions:
+def _options(body: ImportOptionsAPIRequest, request: Request) -> ImportOptions:
     return ImportOptions(
         path_map=tuple(body.path_map) if body.path_map else None,
         collections=tuple(body.collections) if body.collections is not None else None,
@@ -48,6 +49,7 @@ def _options(body: ImportOptionsAPIRequest) -> ImportOptions:
         rename_existing_files=body.rename_existing_files,
         merge_profiles=body.merge_profiles,
         templates=body.templates,
+        feed_base_url=request_base_url(request),
     )
 
 
@@ -126,24 +128,24 @@ def import_upload_remove(importer_key: str):
 
 
 @router.post("/{importer_key}/preview", dependencies=_ADMIN, response_model=ImportPreviewAPIRead)
-def import_preview(importer_key: str, body: ImportOptionsAPIRequest):
+def import_preview(importer_key: str, body: ImportOptionsAPIRequest, request: Request):
     """What the import would do. Nothing is written."""
     importer = _importer(importer_key)
     with db_session() as s:
         try:
-            return ImportPreviewAPIRead.model_validate(preview(s, importer, _options(body)))
+            return ImportPreviewAPIRead.model_validate(preview(s, importer, _options(body, request)))
         except (UploadError, ImportServiceError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/{importer_key}/runs", dependencies=_ADMIN, response_model=ImportRunSummaryAPIRead,
              status_code=status.HTTP_202_ACCEPTED)
-def import_run(importer_key: str, body: ImportOptionsAPIRequest):
+def import_run(importer_key: str, body: ImportOptionsAPIRequest, request: Request):
     """Run the import as previewed. It runs as a task; its files are adopted once each Collection is indexed."""
     importer = _importer(importer_key)
     with db_session() as s:
         try:
-            run = start_run(s, importer, _options(body))
+            run = start_run(s, importer, _options(body, request))
         except ImportServiceError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         s.commit()
