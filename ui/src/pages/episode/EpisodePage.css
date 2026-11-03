@@ -16,22 +16,6 @@
     font-size: 0.9rem;
 }
 
-.episode-view .episode-breadcrumb a {
-    color: inherit;
-    text-decoration: none;
-}
-
-.episode-view .episode-breadcrumb a:hover {
-    color: var(--link-color, #66267a);
-    text-decoration: underline;
-}
-
-@media (prefers-color-scheme: dark) {
-    .episode-view .episode-breadcrumb a:hover {
-        color: #c084fc;
-    }
-}
-
 .episode-view .episode-breadcrumb svg {
     width: 9px;
     opacity: 0.6;
