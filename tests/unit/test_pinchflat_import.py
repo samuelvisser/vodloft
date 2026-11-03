@@ -628,3 +628,37 @@ def test_starting_an_import_and_its_waiting_steps_queues_their_tasks(installatio
     assert imports.start_waiting_import_steps(session, collection) == 1
     session.commit()
     assert triggered == [("import_adopt_files", "collection", collection.id)]
+
+
+def test_match_existing_files_after_an_import_skips_its_files_and_holds_the_download_profile(installation, tmp_path):
+    from backend.db.models import Collection, DownloadProfile, ExistingFileScan, ImportRun
+    from backend.services import existing_files, imports
+
+    session, _applied = installation
+    # A file Pinchflat no longer knows about, under an older name.
+    extra = tmp_path / "downloads" / "pinchflat" / "YouTube" / "Veritasium" / "Old name [vid-ccccccc].mp4"
+    extra.write_bytes(b"media" * 20)
+
+    run = _run(session, imports.ImportOptions(enable_download_profiles=True, match_existing_files=True))
+    collections = {collection.title: collection for collection in session.scalars(select(Collection))}
+    _index(session, collections["Veritasium"], ["vid-aaaaaaa", "vid-bbbbbbb", "vid-ccccccc"])
+    _index(session, collections["Lofi"], ["vid-eeeeeee"])
+    _adopt_waiting(session)
+
+    veritasium = collections["Veritasium"]
+    held = session.scalars(select(DownloadProfile).where(DownloadProfile.collection_id == veritasium.id)).one()
+    assert not held.enable_profile
+    scan = session.scalars(select(ExistingFileScan).where(ExistingFileScan.collection_id == veritasium.id)).one()
+    assert scan.status == "scanning" and scan.held_download_profile_ids == [held.id]
+
+    existing_files.run_scan(session, collection_id=veritasium.id, local_media_profile_id=scan.local_media_profile_id)
+    scan = session.get(ExistingFileScan, scan.id)
+    assert [(item["path"].rsplit("/", 1)[-1], item["confidence"]) for item in scan.results if item["confidence"]] == [
+        ("Old name [vid-ccccccc].mp4", "certain"),
+    ]
+    step = next(step for step in imports.run_view(session, session.get(ImportRun, run.id))["steps"]
+                if step["collection_title"] == "Veritasium")
+    assert step["matching"] == {"status": "ready", "found": 1} and not step["download_profile_on"]
+
+    existing_files.finish_scan(session, scan)
+    assert session.get(DownloadProfile, held.id).enable_profile

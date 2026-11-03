@@ -4,6 +4,7 @@ import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 
 import FolderField from '../ExistingFiles/FolderField'
+import {watchImportMatches} from '../ExistingFiles/ImportMatchesWatcher'
 import ProgressBar from '../common/ProgressBar'
 import OpaqueOutputTemplateCode from '../LocalMediaProfile/OpaqueOutputTemplateCode'
 import {TemplateCodeEditor, templateEditorExtensions} from '../LocalMediaProfile/OutputTemplateEditor'
@@ -36,7 +37,7 @@ const SUPPORT_LABELS: Record<ImportSupport, string> = {
     unsupported: 'Not supported',
 }
 
-const DEFAULT_OPTIONS: ImportOptions = {enableDownloadProfiles: false, templates: {}}
+const DEFAULT_OPTIONS: ImportOptions = {enableDownloadProfiles: false, matchExistingFiles: false, templates: {}}
 
 function settingLabel(key: string): string {
     const last = key.split('.').slice(-2).join(' › ')
@@ -321,6 +322,7 @@ function PreviewStep({importer, onReplace, onFinished}: {
         setStarting(true)
         try {
             const summary = await startRun(importer.key, options)
+            if (options.matchExistingFiles && !preview?.records) watchImportMatches(importer.key, summary.id)
             setRun(await readRun(importer.key, summary.id))
         } catch (exc) {
             toast.error(exc instanceof Error ? exc.message : 'The import could not start')
@@ -504,6 +506,26 @@ function PreviewStep({importer, onReplace, onFinished}: {
                 </div>
             </div>
 
+            {!preview.records && (
+                <div className="settings-field settings-toggle-field settings-field--wide">
+                    <div className="settings-toggle-field__control">
+                        <div>
+                            <label htmlFor={`import-match-${importer.key}`}>Match existing files</label>
+                            <div className="settings-field__help">
+                                After the import, look in each Local Media Profile's folder for files {importer.name} no
+                                longer knew about, like files with an older name. You review the matches before VODLoft
+                                adopts them, and Download Profiles wait until you have.
+                            </div>
+                        </div>
+                        <Switch
+                            id={`import-match-${importer.key}`}
+                            checked={options.matchExistingFiles}
+                            onChange={(on) => setOptions({...options, matchExistingFiles: on})}
+                        />
+                    </div>
+                </div>
+            )}
+
             {error && <p className="form-error-card" role="alert">{error}</p>}
 
             <div className="import-actions">
@@ -621,6 +643,30 @@ function PathPair({path, rendered}: {path: string, rendered: string}) {
 }
 
 const FEW_DIFFERENCES = 3
+const DIFFERENCES_PAGE = 50
+
+/** Every differing path in a scrolling list that renders more as its end comes into view. */
+function EndlessDifferences({differences}: {differences: ImportProfile['pathProof']['differences']}) {
+    const [shown, setShown] = useState(DIFFERENCES_PAGE)
+    const end = useRef<HTMLLIElement | null>(null)
+    useEffect(() => {
+        const sentinel = end.current
+        if (!sentinel || shown >= differences.length) return
+        const observer = new IntersectionObserver((entries) => {
+            if (entries.some((entry) => entry.isIntersecting)) {
+                setShown((current) => Math.min(differences.length, current + DIFFERENCES_PAGE))
+            }
+        }, {root: sentinel.closest('.import-differences'), rootMargin: '200px'})
+        observer.observe(sentinel)
+        return () => observer.disconnect()
+    }, [shown, differences.length])
+    return (
+        <ul className="import-differences is-endless">
+            {differences.slice(0, shown).map((item) => <PathPair key={item.path} path={item.path} rendered={item.rendered}/>)}
+            {shown < differences.length && <li ref={end} className="import-differences__end" aria-hidden="true"/>}
+        </ul>
+    )
+}
 
 function PathProof({proof}: {proof: ImportProfile['pathProof']}) {
     const [expanded, setExpanded] = useState(false)
@@ -638,17 +684,23 @@ function PathProof({proof}: {proof: ImportProfile['pathProof']}) {
             {proof.differences.length > 0 && (
                 <div className="import-proof-differences">
                     <div className="import-proof-differences__title">
-                        {different} file{different === 1 ? ' gets' : 's get'} a different path
-                        {expanded && different > proof.differences.length ? `; these are the first ${proof.differences.length}` : ''}
+                        <span>{different} file{different === 1 ? ' gets' : 's get'} a different path</span>
+                        {expanded && (
+                            <button type="button" className="btn" aria-expanded onClick={() => setExpanded(false)}>Show fewer</button>
+                        )}
                     </div>
-                    <ul className="import-differences">
-                        {proof.differences.slice(0, expanded ? undefined : FEW_DIFFERENCES)
-                            .map((item) => <PathPair key={item.path} path={item.path} rendered={item.rendered}/>)}
-                    </ul>
-                    {proof.differences.length > FEW_DIFFERENCES && (
-                        <button type="button" className="btn import-differences__more" aria-expanded={expanded}
-                                onClick={() => setExpanded(!expanded)}>
-                            {expanded ? 'Show fewer' : `Show ${proof.differences.length - FEW_DIFFERENCES} more`}
+                    {expanded ? (
+                        <EndlessDifferences differences={proof.differences}/>
+                    ) : (
+                        <ul className="import-differences">
+                            {proof.differences.slice(0, FEW_DIFFERENCES)
+                                .map((item) => <PathPair key={item.path} path={item.path} rendered={item.rendered}/>)}
+                        </ul>
+                    )}
+                    {!expanded && proof.differences.length > FEW_DIFFERENCES && (
+                        <button type="button" className="btn import-differences__more" aria-expanded={false}
+                                onClick={() => setExpanded(true)}>
+                            Show {proof.differences.length - FEW_DIFFERENCES} more
                         </button>
                     )}
                 </div>

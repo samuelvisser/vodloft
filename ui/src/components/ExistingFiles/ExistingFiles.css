@@ -148,3 +148,106 @@
         display: none;
     }
 }
+
+/* The page that reviews every Collection's matches. */
+.existing-files-page__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: flex-end;
+    margin-bottom: 1rem;
+}
+
+.existing-files-page__actions .help {
+    margin-right: auto;
+}
+
+.existing-files-page__list {
+    display: grid;
+    gap: 0.5rem;
+    margin: 1rem 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.existing-files-page__item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--border-color, rgba(127, 127, 127, 0.3));
+    border-radius: 10px;
+}
+
+.existing-files-page__item > .form-error-card {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin: 0;
+}
+
+.existing-files-page__item > .btn {
+    grid-column: -2;
+    grid-row: 1;
+}
+
+.existing-files-page__title {
+    display: grid;
+    min-width: 0;
+}
+
+.existing-files-page__title a {
+    color: inherit;
+    font-weight: 600;
+}
+
+.existing-files-page__title small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.7;
+}
+
+.existing-files-page__counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.existing-files-chip {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(100, 116, 139, 0.14);
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.existing-files-chip.is-certain { background: rgba(34, 197, 94, 0.15); color: var(--success, #16a34a); }
+.existing-files-chip.is-likely { background: rgba(59, 130, 246, 0.15); color: var(--primary-color, #2563eb); }
+.existing-files-chip.is-review { background: rgba(245, 158, 11, 0.18); color: var(--warning, #b45309); }
+
+@media (max-width: 640px) {
+    .existing-files-page__item {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .existing-files-page__counts {
+        grid-column: 1 / -1;
+        grid-row: 3;
+        justify-content: flex-start;
+    }
+}
+
+.import-matches-toast {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.import-matches-toast__actions {
+    display: flex;
+    gap: 0.5rem;
+}
