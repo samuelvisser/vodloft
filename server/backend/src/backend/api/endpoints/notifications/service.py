@@ -279,6 +279,8 @@ class DeliverySource:
     status: str
     error: str | None
     at: datetime
+    retry_at: datetime | None = None
+    """When a failed attempt is tried again."""
 
 
 def _deliveries(s: Session, query) -> list[DeliverySource]:
@@ -289,7 +291,8 @@ def _deliveries(s: Session, query) -> list[DeliverySource]:
             id=row.id, title=row.event.title, event=row.event.event,
             destination=row.destination.name if row.destination is not None
             else f"Push to {devices.get(row.subscription_id, 'a device')}",
-            status=row.status, error=row.error, at=row.sent_at or row.next_attempt_at,
+            status=row.status, error=row.error, at=row.sent_at or row.created_at or row.next_attempt_at,
+            retry_at=row.next_attempt_at if row.status == "PENDING" and row.attempts else None,
         )
         for row in rows
     ]

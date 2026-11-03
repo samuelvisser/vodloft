@@ -292,7 +292,9 @@ def _record(session: Session, batch: _Batch, outcome: Outcome | str, now: dateti
             continue
         delivery.error = outcome.error
         retries = WEBHOOK_RETRY_SECONDS if webhook else None
-        if retries is not None and delivery.attempts <= len(retries):
+        if not outcome.retry:
+            delivery.status = "FAILED"
+        elif retries is not None and delivery.attempts <= len(retries):
             delivery.next_attempt_at = now + timedelta(seconds=retries[delivery.attempts - 1])
         elif retries is None and delivery.attempts < MAX_ATTEMPTS:
             delivery.next_attempt_at = now + timedelta(seconds=min(600, 15 * 2 ** (delivery.attempts - 1)))
@@ -328,7 +330,8 @@ def deliver_pending(session: Session, *, now: datetime | None = None) -> int:
             outcome = _send(session, batch)
         except Exception as error:  # A destination must never stop the rest from being sent.
             logger.exception("Sending a notification failed")
-            outcome = Outcome(False, f"Sending failed ({type(error).__name__})")
+            # An exception is a fault in VODLoft or a library, not a busy service: retrying gives the same result.
+            outcome = Outcome(False, f"Sending failed ({type(error).__name__})", retry=False)
         _record(session, batch, outcome, _now())
         session.commit()
         sent += 1
