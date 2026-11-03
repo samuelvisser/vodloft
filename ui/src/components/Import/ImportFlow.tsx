@@ -625,7 +625,7 @@ function RunView({importer, run, onBack}: {importer: Importer, run: ImportRun, o
                 <div>
                     <strong>Import #{run.id}: {RUN_LABELS[run.status]}</strong>
                     {/* The counts are saved when the import has applied everything, so a running import has none yet. */}
-                    <small>{countsLine(run.counts) || (run.status === 'running' ? 'The counts appear once everything is brought over' : 'Nothing counted')}</small>
+                    {countsLine(run.counts) && <small>{countsLine(run.counts)}</small>}
                 </div>
                 <div className="import-actions">
                     <button type="button" className="btn" onClick={() => download(`${importer.key}-import-${run.id}.txt`, runReportText(importer.name, run))}>
