@@ -1,13 +1,19 @@
-.existing-files-dialog {
-    width: min(960px, calc(100vw - 32px));
-    max-height: calc(100vh - 48px);
+/* Larger than a normal modal: the results table needs the room. */
+.modal.existing-files-dialog {
+    width: 100%;
+    max-width: 1280px;
+    height: calc(100vh - 48px);
+    height: calc(100dvh - 48px);
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 
 .existing-files-body {
     display: grid;
+    align-content: start;
     gap: 14px;
+    flex: 1 1 auto;
     min-height: 0;
     margin-top: 8px;
     padding: 0 4px 18px 0;
