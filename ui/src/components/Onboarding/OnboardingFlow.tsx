@@ -27,7 +27,8 @@ type SelectedMedia = {slug: string; title: string; url: string}
 
 type Props = {
     adminPasswordConfigured: boolean
-    onComplete: () => void
+    /** Finish onboarding, then open ``path`` (the home page when left out). */
+    onComplete: (path?: string) => void
 }
 
 /** The Source that works with any site comes first, since most people start there; the rest keep their order. */
@@ -62,7 +63,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
     const completingRef = useRef(false)
     const [error, setError] = useState<string | null>(null)
 
-    const completeOnboarding = useCallback(async () => {
+    const completeOnboarding = useCallback(async (path?: string) => {
         if (completingRef.current) return
         completingRef.current = true
         setIsCompleting(true)
@@ -73,7 +74,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                 credentials: 'include',
             })
             if (!response.ok) throw new Error(`HTTP ${response.status}`)
-            onComplete()
+            onComplete(path)
         } catch {
             setError('VODLoft could not finish onboarding. Please try again.')
         } finally {
@@ -288,7 +289,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                         onBack={() => setStep(step === 'import' ? 'media' : 'security')}
                         onImport={() => setStep('import')}
                         onStartFresh={() => setStep('add')}
-                        onImported={() => void completeOnboarding()}
+                        onImported={(path) => void completeOnboarding(path)}
                     />
                     {isCompleting && <div className="onboarding-completing" role="status">Finishing setup…</div>}
                 </main>

@@ -77,10 +77,12 @@ type Props = {
     importer: Importer
     /** Called once a run has finished, so onboarding can move on. */
     onFinished?: (run: ImportRun) => void
+    /** Called whenever the shown run changes status, including when it starts. */
+    onRunStatus?: (run: ImportRun) => void
 }
 
 /** Upload another program's config folder, preview what it brings, then import it. */
-export default function ImportFlow({importer, onFinished}: Props) {
+export default function ImportFlow({importer, onFinished, onRunStatus}: Props) {
     const queryClient = useQueryClient()
     const hasUpload = Boolean(importer.upload.upload)
     const [stage, setStage] = useState<'upload' | 'preview'>(hasUpload ? 'preview' : 'upload')
@@ -106,6 +108,7 @@ export default function ImportFlow({importer, onFinished}: Props) {
                         setStage('upload')
                     }}
                     onFinished={onFinished}
+                    onRunStatus={onRunStatus}
                 />
             )}
         </div>
@@ -267,10 +270,11 @@ function UploadStep({importer, onUploaded}: {importer: Importer, onUploaded: () 
     )
 }
 
-function PreviewStep({importer, onReplace, onFinished}: {
+function PreviewStep({importer, onReplace, onFinished, onRunStatus}: {
     importer: Importer
     onReplace: () => Promise<void>
     onFinished?: (run: ImportRun) => void
+    onRunStatus?: (run: ImportRun) => void
 }) {
     const queryClient = useQueryClient()
     const [options, setOptions] = useState<ImportOptions>(DEFAULT_OPTIONS)
@@ -334,6 +338,11 @@ function PreviewStep({importer, onReplace, onFinished}: {
         }, 2000)
         return () => window.clearTimeout(timer)
     }, [importer.key, run])
+
+    useEffect(() => {
+        if (run) onRunStatus?.(run)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [run?.status])
 
     useEffect(() => {
         if (run?.status !== 'finished' && run?.status !== 'failed') return

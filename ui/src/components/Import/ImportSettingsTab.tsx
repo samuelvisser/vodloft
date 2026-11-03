@@ -1,4 +1,5 @@
 import {useState} from 'react'
+import {useSearchParams} from 'react-router-dom'
 import './Import.css'
 import {SettingsLoading, SettingsSection} from '../Settings/SettingsControls'
 import ImportFlow from './ImportFlow'
@@ -12,8 +13,11 @@ const DESCRIPTIONS: Record<string, string> = {
 /** Settings › Import: bring over another program's library. */
 export default function ImportSettingsTab() {
     const importers = useImporters()
+    // ?open=pinchflat opens that importer's card, such as after an import started during onboarding.
+    const [params] = useSearchParams()
+    const openKey = params.get('open')
     // An importer reads its upload once its card is first opened, and keeps going when the card closes again.
-    const [opened, setOpened] = useState<ReadonlySet<string>>(new Set())
+    const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set(openKey ? [openKey] : []))
 
     if (importers.isError) return <p role="alert">Could not load the importers: {importers.error.message}</p>
     if (!importers.data) return <SettingsLoading/>
@@ -26,7 +30,7 @@ export default function ImportSettingsTab() {
                     title={importer.name}
                     description={DESCRIPTIONS[importer.key] ?? `Bring over ${importer.name}.`}
                     bodyClassName="import-section"
-                    defaultOpen={false}
+                    defaultOpen={importer.key === openKey}
                     onToggle={(open) => {
                         if (open) setOpened((current) => current.has(importer.key) ? current : new Set([...current, importer.key]))
                     }}
