@@ -1327,6 +1327,10 @@ def run_step(session: Session, step_id: int) -> dict[str, int]:
     }
     counts: Counter = Counter()
     counts["numbers"] = _seed_indexes(session, step, profile, episodes)
+    # Each file is committed on its own: adopting reads the file from disk, and one transaction for a
+    # whole Collection would hold SQLite's write lock that long, so other steps and indexes time out.
+    # Adopting again is a no-op, so a step that stops halfway picks up where it was.
+    session.commit()
     problems: list[dict[str, str]] = []
     for file in step.files:
         episode = episodes.get(file["media_site_id"])
@@ -1338,6 +1342,7 @@ def run_step(session: Session, step_id: int) -> dict[str, int]:
             continue
         if file["kind"] == "suppressed":
             counts["suppressed"] += int(_suppress(session, episode, profile))
+            session.commit()
             continue
         if file["kind"] != "file":
             continue
@@ -1353,6 +1358,7 @@ def run_step(session: Session, step_id: int) -> dict[str, int]:
         if file.get("kept") and isinstance(adopted.download, EpisodeMediaDownload):
             adopted.download.kept = True
         counts["adopted" if adopted.created else "already_adopted"] += 1
+        session.commit()
     download_profile = session.get(DownloadProfile, step.download_profile_id) if step.download_profile_id else None
     if download_profile is not None:
         counts["would_download"] = _would_download(session, download_profile)
