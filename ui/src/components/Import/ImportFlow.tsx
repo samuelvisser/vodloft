@@ -613,12 +613,38 @@ function ProfilePreview({profile, template, onTemplate}: {
                 <details className="import-profile__more">
                     <summary>How the template was converted ({profile.report.length})</summary>
                     <ul className="import-notes">
-                        {profile.report.map((line, index) => <li key={index}>{line}</li>)}
+                        {profile.report.map((line, index) => <li key={index}><ReportLine line={line}/></li>)}
                     </ul>
                 </details>
             )}
         </div>
     )
+}
+
+// A quoted bit of Jinja in a conversion note, such as "{{ collection_author or 'NA' }}".
+const QUOTED_JINJA = /(["'])(\{[{%][\s\S]*?[}%]\})\1/g
+
+/** A conversion note, with its Jinja colored as the template editor colors it. */
+function ReportLine({line}: {line: string}) {
+    const parts: ReactNode[] = []
+    let last = 0
+    for (const match of line.matchAll(QUOTED_JINJA)) {
+        const at = match.index ?? 0
+        if (at > last) parts.push(line.slice(last, at))
+        parts.push(
+            <OpaqueOutputTemplateCode
+                key={at}
+                source={match[2]}
+                sourceMode="compact"
+                renderMode="compact"
+                label="Converted template part"
+                className="import-note__code"
+            />,
+        )
+        last = at + match[0].length
+    }
+    if (last < line.length) parts.push(line.slice(last))
+    return <>{parts}</>
 }
 
 /** Where two paths first differ, so the rest of each can stand out. */

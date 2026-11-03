@@ -357,3 +357,22 @@ div.import-proof.is-different strong { color: var(--warning, #b45309); }
     color: var(--muted);
     font-size: 13px;
 }
+
+/* Jinja inside a conversion note, colored like the template. */
+.import-note__code {
+    display: inline-block;
+    max-width: 100%;
+    vertical-align: middle;
+    padding: 0 6px;
+    border-radius: 6px;
+    background: rgba(100, 116, 139, 0.1);
+}
+
+.import-note__code .cm-editor,
+.import-note__code .cm-scroller,
+.import-note__code .cm-content,
+.import-note__code .cm-line {
+    display: inline-block;
+    padding: 0;
+    background: transparent;
+}
