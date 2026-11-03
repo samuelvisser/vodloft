@@ -98,6 +98,26 @@ These settings are available under **Settings → Downloads**.
 | `downloadSettings.ffmpegPath` | `VL_DOWNLOAD_SETTINGS__FFMPEG_PATH` | `ffmpeg` | FFmpeg executable used for MP4 remuxing. |
 | `downloadSettings.verifyDownloadsCronEnabled` | `VL_DOWNLOAD_SETTINGS__VERIFY_DOWNLOADS_CRON_ENABLED` | `true` | Enables the periodic download-verification cron schedule. |
 | `downloadSettings.verifyDownloadsCron` | `VL_DOWNLOAD_SETTINGS__VERIFY_DOWNLOADS_CRON` | `0 */2 * * *` | Schedule for periodic download verification; every two hours by default. |
+| `downloadSettings.speedLimitMode` | `VL_DOWNLOAD_SETTINGS__SPEED_LIMIT_MODE` | `streaming` | How much of your connection downloads may use: `full`, `streaming` (leave room for streaming) or `custom`. |
+| `downloadSettings.speedLimitMbps` | `VL_DOWNLOAD_SETTINGS__SPEED_LIMIT_MBPS` | `5` | The limit in MB/s for all downloads together, with `custom`. |
+| `downloadSettings.pauseAtNight` | `VL_DOWNLOAD_SETTINGS__PAUSE_AT_NIGHT` | `false` | Pause downloads every night between the two times below. |
+| `downloadSettings.pauseStart` | `VL_DOWNLOAD_SETTINGS__PAUSE_START` | `01:00` | When the pause starts, in VODLoft's timezone. |
+| `downloadSettings.pauseEnd` | `VL_DOWNLOAD_SETTINGS__PAUSE_END` | `07:00` | When downloads start again. The pause may run past midnight. |
+
+### Speed
+
+Downloads share one speed limit, however many run at the same time.
+
+- **Full speed** uses all the speed downloads can get.
+- **Leave room for streaming** is the default. It keeps downloads to about half of your connection, so watching
+  something while VODLoft downloads keeps working. VODLoft learns how fast your connection is from downloads that ran
+  at full speed, so a new installation runs at full speed until a few downloads have finished. The Downloads page
+  shows what VODLoft measured and the limit it uses now.
+- **Custom limit** uses the MB/s you enter. 1 MB/s is 8 Mbit/s.
+
+**Pause downloads at night** holds downloads between the two times you choose. A download that is running finishes
+its current file first; the next one waits and shows *Paused* in its progress. Looking for new episodes keeps going
+during the pause.
 
 ### Direct versus temporary mode
 

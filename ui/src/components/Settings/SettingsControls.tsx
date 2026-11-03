@@ -105,7 +105,7 @@ export function TextField({
     placeholder?: string
     wide?: boolean
     environmentVariable?: string
-    inputType?: 'text' | 'password'
+    inputType?: 'text' | 'password' | 'time'
     autoComplete?: string
 }) {
     const errorId = `${id}-errors`

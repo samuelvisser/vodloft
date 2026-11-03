@@ -300,7 +300,7 @@ class NpoSource(Source):
             for program in new:
                 yield self._video(program, season=ref, drm_protected=drm.get(program["slug"], False))
 
-    def video_playback(self, *, slug: str, url: str) -> Playback:
+    def video_playback(self, *, slug: str, url: str, use_cookies: bool = True) -> Playback:
         parsed = parse_link(url)
         program = self._client.program_detail(parsed[1] if parsed else slug)
         premium = needs_subscription(program)

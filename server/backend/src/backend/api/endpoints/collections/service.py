@@ -9,6 +9,7 @@ from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from backend.db.model_mapping import create_database_fields, update_database_fields
+from backend.services.check_frequency import check_suggestion
 from backend.api.models.collection import *
 from fastapi import HTTPException
 
@@ -215,7 +216,10 @@ def update_collection(s: Session, collection_slug: str, body: CollectionAPIUpdat
     if collection is None:
         raise HTTPException(status_code=404, detail="Collection not found")
 
-    left_out = {name for name in ("membership_level", "ytdlp_options") if getattr(body, name) is None}
+    left_out = {
+        name for name in ("membership_level", "ytdlp_options", "cookies_mode", "check_frequency", "check_cron")
+        if getattr(body, name) is None
+    }
     update_database_fields(collection, body, exclude_fields=left_out or None)
     s.flush()
     request_collection_custom_index_reconciliation(s, collection.id)
@@ -227,6 +231,13 @@ def update_collection(s: Session, collection_slug: str, body: CollectionAPIUpdat
     })
 
     return CollectionAPIRead.model_validate(collection)
+
+
+def collection_check_suggestion(s: Session, collection_slug: str) -> Optional[str]:
+    collection = s.query(Collection).filter_by(slug=collection_slug).one_or_none()
+    if collection is None:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    return check_suggestion(s, collection)
 
 
 def delete_collection(s: Session, collection_slug: str) -> CollectionAPIRead:

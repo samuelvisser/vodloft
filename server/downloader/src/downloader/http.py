@@ -9,6 +9,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from .errors import DownloadCancelled, DownloadError, MediaUnavailableError
+from .speed import limiter
 from .transfer_context import TransferWait, cancel_check, wait_observer
 
 USER_AGENT = "vodloft-downloader/1.0"
@@ -44,6 +45,8 @@ class HttpResponse:
             chunk = self._raw.read(chunk_size)
             if not chunk:
                 return
+            # Every download shares one speed limit; a change applies to the next chunk.
+            limiter.throttle(len(chunk), cancel_check.get())
             yield chunk
 
     def close(self) -> None:

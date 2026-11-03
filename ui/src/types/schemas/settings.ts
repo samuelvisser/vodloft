@@ -75,8 +75,12 @@ export const ThumbnailModeSchema = z.enum(['no_thumbnail', 'embed', 'sidecar', '
 export type ThumbnailMode = z.infer<typeof ThumbnailModeSchema>
 export const MetadataModeSchema = z.enum(['no_metadata', 'embed', 'nfo', 'embed_and_nfo'])
 export type MetadataMode = z.infer<typeof MetadataModeSchema>
+export const SpeedLimitModeSchema = z.enum(['full', 'streaming', 'custom'])
+export type SpeedLimitMode = z.infer<typeof SpeedLimitModeSchema>
 export const CollectionArtworkFallbackFormatSchema = z.enum(['jpg', 'png'])
 export type CollectionArtworkFallbackFormat = z.infer<typeof CollectionArtworkFallbackFormatSchema>
+
+const TIME_OF_DAY = /^([01]\d|2[0-3]):[0-5]\d$/
 
 const DownloadSettingsSchema = z.object({
     verifyDownloadsCronEnabled: z.boolean(),
@@ -100,6 +104,11 @@ const DownloadSettingsSchema = z.object({
     filenameRestrictionMode: FilenameRestrictionModeSchema,
     remuxVideoToMp4: z.boolean(),
     ffmpegPath: z.string(),
+    speedLimitMode: SpeedLimitModeSchema,
+    speedLimitMbps: z.number(),
+    pauseAtNight: z.boolean(),
+    pauseStart: z.string(),
+    pauseEnd: z.string(),
 })
 
 export const FilesystemStorageKindSchema = z.enum(['local', 'remote', 'shared_or_virtual', 'unknown'])
@@ -248,6 +257,9 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
         quickDownloadRoot: z.string().trim().min(1, 'A quick download folder is required.'),
         thumbnailRoot: z.string().trim().min(1, 'A thumbnail folder is required.'),
         rssCacheRetentionSeconds: requiredNumber().int().min(1, 'Must be at least 1 second.'),
+        speedLimitMbps: requiredNumber().gt(0, 'Must be more than 0 MB/s.').max(10000, 'Must be 10000 MB/s or less.'),
+        pauseStart: z.string().regex(TIME_OF_DAY, 'Use a time like 01:00.'),
+        pauseEnd: z.string().regex(TIME_OF_DAY, 'Use a time like 07:00.'),
     }),
     youtubeApi: YouTubeApiSettingsSchema.extend({
         dailyQuota: requiredNumber().int().min(1, 'Must be at least 1.'),
@@ -349,6 +361,11 @@ export const SETTINGS_FIELD_PATHS = [
     'downloadSettings.filenameRestrictionMode',
     'downloadSettings.remuxVideoToMp4',
     'downloadSettings.ffmpegPath',
+    'downloadSettings.speedLimitMode',
+    'downloadSettings.speedLimitMbps',
+    'downloadSettings.pauseAtNight',
+    'downloadSettings.pauseStart',
+    'downloadSettings.pauseEnd',
     'youtubeApi.dailyQuota',
     'youtubeApi.checksQuota',
     'youtubeApi.searchQuota',
@@ -408,3 +425,10 @@ export const SettingsReadSchema = z.object({
     updatedAt: ApiDateTimeSchema.nullable(),
 })
 export type SettingsRead = z.infer<typeof SettingsReadSchema>
+
+export const SpeedLimitStatusSchema = z.object({
+    limitMbps: z.number().nullable(),
+    estimateMbps: z.number().nullable(),
+    pausedUntil: ApiDateTimeSchema.nullable(),
+})
+export type SpeedLimitStatus = z.infer<typeof SpeedLimitStatusSchema>

@@ -17,8 +17,8 @@ def scope_helpers():
 @pytest.fixture
 def collections():
     return [
-        SimpleNamespace(id=1, slug="first-collection", title="First Show", source_key="dailywire"),
-        SimpleNamespace(id=17, slug="second-collection", title="Second Show", source_key="dailywire"),
+        SimpleNamespace(id=1, slug="first-collection", title="First Show", source_key="dailywire", check_frequency="default"),
+        SimpleNamespace(id=17, slug="second-collection", title="Second Show", source_key="dailywire", check_frequency="default"),
     ]
 
 

@@ -14,6 +14,8 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from backend.services import check_frequency
+from backend.services.check_frequency import joins_regular_checks
 from backend.db.models import Episode, Collection
 from config.network import is_no_internet_error
 from sources import Feature, Source, get_source
@@ -48,7 +50,7 @@ def _due_collections(s: Session, now: datetime) -> list[tuple[Collection, Source
     counts = dict(s.execute(select(Episode.collection_id, func.count()).group_by(Episode.collection_id)).all())
     by_source: dict[str, list[Collection]] = {}
     for collection in s.scalars(select(Collection).order_by(Collection.id)).all():
-        if get_source(collection.source_key).has(Feature.QUICK_CHECK):
+        if get_source(collection.source_key).has(Feature.QUICK_CHECK) and joins_regular_checks(collection):
             by_source.setdefault(collection.source_key, []).append(collection)
     due = []
     for source_key, collections in by_source.items():
@@ -56,7 +58,8 @@ def _due_collections(s: Session, now: datetime) -> list[tuple[Collection, Source
         minutes = source.quick_check_minutes([(collection.sharing_url, counts.get(collection.id, 0)) for collection in collections])
         for collection in collections:
             last = _last_checked.get(collection.id)
-            if last is None or now - last >= timedelta(minutes=minutes) - _SLACK:
+            wait = timedelta(minutes=check_frequency.quick_check_minutes(collection, minutes))
+            if last is None or now - last >= wait - _SLACK:
                 due.append((collection, source, counts.get(collection.id, 0)))
     return due
 

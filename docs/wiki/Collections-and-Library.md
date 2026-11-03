@@ -39,6 +39,26 @@ Which automatic download options a collection offers follows its episode identif
 
 See [[Download-Profiles]].
 
+### Checking and cookies per Collection
+
+A Collection's edit page has two choices that are normally best left alone.
+
+**Look for new episodes** decides how often VODLoft checks the Collection:
+
+- **Like other Collections** follows the schedules in Settings.
+- **Less often** checks at most every six hours. It suits a Collection that posts once a week or less, and saves
+  YouTube API quota for the rest.
+- **On its own schedule** checks only on the schedule you set there; the regular checks leave it alone.
+
+After about three weeks VODLoft knows how often a Collection posts, and the edit page suggests a choice when another
+one would suit it better.
+
+**Use the cookies file** appears for Collections from the yt-dlp Source, once you added a cookies file under
+Settings, Sources. Signing in for every download can get an account flagged, so by default (**Only when needed**) a
+Collection downloads without the cookies file. When a download fails because the site wants you signed in, such as a
+bot check or a members-only video, the Collection uses the cookies file for a week, starting with the retry. The edit
+page shows when that is the case. **Always** and **Never** do what they say.
+
 ## Seasons and episodes
 
 Series can contain multiple seasons. The collection page lets you switch between them rather than treating the entire collection as one long list.

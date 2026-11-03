@@ -26,8 +26,9 @@ type CronEditorProps = {
     label: string
     value: string
     onChange: (value: string) => void
-    enabled: boolean
-    onEnabledChange: (enabled: boolean) => void
+    /** Left out, the schedule is always on and shows no switch. */
+    enabled?: boolean
+    onEnabledChange?: (enabled: boolean) => void
     environmentVariable?: string
     enabledEnvironmentVariable?: string
     help?: ReactNode
@@ -377,11 +378,11 @@ export default function CronEditor({
                             <FontAwesomeIcon icon={faIcon('fass', 'file-lines')}/>
                         </button>
                     ) : null}
-                    <div className="cron-editor__enabled">
+                    {onEnabledChange ? <div className="cron-editor__enabled">
                         <span id={enabledLabelId}>Enabled</span>
                         <Switch
                             id={`${id}-enabled`}
-                            checked={enabled}
+                            checked={enabled ?? true}
                             disabled={enabledDisabled}
                             onChange={onEnabledChange}
                             onColor="#0ea5e9"
@@ -393,7 +394,7 @@ export default function CronEditor({
                             handleDiameter={14}
                             aria-labelledby={enabledLabelId}
                         />
-                    </div>
+                    </div> : null}
                 </div>
             </div>
             <div className="cron-editor__card">

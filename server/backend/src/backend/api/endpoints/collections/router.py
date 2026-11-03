@@ -15,6 +15,7 @@ from .service import (
     request_collection_file_rename,
     request_collection_download_delete,
     request_collection_episode_redownload,
+    collection_check_suggestion,
 )
 from ...models.operations import (
     CollectionDeleteDownloadsOperationAccepted,
@@ -28,6 +29,7 @@ from ...models.collection import (
     CollectionAPIRead,
     CollectionAPICreate,
     CollectionAPIUpdate,
+    CollectionCheckSuggestionAPIRead,
     CollectionDeleteDownloadsAPIRequest,
     CollectionDownloadAllAPIRequest,
     CollectionFileRenameAPIRequest,
@@ -209,6 +211,17 @@ def collection_detail(collection_slug: str):
     """
     with db_session() as s:
         return get_collection(s, collection_slug)
+
+
+@router.get(
+    "/{collection_slug}/check-suggestion",
+    dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    response_model=CollectionCheckSuggestionAPIRead,
+)
+def collection_check_suggestion_detail(collection_slug: str):
+    """How often to check the Collection, from how often it posted lately."""
+    with db_session() as s:
+        return CollectionCheckSuggestionAPIRead(suggestion=collection_check_suggestion(s, collection_slug))
 
 
 @router.patch("/{collection_slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=CollectionAPIRead)

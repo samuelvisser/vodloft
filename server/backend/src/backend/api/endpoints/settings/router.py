@@ -1,7 +1,10 @@
 from fastapi import APIRouter, HTTPException, status
 
 from backend.api.models.operations import TaskOperationAccepted
-from backend.api.models.settings import LibraryDefaultsAPIRead, SettingsAPIRead, SettingsAPIUpdate
+from backend.api.models.settings import (
+    LibraryDefaultsAPIRead, SettingsAPIRead, SettingsAPIUpdate, SpeedLimitStatusRead,
+)
+from backend.services import speed_limit
 from config import get_settings
 from backend.app import db_session
 from backend.services.collection_assets import request_collection_asset_reconciliation
@@ -39,6 +42,12 @@ def library_defaults():
         metadata_mode=settings.download_settings.metadata_mode,
         no_usable_media_delete_after_minutes=settings.episode_status_timing.no_usable_media_delete_after_minutes,
     )
+
+
+@router.get("/speed-limit", dependencies=[requires(Area.SETTINGS, Level.MANAGE)], response_model=SpeedLimitStatusRead)
+def settings_speed_limit():
+    """The download speed limit as it applies right now, and the connection speed VODLoft measured."""
+    return SpeedLimitStatusRead.model_validate(speed_limit.status())
 
 
 @router.put("", dependencies=[requires(Area.SETTINGS, Level.MANAGE)], response_model=SettingsAPIRead)

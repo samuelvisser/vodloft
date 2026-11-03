@@ -14,6 +14,12 @@ class CapacityLimiter:
         self._limit = max(1, limit)
         self._active = 0
 
+    @property
+    def active(self) -> int:
+        """How many leases are held right now."""
+        with self._condition:
+            return self._active
+
     def configure(self, limit: int) -> None:
         with self._condition:
             self._limit = max(1, int(limit))

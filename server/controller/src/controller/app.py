@@ -225,6 +225,11 @@ def setup_triggers_from_registry() -> None:
 
     register_monitor_event_handlers()
 
+    # Collections checked on their own schedule get a recurring job each, following the Collection.
+    from task_manager.tasks.workers.fetch_new_episodes.own_schedule import register_own_check_handlers
+
+    register_own_check_handlers()
+
 
 def _should_emit_startup_event() -> bool:
     """Whether this worker should fire ``app.startup`` (and its subscribed tasks).

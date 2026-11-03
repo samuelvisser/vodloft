@@ -16,6 +16,7 @@ export const SourceFeature = {
     COSTLY_SEARCH: 'costly_search',
     PROGRAM_UPDATES: 'program_updates',
     COOKIES: 'cookies',
+    OPTIONAL_COOKIES: 'optional_cookies',
     API_KEY: 'api_key',
     QUICK_CHECK: 'quick_check',
     CATALOGUE_REFRESH: 'catalogue_refresh',
