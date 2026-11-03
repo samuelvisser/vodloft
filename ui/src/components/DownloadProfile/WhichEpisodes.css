@@ -276,3 +276,14 @@
     background: var(--we-accent-soft);
     transition: background 0.6s ease;
 }
+
+/* The auto-generated subtitles line has no count, so on a phone the ✎ stays on the sentence's row. */
+@media (max-width: 640px) {
+    #youtube-subtitles .which-episodes-sentence {
+        flex-wrap: nowrap;
+    }
+
+    #youtube-subtitles .which-episodes-text {
+        flex-basis: auto;
+    }
+}

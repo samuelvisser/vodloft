@@ -8,7 +8,6 @@ import {AutoSubtitlesReg} from '../../types/quality'
 import ReadMore from '../../utils/ReadMore'
 import SponsorBlockLine from './SponsorBlockLine'
 import './WhichEpisodes.css'
-import '../LocalMediaProfile/SubtitleLines.css'
 
 const SENTENCE_ENDS: Record<string, string> = {
     never: ' never',

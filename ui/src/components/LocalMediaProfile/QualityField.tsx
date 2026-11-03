@@ -5,7 +5,6 @@ import Switch from 'react-switch'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 
 import {faIcon} from '../../icons/faIcon'
-import {PreferredFormatReg} from '../../types/local_media_profile'
 import {
     AudioCodecReg,
     AudioFormatReg,
@@ -15,6 +14,7 @@ import {
     ContainerReg,
     GOAL_PRESETS,
     LADDER_STEPS,
+    QualityDownloadReg,
     QualityGoalReg,
     VideoCodecReg,
     codecSummary,
@@ -34,7 +34,9 @@ type Props = {
 
 const OPTIONS = {shouldDirty: true, shouldValidate: true} as const
 
-/** Quality design D: an "up to" resolution ladder, a goal, and your own codec order. */
+type DownloadOption = {value: string; label: string}
+
+/** Quality: what to download (video up to a resolution, audio only or HLS), a goal, and your own codec order. */
 export default function QualityField({form, allowAudioOnly = true, allowHls = false}: Props) {
     const {control, setValue, formState: {errors}} = form
     const [preferredFormat, goal, videoCodecs, codecFallback, container, audioCodec, audioFormat, audioLanguage] = useWatch({
@@ -44,7 +46,6 @@ export default function QualityField({form, allowAudioOnly = true, allowHls = fa
     const [dragging, setDragging] = useState<number | null>(null)
     const audioOnly = preferredFormat === 'format_audio_only'
     const hls = preferredFormat === 'format_hls'
-    const chosenIndex = LADDER_STEPS.indexOf(preferredFormat as (typeof LADDER_STEPS)[number])
     const codecs = videoCodecs ?? []
 
     const chooseGoal = (next: QualityGoal) => {
@@ -72,36 +73,53 @@ export default function QualityField({form, allowAudioOnly = true, allowHls = fa
         setCodecs(next)
     }
 
-    const step = (value: string, label: string, included: boolean) => (
-        <button
-            key={value} type="button" role="radio" aria-checked={preferredFormat === value}
-            className={`quality-ladder__step${preferredFormat === value ? ' is-selected' : included ? ' is-included' : ''}`}
-            onClick={() => setValue('preferredFormat', value, OPTIONS)}
-        >
-            {label}
-        </button>
-    )
+    const option = (value: string): DownloadOption => ({value, label: QualityDownloadReg.getLabelLoose(value)})
+    const downloadGroups = [
+        {label: 'Video, up to', options: LADDER_STEPS.map(option)},
+        {
+            label: 'Other',
+            options: [
+                ...(allowAudioOnly ? [option('format_audio_only')] : []),
+                ...(allowHls ? [option('format_hls')] : []),
+            ],
+        },
+    ].filter((group) => group.options.length)
+    const downloadValue = downloadGroups.flatMap((group) => group.options).find((choice) => choice.value === preferredFormat) ?? null
+    const isLadderStep = (value: string) => (LADDER_STEPS as readonly string[]).includes(value)
 
     return (
-        <div className="form-row quality-field">
-            <span className="quality-field__label" id="quality-up-to">Up to</span>
-            <div className="quality-ladder" role="radiogroup" aria-labelledby="quality-up-to">
-                {LADDER_STEPS.map((value, index) => step(value, PreferredFormatReg.getLabel(value), chosenIndex >= 0 && index < chosenIndex))}
-                {allowAudioOnly && step('format_audio_only', 'Audio only', false)}
-                {allowHls && step('format_hls', 'HLS', false)}
+        <div className="quality-field">
+            <div className="form-row">
+                <label htmlFor="quality-download">Download</label>
+                <Select<DownloadOption, false>
+                    inputId="quality-download"
+                    classNamePrefix="select"
+                    options={downloadGroups}
+                    value={downloadValue}
+                    onChange={(choice) => choice && setValue('preferredFormat', choice.value, OPTIONS)}
+                    formatOptionLabel={(choice, {context}) => {
+                        if (isLadderStep(choice.value)) return context === 'value' ? `Video, up to ${choice.label}` : choice.label
+                        const help = QualityDownloadReg.getHelp(choice.value as any)
+                        return context === 'menu' && help
+                            ? <span className="quality-download-option">{choice.label}<small>{help}</small></span>
+                            : choice.label
+                    }}
+                    isSearchable={false}
+                    aria-invalid={!!errors.preferredFormat}
+                />
+                {errors.preferredFormat && <div className="error" role="alert">{String(errors.preferredFormat.message)}</div>}
+                <div className="help">
+                    {audioOnly
+                        ? 'Audio only: no video is downloaded.'
+                        : hls
+                            ? 'An HLS bundle keeps The Daily Wire’s 480p, 720p and 1080p versions together. Only for The Daily Wire.'
+                            : 'VODLoft downloads the highest resolution the site has up to this, and falls back to lower ones.'}
+                </div>
             </div>
-            <div className="help">
-                {audioOnly
-                    ? 'Audio only: no video is downloaded.'
-                    : hls
-                        ? 'An HLS bundle keeps The Daily Wire’s 480p, 720p and 1080p versions together. Only for The Daily Wire.'
-                        : 'VODLoft downloads the highest resolution the site has up to this, and falls back to the highlighted ones.'}
-            </div>
-            {errors.preferredFormat && <div className="error" role="alert">{String(errors.preferredFormat.message)}</div>}
 
             {audioOnly && (
-                <>
-                    <span className="quality-field__label" id="quality-audio-format">Audio format</span>
+                <div className="form-row">
+                    <span className="quality-field__heading" id="quality-audio-format">Audio format</span>
                     <div className="quality-cards" role="radiogroup" aria-labelledby="quality-audio-format">
                         {AudioFormatReg.values.map((value) => (
                             <button
@@ -115,12 +133,12 @@ export default function QualityField({form, allowAudioOnly = true, allowHls = fa
                         ))}
                     </div>
                     <div className="help">Podcast RSS feeds use this format.</div>
-                </>
+                </div>
             )}
 
             {!audioOnly && !hls && (
-                <>
-                    <span className="quality-field__label" id="quality-goal">Optimise for</span>
+                <div className="form-row">
+                    <span className="quality-field__heading" id="quality-goal">Optimise for</span>
                     <div className="quality-cards" role="radiogroup" aria-labelledby="quality-goal">
                         {QualityGoalReg.values.map((value) => (
                             <button
@@ -232,12 +250,12 @@ export default function QualityField({form, allowAudioOnly = true, allowHls = fa
                             <div className="help">Choosing Compatibility, Quality or Small files again replaces this order with that goal’s.</div>
                         </div>
                     )}
-                </>
+                </div>
             )}
 
             {!hls && (
-                <div className="quality-field__language">
-                    <label className="quality-field__label" htmlFor="quality-audio-language">Audio language</label>
+                <div className="form-row">
+                    <label htmlFor="quality-audio-language">Audio language</label>
                     <Select
                         inputId="quality-audio-language"
                         classNamePrefix="select"
@@ -247,9 +265,9 @@ export default function QualityField({form, allowAudioOnly = true, allowHls = fa
                         isSearchable
                     />
                     <div className="help">For videos with dubbed audio tracks. Original keeps the language the video was made in.</div>
+                    <div className="help">Applies to sites downloaded with yt-dlp. The Daily Wire offers fixed formats.</div>
                 </div>
             )}
-            <div className="help">Applies to sites downloaded with yt-dlp. The Daily Wire offers fixed formats.</div>
         </div>
     )
 }

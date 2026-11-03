@@ -39,14 +39,14 @@ The temporary folder may be on different storage from the final library. Configu
 
 ## Subtitles
 
-Local Media Profiles can save the subtitles a video has, from The Daily Wire and from every site yt-dlp downloads from, such as YouTube. The Subtitles section reads as two sentences, each with a ✎ to change it.
+Local Media Profiles can save the subtitles a video has, from The Daily Wire and from every site yt-dlp downloads from, such as YouTube.
 
-**Where they are stored**: *Store subtitles not at all, inside the media, beside the media, or both.*
+**Subtitles** chooses where they are stored: not at all, inside the media, beside the media, or both.
 
 - **Inside the media** adds them as tracks you can pick in your player, in MP4 and MKV files.
 - **Beside the media** saves SRT files next to the media, such as `Episode.en.srt`. Subtitles beside the media are always SRT.
 
-**Which languages**: a list of languages in order of preference, and one of:
+**Subtitle languages** is a list in order of preference. Drag a language or use its arrows to move it, and add one at the bottom of the list. **When several languages are available** chooses one of:
 
 - **Every language on the list**: one file per language on the list, when the site has it.
 - **Only the first one available**: one subtitle per episode: the first language on the list that the video has.
@@ -54,7 +54,7 @@ Local Media Profiles can save the subtitles a video has, from The Daily Wire and
 
 The first language on the list becomes the default subtitle track in players that read it. New profiles start with English. Profiles from before VODLoft 0.7.0 keep downloading every language the site offers.
 
-**Auto-generated subtitles** only exist on YouTube, so that choice is on each Download Profile of a YouTube Collection (see [Download Profiles](Download-Profiles#youtube)). When a Local Media Profile is used for YouTube Collections, a third, folded line says per Collection whether auto-generated subtitles are downloaded, with a link to each Download Profile.
+**Auto-generated subtitles** only exist on YouTube, so that choice is on each Download Profile of a YouTube Collection (see [Download Profiles](Download-Profiles#youtube)). When a Local Media Profile is used for YouTube Collections, a folded line below says per Collection whether auto-generated subtitles are downloaded, with a link to each Download Profile.
 
 **Movies**, **Series** and Collection profiles available for **Podcasts and Series** start with subtitles beside the media. **Podcast-only** profiles and **Video** profiles start without subtitles.
 
@@ -64,7 +64,7 @@ Forced subtitles use names such as `Movie Name.en.forced.srt`, and auto-generate
 
 Quality applies to sites downloaded with yt-dlp, such as YouTube. The Daily Wire offers fixed formats and keeps them.
 
-**Up to** sets a ceiling: 360p, 480p, 720p, 1080p, 1440p, 4K or 8K. VODLoft downloads the highest resolution the site has up to that step, and otherwise the lower ones. **Audio only** downloads no video. Collection profiles also have **HLS**, The Daily Wire's bundle of its 480p, 720p and 1080p versions.
+**Download** chooses video up to a ceiling: 360p, 480p, 720p, 1080p, 1440p, 4K or 8K. VODLoft downloads the highest resolution the site has up to that, and otherwise the lower ones. **Audio only** downloads no video. Collection profiles also have **HLS bundle**, The Daily Wire's bundle of its 480p, 720p and 1080p versions.
 
 **Optimise for** chooses which codecs and container are used:
 

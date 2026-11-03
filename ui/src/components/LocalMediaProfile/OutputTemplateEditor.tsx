@@ -816,7 +816,13 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
 
     return (
         <>
-            {renderPreviewFields?.(preview)}
+            {renderPreviewFields && (
+                <>
+                    <hr className="form-section-divider" aria-hidden="true"/>
+                    {renderPreviewFields(preview)}
+                </>
+            )}
+            <hr className="form-section-divider" aria-hidden="true"/>
             <div className="form-row output-template-field">
                 <section className="template-workbench" aria-labelledby="template-editor-heading">
                     <div className="template-editor-heading">

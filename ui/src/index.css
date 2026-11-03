@@ -741,6 +741,12 @@ select,
   border-top: 1px solid rgba(0, 0, 0, 0.08);
   margin: 12px 0 4px;
 }
+.form-section-divider {
+  width: 100%;
+  margin: 4px 0;
+  border: none;
+  border-top: 1px solid rgba(100, 116, 139, 0.22);
+}
 .divider-label {
   text-align: center;
   font-size: 12px;
@@ -767,6 +773,7 @@ select,
 @media (prefers-color-scheme: dark) {
   .card { background: #0b1220; color: var(--text); border-color: rgba(255, 255, 255, 0.12); }
   .divider { border-top-color: rgba(255, 255, 255, 0.12); }
+  .form-section-divider { border-top-color: rgba(148, 163, 184, 0.2); }
 }
 
 

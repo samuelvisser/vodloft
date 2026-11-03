@@ -6,6 +6,19 @@ export const LADDER_STEPS = [
 ] as const
 export type LadderStep = (typeof LADDER_STEPS)[number]
 
+/** What a Local Media Profile downloads: video up to a resolution, audio only, or The Daily Wire's HLS bundle. */
+export const QualityDownloadReg = createSelectRegistry('QualityDownload', {
+    format_360p: {label: '360p'},
+    format_480p: {label: '480p'},
+    format_720p: {label: '720p'},
+    format_1080p: {label: '1080p'},
+    format_1440p: {label: '1440p'},
+    format_4k: {label: '4K'},
+    format_8k: {label: '8K'},
+    format_audio_only: {label: 'Audio only', help: 'No video, for podcasts'},
+    format_hls: {label: 'HLS bundle', help: 'The Daily Wire only'},
+})
+
 export const QualityGoalReg = createSelectRegistry('QualityGoal', {
     compatibility: {label: 'Compatibility', help: 'H.264 in MP4. Plays on every device, also older TVs.'},
     quality: {label: 'Quality', help: 'The best the site has: AV1, then VP9. MKV.'},

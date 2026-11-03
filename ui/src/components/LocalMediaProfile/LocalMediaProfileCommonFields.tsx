@@ -2,7 +2,7 @@ import {Controller, UseFormReturn} from 'react-hook-form'
 
 import {type LocalMediaProfileType} from '../../types/local_media_profile'
 import CollectionLocalMediaProfileScopeField from './CollectionLocalMediaProfileScopeField'
-import SubtitleLines from './SubtitleLines'
+import SubtitleFields from './SubtitleFields'
 import {useSubtitleModeDefaults} from './useSubtitleModeDefaults'
 
 import {useLibraryDefaults} from '../../lib/settings'
@@ -104,6 +104,8 @@ export default function LocalMediaProfileCommonFields({
                     isCreating={isCreating}
                 />
             )}
+
+            <hr className="form-section-divider" aria-hidden="true"/>
 
             <div className="form-row">
                 <label htmlFor="local-media-download-mode">Download behavior</label>
@@ -214,7 +216,9 @@ export default function LocalMediaProfileCommonFields({
                 </div>
             </div>
 
-            <SubtitleLines form={form} onSubtitleModeChange={onSubtitleModeChange}/>
+            <hr className="form-section-divider" aria-hidden="true"/>
+
+            <SubtitleFields form={form} onSubtitleModeChange={onSubtitleModeChange}/>
         </>
     )
 }
