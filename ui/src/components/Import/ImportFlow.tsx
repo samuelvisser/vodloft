@@ -27,6 +27,7 @@ import type {
     ImportProfile,
     ImportRun,
     ImportRunSummary,
+    ImportSetting,
     ImportSupport,
     Importer,
 } from '../../types/schemas/imports'
@@ -50,6 +51,14 @@ function formatValue(value: unknown, secret: boolean): string {
     if (typeof value === 'boolean') return value ? 'On' : 'Off'
     if (typeof value === 'object') return JSON.stringify(value)
     return String(value)
+}
+
+/** The value and what the import does with a setting. One it leaves to you says so, not that VODLoft lacks it. */
+function settingDetail(setting: ImportSetting): string {
+    const parts = setting.support === 'unsupported'
+        ? [...(setting.value === null || setting.value === undefined ? [] : [formatValue(setting.value, setting.secret)]), 'Not imported']
+        : [formatValue(setting.value, setting.secret), ...(setting.support === 'close' ? [SUPPORT_LABELS.close] : [])]
+    return [...parts, ...(setting.note ? [setting.note] : [])].join(' · ')
 }
 
 function download(name: string, text: string) {
@@ -478,11 +487,7 @@ function PreviewStep({importer, onReplace, onFinished}: {
                                     />
                                     <span>{settingLabel(setting.key)}</span>
                                 </label>
-                                <small>
-                                    {formatValue(setting.value, setting.secret)}
-                                    {setting.support !== 'exact' ? ` · ${SUPPORT_LABELS[setting.support]}` : ''}
-                                    {setting.note ? ` · ${setting.note}` : ''}
-                                </small>
+                                <small>{settingDetail(setting)}</small>
                             </li>
                         ))}
                     </ul>
