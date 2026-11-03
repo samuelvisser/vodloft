@@ -680,7 +680,6 @@ export default function RegexEditor({id, value, onChange, field = 'title', colle
                             className="input"
                             value={textBlock.text}
                             disabled={disabled}
-                            autoFocus
                             onChange={(event) => setShortcut(where, {...textBlock, text: event.currentTarget.value, wholeWords: textWholeWords})}
                         />
                         <small>Typed as plain text. Characters like . ? ( ) are escaped for you.</small>

@@ -105,6 +105,8 @@ export default function DownloadProfileForm({form, episodeIdentifier, seasons, c
                 </div>
             </div>
 
+            <DownloadProfileDateFilters form={form} collectionId={collectionId} sourceKey={sourceKey} part="countdown"/>
+
             <WhichEpisodes
                 form={form}
                 episodeIdentifier={episodeIdentifier}
@@ -159,7 +161,7 @@ export default function DownloadProfileForm({form, episodeIdentifier, seasons, c
                     </div>
                 )}
                 seasonsField={<DownloadProfileSeasonFilter form={form} seasons={seasons ?? []}/>}
-                datesField={<DownloadProfileDateFilters form={form} collectionId={collectionId} sourceKey={sourceKey}/>}
+                datesField={<DownloadProfileDateFilters form={form} collectionId={collectionId} sourceKey={sourceKey} part="dates"/>}
             />
             <YouTubeSection form={form} collectionId={collectionId} sourceKey={sourceKey} collectionUrl={collectionUrl}/>
         </>

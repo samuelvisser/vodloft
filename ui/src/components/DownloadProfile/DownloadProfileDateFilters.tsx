@@ -14,6 +14,8 @@ type Props = {
     collectionId?: number
     /** The Source of a collection that is not saved yet. */
     sourceKey?: string
+    /** ``countdown``: only the countdown download choices, which sit above Which episodes. ``dates``: the date window. */
+    part: 'countdown' | 'dates'
 }
 
 const LimitModeReg = createSelectRegistry('DownloadLimitMode', {
@@ -23,8 +25,8 @@ const LimitModeReg = createSelectRegistry('DownloadLimitMode', {
 })
 type LimitMode = (typeof LimitModeReg)['values'][number]
 
-/** Filters on when episodes were published, for every collection. */
-export default function DownloadProfileDateFilters({form, collectionId, sourceKey}: Props) {
+/** Filters on when episodes were published, for every collection, and the countdown download choices. */
+export default function DownloadProfileDateFilters({form, collectionId, sourceKey, part}: Props) {
     const {control, register, watch, setValue, clearErrors, formState: {errors}} = form
 
     // If countdown is disabled, redownload final becomes irrelevant and is hidden
@@ -82,8 +84,9 @@ export default function DownloadProfileDateFilters({form, collectionId, sourceKe
         return `${yyyy}-${mm}-${dd}`
     })()
 
-    return (
-        <>
+    if (part === 'countdown') {
+        return (
+            <>
             {offersCountdown && (
             <div className="form-row">
                 <label htmlFor="with-countdown">Download with countdown</label>
@@ -147,7 +150,12 @@ export default function DownloadProfileDateFilters({form, collectionId, sourceKe
                     )}
                 </div>
             )}
+            </>
+        )
+    }
 
+    return (
+        <>
             <div className="form-row">
                 <label htmlFor="download-limit-mode">Limit by</label>
                 <SimpleSelect
