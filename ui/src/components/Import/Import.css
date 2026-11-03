@@ -357,3 +357,201 @@ div.import-proof.is-different strong { color: var(--warning, #b45309); }
     color: var(--muted);
     font-size: 13px;
 }
+
+/* Jinja inside a conversion note, colored like the template. */
+.import-note__code {
+    display: inline-block;
+    max-width: 100%;
+    vertical-align: middle;
+    padding: 0 6px;
+    border-radius: 6px;
+    background: rgba(100, 116, 139, 0.1);
+}
+
+.import-note__code .cm-editor,
+.import-note__code .cm-scroller,
+.import-note__code .cm-content,
+.import-note__code .cm-line {
+    display: inline-block;
+    padding: 0;
+    background: transparent;
+}
+
+/* The collections to import, grouped by profile. */
+.import-collections__header {
+    display: flex;
+    gap: 0.75rem;
+    align-items: baseline;
+}
+
+.import-collections__header small {
+    opacity: 0.7;
+}
+
+.import-collections__all {
+    margin-left: auto;
+    align-self: center;
+}
+
+.import-collections__group {
+    overflow: hidden;
+    border: 1px solid var(--border-color, rgba(127, 127, 127, 0.3));
+    border-radius: 10px;
+}
+
+.import-collections__group + .import-collections__group {
+    margin-top: 0.75rem;
+}
+
+.import-collections__profile {
+    display: flex;
+    gap: 0.75rem;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: rgba(100, 116, 139, 0.08);
+    font-weight: 600;
+}
+
+.import-collections__profile small {
+    font-weight: 400;
+    opacity: 0.7;
+}
+
+.import-collections {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.import-collections li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto 170px;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 7px 12px;
+}
+
+.import-collections li + li {
+    border-top: 1px solid var(--border-color, rgba(127, 127, 127, 0.18));
+}
+
+.import-collections li.is-off {
+    opacity: 0.55;
+}
+
+.import-collections__name {
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+    min-width: 0;
+}
+
+.import-collections__name span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.import-collections__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    justify-content: flex-end;
+}
+
+.import-collections__field {
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.import-collections__files {
+    display: grid;
+    gap: 3px;
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+.import-collections__bar {
+    height: 4px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(100, 116, 139, 0.2);
+}
+
+.import-collections__bar span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--warning, #d97706);
+}
+
+.import-collections__files.is-complete .import-collections__bar span {
+    background: var(--success, #16a34a);
+}
+
+.import-collections__files:not(.is-partial):not(.is-complete) {
+    opacity: 0.6;
+}
+
+@media (max-width: 640px) {
+    .import-collections li {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 0.35rem;
+    }
+
+    .import-collections__meta {
+        justify-content: flex-start;
+        padding-left: 1.6rem;
+    }
+
+    .import-collections__field {
+        max-width: 100%;
+    }
+
+    .import-collections__files {
+        padding-left: 1.6rem;
+        text-align: left;
+    }
+}
+
+/* What a merged profile was made from. */
+.import-merge {
+    display: grid;
+    gap: 6px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(59, 130, 246, 0.08);
+    font-size: 0.9rem;
+}
+
+.import-merge__label {
+    font-weight: 600;
+}
+
+.import-merge__fields {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.import-merge__fields li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    gap: 0.75rem;
+}
+
+.import-merge__fields code {
+    overflow-wrap: anywhere;
+}
+
+.import-merge__apart {
+    margin: 0;
+    font-size: 0.9rem;
+    opacity: 0.8;
+}

@@ -27,6 +27,7 @@ import type {
     ImportProfile,
     ImportRun,
     ImportRunSummary,
+    ImportSetting,
     ImportSupport,
     Importer,
 } from '../../types/schemas/imports'
@@ -50,6 +51,14 @@ function formatValue(value: unknown, secret: boolean): string {
     if (typeof value === 'boolean') return value ? 'On' : 'Off'
     if (typeof value === 'object') return JSON.stringify(value)
     return String(value)
+}
+
+/** The value and what the import does with a setting. One it leaves to you says so, not that VODLoft lacks it. */
+function settingDetail(setting: ImportSetting): string {
+    const parts = setting.support === 'unsupported'
+        ? [...(setting.value === null || setting.value === undefined ? [] : [formatValue(setting.value, setting.secret)]), 'Not imported']
+        : [formatValue(setting.value, setting.secret), ...(setting.support === 'close' ? [SUPPORT_LABELS.close] : [])]
+    return [...parts, ...(setting.note ? [setting.note] : [])].join(' · ')
 }
 
 function download(name: string, text: string) {
@@ -278,6 +287,8 @@ function PreviewStep({importer, onReplace, onFinished}: {
             setPathMap([result.pathMap.source, result.pathMap.target])
             setOptions((current) => ({
                 ...next,
+                // Keep what the preview showed, so the import merges exactly those profiles.
+                mergeProfiles: result.mergeProfiles,
                 // The first preview decides which settings start ticked.
                 settings: current.settings ?? next.settings ?? result.settings.filter((item) => item.selected).map((item) => item.key),
             }))
@@ -287,6 +298,15 @@ function PreviewStep({importer, onReplace, onFinished}: {
             setLoading(false)
         }
     }
+
+    const reloadTimer = useRef<number | null>(null)
+    function reloadSoon(next: ImportOptions) {
+        if (reloadTimer.current !== null) window.clearTimeout(reloadTimer.current)
+        reloadTimer.current = window.setTimeout(() => void load(next), 700)
+    }
+    useEffect(() => () => {
+        if (reloadTimer.current !== null) window.clearTimeout(reloadTimer.current)
+    }, [])
 
     useEffect(() => {
         void load(DEFAULT_OPTIONS)
@@ -342,7 +362,11 @@ function PreviewStep({importer, onReplace, onFinished}: {
             id: item.externalId,
             title: item.title,
             becomes: item.becomes,
-            detail: `${item.filesOnDisk} of ${item.files} files found${item.profileName ? ` · ${item.profileName}` : ''}`,
+            detail: null as string | null,
+            files: item.files,
+            filesOnDisk: item.filesOnDisk,
+            profileName: item.profileName ?? null,
+            fields: item.customMetadata,
         }))
     }, [preview])
 
@@ -368,11 +392,17 @@ function PreviewStep({importer, onReplace, onFinished}: {
 
     const chosen = new Set(options.collections ?? collections.map((item) => item.id))
     const chosenSettings = new Set(options.settings ?? [])
+    const choose = (ids: Set<string>) => {
+        const next = {...options, collections: collections.map((item) => item.id).filter((item) => ids.has(item))}
+        setOptions(next)
+        // Which profiles merge depends on the collections being imported.
+        if (preview.mergeProfiles && !preview.records) reloadSoon(next)
+    }
     const toggleCollection = (id: string, on: boolean) => {
         const next = new Set(chosen)
         if (on) next.add(id)
         else next.delete(id)
-        setOptions({...options, collections: collections.map((item) => item.id).filter((item) => next.has(item))})
+        choose(next)
     }
 
     return (
@@ -418,32 +448,47 @@ function PreviewStep({importer, onReplace, onFinished}: {
             </section>
 
             {collections.length > 0 && (
-                <section className="import-block">
-                    <h3>Collections</h3>
-                    <ul className="import-checklist">
-                        {collections.map((item) => (
-                            <li key={item.id}>
-                                <label>
-                                    <input type="checkbox" checked={chosen.has(item.id)} onChange={(event) => toggleCollection(item.id, event.target.checked)}/>
-                                    <span>{item.title}</span>
-                                </label>
-                                <small>
-                                    {item.becomes === 'new' ? 'New' : item.becomes === 'linked' ? 'Joins the one in your library' : 'Already imported'}
-                                    {item.detail ? ` · ${item.detail}` : ''}
-                                </small>
-                            </li>
-                        ))}
-                    </ul>
-                </section>
+                <CollectionList
+                    collections={collections}
+                    chosen={chosen}
+                    onToggle={toggleCollection}
+                    onChooseAll={(on) => choose(new Set(on ? collections.map((item) => item.id) : []))}
+                />
             )}
 
             {preview.profiles.length > 0 && (
                 <section className="import-block">
                     <h3>Local Media Profiles</h3>
+                    {!preview.records && (
+                        <div className="settings-field settings-toggle-field settings-field--wide">
+                            <div className="settings-toggle-field__control">
+                                <div>
+                                    <label htmlFor={`import-merge-${importer.key}`}>Merge matching profiles</label>
+                                    <div className="settings-field__help">
+                                        Profiles with the same settings whose templates differ only by a folder or a
+                                        name become one profile. Each collection keeps its own folder or name as a
+                                        custom collection field, so no file gets another path.
+                                    </div>
+                                </div>
+                                <Switch
+                                    id={`import-merge-${importer.key}`}
+                                    checked={preview.mergeProfiles}
+                                    disabled={loading}
+                                    onChange={(on) => {
+                                        // Profiles are named and numbered differently, so edited templates start over.
+                                        const next = {...options, mergeProfiles: on, templates: {}}
+                                        setOptions(next)
+                                        void load(next)
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    )}
                     {preview.profiles.map((profile) => (
                         <ProfilePreview
                             key={profile.externalId}
                             profile={profile}
+                            collections={preview.collections.filter((item) => item.profileExternalId === profile.externalId && chosen.has(item.externalId))}
                             template={options.templates[profile.externalId]}
                             onTemplate={(template) => {
                                 const templates = {...options.templates}
@@ -478,11 +523,7 @@ function PreviewStep({importer, onReplace, onFinished}: {
                                     />
                                     <span>{settingLabel(setting.key)}</span>
                                 </label>
-                                <small>
-                                    {formatValue(setting.value, setting.secret)}
-                                    {setting.support !== 'exact' ? ` · ${SUPPORT_LABELS[setting.support]}` : ''}
-                                    {setting.note ? ` · ${setting.note}` : ''}
-                                </small>
+                                <small>{settingDetail(setting)}</small>
                             </li>
                         ))}
                     </ul>
@@ -539,8 +580,97 @@ function PreviewStep({importer, onReplace, onFinished}: {
     )
 }
 
-function ProfilePreview({profile, template, onTemplate}: {
+type CollectionRow = {
+    id: string
+    title: string
+    becomes: string
+    detail: string | null
+    files?: number
+    filesOnDisk?: number
+    profileName?: string | null
+    fields?: Record<string, string>
+}
+
+const BECOMES_LABELS: Record<string, string> = {
+    new: 'New',
+    linked: 'Imported before',
+    in_library: 'In your library',
+}
+
+/** The collections to import, grouped by the Local Media Profile each one gets. */
+function CollectionList({collections, chosen, onToggle, onChooseAll}: {
+    collections: CollectionRow[]
+    chosen: Set<string>
+    onToggle: (id: string, on: boolean) => void
+    onChooseAll: (on: boolean) => void
+}) {
+    const groups = new Map<string, CollectionRow[]>()
+    for (const item of collections) {
+        const key = item.profileName ?? ''
+        groups.set(key, [...(groups.get(key) ?? []), item])
+    }
+    const all = chosen.size === collections.length
+    return (
+        <section className="import-block">
+            <div className="import-collections__header">
+                <h3>Collections</h3>
+                <small>{chosen.size} of {collections.length} chosen</small>
+                <button type="button" className="btn import-collections__all" onClick={() => onChooseAll(!all)}>
+                    {all ? 'Choose none' : 'Choose all'}
+                </button>
+            </div>
+            {[...groups.entries()].map(([profileName, rows]) => (
+                <div key={profileName} className="import-collections__group">
+                    {profileName && (
+                        <div className="import-collections__profile">
+                            <span>{profileName}</span>
+                            <small>{rows.length} collection{rows.length === 1 ? '' : 's'}</small>
+                        </div>
+                    )}
+                    <ul className="import-collections">
+                        {rows.map((item) => {
+                            const files = item.files ?? 0
+                            const found = item.filesOnDisk ?? 0
+                            const complete = files > 0 && found === files
+                            return (
+                                <li key={item.id} className={chosen.has(item.id) ? '' : 'is-off'}>
+                                    <label className="import-collections__name">
+                                        <input type="checkbox" checked={chosen.has(item.id)}
+                                               onChange={(event) => onToggle(item.id, event.target.checked)}/>
+                                        <span title={item.title}>{item.title}</span>
+                                    </label>
+                                    <span className="import-collections__meta">
+                                        {Object.entries(item.fields ?? {}).map(([key, value]) => (
+                                            <span key={key} className="import-chip import-collections__field" title={`${key}: ${value}`}>
+                                                {key}: {value}
+                                            </span>
+                                        ))}
+                                        <span className={`import-chip${item.becomes === 'new' ? ' is-exact' : ''}`}>
+                                            {BECOMES_LABELS[item.becomes] ?? item.becomes}
+                                        </span>
+                                    </span>
+                                    {item.files !== undefined && (
+                                        <span className={`import-collections__files${complete ? ' is-complete' : files ? ' is-partial' : ''}`}>
+                                            <span>{files ? `${found} of ${files} files` : 'No files yet'}</span>
+                                            <span className="import-collections__bar" aria-hidden="true">
+                                                <span style={{width: `${files ? 100 * found / files : 0}%`}}/>
+                                            </span>
+                                        </span>
+                                    )}
+                                    {item.detail && <small>{item.detail}</small>}
+                                </li>
+                            )
+                        })}
+                    </ul>
+                </div>
+            ))}
+        </section>
+    )
+}
+
+function ProfilePreview({profile, collections, template, onTemplate}: {
     profile: ImportProfile
+    collections: ImportPreview['collections']
     template: string | undefined
     onTemplate: (template: string | null) => void
 }) {
@@ -559,6 +689,31 @@ function ProfilePreview({profile, template, onTemplate}: {
                     <span className={`import-chip is-${profile.support}`}>{SUPPORT_LABELS[profile.support]}</span>
                 </span>
             </div>
+            {profile.mergedFrom.length > 0 && (
+                <div className="import-merge">
+                    <div>
+                        <span className="import-merge__label">Merged from</span>{' '}
+                        {profile.mergedFrom.join(', ')}
+                    </div>
+                    {profile.fields.length > 0 && (
+                        <ul className="import-merge__fields">
+                            {collections.map((item) => (
+                                <li key={item.externalId}>
+                                    <span>{item.title}</span>
+                                    <code>
+                                        {profile.fields.map((key) => `${key}: ${item.customMetadata[key] ?? '(the profile default)'}`).join(' · ')}
+                                    </code>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            )}
+            {profile.keptSeparate && (
+                <p className="import-merge__apart">
+                    Kept apart from {profile.baseName ?? 'the other profiles'}: {profile.keptSeparate.charAt(0).toLowerCase() + profile.keptSeparate.slice(1)}.
+                </p>
+            )}
             {editing ? (
                 <div className="import-template-editor">
                     <TemplateCodeEditor
@@ -613,12 +768,38 @@ function ProfilePreview({profile, template, onTemplate}: {
                 <details className="import-profile__more">
                     <summary>How the template was converted ({profile.report.length})</summary>
                     <ul className="import-notes">
-                        {profile.report.map((line, index) => <li key={index}>{line}</li>)}
+                        {profile.report.map((line, index) => <li key={index}><ReportLine line={line}/></li>)}
                     </ul>
                 </details>
             )}
         </div>
     )
+}
+
+// A quoted bit of Jinja in a conversion note, such as "{{ collection_author or 'NA' }}".
+const QUOTED_JINJA = /(["'])(\{[{%][\s\S]*?[}%]\})\1/g
+
+/** A conversion note, with its Jinja colored as the template editor colors it. */
+function ReportLine({line}: {line: string}) {
+    const parts: ReactNode[] = []
+    let last = 0
+    for (const match of line.matchAll(QUOTED_JINJA)) {
+        const at = match.index ?? 0
+        if (at > last) parts.push(line.slice(last, at))
+        parts.push(
+            <OpaqueOutputTemplateCode
+                key={at}
+                source={match[2]}
+                sourceMode="compact"
+                renderMode="compact"
+                label="Converted template part"
+                className="import-note__code"
+            />,
+        )
+        last = at + match[0].length
+    }
+    if (last < line.length) parts.push(line.slice(last))
+    return <>{parts}</>
 }
 
 /** Where two paths first differ, so the rest of each can stand out. */

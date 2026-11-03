@@ -35,6 +35,7 @@ import importer.wireloft  # noqa: F401  (registers the importer)
 from config import get_settings
 from config.settings.submodels import FilenameRestrictionMode
 from importer.contract import CollectionPlan, FilePlan, Importer, ImportPlan, ImportWarning, ProfilePlan
+from importer.profile_merge import merge_profiles
 from importer.paths import DEFAULT_PATH_MAP, PathMap, detect_path_map, map_path, path_map_candidates
 from importer.registry import get_importer as _registered_importer
 from sources.ytdlp_options import check_ytdlp_options
@@ -51,6 +52,7 @@ from backend.utils.custom_index import (
     INDEX_ASSIGNMENT_PREFIX, get_indexing_value_definitions, remove_episode_index_assignments,
     set_episode_index_assignment,
 )
+from backend.utils.custom_metadata import CUSTOM_METADATA_DB_PREFIX, custom_metadata_storage_key, get_custom_metadata
 from backend.utils.output_template import (
     COLLECTION_OUTPUT_TEMPLATE_FIELDS, COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES, _date_substitutions,
     _sanitize_rendered_path, prepare_output_template, rendering_with_filename_mode, replace_output_extension,
@@ -108,6 +110,8 @@ class ImportOptions:
     """Switch on the Download Profiles of the sources that were on in the other program."""
     match_existing_files: bool = False
     """After the files are adopted, look for the Collection's other files on disk (Match existing files)."""
+    merge_profiles: bool | None = None
+    """Merge profiles that name files the same way apart from a folder or name; None decides by the last run."""
     templates: Mapping[str, str] = field(default_factory=dict)
     """Output templates the person edited, by profile external id."""
 
@@ -118,6 +122,7 @@ class ImportOptions:
             "settings": list(self.settings) if self.settings is not None else None,
             "enable_download_profiles": self.enable_download_profiles,
             "match_existing_files": self.match_existing_files,
+            "merge_profiles": self.merge_profiles,
             "templates": dict(self.templates),
         }
 
@@ -132,6 +137,8 @@ class ImportOptions:
             settings=tuple(settings) if settings is not None else None,
             enable_download_profiles=bool(data.get("enable_download_profiles")),
             match_existing_files=bool(data.get("match_existing_files")),
+            # A run from before merging existed made one profile per variant; later runs keep that.
+            merge_profiles=bool(data.get("merge_profiles", False)) if data else None,
             templates=dict(data.get("templates") or {}),
         )
 
@@ -237,7 +244,19 @@ def load_plan(importer: Importer, options: ImportOptions) -> LoadedPlan:
     if chosen != DEFAULT_PATH_MAP:
         plan = importer.read(work_location(importer, chosen))
     found = sum(1 for sample in samples if (mapped := map_path(sample, chosen)) and _exists(mapped))
+    if options.merge_profiles and not plan.records:
+        plan = merge_profiles(plan, selected=set(options.collections) if options.collections is not None else None)
     return LoadedPlan(_with_templates(_with_checked_options(plan), options.templates), chosen, len(samples), found)
+
+
+def with_merge_default(session: Session, importer: Importer, options: ImportOptions) -> ImportOptions:
+    """Merge profiles on a first import; a later one does what the last run did, so no profile is merged or split."""
+    if options.merge_profiles is not None:
+        return options
+    last = session.scalar(select(ImportRun).where(ImportRun.importer == importer.key, ImportRun.status != FAILED)
+                          .order_by(ImportRun.id.desc()).limit(1))
+    merge = True if last is None else ImportOptions.from_dict(last.options or {}).merge_profiles
+    return replace(options, merge_profiles=bool(merge))
 
 
 # ---------- Ledger ----------
@@ -413,7 +432,7 @@ def _published(value: str | None) -> datetime | None:
 
 def path_proof(
     profile: ProfilePlan, files: Sequence[FilePlan], titles: Mapping[str, str], mode: FilenameRestrictionMode,
-    authors: Mapping[str, str] | None = None,
+    authors: Mapping[str, str] | None = None, fields: Mapping[str, Mapping[str, str]] | None = None,
 ) -> dict[str, Any]:
     """How many of the files' real paths the converted template renders exactly, and every one it doesn't."""
     adopted = [file for file in files if file.kind == "file" and file.path]
@@ -435,6 +454,8 @@ def path_proof(
             "collection_title": titles.get(file.collection_external_id, ""), "collection_author": (authors or {}).get(file.collection_external_id, ""),
             "episode_published_date": published.strftime("%Y-%m-%d") if published else "",
             **_date_substitutions(published),
+            **{f"meta_collection_{key}": value
+               for key, value in (fields or {}).get(file.collection_external_id, {}).items()},
         }
         extension = PurePosixPath(file.path).suffix.removeprefix(".")
         try:
@@ -484,16 +505,18 @@ def _warning(warning: ImportWarning) -> dict[str, str]:
 
 def preview(session: Session, importer: Importer, options: ImportOptions) -> dict[str, Any]:
     """Everything the import would do, for the person to check first. Writes nothing."""
+    options = with_merge_default(session, importer, options)
     loaded = load_plan(importer, options)
-    plan = loaded.plan
     links = _links(session, importer.key)
     library = _library_collections(session)
+    plan = _settle_field_keys(session, loaded.plan, links, library)
     files_by_collection: dict[str, list[FilePlan]] = defaultdict(list)
     for file in plan.files:
         files_by_collection[file.collection_external_id].append(file)
     titles = {collection.external_id: collection.title for collection in plan.collections}
     authors = {collection.external_id: str(collection.settings["author"])
                for collection in plan.collections if collection.settings.get("author")}
+    fields = {collection.external_id: _custom_metadata(collection) for collection in plan.collections}
     profiles = {profile.external_id: profile for profile in plan.profiles}
     mode = _filename_mode(plan)
 
@@ -527,6 +550,7 @@ def preview(session: Session, importer: Importer, options: ImportOptions) -> dic
             "suppressed": kinds.get("suppressed", 0),
             "missing": kinds.get("missing", 0),
             "download_profile_on": bool((collection.download_profile or {}).get("enable_profile")),
+            "custom_metadata": fields[collection.external_id],
             "warnings": [_warning(warning) for warning in collection.warnings],
         })
 
@@ -556,8 +580,12 @@ def preview(session: Session, importer: Importer, options: ImportOptions) -> dic
             "settings": dict(profile.settings),
             "custom_indexes": [asdict(index) for index in profile.custom_indexes],
             "warnings": [_warning(warning) for warning in profile.warnings],
-            "path_proof": path_proof(profile, profile_files.get(profile.external_id, []), titles, mode, authors),
+            "path_proof": path_proof(profile, profile_files.get(profile.external_id, []), titles, mode, authors, fields),
             "changes": changes,
+            "base_name": profile.base_name,
+            "merged_from": list(profile.merged_from),
+            "fields": list(profile.fields),
+            "kept_separate": profile.kept_separate,
         })
 
     selected = _selected_settings(plan, options)
@@ -584,6 +612,7 @@ def preview(session: Session, importer: Importer, options: ImportOptions) -> dic
         "warnings": [_warning(warning) for warning in plan.warnings],
         "records": _record_summary(session, plan, links) if plan.records else None,
         "last_run": run_summary(last) if last else None,
+        "merge_profiles": bool(options.merge_profiles),
         "counts": {
             "collections": len(plan.collections),
             "files": sum(1 for file in plan.files if file.kind == "file"),
@@ -629,6 +658,7 @@ def start_run(session: Session, importer: Importer, options: ImportOptions) -> I
     stamp = uploaded_at(importer)
     if stamp is None:
         raise ImportServiceError(f"Upload {importer.name}'s config folder first")
+    options = with_merge_default(session, importer, options)
     run = ImportRun(importer=importer.key, status=RUNNING, options=options.to_dict(), uploaded_at=stamp,
                     report=[], counts={})
     session.add(run)
@@ -860,6 +890,76 @@ def _report_changes(report: _Report, subject: str, changes: _Changes) -> None:
         report.add("newly_mapped", subject, "Now imported: " + ", ".join(changes.newly_mapped))
 
 
+def _custom_metadata(plan: CollectionPlan) -> dict[str, str]:
+    values = plan.settings.get("custom_metadata")
+    return {str(key): str(value) for key, value in values.items()} if isinstance(values, Mapping) else {}
+
+
+def _settle_field_keys(session: Session, plan: ImportPlan, links, library: Mapping[str, Collection]) -> ImportPlan:
+    """Give a merged profile's field another key when a Collection already uses that key for something else.
+
+    The import's own earlier value is not something else: the ledger knows it wrote it.
+    """
+    merged = [profile for profile in plan.profiles if profile.fields]
+    if not merged:
+        return plan
+    existing: dict[str, Collection] = {}
+    for collection in plan.collections:
+        link = links.get(("collection", collection.external_id))
+        found = session.get(Collection, link.entity_id) if link and link.entity_id else None
+        found = found or library.get(_normalise_url(collection.url))
+        if found is not None:
+            existing[collection.external_id] = found
+    renames: dict[str, dict[str, str]] = {}
+    for profile in merged:
+        members = [collection for collection in plan.collections if collection.profile_external_id == profile.external_id]
+        taken = {key for collection in members if collection.external_id in existing
+                 for key in get_custom_metadata(existing[collection.external_id])}
+        for key in profile.fields:
+            def clashes(candidate: str) -> bool:
+                for collection in members:
+                    found = existing.get(collection.external_id)
+                    if found is None:
+                        continue
+                    current = get_custom_metadata(found).get(candidate)
+                    link = links.get(("collection", collection.external_id))
+                    ours = link is not None and custom_metadata_storage_key(candidate) in (link.written or {})
+                    if current is not None and not ours and current != _custom_metadata(collection).get(key):
+                        return True
+                return False
+            chosen, number = key, 1
+            while clashes(chosen) or (chosen != key and chosen in taken):
+                number += 1
+                chosen = f"{key}_{number}"
+            if chosen != key:
+                renames.setdefault(profile.external_id, {})[key] = chosen
+    if not renames:
+        return plan
+
+    def renamed_template(template: str | None, names: Mapping[str, str]) -> str | None:
+        if template is None:
+            return None
+        for old, new in names.items():
+            template = re.sub(rf"\bmeta_collection_{re.escape(old)}\b", f"meta_collection_{new}", template)
+        return template
+
+    profiles = tuple(
+        replace(profile, output_template=renamed_template(profile.output_template, renames[profile.external_id]),
+                fields=tuple(renames[profile.external_id].get(key, key) for key in profile.fields))
+        if profile.external_id in renames else profile
+        for profile in plan.profiles
+    )
+    collections = []
+    for collection in plan.collections:
+        names = renames.get(collection.profile_external_id or "")
+        if not names:
+            collections.append(collection)
+            continue
+        values = {names.get(key, key): value for key, value in _custom_metadata(collection).items()}
+        collections.append(replace(collection, settings={**collection.settings, "custom_metadata": values}))
+    return replace(plan, profiles=profiles, collections=tuple(collections))
+
+
 def _create_collection(session: Session, plan: CollectionPlan) -> Collection:
     """A new yt-dlp Collection for the plan, looked up the way Add Collection does."""
     from backend.api.endpoints.collections.as_bundle.service import create_collection_bundle
@@ -915,9 +1015,17 @@ def _upsert_collection(session: Session, plan: CollectionPlan, library, links, r
     if wanted.get("check_frequency") is not None and "check_cron" not in wanted:
         wanted["check_cron"] = None
     current = {name: getattr(existing, name) for name in wanted}
+    # A merged profile's fields, such as the folder its template reads, follow the same rule.
+    for key, value in _custom_metadata(plan).items():
+        storage = custom_metadata_storage_key(key)
+        wanted[storage] = value
+        current[storage] = existing.get_meta(storage)
     write, hashes, changes = _merge_fields(current, wanted, link if not created else None, ())
     for name, value in write.items():
-        setattr(existing, name, value)
+        if name.startswith(CUSTOM_METADATA_DB_PREFIX):
+            existing.set_meta(name, value)
+        else:
+            setattr(existing, name, value)
     if not created:
         _report_changes(report, plan.title, changes)
     if "check_frequency" in write or "check_cron" in write:
@@ -989,9 +1097,9 @@ def apply_run(session: Session, run_id: int) -> dict[str, int]:
         run.status, run.error, run.finished_at = FAILED, str(exc), datetime.now(timezone.utc)
         session.commit()
         raise
-    plan = loaded.plan
-    run.version = plan.version
     links = _links(session, importer.key)
+    plan = _settle_field_keys(session, loaded.plan, links, _library_collections(session))
+    run.version = plan.version
     for warning in plan.warnings:
         report.add("warning", warning.subject, warning.message)
 
@@ -1006,7 +1114,13 @@ def apply_run(session: Session, run_id: int) -> dict[str, int]:
     profiles: dict[str, CollectionLocalMediaProfile | None] = {}
     for external_id in sorted(needed, key=lambda key: (key.count(":"), key)):
         if external_id in profile_plans:
-            profiles[external_id] = _upsert_profile(session, profile_plans[external_id], links, run, report)
+            profile_plan = profile_plans[external_id]
+            profiles[external_id] = _upsert_profile(session, profile_plan, links, run, report)
+            if profile_plan.merged_from:
+                report.add("merged", profile_plan.name, profile_plan.report[-1])
+            elif profile_plan.kept_separate:
+                report.add("kept_separate", profile_plan.name,
+                           f"Kept apart from {profile_plan.base_name}: {profile_plan.kept_separate}")
     session.flush()
 
     files_by_collection: dict[str, list[FilePlan]] = defaultdict(list)
