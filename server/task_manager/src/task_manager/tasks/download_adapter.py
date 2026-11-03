@@ -16,6 +16,7 @@ from backend.db.models import Episode
 from backend.db.models.media_download import MediaDownloadAsset, MediaDownloadBase
 from backend.services.download_plans import prepare_download_plan
 from backend.services.upgrade_check import schedule_first_upgrade_check
+from backend.services.notifications.emitters import episode_downloaded
 from backend.services.media_download_history import (
     download_attempt_metadata, record_media_download_history,
     record_media_download_history_if_exists, record_media_download_operation_history_once,
@@ -247,6 +248,7 @@ def run_download(
             if isinstance(download.media, Episode):
                 download.downloaded_publish_status = publish_status
                 schedule_first_upgrade_check(download, get_source(download.media.source_key), finished)
+                episode_downloaded(session, download.media, path=execution.result.path, replaced=is_redownload)
             result_data = {
                 "media_download_id": media_download_id, "is_redownload": is_redownload,
                 "file_path": execution.result.path, "downloaded_bytes": execution.result.bytes_downloaded,

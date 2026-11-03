@@ -194,8 +194,9 @@ def get_collection(s: Session, collection_slug: str) -> CollectionAPIRead:
     return CollectionAPIRead.model_validate(collection)
 
 
-def create_collection(s: Session, body: CollectionAPICreate) -> CollectionAPIRead:
+def create_collection(s: Session, body: CollectionAPICreate, *, added_by_id: int | None = None) -> CollectionAPIRead:
     collection = create_database_fields(Collection, body)
+    collection.added_by_id = added_by_id
     s.add(collection)
     s.flush()
 

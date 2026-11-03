@@ -13,6 +13,7 @@ import GeneralSettingsTab from '../components/Settings/GeneralSettingsTab'
 import QuickDownloadSettingsTab from '../components/Settings/QuickDownloadSettingsTab'
 import SourcesSettingsTab from '../components/Settings/SourcesSettingsTab'
 import UsersSettingsTab from '../components/Users/UsersSettingsTab'
+import MessagesActionsSettingsTab from '../components/Notifications/MessagesActionsSettingsTab'
 import ImportSettingsTab from '../components/Import/ImportSettingsTab'
 import {SettingsLoading} from '../components/Settings/SettingsControls'
 import {saveSettingsRequest, useSettings} from '../lib/settings'
@@ -30,7 +31,7 @@ import './SettingsPage.css'
 import './SettingsEnvironmentOverrides.css'
 
 
-type SettingsTab = 'general' | 'downloads' | 'quick-download' | 'automation' | 'sources' | 'users' | 'import' | 'advanced'
+type SettingsTab = 'general' | 'downloads' | 'quick-download' | 'automation' | 'notifications' | 'sources' | 'users' | 'import' | 'advanced'
 
 type SettingsTabDefinition = {
     id: SettingsTab
@@ -45,6 +46,7 @@ const SETTINGS_TABS: SettingsTabDefinition[] = [
     {id: 'downloads', label: 'Downloads', description: 'Storage, naming, processing and verification'},
     {id: 'quick-download', label: 'Quick download', description: 'Defaults, housekeeping and rules for quick downloads'},
     {id: 'automation', label: 'Automation', description: 'Scheduler and episode monitoring'},
+    {id: 'notifications', label: 'Messages and actions', description: 'Notifications, media server refreshes, webhooks and scripts', area: 'settings'},
     {id: 'sources', label: 'Sources', description: 'Services, sign-ins and their settings', area: 'sources'},
     {id: 'users', label: 'Users', description: 'Who may sign in, and what they may do', area: 'users'},
     {id: 'import', label: 'Import', description: 'Bring over Pinchflat or WireLoft', area: 'users'},
@@ -290,6 +292,7 @@ export default function SettingsPage() {
                     {activeTab === 'downloads' ? <DownloadsSettingsTab {...tabProps} /> : null}
                     {activeTab === 'quick-download' ? <QuickDownloadSettingsTab {...tabProps} /> : null}
                     {activeTab === 'automation' ? <AutomationSettingsTab {...tabProps} /> : null}
+                    {activeTab === 'notifications' ? <MessagesActionsSettingsTab /> : null}
                     {activeTab === 'sources' ? <SourcesSettingsTab {...tabProps} /> : null}
                     {activeTab === 'users' ? <UsersSettingsTab /> : null}
                     {activeTab === 'import' ? <ImportSettingsTab /> : null}

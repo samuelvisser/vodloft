@@ -97,8 +97,15 @@ def seed_fresh_start_profiles(session: Session) -> None:
     ))
 
 
+def _seed_notification_rules(session: Session) -> None:
+    from backend.services.notifications.rules import restore_default_rules
+
+    restore_default_rules(session)
+
+
 _INITIAL_SEED_STEPS: tuple[Callable[[Session], None], ...] = (
     _seed_local_media_profiles,
+    _seed_notification_rules,
 )
 
 

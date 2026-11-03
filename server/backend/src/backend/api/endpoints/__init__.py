@@ -28,5 +28,6 @@ from .imports import import_router
 from .assets import assets_router
 from .health import health_router
 from .regex import regex_router
+from .notifications import account_router as account_notification_router, notification_router, push_router
 
 from .meta_router import router as meta_router

@@ -53,7 +53,9 @@ def upsert_collection_local_media_profile(
     return s.get(CollectionLocalMediaProfile, saved.id)
 
 
-def create_collection_bundle(s: Session, request: Request, payload: CollectionAPICreateBundle) -> CollectionAPIRead:
+def create_collection_bundle(
+    s: Session, request: Request, payload: CollectionAPICreateBundle, *, added_by_id: int | None = None,
+) -> CollectionAPIRead:
     try:
         collection_source = get_source(payload.collection.source_key)
     except UnknownSourceError as exc:
@@ -61,6 +63,7 @@ def create_collection_bundle(s: Session, request: Request, payload: CollectionAP
     if not collection_source.has(Feature.COLLECTIONS):
         raise HTTPException(status_code=422, detail=f"{collection_source.name} has no shows")
     collection = create_database_fields(Collection, payload.collection)
+    collection.added_by_id = added_by_id
     if collection_source.has(Feature.EPISODE_LISTS):
         # Indexing puts the episodes in the Source's own seasons, or in a season per
         # upload year. Seasons given here are the Source's, picked for a Download
