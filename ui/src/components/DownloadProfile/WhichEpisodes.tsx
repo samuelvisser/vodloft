@@ -1,4 +1,4 @@
-import {Fragment, useMemo, useRef, useState, type MouseEvent, type ReactNode} from 'react'
+import {Fragment, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode} from 'react'
 import {useFieldArray, useWatch, type UseFormReturn} from 'react-hook-form'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import Select from 'react-select'
@@ -118,7 +118,6 @@ export default function WhichEpisodes({
     const [chosenOpen, setOpen] = useState<Set<string> | null>(startOpen ? null : new Set())
     const open = chosenOpen ?? new Set(builtIns)
     const [showWhich, setShowWhich] = useState(false)
-    const [shown, setShown] = useState(100)
     // Values when a line was opened, so Cancel can put them back; a new rule has none and is removed instead.
     const snapshots = useRef(new Map<string, unknown>())
 
@@ -141,7 +140,20 @@ export default function WhichEpisodes({
             includeEpisodes: showWhich,
         }
     }, [collectionId, values, rules, showWhich])
-    const {result} = useWhichEpisodes(request)
+    const {result, episodes, hasMore, loadingMore, moreFailed, loadMore} = useWhichEpisodes(request)
+    // The list loads its next page when its end scrolls into view.
+    const listRef = useRef<HTMLUListElement | null>(null)
+    const endRef = useRef<HTMLLIElement | null>(null)
+    useEffect(() => {
+        const node = endRef.current
+        if (!node || !hasMore || loadingMore || moreFailed) return
+        const observer = new IntersectionObserver(
+            (entries) => { if (entries[0]?.isIntersecting) loadMore() },
+            {root: listRef.current, rootMargin: '200px'},
+        )
+        observer.observe(node)
+        return () => observer.disconnect()
+    }, [hasMore, loadingMore, moreFailed, loadMore])
     // Counts of the rules sent, mapped back to every rule line (unfinished lines have none).
     const ruleCounts = useMemo(() => {
         const counts: Array<number | undefined> = []
@@ -492,9 +504,9 @@ export default function WhichEpisodes({
                     </li>
                 )}
             </ul>
-            {showWhich && result?.episodes && (
-                <ul className="which-episodes-list">
-                    {result.episodes.slice(0, shown).map((episode) => (
+            {showWhich && episodes && (
+                <ul className="which-episodes-list" ref={listRef}>
+                    {episodes.map((episode) => (
                         <li key={episode.id} className={episode.leftOutBy ? 'is-left-out' : 'is-downloaded'}>
                             <FontAwesomeIcon icon={episode.leftOutBy ? faIcon('fass', 'minus') : faIcon('fass', 'check')}/>
                             <span className="which-episodes-list-title">{episode.title}</span>
@@ -504,8 +516,12 @@ export default function WhichEpisodes({
                             </span>
                         </li>
                     ))}
-                    {result.episodes.length > shown && (
-                        <li><button type="button" className="btn btn-link" onClick={() => setShown((value) => value + 200)}>Show more</button></li>
+                    {hasMore && (
+                        <li ref={endRef} className="which-episodes-list-end">
+                            {moreFailed
+                                ? <>Couldn’t load more episodes. <button type="button" className="btn btn-link" onClick={loadMore}>Try again</button></>
+                                : <><FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin/> Loading more episodes…</>}
+                        </li>
                     )}
                 </ul>
             )}

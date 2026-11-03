@@ -156,6 +156,30 @@ def test_which_episodes_counts_each_line_in_order(db_session):
     assert kept.id not in result.left_out_by
 
 
+
+def test_the_episode_list_comes_a_page_at_a_time(db_session):
+    from backend.api.endpoints.download_profiles.service import count_which_episodes
+    from backend.api.models.download_profile import WhichEpisodesAPIRequest
+
+    collection, season = _collection(db_session)
+    for index in range(1, 6):
+        _episode(db_session, collection, season, index, f"Episode {index}", days_ago=index)
+
+    def page(offset, limit):
+        body = WhichEpisodesAPIRequest(
+            collection_id=collection.id, ep_id_type_list=["ep"], download_with_countdown=False,
+            download_days_in_past=0, download_episode_count=0, download_starting_from=None,
+            include_upcoming_seasons=False, include_episodes=True, episodes_offset=offset, episodes_limit=limit,
+        )
+        return count_which_episodes(db_session, collection, body)
+
+    first, rest = page(0, 2), page(2, 10)
+
+    assert [episode.title for episode in first.episodes] == ["Episode 1", "Episode 2"]
+    assert [episode.title for episode in rest.episodes] == ["Episode 3", "Episode 4", "Episode 5"]
+    # Every page still counts the whole Collection.
+    assert first.total == rest.total == 5
+
 def _download(session, profile, episode, **values):
     from backend.db.models.media_download import EpisodeMediaDownload
 

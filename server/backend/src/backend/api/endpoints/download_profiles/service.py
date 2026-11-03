@@ -284,6 +284,8 @@ def count_which_episodes(s: Session, collection: Collection, body: WhichEpisodes
                 select(Episode.id, Episode.slug, Episode.title, published_at)
                 .where(Episode.collection_id == collection.id)
                 .order_by(published_at.desc().nulls_last(), Episode.id.desc())
+                .offset(body.episodes_offset)
+                .limit(body.episodes_limit)
             )
         ]
     return WhichEpisodesAPIRead.model_validate({**vars(result), "episodes": episodes})
