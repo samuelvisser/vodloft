@@ -1201,8 +1201,15 @@ a.icon-btn { display: inline-block; text-decoration: none; }
   margin-bottom: 16px;
 }
 .log-section-label {
-  margin-bottom: 4px;
+  margin: 0 0 6px;
   font-weight: 600;
+}
+.log-section-label + .modal-text {
+  margin-top: 0;
+}
+/* The footer owns the gap above it: a scroll container's last bottom margin is not reliably kept (Safari). */
+.log-history-scroll > :last-child {
+  margin-bottom: 0;
 }
 .log-output {
   margin: 8px 0 0;
@@ -1229,6 +1236,7 @@ a.icon-btn { display: inline-block; text-decoration: none; }
 }
 .log-dialog-actions {
   flex: 0 0 auto;
+  margin-top: 20px;
 }
 .log-dialog-delete {
   margin-right: auto;
