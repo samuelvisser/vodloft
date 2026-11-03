@@ -463,11 +463,12 @@ function PreviewStep({importer, onReplace, onFinished}: {
                         <div className="settings-field settings-toggle-field settings-field--wide">
                             <div className="settings-toggle-field__control">
                                 <div>
-                                    <label htmlFor={`import-merge-${importer.key}`}>Merge matching profiles</label>
+                                    <label htmlFor={`import-merge-${importer.key}`}>Keep collections with their own template on their Pinchflat profile</label>
                                     <div className="settings-field__help">
-                                        Profiles with the same settings whose templates differ only by a folder or a
-                                        name become one profile. Each collection keeps its own folder or name as a
-                                        custom collection field, so no file gets another path.
+                                        A Pinchflat source that overrides its media profile's template stays on that
+                                        profile: the folder or name it changes becomes a custom collection field.
+                                        Media profiles with the same settings and nearly the same template share one
+                                        profile the same way. This only happens when no file gets another path.
                                     </div>
                                 </div>
                                 <Switch
@@ -679,8 +680,8 @@ function ProfilePreview({profile, collections, template, onTemplate}: {
     const proof = profile.pathProof
 
     return (
-        <div className={`import-profile is-${profile.support}`}>
-            <div className="import-profile__title">
+        <details className={`import-profile is-${profile.support}`} open>
+            <summary className="import-profile__title">
                 <strong>{profile.name}</strong>
                 <span className="import-profile__chips">
                     <span className="import-chip">
@@ -688,11 +689,12 @@ function ProfilePreview({profile, collections, template, onTemplate}: {
                     </span>
                     <span className={`import-chip is-${profile.support}`}>{SUPPORT_LABELS[profile.support]}</span>
                 </span>
-            </div>
+            </summary>
+            <div className="import-profile__body">
             {profile.mergedFrom.length > 0 && (
                 <div className="import-merge">
                     <div>
-                        <span className="import-merge__label">Merged from</span>{' '}
+                        <span className="import-merge__label">Kept together</span>{' '}
                         {profile.mergedFrom.join(', ')}
                     </div>
                     {profile.fields.length > 0 && (
@@ -711,7 +713,7 @@ function ProfilePreview({profile, collections, template, onTemplate}: {
             )}
             {profile.keptSeparate && (
                 <p className="import-merge__apart">
-                    Kept apart from {profile.baseName ?? 'the other profiles'}: {profile.keptSeparate.charAt(0).toLowerCase() + profile.keptSeparate.slice(1)}.
+                    Not kept on {profile.baseName ?? 'its Pinchflat profile'}: {profile.keptSeparate.charAt(0).toLowerCase() + profile.keptSeparate.slice(1)}.
                 </p>
             )}
             {editing ? (
@@ -772,7 +774,8 @@ function ProfilePreview({profile, collections, template, onTemplate}: {
                     </ul>
                 </details>
             )}
-        </div>
+            </div>
+        </details>
     )
 }
 
@@ -781,10 +784,13 @@ const QUOTED_JINJA = /(["'])(\{[{%][\s\S]*?[}%]\})\1/g
 
 /** A conversion note, with its Jinja colored as the template editor colors it. */
 function ReportLine({line}: {line: string}) {
+    // Only what it became is VODLoft's Jinja; the part before is the other program's own text.
+    const split = line.indexOf(' becomes ')
     const parts: ReactNode[] = []
-    let last = 0
-    for (const match of line.matchAll(QUOTED_JINJA)) {
-        const at = match.index ?? 0
+    let last = split >= 0 ? split : 0
+    if (last) parts.push(line.slice(0, last))
+    for (const match of line.slice(last).matchAll(QUOTED_JINJA)) {
+        const at = (split >= 0 ? split : 0) + (match.index ?? 0)
         if (at > last) parts.push(line.slice(last, at))
         parts.push(
             <OpaqueOutputTemplateCode

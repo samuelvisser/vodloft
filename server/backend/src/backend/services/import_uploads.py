@@ -7,19 +7,22 @@ Only the files the importer reads are taken (``importer.uploads``); the rest is
 refused before it is sent. A finished upload replaces the previous one.
 
 Everything lives under ``/config/imports/<importer>/``: ``incoming/`` while
-an upload arrives, ``upload/`` once it is complete, and ``work/`` for the
-private copy of the database that an importer opens.
+an upload arrives, ``upload/`` once it is complete, and a ``work-…/`` folder
+for each private copy of the database that an importer opens, so two reads
+at the same time never share one.
 """
 from __future__ import annotations
 
 import json
 import shutil
 import tarfile
+import tempfile
 import zipfile
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 
 from config import get_settings
 from importer.contract import Importer, ImportLocation
@@ -212,7 +215,6 @@ def _replace_upload(importer: Importer, incoming: Path, files: list[dict[str, An
         raise UploadError(f"This is not a {importer.name} config folder: {importer.database} is missing")
     directory = _directory(importer)
     shutil.rmtree(directory / "upload", ignore_errors=True)
-    shutil.rmtree(directory / "work", ignore_errors=True)
     incoming.replace(directory / "upload")
     _write_json(directory / "upload.json", {"uploaded_at": _now(), "files": files})
     (directory / "incoming.json").unlink(missing_ok=True)
@@ -296,21 +298,23 @@ def remove_secrets(importer: Importer) -> None:
     _write_json(directory / "upload.json", {**upload, "files": kept})
 
 
-def work_location(importer: Importer, path_map: tuple[str, str]) -> ImportLocation:
-    """A fresh private copy of the uploaded database, for the importer to open."""
+@contextmanager
+def work_location(importer: Importer, path_map: tuple[str, str]) -> Iterator[ImportLocation]:
+    """A private copy of the uploaded database for the importer to open, removed afterwards."""
     directory = _directory(importer)
     upload = directory / "upload"
     database = upload / PurePosixPath(importer.database)
     if not database.is_file():
         raise UploadError(f"Upload {importer.name}'s config folder first")
-    work = directory / "work"
-    shutil.rmtree(work, ignore_errors=True)
-    work.mkdir(parents=True)
-    copy = work / database.name
-    shutil.copyfile(database, copy)
-    wal = database.with_name(database.name + "-wal")
-    if wal.is_file() and wal.stat().st_size > 0:
-        shutil.copyfile(wal, work / wal.name)
-    extras = upload / PurePosixPath(importer.extras) if importer.extras else None
-    return ImportLocation(database=copy, extras=extras if extras is not None and extras.is_dir() else None,
-                          path_map=path_map)
+    work = Path(tempfile.mkdtemp(prefix="work-", dir=directory))
+    try:
+        copy = work / database.name
+        shutil.copyfile(database, copy)
+        wal = database.with_name(database.name + "-wal")
+        if wal.is_file() and wal.stat().st_size > 0:
+            shutil.copyfile(wal, work / wal.name)
+        extras = upload / PurePosixPath(importer.extras) if importer.extras else None
+        yield ImportLocation(database=copy, extras=extras if extras is not None and extras.is_dir() else None,
+                             path_map=path_map)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)

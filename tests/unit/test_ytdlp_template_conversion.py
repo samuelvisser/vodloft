@@ -181,6 +181,17 @@ def test_a_playlist_names_each_video_after_its_own_channel():
         )
 
 
+def test_a_channel_template_for_channels_converts_exactly():
+    report = convert_pinchflat("/Video/{{ channel }} [{{ channel_id }}]/{{ title }}.{{ ext }}",
+                               ConversionOptions(collection_type="channel"))
+
+    assert report.output_template == (
+        "/downloads/Video/{{ collection_author or 'NA' }} [{{ collection_site_id }}]/{{ title }}.ext"
+    )
+    assert report.support == "exact"
+    assert report.lines() == [f"{report.original!r} becomes {report.output_template!r}"]
+
+
 def test_volatile_and_format_fields_are_reported_not_converted():
     report = convert_ytdlp("%(title)s %(view_count)s %(height)sp.%(ext)s")
 

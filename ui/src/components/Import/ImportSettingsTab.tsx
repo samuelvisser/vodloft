@@ -1,3 +1,4 @@
+import {useState} from 'react'
 import './Import.css'
 import {SettingsLoading, SettingsSection} from '../Settings/SettingsControls'
 import ImportFlow from './ImportFlow'
@@ -11,6 +12,8 @@ const DESCRIPTIONS: Record<string, string> = {
 /** Settings › Import: bring over another program's library. */
 export default function ImportSettingsTab() {
     const importers = useImporters()
+    // An importer reads its upload once its card is first opened, and keeps going when the card closes again.
+    const [opened, setOpened] = useState<ReadonlySet<string>>(new Set())
 
     if (importers.isError) return <p role="alert">Could not load the importers: {importers.error.message}</p>
     if (!importers.data) return <SettingsLoading/>
@@ -23,9 +26,12 @@ export default function ImportSettingsTab() {
                     title={importer.name}
                     description={DESCRIPTIONS[importer.key] ?? `Bring over ${importer.name}.`}
                     bodyClassName="import-section"
-                    defaultOpen={importers.data.length === 1 || Boolean(importer.upload.upload)}
+                    defaultOpen={false}
+                    onToggle={(open) => {
+                        if (open) setOpened((current) => current.has(importer.key) ? current : new Set([...current, importer.key]))
+                    }}
                 >
-                    <ImportFlow importer={importer}/>
+                    {opened.has(importer.key) && <ImportFlow importer={importer}/>}
                 </SettingsSection>
             ))}
         </>

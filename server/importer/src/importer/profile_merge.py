@@ -96,7 +96,7 @@ def _merged(family: _Family, base_names: dict[str, str]) -> ProfilePlan:
     fields = tuple(slot.key for slot in family.alignment.slots)
     total = sum(len(collections) for collections in family.collections.values())
     proof = f"its template gives the same paths for all {total} collections"
-    line = f"Merged from {', '.join(member.name for member in family.members)}: {proof}"
+    line = f"Kept together: {', '.join(member.name for member in family.members)}, as {proof}"
     if fields:
         line += f"; each collection keeps its own {', '.join(fields)} as a custom collection field"
     return replace(

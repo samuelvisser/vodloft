@@ -230,7 +230,8 @@ def _with_templates(plan: ImportPlan, templates: Mapping[str, str]) -> ImportPla
 
 def load_plan(importer: Importer, options: ImportOptions) -> LoadedPlan:
     """The importer's plan for the upload, with its files mapped to the folders VODLoft sees."""
-    plan = importer.read(work_location(importer, DEFAULT_PATH_MAP))
+    with work_location(importer, DEFAULT_PATH_MAP) as location:
+        plan = importer.read(location)
     original = [file.path for file in plan.files if file.kind == "file" and file.path] + [
         str(record.values["original_path"]) for record in plan.records
         if record.kind == "download" and record.values.get("original_path")
@@ -242,7 +243,8 @@ def load_plan(importer: Importer, options: ImportOptions) -> LoadedPlan:
     else:
         chosen, _found = detect_path_map(samples, _exists, path_map_candidates(samples, _vodloft_folders()))
     if chosen != DEFAULT_PATH_MAP:
-        plan = importer.read(work_location(importer, chosen))
+        with work_location(importer, chosen) as location:
+            plan = importer.read(location)
     found = sum(1 for sample in samples if (mapped := map_path(sample, chosen)) and _exists(mapped))
     if options.merge_profiles and not plan.records:
         plan = merge_profiles(plan, selected=set(options.collections) if options.collections is not None else None)
@@ -1120,7 +1122,7 @@ def apply_run(session: Session, run_id: int) -> dict[str, int]:
                 report.add("merged", profile_plan.name, profile_plan.report[-1])
             elif profile_plan.kept_separate:
                 report.add("kept_separate", profile_plan.name,
-                           f"Kept apart from {profile_plan.base_name}: {profile_plan.kept_separate}")
+                           f"Not kept on {profile_plan.base_name}: {profile_plan.kept_separate}")
     session.flush()
 
     files_by_collection: dict[str, list[FilePlan]] = defaultdict(list)
