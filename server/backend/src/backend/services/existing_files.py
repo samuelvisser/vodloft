@@ -14,6 +14,8 @@ from dataclasses import asdict
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from jinja2 import Environment, TemplateSyntaxError, nodes
+from jinja_analysis import analyze_template
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -51,13 +53,26 @@ class ExistingFilesError(ValueError):
 
 
 def default_folder(output_template: str) -> str:
-    """The deepest folder of the template that has no variable in it, as a /downloads/ path."""
-    cut = len(output_template)
-    for marker in ("{{", "{%", "{#"):
-        index = output_template.find(marker)
-        if index >= 0:
-            cut = min(cut, index)
-    fixed = output_template[:cut]
+    """The deepest folder every path of the template starts with, as a /downloads/ path.
+
+    The template is read the way it renders, so a ``{% set %}`` line at its start or a
+    branch that writes the same folder doesn't hide the folder after it.
+    """
+    try:
+        analysis = analyze_template(output_template, environment=Environment(), max_variants=32)
+    except TemplateSyntaxError:
+        return "/downloads"
+    starts = []
+    for variant in analysis.variants:
+        text = ""
+        for part in variant.parts:
+            if isinstance(part, nodes.Const) and isinstance(part.value, str):
+                part = part.value
+            if not isinstance(part, str):
+                break
+            text += part
+        starts.append(text)
+    fixed = os.path.commonprefix(starts) if starts else ""
     folder = fixed[: fixed.rfind("/")] if "/" in fixed else ""
     return folder if folder.startswith("/downloads") else "/downloads"
 

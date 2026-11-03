@@ -67,6 +67,19 @@ def test_a_template_without_variables_reads_nothing():
     assert template_patterns("/downloads/fixed.ext") == ()
 
 
+def test_a_template_that_only_reads_a_date_matches_nothing():
+    # The channel and title go through filters the pattern can't read back, so only the date is left:
+    # that would fit every file of that day in a folder several channels share.
+    template = ("/downloads/YouTube/{{ collection_title | replace(' ', '_') }}/"
+                "{{ date }} [{{ title | replace(' ', '_') }}].ext")
+    assert template_patterns(template) == ()
+    assert len(template_patterns("/downloads/Show/S{{ season_number }}E{{ episode_number }}.ext")) == 1
+
+    files = [FoundFile("Matt's Off Road Recovery/2024-03-02 [We_Opened_The_Wrecker_s_Hubs].mp4", 1)]
+    (match,) = _match(files, patterns=template_patterns(template)).values()
+    assert match.evidence != "template"
+
+
 # Scanning ---------------------------------------------------------------------
 
 def test_scanning_finds_media_and_their_sidecars_and_skips_partial_files(tmp_path):
@@ -317,6 +330,8 @@ def test_folders_and_default_folder(library):
 
     assert default_folder(TEMPLATE) == "/downloads/YouTube"
     assert default_folder("/downloads/{{ title }}.ext") == "/downloads"
+    assert default_folder("{% set title = title | lower -%}/downloads/Video/{{ title }}.ext") == "/downloads/Video"
+    assert default_folder("/downloads/{% if year %}A/{% else %}A/B/{% endif %}{{ title }}.ext") == "/downloads/A"
     assert list_folders("/downloads") == {"folder": "/downloads/", "parent": None, "folders": ["YouTube"]}
     assert list_folders("/downloads/YouTube")["parent"] == "/downloads/"
     with pytest.raises(ExistingFilesError):
