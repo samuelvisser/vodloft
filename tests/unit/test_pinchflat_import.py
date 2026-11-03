@@ -244,7 +244,8 @@ def test_a_chunked_upload_resumes_and_skips_what_is_not_needed(store, tmp_path):
 
     status = store.finish_upload(pinchflat.IMPORTER)
     assert status["upload"]["files"] == [{"path": "db/pinchflat.db", "size": len(database), "secret": False}]
-    assert read_pinchflat(store.work_location(pinchflat.IMPORTER, ("/downloads", "/downloads")).database).version
+    with store.work_location(pinchflat.IMPORTER, ("/downloads", "/downloads")) as location:
+        assert read_pinchflat(location.database).version
 
 
 def test_an_archive_upload_keeps_only_the_importers_files(store, tmp_path):
@@ -266,8 +267,8 @@ def test_an_archive_upload_keeps_only_the_importers_files(store, tmp_path):
         "db/pinchflat.db", "extras/yt-dlp-configs/media-profile-1-config.txt",
     ]
     assert not (tmp_path / "escape.txt").exists()
-    location = store.work_location(pinchflat.IMPORTER, ("/downloads", "/downloads"))
-    assert (location.extras / "yt-dlp-configs" / "media-profile-1-config.txt").is_file()
+    with store.work_location(pinchflat.IMPORTER, ("/downloads", "/downloads")) as location:
+        assert (location.extras / "yt-dlp-configs" / "media-profile-1-config.txt").is_file()
 
 
 def test_an_upload_without_the_database_is_refused(store):
