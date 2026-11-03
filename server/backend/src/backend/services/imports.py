@@ -40,7 +40,7 @@ from importer.registry import get_importer as _registered_importer
 from sources.ytdlp_options import check_ytdlp_options
 
 from backend.db.models import (
-    Collection, CollectionLocalMediaProfile, DownloadProfile, DownloadProfileRule, Episode, ImportLink, ImportRun, ImportStep,
+    Collection, CollectionLocalMediaProfile, DownloadProfile, DownloadProfileRule, Episode, ExistingFileScan, ImportLink, ImportRun, ImportStep,
     LocalMediaProfileBase, MediaDownloadBase, MovieLocalMediaProfile,
 )
 from backend.db.models.media_download import EpisodeMediaDownload
@@ -64,7 +64,6 @@ logger = logging.getLogger(__name__)
 RUNNING, WAITING, FINISHED, FAILED = "running", "waiting", "finished", "failed"
 STEP_WAITING, STEP_DONE, STEP_FAILED = "waiting", "done", "failed"
 _SAMPLES = 40
-_PROOF_DIFFERENCES = 20
 _PROFILE_FIELDS = (
     "output_template", "preferred_format", "subtitle_mode", "thumbnail_mode", "metadata_mode",
     "collection_scope", "download_collection_assets", "indexing_values",
@@ -107,6 +106,8 @@ class ImportOptions:
     """The settings to apply; None applies the recommended ones."""
     enable_download_profiles: bool = False
     """Switch on the Download Profiles of the sources that were on in the other program."""
+    match_existing_files: bool = False
+    """After the files are adopted, look for the Collection's other files on disk (Match existing files)."""
     templates: Mapping[str, str] = field(default_factory=dict)
     """Output templates the person edited, by profile external id."""
 
@@ -116,6 +117,7 @@ class ImportOptions:
             "collections": list(self.collections) if self.collections is not None else None,
             "settings": list(self.settings) if self.settings is not None else None,
             "enable_download_profiles": self.enable_download_profiles,
+            "match_existing_files": self.match_existing_files,
             "templates": dict(self.templates),
         }
 
@@ -129,6 +131,7 @@ class ImportOptions:
             collections=tuple(collections) if collections is not None else None,
             settings=tuple(settings) if settings is not None else None,
             enable_download_profiles=bool(data.get("enable_download_profiles")),
+            match_existing_files=bool(data.get("match_existing_files")),
             templates=dict(data.get("templates") or {}),
         )
 
@@ -412,7 +415,7 @@ def path_proof(
     profile: ProfilePlan, files: Sequence[FilePlan], titles: Mapping[str, str], mode: FilenameRestrictionMode,
     authors: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
-    """How many of the files' real paths the converted template renders exactly."""
+    """How many of the files' real paths the converted template renders exactly, and every one it doesn't."""
     adopted = [file for file in files if file.kind == "file" and file.path]
     if profile.output_template is None or not adopted:
         return {"identical": 0, "total": len(adopted), "differences": []}
@@ -444,7 +447,7 @@ def path_proof(
             rendered = f"(could not render: {exc})"
         if rendered == file.path:
             identical += 1
-        elif len(differences) < _PROOF_DIFFERENCES:
+        else:
             differences.append({"path": file.path, "rendered": rendered})
     return {"identical": identical, "total": len(adopted), "differences": differences}
 
@@ -1221,22 +1224,53 @@ def run_step(session: Session, step_id: int) -> dict[str, int]:
         if file.get("kept") and isinstance(adopted.download, EpisodeMediaDownload):
             adopted.download.kept = True
         counts["adopted" if adopted.created else "already_adopted"] += 1
-    if step.download_profile_id is not None:
-        download_profile = session.get(DownloadProfile, step.download_profile_id)
-        if download_profile is not None:
-            counts["would_download"] = _would_download(session, download_profile)
-            if step.enable_download_profile:
-                download_profile.enable_profile = True
-                queue_event(session, "download_profile.updated", {
-                    "resource_id": download_profile.id, "id": download_profile.id,
-                    "collection_id": download_profile.collection_id,
-                })
-    step.result = {"counts": dict(counts), "problems": problems}
+    download_profile = session.get(DownloadProfile, step.download_profile_id) if step.download_profile_id else None
+    if download_profile is not None:
+        counts["would_download"] = _would_download(session, download_profile)
+    session.flush()
+    matching = bool(run and ImportOptions.from_dict(run.options or {}).match_existing_files)
+    if matching and not _match_existing_files(session, step, profile, download_profile, problems):
+        matching = False
+    if download_profile is not None and step.enable_download_profile and not matching:
+        download_profile.enable_profile = True
+        queue_event(session, "download_profile.updated", {
+            "resource_id": download_profile.id, "id": download_profile.id,
+            "collection_id": download_profile.collection_id,
+        })
+    step.result = {"counts": dict(counts), "problems": problems, "matching": matching}
     step.status = STEP_DONE
     session.flush()
     _finish_run_if_done(session, step.run_id)
     session.commit()
     return dict(counts)
+
+
+def _match_existing_files(
+    session: Session, step: ImportStep, profile: CollectionLocalMediaProfile,
+    download_profile: DownloadProfile | None, problems: list[dict[str, str]],
+) -> bool:
+    """Scan the profile's folder for the Collection's files the import did not name.
+
+    The files the import adopted are skipped by the scan. A Download Profile to
+    switch on waits for the scan instead, until the matches are reviewed.
+    """
+    from backend.services.existing_files import ExistingFilesError, default_folder, request_scan
+
+    collection = session.get(Collection, step.collection_id)
+    hold: list[DownloadProfile] = []
+    if download_profile is not None and step.enable_download_profile:
+        download_profile.enable_profile = True
+        hold.append(download_profile)
+    folder = default_folder(profile.output_template)
+    try:
+        with session.begin_nested():
+            request_scan(session, collection, profile, folder=folder, hold=hold, indexed=True)
+    except (ExistingFilesError, AdoptionError, OSError) as exc:
+        if download_profile is not None:
+            download_profile.enable_profile = False
+        problems.append({"path": folder, "error": f"Match existing files could not start: {exc}"})
+        return False
+    return True
 
 
 def _would_download(session: Session, profile: DownloadProfile) -> int:
@@ -1270,6 +1304,20 @@ def _finish_run_if_done(session: Session, run_id: int) -> None:
     run.finished_at = datetime.now(timezone.utc)
 
 
+def _matching_view(session: Session, step: ImportStep) -> dict[str, Any] | None:
+    """The Match existing files scan the step started, if it did."""
+    if not (step.result or {}).get("matching"):
+        return None
+    scan = session.scalar(select(ExistingFileScan).where(
+        ExistingFileScan.collection_id == step.collection_id,
+        ExistingFileScan.local_media_profile_id == step.local_media_profile_id,
+    ))
+    if scan is None:
+        return None
+    found = sum(1 for item in scan.results if item.get("confidence") and not item.get("adopted"))
+    return {"status": scan.status, "found": found}
+
+
 def run_view(session: Session, run: ImportRun) -> dict[str, Any]:
     """A run with its report and what happened to each Collection's files."""
     steps = []
@@ -1282,6 +1330,8 @@ def run_view(session: Session, run: ImportRun) -> dict[str, Any]:
             "files": sum(1 for file in step.files if file.get("kind") == "file"),
             "counts": (step.result or {}).get("counts", {}),
             "problems": (step.result or {}).get("problems", []),
-            "download_profile_on": step.enable_download_profile and step.status == STEP_DONE,
+            "download_profile_on": step.enable_download_profile and step.status == STEP_DONE
+            and not (step.result or {}).get("matching"),
+            "matching": _matching_view(session, step),
         })
     return {**run_summary(run), "options": run.options, "version": run.version, "report": run.report, "steps": steps}

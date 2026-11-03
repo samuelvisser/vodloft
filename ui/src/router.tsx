@@ -38,6 +38,7 @@ import VideoPage from './pages/video/VideoPage'
 import AccountPage from './pages/AccountPage'
 import AccountNotificationsPage from './pages/AccountNotificationsPage'
 import RegexEditorTestPage from './pages/RegexEditorTestPage'
+import ExistingFilesPage from './pages/ExistingFilesPage'
 import { allows, getAccess, homePath, canAnySettings, type Area, type Level } from './lib/access'
 
 function RootRoute() {
@@ -85,6 +86,7 @@ export const router = createBrowserRouter(
       <Route path="settings" element={<Guard when={() => canAnySettings()}><SettingsPage /></Guard>} />
       <Route path="logs" element={g('logs', <LogsPage />)} />
       <Route path="tasks" element={g('tasks', <TasksPage />)} />
+      <Route path="existing-files" element={g('library', <ExistingFilesPage />, 'manage')} />
       <Route path="add-collection" element={g('add_media', <AddCollectionRoute />)} />
       <Route path="add-local-media-profile" element={g('local_media_profiles', <AddLocalMediaProfilePage />, 'manage')} />
       <Route path="local-media-profile/:slug" element={g('local_media_profiles', <LocalMediaProfilePage />)} />

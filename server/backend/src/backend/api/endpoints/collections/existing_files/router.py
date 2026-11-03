@@ -25,6 +25,7 @@ from ....models.existing_files import (
     ExistingFilesAdoptAPIResult,
     ExistingFilesFinishAPIRequest,
     ExistingFilesFinishAPIResult,
+    ExistingFilesOpenScanAPIRead,
     ExistingFilesScanAPIRead,
     ExistingFilesScanAPIRequest,
     ExistingFilesScanSummaryAPIRead,
@@ -73,6 +74,26 @@ def existing_files_folders(folder: str = Query(default="/downloads")):
         return FolderListAPIRead.model_validate(list_folders(folder))
     except (ExistingFilesError, AdoptionError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/existing-files/open", dependencies=_MANAGE, response_model=list[ExistingFilesOpenScanAPIRead])
+def existing_files_open():
+    """Every scan of every Collection that still needs a person, without its files."""
+    with db_session() as s:
+        rows = s.execute(
+            select(ExistingFileScan, Collection, CollectionLocalMediaProfile)
+            .join(Collection, Collection.id == ExistingFileScan.collection_id)
+            .join(CollectionLocalMediaProfile, CollectionLocalMediaProfile.id == ExistingFileScan.local_media_profile_id)
+            .where(ExistingFileScan.status != "finished")
+            .order_by(Collection.title, CollectionLocalMediaProfile.name)
+        ).all()
+        return [
+            ExistingFilesOpenScanAPIRead.model_validate({
+                **scan_view(s, scan), "collection_slug": collection.slug, "collection_title": collection.title,
+                "local_media_profile_name": profile.name,
+            })
+            for scan, collection, profile in rows
+        ]
 
 
 @router.get("/{collection_slug}/existing-files/scans", dependencies=_MANAGE, response_model=list[ExistingFilesScanSummaryAPIRead])

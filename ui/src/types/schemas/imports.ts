@@ -142,6 +142,10 @@ export const ImportRunSchema = ImportRunSummarySchema.extend({
         counts: z.record(z.string(), z.number()),
         problems: z.array(z.looseObject({path: z.string().nullish(), error: z.string()})),
         downloadProfileOn: z.boolean(),
+        matching: z.looseObject({
+            status: z.enum(['waiting', 'scanning', 'ready', 'failed', 'finished']),
+            found: z.int(),
+        }).nullish(),
     })),
 })
 export type ImportRun = z.infer<typeof ImportRunSchema>
@@ -151,5 +155,6 @@ export type ImportOptions = {
     collections?: string[] | null
     settings?: string[] | null
     enableDownloadProfiles: boolean
+    matchExistingFiles: boolean
     templates: Record<string, string>
 }

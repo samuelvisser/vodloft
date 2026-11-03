@@ -80,6 +80,16 @@ class ExistingFilesScanSummaryAPIRead(ResponseBase):
     counts: ExistingFilesCountsAPIRead
 
 
+class ExistingFilesOpenScanAPIRead(ExistingFilesScanSummaryAPIRead):
+    """A scan of any Collection that still needs a person, for the page that reviews them all."""
+
+    collection_slug: str
+    collection_title: str
+    local_media_profile_name: str
+    folder: str
+    error: Optional[str] = None
+
+
 class ExistingFilesAdoptAPIResult(ResponseBase):
     adopted: int
     errors: list[dict[str, str]] = Field(default_factory=list)

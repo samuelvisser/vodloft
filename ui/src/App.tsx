@@ -8,6 +8,7 @@ import BackgroundMigrationBanner from './components/BackgroundMigrationBanner/Ba
 import LoginPage from './pages/LoginPage'
 import PullToRefresh from './components/PullToRefresh/PullToRefresh'
 import OperationNotifier from './components/OperationNotifier/OperationNotifier'
+import ImportMatchesWatcher from './components/ExistingFiles/ImportMatchesWatcher'
 import {operationNotificationDefinitions} from './components/OperationNotifier/OperationNotificationDefinitions'
 import FrontendPuller from './lib/puller'
 import ForcedPasswordChangePage from './pages/ForcedPasswordChangePage'
@@ -111,6 +112,8 @@ export default function App() {
       <OperationNotifier definitions={operationNotificationDefinitions}>
         <div className="app">
           <PullToRefresh />
+          {/* After onboarding too, so an import started there still says when its matches are ready. */}
+          <ImportMatchesWatcher />
           <Sidebar />
           <main className="content" role="main">
             {/* Deliberately mounted only after onboarding so first-run setup never shows this banner. */}

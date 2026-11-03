@@ -169,6 +169,18 @@ def test_pinchflat_values_become_collection_values_and_custom_indexes():
     assert report.support == "close"
 
 
+def test_a_playlist_names_each_video_after_its_own_channel():
+    template = "/Video/{{ channel }} - {{ title }}.{{ ext }}"
+
+    assert convert_pinchflat(template, ConversionOptions(collection_type="channel")).output_template == (
+        "/downloads/Video/{{ collection_author or 'NA' }} - {{ title }}.ext"
+    )
+    for options in (ConversionOptions(collection_type="playlist"), ConversionOptions(for_playlists=True)):
+        assert convert_pinchflat(template, options).output_template == (
+            "/downloads/Video/{{ episode_uploader or 'NA' }} - {{ title }}.ext"
+        )
+
+
 def test_volatile_and_format_fields_are_reported_not_converted():
     report = convert_ytdlp("%(title)s %(view_count)s %(height)sp.%(ext)s")
 

@@ -221,8 +221,10 @@ def _profile_plan(variant: _Variant, data: PinchflatData, path_map: PathMap) -> 
     template, root, problem = _template_root(variant.template, path_map)
     if problem:
         warnings.append(ImportWarning("output template", problem, "close"))
-    options = options_from(option_set, root=root, collection_type=types.pop() if len(types) == 1 else None) \
-        if option_set is not None else None
+    options = options_from(
+        option_set, root=root, collection_type=next(iter(types)) if len(types) == 1 else None,
+        for_playlists="playlist" in types,
+    ) if option_set is not None else None
     report = convert_pinchflat(template, options)
 
     custom: list[str] = []

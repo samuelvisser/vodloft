@@ -101,10 +101,12 @@ def request_scan(
     template: str | None = None,
     hold: Sequence[DownloadProfile] = (),
     wait_for_index: bool = False,
+    indexed: bool = False,
 ) -> ExistingFileScan:
     """Start (or restart) the scan for this Collection and profile.
 
     ``hold`` switches those Download Profiles off until the scan is finished.
+    ``indexed`` says the episodes are in already, so an index still finishing doesn't make it wait.
     """
     folder = folder.strip().rstrip("/") or "/downloads"
     if not folder.startswith("/downloads"):
@@ -127,7 +129,7 @@ def request_scan(
     scan.error = None
     scan.results = []
     scan.held_download_profile_ids = sorted({*scan.held_download_profile_ids, *held})
-    waiting = wait_for_index or _index_running(session, collection.id)
+    waiting = wait_for_index or (not indexed and _index_running(session, collection.id))
     scan.status = WAITING if waiting else SCANNING
     session.flush()
     if not waiting:

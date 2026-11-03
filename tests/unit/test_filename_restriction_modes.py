@@ -148,7 +148,21 @@ def test_unrestricted_values_only_change_slashes_and_control_characters():
 
 
 def test_restricted_transliterates_letters_yt_dlp_drops():
-    assert clean_value("ß Æ Łódź — “quote”… 2×3", FilenameRestrictionMode.RESTRICTED) == "ss_AE_Lodz_-_quote..._2x3"
+    assert clean_value("ß Æ Łódź — “quote”… 2×3", FilenameRestrictionMode.RESTRICTED) == "ss_AE_Lodz_quote..._2x3"
+
+
+def test_restricted_dashes_become_underscores_like_yt_dlp():
+    assert clean_value("Happen” — Inside", FilenameRestrictionMode.RESTRICTED) == "Happen_Inside"
+    assert clean_value("Back–Here's", FilenameRestrictionMode.RESTRICTED) == "Back_Here_s"
+
+
+def test_restricted_values_keep_trailing_dots_and_a_folder_ends_in_hash_like_yt_dlp():
+    restricted = FilenameRestrictionMode.RESTRICTED
+    wear = clean_value("Used to Wear . . .", restricted)
+    assert wear == "Used_to_Wear_._._."
+    assert clean_component(wear, restricted) == "Used_to_Wear_._._#"
+    assert clean_component(f"{wear} (2026-08-15).m4a", restricted, extension="m4a") == "Used_to_Wear_._._. (2026-08-15).m4a"
+    assert clean_component(clean_value("getting dangerous...", restricted), restricted) == "getting_dangerous..#"
 
 
 def test_typed_template_text_follows_the_mode():

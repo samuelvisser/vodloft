@@ -139,8 +139,8 @@ def test_plex_title_option_file_converts_and_names_files_as_yt_dlp(monkeypatch, 
 
     assert report.output_template is not None, report.lines()
     assert report.output_template.startswith(
-        "{% set plex_title = title -%}\n"
-        "{% set plex_title = plex_title | regex_replace('\\\\[', '(') -%}\n"
+        "{% set plex_title = title -%}"
+        "{% set plex_title = plex_title | regex_replace('\\\\[', '(') -%}"
     )
     assert [action.support for action in report.actions] == ["exact"] * 5
     assert "doesn't use" in report.actions[-1].reason

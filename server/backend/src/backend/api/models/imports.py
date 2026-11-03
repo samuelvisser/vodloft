@@ -67,6 +67,7 @@ class ImportOptionsAPIRequest(RequestBase):
     collections: Optional[list[str]] = Field(default=None, description="External ids; leave out for all")
     settings: Optional[list[str]] = Field(default=None, description="Setting keys; leave out for the recommended ones")
     enable_download_profiles: bool = False
+    match_existing_files: bool = Field(default=False, description="Look for other files of each Collection after the import")
     templates: dict[str, str] = Field(default_factory=dict, description="Edited output templates by profile")
 
 
@@ -207,6 +208,11 @@ class ImportProblemAPIRead(ResponseBase):
     error: str
 
 
+class ImportStepMatchingAPIRead(ResponseBase):
+    status: Literal["waiting", "scanning", "ready", "failed", "finished"]
+    found: int
+
+
 class ImportStepAPIRead(ResponseBase):
     collection_slug: Optional[str] = None
     collection_title: Optional[str] = None
@@ -215,6 +221,7 @@ class ImportStepAPIRead(ResponseBase):
     counts: dict[str, int]
     problems: list[ImportProblemAPIRead]
     download_profile_on: bool
+    matching: Optional[ImportStepMatchingAPIRead] = None
 
 
 class ImportRunAPIRead(ImportRunSummaryAPIRead):

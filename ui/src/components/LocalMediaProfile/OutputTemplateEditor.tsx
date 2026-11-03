@@ -52,6 +52,10 @@ type TemplateCodeEditorProps = {
     invalid: boolean
     onChange: (value: string) => void
     onBlur: () => void
+    id?: string
+    ariaLabel?: string
+    /** The help and error text, when they are not the profile form's own. */
+    describedBy?: string
 }
 
 type JinjaStatement = {
@@ -388,13 +392,29 @@ function indentAfterNewline(update: ViewUpdate) {
     })
 }
 
-function TemplateCodeEditor({
+/** The template editor's colours, layout and formatting, without the profile form's completions. */
+export const templateEditorExtensions = [
+    ...outputTemplateSyntaxExtensions,
+    indentUnit.of('\t'),
+    EditorView.lineWrapping,
+    EditorView.updateListener.of(indentAfterNewline),
+    EditorView.updateListener.of(formatEditorAfterStructuralEdit),
+    EditorView.theme({
+        '&': {fontSize: '16px'},
+        '.cm-content': {fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'},
+    }),
+]
+
+export function TemplateCodeEditor({
                                 value,
                                 placeholder,
                                 extensions,
                                 invalid,
                                 onChange,
                                 onBlur,
+                                id = 'mp-path',
+                                ariaLabel = 'Output path template',
+                                describedBy,
                             }: TemplateCodeEditorProps) {
     const canonicalValue = value ?? ''
     const [editorValue, setEditorValue] = useState(() => (
@@ -410,7 +430,7 @@ function TemplateCodeEditor({
 
     return (
         <CodeMirror
-            id="mp-path"
+            id={id}
             className="output-template-code-editor"
             value={editorValue}
             minHeight="96px"
@@ -435,9 +455,9 @@ function TemplateCodeEditor({
                 ))
                 onBlur()
             }}
-            aria-label="Output path template"
+            aria-label={ariaLabel}
             aria-invalid={invalid}
-            aria-describedby={invalid ? 'mp-path-error' : 'mp-path-help'}
+            aria-describedby={describedBy ?? (invalid ? 'mp-path-error' : 'mp-path-help')}
         />
     )
 }
@@ -714,20 +734,12 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
             }
         })
         return [
-            ...outputTemplateSyntaxExtensions,
-            indentUnit.of('\t'),
+            ...templateEditorExtensions,
             autocompletion({
                 override: [filterCompletionSource, variableCompletionSource, statementCompletionSource],
                 positionInfo: (_view, list, _option, info, space) => positionCompletionInfo(list, info, space),
             }),
-            EditorView.lineWrapping,
             openCompletionsAfterJinjaDelimiter,
-            EditorView.updateListener.of(indentAfterNewline),
-            EditorView.updateListener.of(formatEditorAfterStructuralEdit),
-            EditorView.theme({
-                '&': {fontSize: '16px'},
-                '.cm-content': {fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'},
-            }),
         ]
     }, [mode, printVariableCompletionOptions, statementCompletionOptions, variableCompletionOptions])
 

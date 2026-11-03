@@ -1,5 +1,7 @@
 import {useQuery} from '@tanstack/react-query'
 import {
+    ExistingFilesOpenScan,
+    ExistingFilesOpenScanSchema,
     ExistingFilesScan,
     ExistingFilesScanSchema,
     ExistingFilesScanSummary,
@@ -35,10 +37,7 @@ export function useExistingFilesScan(collectionSlug: string | undefined, localMe
     return useQuery<ExistingFilesScan, Error>({
         queryKey: ['existingFiles', collectionSlug, localMediaProfileId],
         enabled: Boolean(collectionSlug && localMediaProfileId),
-        queryFn: () => request(
-            `${collectionPath(collectionSlug!)}?local_media_profile_id=${localMediaProfileId}`,
-            ExistingFilesScanSchema,
-        ),
+        queryFn: () => readScan(collectionSlug!, localMediaProfileId!),
         // While a scan waits for the episodes or reads the folder, check back every few seconds.
         refetchInterval: (query) => {
             const status = query.state.data?.status
@@ -56,6 +55,21 @@ export function useExistingFilesScans(collectionSlug: string | undefined, enable
             (scan) => scan.status === 'waiting' || scan.status === 'scanning',
         ) ? 4000 : false,
     })
+}
+
+/** The scans of every Collection that still need a person, for the page that reviews them all. */
+export function useOpenExistingFilesScans() {
+    return useQuery<ExistingFilesOpenScan[], Error>({
+        queryKey: ['existingFilesOpen'],
+        queryFn: () => request('/collections/existing-files/open', ExistingFilesOpenScanSchema.array()),
+        refetchInterval: (query) => (query.state.data ?? []).some(
+            (scan) => scan.status === 'waiting' || scan.status === 'scanning',
+        ) ? 4000 : false,
+    })
+}
+
+export function readScan(collectionSlug: string, localMediaProfileId: number) {
+    return request(`${collectionPath(collectionSlug)}?local_media_profile_id=${localMediaProfileId}`, ExistingFilesScanSchema)
 }
 
 export function startScan(collectionSlug: string, body: {localMediaProfileId: number, folder: string, template?: string | null}) {

@@ -57,6 +57,15 @@ export const ExistingFilesScanSummarySchema = z.looseObject({
 })
 export type ExistingFilesScanSummary = z.infer<typeof ExistingFilesScanSummarySchema>
 
+export const ExistingFilesOpenScanSchema = ExistingFilesScanSummarySchema.extend({
+    collectionSlug: z.string(),
+    collectionTitle: z.string(),
+    localMediaProfileName: z.string(),
+    folder: z.string(),
+    error: z.string().nullish(),
+})
+export type ExistingFilesOpenScan = z.infer<typeof ExistingFilesOpenScanSchema>
+
 export const FolderListSchema = z.looseObject({
     folder: z.string(),
     parent: z.string().nullish(),
