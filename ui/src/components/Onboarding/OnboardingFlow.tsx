@@ -318,7 +318,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
             )}
 
             {step === 'browse' && (
-                <main className="onboarding-stage onboarding-stage-wide">
+                <main className="onboarding-stage">
                     <button className="btn onboarding-movie-back" type="button" onClick={() => setStep('add')}>
                         <FontAwesomeIcon icon={faIcon('fass', 'arrow-left')}/> Back to links
                     </button>
@@ -333,7 +333,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
             )}
 
             {step === 'search' && searchSourceId && (
-                <main className="onboarding-stage onboarding-stage-wide">
+                <main className="onboarding-stage onboarding-stage-narrow">
                     <button className="btn onboarding-movie-back" type="button" onClick={() => setStep('add')}>
                         <FontAwesomeIcon icon={faIcon('fass', 'arrow-left')}/> Back to links
                     </button>

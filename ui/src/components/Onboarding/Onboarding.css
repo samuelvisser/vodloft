@@ -2,6 +2,10 @@
     --bg: #07111f;
     --text: #eef4ff;
     --muted: #94a3b8;
+    /* Onboarding is always dark, so dropdowns use their dark colours whatever the system theme. */
+    --select-menu-bg: #172235;
+    --select-menu-border: #43516a;
+    --select-menu-shadow: 0 16px 38px rgba(0, 0, 0, 0.4);
     color-scheme: dark;
     position: relative;
     min-height: 100vh;
