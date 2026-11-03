@@ -22,6 +22,7 @@ _WORKER_EXPORTS = {
     "rename_file_worker": ".workers.rename_file_worker",
     "rename_collection_profile_files": ".workers.rename_collection_profile_files",
     "rename_movie_profile_files": ".workers.rename_movie_profile_files",
+    "move_collection_profile_episodes": ".workers.move_collection_profile_episodes",
     "delete_collection_downloads_worker": ".workers.delete_collection_downloads_worker",
     "media_download_bulk_action_worker": ".workers.media_download_bulk_action_worker",
     "fetch_new_episodes": ".workers.fetch_new_episodes",

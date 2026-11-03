@@ -226,6 +226,21 @@ Three options change the numbering:
 
 Normally the numbers follow episode order, so an older episode found later moves the numbers after it up by one, and those files get renamed. Turn on **Keep numbers once given out** for an index to keep every number it gives. A newly found episode then takes the next number after the highest one in its group, wherever it falls in episode order. Turning the option off numbers everything in order again.
 
+## Moving episodes to another profile
+
+To retire a Collection profile, or to give its episodes another layout, open the profile and choose **Actions → Move episodes to another profile**. Pick the profile to move to, and VODLoft shows per collection which episodes move and where their files will go. Untick a collection to leave it where it is.
+
+What a move does:
+
+- The episodes belong to the other profile from then on. Their download history, quality and **kept** mark come along.
+- Their files, and the subtitles, thumbnails and NFO files next to them, are renamed into the other profile's layout. Folders left empty are removed.
+- When the other profile writes NFO files or thumbnail images and an episode has none yet, VODLoft adds them. Subtitles are not added: they come with a redownload.
+- Nothing is overwritten. An episode the other profile already has, a path another file already uses, a missing file or a running download stays where it is. The clock icon next to such an episode opens its download history, where you can delete the leftover copy.
+
+Download Profiles pause while their collection's files move. When the collection's Download Profile uses the old profile and the new one has none, VODLoft offers to move it along, so it keeps managing the same episodes. Without that, it would download the moved episodes into the old profile again. When the new profile already has a Download Profile for the collection, the moved episodes join it, and the preview warns about episodes it would delete as older episodes.
+
+Once nothing downloaded is left on the old profile and no Download Profile uses it, the dialog offers to delete it.
+
 ## Movies and extras
 
 Movie templates have two groups of values:

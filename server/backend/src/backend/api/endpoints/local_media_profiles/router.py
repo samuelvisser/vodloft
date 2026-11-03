@@ -9,9 +9,14 @@ from backend.api.models.local_media_profile_view import (
     LocalMediaProfileAPIRead,
     LocalMediaProfileViewAPIRead,
 )
+from backend.api.models.local_media_profile_move import (
+    LocalMediaProfileMoveAPIRequest,
+    LocalMediaProfileMovePreviewAPIRead,
+)
 from backend.api.models.operations import (
     LocalMediaProfileDeleteDownloadsOperationAccepted,
     LocalMediaProfileFileRenameOperationAccepted,
+    LocalMediaProfileMoveEpisodesOperationAccepted,
     LocalMediaProfileRedownloadOperationAccepted,
 )
 from backend.app import db_session
@@ -30,6 +35,7 @@ from .maintenance import (
     request_local_media_profile_download_delete,
     request_local_media_profile_redownload,
 )
+from .move import get_move_preview, request_move
 from .advisory import router as advisory_router
 from .preview import router as preview_router
 from .service import (
@@ -174,6 +180,34 @@ def local_media_profiles_redownload_media(local_media_profile_slug: str):
                 s,
                 local_media_profile_slug,
             )
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
+
+
+@router.get(
+    "/{local_media_profile_slug}/move-episodes/preview",
+    dependencies=[requires(Area.LOCAL_MEDIA_PROFILES, Level.MANAGE)],
+    response_model=LocalMediaProfileMovePreviewAPIRead,
+)
+def local_media_profiles_move_episodes_preview(local_media_profile_slug: str, target: str = Query(min_length=1)):
+    """What moving this profile's episodes to the target profile would do. Changes nothing."""
+    with db_session() as s:
+        return get_move_preview(s, local_media_profile_slug, target)
+
+
+@router.post(
+    "/{local_media_profile_slug}/move-episodes",
+    dependencies=[requires(Area.LOCAL_MEDIA_PROFILES, Level.MANAGE)],
+    response_model=LocalMediaProfileMoveEpisodesOperationAccepted,
+    status_code=202,
+)
+def local_media_profiles_move_episodes(local_media_profile_slug: str, request: LocalMediaProfileMoveAPIRequest):
+    with db_session() as s:
+        try:
+            result = request_move(s, local_media_profile_slug, request)
             s.commit()
             return result
         except Exception:

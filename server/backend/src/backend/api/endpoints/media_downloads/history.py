@@ -130,6 +130,10 @@ def _presentation(entry: MediaDownloadHistory) -> tuple[str, str, str | None]:
         matched_by = metadata.get("matched_by")
         detail = " · ".join(str(value) for value in (path, matched_by) if value)
         return "Imported", "downloaded", detail or None
+    if action == MediaDownloadHistoryAction.MOVED:
+        source, target = metadata.get("from_profile"), metadata.get("to_profile")
+        detail = f"{source} → {target}" if source and target else None
+        return "Moved to another Local Media Profile", "downloaded", detail
 
     if action == MediaDownloadHistoryAction.UPGRADE_CHECKED:
         best, kept = metadata.get("best_height"), metadata.get("kept_height")
