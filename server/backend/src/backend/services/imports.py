@@ -1402,6 +1402,19 @@ def run_step(session: Session, step_id: int) -> dict[str, int]:
     return dict(counts)
 
 
+def fail_step(session: Session, step_id: int, error: str) -> None:
+    """Record that adopting a Collection's files stopped with an error, so the import does not wait for it."""
+    _begin_write(session)
+    step = session.get(ImportStep, step_id)
+    if step is None or step.status != STEP_WAITING:
+        return
+    step.result = {"counts": {}, "problems": [{"path": None, "error": error}]}
+    step.status = STEP_FAILED
+    session.flush()
+    _finish_run_if_done(session, step.run_id)
+    session.commit()
+
+
 def rename_collection_files(session: Session, collection_id: int, local_media_profile_id: int) -> None:
     """Queue renaming the Collection's files with this profile to the paths its template gives them."""
     from task_manager.scheduler.operation_factory import create_operation
