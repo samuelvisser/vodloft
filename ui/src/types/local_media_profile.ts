@@ -5,9 +5,13 @@ import type {LocalMediaProfileSubtitleMode} from "./schemas/local_media_profile_
 
 
 export const PreferredFormatReg = createSelectRegistry("PreferredFormat", {
-  'format_4k':   { label: "4k",   help: "Download a 4k video" },
-  'format_1080p':   { label: "1080p",   help: "Download an 1080p video" },
+  'format_360p': { label: "360p", help: "Up to 360p" },
+  'format_480p': { label: "480p", help: "Up to 480p" },
   'format_720p':   { label: "720p",   help: "Download a 720p video" },
+  'format_1080p':   { label: "1080p",   help: "Download an 1080p video" },
+  'format_1440p': { label: "1440p", help: "Up to 1440p" },
+  'format_4k':   { label: "4K",   help: "Download a 4k video" },
+  'format_8k': { label: "8K", help: "Up to 8K" },
   'format_hls': { label: "HLS (480p / 720p / 1080p)", help: "Download an adaptive HLS video package with 480p, 720p and 1080p renditions" },
   'format_audio_only':   { label: "Audio Only",   help: "Download audio only" },
 });
@@ -19,9 +23,13 @@ export const MoviePreferredFormatReg = createSelectRegistry("MoviePreferredForma
 });
 
 export const VideoPreferredFormatReg = createSelectRegistry("VideoPreferredFormat", {
-  'format_4k': { label: "4k", help: "Download a 4k video, or the best the site has" },
-  'format_1080p': { label: "1080p", help: "Download a 1080p video, or the best below it" },
-  'format_720p': { label: "720p", help: "Download a 720p video, or the best below it" },
+  'format_360p': { label: "360p" },
+  'format_480p': { label: "480p" },
+  'format_720p': { label: "720p" },
+  'format_1080p': { label: "1080p" },
+  'format_1440p': { label: "1440p" },
+  'format_4k': { label: "4K" },
+  'format_8k': { label: "8K" },
   'format_audio_only': { label: "Audio Only", help: "Download audio only" },
 });
 
@@ -50,7 +58,7 @@ export function defaultSubtitleModeForProfile(
     type: LocalMediaProfileType,
     collectionScope: CollectionLocalMediaProfileScope = 'both',
 ): LocalMediaProfileSubtitleMode {
-    // Subtitles come from Daily Wire streams; single videos come from yt-dlp, which VODLoft does not fetch subtitles for yet.
+    // New Video profiles start without subtitles; they can be turned on like any other profile.
     if (type === 'video') return 'no_subtitles'
     return type === 'collection' && collectionScope === 'podcast' ? 'no_subtitles' : 'sidecar'
 }

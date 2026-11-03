@@ -192,10 +192,13 @@ def embed_metadata(
 def embed_media(
     media_path: str, *, metadata: Mapping[str, str] | None = None,
     thumbnail_path: str | None = None, audio_only: bool = False,
-    subtitles: tuple[tuple[str, str, bool], ...] = (),
+    subtitles: tuple[tuple[str, str, bool, str | None], ...] = (),
+    first_subtitle_default: bool = False,
     ffmpeg_path: str = "ffmpeg", should_cancel: Optional[CancelCheck] = None,
 ) -> None:
     """Apply artwork, metadata, and optional subtitles in one serialized pass.
+
+    Each subtitle is (language, SRT path, forced, track title or None).
 
     FFmpeg's growing output is not a time/progress estimate: faststart can still
     rewrite a full file after that output has reached its apparent final size.
@@ -219,7 +222,7 @@ def embed_media(
         if thumbnail_path is not None and not attach:
             command += ["-i", thumbnail_path]
         subtitle_input_index = 2 if thumbnail_path is not None and not attach else 1
-        for _language, path, _forced in subtitles:
+        for _language, path, _forced, _title in subtitles:
             command += ["-i", path]
         # Data streams (such as RTP hint tracks) cannot be copied into MP4.
         command += ["-map", "0", "-map", "-0:d?"]
@@ -234,10 +237,13 @@ def embed_media(
         command += ["-c", "copy"]
         if subtitles:
             command += ["-c:s", "mov_text" if muxer == "mp4" else "srt"]
-            for index, (language, _path, forced) in enumerate(subtitles):
+            for index, (language, _path, forced, title) in enumerate(subtitles):
                 code = mp4_language_code(language) if muxer == "mp4" else language
                 command += [f"-metadata:s:s:{index}", f"language={code}"]
-                command += [f"-disposition:s:{index}", "forced" if forced else "0"]
+                if title:
+                    command += [f"-metadata:s:s:{index}", f"title={title}"]
+                disposition = "forced" if forced else "default" if index == 0 and first_subtitle_default else "0"
+                command += [f"-disposition:s:{index}", disposition]
         if attach:
             extension = Path(thumbnail_path).suffix.lower().lstrip(".")
             extension = "jpg" if extension == "jpeg" else extension

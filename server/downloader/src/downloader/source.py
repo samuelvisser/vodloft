@@ -6,7 +6,10 @@ from .errors import DownloadCancelled, DownloadError, MediaUnavailableError
 from .models import MediaKind, VideoRendition
 from .plan import ResolvedDownloadSource
 
-FORMAT_HEIGHTS = {"format_4k": 2160, "format_1080p": 1080, "format_720p": 720}
+FORMAT_HEIGHTS = {
+    "format_360p": 360, "format_480p": 480, "format_720p": 720, "format_1080p": 1080,
+    "format_1440p": 1440, "format_4k": 2160, "format_8k": 4320,
+}
 
 
 def ensure_not_cancelled(cancellation) -> None:

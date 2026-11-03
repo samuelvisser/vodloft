@@ -74,3 +74,10 @@ class RetentionFrom(StrEnum):
 
     PUBLISHED = "published"
     DOWNLOADED = "downloaded"
+
+
+class AutoSubtitles(StrEnum):
+    """Whether a YouTube Download Profile downloads auto-generated subtitles."""
+    NEVER = "never"
+    FALLBACK = "fallback"
+    ALWAYS = "always"

@@ -240,7 +240,7 @@ def test_subtitle_mp4_embedding_uses_mov_text_and_three_letter_language(tmp_path
         return SimpleNamespace(returncode=0, stdout="")
 
     monkeypatch.setattr(ffmpeg_module.subprocess, "run", run)
-    ffmpeg_module.embed_media(str(media), subtitles=(("en", str(srt), False),))
+    ffmpeg_module.embed_media(str(media), subtitles=(("en", str(srt), False, None),))
 
     assert media.read_bytes() == b"embedded"
     assert "-c:s" in commands[0]
@@ -309,7 +309,7 @@ def test_subtitles_use_existing_publication_and_embedding_lifecycle(
         if embed:
             assert len(embedding_calls) == 1
             assert embedding_calls[0]["subtitles"] == (
-                ("en", embedding_calls[0]["subtitles"][0][1], False),
+                ("en", embedding_calls[0]["subtitles"][0][1], False, None),
             )
             assert Path(embedding_calls[0]["subtitles"][0][1]).is_file()
         else:
@@ -371,19 +371,19 @@ def test_ytdlp_subtitles_publish_one_sidecar_per_language(tmp_path, monkeypatch,
     from downloader import coordinator
     from downloader.capacity import DownloadResources
     from downloader.lifecycle import DownloadTracker
-    from downloader.models import DownloadProgress, DownloadResult
+    from downloader.models import DownloadProgress, DownloadResult, WrittenSubtitle
 
     embedding_calls = []
     monkeypatch.setattr(coordinator, "embed_media", lambda *args, **kwargs: embedding_calls.append(kwargs))
 
-    def transfer(_url, destination, *, command, subtitles_dir, progress, should_cancel):
+    def transfer(_url, destination, *, command, subtitles_dir, progress, should_cancel, **_options):
         assert subtitles_dir is not None
         Path(destination).write_bytes(b"media")
         written = []
         for language, text in subtitles:
             path = subtitles_dir / f"ytdlp-subtitle.{language}.srt"
             path.write_text(f"1\n00:00:01,000 --> 00:00:02,000\n{text}\n\n")
-            written.append((language, str(path)))
+            written.append(WrittenSubtitle(language, str(path)))
         progress(DownloadProgress(5, 5))
         return DownloadResult(destination, 5, subtitles=tuple(written))
 

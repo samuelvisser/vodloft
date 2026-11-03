@@ -198,6 +198,48 @@ def test_profile_formats_map_to_ytdlp_options():
         resolve_ytdlp_source("https://x", command=("yt-dlp",), preferred_format="format_hls", audio_only=False)
 
 
+def _option(options, name):
+    return options[options.index(name) + 1]
+
+
+def test_quality_choices_map_to_yt_dlp_formats():
+    from downloader.ytdlp import YtdlpQuality, resolve_ytdlp_source, ytdlp_format_options
+
+    # Up to 1440p, AV1 then H.264, MKV, Dutch audio.
+    quality = YtdlpQuality(video_codecs=("av1", "h264"), container="mkv", audio_codec="opus", audio_language="nl")
+    options = ytdlp_format_options("format_1440p", audio_only=False, quality=quality)
+    allowed = "[vcodec~='^(av0?1|avc|h264)']"
+    assert _option(options, "-f") == (
+        f"bv*{allowed}+ba[language^=nl]/bv*{allowed}+ba/b{allowed}/bv*+ba[language^=nl]/bv*+ba/b"
+    )
+    assert _option(options, "-S") == "res:1440,vcodec:av01,acodec:opus"
+    assert (_option(options, "--merge-output-format"), _option(options, "--remux-video")) == ("mkv", "mkv")
+
+    # Skipping instead of taking the best version leaves out the fallbacks.
+    strict = ytdlp_format_options("format_8k", audio_only=False, quality=YtdlpQuality(video_codecs=("vp9",), strict=True, prefer_small=True))
+    assert _option(strict, "-f") == "bv*[vcodec~='^(vp0?9)']+ba/b[vcodec~='^(vp0?9)']"
+    assert _option(strict, "-S") == "res:4320,vcodec:vp9,acodec:aac,+size,+br"
+
+    opus = resolve_ytdlp_source("https://x", command=("yt-dlp",), preferred_format="format_audio_only", audio_only=True,
+                                quality=YtdlpQuality(audio_format="opus", audio_language="de"))
+    assert opus.extension == "opus"
+    assert _option(opus.ytdlp_command, "-f") == "ba[acodec=opus][language^=de]/ba[acodec=opus]/ba[language^=de]/ba/b"
+    assert _option(opus.ytdlp_command, "--audio-format") == "opus"
+    video = resolve_ytdlp_source("https://x", command=("yt-dlp",), preferred_format="format_360p", audio_only=False, quality=YtdlpQuality(container="mkv"))
+    assert (video.extension, video.format_downloaded) == ("mkv", "up to 360p")
+    with pytest.raises(DownloadError):
+        YtdlpQuality(video_codecs=("h264", "h264"))
+    with pytest.raises(DownloadError):
+        YtdlpQuality(audio_language="nl; rm -rf")
+
+
+def test_a_video_without_an_allowed_codec_says_so(fake_ytdlp, tmp_path):
+    from downloader.ytdlp import _error
+
+    error = _error(["ERROR: [youtube] x: Requested format is not available. Use --list-formats for a list of available formats"])
+    assert "none of the allowed video codecs" in str(error)
+
+
 FAKE_YTDLP = textwrap.dedent('''
     import pathlib, sys
     args = sys.argv[1:]
@@ -212,6 +254,13 @@ FAKE_YTDLP = textwrap.dedent('''
         print("[download] File is larger than max-filesize (5000 bytes > 100 bytes). Aborting.")
         sys.exit(0)
     work = pathlib.Path(args[args.index("-P") + 1])
+    srt = "1\\n00:00:01,000 --> 00:00:02,000\\n{}\\n\\n"
+    if "--skip-download" in args:
+        # The second run, for auto-generated subtitles only.
+        assert "--write-auto-subs" in args and "--write-subs" not in args
+        (work / "auto.nl.srt").write_text(srt.format("Automatisch"))
+        (work / "auto.fr.srt").write_text(srt.format("Automatique"))
+        sys.exit(0)
     template = args[args.index("--progress-template") + 1].removeprefix("download:")
     for done in (10, 50, 100):
         print(template.replace("%(progress.downloaded_bytes)s", str(done)).replace("%(progress.total_bytes)s", "100").replace("%(progress.total_bytes_estimate)s", "NA"))
@@ -224,6 +273,9 @@ FAKE_YTDLP = textwrap.dedent('''
         (work / "media.nl.srt").write_text("1\\n00:00:01,000 --> 00:00:02,000\\nHallo\\n\\n")
         (work / "media.live_chat.json").write_text("{}")
         (work / "media.de.vtt").write_text("not a subtitle")
+    if "--write-subs" in args and "langs" in url:
+        for language in ("en-US", "en", "nl", "de"):
+            (work / f"media.{language}.srt").write_text(srt.format(language))
     print("[vodloft-file] " + str(work / "media.mp4"))
 ''')
 
@@ -371,10 +423,42 @@ def test_ytdlp_writes_each_uploaded_subtitle_as_srt(fake_ytdlp, tmp_path):
     keep = tmp_path / "keep"
     keep.mkdir()
     result = download_ytdlp("https://x/subs", str(tmp_path / "out.mp4"), command=fake_ytdlp, subtitles_dir=keep)
-    languages = dict(result.subtitles)
+    languages = {subtitle.language: subtitle.path for subtitle in result.subtitles}
     assert sorted(languages) == ["en", "nl"]
     assert open(languages["en"], encoding="utf-8").read() == "1\n00:00:01,000 --> 00:00:02,000\nHello\n\n"
     assert "Hallo" in open(languages["nl"], encoding="utf-8").read()
+
+
+def test_ytdlp_keeps_the_listed_languages_in_order_and_adds_auto_generated_tracks(fake_ytdlp, tmp_path):
+    from downloader.plan import YtdlpSubtitles
+    from downloader.ytdlp import download_ytdlp
+
+    def run(subtitles, name):
+        keep = tmp_path / name
+        keep.mkdir()
+        result = download_ytdlp("https://x/langs", str(tmp_path / f"{name}.mp4"), command=fake_ytdlp, subtitles_dir=keep, subtitles=subtitles)
+        return [(item.language, item.auto_generated, open(item.path, encoding="utf-8").read().splitlines()[2]) for item in result.subtitles]
+
+    # The language itself beats a regional variant, and the list's order is kept.
+    assert run(YtdlpSubtitles(languages=("nl", "en")), "listed") == [("nl", False, "nl"), ("en", False, "en")]
+    assert run(YtdlpSubtitles(languages=("fr", "en", "nl"), first_only=True), "first") == [("en", False, "en")]
+    assert {item[0] for item in run(YtdlpSubtitles(), "every")} == {"en-US", "en", "nl", "de"}
+    assert run(YtdlpSubtitles(languages=("nl",), auto_generated="always"), "always") == [
+        ("nl", False, "nl"), ("nl", True, "Automatisch"),
+    ]
+
+
+def test_subtitle_options_ask_yt_dlp_for_the_listed_languages():
+    from downloader.plan import YtdlpSubtitles
+    from downloader.ytdlp import ytdlp_subtitle_options
+
+    every = ytdlp_subtitle_options(YtdlpSubtitles())
+    assert every[every.index("--sub-langs") + 1] == "all,-live_chat" and "--write-auto-subs" not in every
+    listed = ytdlp_subtitle_options(YtdlpSubtitles(languages=("en", "pt-BR"), auto_generated="fallback"))
+    assert listed[listed.index("--sub-langs") + 1] == "en(-[A-Za-z0-9]+)*,pt\\-BR(-[A-Za-z0-9]+)*"
+    assert "--write-auto-subs" in listed
+    # Always fetches auto-generated subtitles in a run of their own.
+    assert "--write-auto-subs" not in ytdlp_subtitle_options(YtdlpSubtitles(languages=("en",), auto_generated="always"))
 
 
 def test_ytdlp_without_a_subtitle_folder_asks_for_no_subtitles(fake_ytdlp, tmp_path):

@@ -12,6 +12,7 @@ from backend.types.download_profile_types import (
     EpisodeRuleAction,
     EpisodeRuleField,
     EpisodeTagKey,
+    AutoSubtitles,
     RetentionFrom,
 )
 
@@ -68,6 +69,7 @@ class DownloadProfileAPIBaseIn(RequestBase):
     download_starting_from: date | None
     delete_older_episodes: bool
     retention_from: RetentionFrom = RetentionFrom.PUBLISHED
+    auto_subtitles: AutoSubtitles = AutoSubtitles.FALLBACK
 
     seasons: list[SeasonAPIRequestDetached]
     include_upcoming_seasons: bool
@@ -119,6 +121,7 @@ class DownloadProfileAPIBaseOut(ResponseBase):
     download_starting_from: date | None
     delete_older_episodes: bool
     retention_from: RetentionFrom
+    auto_subtitles: AutoSubtitles
 
     seasons: list[SeasonAPIRead]
     include_upcoming_seasons: bool
@@ -175,3 +178,14 @@ class SkippedByFilterAPIRead(ResponseBase):
     download_profile_id: int
     local_media_profile_id: int
     rule: DownloadProfileRuleAPIRead
+
+
+class AutoSubtitlesUseAPIRead(ResponseBase):
+    """A YouTube Download Profile that uses a Local Media Profile, and its auto-generated subtitle choice."""
+
+    download_profile_id: int
+    collection_id: int
+    collection_title: str
+    episode_types: list[str]
+    """The episode types, only when the Collection has more than one Download Profile on this Local Media Profile."""
+    auto_subtitles: AutoSubtitles

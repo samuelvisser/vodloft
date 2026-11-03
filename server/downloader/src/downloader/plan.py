@@ -21,6 +21,18 @@ Resource = Literal["none", "media", "sidecar", "processing"]
 
 
 @dataclass(frozen=True)
+class YtdlpSubtitles:
+    """Which subtitles yt-dlp writes while it downloads the media."""
+    languages: tuple[str, ...] = ()
+    """Language codes in order of preference; none means every language the site offers."""
+    first_only: bool = False
+    """Only the first language on the list that the video has."""
+    auto_generated: Literal["never", "fallback", "always"] = "never"
+    """``fallback`` uses a site's auto-generated subtitle for a language without a real one;
+    ``always`` adds it as a track of its own as well."""
+
+
+@dataclass(frozen=True)
 class ResolvedDownloadSource:
     url: str
     format_downloaded: str
@@ -34,6 +46,7 @@ class ResolvedDownloadSource:
     subtitles: tuple[SubtitleRendition, ...] = ()
     ytdlp_command: tuple[str, ...] = ()
     """When set, yt-dlp downloads ``url`` (a web page) with this command line."""
+    ytdlp_subtitles: YtdlpSubtitles = YtdlpSubtitles()
 
 
 @dataclass(frozen=True)
@@ -59,6 +72,8 @@ class SidecarSpec:
     """``ytdlp``: the subtitles yt-dlp writes while it downloads the media, one file per language."""
     language: str | None = None
     forced: bool = False
+    title: str | None = None
+    """A name for an embedded subtitle track, such as "Auto-generated"."""
 
     def __post_init__(self) -> None:
         if not self.id or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789_-" for c in self.id):
@@ -126,6 +141,8 @@ class DownloadPlan:
     media_lane: tuple[str, int] | None = None
     """A named lane with its own limit on media transfers, such as one stream at a time for an account."""
     subtitle_asset_ids: tuple[str, ...] = ()
+    first_subtitle_default: bool = False
+    """The first embedded subtitle is the track players pick by default."""
 
     def __post_init__(self) -> None:
         stages = {stage.id: stage for stage in self.stages}
@@ -203,6 +220,7 @@ def build_download_plan(
     subtitle_asset_ids: tuple[str, ...] = (),
     attempt_id: str | None = None,
     media_lane: tuple[str, int] | None = None,
+    first_subtitle_default: bool = False,
 ) -> DownloadPlan:
     """Resolve optional work once; the coordinator executes this plan verbatim."""
     if download_mode not in ("direct", "temporary"):
@@ -316,4 +334,5 @@ def build_download_plan(
         str(temporary_root), ffmpeg_path, tuple(assets), tuple(metadata_tags),
         artwork_asset_id, tuple(stages), copying, media_lane=media_lane,
         subtitle_asset_ids=tuple(subtitle_asset_ids),
+        first_subtitle_default=first_subtitle_default and bool(subtitle_asset_ids),
     )

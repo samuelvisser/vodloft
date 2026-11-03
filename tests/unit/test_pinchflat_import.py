@@ -117,7 +117,8 @@ def test_the_plan_converts_profiles_and_maps_sources_and_items(tmp_path):
     assert channel.custom_indexes == (CustomIndexPlan("day", "Upload date index", True, start=99, step=-1),)
     assert channel.settings["preferred_format"] == "format_1080p"
     assert channel.settings["subtitle_mode"] == "sidecar"
-    assert {warning.subject for warning in playlist.warnings} >= {"preferred_resolution"}
+    assert playlist.settings["preferred_format"] == "format_1440p"
+    assert "preferred_resolution" not in {warning.subject for warning in playlist.warnings}
 
     veritasium, lofi = plan.collections
     assert (veritasium.title, lofi.title) == ("Veritasium", "Lofi")
@@ -162,6 +163,32 @@ def test_filters_retention_and_prevent_culling_become_which_episodes(tmp_path):
     assert lofi.download_profile["retention_from"] == "downloaded"
     by_id = {file.media_site_id: file for file in plan.files}
     assert by_id["vid-aaaaaaa"].kept and not by_id["vid-bbbbbbb"].kept
+
+
+def test_quality_and_subtitle_choices_come_over(tmp_path):
+    path = _pinchflat_db(tmp_path / "pinchflat.db")
+    connection = sqlite3.connect(path)
+    connection.execute("UPDATE media_profiles SET sub_langs = 'nl,en.*,weird[x', download_auto_subs = 1, "
+                       "audio_track = 'nl', media_container = 'mkv' WHERE id = 1")
+    connection.commit()
+    connection.close()
+
+    plan = plan_import(read_pinchflat(path), option_directory=None)
+
+    channel, playlist = plan.profiles
+    assert channel.settings["subtitle_languages"] == ["nl", "en"]
+    assert channel.settings["subtitle_language_mode"] == "listed"
+    assert channel.settings["audio_language"] == "nl"
+    assert (channel.settings["quality_goal"], channel.settings["container"]) == ("custom", "mkv")
+    assert channel.settings["video_codecs"][0] == {"codec": "h264", "allowed": True}
+    assert "sub_langs" in {warning.subject for warning in channel.warnings}
+    assert not {warning.subject for warning in channel.warnings} & {"audio_track", "media_container", "download_auto_subs"}
+    # Without a language list, every language the site offers; at 1440p, H.264 first but every codec allowed.
+    assert playlist.settings["subtitle_language_mode"] == "site"
+    assert (playlist.settings["quality_goal"], playlist.settings["container"]) == ("custom", "mp4")
+    assert all(choice["allowed"] for choice in playlist.settings["video_codecs"])
+    veritasium, _lofi = plan.collections
+    assert veritasium.download_profile["auto_subtitles"] == "fallback"
 
 
 def test_paths_map_onto_the_folder_vodloft_sees():
@@ -421,6 +448,8 @@ def test_a_change_made_in_vodloft_is_kept_and_a_newly_mapped_setting_comes_over(
     import importer.pinchflat.mapping as mapping
 
     session, _applied = installation
+    # An earlier VODLoft had no 1440p and reported it as not supported yet.
+    monkeypatch.setitem(mapping._RESOLUTIONS, "1440p", ("format_1080p", "unsupported", "No 1440p yet"))
     _run(session, imports.ImportOptions())
     lists = session.scalar(select(CollectionLocalMediaProfile).where(CollectionLocalMediaProfile.name == "Lists"))
     channel = session.scalar(select(CollectionLocalMediaProfile).where(CollectionLocalMediaProfile.name == "Media server"))
@@ -428,8 +457,8 @@ def test_a_change_made_in_vodloft_is_kept_and_a_newly_mapped_setting_comes_over(
     channel.subtitle_mode = "embed"
     session.commit()
 
-    # A later VODLoft maps 1440p, which this one reported as not supported yet.
-    monkeypatch.setitem(mapping._RESOLUTIONS, "1440p", ("format_4k", "exact", None))
+    # This VODLoft maps 1440p.
+    monkeypatch.setitem(mapping._RESOLUTIONS, "1440p", ("format_1440p", "exact", None))
     view = imports.preview(session, pinchflat.IMPORTER, imports.ImportOptions())
     changes = {profile["name"]: profile["changes"] for profile in view["profiles"]}
     assert changes["Lists"]["updated"] == ["preferred_format"]
@@ -439,7 +468,7 @@ def test_a_change_made_in_vodloft_is_kept_and_a_newly_mapped_setting_comes_over(
     run = _run(session, imports.ImportOptions())
     session.refresh(lists)
     session.refresh(channel)
-    assert lists.preferred_format == "format_4k"
+    assert lists.preferred_format == "format_1440p"
     assert channel.subtitle_mode == "embed"
     kinds = {(entry["kind"], entry["subject"]) for entry in run.report}
     assert ("newly_mapped", "Lists") in kinds and ("kept", "Media server") in kinds

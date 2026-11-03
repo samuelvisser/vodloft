@@ -127,6 +127,17 @@ Some Daily Wire episodes appear with temporary countdown media before the final 
 
 If you only want the finished episode, leave countdown downloading disabled.
 
+## YouTube
+
+Download Profiles of YouTube Collections have a YouTube section under Which episodes. It only appears when the Local Media Profile stores subtitles.
+
+**Use auto-generated subtitles** never, only when there are no real ones (the default), or always. YouTube makes subtitles automatically for most videos; they follow the subtitle languages of the Local Media Profile.
+
+- **Only when there are no real ones** uses an auto-generated subtitle for a language that has no subtitle a person made.
+- **Always** also adds it next to a real one, as its own track marked auto-generated (`Episode.nl.auto.srt` beside the media).
+
+An episode you download by hand follows the Collection's Download Profile for the same Local Media Profile.
+
 ## Using multiple profiles
 
 Multiple Download Profiles are useful whenever format or retention differs. Examples include:

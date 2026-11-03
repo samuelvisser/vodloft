@@ -39,22 +39,47 @@ The temporary folder may be on different storage from the final library. Configu
 
 ## Subtitles
 
-Local Media Profiles can automatically save the subtitle tracks a video has, from The Daily Wire and from every site yt-dlp downloads from, such as YouTube.
+Local Media Profiles can save the subtitles a video has, from The Daily Wire and from every site yt-dlp downloads from, such as YouTube. The Subtitles section reads as two sentences, each with a ✎ to change it.
 
-- **No subtitles**: do not retrieve subtitle tracks.
-- **Embed in media**: add available subtitles as selectable tracks inside the downloaded MP4 or MKV.
-- **Download besides media**: save separate language-labeled SRT files next to the finished media.
-- **Both embed and download**: keep selectable embedded tracks and sidecar files.
+**Where they are stored**: *Store subtitles not at all, inside the media, beside the media, or both.*
 
-**Movies**, **Series** and Collection profiles available for **Podcasts and Series** default to **Download besides media**. **Podcast-only** profiles and **Video** profiles default to **No subtitles**. There is no system-wide subtitle setting; each profile stores its own choice. When **creating** a profile, changing its type or **Available for** selection updates the suggested subtitle option until you explicitly choose a subtitle mode. When **editing an existing profile**, changing its availability does not change its saved subtitle setting.
+- **Inside the media** adds them as tracks you can pick in your player, in MP4 and MKV files.
+- **Beside the media** saves SRT files next to the media, such as `Episode.en.srt`. Subtitles beside the media are always SRT.
 
-Sidecars share the media filename, for example `Movie Name.mp4` and `Movie Name.en.srt` for English. Forced subtitles use names such as `Movie Name.en.forced.srt`. Plex and similar media servers can discover these files automatically. The same naming applies to movie extras and collection episodes.
+**Which languages**: a list of languages in order of preference, and one of:
 
-For yt-dlp sites, only subtitles a person uploaded are fetched, in every language the video has; automatically generated subtitles and YouTube's live chat are not. NPO Start media downloads without subtitles for now, whatever the profile says. Only subtitle tracks actually advertised by the source are downloaded. A video without subtitles downloads as before, and missing or temporarily unavailable tracks do not prevent the primary media from downloading. Audio-only downloads never embed subtitles. HLS bundles cannot have subtitles embedded into a single file; use sidecars for that format.
+- **Every language on the list**: one file per language on the list, when the site has it.
+- **Only the first one available**: one subtitle per episode: the first language on the list that the video has.
+- **Every language the site offers**: whatever the video has. On YouTube this can be dozens when auto-generated subtitles are included.
 
-## Preferred format
+The first language on the list becomes the default subtitle track in players that read it. New profiles start with English. Profiles from before VODLoft 0.7.0 keep downloading every language the site offers.
 
-The preferred format is the quality or media type VODLoft should request when this profile is used.
+**Auto-generated subtitles** only exist on YouTube, so that choice is on each Download Profile of a YouTube Collection (see [Download Profiles](Download-Profiles#youtube)). When a Local Media Profile is used for YouTube Collections, a third, folded line says per Collection whether auto-generated subtitles are downloaded, with a link to each Download Profile.
+
+**Movies**, **Series** and Collection profiles available for **Podcasts and Series** start with subtitles beside the media. **Podcast-only** profiles and **Video** profiles start without subtitles.
+
+Forced subtitles use names such as `Movie Name.en.forced.srt`, and auto-generated ones `Episode.nl.auto.srt`. Plex and similar media servers find these files automatically. NPO Start has no subtitles yet. A video without subtitles downloads as before, and a subtitle that fails never stops the download. Audio-only downloads never embed subtitles, and an HLS bundle can only have them beside it.
+
+## Quality
+
+Quality applies to sites downloaded with yt-dlp, such as YouTube. The Daily Wire offers fixed formats and keeps them.
+
+**Up to** sets a ceiling: 360p, 480p, 720p, 1080p, 1440p, 4K or 8K. VODLoft downloads the highest resolution the site has up to that step, and otherwise the lower ones. **Audio only** downloads no video. Collection profiles also have **HLS**, The Daily Wire's bundle of its 480p, 720p and 1080p versions.
+
+**Optimise for** chooses which codecs and container are used:
+
+- **Compatibility**: H.264 video and AAC audio in MP4. Plays on every device, also older TVs. Above 1080p there is rarely H.264, so a 1440p or 4K profile usually gets 1080p with this goal.
+- **Quality**: AV1, then VP9, then H.264, with Opus audio, in MKV.
+- **Small files**: the same codecs, preferring the smaller of two versions.
+- **Your own**: drag the codecs into your order and switch off the ones you never want. Choose MP4 or MKV and Opus or AAC yourself. When none of your codecs exists for an episode, VODLoft takes the best version there is, or skips the episode and says why.
+
+Changing a codec, the container or the audio codec while a goal is chosen turns it into **Your own**. Choosing a goal again replaces your order with that goal's.
+
+**Audio format**, for Audio only: **M4A** (plays everywhere, including podcast apps), **Opus** (smallest, not every podcast app plays it) or **MP3** (for very old players). Opus files get their thumbnail and metadata beside them, not inside.
+
+**Audio language** picks a dubbed audio track when a video has one. **Original** keeps the language the video was made in.
+
+Profiles from before VODLoft 0.7.0 keep what they downloaded: up to their resolution with Compatibility, and a 4K profile with H.264 first but every codec allowed.
 
 A profile represents one local variant. If you want both audio and 1080p copies of the same episode, create separate Local Media Profiles and use them from separate Download Profiles.
 

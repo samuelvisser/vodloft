@@ -26,6 +26,28 @@ export const LocalMediaProfileSubtitleModeSchema = z.enum([
 export type LocalMediaProfileSubtitleMode = z.infer<typeof LocalMediaProfileSubtitleModeSchema>
 
 
+export const VideoCodecChoiceSchema = z.object({
+    codec: z.enum(['av1', 'vp9', 'h264', 'h265']),
+    allowed: z.boolean(),
+})
+export const LanguageCodeSchema = z.string().regex(/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/, 'Use a language code such as en or pt-BR')
+
+/** Quality and subtitle language choices, with the defaults of a new profile. */
+const QualityAndLanguageFields = {
+    subtitleLanguages: z.array(LanguageCodeSchema).max(20).default(['en']),
+    subtitleLanguageMode: z.enum(['listed', 'first', 'site']).default('listed'),
+    qualityGoal: z.enum(['compatibility', 'quality', 'small', 'custom']).default('compatibility'),
+    videoCodecs: z.array(VideoCodecChoiceSchema).default([
+        {codec: 'h264', allowed: true}, {codec: 'av1', allowed: false},
+        {codec: 'vp9', allowed: false}, {codec: 'h265', allowed: false},
+    ]).refine((codecs) => codecs.some((choice) => choice.allowed), 'Allow at least one video codec'),
+    codecFallback: z.enum(['best', 'skip']).default('best'),
+    container: z.enum(['mp4', 'mkv']).default('mp4'),
+    audioCodec: z.enum(['aac', 'opus']).default('aac'),
+    audioFormat: z.enum(['m4a', 'opus', 'mp3']).default('m4a'),
+    audioLanguage: LanguageCodeSchema.nullable().default(null),
+}
+
 // ---------- Strict request (create/update) ----------
 export const LocalMediaProfileSchemaRequest = z.object({
     name: z.string().min(1, 'Name is required'),
@@ -33,6 +55,7 @@ export const LocalMediaProfileSchemaRequest = z.object({
     thumbnailMode: LocalMediaProfileThumbnailModeSchema.default('system'),
     metadataMode: LocalMediaProfileMetadataModeSchema.default('system'),
     subtitleMode: LocalMediaProfileSubtitleModeSchema.default('sidecar'),
+    ...QualityAndLanguageFields,
 })
 
 export const LocalMediaProfileCreateBaseSchema = LocalMediaProfileSchemaRequest
@@ -68,6 +91,7 @@ export const LocalMediaProfileSchemaResponse = z.looseObject({
     thumbnailMode: LocalMediaProfileThumbnailModeSchema.default('system'),
     metadataMode: LocalMediaProfileMetadataModeSchema.default('system'),
     subtitleMode: LocalMediaProfileSubtitleModeSchema.default('sidecar'),
+    ...QualityAndLanguageFields,
     appendMediaTypeToFilename: z.boolean().optional().default(false),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,

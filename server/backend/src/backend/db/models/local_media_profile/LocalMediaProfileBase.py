@@ -3,17 +3,24 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Index, String, func
+from sqlalchemy import JSON, Boolean, Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
 from backend.types.local_media_profile_types import (
+    AudioCodec,
+    AudioFormat,
+    CodecFallback,
     LocalMediaProfileMetadataMode,
     LocalMediaProfileStorageMode,
     LocalMediaProfileSubtitleMode,
     LocalMediaProfileThumbnailMode,
     LocalMediaProfileType,
+    QualityGoal,
+    SubtitleLanguageMode,
+    VideoContainer,
+    goal_video_codecs,
 )
 
 if TYPE_CHECKING:
@@ -78,6 +85,36 @@ class LocalMediaProfileBase(Base):
         server_default=LocalMediaProfileSubtitleMode.SIDECAR.value,
         nullable=False,
     )
+
+    # Subtitle languages in order of preference, and which of them to download.
+    subtitle_languages: Mapped[list[str]] = mapped_column(JSON, default=lambda: ["en"], server_default='["en"]', nullable=False)
+    subtitle_language_mode: Mapped[str] = mapped_column(
+        String(16), default=SubtitleLanguageMode.LISTED.value, server_default=SubtitleLanguageMode.LISTED.value, nullable=False,
+    )
+
+    # Quality on sites yt-dlp downloads from. A goal other than custom fixes
+    # the codec order, container and audio codec to that goal's.
+    quality_goal: Mapped[str] = mapped_column(
+        String(16), default=QualityGoal.COMPATIBILITY.value, server_default=QualityGoal.COMPATIBILITY.value, nullable=False,
+    )
+    # [{"codec": "h264", "allowed": true}, ...], most wanted first.
+    video_codecs: Mapped[list[dict]] = mapped_column(
+        JSON, default=lambda: goal_video_codecs(QualityGoal.COMPATIBILITY), nullable=False,
+    )
+    codec_fallback: Mapped[str] = mapped_column(
+        String(8), default=CodecFallback.BEST.value, server_default=CodecFallback.BEST.value, nullable=False,
+    )
+    container: Mapped[str] = mapped_column(
+        String(8), default=VideoContainer.MP4.value, server_default=VideoContainer.MP4.value, nullable=False,
+    )
+    audio_codec: Mapped[str] = mapped_column(
+        String(8), default=AudioCodec.AAC.value, server_default=AudioCodec.AAC.value, nullable=False,
+    )
+    audio_format: Mapped[str] = mapped_column(
+        String(8), default=AudioFormat.M4A.value, server_default=AudioFormat.M4A.value, nullable=False,
+    )
+    # A dubbed audio track's language code; None keeps the original language.
+    audio_language: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()
