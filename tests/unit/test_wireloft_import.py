@@ -280,3 +280,26 @@ def test_the_import_task_says_the_downloaded_files_are_adopted(installation, mon
     monkeypatch.setattr(entrypoint, "db_session", same_session)
     summary = entrypoint._run(run.id).summary
     assert summary == "Imported 1 new collection(s) and linked 0; adopted 1 downloaded file(s)"
+
+
+def test_an_imported_season_keeps_its_slug_when_another_collection_uses_it_too(installation):
+    from backend.db.models import Collection, Season
+    from backend.services import imports
+
+    session, _applied = installation
+    other = Collection(
+        uuid="other-uuid", slug="other-show", title="Other Show", sharing_url="https://www.dailywire.com/show/other-show",
+        membership_level="FREE", type="series", episode_identifier="seasonal", author_name="Host", author_slug="host",
+        source_key="dailywire",
+    )
+    session.add(other)
+    session.flush()
+    session.add(Season(collection_id=other.id, index=1, slug="morning-show-season-1", name="Season 1"))
+    session.commit()
+
+    run = _run(session, imports.ImportOptions())
+
+    assert run.status == "finished", run.report
+    imported = session.scalar(select(Collection).where(Collection.slug != "other-show"))
+    # Indexing finds a collection's seasons by the Source's slug, which is unique only within the collection.
+    assert [season.slug for season in imported.seasons] == ["morning-show-season-1"]
