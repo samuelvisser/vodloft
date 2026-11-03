@@ -189,6 +189,9 @@ class WhichEpisodesAPIRequest(RequestBase):
     include_upcoming_seasons: bool
     rules: list[DownloadProfileRuleAPIIn] = Field(default_factory=list, max_length=50)
     include_episodes: bool = False
+    # The episode list is read a page at a time, newest first, as the form scrolls through it.
+    episodes_offset: int = Field(default=0, ge=0)
+    episodes_limit: int = Field(default=50, ge=1, le=200)
 
 
 class WhichEpisodesEpisodeAPIRead(ResponseBase):
@@ -209,6 +212,7 @@ class WhichEpisodesAPIRead(ResponseBase):
     rules: list[int]
     downloaded: int
     episodes: list[WhichEpisodesEpisodeAPIRead] | None = None
+    """One page of the Collection's indexed episodes, from episodes_offset; None unless include_episodes."""
 
 
 class SkippedByFilterAPIRead(ResponseBase):

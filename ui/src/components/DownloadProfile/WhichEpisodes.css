@@ -233,6 +233,13 @@
     font-size: 0.92rem;
 }
 
+.which-episodes-list li.which-episodes-list-end {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    color: var(--muted);
+}
+
 .which-episodes-list li:last-child {
     border-bottom: 0;
 }
