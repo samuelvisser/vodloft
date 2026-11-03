@@ -204,6 +204,20 @@ def require_unique_download_profile_episode_types(
         exclude_profile_id: int | None = None,
 ) -> None:
     requested_types = set(episode_types)
+    others = select(DownloadProfile.id, DownloadProfile.ep_id_type_list).where(
+        DownloadProfile.collection_id == collection_id,
+        DownloadProfile.local_media_profile_id == local_media_profile_id,
+    )
+    if exclude_profile_id is not None:
+        others = others.where(DownloadProfile.id != exclude_profile_id)
+    other_lists = [list(types or []) for _id, types in s.execute(others)]
+    # A profile without an episode types line downloads every type, so it overlaps any other.
+    if other_lists and (not requested_types or any(not types for types in other_lists)):
+        raise HTTPException(
+            status_code=409,
+            detail="Another Download Profile of this Collection already downloads these episodes with this Local Media Profile; "
+                   "give each profile its own episode types",
+        )
     if not requested_types:
         return
 

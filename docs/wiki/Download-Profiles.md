@@ -30,26 +30,27 @@ Each line narrows the one above it. The number next to a line says how many of t
 line leaves out, and the bottom line says how many are left, for example **37 of 412 indexed episodes will be
 downloaded**. **Show which** lists every episode, and for each one that won't be downloaded, the line that left it out.
 
-The first lines are built in and can't be removed:
+A new profile starts with two lines, which you can remove with the bin icon and add again with **Add filter**:
 
 - the **episode types**. The types come from the show's Source: The Daily Wire has Episode, Ep. Extra, Trailer and
-  Auxiliary, and YouTube has Video, Short and Livestream;
-- the **seasons**, for a seasonal collection;
-- the **date window** (see Date options below).
+  Auxiliary, and YouTube has Video, Short and Livestream. Without this line, every type is downloaded;
+- the **date window**, on the **publication date** or the **download date** (see Date options below). Without this
+  line, episodes of any date are downloaded and nothing is deleted.
 
-Click the pencil on a line to change it, and **Done** to fold it back into its sentence. When you create a profile,
-the built-in lines start open so you see them the first time.
+A seasonal collection also has a **seasons** line, which stays. Click the pencil on a line to change it, and **Done**
+to fold it back into its sentence. When you create a profile, these lines start open so you see them the first time.
 
 ### Your own filters
 
-**Add filter** adds a line of your own. Every filter has an action and something it looks at:
+**Add filter** adds a line of your own, set to **Only download**. Every filter has an action and something it looks at:
 
 - **Skip** leaves out the episodes that match.
 - **Only download** leaves out the episodes that *don't* match.
 - **Keep** never stops a download. It protects the downloads it matches from being deleted by the date window, so you
   can, for example, keep every episode with “interview” in its title forever while the rest rotate out.
 
-A filter can look at the episode's **title** or **description**, using the regular expression editor (you don't need to
+Choosing **episode types**, **publication date** or **download date** as what a new filter looks at brings back that
+line when it isn't there. A filter can look at the episode's **title** or **description**, using the regular expression editor (you don't need to
 know regular expressions: the Contains and Any of these tabs write one for you, and the tester shows which of the
 collection's episodes match), or at its **duration**: shorter or longer than a length you choose. An episode whose
 length isn't known yet is never left out by a duration filter.
@@ -88,6 +89,10 @@ Selecting all seasons in the UI also enables future seasons so the profile keeps
 
 ## Date options
 
+The date line filters on one of two dates. **Publication date** offers the limits below. **Download date** keeps each
+download for a number of days, counted from the day it was downloaded, however old the episode already was; only
+episodes published within that many days are downloaded. This is how Pinchflat's retention works.
+
 ### Limit by
 
 Choose how many episodes the profile should consider. On a seasonal collection the limit counts only episodes in the chosen seasons:
@@ -108,11 +113,8 @@ This is useful when you want to begin archiving a collection from a particular d
 
 When a rolling Date or Number of episodes limit is active, **Delete older episodes** can also remove downloaded files that fall outside that window. When retention removes an episode, its download record and download history are removed as well, so it no longer appears on the Downloads page.
 
-With a Date limit you also choose when the clock starts:
-
-- **After publication** deletes an episode once it was published longer ago than the window.
-- **After downloading** keeps every download for the full number of days, counted from the day it was downloaded,
-  however old the episode already was. This is how Pinchflat's retention works.
+On the publication date, an episode is deleted once it was published longer ago than the window; on the download date,
+once it was downloaded longer ago.
 
 Downloads you keep, and downloads a Keep filter matches, are never deleted.
 

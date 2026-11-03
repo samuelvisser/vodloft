@@ -21,7 +21,7 @@ RELEASE_REVISIONS = (
 )
 VODLOFT_0_1_0_REVISION = "f4abb559e3ab"
 VODLOFT_0_5_0_REVISION = "817515eb8209"
-HEAD_REVISION = "b5e1c0a7d392"
+HEAD_REVISION = "e2f7a41c9d05"
 
 
 @pytest.fixture
@@ -244,3 +244,35 @@ def test_collections_migration_renames_shows_and_their_stored_values(migration_d
             "SELECT output_template FROM local_media_profiles WHERE id = 5"
         )).scalar_one() == "/downloads/{{ show }}/{{ meta_show_year }} {{ show_title | upper }} {{ showtime }}.ext"
         assert connection.execute(text("SELECT resource_type FROM task_runs")).scalar_one() == "SHOW"
+
+
+def test_download_profiles_without_episode_types_stop_downloading(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "b5e1c0a7d392")
+    with engine.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+            "author_name, author_slug, source_key) VALUES (1, 'uuid-1', 'a', 'A', 'https://example.test/a', "
+            "'free', 'series', 'numbered', 'Author', 'author', 'ytdlp')"
+        ))
+        connection.execute(text(
+            "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, type, video_codecs) VALUES "
+            "(5, 'p', 'P', '/downloads/{{ collection }}/{{ episode_title }}.ext', 'format_1080p', 'collection', '[]')"
+        ))
+        for profile_id, types in ((1, "[]"), (2, '["ep"]')):
+            connection.execute(text(
+                "INSERT INTO download_profiles (id, collection_id, local_media_profile_id, enable_profile, ep_id_type_list, "
+                "download_with_countdown, redownload_final, download_days_in_past, download_episode_count, "
+                "delete_older_episodes, include_upcoming_seasons, sponsorblock_segments) "
+                "VALUES (:id, 1, 5, 1, :types, 0, 0, 0, 0, 0, 1, '{}')"
+            ), {"id": profile_id, "types": types})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        enabled = dict(connection.execute(text("SELECT id, enable_profile FROM download_profiles")).all())
+    # An empty list used to download nothing; now it would mean every type.
+    assert enabled == {1: 0, 2: 1}

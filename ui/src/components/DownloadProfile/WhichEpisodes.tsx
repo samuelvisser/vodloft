@@ -12,9 +12,11 @@ import {
     DurationOperatorReg,
     EpisodeRuleActionReg,
     EpisodeRuleFieldReg,
+    downloadProfileDefaultsFor,
     newEpisodeRule,
     type EpisodeRule,
 } from '../../types/schemas/download_profile'
+import {createSelectRegistry} from '../../utils/selectRegistry'
 import type {EpisodeTagRead} from '../../types/schemas/source'
 import type {SeasonItem} from './DownloadProfileSeasonFilter'
 import {useWhichEpisodes} from './useWhichEpisodes'
@@ -44,6 +46,17 @@ const BUILT_IN_FIELDS: Record<string, string[]> = {
     ],
 }
 
+// A new filter can also be one of the built-in lines while that line isn't there.
+const FILTER_KINDS = {
+    title: {label: 'title'},
+    description: {label: 'description'},
+    duration: {label: 'duration'},
+    types: {label: 'episode types'},
+    published: {label: 'publication date'},
+    downloaded: {label: 'download date'},
+}
+const DATE_RESET = {downloadDaysInPast: 0, downloadEpisodeCount: 0, downloadStartingFrom: null, deleteOlderEpisodes: false, retentionFrom: 'published'}
+
 const LEFT_OUT_LABELS: Record<string, string> = {
     unavailable: 'Can’t be downloaded',
     types: 'Episode types',
@@ -59,6 +72,11 @@ function Sentence({parts}: {parts: Part[]}) {
                 : part.strong ? <b key={index}>{part.text}</b> : <Fragment key={index}>{part.text}</Fragment>)}
         </>
     )
+}
+
+/** Without an episode types line above it, the date line starts the sentence itself. */
+function withLead(lead: boolean, parts: Part[]): Part[] {
+    return lead ? [{text: 'Download episodes '}, ...parts] : parts
 }
 
 /** Clicking a line's sentence opens or closes it, unless the click was on one of its controls. */
@@ -84,6 +102,7 @@ export default function WhichEpisodes({
     const {fields, append, remove} = useFieldArray({control, name: 'rules'})
     const seasonal = episodeIdentifier === EpisodeIdentifierReg.Enum.seasonal
     const builtIns = ['types', ...(seasonal ? ['seasons'] : []), ...(episodeIdentifier !== undefined ? ['dates'] : [])]
+    const datesAllowed = episodeIdentifier !== undefined
     // While creating, every built-in line stays open until you open or close one yourself.
     const [chosenOpen, setOpen] = useState<Set<string> | null>(startOpen ? null : new Set())
     const open = chosenOpen ?? new Set(builtIns)
@@ -152,6 +171,37 @@ export default function WhichEpisodes({
         if (await trigger(fieldNames)) closeLine(key)
     }
 
+    // Episode types and the date window are filters you can remove and add again; while open they stay.
+    const typesShown = (values.epIdTypeList ?? []).length > 0 || open.has('types')
+    const hasDateLimit = (values.downloadDaysInPast ?? 0) > 0 || (values.downloadEpisodeCount ?? 0) > 0
+        || !!values.downloadStartingFrom || values.retentionFrom === 'downloaded'
+    const datesShown = datesAllowed && (hasDateLimit || open.has('dates'))
+    const kindReg = createSelectRegistry('WhichEpisodesFilterKind', FILTER_KINDS, [
+        ...EpisodeRuleFieldReg.values,
+        ...(typesShown ? [] : ['types' as const]),
+        ...(datesAllowed && !datesShown ? ['published' as const, 'downloaded' as const] : []),
+    ])
+    const removeBuiltIn = (key: string) => {
+        closeLine(key)
+        if (key === 'types') setValue('epIdTypeList', [], {shouldDirty: true, shouldValidate: true})
+        if (key === 'dates') {
+            for (const [name, value] of Object.entries(DATE_RESET)) setValue(name, value, {shouldDirty: true, shouldValidate: true})
+        }
+    }
+    // A new filter turned into a built-in line: the line opens, and Cancel takes it away again.
+    const addBuiltIn = (ruleIndex: number, kind: 'types' | 'published' | 'downloaded') => {
+        remove(ruleIndex)
+        const key = kind === 'types' ? 'types' : 'dates'
+        openLine(key, BUILT_IN_FIELDS[key])
+        if (kind === 'types') {
+            setValue('epIdTypeList', downloadProfileDefaultsFor(episodeIdentifier, tags).epIdTypeList, {shouldDirty: true})
+        } else {
+            setValue('downloadDaysInPast', 180, {shouldDirty: true})
+            setValue('retentionFrom', kind, {shouldDirty: true})
+            setValue('deleteOlderEpisodes', kind === 'downloaded', {shouldDirty: true})
+        }
+    }
+
     const unselectedTypes = (tags ?? []).filter((tag) => !(values.epIdTypeList ?? []).includes(tag.key))
     const typeLabels = (values.epIdTypeList ?? []).map((key: string) => tags?.find((tag) => tag.key === key)?.label ?? key)
     const seasonNames = (values.seasons ?? []).map((season: SeasonItem) => seasons.find((item) => item.slug === season.slug)?.name ?? season.name)
@@ -171,7 +221,13 @@ export default function WhichEpisodes({
                     >
                         <FontAwesomeIcon icon={faIcon('fass', 'pen')}/>
                     </button>
-                    <span className="which-episodes-icon is-placeholder" title="Built-in lines can’t be removed">—</span>
+                    {key === 'seasons'
+                        ? <span className="which-episodes-icon is-placeholder" title="The seasons line can’t be removed">—</span>
+                        : (
+                            <button type="button" className="which-episodes-icon" aria-label={`Remove: ${plainText(parts)}`} onClick={() => removeBuiltIn(key)}>
+                                <FontAwesomeIcon icon={faIcon('fass', 'trash')}/>
+                            </button>
+                        )}
                 </div>
                 {isOpen && (
                     <div className="which-episodes-editor">
@@ -211,18 +267,18 @@ export default function WhichEpisodes({
                 </button>
             </div>
             <ul className="which-episodes-lines">
-                {builtInLine(
+                {typesShown && builtInLine(
                     'types', typesSentence(typeLabels), result?.types, typesField,
                     unselectedTypes.length > 0 && unselectedTypes.length <= 2 ? unselectedTypes.map((tag) => tag.label).join(', ') : undefined,
                 )}
                 {seasonal && builtInLine('seasons', seasonsSentence(seasonNames, !!values.includeUpcomingSeasons), result?.seasons, seasonsField)}
-                {episodeIdentifier !== undefined && builtInLine('dates', dateSentence({
+                {datesShown && builtInLine('dates', withLead(!typesShown && !seasonal, dateSentence({
                     downloadDaysInPast: values.downloadDaysInPast ?? 0,
                     downloadEpisodeCount: values.downloadEpisodeCount ?? 0,
                     downloadStartingFrom: values.downloadStartingFrom ?? null,
                     deleteOlderEpisodes: !!values.deleteOlderEpisodes,
                     retentionFrom: values.retentionFrom ?? 'published',
-                }), result?.dates, datesField)}
+                })), result?.dates, datesField)}
                 {fields.map((item, index) => {
                     const rule: EpisodeRule = rules[index] ?? newEpisodeRule()
                     const key = open.has(`rule-new-${index}`) ? `rule-new-${index}` : `rule-${item.id}`
@@ -241,9 +297,13 @@ export default function WhichEpisodes({
                                         />
                                         <span>if the</span>
                                         <SimpleSelect
-                                            inputId={`rule-${index}-field`} registry={EpisodeRuleFieldReg} value={rule.field}
+                                            inputId={`rule-${index}-field`} registry={kindReg} value={rule.field}
                                             aria-label="What the filter looks at"
                                             onChange={(value) => {
+                                                if (value === 'types' || value === 'published' || value === 'downloaded') {
+                                                    addBuiltIn(index, value)
+                                                    return
+                                                }
                                                 setValue(`${name}.field`, value, {shouldDirty: true})
                                                 if (value === 'duration' && !rule.durationOperator) {
                                                     setValue(`${name}.durationOperator`, 'shorter', {shouldDirty: true})
