@@ -995,7 +995,9 @@ function RunView({importer, run, onBack}: {importer: Importer, run: ImportRun, o
         if (collectionId == null) return 'Waiting for indexing'
         const indexing = findActive('collection.index', 'collection', collectionId)
         if (indexing?.status === 'RUNNING') {
-            return typeof indexing.progress === 'number' ? `Indexing… ${indexing.progress}%` : 'Indexing…'
+            if (typeof indexing.progress === 'number' && indexing.progress > 0) return `Indexing… ${indexing.progress}%`
+            const found = indexing.progressMeta?.found
+            return typeof found === 'number' ? `Indexing… ${found} episode${found === 1 ? '' : 's'} found` : 'Indexing…'
         }
         return 'Waiting for indexing'
     }
