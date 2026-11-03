@@ -75,3 +75,31 @@ def expand(template: str, item_values: Mapping[str, str | None] | None = None) -
         for name, value in combined.items()
     }
     return _render(template, expanded)
+
+
+_FIELD = re.compile(r"%\([^)]*\)[-#0 +]*\d*(?:\.\d+)?[a-zA-Z]")
+
+
+def written_as(template: str) -> dict[str, str]:
+    """Each yt-dlp field that ``expand`` made of a ``{{ name }}``, and how the template wrote it.
+
+    A value of several fields, such as ``{{ season_episode_from_date }}``, names
+    each of its fields with the value it is part of.
+    """
+    item_values = {name: f"%({PSEUDO_FIELD_PREFIX}{name})s" for name in ITEM_VALUES}
+    aliases: dict[str, str] = {}
+    for match in _INTERPOLATION.finditer(template):
+        name = match.group(1)
+        written = f"{{{{ {name} }}}}"
+        try:
+            fragment = expand(written)
+        except TemplateSyntaxError:
+            continue
+        fragment = item_values.get(name, fragment)
+        fields = _FIELD.findall(fragment)
+        if len(fields) == 1 and fields[0] == fragment:
+            aliases.setdefault(fragment, written)
+        else:
+            for found in fields:
+                aliases.setdefault(found, f"{found} in {written}")
+    return aliases

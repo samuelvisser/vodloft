@@ -49,7 +49,8 @@ class ConversionReport:
             if part.support == "exact":
                 continue
             result = f"{part.result!r}" if part.result else "nothing"
-            lines.append(f"{part.source!r} becomes {result}: {part.support}. {part.reason or ''}".rstrip())
+            how = "nearly the same" if part.support == "close" else "not converted"
+            lines.append(f"{part.source!r} becomes {result} ({how}). {part.reason or ''}".rstrip())
         return lines
 
 

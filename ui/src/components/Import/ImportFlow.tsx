@@ -781,10 +781,13 @@ const QUOTED_JINJA = /(["'])(\{[{%][\s\S]*?[}%]\})\1/g
 
 /** A conversion note, with its Jinja colored as the template editor colors it. */
 function ReportLine({line}: {line: string}) {
+    // Only what it became is VODLoft's Jinja; the part before is the other program's own text.
+    const split = line.indexOf(' becomes ')
     const parts: ReactNode[] = []
-    let last = 0
-    for (const match of line.matchAll(QUOTED_JINJA)) {
-        const at = match.index ?? 0
+    let last = split >= 0 ? split : 0
+    if (last) parts.push(line.slice(0, last))
+    for (const match of line.slice(last).matchAll(QUOTED_JINJA)) {
+        const at = (split >= 0 ? split : 0) + (match.index ?? 0)
         if (at > last) parts.push(line.slice(last, at))
         parts.push(
             <OpaqueOutputTemplateCode

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Literal
 
 from jinja2 import Environment, TemplateSyntaxError as JinjaSyntaxError, nodes
@@ -24,7 +24,7 @@ from yt_dlp.postprocessor.metadataparser import MetadataParserPP
 from ..contract import CustomIndexPlan, Support
 from .grammar import Candidate, Field, Template, TemplateSyntaxError, Text, parse
 from .options import MetadataAction, OptionSet
-from .pinchflat import PSEUDO_FIELD_PREFIX, expand
+from .pinchflat import PSEUDO_FIELD_PREFIX, expand, written_as
 from .report import ConversionReport, PartReport, ReportBuilder
 
 ValueType = Literal["str", "int", "index", "date", "datetime"]
@@ -742,4 +742,9 @@ def convert_pinchflat(template: str, options: ConversionOptions | None = None) -
         ytdlp_template = expand(template)
     except TemplateSyntaxError as exc:
         return ConversionReport(template, template, None, errors=(str(exc),))
-    return convert_ytdlp(ytdlp_template, options, original=template)
+    report = convert_ytdlp(ytdlp_template, options, original=template)
+    # Name each part as the person wrote it: Pinchflat's {{ channel }}, not the %(channel)S it stands for.
+    aliases = written_as(template)
+    return replace(report, parts=tuple(
+        replace(part, source=aliases.get(part.source, part.source)) for part in report.parts
+    ))
