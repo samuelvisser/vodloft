@@ -48,6 +48,9 @@ class ConversionReport:
         for part in (*self.actions, *self.parts):
             if part.support == "exact" and part.source == part.result:
                 continue
+            if part.support == "exact" and part in self.actions and not part.result:
+                # A metadata action the template doesn't use changes nothing for this profile.
+                continue
             result = f"{part.result!r}" if part.result else "nothing"
             how = {"exact": "exact", "close": "nearly the same"}.get(part.support, "not converted")
             line = f"{part.source!r} becomes {result} ({how}). {part.reason or ''}".rstrip()
