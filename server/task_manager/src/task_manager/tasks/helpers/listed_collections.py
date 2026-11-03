@@ -143,10 +143,12 @@ def _list_new_episodes(s: Session, collection: Collection, source: Source, progr
     found: list[VideoDetails] = []
     for details in source.list_episodes(url, known=known):
         found.append(details)
-        update_progress(
-            progress, _LISTING_PROGRESS,
-            f"Found {len(found)} new {'episode' if len(found) == 1 else 'episodes'} of '{title}' at {source.name}",
-        )
+        message = f"Found {len(found)} new {'episode' if len(found) == 1 else 'episodes'} of '{title}' at {source.name}"
+        if progress:
+            # A Source can't say how many episodes there are, so the count is shown instead of a percentage.
+            progress.set(_LISTING_PROGRESS, message, meta={"found": len(found)})
+        else:
+            update_progress(progress, _LISTING_PROGRESS, message)
     return found
 
 

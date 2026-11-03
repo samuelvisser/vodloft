@@ -823,3 +823,21 @@ def test_the_path_check_marks_an_uploader_it_cannot_know():
 
     assert proof["identical"] == 1
     assert [item["rendered"] for item in proof["differences"]] == ["/downloads/V/Talks/(uploader) - Second.mp4"]
+
+
+def test_a_step_that_fails_shows_as_failed_and_the_import_finishes(installation):
+    from backend.db.models import ImportRun, ImportStep
+    from backend.services import imports
+
+    session, _applied = installation
+    run = _run(session, imports.ImportOptions())
+    steps = list(session.scalars(select(ImportStep).where(ImportStep.run_id == run.id)))
+    waiting = imports.run_view(session, session.get(ImportRun, run.id))
+    assert [step["indexed"] for step in waiting["steps"]] == [False] * len(steps)
+    for step in steps:
+        imports.fail_step(session, step.id, "database is locked")
+
+    view = imports.run_view(session, session.get(ImportRun, run.id))
+    assert [step["status"] for step in view["steps"]] == ["failed"] * len(steps)
+    assert view["steps"][0]["problems"] == [{"path": None, "error": "database is locked"}]
+    assert view["status"] == "finished"

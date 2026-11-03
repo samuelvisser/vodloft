@@ -40,6 +40,7 @@ from importer.paths import DEFAULT_PATH_MAP, PathMap, detect_path_map, map_path,
 from importer.registry import get_importer as _registered_importer
 from sources.ytdlp_options import check_ytdlp_options
 
+from backend.db.core import begin_write_transaction
 from backend.db.models import (
     Collection, CollectionLocalMediaProfile, DownloadProfile, DownloadProfileRule, Episode, ExistingFileScan, ImportLink, ImportRun, ImportStep,
     LocalMediaProfileBase, MediaDownloadBase, MovieLocalMediaProfile,
@@ -615,6 +616,7 @@ def preview(session: Session, importer: Importer, options: ImportOptions) -> dic
 
     last = session.scalar(select(ImportRun).where(ImportRun.importer == importer.key)
                           .order_by(ImportRun.id.desc()).limit(1))
+    records = _record_summary(session, plan, links) if plan.records else None
     return {
         "importer": importer.key,
         "version": plan.version,
@@ -625,12 +627,13 @@ def preview(session: Session, importer: Importer, options: ImportOptions) -> dic
         "profiles": profile_views,
         "settings": settings,
         "warnings": [_warning(warning) for warning in plan.warnings],
-        "records": _record_summary(session, plan, links) if plan.records else None,
+        "records": records,
         "last_run": run_summary(last) if last else None,
         "merge_profiles": bool(options.merge_profiles),
         "counts": {
-            "collections": len(plan.collections),
-            "files": sum(1 for file in plan.files if file.kind == "file"),
+            "collections": len(records["collections"]) if records else len(plan.collections),
+            "files": sum(item["files"] for item in records["collections"]) if records
+            else sum(1 for file in plan.files if file.kind == "file"),
         },
     }
 
@@ -1313,8 +1316,22 @@ def _suppress(session: Session, episode: Episode, profile: CollectionLocalMediaP
     return True
 
 
+def _begin_write(session: Session) -> None:
+    """Commit what came before and start a transaction that writes.
+
+    With SQLite, a transaction that reads first and only then writes fails at once
+    with "database is locked" when another job committed in between, which
+    indexing and progress updates do all the time. Reserving the write up front
+    waits for the other job instead.
+    """
+    if session.in_transaction():
+        session.commit()
+    begin_write_transaction(session)
+
+
 def run_step(session: Session, step_id: int) -> dict[str, int]:
     """Number, adopt and hold back the episodes of one imported Collection."""
+    _begin_write(session)
     step = session.get(ImportStep, step_id)
     if step is None or step.status != STEP_WAITING:
         return {}
@@ -1330,7 +1347,6 @@ def run_step(session: Session, step_id: int) -> dict[str, int]:
     # Each file is committed on its own: adopting reads the file from disk, and one transaction for a
     # whole Collection would hold SQLite's write lock that long, so other steps and indexes time out.
     # Adopting again is a no-op, so a step that stops halfway picks up where it was.
-    session.commit()
     problems: list[dict[str, str]] = []
     for file in step.files:
         episode = episodes.get(file["media_site_id"])
@@ -1341,11 +1357,12 @@ def run_step(session: Session, step_id: int) -> dict[str, int]:
                     problems.append({"path": file["path"], "error": "The video is not in the Collection (removed or private)"})
             continue
         if file["kind"] == "suppressed":
+            _begin_write(session)
             counts["suppressed"] += int(_suppress(session, episode, profile))
-            session.commit()
             continue
         if file["kind"] != "file":
             continue
+        _begin_write(session)
         try:
             with session.begin_nested():
                 adopted = adopt(session, media=episode, local_media_profile=profile, path=real_path(file["path"]),
@@ -1358,7 +1375,7 @@ def run_step(session: Session, step_id: int) -> dict[str, int]:
         if file.get("kept") and isinstance(adopted.download, EpisodeMediaDownload):
             adopted.download.kept = True
         counts["adopted" if adopted.created else "already_adopted"] += 1
-        session.commit()
+    _begin_write(session)
     download_profile = session.get(DownloadProfile, step.download_profile_id) if step.download_profile_id else None
     if download_profile is not None:
         counts["would_download"] = _would_download(session, download_profile)
@@ -1383,6 +1400,19 @@ def run_step(session: Session, step_id: int) -> dict[str, int]:
     _finish_run_if_done(session, step.run_id)
     session.commit()
     return dict(counts)
+
+
+def fail_step(session: Session, step_id: int, error: str) -> None:
+    """Record that adopting a Collection's files stopped with an error, so the import does not wait for it."""
+    _begin_write(session)
+    step = session.get(ImportStep, step_id)
+    if step is None or step.status != STEP_WAITING:
+        return
+    step.result = {"counts": {}, "problems": [{"path": None, "error": error}]}
+    step.status = STEP_FAILED
+    session.flush()
+    _finish_run_if_done(session, step.run_id)
+    session.commit()
 
 
 def rename_collection_files(session: Session, collection_id: int, local_media_profile_id: int) -> None:
@@ -1489,6 +1519,18 @@ def _matching_view(session: Session, step: ImportStep) -> dict[str, Any] | None:
     return {"status": scan.status, "found": found}
 
 
+def _indexed(session: Session, collection_id: int) -> bool:
+    """Whether the Collection's first index finished, so its step only waits for its files to be adopted."""
+    from task_manager.scheduler.db import TaskOperation
+    from task_manager.scheduler.types import OperationStatus
+
+    return session.scalar(select(TaskOperation.id).where(
+        TaskOperation.kind == "collection.index", TaskOperation.resource_type == "collection",
+        TaskOperation.resource_id == collection_id,
+        TaskOperation.status.in_((OperationStatus.SUCCEEDED.value, OperationStatus.PARTIAL.value)),
+    ).limit(1)) is not None
+
+
 def run_view(session: Session, run: ImportRun) -> dict[str, Any]:
     """A run with its report and what happened to each Collection's files."""
     steps = []
@@ -1499,6 +1541,7 @@ def run_view(session: Session, run: ImportRun) -> dict[str, Any]:
             "collection_slug": collection.slug if collection else None,
             "collection_title": collection.title if collection else None,
             "status": step.status,
+            "indexed": step.status != STEP_WAITING or _indexed(session, step.collection_id),
             "files": sum(1 for file in step.files if file.get("kind") == "file"),
             "counts": (step.result or {}).get("counts", {}),
             "problems": (step.result or {}).get("problems", []),

@@ -206,9 +206,12 @@ def test_a_scan_of_a_listed_collection_skips_the_daily_wire(listed, session, mon
 class _Progress:
     def __init__(self):
         self.messages: list[str] = []
+        self.found: list[int] = []
 
-    def set(self, _percentage, message):
+    def set(self, _percentage, message, meta=None):
         self.messages.append(message)
+        if meta is not None:
+            self.found.append(meta["found"])
 
 
 def test_a_dry_run_lists_a_listed_collection_without_saving(listed, session):
@@ -241,6 +244,7 @@ def test_listing_reports_each_new_episode(listed, session):
         "Found 2 new episodes of 'A playlist' at Listed",
         "Saving 2 new episodes of 'A playlist'",
     ]
+    assert progress.found == [1, 2]
 
 
 def test_a_canceled_scan_stops_between_lookups_and_saves_nothing(lookups, session):

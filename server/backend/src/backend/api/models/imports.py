@@ -184,6 +184,9 @@ class ImportRecordCollectionAPIRead(ResponseBase):
     title: Optional[str] = None
     url: Optional[str] = None
     becomes: str
+    profile_name: Optional[str] = Field(default=None, description="The Local Media Profiles its Download Profiles and files use")
+    files: int = 0
+    files_on_disk: int = 0
 
 
 class ImportRecordsAPIRead(ResponseBase):
@@ -231,6 +234,7 @@ class ImportStepAPIRead(ResponseBase):
     collection_slug: Optional[str] = None
     collection_title: Optional[str] = None
     status: Literal["waiting", "done", "failed"]
+    indexed: bool = Field(default=False, description="Whether the Collection is indexed, so only its files are left")
     files: int
     counts: dict[str, int]
     problems: list[ImportProblemAPIRead]
