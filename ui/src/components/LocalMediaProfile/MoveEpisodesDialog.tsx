@@ -76,7 +76,7 @@ function HistoryButton({episode}: {episode: LocalMediaProfileMoveEpisode}) {
                 aria-label={`Open the download history of ${episode.episodeTitle}`}
                 onClick={() => setOpen(true)}
             >
-                <FontAwesomeIcon icon={faIcon('fass', 'clock-rotate-left')}/>
+                <FontAwesomeIcon icon={faIcon('fass', 'file-lines')}/>
             </button>
             {open && <EpisodeDownloadLog episode={episode} onClose={close}/>}
         </>
