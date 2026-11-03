@@ -95,3 +95,9 @@ class TaskOperationRead(ResponseBase):
     finished_at: Optional[datetime]
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
+
+
+class LocalMediaProfileMoveEpisodesOperationAccepted(TaskOperationAccepted):
+    episodes_queued: int
+    collections_queued: int
+    download_profiles_paused: int

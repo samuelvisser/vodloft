@@ -125,3 +125,26 @@ GOAL_PRESETS: dict[QualityGoal, GoalPreset] = {
 def goal_video_codecs(goal: QualityGoal) -> list[dict]:
     """A goal's codec order as stored on a Local Media Profile."""
     return [{"codec": codec.value, "allowed": allowed} for codec, allowed in GOAL_PRESETS[goal].video_codecs]
+
+
+class EpisodeMoveOutcome(StrEnum):
+    """What moving one episode's download to another Local Media Profile does."""
+
+    MOVE = "move"
+    """The download moves, and its files move into the target's layout."""
+    REPLACE = "replace"
+    """The target has a record of the episode without a file; the download takes its place."""
+    TARGET_HAS_FILE = "target_has_file"
+    """The target already has the episode, so the download stays where it is."""
+    PATH_TAKEN = "path_taken"
+    """A file VODLoft doesn't manage already has the new path."""
+    SAME_PATH = "same_path"
+    """Another moved episode gets the same new path."""
+    FILE_MISSING = "file_missing"
+    """The download's file is missing."""
+    BUSY = "busy"
+    """A download is running for the episode."""
+
+    @property
+    def moves(self) -> bool:
+        return self in (EpisodeMoveOutcome.MOVE, EpisodeMoveOutcome.REPLACE)

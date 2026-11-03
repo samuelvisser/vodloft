@@ -10,6 +10,7 @@ from task_manager.scheduler.operations import OperationTargetSpec
 _RENAME_COLLECTION_FILES_TASK_KEY = "rename_collection_profile_files"
 _RENAME_MOVIE_FILES_TASK_KEY = "rename_movie_profile_files"
 _BULK_DOWNLOAD_TASK_KEY = "media_download_bulk_action_worker"
+_MOVE_EPISODES_TASK_KEY = "move_collection_profile_episodes"
 
 
 class LocalMediaProfileFileRenameOperation(OperationDefinition[LocalMediaProfileBase]):
@@ -129,4 +130,61 @@ class LocalMediaProfileRedownloadOperation(OperationDefinition[LocalMediaProfile
             "local_media_profile_slug": self.resource.slug,
             "local_media_profile_name": self.resource.name,
             "downloads_requested": len(self.media_download_ids),
+        }
+
+
+class LocalMediaProfileMoveEpisodesOperation(OperationDefinition[LocalMediaProfileBase]):
+    """Move a Collection Local Media Profile's downloads to another profile, one task per Collection."""
+
+    kind = "local_media_profile.move_episodes"
+    resource_type = "local_media_profile"
+
+    def __init__(
+        self,
+        local_media_profile: LocalMediaProfileBase,
+        *,
+        target: LocalMediaProfileBase,
+        collections: Sequence[tuple[int, bool, Sequence[int]]],
+        episodes_requested: int,
+    ) -> None:
+        """``collections`` holds, per Collection: its id, whether its Download Profile moves along,
+        and the Download Profiles switched off while it moves."""
+        super().__init__(local_media_profile)
+        self.target = target
+        self.collections = tuple(
+            (int(collection_id), bool(move_download_profile), tuple(int(value) for value in held))
+            for collection_id, move_download_profile, held in collections
+        )
+        self.episodes_requested = int(episodes_requested)
+
+    @property
+    def title(self) -> str:
+        return self.resource.name
+
+    def targets(self) -> tuple[OperationTargetSpec, ...]:
+        return tuple(
+            OperationTargetSpec(
+                task_key=_MOVE_EPISODES_TASK_KEY,
+                resource_type="collection",
+                resource_id=collection_id,
+                task_kwargs={
+                    "source_local_media_profile_id": self.resource.id,
+                    "target_local_media_profile_id": self.target.id,
+                    "move_download_profile": move_download_profile,
+                    "held_download_profile_ids": list(held),
+                },
+                slot_key=f"collection:{collection_id}",
+            )
+            for collection_id, move_download_profile, held in self.collections
+        )
+
+    def context(self) -> dict[str, object]:
+        return {
+            "local_media_profile_slug": self.resource.slug,
+            "local_media_profile_name": self.resource.name,
+            "target_local_media_profile_slug": self.target.slug,
+            "target_local_media_profile_name": self.target.name,
+            "target_local_media_profile_id": self.target.id,
+            "collections_requested": len(self.collections),
+            "episodes_requested": self.episodes_requested,
         }

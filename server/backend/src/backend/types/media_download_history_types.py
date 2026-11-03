@@ -21,5 +21,7 @@ class MediaDownloadHistoryAction(StrEnum):
     ARTIFACT_RESTORED = "artifact_restored"
     ARTIFACT_RENAMED = "artifact_renamed"
     IMPORTED = "imported"
+    MOVED = "moved"
+    """The download moved over to another Local Media Profile."""
     UPGRADE_CHECKED = "upgrade_checked"
     """The upgrade check compared the download with what the site offers now."""
