@@ -12,6 +12,7 @@ import CollectionTypeFilter, {
     matchesCollectionTypeFilter,
 } from '../components/common/CollectionTypeFilter'
 import SourceBadge from '../components/Source/SourceBadge'
+import CollectionTileArt from '../components/CollectionTileArt/CollectionTileArt'
 import {DrmBadge} from '../components/common/DrmProtected'
 import {SubscriptionBadge} from '../components/common/NeedsSubscription'
 import SourceFilter, {matchesSourceFilter} from '../components/Source/SourceFilter'
@@ -84,6 +85,11 @@ function DownloadStateBadge({download}: {download?: MediaDownloadViewRead}) {
         return <span className="movie-state is-error" aria-label="Download failed"><FontAwesomeIcon icon={faIcon('fass', 'triangle-exclamation')}/></span>
     }
     return null
+}
+
+function sameName(a: string, b: string) {
+    const plain = (name: string) => name.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
+    return plain(a) === plain(b)
 }
 
 function formatVideoDuration(seconds: number) {
@@ -236,35 +242,35 @@ export default function LibraryPage() {
                 filteredCollections.length > 0 ? (
                     <div className="library-collection-grid" role="list" aria-label="Collections">
                         {filteredCollections.map((collection) => {
-                            const landscape = !collection.thumbnailPortraitPath && !!collection.thumbnailLandscapePath
+                            // The tile is square, so square artwork comes first when a Source has it.
                             const image = toImageUrl(
-                                collection.thumbnailPortraitPath || collection.thumbnailLandscapePath || collection.logoImagePath || collection.authorHeadshotPath,
+                                collection.thumbnailSquarePath || collection.thumbnailPortraitPath || collection.thumbnailLandscapePath || collection.logoImagePath || collection.authorHeadshotPath,
                             )
+                            // A yt-dlp channel's author is usually the channel itself: do not say its name twice.
+                            const showAuthor = !!collection.authorName && !sameName(collection.authorName, collection.title)
                             return (
                                 <Link className="library-tile" to={`/collection/${collection.slug}`} key={collection.slug} role="listitem">
                                     <span className="library-tile-art">
-                                        {!image ? (
-                                            <span className="collection-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', 'podcast')}/></span>
-                                        ) : landscape ? (
-                                            <img className="library-tile-image" src={image} alt="" loading="lazy" decoding="async"/>
-                                        ) : (
-                                            <>
-                                                <img className="library-tile-backdrop" src={image} alt="" aria-hidden="true" loading="lazy" decoding="async"/>
-                                                <img className="library-tile-poster" src={image} alt="" loading="lazy" decoding="async"/>
-                                            </>
-                                        )}
+                                        {image
+                                            ? <CollectionTileArt key={image} src={image}/>
+                                            : <span className="collection-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', 'podcast')}/></span>}
                                         <SourceBadge sourceKey={collection.sourceKey} className="library-tile-source"/>
                                     </span>
                                     <span className="library-tile-copy">
                                         <span className="library-tile-title">{collection.title}</span>
-                                        {collection.authorName && <span className="library-tile-author">{collection.authorName}</span>}
-                                        <span className="library-tile-meta">{collection.episodeCount} episodes{collection.years ? ` • ${collection.years}` : ''}</span>
-                                        <CollectionIndexingProgress
-                                            collectionId={collection.id}
-                                            collectionSlug={collection.slug}
-                                            pollForStart={collection.episodeCount === 0}
-                                            className="library-collection-indexing"
-                                        />
+                                        {showAuthor && <span className="library-tile-author">{collection.authorName}</span>}
+                                        <span className="library-tile-status">
+                                            <span className="library-tile-meta">
+                                                <span>{collection.episodeCount} episodes</span>
+                                                {collection.years && <span>{collection.years}</span>}
+                                            </span>
+                                            <CollectionIndexingProgress
+                                                collectionId={collection.id}
+                                                collectionSlug={collection.slug}
+                                                pollForStart={collection.episodeCount === 0}
+                                                className="library-collection-indexing"
+                                            />
+                                        </span>
                                     </span>
                                 </Link>
                             )
