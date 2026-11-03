@@ -6,6 +6,8 @@ from typing import ClassVar
 from sqlalchemy import and_, event, select
 from sqlalchemy.orm import Session, declared_attr, foreign, relationship
 
+from task_manager.after_commit import keep_until_commit
+
 from task_manager.scheduler.types import ResourceType, TaskStatus
 
 
@@ -203,7 +205,5 @@ def _discard_deleted_resource_jobs(session: Session) -> None:
     session.info.pop(_PENDING_RELEASED_TASK_CALLBACKS_KEY, None)
 
 
-@event.listens_for(Session, "after_soft_rollback")
-def _discard_soft_rolled_back_resource_jobs(session: Session, previous_transaction) -> None:
-    session.info.pop(_PENDING_DELETED_RESOURCES_KEY, None)
-    session.info.pop(_PENDING_RELEASED_TASK_CALLBACKS_KEY, None)
+# A SAVEPOINT that rolls back only drops what was queued inside it.
+keep_until_commit(_PENDING_DELETED_RESOURCES_KEY, _PENDING_RELEASED_TASK_CALLBACKS_KEY)

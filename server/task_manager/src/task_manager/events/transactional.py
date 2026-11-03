@@ -9,6 +9,8 @@ from typing import Any
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
+from task_manager.after_commit import keep_until_commit
+
 from task_manager.events.emitters import emit_event
 
 
@@ -111,6 +113,5 @@ def _discard_rolled_back_events(session: Session) -> None:
     session.info.pop(_PENDING_EVENTS_KEY, None)
 
 
-@event.listens_for(Session, "after_soft_rollback")
-def _discard_soft_rolled_back_events(session: Session, previous_transaction) -> None:
-    session.info.pop(_PENDING_EVENTS_KEY, None)
+# A SAVEPOINT that rolls back only drops what was queued inside it.
+keep_until_commit(_PENDING_EVENTS_KEY)
