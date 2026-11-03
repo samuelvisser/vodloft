@@ -8,14 +8,22 @@ from task_manager.scheduler.results import TaskResult
 
 
 def _run(import_run_id: int) -> TaskResult:
-    from backend.services.imports import apply_run
+    from backend.db.models import ImportRun
+    from backend.services.imports import WAITING, apply_run
 
     with db_session() as session:
         counts = apply_run(session, import_run_id)
+        run = session.get(ImportRun, import_run_id)
+        waits_for_indexing = run is not None and run.status == WAITING
     created = counts.get("collections_created", 0)
     linked = counts.get("collections_linked", 0)
+    # An import that brings its episodes along, such as WireLoft's, adopts its files right away.
+    files = (
+        "their files are adopted once they are indexed" if waits_for_indexing
+        else f"adopted {counts.get('adopted', 0)} downloaded file(s)"
+    )
     return TaskResult(
-        summary=f"Imported {created} new collection(s) and linked {linked}; their files are adopted once they are indexed",
+        summary=f"Imported {created} new collection(s) and linked {linked}; {files}",
         data=counts,
     )
 
