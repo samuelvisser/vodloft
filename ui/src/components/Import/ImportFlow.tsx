@@ -414,6 +414,8 @@ function PreviewStep({importer, onReplace, onFinished, onRunStatus}: {
                     <>
                         <ProgressBar ariaLabel="Reading the upload"/>
                         <p className="import-run__activity" role="status">Reading the upload…</p>
+                        {/* Cancelling removes the upload, so a late answer has nothing left to show. */}
+                        <button type="button" className="btn" onClick={() => void onReplace()}>Cancel</button>
                     </>
                 )}
                 {error && (
