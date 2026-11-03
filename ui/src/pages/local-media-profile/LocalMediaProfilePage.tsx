@@ -1,7 +1,7 @@
 import {useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useQueryClient} from '@tanstack/react-query'
-import {useNavigate, useParams} from 'react-router-dom'
+import {Link, useNavigate, useParams} from 'react-router-dom'
 import toast from 'react-hot-toast'
 import {faIcon} from '../../icons/faIcon'
 
@@ -249,14 +249,10 @@ export default function LocalMediaProfilePage() {
                     </div>
 
                     <div className="local-media-profile-page-actions">
-                        <button
-                            type="button"
-                            className="btn"
-                            onClick={() => navigate(`/edit-local-media-profile/${encodeURIComponent(profile.slug)}`)}
-                        >
+                        <Link className="btn" to={`/edit-local-media-profile/${encodeURIComponent(profile.slug)}`}>
                             <FontAwesomeIcon icon={faIcon('fass', 'pen-to-square')} aria-hidden="true"/>
                             <span>Edit</span>
-                        </button>
+                        </Link>
                         <button
                             type="button"
                             className="btn btn-danger"

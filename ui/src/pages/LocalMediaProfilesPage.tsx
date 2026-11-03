@@ -1,6 +1,6 @@
-import {useCallback, useRef} from 'react'
+import {useRef} from 'react'
 import {can} from '../lib/access'
-import {useNavigate} from 'react-router-dom'
+import {Link} from 'react-router-dom'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 import {useLocalMediaProfilesView} from '../lib/queries'
 import {LocalMediaProfileRead} from "../types/schemas/local_media_profile";
@@ -29,8 +29,6 @@ function getAvailableForLabel(profile: LocalMediaProfileRead) {
 }
 
 export default function LocalMediaProfilesPage() {
-    const navigate = useNavigate()
-    const onAdd = useCallback(() => navigate('/add-local-media-profile'), [navigate])
     const editIcon: IconProp = faIcon('fass', 'pen-to-square')
     const deleteIcon: IconProp = faIcon('fass', 'trash')
 
@@ -108,7 +106,7 @@ export default function LocalMediaProfilesPage() {
                         across collections and movies. You can create multiple profiles (e.g., “Podcasts to ABS”, “Videos to NAS”) and
                         reuse them.</p>
                 </PageSubtitle>
-                {can('local_media_profiles', 'manage') && <button className="btn btn-primary" onClick={onAdd}>Add media profile</button>}
+                {can('local_media_profiles', 'manage') && <Link className="btn btn-primary" to="/add-local-media-profile">Add media profile</Link>}
             </div>
 
             <div className="form-row">
@@ -133,11 +131,11 @@ export default function LocalMediaProfilesPage() {
                             </span>
                         </>
                     )}
-                    onRowClick={(p) => navigate(`/local-media-profile/${p.slug}`)}
+                    rowHref={(p) => `/local-media-profile/${p.slug}`}
                     mobileRowActionLabel="View"
                     actions={(p) => [
                         {
-                            onClick: () => navigate(`/edit-local-media-profile/${p.slug}`, { state: p }),
+                            href: `/edit-local-media-profile/${p.slug}`,
                             icon: editIcon,
                             text: 'Edit',
                             classes: 'btn',

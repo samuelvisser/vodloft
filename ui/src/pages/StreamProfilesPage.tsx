@@ -1,6 +1,6 @@
 import {useCallback, useRef} from 'react'
 import {can} from '../lib/access'
-import {useNavigate} from 'react-router-dom'
+import {Link} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
 import {useStreamProfilesView} from '../lib/queries'
@@ -14,9 +14,7 @@ import {RssStreamProfileUpdateSchema} from '../types/schemas/rss_stream_profile'
 import {faIcon} from '../icons/faIcon'
 
 export default function StreamProfilesPage() {
-    const navigate = useNavigate()
     const queryClient = useQueryClient()
-    const onAdd = useCallback(() => navigate('/add-stream-profile'), [navigate])
 
     const {data: profiles, isLoading, error} = useStreamProfilesView()
 
@@ -103,7 +101,7 @@ export default function StreamProfilesPage() {
                     <p>Use multiple profiles per collection to fit different listening or
                         viewing needs.</p>
                 </PageSubtitle>
-                {can('stream_profiles') && <button className="btn btn-primary" onClick={onAdd}>Add stream profile</button>}
+                {can('stream_profiles') && <Link className="btn btn-primary" to="/add-stream-profile">Add stream profile</Link>}
             </div>
 
             <div className="form-row">
@@ -128,10 +126,10 @@ export default function StreamProfilesPage() {
                             </span>
                         </>
                     )}
-                    onRowClick={(p) => navigate(`/edit-stream-profile/${p.type}/${p.id}`, {state: p})}
+                    rowHref={(p) => `/edit-stream-profile/${p.type}/${p.id}`}
                     actions={(p) => [
                         {
-                            onClick: () => navigate(`/edit-stream-profile/${p.type}/${p.id}`, {state: p}),
+                            href: `/edit-stream-profile/${p.type}/${p.id}`,
                             icon: faIcon('fass', 'pen-to-square'),
                             text: 'Edit',
                             classes: 'btn',

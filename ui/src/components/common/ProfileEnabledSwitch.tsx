@@ -35,6 +35,7 @@ export default function ProfileEnabledSwitch({checked, ariaLabel, onChange}: Pro
         <span
             style={{display: 'inline-flex'}}
             onClick={(event) => event.stopPropagation()}
+            onAuxClick={(event) => event.stopPropagation()}
             onKeyDown={(event) => event.stopPropagation()}
         >
             <Switch
