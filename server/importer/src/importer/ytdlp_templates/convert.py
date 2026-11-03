@@ -143,7 +143,8 @@ _FORMAT_FIELDS = frozenset({
 # Pinchflat's per-download values, as fields the expansion made of them.
 _PINCHFLAT_VALUES: dict[str, FieldValue] = {
     # Pinchflat writes these into the template before yt-dlp sees it, so restrict_filenames leaves them alone.
-    "source_custom_name": FieldValue("collection_title | as_typed", always=True, support="close", reason="The import names the Collection after the Pinchflat source's custom name"),
+    # The import names the Collection after the source's custom name, so this is exact.
+    "source_custom_name": FieldValue("collection_title | as_typed", always=True),
     "source_collection_name": FieldValue("collection_title | as_typed", always=True, support="close", reason="VODLoft uses the Collection's title, which is the channel or playlist name"),
     "source_collection_id": FieldValue("collection_site_id", always=True),
     "media_playlist_index": FieldValue("'%02d' | format('playlist' | custom_index)", always=True, support="close", reason="Imported numbers are kept; new videos continue from the highest"),
@@ -281,6 +282,9 @@ class _Converter:
             return self.options.extra_fields[name]
         if name == "channel" and (self.options.for_playlists or self.options.collection_type == "playlist"):
             return _PLAYLIST_CHANNEL
+        if name in {"channel", "channel_id"} and self.options.collection_type == "channel":
+            # A channel Collection's author and id are that channel's, so these are exact.
+            return replace(_FIELDS[name], support="exact", reason=None)
         if name in _FIELDS:
             if name in {"autonumber", "video_autonumber"} and self.options.autonumber_start != 1:
                 start = self.options.autonumber_start
@@ -745,6 +749,11 @@ def convert_pinchflat(template: str, options: ConversionOptions | None = None) -
     report = convert_ytdlp(ytdlp_template, options, original=template)
     # Name each part as the person wrote it: Pinchflat's {{ channel }}, not the %(channel)S it stands for.
     aliases = written_as(template)
-    return replace(report, parts=tuple(
-        replace(part, source=aliases.get(part.source, part.source)) for part in report.parts
-    ))
+    parts = []
+    for part in report.parts:
+        part = replace(part, source=aliases.get(part.source, part.source))
+        if part.source == "/" and not part.result:
+            # Pinchflat starts every path in its media folder, which the import maps to VODLoft's folder.
+            part = replace(part, support="exact", reason=None)
+        parts.append(part)
+    return replace(report, parts=tuple(parts))

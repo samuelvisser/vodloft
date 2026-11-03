@@ -50,7 +50,9 @@ class ConversionReport:
                 continue
             result = f"{part.result!r}" if part.result else "nothing"
             how = "nearly the same" if part.support == "close" else "not converted"
-            lines.append(f"{part.source!r} becomes {result} ({how}). {part.reason or ''}".rstrip())
+            line = f"{part.source!r} becomes {result} ({how}). {part.reason or ''}".rstrip()
+            if line not in lines:
+                lines.append(line)
         return lines
 
 
