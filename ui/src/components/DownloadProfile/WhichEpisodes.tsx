@@ -39,7 +39,7 @@ const BUILT_IN_FIELDS: Record<string, string[]> = {
     types: ['epIdTypeList'],
     seasons: ['seasons', 'includeUpcomingSeasons'],
     dates: [
-        'downloadWithCountdown', 'redownloadFinal', 'downloadDaysInPast', 'downloadEpisodeCount',
+        'downloadDaysInPast', 'downloadEpisodeCount',
         'downloadStartingFrom', 'deleteOlderEpisodes', 'retentionFrom',
     ],
 }
