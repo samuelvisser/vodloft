@@ -17,6 +17,7 @@ from backend.db.models import (
     LocalMediaProfileBase,
     MediaDownloadBase,
 )
+from backend.services.storage_used import is_physical_download, storage_size_bytes_sum
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from downloader import hls_asset_marker
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
@@ -137,12 +138,6 @@ def get_local_media_profiles_list(s: Session) -> list[LocalMediaProfileAPIRead]:
     return [_to_read(item) for item in items]
 
 
-_PHYSICAL_DOWNLOAD_STATUSES = (
-    MediaDownloadArtifactStatus.AVAILABLE.value,
-    MediaDownloadArtifactStatus.CORRUPTED.value,
-)
-
-
 def _get_local_media_profile_statistics(
     s: Session,
     local_media_profile_ids: list[int],
@@ -150,32 +145,15 @@ def _get_local_media_profile_statistics(
     if not local_media_profile_ids:
         return {}
 
-    physical_download = MediaDownloadBase.artifact_status.in_(
-        _PHYSICAL_DOWNLOAD_STATUSES,
-    )
     download_rows = (
         s.query(
             MediaDownloadBase.local_media_profile_id,
             func.count(MediaDownloadBase.id),
             func.coalesce(
-                func.sum(case((physical_download, 1), else_=0)),
+                func.sum(case((is_physical_download(), 1), else_=0)),
                 0,
             ),
-            func.coalesce(
-                func.sum(
-                    case(
-                        (
-                            physical_download,
-                            func.coalesce(
-                                MediaDownloadBase.artifact_size_bytes,
-                                0,
-                            ),
-                        ),
-                        else_=0,
-                    )
-                ),
-                0,
-            ),
+            storage_size_bytes_sum(),
         )
         .filter(MediaDownloadBase.local_media_profile_id.in_(local_media_profile_ids))
         .group_by(MediaDownloadBase.local_media_profile_id)

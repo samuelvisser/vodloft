@@ -11,5 +11,7 @@ export const DownloadProfileReadViewSchema = DownloadProfileReadSchema.extend({
     collectionEpisodeIdentifier: z.string(),
     localMediaProfileName: z.string(),
     localMediaProfilePreferredFormat: z.string(),
+    // Disk space this profile's downloaded files take
+    storageSizeBytes: z.number(),
 })
 export type DownloadProfileReadView = z.infer<typeof DownloadProfileReadViewSchema>
