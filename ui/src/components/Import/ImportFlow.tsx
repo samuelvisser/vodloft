@@ -804,8 +804,12 @@ function ProfilePreview({importerName, profile, collections, template, onTemplat
             {profile.keptSeparate && (
                 <div className="import-merge">
                     <div>
-                        <span className="import-merge__label">Not kept on {profile.baseName ?? `its ${importerName} profile`}</span>{' '}
-                        {profile.keptSeparate}, so this collection keeps a profile of its own.
+                        <span className="import-merge__label">
+                            Not kept on {profile.baseName ?? (profile.mergedFrom.length ? mergedNames(profile.mergedFrom) : `its ${importerName} profile`)}
+                        </span>{' '}
+                        {profile.keptSeparate}, so {collections.length === 1
+                            ? 'this collection keeps a profile of its own'
+                            : 'these collections share a profile of their own'}.
                     </div>
                 </div>
             )}

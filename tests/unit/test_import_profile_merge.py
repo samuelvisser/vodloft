@@ -53,6 +53,8 @@ def test_variants_that_differ_only_by_a_folder_share_a_profile_with_a_folder_fie
     assert shared.fields == ("folder",)
     # Only profile names Pinchflat has: the variants count as the profile whose template they override.
     assert shared.merged_from == ("Video to Plex - no shorts",) and shared.template_overrides
+    # The shared profile says why its collections are not on the profile they override.
+    assert shared.kept_separate == "The paths have a different number of folders"
     assert shared.output_template == (
         "/downloads/V/{{ (meta_collection_folder | as_typed) if meta_collection_folder else (collection_title | as_typed) }}"
         "/Season 01/{{ episode_uploader or 'NA' }} - {{ title }}.ext"

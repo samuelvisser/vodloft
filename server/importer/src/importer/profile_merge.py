@@ -87,7 +87,7 @@ def _family_name(family: _Family, base_names: dict[str, str]) -> str:
     return f"{base_names.get(base, base)} ({what} per collection)"
 
 
-def _merged(family: _Family, base_names: dict[str, str]) -> ProfilePlan:
+def _merged(family: _Family, base_names: dict[str, str], reasons: dict[str, str]) -> ProfilePlan:
     founder = family.members[0]
     warnings: list[ImportWarning] = []
     for member in family.members:
@@ -118,6 +118,8 @@ def _merged(family: _Family, base_names: dict[str, str]) -> ProfilePlan:
         merged_from=profiles,
         template_overrides=overrides,
         fields=fields,
+        # Variants that share a profile of their own say why they didn't join the one they override.
+        kept_separate=next((reasons[member.external_id] for member in family.members if member.external_id in reasons), None),
     )
 
 
@@ -182,7 +184,7 @@ def merge_profiles(plan: ImportPlan, *, selected: Some[str] | None = None, max_f
     for family in families:
         if len(family.members) < 2:
             continue
-        plan_ = _merged(family, base_names)
+        plan_ = _merged(family, base_names, reasons)
         merged[family.members[0].external_id] = plan_
         for member, member_values in zip(family.members, family.alignment.values, strict=True):
             renamed[member.external_id] = plan_.external_id
