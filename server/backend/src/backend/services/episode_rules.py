@@ -23,6 +23,7 @@ class EpisodeRule(Protocol):
     ignore_case: bool
     duration_operator: Optional[str]
     duration_seconds: Optional[int]
+    episode_types: Optional[list[str]]
 
 
 def rule_matches(rule: EpisodeRule, episode: Episode) -> Optional[bool]:
@@ -31,6 +32,8 @@ def rule_matches(rule: EpisodeRule, episode: Episode) -> Optional[bool]:
     A duration rule cannot tell for an episode whose length is not known yet. A
     pattern that runs out of time counts as not matching, like in the tester.
     """
+    if rule.field == EpisodeRuleField.TYPES:
+        return episode.episode_type in (rule.episode_types or ())
     if rule.field == EpisodeRuleField.DURATION:
         duration = episode.duration or 0
         if duration <= 0 or not rule.duration_seconds:
@@ -81,10 +84,11 @@ def set_profile_rules(profile: DownloadProfile, rules: Sequence[EpisodeRule]) ->
             position=position,
             action=str(rule.action),
             field=str(rule.field),
-            pattern=rule.pattern if rule.field != EpisodeRuleField.DURATION else None,
-            ignore_case=bool(rule.ignore_case) if rule.field != EpisodeRuleField.DURATION else False,
+            pattern=rule.pattern if rule.field in (EpisodeRuleField.TITLE, EpisodeRuleField.DESCRIPTION) else None,
+            ignore_case=bool(rule.ignore_case) if rule.field in (EpisodeRuleField.TITLE, EpisodeRuleField.DESCRIPTION) else False,
             duration_operator=str(rule.duration_operator) if rule.field == EpisodeRuleField.DURATION else None,
             duration_seconds=rule.duration_seconds if rule.field == EpisodeRuleField.DURATION else None,
+            episode_types=list(rule.episode_types or []) if rule.field == EpisodeRuleField.TYPES else None,
         )
         for position, rule in enumerate(rules)
     ]

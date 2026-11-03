@@ -17,17 +17,13 @@ type Props = {
     part: 'countdown' | 'dates'
 }
 
+// Read after the line's header, "Only download if published …".
 const LimitModeReg = createSelectRegistry('DownloadLimitMode', {
-    none: {label: 'No limits'},
-    date: {label: 'Date'},
-    episodes: {label: 'Number of episodes'},
+    none: {label: 'at any time'},
+    date: {label: 'in the last … days'},
+    episodes: {label: 'as one of the latest … episodes'},
 })
 type LimitMode = (typeof LimitModeReg)['values'][number]
-
-const DateFieldReg = createSelectRegistry('DownloadDateField', {
-    published: {label: 'Publication date', help: 'Download episodes published in a window, and optionally delete them once they are older.'},
-    downloaded: {label: 'Download date', help: 'Keep each download for a number of days after downloading it.'},
-})
 
 /** Filters on when episodes were published, for every collection, and the countdown download choices. */
 export default function DownloadProfileDateFilters({form, collectionId, sourceKey, part}: Props) {
@@ -55,17 +51,8 @@ export default function DownloadProfileDateFilters({form, collectionId, sourceKe
             ? 'date'
             : 'none'
 
+    // Published or downloaded is chosen in the date line's header.
     const dateField = (watch('retentionFrom') ?? 'published') as 'published' | 'downloaded'
-    const updateDateField = (value: string) => {
-        setValue('retentionFrom', value, {shouldDirty: true, shouldValidate: true})
-        if (value === 'downloaded') {
-            // Counting from the download date only works with a number of days.
-            setValue('downloadEpisodeCount', 0, {shouldDirty: true, shouldValidate: true})
-            setValue('downloadStartingFrom', null, {shouldDirty: true, shouldValidate: true})
-            setValue('downloadDaysInPast', watchedDays > 0 ? watchedDays : 180, {shouldDirty: true, shouldValidate: true})
-            setValue('deleteOlderEpisodes', true, {shouldDirty: true, shouldValidate: true})
-        }
-    }
 
     const updateLimitMode = (mode: LimitMode) => {
         if (mode === 'none') {
@@ -172,35 +159,21 @@ export default function DownloadProfileDateFilters({form, collectionId, sourceKe
 
     return (
         <>
-            <div className="form-row">
-                <label htmlFor="download-date-field">Filter on</label>
-                <SimpleSelect
-                    inputId="download-date-field"
-                    registry={DateFieldReg}
-                    value={dateField}
-                    onChange={updateDateField}
-                />
-                <div className="help">{DateFieldReg.getHelp(dateField)}</div>
-            </div>
-
             {dateField === 'published' && (
             <div className="form-row">
-                <label htmlFor="download-limit-mode">Limit by</label>
                 <SimpleSelect
                     inputId="download-limit-mode"
+                    aria-label="Published when"
                     registry={LimitModeReg}
                     value={limitMode}
                     onChange={(value) => updateLimitMode(value as LimitMode)}
                 />
-                <div className="help">
-                    Choose whether to use no rolling limit, a rolling date window, or only the latest number of episodes.
-                </div>
             </div>
             )}
 
             {limitMode === 'none' && (
                 <div className="form-row">
-                    <label htmlFor="download-starting-from">Download starting from</label>
+                    <label htmlFor="download-starting-from">On or after</label>
                     <Controller
                         control={control}
                         name="downloadStartingFrom"
@@ -224,15 +197,15 @@ export default function DownloadProfileDateFilters({form, collectionId, sourceKe
                         </div>
                     )}
                     <div className="help" id="download-starting-from-help">
-                        Optional. Download eligible episodes published on or after this date and keep downloading new episodes.
-                        Existing downloads are not removed. Leave blank to download everything.
+                        Optional. Leave it empty to download episodes of any date. Episodes from before the date that are already
+                        downloaded are not deleted.
                     </div>
                 </div>
             )}
 
             {limitMode === 'date' && (
                 <div className="form-row">
-                    <label htmlFor="days-in-past">{dateField === 'downloaded' ? 'Days to keep each download' : 'Download days in past'}</label>
+                    <label htmlFor="days-in-past">{dateField === 'downloaded' ? 'Keep each download for … days' : 'Days'}</label>
                     <input
                         id="days-in-past"
                         className="input"
@@ -250,12 +223,10 @@ export default function DownloadProfileDateFilters({form, collectionId, sourceKe
                         </div>
                     )}
                     <div className="help" id="days-in-past-help">
-                        {dateField === 'downloaded'
-                            ? 'Only episodes published in this many days are downloaded, and each download is kept for this many days after downloading it.'
-                            : 'Amount of days in the past the collection should be downloaded.'}
+                        {dateField === 'downloaded' ? 'Only episodes published in this many days are downloaded.' : null}
                         {oldestDateText ? (
                             <>
-                                {' '}Earliest date that will be downloaded: <strong>{oldestDateText}</strong>
+                                {dateField === 'downloaded' ? ' ' : ''}The oldest that will be downloaded: <strong>{oldestDateText}</strong>
                             </>
                         ) : null}
                     </div>
@@ -264,7 +235,7 @@ export default function DownloadProfileDateFilters({form, collectionId, sourceKe
 
             {limitMode === 'episodes' && (
                 <div className="form-row">
-                    <label htmlFor="episode-count">Latest episodes to download</label>
+                    <label htmlFor="episode-count">Episodes</label>
                     <input
                         id="episode-count"
                         className="input"
@@ -282,14 +253,16 @@ export default function DownloadProfileDateFilters({form, collectionId, sourceKe
                         </div>
                     )}
                     <div className="help" id="episode-count-help">
-                        Only the latest number of eligible episodes will be downloaded by this profile.
+                        How many of the newest episodes this profile downloads.
                     </div>
                 </div>
             )}
 
             {limitMode !== 'none' && (
                 <div className="form-row">
-                    <label htmlFor="delete-older">Delete older episodes</label>
+                    <label htmlFor="delete-older">{dateField === 'downloaded'
+                        ? `And delete them ${watchedDays || '…'} ${watchedDays === 1 ? 'day' : 'days'} after downloading`
+                        : limitMode === 'episodes' ? 'And delete them once they are no longer among the latest' : 'And delete them once they are older'}</label>
                     <Controller
                         control={control}
                         name="deleteOlderEpisodes"
@@ -313,7 +286,7 @@ export default function DownloadProfileDateFilters({form, collectionId, sourceKe
                         </div>
                     )}
                     <div className="help" id="delete-older-help">
-                        <ReadMore summary={<span>Whether to delete episodes outside the selected limit</span>}>
+                        <ReadMore summary={<span>Downloads you keep are never deleted</span>}>
                             {'Downloads you keep, and downloads a Keep filter matches, are never deleted. '}
                             {limitMode === 'date'
                                 ? 'If enabled, downloaded episodes older than the date shown above will be automatically removed from disk.'

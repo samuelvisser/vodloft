@@ -80,10 +80,10 @@ def _profile(session, collection, rules=(), **values):
     return profile
 
 
-def _rule(action, field, pattern=None, ignore_case=False, duration_operator=None, duration_seconds=None):
+def _rule(action, field, pattern=None, ignore_case=False, duration_operator=None, duration_seconds=None, episode_types=None):
     return SimpleNamespace(
         action=action, field=field, pattern=pattern, ignore_case=ignore_case,
-        duration_operator=duration_operator, duration_seconds=duration_seconds,
+        duration_operator=duration_operator, duration_seconds=duration_seconds, episode_types=episode_types,
     )
 
 
@@ -293,3 +293,25 @@ def test_a_profile_for_every_type_overlaps_any_other(db_session):
     db_session.flush()
     with pytest.raises(HTTPException, match="already downloads these episodes"):
         require_unique_download_profile_episode_types(db_session, episode_types=["trailer"], **check)
+
+
+def test_episode_type_rules_skip_and_keep_types(db_session):
+    from backend.api.models.download_profile import DownloadProfileRuleAPIIn
+    from backend.services.episode_rules import kept_by_rule
+
+    collection, season = _collection(db_session)
+    _episode(db_session, collection, season, 1, "A video")
+    short = _episode(db_session, collection, season, 2, "A short")
+    short.episode_identifier = "short.2"
+    profile = _profile(db_session, collection, rules=[
+        {"action": "skip", "field": "types", "episode_types": ["short"]},
+        {"action": "keep", "field": "types", "episode_types": ["ep"]},
+    ])
+    profile.ep_id_type_list = []
+    db_session.flush()
+
+    assert _wanted_titles(db_session, profile) == {"A video"}
+    assert profile.rules[0].episode_types == ["short"] and profile.rules[0].pattern is None
+    assert not kept_by_rule(profile.rules, short)
+    with pytest.raises(ValueError, match="at least one episode type"):
+        DownloadProfileRuleAPIIn.model_validate({"action": "skip", "field": "types", "episodeTypes": []})

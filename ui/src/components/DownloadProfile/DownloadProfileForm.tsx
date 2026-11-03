@@ -117,7 +117,7 @@ export default function DownloadProfileForm({form, episodeIdentifier, seasons, c
                 typesField={(
                     <div className="form-row">
                         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                            <label htmlFor="ep-id-type-select">Episode types</label>
+                            <label htmlFor="ep-id-type-select">Is any of</label>
                             <div>
                                 <button type="button" className="btn btn-link" onClick={handleSelectAll}>
                                     Select all
@@ -150,7 +150,7 @@ export default function DownloadProfileForm({form, episodeIdentifier, seasons, c
                             </div>
                         )}
                         <div className="help" id="ep-id-type-help">
-                            <ReadMore summary={<span>What episode types to download</span>}>
+                            <ReadMore summary={<span>The episode types to download</span>}>
                                 <p>Select all episode types you want to download.</p>
                                 {(tags ?? []).map((tag) => <p key={tag.key}><b>{tag.label}</b>: {tag.help}.</p>)}
                                 {unavailableEpisodeTypes.size > 0 && (

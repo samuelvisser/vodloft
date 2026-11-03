@@ -38,7 +38,8 @@ A new profile starts with two lines, which you can remove with the bin icon and 
   line, episodes of any date are downloaded and nothing is deleted.
 
 A seasonal collection also has a **seasons** line, which stays. Click the pencil on a line to change it, and **Done**
-to fold it back into its sentence. When you create a profile, these lines start open so you see them the first time.
+to fold it back into its sentence. An open line starts with two dropdowns that read as the start of its sentence, such as
+**Only download** if **published**: what the line does, and what it looks at. Changing either one changes the line. When you create a profile, these lines start open so you see them the first time.
 
 ### Your own filters
 
@@ -49,8 +50,10 @@ to fold it back into its sentence. When you create a profile, these lines start 
 - **Keep** never stops a download. It protects the downloads it matches from being deleted by the date window, so you
   can, for example, keep every episode with “interview” in its title forever while the rest rotate out.
 
-Choosing **episode types**, **publication date** or **download date** as what a new filter looks at brings back that
-line when it isn't there. A filter can look at the episode's **title** or **description**, using the regular expression editor (you don't need to
+A filter can look at the **episode type**. **Only download** if the episode type is any of the types you choose is the
+built-in types line; **Skip** and **Keep** work on episode types too, for example to keep every Trailer forever. A filter
+can look at **published** or **downloaded**, which brings back the date line when it isn't there; the date line only
+says which episodes to download, so its action stays at **Only download**. A filter can look at the episode's **title** or **description**, using the regular expression editor (you don't need to
 know regular expressions: the Contains and Any of these tabs write one for you, and the tester shows which of the
 collection's episodes match), or at its **duration**: shorter or longer than a length you choose. An episode whose
 length isn't known yet is never left out by a duration filter.
@@ -89,36 +92,36 @@ Selecting all seasons in the UI also enables future seasons so the profile keeps
 
 ## Date options
 
-The date line filters on one of two dates. **Publication date** offers the limits below. **Download date** keeps each
+The date line filters on one of two dates, chosen in its header. **Published** offers the limits below. **Downloaded** keeps each
 download for a number of days, counted from the day it was downloaded, however old the episode already was; only
 episodes published within that many days are downloaded. This is how Pinchflat's retention works.
 
-### Limit by
+### Published when
 
-Choose how many episodes the profile should consider. On a seasonal collection the limit counts only episodes in the chosen seasons:
+Choose which episodes the profile should consider. On a seasonal collection the limit counts only episodes in the chosen seasons:
 
-- **No limits** — every eligible episode can be downloaded.
-- **Date** — only episodes inside a recent number-of-days window are eligible.
-- **Number of episodes** — only the newest selected number of eligible episodes are kept in the active window.
+- **at any time** — every eligible episode can be downloaded.
+- **in the last … days** — only episodes inside a recent number-of-days window are eligible.
+- **as one of the latest … episodes** — only the newest selected number of eligible episodes are kept in the active window.
 
-### Download starting from
+### On or after
 
-When **No limits** is selected, you can optionally set **Download starting from** to establish a fixed cutoff date.
+With **at any time**, you can optionally set **On or after** to establish a fixed cutoff date.
 
 VODLoft will ignore eligible episodes older than that date and continue downloading new episodes published after it. Existing files are not deleted simply because they predate the cutoff.
 
 This is useful when you want to begin archiving a collection from a particular date without downloading its complete history.
 
-### Delete older episodes
+### Deleting older episodes
 
-When a rolling Date or Number of episodes limit is active, **Delete older episodes** can also remove downloaded files that fall outside that window. When retention removes an episode, its download record and download history are removed as well, so it no longer appears on the Downloads page.
+When a rolling number of days or number of episodes is chosen, the **And delete them …** switch can also remove downloaded files that fall outside that window. When retention removes an episode, its download record and download history are removed as well, so it no longer appears on the Downloads page.
 
-On the publication date, an episode is deleted once it was published longer ago than the window; on the download date,
-once it was downloaded longer ago.
+On **published**, an episode is deleted once it was published longer ago than the window; on **downloaded**, once it
+was downloaded longer ago.
 
 Downloads you keep, and downloads a Keep filter matches, are never deleted.
 
-Leave it disabled if you only want the limit to control which new episodes are selected while keeping older files already on disk. Planned downloads that never produced a file are still discarded once they fall outside the active Number of episodes window.
+Leave it disabled if you only want the limit to control which new episodes are selected while keeping older files already on disk. Planned downloads that never produced a file are still discarded once they fall outside the active number of episodes window.
 
 ### Countdown and final versions
 

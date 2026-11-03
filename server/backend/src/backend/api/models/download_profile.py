@@ -29,9 +29,14 @@ class DownloadProfileRuleAPIIn(RequestBase):
     ignore_case: bool = False
     duration_operator: DurationOperator | None = None
     duration_seconds: int | None = Field(default=None, ge=1)
+    episode_types: list[EpisodeTagKey] | None = None
 
     @model_validator(mode="after")
     def _validate_rule(self):
+        if self.field == EpisodeRuleField.TYPES:
+            if not self.episode_types:
+                raise ValueError("Choose at least one episode type")
+            return self
         if self.field == EpisodeRuleField.DURATION:
             if self.duration_operator is None or self.duration_seconds is None:
                 raise ValueError("A duration rule needs shorter or longer than, and a duration")
@@ -52,6 +57,7 @@ class DownloadProfileRuleAPIRead(ResponseBase):
     ignore_case: bool
     duration_operator: DurationOperator | None
     duration_seconds: int | None
+    episode_types: list[str] | None = None
 
 
 # ---------- Strict input (create/update) ----------

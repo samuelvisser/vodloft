@@ -130,7 +130,7 @@ If a file is marked corrupted, check the actual storage first if you suspect a d
 
 Automatic retention for collection episodes comes from Podcast Download Profiles.
 
-A rolling date or episode-count limit can optionally delete downloads that fall outside the active window. If **Delete older episodes** is disabled, the limit affects new download selection but leaves older files already on disk alone.
+A rolling date or episode-count limit can optionally delete downloads that fall outside the active window. If the **And delete them …** switch is off, the limit affects new download selection but leaves older files already on disk alone.
 
 See [[Download-Profiles]].
 

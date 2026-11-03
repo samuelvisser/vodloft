@@ -354,7 +354,7 @@ def _download_profile_rules(plan: CollectionPlan) -> list[DownloadProfileRule]:
         DownloadProfileRule(
             action=rule["action"], field=rule["field"], pattern=rule.get("pattern"),
             ignore_case=bool(rule.get("ignore_case")), duration_operator=rule.get("duration_operator"),
-            duration_seconds=rule.get("duration_seconds"),
+            duration_seconds=rule.get("duration_seconds"), episode_types=rule.get("episode_types"),
         )
         for rule in (plan.download_profile or {}).get("rules") or []
     ]
