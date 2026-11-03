@@ -8,6 +8,9 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
+import re
+import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.parse import urlsplit
@@ -19,6 +22,8 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import PushSubscription, PushVapidKey
 from backend.security.crypto import decrypt_text, encrypt_text
+
+from .senders import Outcome
 
 # Only known browser push services: the endpoint comes from the browser, through VODLoft's API, and must not turn
 # a self-hosted VODLoft into a proxy for requests to anywhere.
@@ -127,16 +132,48 @@ def find_subscription(session: Session, endpoint: str) -> PushSubscription | Non
 
 
 _TTL_SECONDS = 60
+# Who runs the sender, for the push service to contact. Apple's push service refuses a subject it cannot reach, such
+# as an address at a .local domain, so this is the project's public page.
+_VAPID_SUBJECT = "https://github.com/samuelvisser/vodloft"
 
 
-def send_push(key: ec.EllipticCurvePrivateKey, subscription: PushSubscription, payload: dict) -> str:
-    """Send one message to one device: SENT, RETRY, or EXPIRED when the browser revoked it."""
+def _vapid_class():
+    from apprise.plugins.vapid import NotifyVapid
+
+    class VodloftVapid(NotifyVapid):
+        """Apprise always signs ``mailto:`` plus the sender address; VODLoft has no address, so it signs its page."""
+
+        def _jwt_token(self, audience: str) -> str:
+            header = _b64url(json.dumps({"alg": "ES256", "typ": "JWT"}, separators=(",", ":")).encode())
+            claims = _b64url(json.dumps({
+                "aud": audience, "exp": int(time.time()) + self.vapid_jwt_expiration_sec, "sub": _VAPID_SUBJECT,
+            }, separators=(",", ":")).encode())
+            signature = _b64url(self.pem.sign(f"{header}.{claims}".encode()))
+            return f"{header}.{claims}.{signature}"
+
+    return VodloftVapid
+
+
+def _rejection(log: str) -> Outcome:
+    """What the push service answered, from Apprise's log, so History shows its reason."""
+    status = re.search(r"error=(\d+)", log)
+    if status is None:
+        return Outcome(False, "The push service could not be reached")
+    code = int(status.group(1))
+    reason = re.search(r"""["']?reason["']?\s*:\s*["']([A-Za-z0-9 _.-]{1,60})["']""", log)
+    detail = f" ({reason.group(1)})" if reason else ""
+    # A refused request stays refused; only a busy or failing push service is worth another try.
+    return Outcome(False, f"The push service answered {code}{detail}", retry=code == 429 or code >= 500)
+
+
+def send_push(key: ec.EllipticCurvePrivateKey, subscription: PushSubscription, payload: dict) -> str | Outcome:
+    """Send one message to one device: SENT, EXPIRED when the browser revoked it, or why it was not accepted."""
     decrypted = decrypt_text(subscription.encrypted_subscription)
     if decrypted is None:
         return "EXPIRED"
     data = json.loads(decrypted)
     validate_endpoint(data["endpoint"])
-    from apprise.plugins.vapid import NotifyVapid
+    from apprise import LogCapture
 
     subscriber = "notifications@vodloft.local"
     with TemporaryDirectory(prefix="vodloft-push-") as directory:
@@ -149,7 +186,7 @@ def send_push(key: ec.EllipticCurvePrivateKey, subscription: PushSubscription, p
         subfile.write_text(json.dumps({subscriber: data}), encoding="utf-8")
         keyfile.chmod(0o600)
         subfile.chmod(0o600)
-        notifier = NotifyVapid(
+        notifier = _vapid_class()(
             subscriber=subscriber, targets=[subscriber], keyfile=str(keyfile), subfile=str(subfile),
             # The push service keeps the message this long for a device that is offline; Apprise allows a minute.
             include_image=False, ttl=_TTL_SECONDS, request_timeout=8, redirects=False,
@@ -157,7 +194,11 @@ def send_push(key: ec.EllipticCurvePrivateKey, subscription: PushSubscription, p
         if not notifier.subscriptions.load():
             return "EXPIRED"
         # Push carries VODLoft's own JSON, which the app's service worker shows.
-        if notifier.send(json.dumps(payload, ensure_ascii=False, separators=(",", ":"))):
+        with LogCapture(level=logging.DEBUG) as log:
+            sent = notifier.send(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+        if sent:
             return "SENT"
         # The plugin drops endpoints the push service answered 404 or 410 for.
-        return "EXPIRED" if subscriber not in notifier.subscriptions else "RETRY"
+        if subscriber not in notifier.subscriptions:
+            return "EXPIRED"
+        return _rejection(log.getvalue())
