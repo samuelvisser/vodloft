@@ -28,13 +28,8 @@ export const DurationOperatorReg = createSelectRegistry('DurationOperator', {
 })
 export type DurationOperator = (typeof DurationOperatorReg)['values'][number]
 
-export const RetentionFromReg = createSelectRegistry('RetentionFrom', {
-    published: {label: 'After publication'},
-    downloaded: {label: 'After downloading'},
-})
-
 export const EpisodeRuleSchema = z.object({
-    action: z.enum(['skip', 'only', 'keep']).default('skip'),
+    action: z.enum(['skip', 'only', 'keep']).default('only'),
     field: z.enum(['title', 'description', 'duration']).default('title'),
     pattern: z.string().nullable().default(null),
     ignoreCase: z.boolean().default(false),
@@ -54,7 +49,7 @@ export type EpisodeRule = z.output<typeof EpisodeRuleSchema>
 
 /** A new filter line: skip titles containing a whole word, in any capitalisation. */
 export function newEpisodeRule(): EpisodeRule {
-    return {action: 'skip', field: 'title', pattern: '', ignoreCase: true, durationOperator: null, durationSeconds: null}
+    return {action: 'only', field: 'title', pattern: '', ignoreCase: true, durationOperator: null, durationSeconds: null}
 }
 
 

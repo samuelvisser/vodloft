@@ -260,3 +260,36 @@ def test_a_duration_rule_request_needs_no_pattern():
         {"action": "skip", "field": "duration", "durationOperator": "shorter", "durationSeconds": 120}
     )
     assert rule.duration_seconds == 120 and rule.pattern is None
+
+
+def test_without_an_episode_types_line_every_type_is_downloaded(db_session):
+    collection, season = _collection(db_session)
+    _episode(db_session, collection, season, 1, "Regular")
+    trailer = _episode(db_session, collection, season, 2, "Trailer")
+    trailer.episode_identifier = "trailer.2026-01-02"
+    db_session.flush()
+    profile = _profile(db_session, collection)
+    assert _wanted_titles(db_session, profile) == {"Regular"}
+
+    profile.ep_id_type_list = []
+    db_session.flush()
+    assert _wanted_titles(db_session, profile) == {"Regular", "Trailer"}
+
+
+def test_a_profile_for_every_type_overlaps_any_other(db_session):
+    from fastapi import HTTPException
+
+    from backend.api.endpoints.download_profiles.service import require_unique_download_profile_episode_types
+
+    collection, _season = _collection(db_session)
+    profile = _profile(db_session, collection)
+    check = dict(collection_id=collection.id, local_media_profile_id=profile.local_media_profile_id)
+
+    with pytest.raises(HTTPException, match="already downloads these episodes"):
+        require_unique_download_profile_episode_types(db_session, episode_types=[], **check)
+    # Editing the profile itself is no overlap.
+    require_unique_download_profile_episode_types(db_session, episode_types=[], exclude_profile_id=profile.id, **check)
+    profile.ep_id_type_list = []
+    db_session.flush()
+    with pytest.raises(HTTPException, match="already downloads these episodes"):
+        require_unique_download_profile_episode_types(db_session, episode_types=["trailer"], **check)

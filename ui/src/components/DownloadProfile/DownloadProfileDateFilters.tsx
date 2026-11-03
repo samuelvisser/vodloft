@@ -6,7 +6,6 @@ import DateInput from '../common/DateInput'
 import SimpleSelect from '../common/SimpleSelect'
 import {useCollections, useSourceLookup} from '../../lib/queries'
 import {sourceControls} from '../../lib/sourceControls'
-import {RetentionFromReg} from '../../types/schemas/download_profile'
 
 type Props = {
     form: UseFormReturn<any>
@@ -24,6 +23,11 @@ const LimitModeReg = createSelectRegistry('DownloadLimitMode', {
     episodes: {label: 'Number of episodes'},
 })
 type LimitMode = (typeof LimitModeReg)['values'][number]
+
+const DateFieldReg = createSelectRegistry('DownloadDateField', {
+    published: {label: 'Publication date', help: 'Download episodes published in a window, and optionally delete them once they are older.'},
+    downloaded: {label: 'Download date', help: 'Keep each download for a number of days after downloading it.'},
+})
 
 /** Filters on when episodes were published, for every collection, and the countdown download choices. */
 export default function DownloadProfileDateFilters({form, collectionId, sourceKey, part}: Props) {
@@ -50,6 +54,18 @@ export default function DownloadProfileDateFilters({form, collectionId, sourceKe
         : watchedDays > 0 || daysInputInvalid
             ? 'date'
             : 'none'
+
+    const dateField = (watch('retentionFrom') ?? 'published') as 'published' | 'downloaded'
+    const updateDateField = (value: string) => {
+        setValue('retentionFrom', value, {shouldDirty: true, shouldValidate: true})
+        if (value === 'downloaded') {
+            // Counting from the download date only works with a number of days.
+            setValue('downloadEpisodeCount', 0, {shouldDirty: true, shouldValidate: true})
+            setValue('downloadStartingFrom', null, {shouldDirty: true, shouldValidate: true})
+            setValue('downloadDaysInPast', watchedDays > 0 ? watchedDays : 180, {shouldDirty: true, shouldValidate: true})
+            setValue('deleteOlderEpisodes', true, {shouldDirty: true, shouldValidate: true})
+        }
+    }
 
     const updateLimitMode = (mode: LimitMode) => {
         if (mode === 'none') {
@@ -157,6 +173,18 @@ export default function DownloadProfileDateFilters({form, collectionId, sourceKe
     return (
         <>
             <div className="form-row">
+                <label htmlFor="download-date-field">Filter on</label>
+                <SimpleSelect
+                    inputId="download-date-field"
+                    registry={DateFieldReg}
+                    value={dateField}
+                    onChange={updateDateField}
+                />
+                <div className="help">{DateFieldReg.getHelp(dateField)}</div>
+            </div>
+
+            {dateField === 'published' && (
+            <div className="form-row">
                 <label htmlFor="download-limit-mode">Limit by</label>
                 <SimpleSelect
                     inputId="download-limit-mode"
@@ -168,6 +196,7 @@ export default function DownloadProfileDateFilters({form, collectionId, sourceKe
                     Choose whether to use no rolling limit, a rolling date window, or only the latest number of episodes.
                 </div>
             </div>
+            )}
 
             {limitMode === 'none' && (
                 <div className="form-row">
@@ -203,7 +232,7 @@ export default function DownloadProfileDateFilters({form, collectionId, sourceKe
 
             {limitMode === 'date' && (
                 <div className="form-row">
-                    <label htmlFor="days-in-past">Download days in past</label>
+                    <label htmlFor="days-in-past">{dateField === 'downloaded' ? 'Days to keep each download' : 'Download days in past'}</label>
                     <input
                         id="days-in-past"
                         className="input"
@@ -221,7 +250,9 @@ export default function DownloadProfileDateFilters({form, collectionId, sourceKe
                         </div>
                     )}
                     <div className="help" id="days-in-past-help">
-                        Amount of days in the past the collection should be downloaded.
+                        {dateField === 'downloaded'
+                            ? 'Only episodes published in this many days are downloaded, and each download is kept for this many days after downloading it.'
+                            : 'Amount of days in the past the collection should be downloaded.'}
                         {oldestDateText ? (
                             <>
                                 {' '}Earliest date that will be downloaded: <strong>{oldestDateText}</strong>
@@ -292,21 +323,6 @@ export default function DownloadProfileDateFilters({form, collectionId, sourceKe
                 </div>
             )}
 
-            {limitMode === 'date' && watch('deleteOlderEpisodes') && (
-                <div className="form-row">
-                    <label htmlFor="retention-from">Delete them {watchedDays || 'N'} days</label>
-                    <SimpleSelect
-                        inputId="retention-from"
-                        registry={RetentionFromReg}
-                        value={watch('retentionFrom') ?? 'published'}
-                        onChange={(value) => setValue('retentionFrom', value, {shouldDirty: true, shouldValidate: true})}
-                    />
-                    <div className="help">
-                        After publication deletes an episode once it is older than the window. After downloading keeps each
-                        download for the full {watchedDays || 'N'} days, however old the episode was when it was downloaded.
-                    </div>
-                </div>
-            )}
         </>
     )
 }

@@ -91,6 +91,9 @@ def _availability(selection: EpisodeSelection, stmt: Select) -> Select:
 
 
 def _types(selection: EpisodeSelection, stmt: Select) -> Select:
+    """No episode types line: every type."""
+    if not selection.ep_id_type_list:
+        return stmt
     return stmt.where(episode_identifier_type_predicate(Episode.episode_identifier, set(selection.ep_id_type_list)))
 
 
@@ -144,8 +147,6 @@ def _built_in_statement(s: Session, selection: EpisodeSelection, *, upto: str = 
     stmt = _availability(selection, stmt)
     if upto == "availability":
         return stmt
-    if not selection.ep_id_type_list:
-        return stmt.where(False)
     stmt = _types(selection, stmt)
     if upto == "types":
         return stmt
