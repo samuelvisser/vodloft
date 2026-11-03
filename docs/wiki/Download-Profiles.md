@@ -164,7 +164,7 @@ Download Profiles of YouTube Collections have a YouTube section under Which epis
 
 ### Auto-generated subtitles
 
-This line only appears when the Local Media Profile stores subtitles.
+This setting only appears when the Local Media Profile stores subtitles.
 
 **Use auto-generated subtitles** never, only when there are no real ones (the default), or always. YouTube makes subtitles automatically for most videos; they follow the subtitle languages of the Local Media Profile.
 
