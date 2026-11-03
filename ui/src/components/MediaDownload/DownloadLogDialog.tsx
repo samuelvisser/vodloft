@@ -137,7 +137,7 @@ export default function DownloadLogDialog({row, onClose}: Props) {
 
                     <div className="log-history-scroll">
                         <dl className="log-meta log-file-meta">
-                            <div><dt>File</dt><dd className="mono">{row.filePath}</dd></div>
+                            <div><dt>File</dt><dd className={row.filePath ? 'mono' : undefined}>{row.filePath || '—'}</dd></div>
                         </dl>
 
                         <p className="modal-text log-section-label">Download history</p>
