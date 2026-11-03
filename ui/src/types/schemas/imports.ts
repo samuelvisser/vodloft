@@ -162,6 +162,7 @@ export type ImportOptions = {
     settings?: string[] | null
     enableDownloadProfiles: boolean
     matchExistingFiles: boolean
+    renameExistingFiles: boolean
     /** Leave out to do what the last import did. */
     mergeProfiles?: boolean | null
     templates: Record<string, string>

@@ -665,6 +665,48 @@ def test_match_existing_files_after_an_import_skips_its_files_and_holds_the_down
     assert session.get(DownloadProfile, held.id).enable_profile
 
 
+def _renames(session) -> list[int]:
+    """The Collections a file rename was queued for."""
+    from task_manager.scheduler.db import TaskOperation
+
+    return [operation.resource_id
+            for operation in session.scalars(select(TaskOperation).where(TaskOperation.kind == "collection.rename_files"))]
+
+
+def test_renaming_existing_files_queues_a_rename_once_the_files_are_adopted(installation):
+    from backend.db.models import Collection
+    from backend.services import imports
+
+    session, _applied = installation
+    _run(session, imports.ImportOptions(rename_existing_files=True))
+    collections = {collection.title: collection for collection in session.scalars(select(Collection))}
+    _index(session, collections["Veritasium"], ["vid-aaaaaaa", "vid-bbbbbbb"])
+    assert _renames(session) == []
+    _adopt_waiting(session)
+
+    veritasium = collections["Veritasium"]
+    assert veritasium.id in _renames(session)
+
+
+def test_with_matching_the_rename_waits_until_the_matches_are_done(installation):
+    from backend.db.models import Collection, ExistingFileScan
+    from backend.services import existing_files, imports
+
+    session, _applied = installation
+    _run(session, imports.ImportOptions(match_existing_files=True, rename_existing_files=True))
+    collections = {collection.title: collection for collection in session.scalars(select(Collection))}
+    veritasium = collections["Veritasium"]
+    _index(session, veritasium, ["vid-aaaaaaa", "vid-bbbbbbb"])
+    _adopt_waiting(session)
+    assert _renames(session) == []
+
+    scan = session.scalars(select(ExistingFileScan).where(ExistingFileScan.collection_id == veritasium.id)).one()
+    existing_files.run_scan(session, collection_id=veritasium.id, local_media_profile_id=scan.local_media_profile_id)
+    existing_files.finish_scan(session, session.get(ExistingFileScan, scan.id))
+    existing_files.finish_scan(session, session.get(ExistingFileScan, scan.id))
+    assert _renames(session) == [veritasium.id]
+
+
 def _add_playlists_with_their_own_folder(tmp_path):
     """Two playlist sources whose own templates differ only in their folder, with a file each."""
     database = tmp_path / "imports" / "pinchflat" / "upload" / "db" / "pinchflat.db"

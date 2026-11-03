@@ -110,6 +110,8 @@ class ImportOptions:
     """Switch on the Download Profiles of the sources that were on in the other program."""
     match_existing_files: bool = False
     """After the files are adopted, look for the Collection's other files on disk (Match existing files)."""
+    rename_existing_files: bool = False
+    """Rename the adopted files to the paths the VODLoft templates give them; after the matches when matching."""
     merge_profiles: bool | None = None
     """Merge profiles that name files the same way apart from a folder or name; None decides by the last run."""
     templates: Mapping[str, str] = field(default_factory=dict)
@@ -122,6 +124,7 @@ class ImportOptions:
             "settings": list(self.settings) if self.settings is not None else None,
             "enable_download_profiles": self.enable_download_profiles,
             "match_existing_files": self.match_existing_files,
+            "rename_existing_files": self.rename_existing_files,
             "merge_profiles": self.merge_profiles,
             "templates": dict(self.templates),
         }
@@ -137,6 +140,7 @@ class ImportOptions:
             settings=tuple(settings) if settings is not None else None,
             enable_download_profiles=bool(data.get("enable_download_profiles")),
             match_existing_files=bool(data.get("match_existing_files")),
+            rename_existing_files=bool(data.get("rename_existing_files")),
             # A run from before merging existed made one profile per variant; later runs keep that.
             merge_profiles=bool(data.get("merge_profiles", False)) if data else None,
             templates=dict(data.get("templates") or {}),
@@ -1344,21 +1348,57 @@ def run_step(session: Session, step_id: int) -> dict[str, int]:
     if download_profile is not None:
         counts["would_download"] = _would_download(session, download_profile)
     session.flush()
-    matching = bool(run and ImportOptions.from_dict(run.options or {}).match_existing_files)
+    run_options = ImportOptions.from_dict(run.options or {}) if run else ImportOptions()
+    matching = run_options.match_existing_files
     if matching and not _match_existing_files(session, step, profile, download_profile, problems):
         matching = False
+    renaming = run_options.rename_existing_files
+    if renaming and not matching:
+        # With matching on, the rename waits until the matches are done, so it renames those files too.
+        rename_collection_files(session, step.collection_id, profile.id)
     if download_profile is not None and step.enable_download_profile and not matching:
         download_profile.enable_profile = True
         queue_event(session, "download_profile.updated", {
             "resource_id": download_profile.id, "id": download_profile.id,
             "collection_id": download_profile.collection_id,
         })
-    step.result = {"counts": dict(counts), "problems": problems, "matching": matching}
+    step.result = {"counts": dict(counts), "problems": problems, "matching": matching, "renaming": renaming}
     step.status = STEP_DONE
     session.flush()
     _finish_run_if_done(session, step.run_id)
     session.commit()
     return dict(counts)
+
+
+def rename_collection_files(session: Session, collection_id: int, local_media_profile_id: int) -> None:
+    """Queue renaming the Collection's files with this profile to the paths its template gives them."""
+    from task_manager.scheduler.operation_factory import create_operation
+    from task_manager.scheduler.operations import queue_operation_target_dispatch
+
+    from backend.api.endpoints.collections.operations import CollectionFileRenameOperation
+
+    collection = session.get(Collection, collection_id)
+    if collection is None:
+        return
+    operation = create_operation(session, CollectionFileRenameOperation(
+        collection, local_media_profile_ids=(local_media_profile_id,),
+    ))
+    queue_operation_target_dispatch(session, operation.id, f"profile:{local_media_profile_id}")
+
+
+def rename_after_matching(session: Session, scan: ExistingFileScan) -> bool:
+    """Once its matches are done, rename the files of an import that asked for it; whether it did."""
+    steps = session.scalars(select(ImportStep).where(
+        ImportStep.collection_id == scan.collection_id,
+        ImportStep.local_media_profile_id == scan.local_media_profile_id,
+        ImportStep.status == STEP_DONE,
+    ).order_by(ImportStep.id.desc()).limit(1))
+    step = next(iter(steps), None)
+    if step is None or not (step.result or {}).get("renaming") or (step.result or {}).get("renamed"):
+        return False
+    rename_collection_files(session, scan.collection_id, scan.local_media_profile_id)
+    step.result = {**step.result, "renamed": True}
+    return True
 
 
 def _match_existing_files(

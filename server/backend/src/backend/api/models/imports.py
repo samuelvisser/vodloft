@@ -68,6 +68,9 @@ class ImportOptionsAPIRequest(RequestBase):
     settings: Optional[list[str]] = Field(default=None, description="Setting keys; leave out for the recommended ones")
     enable_download_profiles: bool = False
     match_existing_files: bool = Field(default=False, description="Look for other files of each Collection after the import")
+    rename_existing_files: bool = Field(
+        default=False, description="Rename the adopted files to the paths the VODLoft templates give them",
+    )
     merge_profiles: Optional[bool] = Field(
         default=None, description="Merge profiles that differ only by a folder or name; leave out to do what the last run did",
     )
