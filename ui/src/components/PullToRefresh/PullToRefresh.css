@@ -1,0 +1,20 @@
+.pull-to-refresh {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) - 36px);
+    left: 50%;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--select-menu-bg);
+    color: var(--muted);
+    box-shadow: var(--select-menu-shadow);
+    pointer-events: none;
+}
+
+.pull-to-refresh.is-ready {
+    color: var(--text);
+}
