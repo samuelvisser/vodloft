@@ -296,3 +296,30 @@ def test_new_episodes_only_count_for_collections_that_download_nothing(db):
     assert db.scalar(select(NotificationEvent)) is None
     new_episodes_found(db, collection, 1)
     assert db.scalar(select(NotificationEvent)).title == "1 new episode in Show"
+
+
+def test_push_reaches_the_push_service(monkeypatch):
+    """Apprise refuses a time to live over a minute, which failed every push before it was sent."""
+    import base64
+    import os
+    from types import SimpleNamespace
+
+    import requests
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    from backend.services.notifications import push
+
+    def encoded(data: bytes) -> str:
+        return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+    client = ec.generate_private_key(ec.SECP256R1()).public_key().public_bytes(
+        serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint,
+    )
+    subscription = {"endpoint": "https://web.push.apple.com/device", "keys": {"p256dh": encoded(client), "auth": encoded(os.urandom(16))}}
+    sent = []
+    monkeypatch.setattr(push, "decrypt_text", lambda _value: json.dumps(subscription))
+    monkeypatch.setattr(requests, "post", lambda url, **kwargs: sent.append(url) or SimpleNamespace(status_code=201, content=b"", text="", headers={}))
+
+    result = push.send_push(ec.generate_private_key(ec.SECP256R1()), SimpleNamespace(encrypted_subscription="x"), {"title": "Test"})
+    assert result == "SENT" and sent == ["https://web.push.apple.com/device"]
