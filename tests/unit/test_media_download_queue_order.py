@@ -1138,3 +1138,112 @@ def test_workflow_orders_active_downloads_by_execution_start_across_pages():
     finally:
         session.close()
         engine.dispose()
+
+
+def test_workflow_orders_publication_waits_in_dispatch_queue_order():
+    from sqlalchemy import select
+
+    from backend.api.endpoints.media_downloads.service import get_media_downloads_page
+    from task_manager.scheduler.db import TaskDefinition, TaskRun
+    from task_manager.scheduler.operations import link_run_to_operations, refresh_operation
+    from task_manager.scheduler.types import OperationSource, ResourceType, TaskStatus
+    from task_manager.tasks.media_download_operations import (
+        _set_media_download_countdown_wait,
+        create_media_download_operation,
+    )
+
+    session, engine = _session()
+    try:
+        # Delayed downloads sort where they will dispatch once the wait ends:
+        # after manually prioritized work, in creation order with the rest.
+        countdown_delay = _make_download(session, slug="delay-no-deadline")
+        late_delay = _make_download(session, slug="delay-late")
+        soon_delay = _make_download(session, slug="delay-soon")
+        running = _make_download(session, slug="delay-running")
+        queued = _make_download(session, slug="delay-queued")
+        prioritized = _make_download(session, slug="delay-prioritized")
+
+        now = datetime.now(timezone.utc)
+        create_media_download_operation(
+            session, late_delay, not_before=now + timedelta(hours=2),
+        )
+        create_media_download_operation(
+            session, soon_delay, not_before=now + timedelta(hours=1),
+        )
+        countdown_operation = create_media_download_operation(session, countdown_delay)
+        _set_media_download_countdown_wait(session, countdown_operation)
+
+        operation = create_media_download_operation(session, running)
+        definition_id = session.scalar(select(TaskDefinition.id).where(
+            TaskDefinition.key == "download_episode"
+        ))
+        run = TaskRun(
+            schedule_id=None,
+            definition_id=definition_id,
+            resource_type=ResourceType.MEDIA_DOWNLOAD,
+            resource_id=running.id,
+            status=TaskStatus.RUNNING,
+            progress=40,
+            message="Downloading",
+            meta={"inputs": _DOWNLOAD_INPUTS, "_progress_meta": {"download": {
+                "phase": "transferring",
+                "main_activity": "media",
+                "primary_transfer_complete": False,
+            }}},
+            result=None,
+            attempt_count=1,
+            max_retries=2,
+            last_error=None,
+            next_retry_at=None,
+            started_at=now,
+            finished_at=None,
+            runtime_ms=None,
+        )
+        session.add(run)
+        session.flush()
+        link_run_to_operations(
+            session,
+            run=run,
+            task_key="download_episode",
+            operation_ids=(operation.id,),
+            operation_slot=operation.targets[0].slot_key,
+        )
+        refresh_operation(session, operation.id)
+        create_media_download_operation(session, queued)
+        create_media_download_operation(session, prioritized, source=OperationSource.UI)
+        session.commit()
+
+        def page(cursor=None):
+            return get_media_downloads_page(
+                session, order="workflow", cursor=cursor, limit=2,
+            )
+
+        rows = []
+        cursor = None
+        while True:
+            result = page(cursor)
+            rows.extend(result.items)
+            cursor = result.next_cursor
+            if cursor is None:
+                break
+
+        assert [row.id for row in rows] == [
+            running.id,
+            prioritized.id,
+            late_delay.id,
+            soon_delay.id,
+            countdown_delay.id,
+            queued.id,
+        ]
+        # Only dispatchable downloads get a visible queue position.
+        assert {row.id: row.queue_position for row in rows} == {
+            running.id: None,
+            prioritized.id: 1,
+            late_delay.id: None,
+            soon_delay.id: None,
+            countdown_delay.id: None,
+            queued.id: 2,
+        }
+    finally:
+        session.close()
+        engine.dispose()
