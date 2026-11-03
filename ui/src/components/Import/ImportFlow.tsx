@@ -463,12 +463,11 @@ function PreviewStep({importer, onReplace, onFinished}: {
                         <div className="settings-field settings-toggle-field settings-field--wide">
                             <div className="settings-toggle-field__control">
                                 <div>
-                                    <label htmlFor={`import-merge-${importer.key}`}>Keep collections with their own template on their Pinchflat profile</label>
+                                    <label htmlFor={`import-merge-${importer.key}`}>Attempt to merge custom output template overwrites</label>
                                     <div className="settings-field__help">
-                                        A Pinchflat source that overrides its media profile's template stays on that
-                                        profile: the folder or name it changes becomes a custom collection field.
-                                        Media profiles with the same settings and nearly the same template share one
-                                        profile the same way. This only happens when no file gets another path.
+                                        When collections overwrite the Pinchflat Media Profile output, attempt to use
+                                        custom collection metadata fields to merge the output template such that
+                                        the collections can still share the same profile as they did in Pinchflat.
                                     </div>
                                 </div>
                                 <Switch
