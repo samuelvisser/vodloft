@@ -346,7 +346,12 @@ function PreviewStep({importer, onReplace, onFinished}: {
     if (!preview) {
         return (
             <div className="import-step">
-                {loading && <p role="status">Reading the upload…</p>}
+                {loading && (
+                    <>
+                        <ProgressBar ariaLabel="Reading the upload"/>
+                        <p className="import-run__activity" role="status">Reading the upload…</p>
+                    </>
+                )}
                 {error && (
                     <>
                         <p className="form-error-card" role="alert">{error}</p>
