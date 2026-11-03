@@ -62,6 +62,7 @@ export const ImportCollectionSchema = z.looseObject({
     suppressed: z.int(),
     missing: z.int(),
     downloadProfileOn: z.boolean(),
+    customMetadata: z.record(z.string(), z.string()).default({}),
     warnings: z.array(ImportWarningSchema),
 })
 export type ImportCollection = z.infer<typeof ImportCollectionSchema>
@@ -84,6 +85,10 @@ export const ImportProfileSchema = z.looseObject({
         differences: z.array(z.looseObject({path: z.string(), rendered: z.string()})),
         error: z.string().nullish(),
     }),
+    baseName: z.string().nullish(),
+    mergedFrom: z.array(z.string()).default([]),
+    fields: z.array(z.string()).default([]),
+    keptSeparate: z.string().nullish(),
     changes: z.looseObject({
         updated: z.array(z.string()),
         kept: z.array(z.string()),
@@ -121,6 +126,7 @@ export const ImportPreviewSchema = z.looseObject({
         })),
     }).nullish(),
     lastRun: ImportRunSummarySchema.nullish(),
+    mergeProfiles: z.boolean().default(false),
     counts: z.looseObject({collections: z.int(), files: z.int()}),
 })
 export type ImportPreview = z.infer<typeof ImportPreviewSchema>
@@ -156,5 +162,7 @@ export type ImportOptions = {
     settings?: string[] | null
     enableDownloadProfiles: boolean
     matchExistingFiles: boolean
+    /** Leave out to do what the last import did. */
+    mergeProfiles?: boolean | null
     templates: Record<string, string>
 }
