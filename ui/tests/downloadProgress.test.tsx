@@ -47,9 +47,17 @@ test('audio transfer detail uses human-readable downloaded and total sizes',()=>
     )
     assert.equal(view.detail,'Primary media transfer: 50.5 MiB / 67.8 MiB downloaded.')
 })
-test('non-audio direct transfer detail keeps the byte-count wording',()=>{
-    const view=presentDownloadProgress(undefined,active())
-    assert.equal(view.detail,'Primary media transfer: 42/100 bytes.')
+test('video transfer detail uses the same human-readable sizes',()=>{
+    const snapshot=execution()
+    Object.assign(snapshot.stages[0], {bytes_received: 402089151, total_bytes: 2724118969})
+    const view=presentDownloadProgress(undefined,operation({progressMeta:{download:snapshot}}))
+    assert.equal(view.detail,'Primary media transfer: 383.5 MiB / 2.54 GiB downloaded.')
+})
+test('transfer without a known total shows the received size',()=>{
+    const snapshot=execution('transferring','media',null)
+    Object.assign(snapshot.stages[0], {bytes_received: Math.round(12.3 * 1024 ** 2), total_bytes: null})
+    const view=presentDownloadProgress(undefined,operation({progressMeta:{download:snapshot}}))
+    assert.equal(view.detail,'12.3 MiB downloaded; total size unknown')
 })
 test('unknown transfer size is indeterminate',()=>assert.equal(presentDownloadProgress(undefined,active('transferring','media',null)).mode,'indeterminate'))
 test('global cooldown is not flattened into 0%',()=>{

@@ -78,16 +78,11 @@ export function presentDownloadProgress(download?: MediaDownloadDomainViewRead, 
         const secondary = execution?.stages.filter(stage => stage.id !== main?.id && ['running', 'waiting'].includes(stage.state))
             .map(stage => stage.wait ? `${activityLabel(stage)}: waiting` : activityLabel(stage)).join(' / ')
         if (execution?.phase === 'transferring' && main?.id === 'media') {
-            const audioOnly = download?.preferredFormat === 'format_audio_only'
             const basis = media?.segments_total
                 ? `${media.segments_done || 0}/${media.segments_total} media segments`
                 : media?.total_bytes
-                    ? audioOnly
-                        ? `${formatBytes(media.bytes_received)} / ${formatBytes(media.total_bytes)} downloaded`
-                        : `${media.bytes_received.toLocaleString()}/${media.total_bytes.toLocaleString()} bytes`
-                    : audioOnly
-                        ? `${formatBytes(media?.bytes_received ?? 0)} downloaded; total size unknown`
-                        : `${media?.bytes_received?.toLocaleString() || '0'} bytes received; total size unknown`
+                    ? `${formatBytes(media.bytes_received)} / ${formatBytes(media.total_bytes)} downloaded`
+                    : `${formatBytes(media?.bytes_received ?? 0)} downloaded; total size unknown`
             if (transferPercent !== null) return {status: 'downloading', mode: 'determinate', active: true, percent: transferPercent,
                 label: `${transferPercent}%`, detail: `Primary media transfer: ${basis}.`, icon: faIcon('fass', 'download'), secondary,
                 canCancel: true, canRetry: true}
