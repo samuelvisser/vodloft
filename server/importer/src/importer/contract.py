@@ -73,7 +73,9 @@ class ProfilePlan:
     base_name: str | None = None
     """For a variant of another profile, such as a source's own template: that profile's name."""
     merged_from: tuple[str, ...] = ()
-    """The other program's profiles this one was merged from, by name; empty when it was not merged."""
+    """The other program's own profiles this one was merged from, by name; empty when it was not merged."""
+    template_overrides: bool = False
+    """Whether it holds Collections whose source overrides its profile's template, each with its own field values."""
     fields: tuple[str, ...] = ()
     """The custom collection fields the merged template reads; each Collection stores its own value."""
     kept_separate: str | None = None

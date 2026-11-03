@@ -95,8 +95,15 @@ def _merged(family: _Family, base_names: dict[str, str]) -> ProfilePlan:
     support = max((member.support for member in family.members), key=lambda value: _SUPPORT[value])
     fields = tuple(slot.key for slot in family.alignment.slots)
     total = sum(len(collections) for collections in family.collections.values())
+    # Only names the other program has: a variant counts as the profile whose template it overrides.
+    profiles = tuple(dict.fromkeys(member.base_name or member.name for member in family.members))
+    overrides = any(member.base_name is not None for member in family.members)
     proof = f"its template gives the same paths for all {total} collections"
-    line = f"Kept together: {', '.join(member.name for member in family.members)}, as {proof}"
+    if overrides:
+        line = (f"Collections that override the template of {' and '.join(profiles)} share this profile, "
+                f"as {proof}")
+    else:
+        line = f"Kept together: {', '.join(profiles)}, as {proof}"
     if fields:
         line += f"; each collection keeps its own {', '.join(fields)} as a custom collection field"
     return replace(
@@ -108,7 +115,8 @@ def _merged(family: _Family, base_names: dict[str, str]) -> ProfilePlan:
         report=(*founder.report, line),
         support=support,
         base_name=None,
-        merged_from=tuple(member.name for member in family.members),
+        merged_from=profiles,
+        template_overrides=overrides,
         fields=fields,
     )
 

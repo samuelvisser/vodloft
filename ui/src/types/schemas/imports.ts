@@ -87,6 +87,7 @@ export const ImportProfileSchema = z.looseObject({
     }),
     baseName: z.string().nullish(),
     mergedFrom: z.array(z.string()).default([]),
+    templateOverrides: z.boolean().default(false),
     fields: z.array(z.string()).default([]),
     keptSeparate: z.string().nullish(),
     changes: z.looseObject({

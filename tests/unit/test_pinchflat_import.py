@@ -775,3 +775,26 @@ def test_a_run_from_before_merging_keeps_one_profile_per_variant(installation, t
                           report=[], counts={}))
     session.commit()
     assert imports.with_merge_default(session, pinchflat.IMPORTER, imports.ImportOptions()).merge_profiles is False
+
+
+def test_the_path_check_reads_each_videos_uploader_from_its_own_path():
+    """VODLoft learns the uploader only when it indexes, so the check takes it from where the template puts it."""
+    from config.settings.submodels import FilenameRestrictionMode
+    from backend.services import imports
+    from importer.contract import FilePlan, ProfilePlan
+
+    profile = ProfilePlan(external_id="p", name="Video",
+                          output_template="/downloads/V/{{ collection_title }}/{{ episode_uploader or 'NA' }} - {{ title }}.ext")
+    files = [
+        FilePlan("c", "a", "/downloads/V/Talks/PragerU - First.mp4", title="First"),
+        FilePlan("c", "b", "/downloads/Old/PragerU - Second.mp4", title="Second"),
+        FilePlan("c", "d", "/downloads/V/Talks/Third.mp4", title="Third"),
+    ]
+
+    proof = imports.path_proof(profile, files, {"c": "Talks"}, FilenameRestrictionMode.UNRESTRICTED)
+
+    assert proof["identical"] == 1
+    assert [item["rendered"] for item in proof["differences"]] == [
+        "/downloads/V/Talks/PragerU - Second.mp4",
+        "/downloads/V/Talks/(uploader) - Third.mp4",
+    ]

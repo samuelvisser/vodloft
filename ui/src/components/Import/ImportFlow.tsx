@@ -623,6 +623,11 @@ const BECOMES_LABELS: Record<string, string> = {
     in_library: 'In your library',
 }
 
+/** "A", "A and B", "A, B and C". */
+function mergedNames(names: readonly string[]): string {
+    return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+}
+
 /** Names in the order a person expects: case-insensitive, with numbers in number order. */
 const byName = (a: string, b: string) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'})
 
@@ -726,15 +731,28 @@ function ProfilePreview({importerName, profile, collections, template, onTemplat
             <div className="import-profile__body">
             {profile.mergedFrom.length > 0 && (
                 <div className="import-merge">
-                    <div>
-                        <span className="import-merge__label">Kept together</span>{' '}
-                        {profile.mergedFrom.join(', ')}
-                    </div>
-                    <p className="import-merge__why">
-                        VODLoft uses Download Profiles to decide which episodes to download, so these can share one
-                        Local Media Profile. Each collection's Download Profile is set up to download what{' '}
-                        {importerName} did.
-                    </p>
+                    {profile.mergedFrom.length > 1 && (
+                        <>
+                            <div>
+                                <span className="import-merge__label">Kept together</span>{' '}
+                                {profile.mergedFrom.join(', ')}
+                            </div>
+                            <p className="import-merge__why">
+                                VODLoft uses Download Profiles to decide which episodes to download, so these can share
+                                one Local Media Profile. Each collection's Download Profile is set up to download
+                                what {importerName} did.
+                            </p>
+                        </>
+                    )}
+                    {profile.templateOverrides && (
+                        <div>
+                            <span className="import-merge__label">Template overrides</span>{' '}
+                            {collections.length === 1 ? 'This collection overrides' : 'These collections override'}{' '}
+                            the template of {mergedNames(profile.mergedFrom)} in {importerName}. The{' '}
+                            {mergedNames(profile.fields)} each one sets is taken out of its template and kept as a
+                            custom collection field, so they can all use this profile.
+                        </div>
+                    )}
                     {profile.fields.length > 0 && (
                         <ul className="import-merge__fields">
                             {collections.map((item) => (
