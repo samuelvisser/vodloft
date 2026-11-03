@@ -67,6 +67,19 @@ def test_a_template_without_variables_reads_nothing():
     assert template_patterns("/downloads/fixed.ext") == ()
 
 
+def test_a_template_that_only_reads_a_date_matches_nothing():
+    # The channel and title go through filters the pattern can't read back, so only the date is left:
+    # that would fit every file of that day in a folder several channels share.
+    template = ("/downloads/YouTube/{{ collection_title | replace(' ', '_') }}/"
+                "{{ date }} [{{ title | replace(' ', '_') }}].ext")
+    assert template_patterns(template) == ()
+    assert len(template_patterns("/downloads/Show/S{{ season_number }}E{{ episode_number }}.ext")) == 1
+
+    files = [FoundFile("Matt's Off Road Recovery/2024-03-02 [We_Opened_The_Wrecker_s_Hubs].mp4", 1)]
+    (match,) = _match(files, patterns=template_patterns(template)).values()
+    assert match.evidence != "template"
+
+
 # Scanning ---------------------------------------------------------------------
 
 def test_scanning_finds_media_and_their_sidecars_and_skips_partial_files(tmp_path):
@@ -317,7 +330,74 @@ def test_folders_and_default_folder(library):
 
     assert default_folder(TEMPLATE) == "/downloads/YouTube"
     assert default_folder("/downloads/{{ title }}.ext") == "/downloads"
+    assert default_folder("{% set title = title | lower -%}/downloads/Video/{{ title }}.ext") == "/downloads/Video"
+    assert default_folder("/downloads/{% if year %}A/{% else %}A/B/{% endif %}{{ title }}.ext") == "/downloads/A"
     assert list_folders("/downloads") == {"folder": "/downloads/", "parent": None, "folders": ["YouTube"]}
     assert list_folders("/downloads/YouTube")["parent"] == "/downloads/"
     with pytest.raises(ExistingFilesError):
         list_folders("/downloads/missing")
+
+
+def test_a_collection_review_only_shows_its_own_folder_and_the_profile_review_shows_all(library, monkeypatch):
+    from backend.db.models import Collection, DownloadProfile
+    from backend.services import existing_files
+    from backend.types.collection_types import CollectionType, EpisodeIdentifier
+
+    session, collection, profile, download_profile, _episodes, root = library
+    monkeypatch.setattr(existing_files, "queue_scan", lambda *args: None)
+    other = Collection(
+        source_key="ytdlp", uuid="o", slug="smarter-every-day", title="Smarter Every Day", description="",
+        sharing_url="https://www.youtube.com/@smartereveryday", membership_level="FREE",
+        type=CollectionType.SERIES.value, episode_identifier=EpisodeIdentifier.NUMBERED.value,
+        author_name="Destin", author_slug="destin",
+    )
+    other_download_profile = DownloadProfile(collection=other, local_media_profile=profile, enable_profile=True)
+    session.add_all([other, other_download_profile])
+    (root / "YouTube" / "Smarter Every Day").mkdir()
+    (root / "YouTube" / "Smarter Every Day" / "Slow motion.mp4").write_bytes(b"e")
+    session.commit()
+
+    # Both Collections scan the folder they share.
+    for owner, holds in ((collection, download_profile), (other, other_download_profile)):
+        existing_files.request_scan(session, owner, profile, folder="/downloads/YouTube", hold=[holds])
+        session.commit()
+        existing_files.run_scan(session, collection_id=owner.id, local_media_profile_id=profile.id)
+    scans = {scan.collection_id: scan for scan in session.scalars(select(existing_files.ExistingFileScan))}
+
+    # A Collection looks in its own folder, the one its show artwork goes in.
+    assert existing_files.collection_folder(collection, profile) == "/downloads/YouTube/Veritasium"
+    assert existing_files.scan_folder_for(collection, profile) == "/downloads/YouTube/Veritasium"
+    assert existing_files.scan_folder_for(other, profile) == "/downloads/YouTube/Smarter Every Day"
+
+    # Veritasium's review lists its own unmatched file, not the one of Smarter Every Day.
+    view = existing_files.scan_view(session, scans[collection.id])
+    unmatched = sorted(item["path"] for item in view["files"] if item["episode"] is None)
+    assert unmatched == ["/downloads/YouTube/Veritasium/bonus.mp4"]
+    assert view["counts"]["unmatched"] == 1
+
+    # The profile's review is the whole folder, each file once with its best match.
+    review = existing_files.profile_review(session, profile)
+    paths = [item["path"] for item in review["files"]]
+    assert len(paths) == len(set(paths)) == 5
+    assert review["counts"]["unmatched"] == 2
+    assert review["counts"]["certain"] == view["counts"]["certain"]
+    sewing = next(item for item in review["files"] if "Sewing" in item["path"])
+    assert sewing["episode"]["collection_slug"] == "veritasium"
+    assert [item["collection_slug"] for item in review["collections"]] == ["smarter-every-day", "veritasium"]
+
+
+def test_a_profile_scan_looks_for_every_collection_in_its_own_folder(library, monkeypatch):
+    from backend.services import existing_files
+
+    session, collection, profile, download_profile, _episodes, _root = library
+    queued = []
+    monkeypatch.setattr(existing_files, "queue_scan", lambda *args: queued.append(args))
+
+    assert existing_files.scan_profile(session, profile) == 1
+    session.commit()
+    scan = session.scalar(select(existing_files.ExistingFileScan))
+    assert (scan.collection_id, scan.folder, scan.status, len(queued)) == (
+        collection.id, "/downloads/YouTube/Veritasium", "scanning", 1,
+    )
+    # A scan started by hand holds no Download Profile.
+    assert download_profile.enable_profile is True

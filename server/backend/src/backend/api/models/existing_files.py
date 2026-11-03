@@ -39,6 +39,8 @@ class ExistingFileEpisodeAPIRead(ResponseBase):
     slug: str
     title: str
     date: Optional[str] = None
+    collection_slug: str
+    collection_title: str
 
 
 class ExistingFileAPIRead(ResponseBase):
@@ -88,6 +90,29 @@ class ExistingFilesOpenScanAPIRead(ExistingFilesScanSummaryAPIRead):
     local_media_profile_name: str
     folder: str
     error: Optional[str] = None
+
+
+class ExistingFilesProfileCollectionAPIRead(ResponseBase):
+    collection_slug: str
+    collection_title: str
+    status: Literal["waiting", "scanning", "ready", "failed", "finished"]
+
+
+class ExistingFilesProfileReviewAPIRead(ResponseBase):
+    """Every open scan of one Local Media Profile, as one review of its whole folder."""
+
+    status: Literal["waiting", "scanning", "ready", "failed", "finished"]
+    folder: str
+    local_media_profile_id: int
+    held_download_profiles: int = 0
+    counts: ExistingFilesCountsAPIRead
+    episodes_without_file: int = 0
+    files: list[ExistingFileAPIRead] = Field(default_factory=list)
+    collections: list[ExistingFilesProfileCollectionAPIRead] = Field(default_factory=list)
+
+
+class ExistingFilesProfileScanAPIResult(ResponseBase):
+    collections: int
 
 
 class ExistingFilesAdoptAPIResult(ResponseBase):

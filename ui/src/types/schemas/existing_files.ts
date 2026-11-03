@@ -5,6 +5,8 @@ export const ExistingFileEpisodeSchema = z.looseObject({
     slug: z.string(),
     title: z.string(),
     date: z.string().nullish(),
+    collectionSlug: z.string(),
+    collectionTitle: z.string(),
 })
 export type ExistingFileEpisode = z.infer<typeof ExistingFileEpisodeSchema>
 
@@ -65,6 +67,22 @@ export const ExistingFilesOpenScanSchema = ExistingFilesScanSummarySchema.extend
     error: z.string().nullish(),
 })
 export type ExistingFilesOpenScan = z.infer<typeof ExistingFilesOpenScanSchema>
+
+export const ExistingFilesProfileReviewSchema = z.looseObject({
+    status: ExistingFilesStatusSchema,
+    folder: z.string(),
+    localMediaProfileId: z.int(),
+    heldDownloadProfiles: z.int().default(0),
+    counts: ExistingFilesCountsSchema,
+    episodesWithoutFile: z.int().default(0),
+    files: z.array(ExistingFileSchema).default([]),
+    collections: z.array(z.looseObject({
+        collectionSlug: z.string(),
+        collectionTitle: z.string(),
+        status: ExistingFilesStatusSchema,
+    })).default([]),
+})
+export type ExistingFilesProfileReview = z.infer<typeof ExistingFilesProfileReviewSchema>
 
 export const FolderListSchema = z.looseObject({
     folder: z.string(),

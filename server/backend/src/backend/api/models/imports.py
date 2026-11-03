@@ -242,8 +242,14 @@ class ImportStepAPIRead(ResponseBase):
     matching: Optional[ImportStepMatchingAPIRead] = None
 
 
+class ImportRunDownloadProfilesAPIRead(ResponseBase):
+    total: int = Field(description="The Download Profiles the import brought over that can be turned on now")
+    on: int
+
+
 class ImportRunAPIRead(ImportRunSummaryAPIRead):
     options: dict[str, Any]
+    download_profiles: ImportRunDownloadProfilesAPIRead
     version: Optional[str] = None
     report: list[ImportReportEntryAPIRead]
     steps: list[ImportStepAPIRead]

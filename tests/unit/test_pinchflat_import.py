@@ -841,3 +841,25 @@ def test_a_step_that_fails_shows_as_failed_and_the_import_finishes(installation)
     assert [step["status"] for step in view["steps"]] == ["failed"] * len(steps)
     assert view["steps"][0]["problems"] == [{"path": None, "error": "database is locked"}]
     assert view["status"] == "finished"
+
+
+def test_a_finished_import_turns_on_all_its_download_profiles_at_once(installation):
+    from backend.db.models import Collection, DownloadProfile, ImportRun
+    from backend.services import imports
+
+    session, _applied = installation
+    run = _run(session, imports.ImportOptions())
+    collections = {collection.title: collection for collection in session.scalars(select(Collection))}
+    _index(session, collections["Veritasium"], ["vid-aaaaaaa", "vid-bbbbbbb"])
+    _index(session, collections["Lofi"], ["vid-eeeeeee"])
+    _adopt_waiting(session)
+    run = session.get(ImportRun, run.id)
+    assert run.status == "finished"
+    total = len(list(session.scalars(select(DownloadProfile))))
+    assert total
+    assert imports.run_view(session, run)["download_profiles"] == {"total": total, "on": 0}
+
+    assert imports.enable_run_download_profiles(session, run) == total
+    session.commit()
+    assert imports.run_view(session, run)["download_profiles"] == {"total": total, "on": total}
+    assert all(profile.enable_profile for profile in session.scalars(select(DownloadProfile)))

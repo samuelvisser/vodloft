@@ -55,6 +55,17 @@ class PathPattern:
     def variables(self) -> tuple[str, ...]:
         return tuple(dict.fromkeys(name for run in self.runs for name in run if name is not None))
 
+    @property
+    def identifies(self) -> bool:
+        """Whether a reading can tell one episode from another's file in a shared folder.
+
+        A pattern that only reads dates and numbers, while it can't read the rest of the
+        path, fits every file with that date, whichever channel or title it has.
+        """
+        reads_text = any(name not in _SHAPES for name in self.variables)
+        reads_everything = all(name is not None for run in self.runs for name in run)
+        return reads_text or reads_everything
+
     def read(self, normalised_path: str) -> Iterator[dict[str, str]]:
         """Each way the values can be read from a path (normalised, without extension)."""
         match = self.regex.match(normalised_path)
@@ -132,7 +143,7 @@ def _component_regex(pieces: list[tuple[str, str]], runs: list[Run]) -> str:
 
 
 def template_patterns(template: str, *, limit: int = 32) -> tuple[PathPattern, ...]:
-    """A pattern for each way the template can lay out a path; empty when none reads a value."""
+    """A pattern for each way the template can lay out a path that tells episodes apart; empty when none does."""
     try:
         analysis = analyze_template(template, environment=_ENVIRONMENT, max_variants=limit)
     except TemplateSyntaxError:
@@ -162,7 +173,7 @@ def template_patterns(template: str, *, limit: int = 32) -> tuple[PathPattern, .
         runs: list[Run] = []
         regex = "^" + "/".join(_component_regex(pieces, runs) for pieces in components if pieces) + "$"
         pattern = PathPattern(re.compile(regex), tuple(runs))
-        if not pattern.variables or regex in seen:
+        if not pattern.variables or not pattern.identifies or regex in seen:
             continue
         seen.add(regex)
         patterns.append(pattern)

@@ -137,6 +137,7 @@ export type ImportPreview = z.infer<typeof ImportPreviewSchema>
 
 export const ImportRunSchema = ImportRunSummarySchema.extend({
     options: z.record(z.string(), z.unknown()),
+    downloadProfiles: z.looseObject({total: z.int(), on: z.int()}).default({total: 0, on: 0}),
     version: z.string().nullish(),
     report: z.array(z.looseObject({
         kind: z.string(),
