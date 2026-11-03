@@ -1158,11 +1158,14 @@ def apply_run(session: Session, run_id: int) -> dict[str, int]:
         if collection is None:
             continue
         download_profile = _upsert_download_profile(session, collection_plan, collection, profile, links, run, report)
-        enable = bool(options.enable_download_profiles and (collection_plan.download_profile or {}).get("enable_profile"))
+        wanted_on = bool((collection_plan.download_profile or {}).get("enable_profile"))
+        enable = bool(options.enable_download_profiles and wanted_on)
         if download_profile is not None and download_profile.enable_profile:
             # Already on (by the person, or an earlier run): hold it until the files are adopted.
-            enable = True
+            enable = wanted_on = True
             download_profile.enable_profile = False
+        if download_profile is not None and wanted_on:
+            run.download_profiles_on = sorted({*run.download_profiles_on, download_profile.id})
         step = ImportStep(
             run_id=run.id, collection_id=collection.id, local_media_profile_id=profile.id,
             download_profile_id=download_profile.id if download_profile else None,
@@ -1249,6 +1252,9 @@ def _apply_record_plan(session: Session, plan: ImportPlan, options: ImportOption
     report.entries.extend(result.entries)
     report.counts.update(result.counts)
     # Every download is adopted now, so a Download Profile that should be on can be.
+    run.download_profiles_on = sorted({
+        *run.download_profiles_on, *(profile_id for profile_id, wanted_on in result.download_profiles if wanted_on),
+    })
     for profile_id, wanted_on in result.download_profiles:
         profile = session.get(DownloadProfile, profile_id)
         if profile is not None:
@@ -1525,15 +1531,15 @@ def _matching_view(session: Session, step: ImportStep) -> dict[str, Any] | None:
 
 
 def _run_download_profiles(session: Session, run: ImportRun) -> list[DownloadProfile]:
-    """The Download Profiles the run brought over, without the ones a Match existing files review still holds."""
-    ids = set(session.scalars(select(ImportLink.entity_id).where(
-        ImportLink.run_id == run.id, ImportLink.kind == "download_profile", ImportLink.entity_id.is_not(None),
-    )))
+    """The Download Profiles the run brought over that were on in the other program.
+
+    The ones a Match existing files review still holds are left out.
+    """
+    ids = set(run.download_profiles_on)
     held: set[int] = set()
     for step in session.scalars(select(ImportStep).where(ImportStep.run_id == run.id)):
-        if step.download_profile_id is None:
+        if step.download_profile_id not in ids:
             continue
-        ids.add(step.download_profile_id)
         matching = _matching_view(session, step)
         if matching is not None and matching["status"] != "finished":
             held.add(step.download_profile_id)
@@ -1543,7 +1549,7 @@ def _run_download_profiles(session: Session, run: ImportRun) -> list[DownloadPro
 
 
 def enable_run_download_profiles(session: Session, run: ImportRun) -> int:
-    """Turn on every Download Profile a finished run brought over; how many were off."""
+    """Turn on the Download Profiles a finished run brought over that were on in the other program; how many were off."""
     if run.status != FINISHED:
         raise ImportServiceError("The import is not finished yet")
     enabled = 0

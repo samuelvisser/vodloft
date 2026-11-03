@@ -415,7 +415,9 @@ function PreviewStep({importer, onReplace, onFinished, onRunStatus}: {
                         <ProgressBar ariaLabel="Reading the upload"/>
                         <p className="import-run__activity" role="status">Reading the upload…</p>
                         {/* Cancelling removes the upload, so a late answer has nothing left to show. */}
-                        <button type="button" className="btn" onClick={() => void onReplace()}>Cancel</button>
+                        <div className="import-actions">
+                            <button type="button" className="btn" onClick={() => void onReplace()}>Cancel</button>
+                        </div>
                     </>
                 )}
                 {error && (
@@ -1082,7 +1084,8 @@ function RunView({importer, run, onRun, onBack}: {
                         Download report
                     </button>
                     {run.status === 'finished' && off > 0 && (
-                        <button type="button" className="btn btn-primary" disabled={enabling} onClick={() => void enableDownloadProfiles()}>
+                        <button type="button" className="btn btn-primary" disabled={enabling} onClick={() => void enableDownloadProfiles()}
+                                title={`Only the Download Profiles that were on in ${importer.name}`}>
                             Turn on {off} Download Profile{off === 1 ? '' : 's'}
                         </button>
                     )}
