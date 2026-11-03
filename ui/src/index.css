@@ -498,6 +498,33 @@ select,
   font-size: 16px;
 }
 
+/* Native date and time inputs keep an intrinsic minimum width, so a width: 100% field
+   can still push past the edge of a narrow card on phones. */
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"] {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* iOS Safari ignores the width of its native date and time inputs and centers their value.
+   Dropping the native appearance there makes them size and align like the other inputs. */
+@supports (-webkit-touch-callout: none) {
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="time"] {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  input[type="date"]::-webkit-date-and-time-value,
+  input[type="datetime-local"]::-webkit-date-and-time-value,
+  input[type="time"]::-webkit-date-and-time-value {
+    min-height: 1.5em;
+    text-align: left;
+  }
+}
+
 .input:disabled {
   opacity: 0.6;
   cursor: not-allowed;
