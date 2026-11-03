@@ -112,7 +112,9 @@ def test_preview_counts_what_the_import_brings(installation):
 
     assert view["records"]["collections"] == [{
         "external_id": "1", "title": "Morning Show", "url": "https://www.dailywire.com/show/morning-show", "becomes": "new",
+        "profile_name": "WireLoft Shows", "files": 1, "files_on_disk": 1,
     }]
+    assert view["counts"] == {"collections": 1, "files": 1}
     assert view["records"]["kinds"]["download"] == {"new": 1, "on_disk": 1}
     assert view["path_map"]["found"] == 1
     assert {item["key"] for item in view["settings"] if item["selected"]} == set()

@@ -16,7 +16,7 @@ import adopts it once the folder is reachable.
 from __future__ import annotations
 
 import json
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -437,6 +437,27 @@ def record_summary(session: Session, plan: ImportPlan, links: dict[tuple[str, st
 
     by_kind: dict[str, Counter] = {}
     collections = []
+    profile_names = {profile.external_id: profile.name for profile in plan.profiles}
+    episode_collections = {record.external_id: record.references["collection_id"].external_id
+                           for record in plan.records if record.kind == "episode" and "collection_id" in record.references}
+    # Per collection: the profiles its Download Profiles and files use, and its downloaded files.
+    profiles_of: dict[str, set[str]] = defaultdict(set)
+    files: Counter = Counter()
+    on_disk: Counter = Counter()
+    for record in plan.records:
+        profile = record.references.get("local_media_profile_id")
+        if record.kind == "download_profile" and profile is not None:
+            profiles_of[record.references["collection_id"].external_id].add(profile.external_id)
+        if record.kind != "download" or record.references["media_item_id"].kind != "episode":
+            continue
+        collection_id = episode_collections.get(record.references["media_item_id"].external_id)
+        if collection_id is None:
+            continue
+        if profile is not None:
+            profiles_of[collection_id].add(profile.external_id)
+        if record.values.get("artifact_status") == _AVAILABLE:
+            files[collection_id] += 1
+            on_disk[collection_id] += int(bool(record.values.get("file_path")) and _exists(str(record.values["file_path"])))
     for record in plan.records:
         if record.kind == "download_profile_season":
             continue
@@ -459,5 +480,9 @@ def record_summary(session: Session, plan: ImportPlan, links: dict[tuple[str, st
                 "external_id": record.external_id, "title": record.values.get("title"),
                 "url": record.values.get("sharing_url"),
                 "becomes": "linked" if linked else "in_library" if known else "new",
+                "profile_name": ", ".join(sorted(
+                    (profile_names.get(profile, profile) for profile in profiles_of[record.external_id]), key=str.casefold,
+                )) or None,
+                "files": files[record.external_id], "files_on_disk": on_disk[record.external_id],
             })
     return {"kinds": {kind: dict(counts) for kind, counts in by_kind.items()}, "collections": collections}

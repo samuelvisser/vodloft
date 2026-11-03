@@ -184,6 +184,9 @@ class ImportRecordCollectionAPIRead(ResponseBase):
     title: Optional[str] = None
     url: Optional[str] = None
     becomes: str
+    profile_name: Optional[str] = Field(default=None, description="The Local Media Profiles its Download Profiles and files use")
+    files: int = 0
+    files_on_disk: int = 0
 
 
 class ImportRecordsAPIRead(ResponseBase):

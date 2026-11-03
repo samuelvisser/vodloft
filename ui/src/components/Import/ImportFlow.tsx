@@ -359,6 +359,7 @@ function PreviewStep({importer, onReplace, onFinished}: {
         if (preview.records) {
             return preview.records.collections.map((item) => ({
                 id: item.externalId, title: item.title ?? item.externalId, becomes: item.becomes, detail: null as string | null,
+                files: item.files, filesOnDisk: item.filesOnDisk, profileName: item.profileName ?? null,
             }))
         }
         return preview.collections.map((item) => ({

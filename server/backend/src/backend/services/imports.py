@@ -615,6 +615,7 @@ def preview(session: Session, importer: Importer, options: ImportOptions) -> dic
 
     last = session.scalar(select(ImportRun).where(ImportRun.importer == importer.key)
                           .order_by(ImportRun.id.desc()).limit(1))
+    records = _record_summary(session, plan, links) if plan.records else None
     return {
         "importer": importer.key,
         "version": plan.version,
@@ -625,12 +626,13 @@ def preview(session: Session, importer: Importer, options: ImportOptions) -> dic
         "profiles": profile_views,
         "settings": settings,
         "warnings": [_warning(warning) for warning in plan.warnings],
-        "records": _record_summary(session, plan, links) if plan.records else None,
+        "records": records,
         "last_run": run_summary(last) if last else None,
         "merge_profiles": bool(options.merge_profiles),
         "counts": {
-            "collections": len(plan.collections),
-            "files": sum(1 for file in plan.files if file.kind == "file"),
+            "collections": len(records["collections"]) if records else len(plan.collections),
+            "files": sum(item["files"] for item in records["collections"]) if records
+            else sum(1 for file in plan.files if file.kind == "file"),
         },
     }
 
