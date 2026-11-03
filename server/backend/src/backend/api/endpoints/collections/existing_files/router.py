@@ -13,11 +13,11 @@ from backend.services.adoption import AdoptionError
 from backend.services.existing_files import (
     ExistingFilesError,
     adopt_matches,
-    default_folder,
     finish_scan,
     list_folders,
     profile_review,
     request_scan,
+    scan_folder_for,
     scan_view,
 )
 
@@ -61,7 +61,7 @@ def _scan(s: Session, collection: Collection, profile_id: int) -> ExistingFileSc
 
 def _read(s: Session, collection: Collection, profile: CollectionLocalMediaProfile) -> ExistingFilesScanAPIRead:
     scan = _scan(s, collection, profile.id)
-    base = {"default_folder": default_folder(profile.output_template), "local_media_profile_id": profile.id}
+    base = {"default_folder": scan_folder_for(collection, profile), "local_media_profile_id": profile.id}
     if scan is None:
         return ExistingFilesScanAPIRead(status="none", **base)
     view = scan_view(s, scan)

@@ -77,6 +77,33 @@ def default_folder(output_template: str) -> str:
     return folder if folder.startswith("/downloads") else "/downloads"
 
 
+def collection_folder(collection: Collection, profile: LocalMediaProfileBase) -> str | None:
+    """The Collection's own folder in this profile, as a /downloads/ path.
+
+    It is the folder the profile puts the show's artwork in, so the same folder
+    decides which files belong to the Collection. None when the template has no
+    folder of its own for each Collection.
+    """
+    from backend.services.collection_assets import resolve_collection_media_directory
+
+    try:
+        root = resolve_collection_media_directory(collection, profile.output_template)
+        return virtual_path(Path(root.path)) if root.path else None
+    except (AdoptionError, OSError, ValueError):
+        return None
+
+
+def scan_folder_for(collection: Collection, profile: LocalMediaProfileBase) -> str:
+    """The folder to look in for a Collection's files: its own folder when there is one, else the profile's."""
+    own = collection_folder(collection, profile)
+    try:
+        if own is not None and real_path(own + "/").is_dir():
+            return own
+    except AdoptionError:
+        pass
+    return default_folder(profile.output_template)
+
+
 def check_folder(folder: str) -> Path:
     folder = folder.strip().rstrip("/") or "/downloads"
     path = real_path(folder + "/") if folder != "/downloads" else download_root()
@@ -265,10 +292,16 @@ def start_waiting_scans(session: Session, collection: Collection) -> int:
 def _collection_folders(session: Session, scan: ExistingFileScan, collection: Collection) -> list[str]:
     """The folders that hold this Collection's files, as /downloads/ paths.
 
-    These are where its matches and downloads are, and where a few of its episodes
-    would be saved. Several Collections can share one Local Media Profile folder, so
-    the files outside these folders belong to someone else.
+    Several Collections can share one Local Media Profile folder, so the files
+    outside these folders belong to someone else. That is the Collection's own
+    folder, the one its show artwork goes in. A template without one falls back to
+    where the Collection's matches and downloads are, and where a few of its
+    episodes would be saved.
     """
+    profile = session.get(LocalMediaProfileBase, scan.local_media_profile_id)
+    own = collection_folder(collection, profile) if profile is not None else None
+    if own is not None:
+        return [own]
     folders = {str(PurePosixPath(item["path"]).parent) for item in scan.results if item.get("episode_id")}
     profile = session.get(LocalMediaProfileBase, scan.local_media_profile_id)
     downloads = session.scalars(select(MediaDownloadBase.file_path).join(

@@ -364,6 +364,11 @@ def test_a_collection_review_only_shows_its_own_folder_and_the_profile_review_sh
         existing_files.run_scan(session, collection_id=owner.id, local_media_profile_id=profile.id)
     scans = {scan.collection_id: scan for scan in session.scalars(select(existing_files.ExistingFileScan))}
 
+    # A Collection looks in its own folder, the one its show artwork goes in.
+    assert existing_files.collection_folder(collection, profile) == "/downloads/YouTube/Veritasium"
+    assert existing_files.scan_folder_for(collection, profile) == "/downloads/YouTube/Veritasium"
+    assert existing_files.scan_folder_for(other, profile) == "/downloads/YouTube/Smarter Every Day"
+
     # Veritasium's review lists its own unmatched file, not the one of Smarter Every Day.
     view = existing_files.scan_view(session, scans[collection.id])
     unmatched = sorted(item["path"] for item in view["files"] if item["episode"] is None)

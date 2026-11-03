@@ -1455,14 +1455,14 @@ def _match_existing_files(
     The files the import adopted are skipped by the scan. A Download Profile to
     switch on waits for the scan instead, until the matches are reviewed.
     """
-    from backend.services.existing_files import ExistingFilesError, default_folder, request_scan
+    from backend.services.existing_files import ExistingFilesError, request_scan, scan_folder_for
 
     collection = session.get(Collection, step.collection_id)
     hold: list[DownloadProfile] = []
     if download_profile is not None and step.enable_download_profile:
         download_profile.enable_profile = True
         hold.append(download_profile)
-    folder = default_folder(profile.output_template)
+    folder = scan_folder_for(collection, profile)
     try:
         with session.begin_nested():
             request_scan(session, collection, profile, folder=folder, hold=hold, indexed=True)
