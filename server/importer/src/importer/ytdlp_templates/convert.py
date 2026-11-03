@@ -284,7 +284,8 @@ class _Converter:
             return _PLAYLIST_CHANNEL
         if name in {"channel", "channel_id"} and self.options.collection_type == "channel":
             # A channel Collection's author and id are that channel's, so these are exact.
-            return replace(_FIELDS[name], support="exact", reason=None)
+            own = "author, which is the channel's name" if name == "channel" else "id, which is the channel id"
+            return replace(_FIELDS[name], support="exact", reason=f"VODLoft uses the Collection's {own}")
         if name in _FIELDS:
             if name in {"autonumber", "video_autonumber"} and self.options.autonumber_start != 1:
                 start = self.options.autonumber_start
@@ -660,7 +661,7 @@ def convert_ytdlp(template: str, options: ConversionOptions | None = None, *, or
         expressions.append(node)
     output.append(".ext")
     if extension_source:
-        report.add("." + extension_source, ".ext")
+        report.add("." + extension_source, ".ext", reason="VODLoft puts each file's own extension here")
     else:
         report.add("", ".ext", "close", "The template has no .%(ext)s at the end; VODLoft adds the extension itself")
 
@@ -751,9 +752,12 @@ def convert_pinchflat(template: str, options: ConversionOptions | None = None) -
     aliases = written_as(template)
     parts = []
     for part in report.parts:
-        part = replace(part, source=aliases.get(part.source, part.source))
+        source = part.source
+        if source.startswith(".") and source[1:] in aliases:
+            source = "." + aliases[source[1:]]
+        part = replace(part, source=aliases.get(source, source))
         if part.source == "/" and not part.result:
-            # Pinchflat starts every path in its media folder, which the import maps to VODLoft's folder.
-            part = replace(part, support="exact", reason=None)
+            part = replace(part, support="exact",
+                           reason="Pinchflat starts every path in its media folder, which becomes VODLoft's folder")
         parts.append(part)
     return replace(report, parts=tuple(parts))

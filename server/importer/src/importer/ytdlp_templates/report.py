@@ -41,15 +41,15 @@ class ConversionReport:
         return max((part.support for part in (*self.parts, *self.actions)), key=_ORDER.__getitem__, default="exact")
 
     def lines(self) -> list[str]:
-        """The report as text, one line per part that is not exact."""
+        """The report as text, one line per part that changed: renamed, nearly the same or not converted."""
         lines = [f"{self.original!r} becomes {self.output_template!r}" if self.output_template
                  else f"{self.original!r} could not be converted"]
         lines.extend(self.errors)
         for part in (*self.actions, *self.parts):
-            if part.support == "exact":
+            if part.support == "exact" and part.source == part.result:
                 continue
             result = f"{part.result!r}" if part.result else "nothing"
-            how = "nearly the same" if part.support == "close" else "not converted"
+            how = {"exact": "exact", "close": "nearly the same"}.get(part.support, "not converted")
             line = f"{part.source!r} becomes {result} ({how}). {part.reason or ''}".rstrip()
             if line not in lines:
                 lines.append(line)

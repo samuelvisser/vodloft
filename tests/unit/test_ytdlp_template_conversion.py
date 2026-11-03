@@ -189,7 +189,9 @@ def test_a_channel_template_for_channels_converts_exactly():
         "/downloads/Video/{{ collection_author or 'NA' }} [{{ collection_site_id }}]/{{ title }}.ext"
     )
     assert report.support == "exact"
-    assert report.lines() == [f"{report.original!r} becomes {report.output_template!r}"]
+    notes = report.lines()[1:]
+    assert all("(exact)" in note for note in notes)
+    assert any(note.startswith("'{{ channel }}' becomes") for note in notes)
 
 
 def test_volatile_and_format_fields_are_reported_not_converted():
