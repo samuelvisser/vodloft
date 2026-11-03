@@ -7,6 +7,7 @@ from typing import Any, Optional, Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.services.check_frequency import full_scan_done, full_scan_due
 from backend.db.models import Episode, Season, Collection
 from backend.services.collection_assets import update_collection_artwork_metadata
 from backend.services.thumbnails import newest_media_item_id, take_first_frames
@@ -153,6 +154,9 @@ async def run_fetch_new_episodes(
     collections: Sequence[Collection] = get_collections(s, collection_id=collection_id, collection_slug=collection_slug)
     if quick_checked is not None and collection_id is None and not collection_slug:
         collections = [collection for collection in collections if get_source(collection.source_key).has(Feature.QUICK_CHECK) == quick_checked]
+    if collection_id is None and not collection_slug:
+        # Each Collection's check frequency: on its own schedule it is left out, checked less often it skips scans.
+        collections = [collection for collection in collections if full_scan_due(collection)]
     collection_ids = [collection.id for collection in collections]
     lists_episodes = {collection.id: get_source(collection.source_key).has(Feature.EPISODE_LISTS) for collection in collections}
 
@@ -170,6 +174,7 @@ async def run_fetch_new_episodes(
         collection = s.get(Collection, current_collection_id)
         if collection is None:
             continue
+        full_scan_done(current_collection_id)
         if lists_episodes[current_collection_id]:
             completed.append(_index_listed_collection(
                 s, collection=collection, source=get_source(collection.source_key), dry_run=dry_run, progress=progress,

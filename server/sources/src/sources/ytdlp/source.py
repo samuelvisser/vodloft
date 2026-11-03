@@ -217,6 +217,12 @@ def _thumbnail(info: dict) -> str | None:
     return thumbnails.widest_still(candidates[-1]["url"]) if candidates else None
 
 
+# What yt-dlp says when a video needs someone signed in: a bot check, an age check, members-only videos.
+_SIGN_IN_ERRORS = (
+    "--cookies", "sign in to confirm", "login required", "login_required", "members-only", "members only",
+    "join this channel", "registered users", "private video", "age-restricted",
+)
+
 class YtDlpSource(Source):
     """Every site yt-dlp supports, and any page with a plain video on it."""
 
@@ -224,7 +230,7 @@ class YtDlpSource(Source):
     name = "yt-dlp"
     domains = (ANY_DOMAIN,)
     features = frozenset({
-        Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.API_KEY,
+        Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.OPTIONAL_COOKIES, Feature.API_KEY,
         Feature.QUICK_CHECK, Feature.CATALOGUE_REFRESH, Feature.SEARCH, Feature.COSTLY_SEARCH,
         Feature.FORMAT_CHOICES, Feature.YTDLP_DOWNLOADS, Feature.UPGRADE_CHECKS,
     })
@@ -679,8 +685,12 @@ class YtDlpSource(Source):
         )
         return interval or settings.min_check_interval_minutes
 
-    def video_playback(self, *, slug: str, url: str) -> Playback:
-        return Playback(url=url, kind=PlaybackKind.YTDLP, command=runner.command())
+    def video_playback(self, *, slug: str, url: str, use_cookies: bool = True) -> Playback:
+        return Playback(url=url, kind=PlaybackKind.YTDLP, command=runner.command(cookies=use_cookies))
+
+    def needs_cookies(self, error: str) -> bool:
+        text = error.lower()
+        return any(sign in text for sign in _SIGN_IN_ERRORS)
 
     def program_status(self) -> ProgramStatus:
         last_update_at, last_update_error = runner.last_update()

@@ -27,6 +27,7 @@ from .storage.publication import PublicationJournal
 from .storage.replacement import (
     PreviousDownload, ReplacementJournal, ReplacementSidecar, publish_replacement,
 )
+from .speed import limiter
 from .ytdlp import download_ytdlp
 
 
@@ -190,10 +191,16 @@ def execute_download_plan(
                 should_cancel=tracker.is_canceled,
                 waiting=lambda value: tracker.wait("media", "download_capacity" if value else None),
             ):
+                # A pause, such as at night, holds downloads that have not started yet.
+                limiter.wait_while_paused(
+                    tracker.is_canceled, waiting=lambda until: tracker.wait("media", "downloads_paused" if until else None, until),
+                )
                 ytdlp_subtitles = [spec.id for spec in plan.assets if spec.source_format == "ytdlp"]
                 if plan.source.ytdlp_command:
+                    rate = limiter.share(resources.media.active)
                     transfer = partial(
-                        download_ytdlp, command=plan.source.ytdlp_command,
+                        download_ytdlp,
+                        command=(*plan.source.ytdlp_command, *(("--limit-rate", f"{int(rate)}") if rate else ())),
                         subtitles_dir=workspace.workspace if ytdlp_subtitles else None,
                         subtitles=plan.source.ytdlp_subtitles,
                         sponsorblock=plan.source.ytdlp_sponsorblock,

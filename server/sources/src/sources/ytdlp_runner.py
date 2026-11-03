@@ -60,17 +60,16 @@ def program() -> tuple[str, ...]:
     return (sys.executable, "-m", "yt_dlp")
 
 
-def command() -> tuple[str, ...]:
-    """yt-dlp with the options every run uses."""
+def command(*, cookies: bool = True) -> tuple[str, ...]:
+    """yt-dlp with the options every run uses; ``cookies`` False leaves the cookies file out."""
     options = ["--ignore-config", "--no-warnings", "--color", "never"]
     # YouTube needs a JavaScript runtime. VODLoft installs Deno next to Python,
     # which is not always on the PATH of the process that runs yt-dlp.
     deno = Path(sys.executable).with_name("deno")
     if deno.is_file():
         options += ["--js-runtimes", f"deno:{deno}"]
-    cookies = cookies_path()
-    if cookies.is_file():
-        options += ["--cookies", str(cookies)]
+    if cookies and cookies_path().is_file():
+        options += ["--cookies", str(cookies_path())]
     return (*program(), *options)
 
 

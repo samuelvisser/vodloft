@@ -386,6 +386,13 @@ class DownloadMode(StrEnum):
     TEMPORARY = "temporary"
 
 
+class SpeedLimitMode(StrEnum):
+    FULL = "full"
+    STREAMING = "streaming"
+    """Keep downloads to about half of the connection, so streaming still works."""
+    CUSTOM = "custom"
+
+
 class ThumbnailMode(StrEnum):
     NO_THUMBNAIL = "no_thumbnail"
     EMBED = "embed"
@@ -505,6 +512,19 @@ class DownloadSettings(SubmodelBase):
         min_length=1,
         description="Path to the ffmpeg binary used for remuxing video to mp4",
     )
+    speed_limit_mode: SpeedLimitMode = Field(
+        default=SpeedLimitMode.STREAMING,
+        description="Full speed, leave room for streaming (about half of the connection), or a custom limit",
+    )
+    speed_limit_mbps: float = Field(
+        default=5.0,
+        gt=0,
+        le=10_000,
+        description="The custom speed limit in MB/s, shared by every download at the same time",
+    )
+    pause_at_night: bool = Field(default=False, description="Hold downloads between the pause start and end")
+    pause_start: str = Field(default="01:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$", description="When downloads pause")
+    pause_end: str = Field(default="07:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$", description="When downloads start again")
 
     _validate_download_root = field_validator(
         "download_root", mode="before"

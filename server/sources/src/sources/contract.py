@@ -39,6 +39,9 @@ class Feature(StrEnum):
     page searches when asked instead of while the user types."""
     PROGRAM_UPDATES = "program_updates"
     COOKIES = "cookies"
+    OPTIONAL_COOKIES = "optional_cookies"
+    """Downloads work with or without the cookies file, so each Collection chooses when to use it, and
+    ``needs_cookies`` tells from a failed download that the cookies file would help."""
     API_KEY = "api_key"
     """An optional key for the service's own API, which makes catalogue lookups faster."""
     QUICK_CHECK = "quick_check"
@@ -478,10 +481,11 @@ class Source(ABC):
         Only Sources with ``Feature.UPGRADE_CHECKS`` implement it."""
         raise NotImplementedError(f"{self.name} has no upgrade checks")
 
-    def video_playback(self, *, slug: str, url: str) -> Playback:
+    def video_playback(self, *, slug: str, url: str, use_cookies: bool = True) -> Playback:
         """Resolve the playable URL of a single video, or of an episode of a collection
         from ``list_episodes``. Only Sources with ``Feature.VIDEOS`` or
-        ``Feature.EPISODE_LISTS`` implement it."""
+        ``Feature.EPISODE_LISTS`` implement it. ``use_cookies`` False leaves the cookies file out,
+        for a Source with ``Feature.OPTIONAL_COOKIES``."""
         raise NotImplementedError(f"{self.name} has no single videos")
 
     def collection_details(self, url: str) -> CollectionDetails:
@@ -530,6 +534,10 @@ class Source(ABC):
     def update_program(self) -> ProgramStatus:
         """Fetch the latest version of the program and use it from now on."""
         raise NotImplementedError(f"{self.name} has no program to update")
+
+    def needs_cookies(self, error: str) -> bool:
+        """True when a failed download says signing in would help, for a Source with ``Feature.OPTIONAL_COOKIES``."""
+        return False
 
     def has_cookies(self) -> bool:
         """True when a cookies file is stored. Only Sources with ``Feature.COOKIES`` implement it."""

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from backend.services.collection_cookies import uses_cookies
 from backend.services.no_ascii_names import settle_no_ascii_name
 from backend.db.models import DownloadProfile, Episode, Movie, MovieExtra, Video
 from backend.db.models.media_download import MediaDownloadBase
@@ -89,9 +90,12 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     if (episode is not None and media_source.has(Feature.EPISODE_LISTS)) or video is not None:
         # A listed episode is a video on a page, just like a single video.
         page_url = media.sharing_url
+        cookies = {}
+        if episode is not None and media_source.has(Feature.OPTIONAL_COOKIES):
+            cookies = {"use_cookies": uses_cookies(episode.collection)}
         session.rollback()
         tracker.preparing("resolve_playback")
-        playback = media_source.video_playback(slug=slug, url=page_url)
+        playback = media_source.video_playback(slug=slug, url=page_url, **cookies)
         tracker.ensure_active()
         if playback.drm_protected:
             raise EncryptedMediaError(f"{media_source.name} protects '{title}' with DRM")

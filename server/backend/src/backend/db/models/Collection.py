@@ -32,6 +32,18 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
         Text, default="", server_default="",
         comment="Your own yt-dlp options for this Collection, added after the yt-dlp Source's",
     )
+    cookies_mode: Mapped[str] = mapped_column(
+        default="automatic", server_default="automatic",
+        comment="When downloads use the Source's cookies file: automatic, never or always",
+    )
+    cookies_needed_until: Mapped[Optional[datetime]] = mapped_column(
+        UTCDateTime(), comment="Automatic cookies: downloads use the cookies file until then",
+    )
+    check_frequency: Mapped[str] = mapped_column(
+        default="default", server_default="default",
+        comment="How often VODLoft looks for new episodes: default, less_often or own",
+    )
+    check_cron: Mapped[Optional[str]] = mapped_column(comment="The Collection's own schedule, with check_frequency own")
     membership_level: Mapped[str]
     type: Mapped[str]
     episode_identifier: Mapped[str]

@@ -22,6 +22,7 @@ from config.settings.cron_validation import (
 from config.settings.settings import AppSettings
 from config.settings.submodels import (
     DownloadMode,
+    SpeedLimitMode,
     FilenameRestrictionMode,
     MetadataMode,
     QUICK_DOWNLOAD_MP3_BITRATES,
@@ -96,6 +97,11 @@ SettingFieldPath = Literal[
     "downloadSettings.filenameRestrictionMode",
     "downloadSettings.remuxVideoToMp4",
     "downloadSettings.ffmpegPath",
+    "downloadSettings.speedLimitMode",
+    "downloadSettings.speedLimitMbps",
+    "downloadSettings.pauseAtNight",
+    "downloadSettings.pauseStart",
+    "downloadSettings.pauseEnd",
     "youtubeApi.dailyQuota",
     "youtubeApi.checksQuota",
     "youtubeApi.searchQuota",
@@ -188,6 +194,11 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "downloadSettings.filenameRestrictionMode",
     "downloadSettings.remuxVideoToMp4",
     "downloadSettings.ffmpegPath",
+    "downloadSettings.speedLimitMode",
+    "downloadSettings.speedLimitMbps",
+    "downloadSettings.pauseAtNight",
+    "downloadSettings.pauseStart",
+    "downloadSettings.pauseEnd",
     "youtubeApi.dailyQuota",
     "youtubeApi.checksQuota",
     "youtubeApi.searchQuota",
@@ -363,6 +374,11 @@ class DownloadSettingsValue(_SettingsValueModel):
     filename_restriction_mode: FilenameRestrictionMode
     remux_video_to_mp4: bool
     ffmpeg_path: str = Field(min_length=1)
+    speed_limit_mode: SpeedLimitMode
+    speed_limit_mbps: float = Field(gt=0, le=10_000)
+    pause_at_night: bool
+    pause_start: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    pause_end: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
 
     _validate_download_root = field_validator(
         "download_root", mode="before"
@@ -642,3 +658,11 @@ class LibraryDefaultsAPIRead(ResponseBase):
     thumbnail_mode: ThumbnailMode
     metadata_mode: MetadataMode
     no_usable_media_delete_after_minutes: int
+
+
+class SpeedLimitStatusRead(ResponseBase):
+    """How fast downloads may go right now, for Settings › Downloads."""
+
+    limit_mbps: float | None
+    estimate_mbps: float | None
+    paused_until: datetime | None

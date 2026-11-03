@@ -14,6 +14,7 @@ const WAITS: Record<string, [string, string]> = {
     custom_indexes: ['Preparing...', 'Waiting for Custom Index assignments.'],
     previous_attempt: ['Restarting', 'Waiting for the previous download to stop and clean up.'],
     publication_delay: ['Delayed', 'Waiting for the post-publication safety delay before downloading.'],
+    downloads_paused: ['Paused', 'Downloads are paused for the night in Settings › Downloads. It starts when the pause ends.'],
     publication_countdown: ['Countdown', 'Waiting for the episode countdown to finish before downloading final media.'],
 }
 

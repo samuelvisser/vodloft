@@ -122,7 +122,10 @@ async def application_lifespan(app: FastAPI):
         recovery_thread.start()
         recovery_started = True
 
+        from backend.services.speed_limit import start_speed_limit
         from backend.services.notifications.worker import start_notification_worker
+
+        start_speed_limit()
         notification_worker = start_notification_worker()
         yield
     finally:

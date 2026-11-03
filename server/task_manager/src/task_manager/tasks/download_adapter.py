@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode
 from backend.db.models.media_download import MediaDownloadAsset, MediaDownloadBase
+from backend.services.collection_cookies import note_failed_download
 from backend.services.download_plans import prepare_download_plan
 from backend.services.upgrade_check import schedule_first_upgrade_check
 from backend.services.notifications.emitters import episode_downloaded
@@ -313,6 +314,13 @@ def run_download(
             return TaskResult(summary=f"{title} is protected by DRM and cannot be downloaded", outcome="failed")
         if isinstance(exc, SubscriptionRequiredError) and _mark_needs_subscription(session, media_download_id):
             return TaskResult(summary=f"{title} needs a subscription and cannot be downloaded", outcome="failed")
+        if not isinstance(exc, (DownloadCancelled, RequestCancelled)):
+            try:
+                # A Collection with automatic cookies uses the cookies file from the retry on.
+                note_failed_download(session, media_download_id, str(exc))
+            except Exception:
+                session.rollback()
+                logger.exception("Could not tell whether download %s needs the cookies file", media_download_id)
         raise
     finally:
         if execution is not None:

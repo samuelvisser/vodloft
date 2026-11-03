@@ -9,6 +9,7 @@ import ReadMore from '../../utils/ReadMore'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import CronEditor from './CronEditor'
+import SpeedSettings from './SpeedSettings'
 import type {SettingsTabProps} from './SettingsTabTypes'
 import {
     DurationField,
@@ -457,6 +458,15 @@ export default function DownloadsSettingsTab({
                     help="Stops a single download attempt that makes no useful progress for too long."
                 />
             </SettingsSection>
+
+            <SpeedSettings
+                draft={draft}
+                updateDraft={updateDraft}
+                errorFor={errorFor}
+                environmentVariableFor={environmentVariableFor}
+                isFieldExplicit={isFieldExplicit}
+                isFieldDirty={isFieldDirty}
+            />
 
             <SettingsSection
                 title="Video output"

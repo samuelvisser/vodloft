@@ -11,6 +11,23 @@ import {faIcon} from '../../icons/faIcon'
 import OptionsEditor from '../../components/common/OptionsEditor/OptionsEditor'
 import ReadMore from '../../utils/ReadMore'
 import {hasSourceFeature, SourceFeature} from '../../types/schemas/source'
+import CronEditor from '../../components/Settings/CronEditor'
+import {useQuery} from '@tanstack/react-query'
+
+const CheckFrequencyReg = createSelectRegistry('CollectionCheckFrequency', {
+  default: {label: 'Like other Collections'},
+  less_often: {label: 'Less often'},
+  own: {label: 'On its own schedule'},
+})
+
+const CookiesModeReg = createSelectRegistry('CollectionCookiesMode', {
+  automatic: {label: 'Only when needed'},
+  never: {label: 'Never'},
+  always: {label: 'Always'},
+})
+
+type CheckFrequency = 'default' | 'less_often' | 'own'
+type CookiesMode = 'automatic' | 'never' | 'always'
 
 type RouteParams = { id?: string }
 
@@ -18,6 +35,9 @@ type FormState = CollectionFormValue & {
   url: string
   localMediaProfileId: string
   ytdlpOptions: string
+  checkFrequency: CheckFrequency
+  checkCron: string
+  cookiesMode: CookiesMode
 }
 
 export default function EditCollectionPage() {
@@ -34,6 +54,9 @@ export default function EditCollectionPage() {
     url: id ? `https://www.dailywire.com/show/${id}` : '',
     localMediaProfileId: 'p1',
     ytdlpOptions: '',
+    checkFrequency: 'default',
+    checkCron: '0 */6 * * *',
+    cookiesMode: 'automatic',
     ...defaultCollectionFormValue,
   }))
 
@@ -60,6 +83,9 @@ export default function EditCollectionPage() {
       name: collection.title,
       author: collection.authorName,
       ytdlpOptions: collection.ytdlpOptions ?? '',
+      checkFrequency: collection.checkFrequency,
+      checkCron: collection.checkCron || prev.checkCron,
+      cookiesMode: collection.cookiesMode,
     }))
   }, [id, collection])
 
@@ -90,6 +116,19 @@ export default function EditCollectionPage() {
   }, [])
 
   const usesYtdlp = hasSourceFeature(collection, SourceFeature.YTDLP_DOWNLOADS)
+  const optionalCookies = hasSourceFeature(collection, SourceFeature.OPTIONAL_COOKIES)
+  const [cronError, setCronError] = useState<string | null>(null)
+  const {data: suggestion} = useQuery({
+    queryKey: ['collection', id, 'checkSuggestion'],
+    enabled: !!id,
+    queryFn: async ({signal}) => {
+      const r = await fetch(`${(window as any).appConfig.API_URL}/collections/${id}/check-suggestion`, {signal, credentials: 'include'})
+      if (!r.ok) return null
+      return ((await r.json()) as {suggestion: string | null}).suggestion
+    },
+  })
+  const cookiesNeededUntil = collection?.cookiesNeededUntil ?? null
+  const cookiesInUse = cookiesNeededUntil !== null && cookiesNeededUntil.getTime() > Date.now()
 
   const onCancel = () => navigate(`/collection/${id ?? ''}`)
   const onSave = async () => {
@@ -107,6 +146,9 @@ export default function EditCollectionPage() {
       thumbnailPortraitPath: collection.thumbnailPortraitPath ?? null,
       thumbnailSquarePath: collection.thumbnailSquarePath ?? null,
       ...(usesYtdlp ? {ytdlpOptions: form.ytdlpOptions} : {}),
+      checkFrequency: form.checkFrequency,
+      ...(form.checkFrequency === 'own' ? {checkCron: form.checkCron} : {}),
+      ...(optionalCookies ? {cookiesMode: form.cookiesMode} : {}),
     }
     const r = await fetch(`${(window as any).appConfig.API_URL}/collections/${id}`, {
       method: 'PATCH',
@@ -116,9 +158,17 @@ export default function EditCollectionPage() {
     })
     if (r.status === 422) {
       const body = await r.json().catch(() => null)
-      const problem = (body?.detail ?? []).find((item: any) => Array.isArray(item?.loc) && item.loc.includes('ytdlpOptions'))
+      const problemAt = (...names: string[]) => (body?.detail ?? []).find(
+        (item: any) => Array.isArray(item?.loc) && names.some((name) => item.loc.includes(name)),
+      )
+      const problem = problemAt('ytdlpOptions')
       if (problem) {
         setOptionsError(String(problem.msg).replace(/^Value error, /, ''))
+        return
+      }
+      const cronProblem = problemAt('checkCron', 'check_cron')
+      if (cronProblem) {
+        setCronError(String(cronProblem.msg).replace(/^Value error, /, ''))
         return
       }
     }
@@ -244,6 +294,70 @@ export default function EditCollectionPage() {
               <ReadMore summary="Exceptions for this Collection, on top of the yt-dlp Source’s options in Settings. Most Collections leave this empty.">
                 <p>These lines come after the yt-dlp options in Settings, under Sources, so for an option set in both places this Collection’s wins.
                   Each line is checked with yt-dlp’s own parser, and the same options are blocked as in Settings.</p>
+              </ReadMore>
+            </div>
+          </div>
+        )}
+
+        <div className="form-row">
+          <label htmlFor="collection-check-frequency">Look for new episodes</label>
+          <SimpleSelect
+            inputId="collection-check-frequency"
+            registry={CheckFrequencyReg}
+            value={form.checkFrequency}
+            onChange={(value) => {
+              setCronError(null)
+              setForm((prev) => ({...prev, checkFrequency: value as CheckFrequency}))
+            }}
+          />
+          <div className="help">
+            {form.checkFrequency === 'less_often'
+              ? 'At most every six hours, for a Collection that rarely posts. It still saves checks for everything else.'
+              : form.checkFrequency === 'own'
+                ? 'Only on the schedule below; the regular checks leave this Collection alone.'
+                : 'On the schedule in Settings, like other Collections.'}
+            {suggestion ? <> {suggestion}</> : null}
+          </div>
+        </div>
+
+        {form.checkFrequency === 'own' && (
+          <div className="form-row">
+            <CronEditor
+              id="collection-check-cron"
+              label="Check schedule"
+              value={form.checkCron}
+              error={cronError ?? undefined}
+              onChange={(value) => {
+                setCronError(null)
+                setForm((prev) => ({...prev, checkCron: value}))
+              }}
+            />
+          </div>
+        )}
+
+        {optionalCookies && (
+          <div className="form-row">
+            <label htmlFor="collection-cookies-mode">Use the cookies file</label>
+            <SimpleSelect
+              inputId="collection-cookies-mode"
+              registry={CookiesModeReg}
+              value={form.cookiesMode}
+              onChange={(value) => setForm((prev) => ({...prev, cookiesMode: value as CookiesMode}))}
+            />
+            <div className="help">
+              <ReadMore summary={
+                form.cookiesMode === 'automatic'
+                  ? (cookiesInUse
+                    ? `A download needed signing in, so downloads use the cookies file until ${cookiesNeededUntil!.toLocaleDateString()}.`
+                    : 'Downloads run without the cookies file until one fails because the site wants you signed in.')
+                  : form.cookiesMode === 'always'
+                    ? 'Every download of this Collection signs in with the cookies file.'
+                    : 'Downloads of this Collection never sign in, even when that makes them fail.'
+              }>
+                <p>The cookies file is added in Settings, under Sources. Signing in for every download can get an account
+                  flagged, so by default VODLoft only uses it after a download failed because the site asked for a
+                  sign-in, such as a bot check or a members-only video. It then keeps using it for a week, starting with
+                  the retry.</p>
               </ReadMore>
             </div>
           </div>

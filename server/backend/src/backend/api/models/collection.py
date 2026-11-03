@@ -3,13 +3,14 @@ from __future__ import annotations
 from typing import Literal, Optional, Union
 from datetime import date, datetime
 
-from pydantic import AliasChoices, AliasPath, computed_field, Field, field_validator, model_validator
+from pydantic import AliasChoices, AliasPath, computed_field, Field, ValidationInfo, field_validator, model_validator
 
-from backend.api.models.base import RequestBase, response_model_config
+from backend.api.models.base import RequestBase, ResponseBase, response_model_config
 from backend.api.models.custom_metadata import CustomMetadataResponseBase
 from backend.api.models.source import SourcedResponse
 from backend.types.dailywire_user_info import DwMembershipLevel
-from backend.types.collection_types import CollectionType, EpisodeIdentifier
+from backend.types.collection_types import CheckFrequency, CollectionType, CookiesMode, EpisodeIdentifier
+from config.settings.cron_validation import CronExpressionError, validate_cron_expression
 from backend.types.download_profile_types import EpisodeTagKey
 from backend.utils.helpers import generate_uuid
 from backend.api.models.source import checked_ytdlp_options
@@ -59,10 +60,33 @@ class CollectionAPIUpdate(_CollectionAPIBaseIn):
     ytdlp_options: Optional[str] = Field(default=None, max_length=MAX_OPTIONS_LENGTH)
     """Your own yt-dlp options for this Collection; left out, they stay as they are."""
 
+    cookies_mode: Optional[CookiesMode] = None
+    check_frequency: Optional[CheckFrequency] = None
+    check_cron: Optional[str] = Field(default=None, validate_default=True)
+    """The Collection's own schedule, with ``check_frequency`` own."""
+
     @field_validator("ytdlp_options")
     @classmethod
     def _validate_ytdlp_options(cls, value: Optional[str]) -> Optional[str]:
         return None if value is None else checked_ytdlp_options(value)
+
+    @field_validator("check_cron")
+    @classmethod
+    def _validate_check_cron(cls, value: Optional[str], info: ValidationInfo) -> Optional[str]:
+        if value is None or not value.strip():
+            if info.data.get("check_frequency") == CheckFrequency.OWN:
+                raise ValueError("Enter the schedule to check this Collection on")
+            return None
+        value = " ".join(value.split())
+        try:
+            validate_cron_expression(value)
+        except CronExpressionError as exc:
+            raise ValueError(str(exc)) from exc
+        return value
+
+
+class CollectionCheckSuggestionAPIRead(ResponseBase):
+    suggestion: Optional[str] = None
 
 
 class CollectionFileRenameAPIRequest(RequestBase):
@@ -154,6 +178,10 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     thumbnail_portrait_path: Optional[str] = None
     thumbnail_square_path: Optional[str] = None
     ytdlp_options: str = ""
+    cookies_mode: CookiesMode = CookiesMode.AUTOMATIC
+    cookies_needed_until: Optional[datetime] = None
+    check_frequency: CheckFrequency = CheckFrequency.DEFAULT
+    check_cron: Optional[str] = None
 
 
 class CollectionAPIRead(_CollectionAPIBaseOut):
