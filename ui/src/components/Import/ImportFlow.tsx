@@ -574,7 +574,8 @@ function PreviewStep({importer, onReplace, onFinished, onRunStatus}: {
                         <label htmlFor={`import-enable-${importer.key}`}>Turn on Download Profiles</label>
                         <div className="settings-field__help">
                             Imported Download Profiles start off, so nothing downloads before you have looked.
-                            Turn this on to keep downloading where {importer.name} left off.
+                            Turning this on means everything in {importer.name} that was configured to download
+                            will start downloading in VODLoft, too.
                         </div>
                     </div>
                     <Switch
