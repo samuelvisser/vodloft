@@ -3,6 +3,7 @@
 The package only depends on jinja2. It knows nothing about VODLoft's variables
 or database; callers pass in the environment and the values they care about.
 """
+from .align import Alignment, AlignmentFailure, Slot, align_templates
 from .custom_indexes import (
     CustomIndexReachabilityComparison,
     CustomIndexReachabilityStatus,
@@ -17,6 +18,10 @@ from .paths import OutputVariant, TemplateAnalysis, UnknownOutput, analyze_templ
 from .source import TemplateEdit, TemplateEdits, UnsafeEdit, expression_source
 
 __all__ = [
+    "Alignment",
+    "AlignmentFailure",
+    "Slot",
+    "align_templates",
     "CustomIndexReachabilityComparison",
     "CustomIndexReachabilityStatus",
     "CustomIndexUsage",

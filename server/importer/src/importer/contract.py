@@ -70,6 +70,14 @@ class ProfilePlan:
     report: tuple[str, ...] = ()
     """How the template and its options were converted, one line per part that is not exact."""
     support: Support = "exact"
+    base_name: str | None = None
+    """For a variant of another profile, such as a source's own template: that profile's name."""
+    merged_from: tuple[str, ...] = ()
+    """The other program's profiles this one was merged from, by name; empty when it was not merged."""
+    fields: tuple[str, ...] = ()
+    """The custom collection fields the merged template reads; each Collection stores its own value."""
+    kept_separate: str | None = None
+    """Why this variant was not merged with the profile it is a variant of."""
 
 
 @dataclass(frozen=True)
@@ -79,7 +87,8 @@ class CollectionPlan:
     title: str
     profile_external_id: str | None = None
     settings: dict[str, object] = field(default_factory=dict)
-    """Collection fields by their VODLoft name, such as ``type``."""
+    """Collection fields by their VODLoft name, such as ``type``. ``custom_metadata`` holds custom
+    collection fields by key, such as the folder a merged profile's template reads."""
     download_profile: dict[str, object] | None = None
     """Download Profile fields by their VODLoft name, or None for no Download Profile."""
     warnings: tuple[ImportWarning, ...] = ()

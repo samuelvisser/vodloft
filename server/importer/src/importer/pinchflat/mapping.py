@@ -53,6 +53,7 @@ _INDEX_FIELDS = {"playlist": "playlist_index", "day": "upload_date_index"}
 class _Variant:
     external_id: str
     name: str
+    base_name: str | None
     profile: PinchflatProfile
     template: str
     files: tuple
@@ -81,6 +82,7 @@ def _variants(data: PinchflatData, directory: Path | None) -> list[_Variant]:
         groups[external_id] = _Variant(
             external_id,
             f"{profile.name} ({source.name})" if own else profile.name,
+            profile.name if own else None,
             profile,
             source.output_path_template_override or profile.output_path_template,
             files,
@@ -269,6 +271,7 @@ def _profile_plan(variant: _Variant, data: PinchflatData, path_map: PathMap) -> 
         original_template=variant.template,
         report=tuple(report.lines()[1:]),
         support=report.support,
+        base_name=variant.base_name,
     ), "\n".join(custom)
 
 

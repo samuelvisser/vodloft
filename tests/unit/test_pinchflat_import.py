@@ -662,3 +662,73 @@ def test_match_existing_files_after_an_import_skips_its_files_and_holds_the_down
 
     existing_files.finish_scan(session, scan)
     assert session.get(DownloadProfile, held.id).enable_profile
+
+
+def _add_playlists_with_their_own_folder(tmp_path):
+    """Two playlist sources whose own templates differ only in their folder, with a file each."""
+    database = tmp_path / "imports" / "pinchflat" / "upload" / "db" / "pinchflat.db"
+    connection = sqlite3.connect(database)
+    template = "/Lists/{folder}/{{{{ title }}}}.{{{{ ext }}}}"
+    connection.executemany(
+        "INSERT INTO sources (id, collection_name, collection_type, original_url, media_profile_id, custom_name, "
+        "enabled, download_media, output_path_template_override) VALUES (?,?,?,?,?,?,?,?,?)", [
+            (3, "Fireside", "playlist", "https://www.youtube.com/playlist?list=PL3", 2, None, 1, 1,
+             template.format(folder="Fireside Chat with Dennis Prager")),
+            (4, "War", "playlist", "https://www.youtube.com/playlist?list=PL4", 2, None, 1, 1,
+             template.format(folder="Eighty Years War")),
+        ])
+    for item, (source, folder) in enumerate(((3, "Fireside Chat with Dennis Prager"), (4, "Eighty Years War")), start=10):
+        path = tmp_path / "downloads" / "pinchflat" / "Lists" / folder / f"Talk {item}.mp4"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"media" * 20)
+        connection.execute(
+            "INSERT INTO media_items (id, media_id, title, media_filepath, source_id, uploaded_at, prevent_download) "
+            "VALUES (?,?,?,?,?,?,0)", (item, f"vid-{item}", f"Talk {item}", f"/downloads/Lists/{folder}/Talk {item}.mp4",
+                                       source, "2024-03-02T10:00:00Z"))
+    connection.commit()
+    connection.close()
+
+
+def test_sources_whose_templates_differ_only_by_a_folder_share_one_profile_with_a_folder_field(installation, tmp_path, monkeypatch):
+    from backend.db.models import Collection, CollectionLocalMediaProfile, ImportRun
+    from backend.services import imports
+    from sources import registry
+    from sources.contract import CollectionDetails
+
+    session, _applied = installation
+    _add_playlists_with_their_own_folder(tmp_path)
+    # Each playlist is its own Collection.
+    monkeypatch.setattr(type(registry._sources["ytdlp"]), "collection_details", lambda self, url: CollectionDetails(
+        slug=url.rsplit("=", 1)[-1], url=url, title="From YouTube", author_name="Derek"))
+
+    view = imports.preview(session, pinchflat.IMPORTER, imports.ImportOptions())
+    assert view["merge_profiles"]
+    shared = next(profile for profile in view["profiles"] if profile["merged_from"])
+    assert shared["fields"] == ["folder"] and shared["name"] == "Lists (folder per collection)"
+    # Each file's own folder comes back through the field: no recorded path changes.
+    assert shared["path_proof"]["identical"] == shared["path_proof"]["total"] == 2
+    values = {item["title"]: item["custom_metadata"] for item in view["collections"]}
+    assert values["Fireside"] == {"folder": "Fireside Chat with Dennis Prager"}
+
+    run = _run(session, imports.ImportOptions())
+    assert session.get(ImportRun, run.id).options["merge_profiles"] is True
+    names = sorted(profile.name for profile in session.scalars(select(CollectionLocalMediaProfile)))
+    assert names == ["Lists", "Lists (folder per collection)", "Media server"]
+    fireside = session.scalars(select(Collection).where(Collection.title == "Fireside")).one()
+    assert fireside.get_meta("custom.folder") == "Fireside Chat with Dennis Prager"
+    assert any(entry["kind"] == "merged" for entry in session.get(ImportRun, run.id).report)
+
+    # A later run does what this one did, and doesn't make the profile twice.
+    _run(session, imports.ImportOptions())
+    assert len(list(session.scalars(select(CollectionLocalMediaProfile)))) == 3
+
+
+def test_a_run_from_before_merging_keeps_one_profile_per_variant(installation, tmp_path):
+    from backend.db.models import ImportRun
+    from backend.services import imports
+
+    session, _applied = installation
+    session.add(ImportRun(importer="pinchflat", status="finished", options={"enable_download_profiles": False},
+                          report=[], counts={}))
+    session.commit()
+    assert imports.with_merge_default(session, pinchflat.IMPORTER, imports.ImportOptions()).merge_profiles is False

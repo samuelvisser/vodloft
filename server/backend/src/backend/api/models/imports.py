@@ -68,6 +68,9 @@ class ImportOptionsAPIRequest(RequestBase):
     settings: Optional[list[str]] = Field(default=None, description="Setting keys; leave out for the recommended ones")
     enable_download_profiles: bool = False
     match_existing_files: bool = Field(default=False, description="Look for other files of each Collection after the import")
+    merge_profiles: Optional[bool] = Field(
+        default=None, description="Merge profiles that differ only by a folder or name; leave out to do what the last run did",
+    )
     templates: dict[str, str] = Field(default_factory=dict, description="Edited output templates by profile")
 
 
@@ -98,6 +101,7 @@ class ImportCollectionAPIRead(ResponseBase):
     suppressed: int
     missing: int
     download_profile_on: bool
+    custom_metadata: dict[str, str] = Field(default_factory=dict)
     warnings: list[ImportWarningAPIRead]
 
 
@@ -141,6 +145,10 @@ class ImportProfileAPIRead(ResponseBase):
     warnings: list[ImportWarningAPIRead]
     path_proof: ImportPathProofAPIRead
     changes: Optional[ImportChangesAPIRead] = None
+    base_name: Optional[str] = None
+    merged_from: list[str] = Field(default_factory=list)
+    fields: list[str] = Field(default_factory=list)
+    kept_separate: Optional[str] = None
 
 
 class ImportSettingAPIRead(ResponseBase):
@@ -192,6 +200,7 @@ class ImportPreviewAPIRead(ResponseBase):
     warnings: list[ImportWarningAPIRead]
     records: Optional[ImportRecordsAPIRead] = None
     last_run: Optional[ImportRunSummaryAPIRead] = None
+    merge_profiles: bool = False
     counts: ImportCountsAPIRead
 
 
