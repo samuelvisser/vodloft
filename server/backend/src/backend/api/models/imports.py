@@ -150,6 +150,7 @@ class ImportProfileAPIRead(ResponseBase):
     changes: Optional[ImportChangesAPIRead] = None
     base_name: Optional[str] = None
     merged_from: list[str] = Field(default_factory=list)
+    template_overrides: bool = False
     fields: list[str] = Field(default_factory=list)
     kept_separate: Optional[str] = None
 
@@ -226,6 +227,7 @@ class ImportStepMatchingAPIRead(ResponseBase):
 
 
 class ImportStepAPIRead(ResponseBase):
+    collection_id: Optional[int] = None
     collection_slug: Optional[str] = None
     collection_title: Optional[str] = None
     status: Literal["waiting", "done", "failed"]

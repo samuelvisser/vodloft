@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 import logging
+import re
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, replace
@@ -459,9 +459,12 @@ def path_proof(
             "title": file.title or "", "episode_title": file.title or "", "episode_site_id": file.media_site_id,
             "collection_title": titles.get(file.collection_external_id, ""), "collection_author": (authors or {}).get(file.collection_external_id, ""),
             "episode_published_date": published.strftime("%Y-%m-%d") if published else "",
+            # VODLoft learns the uploader when it indexes; without the saved metadata the check can't know it.
+            "episode_uploader": _UPLOADER,
             **_date_substitutions(published),
             **{f"meta_collection_{key}": value
                for key, value in (fields or {}).get(file.collection_external_id, {}).items()},
+            **file.episode_values,
         }
         extension = PurePosixPath(file.path).suffix.removeprefix(".")
         try:
@@ -472,11 +475,16 @@ def path_proof(
             rendered = _sanitize_rendered_path(replace_output_extension(rendered, extension), mode=mode, extension=extension)
         except ValueError as exc:
             rendered = f"(could not render: {exc})"
+        rendered = rendered.replace(_UPLOADER, "(uploader)")
         if rendered == file.path:
             identical += 1
         else:
             differences.append({"path": file.path, "rendered": rendered})
     return {"identical": identical, "total": len(adopted), "differences": differences}
+
+
+# Stands in for an uploader the upload has no metadata for; shown as "(uploader)".
+_UPLOADER = "Vodloftuploaderunknown"
 
 
 def _filename_mode(plan: ImportPlan) -> FilenameRestrictionMode:
@@ -590,6 +598,7 @@ def preview(session: Session, importer: Importer, options: ImportOptions) -> dic
             "changes": changes,
             "base_name": profile.base_name,
             "merged_from": list(profile.merged_from),
+            "template_overrides": profile.template_overrides,
             "fields": list(profile.fields),
             "kept_separate": profile.kept_separate,
         })
@@ -1318,6 +1327,10 @@ def run_step(session: Session, step_id: int) -> dict[str, int]:
     }
     counts: Counter = Counter()
     counts["numbers"] = _seed_indexes(session, step, profile, episodes)
+    # Each file is committed on its own: adopting reads the file from disk, and one transaction for a
+    # whole Collection would hold SQLite's write lock that long, so other steps and indexes time out.
+    # Adopting again is a no-op, so a step that stops halfway picks up where it was.
+    session.commit()
     problems: list[dict[str, str]] = []
     for file in step.files:
         episode = episodes.get(file["media_site_id"])
@@ -1329,6 +1342,7 @@ def run_step(session: Session, step_id: int) -> dict[str, int]:
             continue
         if file["kind"] == "suppressed":
             counts["suppressed"] += int(_suppress(session, episode, profile))
+            session.commit()
             continue
         if file["kind"] != "file":
             continue
@@ -1344,6 +1358,7 @@ def run_step(session: Session, step_id: int) -> dict[str, int]:
         if file.get("kept") and isinstance(adopted.download, EpisodeMediaDownload):
             adopted.download.kept = True
         counts["adopted" if adopted.created else "already_adopted"] += 1
+        session.commit()
     download_profile = session.get(DownloadProfile, step.download_profile_id) if step.download_profile_id else None
     if download_profile is not None:
         counts["would_download"] = _would_download(session, download_profile)
@@ -1480,6 +1495,7 @@ def run_view(session: Session, run: ImportRun) -> dict[str, Any]:
     for step in session.scalars(select(ImportStep).where(ImportStep.run_id == run.id).order_by(ImportStep.id)):
         collection = session.get(Collection, step.collection_id)
         steps.append({
+            "collection_id": step.collection_id,
             "collection_slug": collection.slug if collection else None,
             "collection_title": collection.title if collection else None,
             "status": step.status,

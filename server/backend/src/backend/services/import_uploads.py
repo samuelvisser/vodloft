@@ -315,6 +315,6 @@ def work_location(importer: Importer, path_map: tuple[str, str]) -> Iterator[Imp
             shutil.copyfile(wal, work / wal.name)
         extras = upload / PurePosixPath(importer.extras) if importer.extras else None
         yield ImportLocation(database=copy, extras=extras if extras is not None and extras.is_dir() else None,
-                             path_map=path_map)
+                             path_map=path_map, folder=upload)
     finally:
         shutil.rmtree(work, ignore_errors=True)

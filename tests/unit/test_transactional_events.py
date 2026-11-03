@@ -80,3 +80,46 @@ def test_committed_event_batch_adapter_derives_one_event_from_full_batch(monkeyp
     finally:
         transactional.unregister_committed_event_batch_adapter("test.transactional.batch")
         session.close()
+
+
+def test_a_rolled_back_savepoint_only_drops_the_events_queued_inside_it(monkeypatch):
+    from task_manager.events import transactional
+
+    emit = Mock()
+    monkeypatch.setattr(transactional, "emit_event", emit)
+    session = Session(create_engine("sqlite+pysqlite:///:memory:"))
+
+    session.execute(text("SELECT 1"))
+    transactional.queue_event(session, "collection.added", {"resource_id": 1})
+    try:
+        with session.begin_nested():
+            transactional.queue_event(session, "collection.added", {"resource_id": 2})
+            raise ValueError("The second collection could not be added")
+    except ValueError:
+        pass
+    transactional.queue_event(session, "collection.added", {"resource_id": 3})
+    session.commit()
+
+    assert [call.args[1]["resource_id"] for call in emit.call_args_list] == [1, 3]
+    session.close()
+
+
+def test_a_rolled_back_savepoint_keeps_the_task_dispatches_queued_before_it(monkeypatch):
+    from task_manager.scheduler import scheduler, transactional
+
+    trigger = Mock()
+    monkeypatch.setattr(scheduler, "trigger_now", trigger)
+    session = Session(create_engine("sqlite+pysqlite:///:memory:"))
+
+    session.execute(text("SELECT 1"))
+    transactional.queue_task_after_commit(session, def_key="fetch_new_episodes", resource_type="collection", resource_id=1)
+    try:
+        with session.begin_nested():
+            transactional.queue_task_after_commit(session, def_key="fetch_new_episodes", resource_type="collection", resource_id=2)
+            raise ValueError
+    except ValueError:
+        pass
+    session.commit()
+
+    assert [call.kwargs["resource_id"] for call in trigger.call_args_list] == [1]
+    session.close()

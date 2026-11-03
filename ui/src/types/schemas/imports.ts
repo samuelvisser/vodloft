@@ -87,6 +87,7 @@ export const ImportProfileSchema = z.looseObject({
     }),
     baseName: z.string().nullish(),
     mergedFrom: z.array(z.string()).default([]),
+    templateOverrides: z.boolean().default(false),
     fields: z.array(z.string()).default([]),
     keptSeparate: z.string().nullish(),
     changes: z.looseObject({
@@ -141,6 +142,7 @@ export const ImportRunSchema = ImportRunSummarySchema.extend({
         support: z.string().nullish(),
     })),
     steps: z.array(z.looseObject({
+        collectionId: z.int().nullish(),
         collectionSlug: z.string().nullish(),
         collectionTitle: z.string().nullish(),
         status: z.enum(['waiting', 'done', 'failed']),

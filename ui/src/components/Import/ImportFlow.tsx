@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import FolderField from '../ExistingFiles/FolderField'
 import {watchImportMatches} from '../ExistingFiles/ImportMatchesWatcher'
 import ProgressBar from '../common/ProgressBar'
+import {useOperations} from '../OperationNotifier/OperationNotifier'
 import OpaqueOutputTemplateCode from '../LocalMediaProfile/OpaqueOutputTemplateCode'
 import {TemplateCodeEditor, templateEditorExtensions} from '../LocalMediaProfile/OutputTemplateEditor'
 import {
@@ -486,8 +487,10 @@ function PreviewStep({importer, onReplace, onFinished}: {
                             </div>
                         </div>
                     )}
-                    {preview.profiles.map((profile) => (
+                    {/* The same order as the Collections list, which groups by profile name. */}
+                    {[...preview.profiles].sort((a, b) => byName(a.name, b.name)).map((profile) => (
                         <ProfilePreview
+                            importerName={importer.name}
                             key={profile.externalId}
                             profile={profile}
                             collections={preview.collections.filter((item) => item.profileExternalId === profile.externalId && chosen.has(item.externalId))}
@@ -621,6 +624,14 @@ const BECOMES_LABELS: Record<string, string> = {
     in_library: 'In your library',
 }
 
+/** "A", "A and B", "A, B and C". */
+function mergedNames(names: readonly string[]): string {
+    return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+}
+
+/** Names in the order a person expects: case-insensitive, with numbers in number order. */
+const byName = (a: string, b: string) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'})
+
 /** The collections to import, grouped by the Local Media Profile each one gets. */
 function CollectionList({collections, chosen, onToggle, onChooseAll}: {
     collections: CollectionRow[]
@@ -634,7 +645,6 @@ function CollectionList({collections, chosen, onToggle, onChooseAll}: {
         groups.set(key, [...(groups.get(key) ?? []), item])
     }
     // By profile name, then by collection title; collections without a profile come last.
-    const byName = (a: string, b: string) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'})
     const sorted = [...groups.entries()]
         .sort(([a], [b]) => (a === '') !== (b === '') ? (a === '' ? 1 : -1) : byName(a, b))
         .map(([name, rows]) => [name, [...rows].sort((a, b) => byName(a.title, b.title))] as const)
@@ -697,7 +707,8 @@ function CollectionList({collections, chosen, onToggle, onChooseAll}: {
     )
 }
 
-function ProfilePreview({profile, collections, template, onTemplate}: {
+function ProfilePreview({importerName, profile, collections, template, onTemplate}: {
+    importerName: string
     profile: ImportProfile
     collections: ImportPreview['collections']
     template: string | undefined
@@ -721,10 +732,28 @@ function ProfilePreview({profile, collections, template, onTemplate}: {
             <div className="import-profile__body">
             {profile.mergedFrom.length > 0 && (
                 <div className="import-merge">
-                    <div>
-                        <span className="import-merge__label">Kept together</span>{' '}
-                        {profile.mergedFrom.join(', ')}
-                    </div>
+                    {profile.mergedFrom.length > 1 && (
+                        <>
+                            <div>
+                                <span className="import-merge__label">Kept together</span>{' '}
+                                {profile.mergedFrom.join(', ')}
+                            </div>
+                            <p className="import-merge__why">
+                                VODLoft uses Download Profiles to decide which episodes to download, so these can share
+                                one Local Media Profile. Each collection's Download Profile is set up to download
+                                what {importerName} did.
+                            </p>
+                        </>
+                    )}
+                    {profile.templateOverrides && (
+                        <div>
+                            <span className="import-merge__label">Template overrides</span>{' '}
+                            {collections.length === 1 ? 'This collection overrides' : 'These collections override'}{' '}
+                            the template of {mergedNames(profile.mergedFrom)} in {importerName}. The{' '}
+                            {mergedNames(profile.fields)} each one sets is taken out of its template and kept as a
+                            custom collection field, so they can all use this profile.
+                        </div>
+                    )}
                     {profile.fields.length > 0 && (
                         <ul className="import-merge__fields">
                             {collections.map((item) => (
@@ -740,9 +769,12 @@ function ProfilePreview({profile, collections, template, onTemplate}: {
                 </div>
             )}
             {profile.keptSeparate && (
-                <p className="import-merge__apart">
-                    Not kept on {profile.baseName ?? 'its Pinchflat profile'}: {profile.keptSeparate.charAt(0).toLowerCase() + profile.keptSeparate.slice(1)}.
-                </p>
+                <div className="import-merge">
+                    <div>
+                        <span className="import-merge__label">Not kept on {profile.baseName ?? `its ${importerName} profile`}</span>{' '}
+                        {profile.keptSeparate}, so this collection keeps a profile of its own.
+                    </div>
+                </div>
             )}
             {editing ? (
                 <div className="import-template-editor">
@@ -954,6 +986,17 @@ function useElapsed(since: string, running: boolean): string {
 }
 
 function RunView({importer, run, onBack}: {importer: Importer, run: ImportRun, onBack: () => void}) {
+    const {findActive} = useOperations()
+    // A waiting step is first indexed, then its files are adopted: each runs as an operation on the Collection.
+    const waitingLabel = (collectionId: number | null | undefined): string => {
+        if (collectionId == null) return 'Waiting for indexing'
+        if (findActive('import.adopt_files', 'collection', collectionId)) return 'Adopting files…'
+        const indexing = findActive('collection.index', 'collection', collectionId)
+        if (indexing?.status === 'RUNNING') {
+            return typeof indexing.progress === 'number' ? `Indexing… ${indexing.progress}%` : 'Indexing…'
+        }
+        return 'Waiting for indexing'
+    }
     const done = run.status === 'finished' || run.status === 'failed'
     const elapsed = useElapsed(run.createdAt, !done)
     const waitingSteps = run.steps.filter((step) => step.status === 'waiting').length
@@ -963,7 +1006,7 @@ function RunView({importer, run, onBack}: {importer: Importer, run: ImportRun, o
     const activity = run.status === 'running'
         ? `Bringing over settings, profiles, collections and downloads. A large library can take a few minutes. Running for ${elapsed}.`
         : run.status === 'waiting'
-            ? `${waitingSteps} of ${run.steps.length} collection${run.steps.length === 1 ? '' : 's'} waiting to be indexed; their files are adopted right after. Running for ${elapsed}.`
+            ? `${finishedSteps} of ${run.steps.length} collection${run.steps.length === 1 ? '' : 's'} done. Each collection is indexed first, and its files are adopted right after. Running for ${elapsed}.`
             : null
     return (
         <div className="import-step import-run" aria-live="polite">
@@ -989,7 +1032,7 @@ function RunView({importer, run, onBack}: {importer: Importer, run: ImportRun, o
                         <li key={index} className={`is-${step.status}`}>
                             <span>{step.collectionTitle ?? step.collectionSlug}</span>
                             <small>
-                                {step.status === 'waiting' ? 'Waiting for indexing' : step.status === 'failed' ? 'Failed' : countsLine(step.counts) || 'Done'}
+                                {step.status === 'waiting' ? waitingLabel(step.collectionId) : step.status === 'failed' ? 'Failed' : countsLine(step.counts) || 'Done'}
                                 {step.problems.length ? ` · ${step.problems.length} problem${step.problems.length === 1 ? '' : 's'}` : ''}
                             </small>
                         </li>
