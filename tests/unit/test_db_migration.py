@@ -18,9 +18,11 @@ RELEASE_REVISIONS = (
     ("0.4.0", "e6a2c9d4f817"),
     ("0.5.0", "817515eb8209"),
     ("0.6.0", "d0f28c7f863e"),
+    ("0.7.0", "c89f1a5ea2ba"),
 )
 VODLOFT_0_1_0_REVISION = "f4abb559e3ab"
 VODLOFT_0_5_0_REVISION = "817515eb8209"
+VODLOFT_0_6_0_REVISION = "d0f28c7f863e"
 HEAD_REVISION = "c89f1a5ea2ba"
 
 
@@ -260,7 +262,7 @@ def test_download_profiles_without_episode_types_stop_downloading(migration_data
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, "b5e1c0a7d392")
+    command.upgrade(config, VODLOFT_0_6_0_REVISION)
     with engine.begin() as connection:
         connection.execute(text(
             "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
@@ -268,15 +270,15 @@ def test_download_profiles_without_episode_types_stop_downloading(migration_data
             "'free', 'series', 'numbered', 'Author', 'author', 'ytdlp')"
         ))
         connection.execute(text(
-            "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, type, video_codecs) VALUES "
-            "(5, 'p', 'P', '/downloads/{{ collection }}/{{ episode_title }}.ext', 'format_1080p', 'collection', '[]')"
+            "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, type) VALUES "
+            "(5, 'p', 'P', '/downloads/{{ collection }}/{{ episode_title }}.ext', 'format_1080p', 'collection')"
         ))
         for profile_id, types in ((1, "[]"), (2, '["ep"]')):
             connection.execute(text(
                 "INSERT INTO download_profiles (id, collection_id, local_media_profile_id, enable_profile, ep_id_type_list, "
                 "download_with_countdown, redownload_final, download_days_in_past, download_episode_count, "
-                "delete_older_episodes, include_upcoming_seasons, sponsorblock_segments) "
-                "VALUES (:id, 1, 5, 1, :types, 0, 0, 0, 0, 0, 1, '{}')"
+                "delete_older_episodes, include_upcoming_seasons) "
+                "VALUES (:id, 1, 5, 1, :types, 0, 0, 0, 0, 0, 1)"
             ), {"id": profile_id, "types": types})
 
     command.upgrade(config, HEAD_REVISION)
@@ -287,33 +289,12 @@ def test_download_profiles_without_episode_types_stop_downloading(migration_data
     assert enabled == {1: 0, 2: 1}
 
 
-def test_ytdlp_options_move_from_local_media_profiles_to_the_source(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import get_alembic_config
-
-    config = get_alembic_config()
-    command.upgrade(config, "e2f7a41c9d05")
-    with engine.begin() as connection:
-        for profile_id, options in ((5, "-N 4"), (6, ""), (7, "-N 4"), (8, "--xattrs")):
-            connection.execute(text(
-                "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, type, video_codecs, "
-                "ytdlp_options) VALUES (:id, :slug, :slug, '/downloads/{{ collection }}/' || :slug || '/{{ episode_title }}.ext', "
-                "'format_1080p', 'collection', '[]', :options)"
-            ), {"id": profile_id, "slug": f"p{profile_id}", "options": options})
-
-    command.upgrade(config, HEAD_REVISION)
-
-    with engine.connect() as connection:
-        assert connection.execute(text("SELECT ytdlp_options FROM settings")).scalar_one() == "-N 4\n--xattrs"
-    assert "ytdlp_options" not in {column["name"] for column in inspect(engine).get_columns("local_media_profiles")}
-
-
 def test_imported_seasons_get_their_slug_back_and_the_duplicate_is_merged(migration_database):
     _database_path, engine = migration_database
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, "4b8e1d27a6c3")
+    command.upgrade(config, VODLOFT_0_6_0_REVISION)
     with engine.begin() as connection:
         for collection_id in (1, 2, 3, 4):
             connection.execute(text(
@@ -342,15 +323,15 @@ def test_imported_seasons_get_their_slug_back_and_the_duplicate_is_merged(migrat
                     "VALUES ('wireloft', 'season', :id, :id, '{}', '[]')"
                 ), {"id": season_id})
         connection.execute(text(
-            "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, type, video_codecs) VALUES "
-            "(5, 'p', 'P', '/downloads/{{ collection }}/{{ episode_title }}.ext', 'format_1080p', 'collection', '[]')"
+            "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, type) VALUES "
+            "(5, 'p', 'P', '/downloads/{{ collection }}/{{ episode_title }}.ext', 'format_1080p', 'collection')"
         ))
         for profile_id in (1, 2):
             connection.execute(text(
                 "INSERT INTO download_profiles (id, collection_id, local_media_profile_id, enable_profile, ep_id_type_list, "
                 "download_with_countdown, redownload_final, download_days_in_past, download_episode_count, "
-                "delete_older_episodes, include_upcoming_seasons, sponsorblock_segments) "
-                "VALUES (:id, 3, 5, 1, '[]', 0, 0, 0, 0, 0, 1, '{}')"
+                "delete_older_episodes, include_upcoming_seasons) "
+                "VALUES (:id, 3, 5, 1, '[]', 0, 0, 0, 0, 0, 1)"
             ), {"id": profile_id})
         # Profile 1 had the imported season and got the duplicate as an upcoming season; profile 2 only the duplicate.
         for profile_id, season_id in ((1, 3), (1, 5), (2, 5)):
@@ -377,3 +358,54 @@ def test_imported_seasons_get_their_slug_back_and_the_duplicate_is_merged(migrat
         assert sorted(connection.execute(text(
             "SELECT download_profile_id, season_id FROM download_profile_seasons"
         )).all()) == [(1, 3), (2, 3)]
+
+
+def test_0_7_0_migration_keeps_what_existing_profiles_and_episodes_did(migration_database):
+    _database_path, engine = migration_database
+    import json
+
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, VODLOFT_0_6_0_REVISION)
+    with engine.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+            "author_name, author_slug, source_key) VALUES (1, 'uuid-1', 'a', 'A', 'https://example.test/a', "
+            "'free', 'series', 'numbered', 'The Host', 'host', 'dailywire')"
+        ))
+        connection.execute(text(
+            "INSERT INTO seasons (id, collection_id, \"index\", slug, name, season_type, season_number) "
+            "VALUES (1, 1, 1, 'season-1', 'Season 1', 'season', 1)"
+        ))
+        connection.execute(text(
+            "INSERT INTO media_items (id, uuid, type, source_key) VALUES (10, 'episode-10', 'episode', 'dailywire')"
+        ))
+        connection.execute(text(
+            "INSERT INTO media_items_episode (id, collection_id, season_id, \"index\", episode_identifier, slug, "
+            "publish_status, sharing_url, source_slug) VALUES (10, 1, 1, 1, 'ep.1', 'e10', "
+            "'published_final', 'https://example.test', 'e10')"
+        ))
+        for profile_id, preferred_format in ((5, "format_1080p"), (6, "format_4k")):
+            connection.execute(text(
+                "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, type) VALUES "
+                "(:id, :slug, :slug, '/downloads/{{ collection }}/' || :slug || '/{{ episode_title }}.ext', "
+                ":format, 'collection')"
+            ), {"id": profile_id, "slug": f"p{profile_id}", "format": preferred_format})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT author_name FROM media_items_episode")).scalar_one() == "The Host"
+        profiles = {
+            row.id: row for row in connection.execute(text(
+                "SELECT id, subtitle_language_mode, quality_goal, video_codecs FROM local_media_profiles"
+            ))
+        }
+        assert {row.subtitle_language_mode for row in profiles.values()} == {"site"}
+        assert profiles[5].quality_goal == "compatibility"
+        assert profiles[6].quality_goal == "custom"
+        assert all(codec["allowed"] for codec in json.loads(profiles[6].video_codecs))
+        assert [key for (key,) in connection.execute(text(
+            "SELECT default_key FROM notification_rules ORDER BY position"
+        ))] == ["download_failed", "sign_in_needed", "disk_almost_full", "task_failing", "update_available", "daily_summary"]

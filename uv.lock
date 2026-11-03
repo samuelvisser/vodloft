@@ -92,7 +92,7 @@ wheels = [
 
 [[package]]
 name = "backend"
-version = "0.6.0"
+version = "0.7.0"
 source = { editable = "server/backend" }
 dependencies = [
     { name = "alembic" },
@@ -253,7 +253,7 @@ wheels = [
 
 [[package]]
 name = "config"
-version = "0.4.0"
+version = "0.5.0"
 source = { editable = "server/config" }
 dependencies = [
     { name = "pydantic" },
@@ -270,7 +270,7 @@ requires-dist = [
 
 [[package]]
 name = "controller"
-version = "0.1.2"
+version = "0.1.3"
 source = { editable = "server/controller" }
 dependencies = [
     { name = "apscheduler" },
@@ -343,7 +343,7 @@ wheels = [
 
 [[package]]
 name = "downloader"
-version = "0.5.0"
+version = "0.6.0"
 source = { editable = "server/downloader" }
 
 [[package]]
@@ -426,7 +426,7 @@ wheels = [
 
 [[package]]
 name = "importer"
-version = "0.6.0"
+version = "0.7.0"
 source = { editable = "server/importer" }
 dependencies = [
     { name = "alembic" },
@@ -498,7 +498,7 @@ wheels = [
 
 [[package]]
 name = "jinja-analysis"
-version = "0.6.0"
+version = "0.7.0"
 source = { editable = "server/jinja_analysis" }
 dependencies = [
     { name = "jinja2" },
@@ -909,7 +909,7 @@ wheels = [
 
 [[package]]
 name = "sources"
-version = "0.6.0"
+version = "0.7.0"
 source = { editable = "server/sources" }
 dependencies = [
     { name = "config" },
@@ -964,7 +964,7 @@ wheels = [
 
 [[package]]
 name = "task-manager"
-version = "0.6.0"
+version = "0.7.0"
 source = { editable = "server/task_manager" }
 dependencies = [
     { name = "apscheduler" },
