@@ -50,7 +50,8 @@ class Feature(StrEnum):
     its own. Without it, "Best" is MP4 video at the highest resolution and the
     other choices are not offered."""
     YTDLP_DOWNLOADS = "ytdlp_downloads"
-    """yt-dlp downloads this Source's videos, so your own yt-dlp options apply to them."""
+    """Your own yt-dlp options apply to this Source's downloads. Only the yt-dlp Source has it: NPO Start
+    also downloads with yt-dlp, but as a Source of its own it takes no yt-dlp options."""
     CATALOGUE_REFRESH = "catalogue_refresh"
     """Refreshing the titles, descriptions and thumbnails of a listed collection's
     episodes, and telling which ones the Source no longer has, with ``refresh_items``."""

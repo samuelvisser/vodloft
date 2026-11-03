@@ -256,7 +256,7 @@ export default function LocalMediaProfileCommonFields({
                             <p>A few options are <strong>blocked</strong>, with the reason: the ones that would change where files go or what they are called
                                 (such as <code>-o</code> and <code>-P</code>), pick the format past the Quality setting (<code>-f</code>), or run other programs (<code>--exec</code>).
                                 Options VODLoft already has a setting for point to that setting instead.</p>
-                            <p>A Collection can add its own options on top of these, on its Edit page. Downloads from The Daily Wire don’t use yt-dlp, so these options don’t apply to them.</p>
+                            <p>A Collection can add its own options on top of these, on its Edit page. They only apply to Collections and videos from the yt-dlp Source, not to The Daily Wire or NPO Start.</p>
                         </ReadMore>
                     </div>
                 </div>

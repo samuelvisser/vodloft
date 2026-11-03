@@ -549,7 +549,13 @@ def test_a_youtube_download_profile_cuts_sponsors_and_adds_your_own_options(list
     session.add(download)
     session.commit()
 
-    # A site SponsorBlock doesn't cover gets no segments; your own options apply everywhere yt-dlp downloads.
+    # A Source that takes no yt-dlp options of its own, such as NPO Start, ignores them.
+    plan = download_plans.prepare_download_plan(session, download.id, DownloadTracker())
+    assert "--concurrent-fragments" not in plan.source.ytdlp_command
+
+    # A site SponsorBlock doesn't cover gets no segments; your own options apply to the yt-dlp Source.
+    from sources import Feature
+    monkeypatch.setattr(ListedSource, "features", ListedSource.features | {Feature.YTDLP_DOWNLOADS})
     plan = download_plans.prepare_download_plan(session, download.id, DownloadTracker())
     assert plan.source.ytdlp_sponsorblock == YtdlpSponsorBlock()
     command = plan.source.ytdlp_command

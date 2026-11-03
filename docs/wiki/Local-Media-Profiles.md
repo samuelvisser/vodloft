@@ -91,7 +91,7 @@ Downloads from sites yt-dlp handles, such as YouTube, can take extra yt-dlp opti
 - **Blocked**, with the reason: options that would change where files go or what they are called (such as `-o` and `-P`), pick the format past the Quality setting (`-f`), run other programs (`--exec`), or stop VODLoft from following the download.
 - **VODLoft already has a setting for this**, with a link to that setting: for example subtitles, thumbnails, the container or SponsorBlock.
 
-A profile can only be saved when every line passes. A Collection can add its own options on its Edit page, for exceptions; they come after the profile's options, so for an option set in both places the Collection's wins. Downloads from The Daily Wire don't use yt-dlp, so these options don't apply to them.
+A profile can only be saved when every line passes. A Collection can add its own options on its Edit page, for exceptions; they come after the profile's options, so for an option set in both places the Collection's wins. They only apply to Collections and videos from the yt-dlp Source (YouTube and the other sites yt-dlp handles), not to The Daily Wire or NPO Start.
 
 ## Output templates
 
