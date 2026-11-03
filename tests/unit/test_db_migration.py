@@ -81,6 +81,7 @@ def test_demo_seed_runs_on_a_fresh_database(migration_database):
 
 def test_fresh_database_upgrades_to_the_head(migration_database):
     database_path, engine = migration_database
+    from backend.db.background_migrations import get_background_migration_head_revision
     from backend.db.migrations import get_database_status, upgrade_database
 
     assert not database_path.exists()
@@ -127,6 +128,10 @@ def test_fresh_database_upgrades_to_the_head(migration_database):
         assert connection.execute(text(
             "SELECT onboarding_completed FROM settings"
         )).scalar_one() == 0
+        # A new database has nothing for the background migrations to repair.
+        assert connection.execute(text(
+            "SELECT background_migration_version FROM settings"
+        )).scalar_one() == get_background_migration_head_revision()
 
         profiles = connection.execute(text(
             "SELECT type, slug, output_template, preferred_format "
@@ -172,6 +177,10 @@ def test_existing_database_upgrade_does_not_run_initial_seed(migration_database)
         assert connection.execute(text(
             "SELECT COUNT(*) FROM local_media_profiles"
         )).scalar_one() == 0
+        # An existing database still runs its background migrations.
+        assert connection.execute(text(
+            "SELECT background_migration_version FROM settings"
+        )).scalar_one() is None
 
 
 def test_collections_migration_renames_shows_and_their_stored_values(migration_database):

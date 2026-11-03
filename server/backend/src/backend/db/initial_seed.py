@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from .core import get_session, load_database_models
@@ -118,9 +118,18 @@ def _seed_notification_rules(session: Session) -> None:
     restore_default_rules(session)
 
 
+def _mark_background_migrations_done(session: Session) -> None:
+    """A new database has no historical data to repair, so it starts at the latest background migration."""
+    from backend.db.background_migrations import get_background_migration_head_revision
+    from backend.db.models import Settings
+
+    session.execute(update(Settings).values(background_migration_version=get_background_migration_head_revision()))
+
+
 _INITIAL_SEED_STEPS: tuple[Callable[[Session], None], ...] = (
     _seed_local_media_profiles,
     _seed_notification_rules,
+    _mark_background_migrations_done,
 )
 
 
