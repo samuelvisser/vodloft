@@ -5,7 +5,7 @@
     --q-accent-soft: rgba(14, 165, 233, 0.12);
     --q-warn: #b45309;
     display: grid;
-    gap: 8px;
+    gap: 16px;
     min-width: 0;
 }
 
@@ -21,45 +21,15 @@
     font-weight: 600;
 }
 
-.quality-ladder {
+.quality-download-option {
     display: flex;
     flex-wrap: wrap;
-    border: 1px solid var(--q-border);
-    border-radius: 10px;
-    overflow: hidden;
+    align-items: baseline;
+    gap: 4px 10px;
 }
 
-.quality-ladder__step {
-    flex: 1 1 0;
-    min-width: 64px;
-    min-height: 40px;
-    padding: 6px 10px;
-    border: 0;
-    border-right: 1px solid var(--q-border);
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    cursor: pointer;
-}
-
-.quality-ladder__step:last-child {
-    border-right: 0;
-}
-
-.quality-ladder__step.is-included {
-    background: var(--q-accent-soft);
-}
-
-.quality-ladder__step.is-selected {
-    background: var(--q-accent);
-    color: #fff;
-    font-weight: 600;
-}
-
-@media (prefers-color-scheme: dark) {
-    .quality-ladder__step.is-selected {
-        color: #0b1220;
-    }
+.quality-download-option small {
+    opacity: 0.75;
 }
 
 .quality-cards {
@@ -204,15 +174,3 @@
     gap: 12px;
 }
 
-.quality-field__language {
-    display: grid;
-    gap: 6px;
-    max-width: 420px;
-}
-
-@media (max-width: 640px) {
-    .quality-ladder__step {
-        flex-basis: 25%;
-        border-bottom: 1px solid var(--q-border);
-    }
-}

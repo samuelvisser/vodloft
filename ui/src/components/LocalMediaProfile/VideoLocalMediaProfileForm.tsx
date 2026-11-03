@@ -7,6 +7,7 @@ import OutputTemplateEditor from './OutputTemplateEditor'
 export default function VideoLocalMediaProfileForm({form}: { form: UseFormReturn<any> }) {
     return (
         <>
+            <hr className="form-section-divider" aria-hidden="true"/>
             <QualityField form={form}/>
             <OutputTemplateEditor
                 form={form}
