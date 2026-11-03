@@ -1,12 +1,13 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.models.source import (
-    SiteOptionsAPIRead,
+    SiteOptionsAPIRead, YtdlpOptionLineAPIRead, YtdlpOptionsCheckAPIRequest,
     ApiKeyAPIUpdate, ApiStatusAPIRead, CookiesAPIRead, EpisodeTagAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultsAPIRead,
     CollectionDetailsAPIRead, SourceAPIRead, SourceDomainAPIRead, SourceDomainAPIUpdate,
 )
 from backend.app import db_session
 from sources import ApiKeyRejected, Feature, Source, UnknownSourceError, get_source
+from sources.ytdlp_options import check_ytdlp_options
 
 from .service import (
     LinkNotRecognisedError, SourceFeatureMissingError, UnknownDomainError, get_api_status, get_program_status,
@@ -86,7 +87,13 @@ def site_options(source_id: str, url: str = Query(min_length=1, max_length=2048)
         source = get_source(source_id)
     except UnknownSourceError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return SiteOptionsAPIRead(auto_subtitles=source.auto_subtitles_for(url))
+    return SiteOptionsAPIRead(auto_subtitles=source.auto_subtitles_for(url), sponsorblock=source.sponsorblock_for(url))
+
+
+@router.post("/sources/ytdlp-options/check", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=list[YtdlpOptionLineAPIRead])
+def ytdlp_options_check(body: YtdlpOptionsCheckAPIRequest):
+    """Check your own yt-dlp options line by line with yt-dlp's parser, before they are saved."""
+    return [YtdlpOptionLineAPIRead.model_validate(line) for line in check_ytdlp_options(body.text)]
 
 
 @router.get("/sources/{source_id}/collection", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=CollectionDetailsAPIRead)

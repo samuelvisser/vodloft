@@ -137,8 +137,6 @@ def _profile_warnings(profile: PinchflatProfile) -> list[ImportWarning]:
         warnings.append(ImportWarning(
             "sub_langs", f"VODLoft lists languages by code, so it leaves out {', '.join(left_out)}", "close",
         ))
-    if profile.sponsorblock_behaviour not in (None, "", "disabled"):
-        warnings.append(ImportWarning("sponsorblock_behaviour", "VODLoft does not use SponsorBlock yet"))
     if profile.redownload_delay_days:
         warnings.append(ImportWarning(
             "redownload_delay_days", f"VODLoft does not download a video again after {profile.redownload_delay_days} days yet",
@@ -210,6 +208,10 @@ def _template_root(template: str, path_map: PathMap) -> tuple[str, str, str | No
     )
 
 
+# Options the converter explains better than a yt-dlp option could: the template and links.
+_NOT_FORWARDED = frozenset({"outtmpl", "url"})
+
+
 def _profile_plan(variant: _Variant, data: PinchflatData, path_map: PathMap) -> ProfilePlan:
     profile = variant.profile
     warnings = _profile_warnings(profile)
@@ -241,12 +243,20 @@ def _profile_plan(variant: _Variant, data: PinchflatData, path_map: PathMap) -> 
             "embed_and_nfo" if embed and profile.download_nfo else "nfo" if profile.download_nfo
             else "embed" if embed else "no_metadata"
         )
+        custom: list[str] = []
         for option in option_set.reports:
-            if option.option.origin != "Pinchflat" and option.handling in ("unsupported", "close"):
+            if option.option.origin == "Pinchflat":
+                continue
+            if option.handling == "unsupported" and option.option.dest not in _NOT_FORWARDED:
+                # VODLoft checks these as your own yt-dlp options, and reports the lines it can't use.
+                custom.append(f"{option.option.source}  # {option.option.origin}")
+            elif option.handling in ("unsupported", "close"):
                 warnings.append(ImportWarning(
                     option.option.origin, f"{option.option.source}: {option.reason}",
                     "close" if option.handling == "close" else "unsupported",
                 ))
+        if custom:
+            settings["ytdlp_options"] = "\n".join(custom)
     if profile.preferred_resolution == "audio":
         settings["subtitle_mode"] = "no_subtitles"
     settings["download_collection_assets"] = bool(profile.download_source_images)
@@ -276,6 +286,24 @@ def _episode_types(profile: PinchflatProfile) -> list[str]:
     if profile.livestream_behaviour == "include":
         types.append("livestream")
     return types
+
+
+SPONSORBLOCK_CATEGORIES = (
+    "sponsor", "selfpromo", "interaction", "intro", "outro", "preview", "filler", "music_offtopic",
+)
+
+
+def _sponsorblock(profile: PinchflatProfile) -> dict[str, object]:
+    """Pinchflat's SponsorBlock setting: remove or mark the chosen categories, keep the others."""
+    on = profile.sponsorblock_behaviour in ("remove", "mark") and bool(profile.sponsorblock_categories)
+    action = "cut" if profile.sponsorblock_behaviour == "remove" else "chapter"
+    chosen = set(profile.sponsorblock_categories)
+    return {
+        "sponsorblock_enabled": on,
+        "sponsorblock_segments": {
+            category: action if on and category in chosen else "keep" for category in SPONSORBLOCK_CATEGORIES
+        },
+    }
 
 
 def _collection_plan(source: PinchflatSource, profile: PinchflatProfile, profile_external_id: str, path_map: PathMap) -> CollectionPlan:
@@ -341,6 +369,7 @@ def _collection_plan(source: PinchflatSource, profile: PinchflatProfile, profile
             "rules": rules,
             # yt-dlp takes an uploaded subtitle over an auto-generated one, as VODLoft's fallback does.
             "auto_subtitles": "fallback" if profile.download_auto_subs else "never",
+            **_sponsorblock(profile),
             **limits,
         },
         warnings=tuple(warnings),

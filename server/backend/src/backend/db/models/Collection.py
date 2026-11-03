@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING, TypeAlias
 
-from sqlalchemy import func
+from sqlalchemy import Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
@@ -28,6 +28,10 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     title: Mapped[str]
     description: Mapped[Optional[str]]
     sharing_url: Mapped[str] = mapped_column(unique=True)
+    ytdlp_options: Mapped[str] = mapped_column(
+        Text, default="", server_default="",
+        comment="Your own yt-dlp options for this Collection, added after the Local Media Profile's",
+    )
     membership_level: Mapped[str]
     type: Mapped[str]
     episode_identifier: Mapped[str]

@@ -276,6 +276,15 @@ FAKE_YTDLP = textwrap.dedent('''
     if "--write-subs" in args and "langs" in url:
         for language in ("en-US", "en", "nl", "de"):
             (work / f"media.{language}.srt").write_text(srt.format(language))
+    if "--sponsorblock-mark" in args:
+        import json
+        assert args.index("--sponsorblock-mark") < args.index("--")
+        found = [
+            {"category": "sponsor", "start_time": 30.0, "end_time": 90.5, "title": "Sponsor", "type": "skip"},
+            {"category": "intro", "start_time": 0, "end_time": 12.25, "title": "Intro", "type": "skip"},
+            {"category": "poi_highlight", "start_time": 300.0, "end_time": 301.0, "title": "Highlight", "type": "poi"},
+        ]
+        print("[vodloft-sponsorblock] " + json.dumps(found if "segments" in url else None))
     print("[vodloft-file] " + str(work / "media.mp4"))
 ''')
 
@@ -509,3 +518,55 @@ def test_widest_still_leaves_other_urls_alone(monkeypatch, url):
     monkeypatch.setattr(thumbnails.requests, "head", head)
     assert thumbnails.widest_still(url) == url
     assert head.urls == []
+
+
+def test_sponsorblock_choices_map_to_yt_dlp_options():
+    from downloader.plan import YtdlpSponsorBlock
+    from downloader.ytdlp import ytdlp_sponsorblock_options
+
+    assert ytdlp_sponsorblock_options(YtdlpSponsorBlock()) == ()
+    assert ytdlp_sponsorblock_options(YtdlpSponsorBlock(chapter=("intro",), cut=("sponsor", "selfpromo"))) == (
+        "--sponsorblock-mark", "intro,poi_highlight", "--sponsorblock-remove", "sponsor,selfpromo",
+    )
+    # Only chapters: nothing is cut.
+    assert ytdlp_sponsorblock_options(YtdlpSponsorBlock(chapter=("outro",))) == ("--sponsorblock-mark", "outro,poi_highlight")
+
+
+def test_your_own_options_come_before_vodlofts_own():
+    from downloader.plan import YtdlpSponsorBlock
+    from downloader.ytdlp import resolve_ytdlp_source
+
+    source = resolve_ytdlp_source(
+        "https://www.youtube.com/watch?v=x", command=("yt-dlp",), preferred_format="format_1080p", audio_only=False,
+        sponsorblock=YtdlpSponsorBlock(cut=("sponsor",)), custom_options=("--concurrent-fragments", "4"),
+    )
+    command = source.ytdlp_command
+    assert command[:3] == ("yt-dlp", "--concurrent-fragments", "4")
+    assert command.index("-f") > command.index("--concurrent-fragments")
+    assert command[-4:] == ("--sponsorblock-mark", "poi_highlight", "--sponsorblock-remove", "sponsor")
+    assert source.ytdlp_sponsorblock == YtdlpSponsorBlock(cut=("sponsor",))
+
+
+def test_ytdlp_reports_the_sponsorblock_segments_it_found(fake_ytdlp, tmp_path):
+    from downloader.models import SponsorSegment
+    from downloader.plan import YtdlpSponsorBlock
+    from downloader.ytdlp import download_ytdlp
+
+    sponsorblock = YtdlpSponsorBlock(chapter=("intro",), cut=("sponsor",))
+    result = download_ytdlp(
+        "https://x/segments", str(tmp_path / "out.mp4"), command=(*fake_ytdlp, "--sponsorblock-mark", "intro,poi_highlight"),
+        sponsorblock=sponsorblock,
+    )
+    assert result.sponsorblock == (
+        SponsorSegment("intro", 0.0, 12.25, "chapter"),
+        SponsorSegment("sponsor", 30.0, 90.5, "cut"),
+        SponsorSegment("poi_highlight", 300.0, 301.0, "chapter"),
+    )
+    # SponsorBlock had nothing for this video.
+    empty = download_ytdlp(
+        "https://x/plain", str(tmp_path / "plain.mp4"), command=(*fake_ytdlp, "--sponsorblock-mark", "intro,poi_highlight"),
+        sponsorblock=sponsorblock,
+    )
+    assert empty.sponsorblock == ()
+    # Not asked: not known.
+    assert download_ytdlp("https://x/segments", str(tmp_path / "off.mp4"), command=fake_ytdlp).sponsorblock is None

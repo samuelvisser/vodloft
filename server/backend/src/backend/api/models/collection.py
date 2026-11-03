@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Literal, Optional, Union
 from datetime import date, datetime
 
-from pydantic import AliasChoices, AliasPath, computed_field, Field, model_validator
+from pydantic import AliasChoices, AliasPath, computed_field, Field, field_validator, model_validator
 
 from backend.api.models.base import RequestBase, response_model_config
 from backend.api.models.custom_metadata import CustomMetadataResponseBase
@@ -12,6 +12,8 @@ from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.download_profile_types import EpisodeTagKey
 from backend.utils.helpers import generate_uuid
+from backend.api.models.local_media_profile import checked_ytdlp_options
+from sources.ytdlp_options import MAX_OPTIONS_LENGTH
 
 
 # ---------- Strict input (create/update) ----------
@@ -54,6 +56,13 @@ class CollectionAPIUpdate(_CollectionAPIBaseIn):
     """
 
     membership_level: Optional[str] = None
+    ytdlp_options: Optional[str] = Field(default=None, max_length=MAX_OPTIONS_LENGTH)
+    """Your own yt-dlp options for this Collection; left out, they stay as they are."""
+
+    @field_validator("ytdlp_options")
+    @classmethod
+    def _validate_ytdlp_options(cls, value: Optional[str]) -> Optional[str]:
+        return None if value is None else checked_ytdlp_options(value)
 
 
 class CollectionFileRenameAPIRequest(RequestBase):
@@ -144,6 +153,7 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     thumbnail_landscape_path: Optional[str] = None
     thumbnail_portrait_path: Optional[str] = None
     thumbnail_square_path: Optional[str] = None
+    ytdlp_options: str = ""
 
 
 class CollectionAPIRead(_CollectionAPIBaseOut):

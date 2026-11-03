@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import BigInteger, Boolean, CheckConstraint, Index, String, Text, func, UniqueConstraint
+from sqlalchemy import JSON, BigInteger, Boolean, CheckConstraint, Index, String, Text, func, UniqueConstraint
 from sqlalchemy.sql.schema import ForeignKey
 
 from backend.db import Base
@@ -91,6 +91,10 @@ class MediaDownloadBase(HasMetadataMixin, HasTaskResourcesMixin, Base):
     # after a successful download attempt.
     downloaded_bytes: Mapped[Optional[int]]
     format_downloaded: Mapped[Optional[str]]
+    sponsorblock_segments: Mapped[Optional[list[dict]]] = mapped_column(
+        JSON, nullable=True,
+        comment="The SponsorBlock segments of the video as published, and whether each became a chapter or was cut",
+    )
     downloaded_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()

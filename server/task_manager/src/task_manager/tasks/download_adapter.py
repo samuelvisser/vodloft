@@ -232,6 +232,8 @@ def run_download(
             download.automatic_retry_suppressed = False
             download.downloaded_bytes = execution.result.bytes_downloaded
             download.format_downloaded = execution.format_downloaded
+            segments = execution.result.sponsorblock
+            download.sponsorblock_segments = None if segments is None else [segment._asdict() for segment in segments]
             finished = datetime.now(timezone.utc)
             download.downloaded_at = finished
             if isinstance(download.media, Episode):

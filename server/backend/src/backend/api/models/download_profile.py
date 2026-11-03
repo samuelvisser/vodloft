@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from backend.api.models.base import ResponseBase, RequestBase, response_model_config
 from backend.api.models.season import SeasonAPIRequestDetached, SeasonAPIRead
@@ -13,7 +13,10 @@ from backend.types.download_profile_types import (
     EpisodeRuleField,
     EpisodeTagKey,
     AutoSubtitles,
+    DEFAULT_SPONSORBLOCK_SEGMENTS,
     RetentionFrom,
+    SponsorBlockAction,
+    SponsorBlockCategory,
 )
 
 
@@ -70,10 +73,21 @@ class DownloadProfileAPIBaseIn(RequestBase):
     delete_older_episodes: bool
     retention_from: RetentionFrom = RetentionFrom.PUBLISHED
     auto_subtitles: AutoSubtitles = AutoSubtitles.FALLBACK
+    sponsorblock_enabled: bool = True
+    sponsorblock_segments: dict[SponsorBlockCategory, SponsorBlockAction] = Field(
+        default_factory=lambda: dict(DEFAULT_SPONSORBLOCK_SEGMENTS),
+    )
 
     seasons: list[SeasonAPIRequestDetached]
     include_upcoming_seasons: bool
     rules: list[DownloadProfileRuleAPIIn] = Field(default_factory=list, max_length=50)
+
+    @field_validator("sponsorblock_segments")
+    @classmethod
+    def _validate_sponsorblock_segments(cls, value: dict) -> dict:
+        if set(value) != {category.value for category in SponsorBlockCategory}:
+            raise ValueError("Choose Keep, Chapter or Cut out for every SponsorBlock segment type")
+        return value
 
     @model_validator(mode="after")
     def _validate_download_limit(self):
@@ -122,6 +136,8 @@ class DownloadProfileAPIBaseOut(ResponseBase):
     delete_older_episodes: bool
     retention_from: RetentionFrom
     auto_subtitles: AutoSubtitles
+    sponsorblock_enabled: bool
+    sponsorblock_segments: dict[str, SponsorBlockAction]
 
     seasons: list[SeasonAPIRead]
     include_upcoming_seasons: bool

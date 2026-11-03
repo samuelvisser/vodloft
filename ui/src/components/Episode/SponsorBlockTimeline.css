@@ -1,0 +1,99 @@
+.sponsorblock-timeline {
+    display: grid;
+    gap: 8px;
+    margin-top: 16px;
+    padding: 12px 14px;
+    border: 1px solid rgba(100, 116, 139, 0.24);
+    border-radius: 10px;
+}
+
+.sponsorblock-timeline h3 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.sponsorblock-timeline__summary {
+    margin: 0;
+    color: var(--muted);
+}
+
+.sponsorblock-timeline__bar {
+    position: relative;
+    height: 14px;
+    border-radius: 7px;
+    background: rgba(100, 116, 139, 0.25);
+    overflow: hidden;
+}
+
+.sponsorblock-timeline__segment {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    min-width: 2px;
+}
+
+.sponsorblock-timeline__segment.is-point {
+    width: 3px;
+}
+
+/* A cut part is no longer in the file: striped, like a gap. */
+.sponsorblock-timeline__segment.is-cut {
+    background-image: repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.45) 0 3px, transparent 3px 6px) !important;
+    background-blend-mode: normal;
+}
+
+.sponsorblock-timeline__scale {
+    display: flex;
+    justify-content: space-between;
+    color: var(--muted);
+    font-size: 0.75rem;
+}
+
+.sponsorblock-timeline__list {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.875rem;
+}
+
+.sponsorblock-timeline__list li {
+    display: grid;
+    grid-template-columns: 10px minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 8px;
+}
+
+.sponsorblock-timeline__swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+}
+
+.sponsorblock-timeline__time {
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.sponsorblock-timeline__action {
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: rgba(100, 116, 139, 0.16);
+    font-size: 0.8rem;
+}
+
+.sponsorblock-timeline__action.is-cut {
+    background: rgba(239, 68, 68, 0.16);
+}
+
+@media (max-width: 480px) {
+    .sponsorblock-timeline__list li {
+        grid-template-columns: 10px minmax(0, 1fr) auto;
+    }
+
+    .sponsorblock-timeline__time {
+        grid-column: 2 / 4;
+        grid-row: 2;
+    }
+}

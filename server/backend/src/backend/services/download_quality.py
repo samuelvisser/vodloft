@@ -1,14 +1,16 @@
-"""A Local Media Profile's quality and subtitle choices, in the downloader's terms."""
+"""A Local Media Profile's quality and subtitle choices, and a Download Profile's SponsorBlock choices, in the downloader's terms."""
 from __future__ import annotations
 
 from typing import Sequence, TypeVar
 
 from backend.db.models.local_media_profile import LocalMediaProfileBase
-from backend.types.download_profile_types import AutoSubtitles
+from backend.types.download_profile_types import AutoSubtitles, SponsorBlockAction
 from backend.types.local_media_profile_types import CodecFallback, QualityGoal, SubtitleLanguageMode
 from downloader.models import SubtitleRendition
-from downloader.plan import YtdlpSubtitles
+from downloader.errors import DownloadError
+from downloader.plan import YtdlpSponsorBlock, YtdlpSubtitles
 from downloader.ytdlp import YtdlpQuality
+from sources.ytdlp_options import OptionsRefused, ytdlp_option_arguments
 
 Track = TypeVar("Track", bound=SubtitleRendition)
 
@@ -34,6 +36,27 @@ def ytdlp_subtitles(profile: LocalMediaProfileBase, auto_subtitles: AutoSubtitle
         first_only=profile.subtitle_language_mode == SubtitleLanguageMode.FIRST.value,
         auto_generated=AutoSubtitles(auto_subtitles).value,
     )
+
+
+def ytdlp_sponsorblock(enabled: bool, segments: dict[str, str]) -> YtdlpSponsorBlock:
+    """Which SponsorBlock segment types a Download Profile marks as chapters and cuts out."""
+    if not enabled:
+        return YtdlpSponsorBlock()
+    return YtdlpSponsorBlock(
+        chapter=tuple(category for category, action in segments.items() if action == SponsorBlockAction.CHAPTER.value),
+        cut=tuple(category for category, action in segments.items() if action == SponsorBlockAction.CUT.value),
+    )
+
+
+def custom_ytdlp_options(*texts: tuple[str, str]) -> tuple[str, ...]:
+    """Your own yt-dlp options, as ``(where they are set, text)``, in the order yt-dlp gets them."""
+    arguments: list[str] = []
+    for where, text in texts:
+        try:
+            arguments.extend(ytdlp_option_arguments(text))
+        except OptionsRefused as exc:
+            raise DownloadError(f"The yt-dlp options of {where} can no longer be used. {exc}") from None
+    return tuple(arguments)
 
 
 def chosen_subtitle_tracks(subtitles: YtdlpSubtitles, tracks: Sequence[Track]) -> list[Track]:

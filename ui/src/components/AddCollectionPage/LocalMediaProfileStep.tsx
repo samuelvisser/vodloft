@@ -21,7 +21,7 @@ import LocalMediaProfileCard from '../LocalMediaProfile/LocalMediaProfileCard'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {isCollectionLocalMediaProfileAvailableFor, type CollectionLocalMediaProfileContext} from '../../types/local_media_profile'
-
+/** Quality, subtitle language and yt-dlp option choices an existing profile keeps when this step picks it. */
 /** Quality and subtitle language choices an existing profile keeps when this step picks it. */
 const QUALITY_FIELDS = [
     'subtitleLanguages', 'subtitleLanguageMode', 'qualityGoal', 'videoCodecs', 'codecFallback',

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, Boolean, Index, String, func
+from sqlalchemy import JSON, Boolean, Index, String, func, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
@@ -115,6 +115,10 @@ class LocalMediaProfileBase(Base):
     )
     # A dubbed audio track's language code; None keeps the original language.
     audio_language: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    ytdlp_options: Mapped[str] = mapped_column(
+        Text, default="", server_default="", nullable=False,
+        comment="Your own yt-dlp options, one or more per line, for downloads yt-dlp makes",
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()

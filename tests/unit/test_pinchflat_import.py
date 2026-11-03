@@ -496,3 +496,41 @@ def test_an_import_from_a_read_only_media_folder_changes_no_file(installation, t
     assert sum(download.artifact_status == "available" for download in downloads_made) == 3
     assert folder_snapshot(downloads) == before
     assert refused == []
+
+
+def test_sponsorblock_and_unmapped_options_come_over(tmp_path):
+    from backend.services.imports import _with_checked_options
+
+    path = _pinchflat_db(tmp_path / "pinchflat.db")
+    connection = sqlite3.connect(path)
+    connection.execute("UPDATE media_profiles SET sponsorblock_behaviour = 'remove', "
+                       "sponsorblock_categories = '[\"sponsor\", \"intro\"]' WHERE id = 1")
+    connection.commit()
+    connection.close()
+    options = tmp_path / "yt-dlp-configs"
+    options.mkdir()
+    (options / "media-profile-1-config.txt").write_text("--xattrs\n--exec 'echo done'\n--embed-chapters\n")
+
+    plan = plan_import(read_pinchflat(path), option_directory=options)
+
+    channel, playlist = plan.profiles
+    veritasium, _lofi = plan.collections
+    assert veritasium.download_profile["sponsorblock_enabled"] is True
+    assert veritasium.download_profile["sponsorblock_segments"]["sponsor"] == "cut"
+    assert veritasium.download_profile["sponsorblock_segments"]["intro"] == "cut"
+    assert veritasium.download_profile["sponsorblock_segments"]["outro"] == "keep"
+    assert "sponsorblock_behaviour" not in {warning.subject for warning in channel.warnings}
+    assert channel.settings["ytdlp_options"].splitlines() == [
+        "--xattrs  # media-profile-1-config.txt",
+        '--exec "echo done"  # media-profile-1-config.txt',
+        "--embed-chapters  # media-profile-1-config.txt",
+    ]
+    assert "ytdlp_options" not in playlist.settings
+
+    # VODLoft keeps the lines its own check passes, and reports the others with the reason.
+    checked = _with_checked_options(plan).profiles[0]
+    assert checked.settings["ytdlp_options"].splitlines() == [
+        "--xattrs  # media-profile-1-config.txt", "--embed-chapters  # media-profile-1-config.txt",
+    ]
+    refused = [warning.message for warning in checked.warnings if warning.subject == "yt-dlp options"]
+    assert any(message.startswith('--exec "echo done"') and "Runs other programs" in message for message in refused)

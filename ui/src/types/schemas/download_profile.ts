@@ -4,6 +4,7 @@ import {EpisodeIdentifierReg, EpisodeIdentifierValue} from "../collection";
 import {ApiDateTimeSchema} from "./datetime";
 import {SeasonDetachedSchema, SeasonReadSchema} from "./season";
 import {createSelectRegistry} from "../../utils/selectRegistry";
+import {DEFAULT_SPONSORBLOCK_SEGMENTS} from '../sponsorblock'
 
 
 // ---------- Which episodes: your own rules ----------
@@ -71,6 +72,8 @@ export const DownloadProfileSchemaRequest = z.object({
     deleteOlderEpisodes: z.boolean().default(true),
     retentionFrom: z.enum(['published', 'downloaded']).default('published'),
     autoSubtitles: z.enum(['never', 'fallback', 'always']).default('fallback'),
+    sponsorblockEnabled: z.boolean().default(true),
+    sponsorblockSegments: z.record(z.string(), z.enum(['keep', 'chapter', 'cut'])).default(() => ({...DEFAULT_SPONSORBLOCK_SEGMENTS})),
     seasons: z.array(SeasonDetachedSchema).default([]),
     includeUpcomingSeasons: z.boolean().default(true),
     rules: z.array(EpisodeRuleSchema).default([]),
@@ -167,6 +170,8 @@ export const DownloadProfileReadSchema = z.looseObject({
     deleteOlderEpisodes: z.boolean(),
     retentionFrom: z.string(),
     autoSubtitles: z.string().default('fallback'),
+    sponsorblockEnabled: z.boolean().default(false),
+    sponsorblockSegments: z.record(z.string(), z.enum(['keep', 'chapter', 'cut'])).default(() => ({...DEFAULT_SPONSORBLOCK_SEGMENTS})),
     seasons: z.array(SeasonReadSchema),
     includeUpcomingSeasons: z.boolean(),
     rules: z.array(z.looseObject({
@@ -220,4 +225,4 @@ export const AutoSubtitlesUseSchema = z.object({
 })
 export type AutoSubtitlesUse = z.infer<typeof AutoSubtitlesUseSchema>
 
-export const SiteOptionsSchema = z.object({autoSubtitles: z.boolean()})
+export const SiteOptionsSchema = z.object({autoSubtitles: z.boolean(), sponsorblock: z.boolean()})

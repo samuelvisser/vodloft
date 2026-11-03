@@ -206,7 +206,7 @@ class YtDlpSource(Source):
     features = frozenset({
         Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.API_KEY,
         Feature.QUICK_CHECK, Feature.CATALOGUE_REFRESH, Feature.SEARCH, Feature.COSTLY_SEARCH,
-        Feature.FORMAT_CHOICES,
+        Feature.FORMAT_CHOICES, Feature.YTDLP_DOWNLOADS,
     })
     episode_tags = _YOUTUBE_TAGS
     # Search covers YouTube only; other sites are added by link.
@@ -224,6 +224,9 @@ class YtDlpSource(Source):
         return _YOUTUBE_TAGS if url is None or _is_youtube(url) else (_VIDEO_TAG,)
 
     def auto_subtitles_for(self, url: str) -> bool:
+        return _is_youtube(url)
+
+    def sponsorblock_for(self, url: str) -> bool:
         return _is_youtube(url)
 
     def _info(self, url: str) -> dict:

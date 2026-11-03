@@ -92,6 +92,15 @@ class WrittenSubtitle(NamedTuple):
     auto_generated: bool = False
 
 
+class SponsorSegment(NamedTuple):
+    """A SponsorBlock segment of the video as it was published, and what the download did with it."""
+    category: str
+    start: float
+    end: float
+    action: str
+    """``chapter`` or ``cut``."""
+
+
 @dataclass(frozen=True)
 class DownloadResult:
     """Outcome of a completed download."""
@@ -101,6 +110,8 @@ class DownloadResult:
     segments_downloaded: Optional[int] = None
     subtitles: tuple[WrittenSubtitle, ...] = ()
     """Each subtitle the download wrote alongside the media, in order of preference."""
+    sponsorblock: tuple[SponsorSegment, ...] | None = None
+    """The SponsorBlock segments found, when the download asked SponsorBlock."""
 
 
 # Called periodically during a download with a progress snapshot.
