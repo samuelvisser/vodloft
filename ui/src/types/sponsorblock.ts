@@ -20,7 +20,7 @@ export const SponsorBlockActionReg = createSelectRegistry('SponsorBlockAction', 
 })
 export type SponsorBlockAction = (typeof SponsorBlockActionReg)['values'][number]
 
-/** The groups the grid shows the segment types in. */
+/** The groups the SponsorBlock cards show the segment types in. */
 export const SPONSORBLOCK_GROUPS: {label: string; categories: SponsorBlockCategory[]}[] = [
     {label: 'Ads and asks', categories: ['sponsor', 'selfpromo', 'interaction']},
     {label: 'Around the content', categories: ['intro', 'outro', 'preview']},
@@ -40,14 +40,14 @@ export const SPONSORBLOCK_COLORS: Record<string, string> = {
     poi_highlight: '#ff1684',
 }
 
-/** A new YouTube Download Profile cuts out ads and reminders and marks intros, outros and recaps as chapters. */
+/** A new YouTube Download Profile makes chapters of sponsors, intros and outros and keeps everything else. */
 export const DEFAULT_SPONSORBLOCK_SEGMENTS: Record<SponsorBlockCategory, SponsorBlockAction> = {
-    sponsor: 'cut',
-    selfpromo: 'cut',
-    interaction: 'cut',
+    sponsor: 'chapter',
+    selfpromo: 'keep',
+    interaction: 'keep',
     intro: 'chapter',
     outro: 'chapter',
-    preview: 'chapter',
+    preview: 'keep',
     filler: 'keep',
     music_offtopic: 'keep',
 }

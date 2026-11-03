@@ -2,16 +2,14 @@ import {useWatch, type UseFormReturn} from 'react-hook-form'
 import Switch from 'react-switch'
 
 import {
-    DEFAULT_SPONSORBLOCK_SEGMENTS, SPONSORBLOCK_COLORS, SPONSORBLOCK_GROUPS, SponsorBlockActionReg, SponsorBlockCategoryReg,
+    SPONSORBLOCK_COLORS, SPONSORBLOCK_GROUPS, SponsorBlockActionReg, SponsorBlockCategoryReg,
 } from '../../types/sponsorblock'
 import ReadMore from '../../utils/ReadMore'
 
 /** SponsorBlock on a YouTube Download Profile: a switch, and Keep, Chapter or Cut out per segment type. */
 export default function SponsorBlockFields({form}: {form: UseFormReturn<any>}) {
     const {control, setValue} = form
-    const [enabledValue, segmentsValue] = useWatch({control, name: ['sponsorblockEnabled', 'sponsorblockSegments']}) as [boolean | undefined, Record<string, string> | undefined]
-    const enabled = enabledValue ?? true
-    const segments = {...DEFAULT_SPONSORBLOCK_SEGMENTS, ...(segmentsValue ?? {})}
+    const [enabled, segments] = useWatch({control, name: ['sponsorblockEnabled', 'sponsorblockSegments']}) as [boolean, Record<string, string>]
 
     const choose = (category: string, action: string) =>
         setValue('sponsorblockSegments', {...segments, [category]: action}, {shouldDirty: true})
@@ -27,43 +25,46 @@ export default function SponsorBlockFields({form}: {form: UseFormReturn<any>}) {
                 aria-describedby="sponsorblock-help"
             />
             {enabled && (
-                <table className="sponsorblock-grid">
-                    <thead>
-                    <tr>
-                        <th scope="col"><span className="sr-only">Segment type</span></th>
-                        {SponsorBlockActionReg.values.map((action) => (
-                            <th key={action} scope="col">{SponsorBlockActionReg.getLabel(action)}</th>
-                        ))}
-                    </tr>
-                    </thead>
+                <div className="sponsorblock-groups">
                     {SPONSORBLOCK_GROUPS.map((group) => (
-                        <tbody key={group.label}>
-                        <tr className="sponsorblock-grid__group"><th colSpan={4} scope="rowgroup">{group.label}</th></tr>
-                        {group.categories.map((category) => (
-                            <tr key={category}>
-                                <th scope="row">
-                                    <span className="sponsorblock-grid__name">
-                                        <span className="sponsorblock-swatch" style={{background: SPONSORBLOCK_COLORS[category]}} aria-hidden="true"/>
-                                        {SponsorBlockCategoryReg.getLabel(category)}
-                                    </span>
-                                    <small>{SponsorBlockCategoryReg.getHelp(category)}</small>
-                                </th>
-                                {SponsorBlockActionReg.values.map((action) => (
-                                    <td key={action}>
-                                        <input
-                                            type="radio"
-                                            name={`sponsorblock-${category}`}
-                                            aria-label={`${SponsorBlockCategoryReg.getLabel(category)}: ${SponsorBlockActionReg.getLabel(action)}`}
-                                            checked={segments[category] === action}
-                                            onChange={() => choose(category, action)}
-                                        />
-                                    </td>
-                                ))}
-                            </tr>
-                        ))}
-                        </tbody>
+                        <fieldset key={group.label} className="sponsorblock-group">
+                            <legend>{group.label}</legend>
+                            {group.categories.map((category) => {
+                                const label = SponsorBlockCategoryReg.getLabel(category)
+                                const help = SponsorBlockCategoryReg.getHelp(category)
+                                return (
+                                    <div key={category} className="sponsorblock-row">
+                                        <span className="sponsorblock-row__name" id={`sponsorblock-${category}-label`} title={help}>
+                                            <span className="sponsorblock-swatch" style={{background: SPONSORBLOCK_COLORS[category]}} aria-hidden="true"/>
+                                            {label}
+                                        </span>
+                                        <span className="sr-only" id={`sponsorblock-${category}-help`}>{help}</span>
+                                        <span
+                                            className="sponsorblock-choice"
+                                            role="radiogroup"
+                                            aria-labelledby={`sponsorblock-${category}-label`}
+                                            aria-describedby={`sponsorblock-${category}-help`}
+                                        >
+                                            {SponsorBlockActionReg.values.map((action) => (
+                                                <label key={action} title={SponsorBlockActionReg.getHelp(action)}>
+                                                    <input
+                                                        type="radio"
+                                                        name={`sponsorblock-${category}`}
+                                                        value={action}
+                                                        aria-label={`${label}: ${SponsorBlockActionReg.getLabel(action)}`}
+                                                        checked={segments[category] === action}
+                                                        onChange={() => choose(category, action)}
+                                                    />
+                                                    <span>{SponsorBlockActionReg.getLabel(action)}</span>
+                                                </label>
+                                            ))}
+                                        </span>
+                                    </div>
+                                )
+                            })}
+                        </fieldset>
                     ))}
-                </table>
+                </div>
             )}
             <div className="help" id="sponsorblock-help">
                 <ReadMore summary="Mark or cut out sponsor reads and other parts of a video.">

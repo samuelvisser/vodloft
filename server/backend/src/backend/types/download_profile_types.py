@@ -134,13 +134,13 @@ class SponsorBlockCategory(StrEnum):
 
 
 DEFAULT_SPONSORBLOCK_SEGMENTS: dict[str, str] = {
-    SponsorBlockCategory.SPONSOR.value: SponsorBlockAction.CUT.value,
-    SponsorBlockCategory.SELFPROMO.value: SponsorBlockAction.CUT.value,
-    SponsorBlockCategory.INTERACTION.value: SponsorBlockAction.CUT.value,
+    SponsorBlockCategory.SPONSOR.value: SponsorBlockAction.CHAPTER.value,
+    SponsorBlockCategory.SELFPROMO.value: SponsorBlockAction.KEEP.value,
+    SponsorBlockCategory.INTERACTION.value: SponsorBlockAction.KEEP.value,
     SponsorBlockCategory.INTRO.value: SponsorBlockAction.CHAPTER.value,
     SponsorBlockCategory.OUTRO.value: SponsorBlockAction.CHAPTER.value,
-    SponsorBlockCategory.PREVIEW.value: SponsorBlockAction.CHAPTER.value,
+    SponsorBlockCategory.PREVIEW.value: SponsorBlockAction.KEEP.value,
     SponsorBlockCategory.FILLER.value: SponsorBlockAction.KEEP.value,
     SponsorBlockCategory.MUSIC_OFFTOPIC.value: SponsorBlockAction.KEEP.value,
 }
-"""A new YouTube Download Profile cuts out ads and reminders and marks intros, outros and recaps as chapters."""
+"""A new YouTube Download Profile makes chapters of sponsors, intros and outros and keeps everything else."""
