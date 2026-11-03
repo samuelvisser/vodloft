@@ -583,6 +583,12 @@ div.import-proof.is-different strong { color: var(--warning, #b45309); }
     overflow-wrap: anywhere;
 }
 
+.import-merge__why {
+    margin: 0.35rem 0 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
 .import-merge__apart {
     margin: 0;
     font-size: 0.9rem;

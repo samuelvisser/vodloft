@@ -489,6 +489,7 @@ function PreviewStep({importer, onReplace, onFinished}: {
                     {/* The same order as the Collections list, which groups by profile name. */}
                     {[...preview.profiles].sort((a, b) => byName(a.name, b.name)).map((profile) => (
                         <ProfilePreview
+                            importerName={importer.name}
                             key={profile.externalId}
                             profile={profile}
                             collections={preview.collections.filter((item) => item.profileExternalId === profile.externalId && chosen.has(item.externalId))}
@@ -700,7 +701,8 @@ function CollectionList({collections, chosen, onToggle, onChooseAll}: {
     )
 }
 
-function ProfilePreview({profile, collections, template, onTemplate}: {
+function ProfilePreview({importerName, profile, collections, template, onTemplate}: {
+    importerName: string
     profile: ImportProfile
     collections: ImportPreview['collections']
     template: string | undefined
@@ -728,6 +730,11 @@ function ProfilePreview({profile, collections, template, onTemplate}: {
                         <span className="import-merge__label">Kept together</span>{' '}
                         {profile.mergedFrom.join(', ')}
                     </div>
+                    <p className="import-merge__why">
+                        VODLoft uses Download Profiles to decide which episodes to download, so these can share one
+                        Local Media Profile. Each collection's Download Profile is set up to download what{' '}
+                        {importerName} did.
+                    </p>
                     {profile.fields.length > 0 && (
                         <ul className="import-merge__fields">
                             {collections.map((item) => (
