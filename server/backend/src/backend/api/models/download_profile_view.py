@@ -21,3 +21,4 @@ class DownloadProfileAPIReadView(DownloadProfileAPIRead):
     local_media_profile_preferred_format: str = Field(
         validation_alias=AliasPath("profile", "local_media_profile", "preferred_format")
     )
+    storage_size_bytes: int = Field(validation_alias=AliasPath("storage_size_bytes"))

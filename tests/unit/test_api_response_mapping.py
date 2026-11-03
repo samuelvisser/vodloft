@@ -82,7 +82,7 @@ def test_download_profile_view_uses_relationship_aliases():
     )
 
     view = DownloadProfileAPIReadView.model_validate(
-        SimpleNamespace(profile=profile)
+        SimpleNamespace(profile=profile, storage_size_bytes=2048)
     )
 
     assert view.collection_title == "Collection"
@@ -90,6 +90,7 @@ def test_download_profile_view_uses_relationship_aliases():
     assert view.collection_episode_identifier == "seasonal"
     assert view.collection_source_key == "ytdlp"
     assert view.download_episode_count == 25
+    assert view.storage_size_bytes == 2048
 
 
 def test_stream_profile_view_uses_relationship_aliases():

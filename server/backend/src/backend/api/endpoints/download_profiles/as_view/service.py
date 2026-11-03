@@ -8,20 +8,40 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from backend.api.models.download_profile_view import DownloadProfileAPIReadView
 from backend.db.models import (
     DownloadProfile,
+    EpisodeMediaDownload,
     LocalMediaProfileBase,
     Collection,
 )
+from backend.services.storage_used import storage_size_bytes_sum
 
 
 @dataclass(frozen=True)
 class _DownloadProfileViewSource:
     profile: DownloadProfile
+    storage_size_bytes: int
 
 
-def _to_view(item: DownloadProfile) -> DownloadProfileAPIReadView:
-    return DownloadProfileAPIReadView.model_validate(
-        _DownloadProfileViewSource(profile=item)
+def _storage_size_bytes(s: Session, download_profile_ids: list[int]) -> dict[int, int]:
+    """The disk space each Download Profile's downloads take, by profile id."""
+    if not download_profile_ids:
+        return {}
+    rows = (
+        s.query(EpisodeMediaDownload.download_profile_id, storage_size_bytes_sum())
+        .filter(EpisodeMediaDownload.download_profile_id.in_(download_profile_ids))
+        .group_by(EpisodeMediaDownload.download_profile_id)
+        .all()
     )
+    return {int(profile_id): int(size) for profile_id, size in rows}
+
+
+def _to_views(s: Session, items: list[DownloadProfile]) -> list[DownloadProfileAPIReadView]:
+    storage = _storage_size_bytes(s, [item.id for item in items])
+    return [
+        DownloadProfileAPIReadView.model_validate(
+            _DownloadProfileViewSource(profile=item, storage_size_bytes=storage.get(item.id, 0))
+        )
+        for item in items
+    ]
 
 
 def get_download_profile_views_list(s: Session) -> list[DownloadProfileAPIReadView]:
@@ -40,7 +60,7 @@ def get_download_profile_views_list(s: Session) -> list[DownloadProfileAPIReadVi
         .order_by(Collection.title.asc(), DownloadProfile.id.asc())
         .all()
     )
-    return [_to_view(item) for item in items]
+    return _to_views(s, items)
 
 
 def get_download_profile_view(
@@ -59,4 +79,4 @@ def get_download_profile_view(
     )
     if item is None:
         raise HTTPException(status_code=404, detail="Download profile not found")
-    return _to_view(item)
+    return _to_views(s, [item])[0]

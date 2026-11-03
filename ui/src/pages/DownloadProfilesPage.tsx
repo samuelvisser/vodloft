@@ -13,6 +13,7 @@ import ProfileEnabledSwitch from '../components/common/ProfileEnabledSwitch'
 import {EpisodeIdentifierReg} from "../types/collection";
 import {DownloadProfileUpdateSchema} from '../types/schemas/download_profile'
 import {faIcon} from '../icons/faIcon'
+import {formatBytes} from '../utils/formatting'
 
 export default function DownloadProfilesPage() {
     const navigate = useNavigate()
@@ -72,6 +73,13 @@ export default function DownloadProfilesPage() {
             accessor: (p) => EpisodeIdentifierReg.getLabelLoose(p.collectionEpisodeIdentifier),
         },
         {
+            header: 'Storage Used',
+            accessor: (p) => formatBytes(p.storageSizeBytes) || '0 KiB',
+            width: '1%',
+            headerStyle: {whiteSpace: 'nowrap'},
+            cellStyle: {whiteSpace: 'nowrap'},
+        },
+        {
             header: 'Enabled',
             cell: (p) => (
                 <ProfileEnabledSwitch
@@ -116,6 +124,8 @@ export default function DownloadProfilesPage() {
                                 <span>{PreferredFormatReg.getLabelLoose(p.localMediaProfilePreferredFormat)}</span>
                                 <span aria-hidden="true">•</span>
                                 <span>{EpisodeIdentifierReg.getLabelLoose(p.collectionEpisodeIdentifier)}</span>
+                                <span aria-hidden="true">•</span>
+                                <span>{formatBytes(p.storageSizeBytes) || '0 KiB'}</span>
                                 <span className={`mobile-summary-status ${p.enableProfile ? 'is-success' : ''}`}>
                                     {p.enableProfile ? 'Enabled' : 'Disabled'}
                                 </span>
