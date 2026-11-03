@@ -312,6 +312,12 @@ function PreviewStep({importer, onReplace, onFinished}: {
     }, [])
 
     useEffect(() => {
+        // An import that is still going is shown as it is; reading the upload again waits until you go back.
+        const last = importer.lastRun
+        if (last && (last.status === 'running' || last.status === 'waiting')) {
+            void readRun(importer.key, last.id).then(setRun).catch(() => void load(DEFAULT_OPTIONS))
+            return
+        }
         void load(DEFAULT_OPTIONS)
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [importer.key])
@@ -374,7 +380,12 @@ function PreviewStep({importer, onReplace, onFinished}: {
         }))
     }, [preview])
 
-    if (run) return <RunView importer={importer} run={run} onBack={() => setRun(null)}/>
+    if (run) {
+        return <RunView importer={importer} run={run} onBack={() => {
+            setRun(null)
+            if (!preview) void load(options)
+        }}/>
+    }
     if (!preview) {
         return (
             <div className="import-step">
