@@ -19,7 +19,7 @@ def _final_episode(*, episode_id: int = 71):
         safe_published_final=None,
         last_known_pending=None,
         published_date=datetime(2026, 9, 8, tzinfo=timezone.utc),
-        collection=SimpleNamespace(membership_level=DwMembershipLevel.FREE.value),
+        collection=SimpleNamespace(membership_level=DwMembershipLevel.FREE.value, site=None),
     )
 
 
@@ -72,7 +72,7 @@ def test_metadata_refresh_releases_read_transaction_before_dailywire_request(mon
         "schedule_remaining_metadata_checks",
         lambda **_kwargs: ["future-refresh"],
     )
-    monkeypatch.setattr(service, "metadata_watch_expired", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(service, "refresh_watch_expired", lambda *_args, **_kwargs: False)
     monkeypatch.setattr(service, "request_collection_custom_index_reconciliation", lambda *_args: None)
 
     did_refresh = asyncio.run(

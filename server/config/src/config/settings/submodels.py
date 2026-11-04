@@ -348,7 +348,7 @@ class TrackNewEpisodeSchedule(SubmodelBase):
     metadata_refresh_intervals: str = Field(
         ...,
         min_length=1,
-        description="Comma-separated offsets after publication for refreshing finalized episode metadata",
+        description="The system schedule: comma-separated offsets after publication for refreshing the metadata of Sites that follow it",
     )
 
     @field_validator("metadata_refresh_intervals")
