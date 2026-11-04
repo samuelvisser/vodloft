@@ -8,7 +8,7 @@ from types import MappingProxyType
 from urllib.parse import urlsplit
 
 from ..contract import (
-    MIN_NEWEST_EPISODES, Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, SearchResults, SeasonRef, CollectionDetails, Source,
+    MIN_NEWEST_EPISODES, Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, SearchResults, SeasonRef, CollectionDetails, Site, Source,
     CookiesStatus, SourceProblem, VideoDetails,
 )
 from .. import ytdlp_runner as runner
@@ -126,6 +126,7 @@ class NpoSource(Source):
     id = "npo"
     name = "NPO Start"
     domains = ("npo.nl",)
+    sites = (Site("npo", "NPO Start", domains),)
     features = frozenset({Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.SEARCH, Feature.COOKIES})
     subscription_name = "NPO Plus"
     kind_names = MappingProxyType({LinkKind.COLLECTION: "Series"})
@@ -135,6 +136,10 @@ class NpoSource(Source):
         "close that window without signing out. VODLoft keeps the sign-in fresh by itself and never sees your "
         "password. Programmes protected by DRM still can't be downloaded."
     )
+
+    def collection_ref(self, url: str) -> str | None:
+        parsed = parse_link(url)
+        return parsed[1] if parsed is not None and parsed[0] is LinkKind.COLLECTION else None
 
     def __init__(self, client: NpoClient | None = None):
         self._client = client or NpoClient()

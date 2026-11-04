@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import timedelta
 from typing import Optional, Sequence, cast
 
 from sqlalchemy import select
@@ -9,12 +8,11 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from backend.db.models import DownloadProfile, Episode, LocalMediaProfileBase
 from backend.db.models.media_download import EpisodeMediaDownload
-from backend.types.download_profile_types import MediaDownloadArtifactStatus, RetentionFrom
+from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.types.episode_types import EpisodePublishStatus
-from backend.services.episode_rules import kept_by_rule
 from backend.services.notifications.emitters import episode_deleted
-from backend.services.which_episodes import EpisodeSelection, _utc_now, episodes_in_window, wanted_episodes
+from backend.services.episode_filters import EpisodeSelection, evaluate, is_date_line, retention_removes, wanted_episodes
 from backend.types.media_types import MediaType
 from backend.services.media_download_history import record_media_download_history
 from backend.utils.output_template import resolve_episode_output_path
@@ -28,11 +26,10 @@ from task_manager.tasks.workers.file_watcher.service import resolve_media_downlo
 
 
 def _download_profile_stmt():
-    """Load profiles with the collection and seasons their episode filters need."""
+    """Load profiles with the collection and filters Which episodes needs."""
     return select(DownloadProfile).options(
         joinedload(DownloadProfile.collection),
-        selectinload(DownloadProfile.seasons),
-        selectinload(DownloadProfile.rules),
+        selectinload(DownloadProfile.filters),
     )
 
 
@@ -123,7 +120,7 @@ def ensure_episode_download(
     redownload_when_final = (
         profile.download_with_countdown
         and profile.redownload_final
-        and episode.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN
+        and episode.publish_status == EpisodePublishStatus.PUBLISHED_PRELIMINARY
     )
 
     if existing is None:
@@ -215,51 +212,20 @@ def trigger_next_pending_downloads(s: Session, *, budget: Optional[int] = None) 
 
 
 def cleanup_older_episodes(s: Session, profile: DownloadProfile) -> int:
-    """Remove downloads that have fallen outside a profile's retention limit.
+    """Remove downloads that a date line of the profile now leaves out.
 
-    Changing your own rules later never deletes anything: an episode a rule now
-    leaves out keeps its download. Downloads kept by hand or by a Keep rule are
-    never removed.
+    Only date lines delete: changing the other filters later never deletes anything,
+    and downloads kept by hand or by a Keep filter are never removed. A download that
+    is not on disk yet goes as soon as a date line leaves it out; one that is, only when
+    the profile deletes older episodes.
     """
-    selection = EpisodeSelection.of_profile(profile)
-    if profile.download_episode_count > 0:
-        in_window_ids = {episode.id for episode in episodes_in_window(s, selection)}
-        stmt = select(EpisodeMediaDownload).where(
-            EpisodeMediaDownload.download_profile_id == profile.id,
-        )
-        if in_window_ids:
-            stmt = stmt.where(EpisodeMediaDownload.media_item_id.notin_(in_window_ids))
-        if not profile.delete_older_episodes:
-            stmt = stmt.where(
-                EpisodeMediaDownload.artifact_status
-                == MediaDownloadArtifactStatus.ABSENT.value
-            )
-    elif profile.download_days_in_past > 0:
-        if not profile.delete_older_episodes:
-            return 0
-        cutoff = _utc_now() - timedelta(days=profile.download_days_in_past)
-        stmt = (
-            select(EpisodeMediaDownload)
-            .join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
-            .where(EpisodeMediaDownload.download_profile_id == profile.id)
-        )
-        if profile.retention_from == RetentionFrom.DOWNLOADED:
-            stmt = stmt.where(
-                EpisodeMediaDownload.downloaded_at.is_not(None),
-                EpisodeMediaDownload.downloaded_at < cutoff,
-            )
-        else:
-            stmt = stmt.where(
-                Episode.published_date.is_not(None),
-                Episode.published_date < cutoff,
-            )
-    else:
+    if not any(is_date_line(item) for item in profile.filters):
         return 0
-
+    evaluation = evaluate(s, EpisodeSelection.of_profile(profile))
     rows = [
         row
-        for row in s.scalars(stmt.where(EpisodeMediaDownload.kept.is_(False)))
-        if not (profile.rules and kept_by_rule(profile.rules, row.media))
+        for row in s.scalars(select(EpisodeMediaDownload).where(EpisodeMediaDownload.download_profile_id == profile.id))
+        if retention_removes(evaluation, row, delete_older_episodes=profile.delete_older_episodes)
     ]
     for row in rows:
         if profile.delete_older_episodes:

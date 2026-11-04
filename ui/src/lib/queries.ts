@@ -19,6 +19,7 @@ import {
     useLazyCollection,
 } from './lazyCollection'
 import {useFrontendPuller} from './puller'
+import {SiteRefreshReadSchema, type SiteRefreshFormValues, type SiteRefreshRead} from '../types/schemas/siteRefresh'
 import {downloadStatusesForApi} from './downloadStatusFilters'
 import {
     episodeQueryKeys,
@@ -59,9 +60,9 @@ import {TaskOperationRead} from "../types/schemas/operation";
 import {MovieRead, MovieReadSchema} from "../types/schemas/movie";
 import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
-    ApiStatusRead, ApiStatusReadSchema, CookiesRead, EpisodeTagRead, EpisodeTagReadSchema, CookiesReadSchema, ProgramStatusRead, SourceProblemRead,
+    ApiStatusRead, ApiStatusReadSchema, CookiesRead, EpisodeTagRead, EpisodeTagReadSchema, PublishStatusLabelRead, PublishStatusLabelReadSchema, CookiesReadSchema, ProgramStatusRead, SourceProblemRead,
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
-    ResolvedLinkReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceDomainRead, SourceDomainReadSchema, SourceRead,
+    ResolvedLinkReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SourceRead,
     SourceReadSchema,
     YtdlpOptionsReadSchema,
 } from "../types/schemas/source";
@@ -374,6 +375,21 @@ export function useEpisodeTags(sourceKey?: string | null, url?: string | null) {
     })
 }
 
+/** What a Source calls each publish status, by status. */
+export function usePublishStatusLabels(sourceKey?: string | null) {
+    return useQuery<PublishStatusLabelRead[], Error, Record<string, PublishStatusLabelRead>, readonly ['publishStatusLabels', string]>({
+        queryKey: ['publishStatusLabels', sourceKey ?? ''] as const,
+        enabled: !!sourceKey,
+        staleTime: Infinity,
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceKey ?? '')}/publish-statuses`,
+            PublishStatusLabelReadSchema.array(),
+            signal,
+        ),
+        select: (labels) => Object.fromEntries(labels.map((label) => [label.status, label])),
+    })
+}
+
 /** The episode tags of a saved show, or of a show about to be added from ``sourceKey`` at ``url``. */
 export function useCollectionEpisodeTags({collectionId, collectionSlug, sourceKey, url}: {
     collectionId?: number, collectionSlug?: string, sourceKey?: string, url?: string,
@@ -439,27 +455,52 @@ export function useSourceProblems() {
     })
 }
 
-/** Every site a Source names, and the Source VODLoft asks first for its links. */
-export function useSourceDomains() {
-    return useQuery<SourceDomainRead[], Error, SourceDomainRead[], readonly ['sourceDomains']>({
-        queryKey: ['sourceDomains'] as const,
+/** Every Site a Source is made for, and the Source VODLoft asks first for its links. */
+export function useSourceSites() {
+    return useQuery<SourceSiteRead[], Error, SourceSiteRead[], readonly ['sourceSites']>({
+        queryKey: ['sourceSites'] as const,
         queryFn: async ({signal}) => {
-            const value = await fetchJSON<unknown>(`${(window as any).appConfig.API_URL}/sources/domains`, signal)
-            return SourceDomainReadSchema.array().parse(value)
+            const value = await fetchJSON<unknown>(`${(window as any).appConfig.API_URL}/sources/sites`, signal)
+            return SourceSiteReadSchema.array().parse(value)
         },
     })
 }
 
-/** Choose the Source to ask first for a site's links; ``null`` goes back to the default. */
-export async function saveSourceDomain(domain: string, preferredSourceKey: string | null): Promise<SourceDomainRead> {
-    const response = await fetch(`${(window as any).appConfig.API_URL}/sources/domains/${encodeURIComponent(domain)}`, {
+/** The metadata refresh schedule of every Site VODLoft has seen. */
+export function useSiteRefresh() {
+    return useQuery<SiteRefreshRead[], Error, SiteRefreshRead[], readonly ['siteRefresh']>({
+        queryKey: ['siteRefresh'] as const,
+        queryFn: async ({signal}) => {
+            const value = await fetchJSON<unknown>(`${(window as any).appConfig.API_URL}/settings/site-refresh`, signal)
+            return SiteRefreshReadSchema.array().parse(value)
+        },
+    })
+}
+
+/** Choose the schedule a Site's items follow; the form reads the response for field errors. */
+export function saveSiteRefresh(key: string, values: SiteRefreshFormValues): Promise<Response> {
+    return fetch(`${(window as any).appConfig.API_URL}/settings/site-refresh/${encodeURIComponent(key)}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            refreshMode: values.refreshMode,
+            refreshIntervals: values.refreshIntervals.trim() || null,
+            pendingChecks: values.pendingChecks,
+        }),
+    })
+}
+
+/** Choose the Source to ask first for a Site's links; ``null`` goes back to the default. */
+export async function saveSourceSite(key: string, preferredSourceKey: string | null): Promise<SourceSiteRead> {
+    const response = await fetch(`${(window as any).appConfig.API_URL}/sources/sites/${encodeURIComponent(key)}`, {
         method: 'PUT',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({preferredSourceKey}),
     })
     if (!response.ok) throw await responseError(response)
-    return SourceDomainReadSchema.parse(await response.json())
+    return SourceSiteReadSchema.parse(await response.json())
 }
 
 /** Shows and videos at a Source whose name matches the query. */

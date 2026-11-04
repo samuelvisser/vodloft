@@ -1,4 +1,4 @@
-import {useEffect, useMemo} from 'react'
+import {useEffect} from 'react'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {ChosenCollectionCard} from './CollectionPreviewCard'
@@ -8,9 +8,7 @@ import type {CollectionCreatePayloadOut} from '../../types/schemas/collection'
 import {
     DownloadProfileBundleIn, DownloadProfileBundleOut, DownloadProfileBundleSchema
 } from "../../types/schemas/collection_as_bundle";
-import {forEpisodeIdentifier} from "../../types/schemas/download_profile";
 import {SeasonDetachedOut} from "../../types/schemas/season";
-import {EpisodeIdentifierReg} from "../../types/collection";
 
 
 type Props = {
@@ -28,28 +26,12 @@ type Props = {
 
 export default function DownloadProfileStep({value, onChange, onSubmit: onSubmitParent, onBack, onContinue, onCancel, collection, seasons, continueLabel = 'Continue'}: Props) {
     const episodeIdentifier = collection?.episodeIdentifier
-    const isSeasonal = episodeIdentifier === EpisodeIdentifierReg.Enum.seasonal
 
-    // Until the user picks seasons, a seasonal collection starts with its latest season.
-    const latestSeason = seasons.length > 0 ? seasons[seasons.length - 1] : undefined
-    const defaultValues: Partial<DownloadProfileBundleIn> = {
-        ...value,
-        seasons: !isSeasonal
-            ? []
-            : value.seasons === undefined
-                ? (latestSeason ? [latestSeason] : [])
-                : value.seasons,
-    }
-
-    const schema = useMemo(
-        () => forEpisodeIdentifier(DownloadProfileBundleSchema, episodeIdentifier),
-        [episodeIdentifier],
-    )
     const form = useForm<DownloadProfileBundleIn>({
-        resolver: zodResolver(schema),
+        resolver: zodResolver(DownloadProfileBundleSchema),
         mode: 'onBlur',
         shouldFocusError: true,
-        defaultValues,
+        defaultValues: value,
     })
     const {watch, setValue} = form
 
@@ -84,7 +66,6 @@ export default function DownloadProfileStep({value, onChange, onSubmit: onSubmit
                         seasons={seasons}
                         sourceKey={collection?.sourceKey}
                         collectionUrl={collection?.sharingUrl}
-                        startOpen
                     />
 
                     <div className="actions">

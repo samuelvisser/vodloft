@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from pathlib import Path
 
 import pytest
@@ -24,7 +26,10 @@ VODLOFT_0_1_0_REVISION = "f4abb559e3ab"
 VODLOFT_0_5_0_REVISION = "817515eb8209"
 VODLOFT_0_6_0_REVISION = "d0f28c7f863e"
 VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
-HEAD_REVISION = "ce5df2342e6f"
+SITE_REFRESH_REVISION = "5b75b63e55f2"
+NEUTRAL_STATUSES_REVISION = "b9dbb772c34e"
+UPCOMING_VIDEOS_REVISION = "158c03681e52"
+HEAD_REVISION = "cbad9977fd7b"
 
 
 @pytest.fixture
@@ -282,7 +287,7 @@ def test_download_profiles_without_episode_types_stop_downloading(migration_data
                 "VALUES (:id, 1, 5, 1, :types, 0, 0, 0, 0, 0, 1)"
             ), {"id": profile_id, "types": types})
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, VODLOFT_0_7_0_REVISION)
 
     with engine.connect() as connection:
         enabled = dict(connection.execute(text("SELECT id, enable_profile FROM download_profiles")).all())
@@ -349,7 +354,7 @@ def test_imported_seasons_get_their_slug_back_and_the_duplicate_is_merged(migrat
                 "'published_final', 'https://example.test', :slug)"
             ), {"id": episode_id, "season": season_id, "identifier": f"trailer.{episode_id}", "slug": f"e{episode_id}"})
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, VODLOFT_0_7_0_REVISION)
 
     with engine.connect() as connection:
         assert dict(connection.execute(text("SELECT id, slug FROM seasons")).all()) == {
@@ -431,3 +436,235 @@ def test_canceled_history_actions_are_spelled_like_the_rest_of_vodloft(migration
     with engine.connect() as connection:
         actions = dict(connection.execute(text("SELECT id, action FROM media_download_history")).all())
     assert actions == {1: "canceled", 2: "completed", 3: "cancel_requested"}
+
+
+def test_which_episodes_becomes_one_ordered_list_of_filters(migration_database):
+    _database_path, engine = migration_database
+    import json
+
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, VODLOFT_0_6_0_REVISION)
+    with engine.begin() as connection:
+        for collection_id, identifier in ((1, "seasonal"), (2, "numbered")):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key) VALUES (:id, :uuid, :slug, :slug, 'https://example.test/' || :slug, "
+                "'free', 'series', :identifier, 'Author', 'author', 'dailywire')"
+            ), {"id": collection_id, "uuid": f"uuid-{collection_id}", "slug": f"show-{collection_id}", "identifier": identifier})
+        for season_id, index in ((1, 1), (2, 2)):
+            connection.execute(text(
+                "INSERT INTO seasons (id, collection_id, \"index\", slug, name, season_type, season_number) "
+                "VALUES (:id, 1, :index, :slug, :slug, 'normal', :index)"
+            ), {"id": season_id, "index": index, "slug": f"season-{index}"})
+        for profile_id in (5, 6):
+            connection.execute(text(
+                "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, type) VALUES "
+                "(:id, :slug, :slug, '/downloads/' || :slug || '/{{ collection }}/{{ episode_title }}.ext', 'format_1080p', "
+                "'collection')"
+            ), {"id": profile_id, "slug": f"p{profile_id}"})
+        profiles = (
+            # (id, collection, local media profile, types, days, count, retention, all seasons)
+            (1, 1, 5, '["ep"]', 0, 25, "published", 0),
+            (2, 2, 5, '["ep"]', 30, 0, "downloaded", 0),
+            (3, 2, 5, '["trailer"]', 30, 0, "downloaded", 0),
+            (4, 2, 6, '["ep"]', 0, 10, "published", 0),
+            (5, 2, 6, '["aux"]', 0, 0, "published", 0),
+        )
+        for profile_id, collection_id, local_id, types, days, count, retention, all_seasons in profiles:
+            connection.execute(text(
+                "INSERT INTO download_profiles (id, collection_id, local_media_profile_id, enable_profile, ep_id_type_list, "
+                "download_with_countdown, redownload_final, download_days_in_past, download_episode_count, "
+                "delete_older_episodes, include_upcoming_seasons) "
+                "VALUES (:id, :collection, :local, :enabled, :types, 0, 0, :days, :count, 1, 1)"
+            ), {"id": profile_id, "collection": collection_id, "local": local_id, "types": types, "days": days,
+                "count": count, "enabled": int(profile_id != 3)})
+        connection.execute(text(
+            "INSERT INTO download_profile_seasons (download_profile_id, season_id) VALUES (1, 2)"
+        ))
+    command.upgrade(config, "ce5df2342e6f")
+    with engine.begin() as connection:
+        for profile_id, _collection, _local, _types, _days, _count, retention, all_seasons in profiles:
+            connection.execute(text(
+                "UPDATE download_profiles SET retention_from = :retention, all_seasons = :all WHERE id = :id"
+            ), {"id": profile_id, "retention": retention, "all": all_seasons})
+        connection.execute(text(
+            "INSERT INTO download_profile_rules (download_profile_id, position, action, field, pattern, ignore_case) "
+            "VALUES (1, 0, 'skip', 'title', 'trailer', 1)"
+        ))
+        connection.execute(text(
+            "INSERT INTO media_items (id, uuid, type, source_key) VALUES (10, 'episode-10', 'episode', 'dailywire')"
+        ))
+        connection.execute(text(
+            "INSERT INTO seasons (id, collection_id, \"index\", slug, name, season_type, season_number) "
+            "VALUES (3, 2, 1, 'season-1', 'Season 1', 'normal', 1)"
+        ))
+        connection.execute(text(
+            "INSERT INTO media_items_episode (id, collection_id, season_id, \"index\", episode_identifier, slug, "
+            "publish_status, sharing_url, source_slug) VALUES (10, 2, 3, 1, 'trailer.1', 'e10', "
+            "'published_final', 'https://example.test', 'e10')"
+        ))
+        connection.execute(text(
+            "INSERT INTO media_downloads (id, type, media_item_id, local_media_profile_id, artifact_status, file_path) "
+            "VALUES (20, 'episode', 10, 5, 'absent', '')"
+        ))
+        connection.execute(text(
+            "INSERT INTO media_downloads_episode (id, download_profile_id) VALUES (20, 3)"
+        ))
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        rows = connection.execute(text(
+            "SELECT download_profile_id, position, action, field, pattern, episode_types, season_slugs, include_upcoming, "
+            "days, count FROM download_profile_filters ORDER BY download_profile_id, position"
+        )).all()
+        enabled = dict(connection.execute(text("SELECT id, enable_profile FROM download_profiles")).all())
+        download_profile = connection.execute(text(
+            "SELECT download_profile_id FROM media_downloads_episode WHERE id = 20"
+        )).scalar_one()
+    by_profile: dict[int, list] = {}
+    for row in rows:
+        by_profile.setdefault(row.download_profile_id, []).append(
+            (row.action, row.field, row.pattern, row.episode_types and json.loads(row.episode_types),
+             row.season_slugs and json.loads(row.season_slugs), bool(row.include_upcoming), row.days, row.count)
+        )
+    # Seasons first, then episode types, then the rules, then the date line; ignore case is in the pattern.
+    assert by_profile[1] == [
+        ("only", "seasons", None, None, ["season-2"], True, None, None),
+        ("only", "types", None, ["ep"], None, False, None, None),
+        ("skip", "title", "(?i)trailer", None, None, False, None, None),
+        ("only", "published", None, None, None, False, None, 25),
+    ]
+    # Profiles 2 and 3 differed only in their episode types: one profile downloads both, with profile 3's downloads.
+    assert by_profile[2] == [
+        ("only", "types", None, ["ep", "trailer"], None, False, None, None),
+        ("only", "downloaded", None, None, None, False, 30, None),
+    ]
+    assert download_profile == 2
+    # Profiles 4 and 5 differ in their date line too: the oldest stays.
+    assert by_profile[4] == [
+        ("only", "types", None, ["ep"], None, False, None, None),
+        ("only", "published", None, None, None, False, None, 10),
+    ]
+    assert enabled == {1: 1, 2: 1, 4: 1}
+
+
+def test_sites_migration_places_named_sources_and_moves_the_domain_preference(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "7b3e9d2a4c61")
+    with engine.begin() as connection:
+        for collection_id, slug, source_key in ((1, "a-show", "dailywire"), (2, "UC123", "ytdlp")):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key) VALUES (:id, :uuid, :slug, :slug, 'https://example.test/' || :slug, "
+                "'free', 'series', 'numbered', 'Author', 'author', :source_key)"
+            ), {"id": collection_id, "uuid": f"uuid-{collection_id}", "slug": slug, "source_key": source_key})
+        connection.execute(text(
+            "INSERT INTO source_domain_preferences (domain, source_key) VALUES ('npo.nl', 'ytdlp')"
+        ))
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT slug, site_key, site_ref FROM collections ORDER BY id"
+        )).all() == [("a-show", "dailywire", "a-show"), ("UC123", None, None)]
+        assert connection.execute(text(
+            "SELECT key, name, domains, preferred_source_key FROM sites ORDER BY key"
+        )).all() == [("dailywire", "The Daily Wire", '["dailywire.com"]', None), ("npo", "NPO Start", '["npo.nl"]', "ytdlp")]
+
+
+def test_site_refresh_migration_gives_the_daily_wire_and_youtube_their_own_schedule(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "2bd0eb5fe4a6")
+    with engine.begin() as connection:
+        for key, name in (("dailywire", "The Daily Wire"), ("youtube", "YouTube"), ("vimeo", "Vimeo")):
+            connection.execute(text(
+                "INSERT INTO sites (key, name, domains) VALUES (:key, :name, '[]')"
+            ), {"key": key, "name": name})
+
+    command.upgrade(config, "5b75b63e55f2")
+
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT key, refresh_mode, refresh_intervals FROM sites ORDER BY key"
+        )).all() == [
+            ("dailywire", "own", "15m,30m,1h,3h,6h,24h,3d"),
+            ("vimeo", "system", None),
+            ("youtube", "own", "30m,2h,6h,24h,3d,7d,14d"),
+        ]
+        columns = {row.name: row for row in connection.execute(text("PRAGMA table_info(media_items_video)"))}
+        assert columns["metadata_is_final"].dflt_value == "'1'"
+
+
+def test_publish_statuses_get_names_every_source_shares(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, SITE_REFRESH_REVISION)
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA foreign_keys = OFF"))
+        for episode_id, status in ((10, "dw_processing"), (11, "published_with_countdown"), (12, "published_final")):
+            connection.execute(text(
+                "INSERT INTO media_items_episode (id, collection_id, season_id, \"index\", episode_identifier, slug, "
+                "publish_status, sharing_url, source_slug) VALUES (:id, 1, 1, :id, 'ep.' || :id, 'e' || :id, "
+                ":status, 'https://example.test', 'e' || :id)"
+            ), {"id": episode_id, "status": status})
+        connection.execute(text(
+            "INSERT INTO media_downloads_episode (id, downloaded_publish_status) VALUES (1, 'published_with_countdown')"
+        ))
+        connection.execute(text(
+            "INSERT INTO media_download_history (id, media_download_id, action, metadata, occurred_at) VALUES "
+            "(1, 1, 'started', '{\"started_publish_status\": \"published_with_countdown\", \"is_redownload\": true}', "
+            "'2026-11-04 10:00:00')"
+        ))
+        connection.execute(text(
+            "INSERT INTO task_operations (id, kind, source, resource_type, title, status, context, result) VALUES "
+            "('op-1', 'episode.early_delete', 'user', 'episode', 'Early delete', 'succeeded', "
+            "'{\"episode_publish_status\": \"dw_processing\"}', '{\"publish_status\": \"published_with_countdown\"}')"
+        ))
+        connection.execute(text(
+            "INSERT INTO metadata (parent_table, parent_id, key, value) VALUES "
+            "('media_items_episode', 10, 'ep_status.dw_processing.slug', 'e10')"
+        ))
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        assert dict(connection.execute(text("SELECT id, publish_status FROM media_items_episode")).all()) == {
+            10: "source_processing", 11: "published_preliminary", 12: "published_final",
+        }
+        assert connection.execute(text(
+            "SELECT downloaded_publish_status FROM media_downloads_episode"
+        )).scalar_one() == "published_preliminary"
+        assert json.loads(connection.execute(text("SELECT metadata FROM media_download_history")).scalar_one()) == {
+            "started_publish_status": "published_preliminary", "is_redownload": True,
+        }
+        context, result = connection.execute(text("SELECT context, result FROM task_operations")).one()
+        assert json.loads(context) == {"episode_publish_status": "source_processing"}
+        assert json.loads(result) == {"publish_status": "published_preliminary"}
+        assert connection.execute(text("SELECT key FROM metadata")).scalar_one() == "ep_status.source_processing.slug"
+
+
+def test_every_site_adds_upcoming_and_live_videos(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, NEUTRAL_STATUSES_REVISION)
+    with engine.begin() as connection:
+        connection.execute(text("INSERT INTO sites (key, name, domains) VALUES ('youtube', 'YouTube', '[]')"))
+
+    command.upgrade(config, UPCOMING_VIDEOS_REVISION)
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT pending_checks FROM sites WHERE key = 'youtube'")).scalar_one() == 1

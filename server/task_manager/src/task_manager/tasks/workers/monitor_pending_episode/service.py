@@ -14,13 +14,14 @@ from task_manager.events.transactional import queue_event
 
 from ._helpers import save_status_metadata
 from .scheduling import queue_monitor_completion_if_settled
+from backend.services.metadata_refresh import refresh_watch_expired
 from ...helpers.episodes.trusted_publication_timing import track_monitor_publication_timing
 from ...helpers.episodes.events import queue_episode_status_events
 from ...helpers.episodes.identifier_reconciliation import reconcile_episode_identifier
 from ...helpers.episodes.mapper import fetch_all_episodes_paginated
 from ...helpers.episodes.metadata import (
     METADATA_REFRESH_REQUESTED_EVENT,
-    metadata_watch_expired,
+    episode_refresh_offsets,
     update_episode_from_dailywire,
 )
 from ...helpers.episodes.no_show import is_no_show_today_slug
@@ -154,7 +155,7 @@ def _try_reconcile_slug_after_404(
 def _no_usable_reason(detail, *, observed_status: EpisodePublishStatus) -> NoUsableMediaReason:
     if is_no_show_today_slug(detail.slug):
         return NoUsableMediaReason.NO_SHOW_TODAY
-    if observed_status is EpisodePublishStatus.DW_PROCESSING:
+    if observed_status is EpisodePublishStatus.SOURCE_PROCESSING:
         return NoUsableMediaReason.PROCESSING_TIMEOUT
     return NoUsableMediaReason.MEDIA_UNUSABLE
 
@@ -362,7 +363,7 @@ async def run_monitor_pending_episode(
     if new_status is not EpisodePublishStatus.NO_USABLE_MEDIA:
         final_publication_time = best_effort_published_date(episode)
         episode.metadata_is_final = (
-            metadata_watch_expired(final_publication_time)
+            refresh_watch_expired(final_publication_time, episode_refresh_offsets(episode))
             if new_status is EpisodePublishStatus.PUBLISHED_FINAL
             else False
         )

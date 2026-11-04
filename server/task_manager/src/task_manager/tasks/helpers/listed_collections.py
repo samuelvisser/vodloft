@@ -16,6 +16,10 @@ A new episode is numbered after the episodes VODLoft already has, so existing
 file names never change. Numbering follows upload order, so the episodes are
 saved together once the Source has listed them all.
 
+A Source with ``Feature.PENDING_CHECKS`` also lists upcoming and live videos.
+VODLoft adds them with their status, unless their Site has that turned off, and
+follows them until they are published. They are not downloaded before then.
+
 A Source with ``Feature.CATALOGUE_REFRESH`` also keeps the episodes VODLoft
 has up to date: their titles, descriptions and pictures, and whether the
 Source still has them. An episode the Source no longer has keeps its
@@ -32,15 +36,16 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Season, Collection
 from backend.services.seasons import create_season_record
-from backend.services.thumbnails import is_own_thumbnail
-from backend.types.episode_types import EpisodePublishStatus
+from backend.services.metadata_refresh import new_item_metadata_is_final
+from backend.types.episode_types import PENDING_EPISODE_PUBLISH_STATUSES, EpisodePublishStatus
 from backend.types.media_types import MediaType
 from backend.types.collection_types import EpisodeIdentifier
 from backend.utils.helpers import generate_uuid
-from sources import MAIN_TAG, ItemRef, Source, VideoDetails
+from sources import MAIN_TAG, Feature, ItemRef, Source, VideoDetails, get_source
 from .episodes.events import queue_episode_status_events
 from .general import datetime_to_string
 from .progress import update_progress
+from .refreshed_metadata import apply_refreshed_details
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +136,27 @@ def _episode_slug(s: Session, collection: Collection, source_slug: str) -> str:
     return f"{collection.slug}-{source_slug}" if taken else source_slug
 
 
+def adds_pending(collection: Collection) -> bool:
+    """Whether upcoming and live videos of the collection are added before they are published."""
+    site = collection.site
+    return get_source(collection.source_key).has(Feature.PENDING_CHECKS) and (site is None or site.pending_checks)
+
+
+def date_based_identifier(s: Session, episode: Episode, published_at: datetime) -> str | None:
+    """The identifier a main episode of a date-based collection gets for a new publication date,
+    or None when it keeps its own: an upcoming video that started later than planned moves."""
+    collection = episode.collection
+    if collection.episode_identifier != EpisodeIdentifier.DATE_BASED.value:
+        return None
+    identifier = f"ep.{datetime_to_string(published_at)}"
+    if not episode.episode_identifier.startswith("ep.") or episode.episode_identifier == identifier:
+        return None
+    identifiers = set(s.scalars(select(Episode.episode_identifier).where(
+        Episode.collection_id == collection.id, Episode.id != episode.id,
+    )))
+    return _next(identifiers, "aux") if identifier in identifiers else identifier
+
+
 def known_episode_slugs(s: Session, collection: Collection) -> frozenset[str]:
     return frozenset(s.scalars(select(Episode.source_slug).where(Episode.collection_id == collection.id)))
 
@@ -174,8 +200,12 @@ def add_listed_episodes(s: Session, *, collection_id: int, found: list[VideoDeta
         return 0
     known = known_episode_slugs(s, collection)
     now = datetime.now(timezone.utc)
+    pending_too = any(details.publish_status in PENDING_EPISODE_PUBLISH_STATUSES for details in found) and adds_pending(collection)
     new: dict[str, VideoDetails] = {}
     for details in found:
+        if details.publish_status in PENDING_EPISODE_PUBLISH_STATUSES and not pending_too:
+            # A later scan adds it once it is published.
+            continue
         if details.slug not in known:
             new.setdefault(details.slug, details)
     ordered = sorted(new.values(), key=lambda details: _order_key(details, now))
@@ -187,7 +217,7 @@ def add_listed_episodes(s: Session, *, collection_id: int, found: list[VideoDeta
     identifiers = set(s.scalars(select(Episode.episode_identifier).where(Episode.collection_id == collection.id)))
     numbers = _SeasonNumbers(s)
     next_index = (s.scalar(select(func.max(Episode.index)).where(Episode.collection_id == collection.id)) or 0) + 1
-    created: list[Episode] = []
+    created: list[tuple[Episode, EpisodePublishStatus]] = []
     for details in ordered:
         number = _season_number(details, now)
         ref = details.season
@@ -216,8 +246,12 @@ def add_listed_episodes(s: Session, *, collection_id: int, found: list[VideoDeta
             episode_identifier=identifier,
             slug=_episode_slug(s, collection, details.slug),
             source_slug=details.slug,
-            publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
-            metadata_is_final=True,
+            publish_status=details.publish_status.value,
+            # The metadata refresh sweep follows a new upload for a while, from when it is published; an older one is done.
+            metadata_is_final=details.publish_status not in PENDING_EPISODE_PUBLISH_STATUSES and new_item_metadata_is_final(
+                s, source_key=collection.source_key, site_key=collection.site_key, published_at=details.published_at,
+            ),
+            scheduled_date=details.scheduled_at,
             sharing_url=details.url,
             published_date=details.published_at,
             title=details.title,
@@ -231,14 +265,13 @@ def add_listed_episodes(s: Session, *, collection_id: int, found: list[VideoDeta
         )
         s.add(episode)
         s.flush()
-        created.append(episode)
+        created.append((episode, details.publish_status))
         next_index += 1
 
     _order_seasons(s, collection)
-    for episode in created:
+    for episode, status in created:
         queue_episode_status_events(
-            s, episode=episode, collection=collection, old_status=None,
-            new_status=EpisodePublishStatus.PUBLISHED_FINAL, was_created=True,
+            s, episode=episode, collection=collection, old_status=None, new_status=status, was_created=True,
         )
     return len(created)
 
@@ -284,19 +317,7 @@ def refresh_listed_collection(s: Session, *, collection_id: int, source: Source)
         if episode.removed_from_source:
             episode.removed_from_source = False
             returned += 1
-        changes = {
-            "title": details.title, "description": details.description, "author_name": details.author_name,
-            # A length of zero means the Source did not say.
-            "duration": details.duration or None,
-        }
-        # A frame VODLoft took stays until the Source has a picture again; refreshes do not say which.
-        if details.image_url and not is_own_thumbnail(episode.thumbnail_landscape_path):
-            changes |= {"thumbnail_landscape_path": details.image_url, "background_image_path": details.image_url}
-        changed = False
-        for name, value in changes.items():
-            if value is not None and getattr(episode, name) != value:
-                setattr(episode, name, value)
-                changed = True
+        changed = apply_refreshed_details(episode, details)
         updated += changed
     s.commit()
     if removed or returned:

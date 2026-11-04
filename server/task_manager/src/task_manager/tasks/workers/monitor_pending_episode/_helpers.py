@@ -20,8 +20,8 @@ def save_status_metadata(
             episode.set_meta("ep_status.live.sharing_url", dw_episode.sharing_url)
         case EpisodePublishStatus.DELAYED:
             episode.set_meta("ep_status.delayed.slug", dw_episode.slug)
-        case EpisodePublishStatus.DW_PROCESSING:
-            episode.set_meta("ep_status.dw_processing.slug", dw_episode.slug)
+        case EpisodePublishStatus.SOURCE_PROCESSING:
+            episode.set_meta("ep_status.source_processing.slug", dw_episode.slug)
         case _:
             pass
     s.flush()

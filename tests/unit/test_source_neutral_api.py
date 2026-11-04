@@ -14,7 +14,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend.api.errors import source_request_error_handler
 from backend.services.source_requests import SourceRequestError
-from sources import ANY_DOMAIN, LinkKind, ResolvedLink, SearchNotice, SearchResults, Source, registry
+from sources import ANY_DOMAIN, LinkKind, ResolvedLink, SearchNotice, SearchResults, Site, Source, registry
 
 
 class StubSource(Source):
@@ -23,6 +23,7 @@ class StubSource(Source):
     id = "stub"
     name = "Stub Video"
     domains = ("stub.example",)
+    sites = (Site("stub", "Stub", domains),)
     features = frozenset()
 
     def resolve(self, url):
@@ -42,6 +43,7 @@ class CatchAllSource(StubSource):
     id = "catch_all"
     name = "Anything"
     domains = (ANY_DOMAIN,)
+    sites = ()
 
     def resolve(self, url):
         return ResolvedLink(kind=LinkKind.COLLECTION, slug="anything", url=url, title="Anything")
@@ -252,8 +254,8 @@ def test_api_routes_serialise_a_collection_from_any_source(stub_sources):
 
 def test_a_preferred_source_is_asked_first(client, stub_sources):
     stub, catch_all = stub_sources
-    assert registry.sources_for("https://www.stub.example/watch/x", {"stub.example": "catch_all"}) == [catch_all, stub]
-    assert registry.sources_for("https://elsewhere.example/", {"stub.example": "catch_all"}) == [catch_all]
+    assert registry.sources_for("https://www.stub.example/watch/x", {"stub": "catch_all"}) == [catch_all, stub]
+    assert registry.sources_for("https://elsewhere.example/", {"stub": "catch_all"}) == [catch_all]
 
     body = client.post("/api/resolve", json={"url": "https://stub.example/watch/clip-1"}).json()
     assert body["source"]["id"] == "stub"
@@ -264,21 +266,21 @@ def test_a_preferred_source_is_asked_first(client, stub_sources):
     assert client.post("/api/resolve", json={"url": "https://stub.example/x", "sourceKey": "nope"}).status_code == 422
 
 
-def test_the_preferred_source_per_domain_is_saved(client):
-    domains = {row["domain"]: row for row in client.get("/api/sources/domains").json()}
-    assert domains["stub.example"] == {
-        "domain": "stub.example", "sourceKeys": ["stub", "catch_all"], "defaultSourceKey": "stub",
-        "preferredSourceKey": None,
+def test_the_preferred_source_per_site_is_saved(client):
+    sites = {row["key"]: row for row in client.get("/api/sources/sites").json()}
+    assert sites["stub"] == {
+        "key": "stub", "name": "Stub", "domains": ["stub.example"], "sourceKeys": ["stub", "catch_all"],
+        "defaultSourceKey": "stub", "preferredSourceKey": None,
     }
 
-    saved = client.put("/api/sources/domains/stub.example", json={"preferredSourceKey": "catch_all"}).json()
+    saved = client.put("/api/sources/sites/stub", json={"preferredSourceKey": "catch_all"}).json()
     assert saved["preferredSourceKey"] == "catch_all"
     body = client.post("/api/resolve", json={"url": "https://stub.example/watch/clip-1"}).json()
     assert body["source"]["id"] == "catch_all"
 
-    assert client.put("/api/sources/domains/stub.example", json={"preferredSourceKey": "nope"}).status_code == 422
-    assert client.put("/api/sources/domains/other.example", json={"preferredSourceKey": "stub"}).status_code == 422
-    reset = client.put("/api/sources/domains/stub.example", json={"preferredSourceKey": None}).json()
+    assert client.put("/api/sources/sites/stub", json={"preferredSourceKey": "nope"}).status_code == 422
+    assert client.put("/api/sources/sites/other", json={"preferredSourceKey": "stub"}).status_code == 422
+    reset = client.put("/api/sources/sites/stub", json={"preferredSourceKey": None}).json()
     assert reset["preferredSourceKey"] is None
     assert client.post("/api/resolve", json={"url": "https://stub.example/watch/clip-1"}).json()["source"]["id"] == "stub"
 

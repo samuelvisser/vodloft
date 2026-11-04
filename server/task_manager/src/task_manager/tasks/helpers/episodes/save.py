@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from backend.db.model_mapping import update_database_fields, create_database_fields
 from backend.db.models import Collection, Season
 from backend.db.models.media_item import Episode
+from backend.services.metadata_refresh import site_refresh_offsets
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.helpers import generate_uuid
 from backend.types.media_types import MediaType
@@ -72,6 +73,7 @@ def upsert_episode(
                 "metadata_is_final": metadata_is_final_for_new_episode(
                     ep.publish_status,
                     ep.published_date,
+                    site_refresh_offsets(collection.site),
                 ),
             }
         })
@@ -92,6 +94,7 @@ def upsert_episode(
         episode.metadata_is_final = metadata_is_final_for_new_episode(
             ep.publish_status,
             ep.published_date,
+            site_refresh_offsets(collection.site),
         )
     s.flush()
 
@@ -153,7 +156,7 @@ def resolve_dw_episodes(
                 if status is EpisodePublishStatus.NO_USABLE_MEDIA:
                     if is_no_show_today_slug(detail.slug):
                         reason = NoUsableMediaReason.NO_SHOW_TODAY
-                    elif observed.status is EpisodePublishStatus.DW_PROCESSING:
+                    elif observed.status is EpisodePublishStatus.SOURCE_PROCESSING:
                         reason = NoUsableMediaReason.PROCESSING_TIMEOUT
                     else:
                         reason = NoUsableMediaReason.MEDIA_UNUSABLE

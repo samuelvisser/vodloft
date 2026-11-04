@@ -377,15 +377,9 @@ def test_manual_downloads_reject_the_wrong_local_media_profile_type() -> None:
                 collection_id=collection.id,
                 local_media_profile_id=movie_profile.id,
                 enable_profile=True,
-                ep_id_type_list=[],
                 download_with_countdown=False,
                 redownload_final=False,
-                download_days_in_past=0,
                 delete_older_episodes=False,
-                download_episode_count=0,
-                download_starting_from=None,
-                seasons=[],
-                include_upcoming_seasons=True,
             ),
         )
     assert profile_error.value.status_code == 422

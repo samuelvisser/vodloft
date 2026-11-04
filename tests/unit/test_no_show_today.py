@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from profile_filters import filter_rows, line
+
 import asyncio
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -299,17 +301,16 @@ def test_download_profile_excludes_unusable_and_processing_statuses(db_session):
         ep_id="aux.2",
         title="Processing episode",
         index=3,
-        publish_status=EpisodePublishStatus.DW_PROCESSING.value,
+        publish_status=EpisodePublishStatus.SOURCE_PROCESSING.value,
     )
 
     profile = DownloadProfile(
         collection=collection,
         local_media_profile=lmp,
         enable_profile=True,
-        ep_id_type_list=[EpIdType.EP.value, EpIdType.AUX.value],
+        filters=filter_rows(line("only", "types", episode_types=[EpIdType.EP.value, EpIdType.AUX.value])),
         download_with_countdown=False,
         redownload_final=False,
-        download_days_in_past=0,
         delete_older_episodes=False,
     )
     db_session.add(profile)
@@ -616,7 +617,7 @@ def test_monitor_ignores_genuine_dw_processing(db_session, monkeypatch):
         ep_id="ep.1",
         title="Real processing episode",
         index=1,
-        publish_status=EpisodePublishStatus.DW_PROCESSING.value,
+        publish_status=EpisodePublishStatus.SOURCE_PROCESSING.value,
         published_at=(datetime.now(timezone.utc) - timedelta(hours=10)),
     )
     db_session.commit()

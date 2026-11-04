@@ -8,7 +8,7 @@ from apscheduler.triggers.date import DateTrigger
 
 from task_manager.scheduler.executor import execute_task
 from task_manager.scheduler.scheduler import start_scheduler
-from ...helpers.episodes.metadata import ensure_utc, metadata_refresh_offsets_seconds
+from ...helpers.episodes.metadata import ensure_utc
 
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ def metadata_job_id(episode_id: int, offset_seconds: int) -> str:
 
 
 def schedule_remaining_metadata_checks(
-    *, episode_id: int, publication_time: datetime | None, now: datetime | None = None,
+    *, episode_id: int, publication_time: datetime | None, offsets: tuple[int, ...], now: datetime | None = None,
 ) -> list[str]:
     if publication_time is None:
         return []
@@ -29,7 +29,7 @@ def schedule_remaining_metadata_checks(
     publication_at = ensure_utc(publication_time)
     current = ensure_utc(now or datetime.now(timezone.utc))
     job_ids: list[str] = []
-    for offset_seconds in metadata_refresh_offsets_seconds():
+    for offset_seconds in offsets:
         run_at = publication_at + timedelta(seconds=offset_seconds)
         if run_at <= current:
             continue

@@ -432,9 +432,8 @@ def test_a_saved_profile_starts_on_a_collection_that_downloads_to_it(db_session)
     for collection in collections:
         _add_episode(db_session, collection, index=1)
     db_session.add(DownloadProfile(
-        collection=collections[3], local_media_profile=profile, enable_profile=True, ep_id_type_list=["ep"],
-        download_with_countdown=False, redownload_final=False, download_days_in_past=0, download_episode_count=0,
-        delete_older_episodes=False,
+        collection=collections[3], local_media_profile=profile, enable_profile=True,
+        download_with_countdown=False, redownload_final=False, delete_older_episodes=False,
     ))
     db_session.flush()
 

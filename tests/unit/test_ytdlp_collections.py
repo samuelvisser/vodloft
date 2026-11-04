@@ -1,6 +1,8 @@
 """Channels and playlists from a Source that lists their episodes, as collections with a season per year."""
 from __future__ import annotations
 
+from profile_filters import filter_rows, only_types
+
 from datetime import datetime, timezone
 
 import pytest
@@ -468,9 +470,9 @@ def test_a_bundle_that_matches_existing_files_holds_its_download_profile(listed,
             "outputTemplate": "/downloads/YouTube/{{ collection_title }}/{{ title }}.ext",
         },
         "downloadProfile": {
-            "enableProfile": True, "epIdTypeList": ["ep"], "downloadWithCountdown": False, "redownloadFinal": False,
-            "downloadDaysInPast": 0, "downloadEpisodeCount": 0, "downloadStartingFrom": None,
-            "deleteOlderEpisodes": False, "seasons": [], "includeUpcomingSeasons": True,
+            "enableProfile": True, "downloadWithCountdown": False, "redownloadFinal": False,
+            "deleteOlderEpisodes": False,
+            "filters": [{"action": "only", "field": "types", "episodeTypes": ["ep"]}],
         },
         "existingFiles": {"folder": "/downloads/YouTube"},
     }
@@ -504,7 +506,8 @@ def test_a_youtube_download_profile_chooses_auto_generated_subtitles(listed, ses
     session.add(profile)
     session.flush()
     download_profile = DownloadProfile(
-        collection_id=collection.id, local_media_profile_id=profile.id, ep_id_type_list=["ep"], auto_subtitles="always",
+        collection_id=collection.id, local_media_profile_id=profile.id, filters=filter_rows(only_types("ep")),
+        auto_subtitles="always",
     )
     session.add(download_profile)
     download = EpisodeMediaDownload(
@@ -522,7 +525,7 @@ def test_a_youtube_download_profile_chooses_auto_generated_subtitles(listed, ses
     plan = download_plans.prepare_download_plan(session, download.id, DownloadTracker())
     assert (plan.source.ytdlp_subtitles.languages, plan.source.ytdlp_subtitles.auto_generated) == (("nl", "en"), "always")
     uses = auto_subtitles_uses(session, profile.id, everyone)
-    assert [(use.collection_title, use.auto_subtitles, use.episode_types) for use in uses] == [("A playlist", "always", [])]
+    assert [(use.collection_title, use.auto_subtitles) for use in uses] == [("A playlist", "always")]
 
 
 def test_a_youtube_download_profile_marks_sponsors_and_adds_your_own_options(listed, session, monkeypatch):
@@ -547,7 +550,9 @@ def test_a_youtube_download_profile_marks_sponsors_and_adds_your_own_options(lis
     session.add(profile)
     save_ytdlp_source_options(session, "# faster\n--concurrent-fragments 4\n--extractor-args 'youtube:player_client=web'")
     session.flush()
-    session.add(DownloadProfile(collection_id=collection.id, local_media_profile_id=profile.id, ep_id_type_list=["ep"]))
+    session.add(DownloadProfile(
+        collection_id=collection.id, local_media_profile_id=profile.id, filters=filter_rows(only_types("ep")),
+    ))
     download = EpisodeMediaDownload(
         media=collection.episodes[0], local_media_profile=profile, type="episode", file_path="/downloads/x.ext",
     )

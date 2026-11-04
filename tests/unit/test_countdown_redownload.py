@@ -76,7 +76,7 @@ def final_download(tmp_path, monkeypatch):
         media_item_id=episode.id,
         local_media_profile_id=profile.id,
         **available_artifact(path),
-        downloaded_publish_status="published_with_countdown",
+        downloaded_publish_status="published_preliminary",
         redownload_when_final=True,
         file_path=str(path),
     )
@@ -124,7 +124,7 @@ def test_final_publication_cancels_countdown_attempt_and_waits_for_terminal(fina
     session, episode, download = final_download
     countdown_operation = SimpleNamespace(
         id="countdown-operation",
-        context={"episode_publish_status": "published_with_countdown"},
+        context={"episode_publish_status": "published_preliminary"},
     )
     canceled = Mock()
     queued = Mock(return_value=False)
@@ -172,7 +172,7 @@ def test_manual_countdown_request_persists_final_redownload_choice(final_downloa
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
     session, episode, download = final_download
-    episode.publish_status = "published_with_countdown"
+    episode.publish_status = "published_preliminary"
     download.artifact_status = MediaDownloadArtifactStatus.ABSENT.value
     download.redownload_when_final = False
     session.commit()

@@ -10,6 +10,7 @@ import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {RssStreamProfileUpdateIn, RssStreamProfileUpdateSchema} from '../../types/schemas/rss_stream_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {faIcon} from '../../icons/faIcon'
+import {downloadedEpisodeTypes} from '../../components/DownloadProfile/episodeFilters'
 
 
 type RouteParams = { type?: 'rss'; id?: string }
@@ -41,7 +42,7 @@ export default function EditStreamProfilePage() {
             .map((profile) => ({
                 id: profile.id,
                 preferredFormat: profile.localMediaProfilePreferredFormat,
-                episodeTypes: profile.epIdTypeList,
+                episodeTypes: downloadedEpisodeTypes(profile.filters),
                 enabled: profile.enableProfile,
             }))
     }, [downloadProfiles, streamProfile?.collectionSlug])

@@ -74,8 +74,7 @@ export default function SubtitleFields({form, onSubtitleModeChange}: Props) {
     const addable = Object.entries(LANGUAGES).filter(([code]) => !list.includes(code)).map(([value, label]) => ({value, label}))
 
     // The auto-generated pointer, grouped by choice: "for Kurzgesagt, for Veritasium only when there are no real ones, and not for MKBHD".
-    const useName = (use: {collectionTitle: string; episodeTypes: string[]}) =>
-        use.episodeTypes.length ? `${use.collectionTitle} (${use.episodeTypes.join(' and ')})` : use.collectionTitle
+    const useName = (use: {collectionTitle: string}) => use.collectionTitle
     const groupNames = (choice: string) => {
         const all = (uses ?? []).filter((use) => use.autoSubtitles === choice).map(useName)
         return all.length > 4 ? [...all.slice(0, 3), `${all.length - 3} more`] : all
@@ -199,7 +198,7 @@ export default function SubtitleFields({form, onSubtitleModeChange}: Props) {
                                 {uses.map((use) => (
                                     <div key={use.downloadProfileId} className="subtitle-use">
                                         <strong>{use.collectionTitle}</strong>
-                                        <span className="subtitle-use__muted">{use.episodeTypes.length ? use.episodeTypes.join(' and ') : 'YouTube'}</span>
+                                        <span className="subtitle-use__muted">YouTube</span>
                                         <span className={`subtitle-use__choice is-${use.autoSubtitles}`}>{AutoSubtitlesReg.getLabelLoose(use.autoSubtitles)}</span>
                                         <Link to={`/edit-download-profile/${use.downloadProfileId}#youtube-subtitles`}>
                                             Edit <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')}/>

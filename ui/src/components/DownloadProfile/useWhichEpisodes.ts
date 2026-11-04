@@ -1,21 +1,14 @@
 import {useCallback, useEffect, useRef, useState} from 'react'
 
 import type {ExampleCollection} from '../../lib/collectionExamples'
-import {WhichEpisodesSchema, type EpisodeRule, type WhichEpisodes} from '../../types/schemas/download_profile'
+import {WhichEpisodesSchema, type EpisodeFilter, type WhichEpisodes} from '../../types/schemas/download_profile'
 
 export type WhichEpisodesRequest = {
     /** The saved Collection, or the newest episodes of the one that is being added. */
     collectionId?: number
     exampleCollection?: ExampleCollection
-    epIdTypeList: string[]
     downloadWithCountdown: boolean
-    downloadDaysInPast: number
-    downloadEpisodeCount: number
-    downloadStartingFrom: string | null
-    seasonSlugs: string[]
-    includeUpcomingSeasons: boolean
-    allSeasons: boolean
-    rules: EpisodeRule[]
+    filters: EpisodeFilter[]
     includeEpisodes: boolean
 }
 
@@ -44,13 +37,13 @@ async function fetchPage(body: string, offset: number, limit: number, signal: Ab
         signal,
         body: JSON.stringify({...JSON.parse(body), episodesOffset: offset, episodesLimit: limit}),
     })
-    // A line that is still being typed (an unfinished pattern) cannot be counted yet; keep the last counts.
+    // A filter that is still being typed (an unfinished pattern) cannot be counted yet; keep the last counts.
     if (!response.ok) return null
     return WhichEpisodesSchema.parse(await response.json())
 }
 
 /**
- * How many indexed episodes each Which episodes line leaves out; asked again shortly after each change.
+ * How many indexed episodes each Which episodes filter leaves out; asked again shortly after each change.
  * With includeEpisodes, the list of episodes comes a page at a time: call loadMore for the next one.
  */
 export function useWhichEpisodes(request: WhichEpisodesRequest | null): State & {hasMore: boolean; loadMore: () => void} {

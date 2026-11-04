@@ -15,12 +15,12 @@ from config import get_settings
 from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
-    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, Feature, LinkKind, LinkPreview, Playback, PlaybackKind, ProgramStatus,
-    ResolvedLink, SearchResults, CollectionDetails, Source, SourceProblem, SponsorBlockSegment, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
+    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, Feature, LinkKind, LinkPreview, Playback, PlaybackKind, ProgramStatus,
+    ResolvedLink, SearchResults, CollectionDetails, Site, Source, SourceProblem, SponsorBlockSegment, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
 )
 from .. import pacing, ytdlp_runner as runner
-from . import thumbnails, youtube_rss, youtube_search
+from . import sites, thumbnails, youtube_rss, youtube_search
 from .youtube_api import ApiKeyError, QuotaExceededError, Share, YouTubeApiClient, YouTubeApiError, key as api_key, mapping, quota
 from .youtube_api.catalogue import Catalogue
 from .youtube_api.client import MAX_RESULTS
@@ -45,8 +45,17 @@ _YOUTUBE_TAGS = (
 )
 # yt-dlp reports a livestream that is still live, upcoming or long finished alike.
 _LIVE_STATUSES = {"is_live", "is_upcoming", "was_live", "post_live"}
-# Upcoming and live videos have nothing to download yet; a later scan adds them once they have finished.
-_PENDING_STATUSES = {"is_live", "is_upcoming"}
+# Where a video is in its life, as yt-dlp's live_status says. An upcoming video past its start is delayed.
+_PUBLISH_STATUSES = {
+    "is_upcoming": EpisodePublishStatus.SCHEDULED,
+    "is_live": EpisodePublishStatus.LIVE,
+    "post_live": EpisodePublishStatus.SOURCE_PROCESSING,
+}
+# What yt-dlp says about a video the site no longer has, such as a cancelled stream. A video
+# blocked in this country, or one that needs signing in, is still there, unless it went private.
+_GONE_ERRORS = ("video unavailable", "has been removed", "no longer available", "does not exist")
+_STILL_THERE_ERRORS = ("country", "sign in", "--cookies", "members")
+_PRIVATE_ERRORS = ("private video", "this video is private")
 # Without a key, a channel's uploads are listed tab by tab. A channel may have no Shorts or Live tab.
 _CHANNEL_EXTRA_TABS = ("shorts", "streams")
 # The same search within an hour is answered from memory, so going back to the results costs nothing.
@@ -122,17 +131,45 @@ def _is_youtube(url: str) -> bool:
 
 
 def _tag(info: dict, url: str) -> str:
-    """Short and Livestream, as yt-dlp's full extraction of a YouTube video says."""
+    """Short and Livestream, as yt-dlp's full extraction of a YouTube video says.
+
+    yt-dlp calls a premiere a video, also while it is upcoming or playing for
+    the first time, so then a live status alone does not make it a livestream.
+    A finished broadcast does.
+    """
     if not str(info.get("extractor_key") or "").startswith("Youtube"):
         return MAIN_TAG
     media_type = info.get("media_type")
     if media_type in {"short", "livestream"}:
         return media_type
-    if info.get("live_status") in _LIVE_STATUSES:
+    live_status = info.get("live_status")
+    if live_status == "was_live" or (media_type is None and live_status in _LIVE_STATUSES):
         return "livestream"
     if "/shorts/" in (info.get("webpage_url") or url):
         return "short"
     return MAIN_TAG
+
+
+def _scheduled_at(info: dict) -> datetime | None:
+    if info.get("live_status") == "is_upcoming" and isinstance(info.get("release_timestamp"), (int, float)):
+        return datetime.fromtimestamp(info["release_timestamp"], tz=timezone.utc)
+    return None
+
+
+def _publish_status(info: dict) -> EpisodePublishStatus:
+    status = _PUBLISH_STATUSES.get(info.get("live_status"), EpisodePublishStatus.PUBLISHED_FINAL)
+    scheduled_at = _scheduled_at(info)
+    if status is EpisodePublishStatus.SCHEDULED and scheduled_at is not None and scheduled_at < datetime.now(timezone.utc):
+        return EpisodePublishStatus.DELAYED
+    return status
+
+
+def is_gone_message(message: str) -> bool:
+    """Whether yt-dlp's error says the site no longer has the video."""
+    message = message.lower()
+    if any(text in message for text in _PRIVATE_ERRORS):
+        return True
+    return any(text in message for text in _GONE_ERRORS) and not any(text in message for text in _STILL_THERE_ERRORS)
 
 
 def _drm_protected(info: dict) -> bool:
@@ -239,7 +276,8 @@ class YtDlpSource(Source):
     features = frozenset({
         Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.OPTIONAL_COOKIES, Feature.API_KEY,
         Feature.QUICK_CHECK, Feature.CATALOGUE_REFRESH, Feature.SEARCH, Feature.COSTLY_SEARCH,
-        Feature.FORMAT_CHOICES, Feature.YTDLP_DOWNLOADS, Feature.UPGRADE_CHECKS,
+        Feature.FORMAT_CHOICES, Feature.YTDLP_DOWNLOADS, Feature.UPGRADE_CHECKS, Feature.METADATA_REFRESH,
+        Feature.PENDING_CHECKS,
     })
     episode_tags = _YOUTUBE_TAGS
     # Search covers YouTube only; other sites are added by link.
@@ -252,6 +290,10 @@ class YtDlpSource(Source):
         self._cache_lock = threading.Lock()
         # A channel's handle never changes its ID, so it is looked up once.
         self._channel_ids: dict[str, str] = {}
+
+    def site_for(self, url: str) -> Site:
+        """The site of the yt-dlp extractor that handles the link: one Site for all of YouTube's domains."""
+        return sites.site_for(url)
 
     def episode_tags_for(self, url: str | None) -> tuple[EpisodeTag, ...]:
         """Shorts and livestreams are YouTube's; other sites only have videos."""
@@ -436,6 +478,8 @@ class YtDlpSource(Source):
             published_at=_published_at(info),
             drm_protected=_drm_protected(info),
             tag=_tag(info, url),
+            publish_status=_publish_status(info),
+            scheduled_at=_scheduled_at(info),
         )
 
     @staticmethod
@@ -497,26 +541,65 @@ class YtDlpSource(Source):
                 continue
             for item in items:
                 if mapping.is_pending(item):
-                    continue
-                if mapping.may_be_premiere(item):
+                    # Only yt-dlp tells when an upcoming video starts and whether it is a premiere.
+                    if details := self._look_up(mapping.video_url(item["id"])):
+                        yield details
+                elif mapping.may_be_premiere(item):
                     # yt-dlp calls a finished premiere a video and a livestream a livestream.
                     yield self._look_up(mapping.video_url(item["id"])) or mapping.video(item, short=False)
                 else:
                     yield mapping.video(item, short=item["id"] in shorts)
 
     def _look_up(self, url: str) -> VideoDetails | None:
-        """One video through yt-dlp, or None when it cannot be looked up or has nothing to download yet."""
+        """One video through yt-dlp, or None when it cannot be looked up."""
         try:
-            info = _lookup("--no-playlist", url)
+            info = self._pending_info(url)
         except runner.YtDlpError as exc:
             logger.info("Skipping %s for now: %s", url, exc)
             return None
+        return self._video(info, url)
+
+    @staticmethod
+    def _pending_info(url: str) -> dict:
+        """The video info. An upcoming video has no formats yet, which yt-dlp calls an error
+        unless told not to. A video that failed is looked up that way once more, unless it is
+        clearly gone or needs signing in, and only an upcoming one is taken from that lookup:
+        for any other video a missing format is still an error."""
+        try:
+            return _lookup("--no-playlist", url)
+        except runner.YtDlpError as exc:
+            message = str(exc).lower()
+            if is_gone_message(message) or any(text in message for text in _SIGN_IN_ERRORS):
+                raise
+            error = exc
         finally:
             pacing.pause(_LISTING_PAUSE_SECONDS)
-        if info.get("live_status") in _PENDING_STATUSES:
-            logger.info("Skipping %s until it has finished", url)
-            return None
-        return self._video(info, url)
+        try:
+            info = runner.run_json("--no-playlist", "--ignore-no-formats-error", url)
+        except runner.YtDlpError:
+            raise error from None
+        finally:
+            pacing.pause(_LISTING_PAUSE_SECONDS)
+        if info.get("live_status") != "is_upcoming":
+            raise error
+        return info
+
+    def check_pending(self, items: Sequence[ItemRef]) -> ItemRefresh:
+        """Each item looked up with yt-dlp, which works for every site. A lookup that fails is
+        only a removal when yt-dlp says the site no longer has the video."""
+        details: dict[str, VideoDetails] = {}
+        removed: set[str] = set()
+        for ref in items:
+            try:
+                info = self._pending_info(ref.url)
+            except runner.YtDlpError as exc:
+                if is_gone_message(str(exc)):
+                    removed.add(ref.slug)
+                else:
+                    logger.info("Could not check %s: %s", ref.url, exc)
+                continue
+            details[ref.slug] = self._video(info, ref.url)
+        return ItemRefresh(details=details, removed=frozenset(removed))
 
     def _list_with_ytdlp(self, url: str, known: frozenset[str]) -> Iterator[VideoDetails]:
         seen = set(known)
@@ -647,6 +730,38 @@ class YtDlpSource(Source):
                         removed.add(video_id)
         if listed:
             details.update(self._refresh_from_listing(url, frozenset(listed)))
+        return ItemRefresh(details=details, removed=frozenset(removed))
+
+    def refresh_metadata(self, items: Sequence[ItemRef]) -> ItemRefresh:
+        """YouTube videos through the API, 50 a unit; the rest, or a batch the API could not answer, one by one with yt-dlp.
+
+        Only the API can say a video is gone: it leaves deleted and private videos
+        out of its answer. A yt-dlp lookup that fails may just have been refused
+        this time, so the video stays as it is.
+        """
+        details: dict[str, VideoDetails] = {}
+        removed: set[str] = set()
+        youtube = [item for item in items if _is_youtube(item.url)]
+        catalogue = self._catalogue(adding=False) if youtube else None
+        looked_up = [item for item in items if catalogue is None or item not in youtube]
+        if catalogue is not None:
+            for start in range(0, len(youtube), MAX_RESULTS):
+                batch = youtube[start:start + MAX_RESULTS]
+                try:
+                    found = {item["id"]: item for item in catalogue.videos([ref.slug for ref in batch])}
+                except YouTubeApiError as exc:
+                    logger.info("Refreshing %d videos with yt-dlp, because the YouTube API could not: %s", len(batch), exc)
+                    looked_up += batch
+                    continue
+                for ref in batch:
+                    item = found.get(ref.slug)
+                    if item is None:
+                        removed.add(ref.slug)
+                    elif not mapping.is_pending(item):
+                        details[ref.slug] = mapping.video(item, short=False)
+        for ref in looked_up:
+            if found_details := self._look_up(ref.url):
+                details[ref.slug] = found_details
         return ItemRefresh(details=details, removed=frozenset(removed))
 
     def _refresh_from_listing(self, url: str, wanted: frozenset[str]) -> dict[str, VideoDetails]:

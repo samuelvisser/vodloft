@@ -153,8 +153,9 @@ def test_a_wireloft_import_keeps_names_numbers_feeds_and_files_and_repeats_clean
     feed = session.scalar(select(RssStreamProfile))
     assert (feed.token, feed.collection_id) == ("feed-token", collection.id)
     profile = session.scalar(select(DownloadProfile))
-    assert profile.enable_profile and not profile.include_upcoming_seasons
-    assert [season.slug for season in profile.seasons] == ["morning-show-season-1"]
+    assert profile.enable_profile
+    [seasons_line] = [item for item in profile.filters if item.field == "seasons"]
+    assert (seasons_line.season_slugs, seasons_line.include_upcoming) == (["morning-show-season-1"], False)
     movie = session.scalar(select(Movie))
     assert movie.official_trailer is not None and movie.official_trailer.uuid == "extra-uuid"
 

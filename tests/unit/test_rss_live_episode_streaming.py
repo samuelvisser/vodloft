@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from profile_filters import filter_rows, latest, line
+
 from conftest import available_artifact
 from datetime import datetime, timezone
 from pathlib import Path
@@ -107,11 +109,9 @@ def _download_profile(session: Session, collection, local_profile, *, enabled: b
         collection=collection,
         local_media_profile=local_profile,
         enable_profile=enabled,
-        ep_id_type_list=["ep"],
+        filters=filter_rows(line("only", "types", episode_types=["ep"]), latest(5)),
         download_with_countdown=False,
         redownload_final=False,
-        download_days_in_past=0,
-        download_episode_count=5,
         delete_older_episodes=True,
     )
     session.add(item)
@@ -345,7 +345,7 @@ def test_live_handoff_keeps_same_remote_hls_url_usable_until_final_hls_exists(
     remember_live_episode_handoff(profile, episode)
     assert profile.live_episode_handoff_ids == [episode.id]
 
-    episode.publish_status = "dw_processing"
+    episode.publish_status = "source_processing"
     db_session.flush()
 
     assert get_feed_items(db_session, profile) == [(episode, None)]
@@ -401,7 +401,7 @@ def test_live_handoff_is_not_dropped_just_because_episode_leaves_rss_window(
     )
 
     remember_live_episode_handoff(profile, live_episode)
-    live_episode.publish_status = "dw_processing"
+    live_episode.publish_status = "source_processing"
 
     # Add a newer live episode so the original cached RSS item falls outside
     # max_items. Its previously published stable URL must still retain handoff state.

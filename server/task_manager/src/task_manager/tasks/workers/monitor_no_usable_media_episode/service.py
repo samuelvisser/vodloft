@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Episode, EpisodeMediaDownload, Collection
-from backend.services.custom_indexes import request_collection_custom_index_reconciliation
+from backend.db.models import Episode, Collection
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from config.network import NoInternetConnectionError, is_no_internet_error
+from sources import Feature, all_sources
 from sources.dailywire.api.dw_api.client import MiddlewareAPIError, MiddlewareClient
 from sources.dailywire.auth import DeviceAuthClient
 from task_manager.events.transactional import queue_event
@@ -26,8 +26,9 @@ from ...helpers.episodes.status import observe_episode_detail, resolve_episode_s
 from ...helpers.episodes.unusable_media import (
     NoUsableMediaReason,
     clear_episode_no_usable_media_tracking,
-    episode_no_usable_media_since,
+    delete_no_usable_media_episode,
     mark_episode_no_usable_media,
+    no_usable_media_incident_expired,
 )
 from ...helpers.progress import update_progress
 from ..monitor_pending_episode.scheduling import MONITOR_REQUESTED_EVENT
@@ -35,30 +36,6 @@ from ..monitor_pending_episode.scheduling import MONITOR_REQUESTED_EVENT
 
 logger = logging.getLogger(__name__)
 DEFAULT_NO_USABLE_MEDIA_DELETE_AFTER_MINUTES = 4 * 60
-
-
-def _incident_expired(episode: Episode, *, now: datetime, minutes: int) -> bool:
-    since = episode_no_usable_media_since(episode)
-    return since is not None and now - since >= timedelta(minutes=max(0, minutes))
-
-
-def _delete_episode(s: Session, episode: Episode) -> bool:
-    media_download = s.scalar(
-        select(EpisodeMediaDownload.id).where(
-            EpisodeMediaDownload.media_item_id == episode.id,
-        ).limit(1)
-    )
-    if media_download is not None:
-        # The quarantined Episode remains the durable owner of its download history.
-        # It stays hidden by its NO_USABLE_MEDIA state until the Collection is deleted.
-        s.commit()
-        return False
-
-    queue_event(s, "episode.deleted", episode_event_payload(episode=episode, collection=episode.collection))
-    request_collection_custom_index_reconciliation(s, episode.collection_id)
-    s.delete(episode)
-    s.commit()
-    return True
 
 
 def _replacement_for_quarantined_episode(s: Session, episode: Episode) -> Episode | None:
@@ -79,7 +56,7 @@ def _replacement_for_quarantined_episode(s: Session, episode: Episode) -> Episod
 def _reason_for_unusable_detail(detail, observed_status: EpisodePublishStatus) -> NoUsableMediaReason:
     if is_no_show_today_slug(detail.slug):
         return NoUsableMediaReason.NO_SHOW_TODAY
-    if observed_status is EpisodePublishStatus.DW_PROCESSING:
+    if observed_status is EpisodePublishStatus.SOURCE_PROCESSING:
         return NoUsableMediaReason.PROCESSING_TIMEOUT
     return NoUsableMediaReason.MEDIA_UNUSABLE
 
@@ -202,7 +179,12 @@ async def run_monitor_no_usable_media_episode(
     if force and episode_id is None:
         raise ValueError("Early Delete requires a specific episode_id")
 
-    stmt = select(Episode).where(Episode.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value)
+    # The pending checks look after the episodes of Sources that have them.
+    checked_elsewhere = [source.id for source in all_sources() if source.has(Feature.PENDING_CHECKS)]
+    stmt = select(Episode).where(
+        Episode.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value,
+        Episode.source_key.not_in(checked_elsewhere),
+    )
     if episode_id is not None:
         stmt = stmt.where(Episode.id == episode_id)
     elif collection_id is not None:
@@ -288,7 +270,7 @@ async def run_monitor_no_usable_media_episode(
                 now=now,
             )
             s.commit()
-            if force or _incident_expired(episode, now=now, minutes=delete_after_minutes):
+            if force or no_usable_media_incident_expired(episode, now=now, minutes=delete_after_minutes):
                 replacement = _replacement_for_quarantined_episode(s, episode) if is_target else None
                 replacement_status = (
                     EpisodePublishStatus(replacement.publish_status)
@@ -297,7 +279,7 @@ async def run_monitor_no_usable_media_episode(
                 )
                 replacement_slug = replacement.slug if replacement is not None else None
                 logger.info("Deleting confirmed-404 episode %s", episode.slug)
-                was_deleted = _delete_episode(s, episode)
+                was_deleted = delete_no_usable_media_episode(s, episode)
                 if was_deleted:
                     removed += 1
                 if is_target:

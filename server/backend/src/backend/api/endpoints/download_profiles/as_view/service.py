@@ -50,7 +50,7 @@ def get_download_profile_views_list(s: Session) -> list[DownloadProfileAPIReadVi
         .options(
             joinedload(DownloadProfile.collection),
             joinedload(DownloadProfile.local_media_profile),
-            selectinload(DownloadProfile.seasons),
+            selectinload(DownloadProfile.filters),
         )
         .join(Collection, Collection.id == DownloadProfile.collection_id)
         .join(
@@ -72,7 +72,7 @@ def get_download_profile_view(
         .options(
             joinedload(DownloadProfile.collection),
             joinedload(DownloadProfile.local_media_profile),
-            selectinload(DownloadProfile.seasons),
+            selectinload(DownloadProfile.filters),
         )
         .filter_by(id=download_profile_id)
         .one_or_none()

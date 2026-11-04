@@ -126,7 +126,7 @@ export default function StreamProfileForm({
                     ? candidates.find((profile) => STANDARD_VIDEO_FORMATS.has(profile.preferredFormat))
                     : candidates.find((profile) => profile.preferredFormat === preferredFormat)
 
-            if (matchingProfile) return [...matchingProfile.episodeTypes]
+            if (matchingProfile) return [...(matchingProfile.episodeTypes ?? (tags ?? []).map((tag) => tag.key))]
         }
         return (tags ?? []).filter((tag) => tag.selectedByDefault).map((tag) => tag.key)
     }, [downloadProfileDefaults, preferredFormat, tags, useDownloads, videoOutputMode])

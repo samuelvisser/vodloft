@@ -7,14 +7,15 @@ from sqlalchemy.orm import Session
 
 from backend.api.models.source import (
     ApiStatusAPIRead, ProgramStatusAPIRead, SourceProblemAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SearchResultsAPIRead, CollectionDetailsAPIRead,
-    SourceAPIRead, SourceDomainAPIRead,
+    SourceAPIRead, SourceSiteAPIRead,
 )
-from backend.db.models import Episode, Collection, SourceDomainPreference
+from backend.db.models import Episode, Collection
 from backend.security.access import Access
+from backend.services.sites import preferred_sources, site_record
 from backend.services.source_requests import asking_source
 from backend.utils.helpers import slugify
 from sources import (
-    Feature, LinkKind, ResolvedLink, Source, UnknownSourceError, all_sources, get_source, named_domains, sources_for,
+    Feature, LinkKind, ResolvedLink, Site, Source, UnknownSourceError, all_sources, get_source, named_sites, sources_for,
 )
 
 
@@ -133,10 +134,6 @@ def _to_read(s: Session, source: Source, link: ResolvedLink, candidates: list[So
     )
 
 
-def preferred_sources(s: Session) -> dict[str, str]:
-    return {row.domain: row.source_key for row in s.query(SourceDomainPreference)}
-
-
 def resolve_link(s: Session, access: Access, url: str, source_key: str | None = None) -> ResolvedLinkAPIRead:
     """Ask each Source that claims the link, preferred first, until one recognises it.
 
@@ -171,40 +168,34 @@ def resolve_link(s: Session, access: Access, url: str, source_key: str | None = 
     raise LinkNotRecognisedError("No Source recognises this link")
 
 
-def _domain_read(domain: str, preferred: dict[str, str]) -> SourceDomainAPIRead:
-    candidates = sources_for(f"https://{domain}/")
-    return SourceDomainAPIRead(
-        domain=domain,
+def _site_read(site: Site, preferred: dict[str, str]) -> SourceSiteAPIRead:
+    candidates = sources_for(f"https://{site.domains[0]}/")
+    return SourceSiteAPIRead(
+        key=site.key,
+        name=site.name,
+        domains=list(site.domains),
         source_keys=[source.id for source in candidates],
         default_source_key=candidates[0].id,
-        preferred_source_key=preferred.get(domain),
+        preferred_source_key=preferred.get(site.key),
     )
 
 
-def list_source_domains(s: Session) -> list[SourceDomainAPIRead]:
-    """Every domain a Source names, with the Sources that can handle it."""
+def list_source_sites(s: Session) -> list[SourceSiteAPIRead]:
+    """Every Site a Source is made for, with the Sources that can handle its links."""
     preferred = preferred_sources(s)
-    return [_domain_read(domain, preferred) for domain in named_domains()]
+    return [_site_read(site, preferred) for site in named_sites()]
 
 
-class UnknownDomainError(LookupError):
+class UnknownSiteError(LookupError):
     pass
 
 
-def set_domain_preference(s: Session, domain: str, source_key: str | None) -> SourceDomainAPIRead:
-    domain = domain.strip().lower()
-    if domain not in named_domains():
-        raise UnknownDomainError(f"No Source names the domain '{domain}'")
-    current = s.get(SourceDomainPreference, domain)
-    if source_key is None:
-        if current is not None:
-            s.delete(current)
-    else:
-        if source_key not in [source.id for source in sources_for(f"https://{domain}/")]:
-            raise UnknownDomainError(f"Source '{source_key}' does not handle links on {domain}")
-        if current is None:
-            s.add(SourceDomainPreference(domain=domain, source_key=source_key))
-        else:
-            current.source_key = source_key
+def set_site_preference(s: Session, key: str, source_key: str | None) -> SourceSiteAPIRead:
+    site = next((site for site in named_sites() if site.key == key), None)
+    if site is None:
+        raise UnknownSiteError(f"No Source is made for the Site '{key}'")
+    if source_key is not None and source_key not in [source.id for source in sources_for(f"https://{site.domains[0]}/")]:
+        raise UnknownSiteError(f"Source '{source_key}' does not handle links on {site.name}")
+    site_record(s, site).preferred_source_key = source_key
     s.flush()
-    return _domain_read(domain, preferred_sources(s))
+    return _site_read(site, preferred_sources(s))

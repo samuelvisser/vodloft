@@ -24,7 +24,9 @@ from .operation_context import operation_context
 from .operation_control import (
     RUN_CANCEL_REASON_META_KEY,
     RUN_CANCEL_REQUESTED_META_KEY,
+    active_operation_ids,
     operation_ids_allow_execution,
+    operation_ids_canceled,
     run_cancel_reason,
     run_cancel_requested,
 )
@@ -387,6 +389,7 @@ def _prepare_execution(
         run_id: Optional[int],
         max_retries: Optional[int],
         operation_ids: tuple[str, ...],
+        operation_ids_inherited: bool,
         operation_slot: str | None,
         worker_callable,
         tracks_progress: bool,
@@ -396,7 +399,13 @@ def _prepare_execution(
     session = get_session()
     try:
         begin_write_transaction(session)
-        if operation_ids and not operation_ids_allow_execution(session, operation_ids):
+        if operation_ids and operation_ids_inherited:
+            # Started by an operation's worker, not owned by the operation: it only
+            # stops when that operation was canceled, and joins it while it is active.
+            if operation_ids_canceled(session, operation_ids):
+                return None
+            operation_ids = active_operation_ids(session, operation_ids)
+        elif operation_ids and not operation_ids_allow_execution(session, operation_ids):
             return None
 
         if schedule_id is not None and session.get(TaskSchedule, schedule_id) is None:
@@ -612,6 +621,7 @@ def execute_task(
         max_retries: Optional[int] = None,
         operation_ids: tuple[str, ...] | list[str] | None = None,
         operation_slot: str | None = None,
+        operation_ids_inherited: bool = False,
         _scheduled_work_pause_token: str | None = None,
         **kwargs,
 ):
@@ -650,6 +660,7 @@ def execute_task(
             run_id=run_id,
             max_retries=max_retries,
             operation_ids=explicit_operation_ids,
+            operation_ids_inherited=operation_ids_inherited,
             operation_slot=operation_slot,
             worker_callable=fn,
             tracks_progress=task_meta.tracks_progress,

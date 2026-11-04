@@ -19,6 +19,7 @@ _WORKER_EXPORTS = {
     "reconcile_collection_assets": ".workers.reconcile_collection_assets",
     "monitor_pending_episode": ".workers.monitor_pending_episode",
     "refresh_episode_metadata": ".workers.refresh_episode_metadata",
+    "refresh_metadata": ".workers.refresh_metadata",
     "rename_file_worker": ".workers.rename_file_worker",
     "rename_collection_profile_files": ".workers.rename_collection_profile_files",
     "rename_movie_profile_files": ".workers.rename_movie_profile_files",

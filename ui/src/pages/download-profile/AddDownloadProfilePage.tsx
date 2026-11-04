@@ -5,8 +5,7 @@ import {useNavigate, useSearchParams} from 'react-router-dom'
 import {useDownloadProfilesByCollectionSlug, useLocalMediaProfiles, useCollectionEpisodeTags, useCollectionSeasons, useCollections} from '../../lib/queries'
 import DownloadProfileForm from '../../components/DownloadProfile/DownloadProfileForm'
 import {
-    DownloadProfileCreateIn, DownloadProfileCreateOut, DownloadProfileCreateSchema,
-    downloadProfileDefaultsFor, forEpisodeIdentifier,
+    DownloadProfileCreateIn, DownloadProfileCreateOut, DownloadProfileCreateSchema, defaultEpisodeFilters,
 } from '../../types/schemas/download_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import Select from 'react-select'
@@ -16,8 +15,6 @@ import {buildCollectionSelectRegistry, EpisodeIdentifierReg} from "../../types/c
 import {useQueryClient} from "@tanstack/react-query";
 import {getZodDefaults} from "../../utils/defaultZod";
 import ReadMore from "../../utils/ReadMore";
-import {SeasonItem} from "../../components/DownloadProfile/DownloadProfileSeasonFilter";
-import {SeasonRead} from "../../types/schemas/season";
 
 export default function AddDownloadProfilePage() {
     const navigate = useNavigate()
@@ -31,18 +28,13 @@ export default function AddDownloadProfilePage() {
     const collectionReg: SelectRegistry = useMemo(() => buildCollectionSelectRegistry(collections), [collections])
 
     const form = useForm<DownloadProfileCreateIn>({
-        // Which filters apply follows the chosen collection, so the schema does too.
-        resolver: (values, context, options) => zodResolver(forEpisodeIdentifier(
-            DownloadProfileCreateSchema,
-            collections?.find((collection) => collection.id === values.collectionId)?.episodeIdentifier,
-        ))(values, context, options),
+        resolver: zodResolver(DownloadProfileCreateSchema),
         mode: 'onBlur',
         shouldFocusError: true,
         defaultValues: getZodDefaults(DownloadProfileCreateSchema),
     })
-    const {watch, setValue, getFieldState, formState: {errors, isSubmitting}} = form
+    const {watch, setValue, formState: {errors, isSubmitting}} = form
     const collectionId = watch('collectionId')
-    const localMediaProfileId = watch('localMediaProfileId')
 
     const selectedCollection = useMemo(
         () => collections?.find((collection) => collection.id === collectionId),
@@ -58,23 +50,17 @@ export default function AddDownloadProfilePage() {
 
     const selectCollection = useCallback((id: number) => {
         setValue('collectionId', id, {shouldDirty: true, shouldValidate: true})
-        // Seasons belong to one collection.
-        setValue('seasons', [], {shouldDirty: true})
+        // Filters name the seasons and episode types of one collection; the new one gets its own starting filters.
+        setValue('filters', [])
     }, [setValue])
-    // The episode tags to start with depend on the collection's Source, which answers after the collection is picked.
-    const {data: episodeTags} = useCollectionEpisodeTags({collectionId: selectedCollection?.id})
-    useEffect(() => {
-        if (!episodeTags || getFieldState('epIdTypeList').isDirty) return
-        setValue('epIdTypeList', downloadProfileDefaultsFor(episodeIdentifier, episodeTags).epIdTypeList)
-    }, [episodeIdentifier, episodeTags, getFieldState, setValue])
     const prefillApplied = useRef(false)
-    const limitPrefillApplied = useRef(false)
     const mediaProfilePrefillApplied = useRef(false)
-    const episodeTypesPrefillApplied = useRef(false)
     const requestedCollectionSlug = searchParams.get('collection')
     const requestedPreferredFormat = searchParams.get('preferredFormat')
-    const requestedEpisodeTypeValues = searchParams.getAll('episodeType')
-    const requestedEpisodeTypes = requestedEpisodeTypeValues.filter((value) => /^[a-z][a-z-]*$/.test(value))
+    const requestedEpisodeTypes = useMemo(
+        () => searchParams.getAll('episodeType').filter((value) => /^[a-z][a-z-]*$/.test(value)),
+        [searchParams],
+    )
     const requestedDownloadEpisodeCountRaw = searchParams.get('downloadEpisodeCount')
     const parsedDownloadEpisodeCount = Number(requestedDownloadEpisodeCountRaw)
     const requestedDownloadEpisodeCount = requestedDownloadEpisodeCountRaw !== null
@@ -91,27 +77,6 @@ export default function AddDownloadProfilePage() {
         selectCollection(requestedCollection.id)
         prefillApplied.current = true
     }, [requestedCollectionSlug, selectCollection, collections])
-
-    useEffect(() => {
-        if (limitPrefillApplied.current || requestedDownloadEpisodeCount === undefined) return
-
-        setValue('downloadDaysInPast', 0, {shouldDirty: true, shouldValidate: true})
-        setValue('downloadEpisodeCount', requestedDownloadEpisodeCount, {
-            shouldDirty: true,
-            shouldValidate: true,
-        })
-        limitPrefillApplied.current = true
-    }, [setValue, requestedDownloadEpisodeCount])
-
-    useEffect(() => {
-        if (episodeTypesPrefillApplied.current || requestedEpisodeTypes.length === 0) return
-
-        setValue('epIdTypeList', [...requestedEpisodeTypes], {
-            shouldDirty: true,
-            shouldValidate: true,
-        })
-        episodeTypesPrefillApplied.current = true
-    }, [setValue, requestedEpisodeTypes])
 
     const onCancel = useCallback(() => navigate('/download-profiles'), [navigate])
 
@@ -136,6 +101,37 @@ export default function AddDownloadProfilePage() {
         successStatuses: [201],
     })
 
+    const selectedCollectionSlug: string | undefined = selectedCollection?.slug
+
+    // Fetch seasons and existing download profiles for the selected show
+    const {data: seasonsData} = useCollectionSeasons(selectedCollectionSlug)
+    const {data: collectionProfiles} = useDownloadProfilesByCollectionSlug(selectedCollectionSlug)
+
+    // The episode tags and seasons to start with answer after the collection is picked.
+    const {data: episodeTags} = useCollectionEpisodeTags({collectionId: selectedCollection?.id})
+    const seasonal = episodeIdentifier === EpisodeIdentifierReg.Enum.seasonal
+    const filtersDefaultedFor = useRef<number | undefined>(undefined)
+    useEffect(() => {
+        if (!selectedCollection || !episodeTags || (seasonal && !seasonsData)) return
+        if (filtersDefaultedFor.current === selectedCollection.id) return
+        filtersDefaultedFor.current = selectedCollection.id
+        const latestSeason = [...(seasonsData ?? [])].sort((a, b) => b.index - a.index)[0]
+        // A link from a Stream Profile asks for the episode types and the number of episodes it streams.
+        const filters = defaultEpisodeFilters(episodeIdentifier, episodeTags, latestSeason?.slug).map((filter) => {
+            if (filter.field === 'types' && requestedEpisodeTypes.length > 0) return {...filter, episodeTypes: requestedEpisodeTypes}
+            if (filter.field === 'published' && requestedDownloadEpisodeCount !== undefined) return {...filter, count: requestedDownloadEpisodeCount}
+            return filter
+        })
+        setValue('filters', filters)
+    }, [selectedCollection, episodeTags, seasonal, seasonsData, episodeIdentifier, requestedEpisodeTypes, requestedDownloadEpisodeCount, setValue])
+
+    // A collection has one Download Profile per Local Media Profile.
+    const usedLocalMediaProfiles = useMemo(() => new Set(
+        (collectionProfiles ?? [])
+            .filter((profile) => profile.collectionId === selectedCollection?.id)
+            .map((profile) => profile.localMediaProfileId),
+    ), [collectionProfiles, selectedCollection?.id])
+
     useEffect(() => {
         if (
             mediaProfilePrefillApplied.current
@@ -149,6 +145,7 @@ export default function AddDownloadProfilePage() {
             && profile.preferredFormat === requestedPreferredFormat
             && isCollectionLocalMediaProfileAvailableFor(profile, selectedCollection.type)
             && isLocalMediaProfileAvailableForSource(profile, selectedCollection.sourceKey)
+            && !usedLocalMediaProfiles.has(profile.id)
         ))
         if (!matchingProfile) return
 
@@ -162,39 +159,8 @@ export default function AddDownloadProfilePage() {
         mediaProfiles,
         requestedPreferredFormat,
         selectedCollection,
+        usedLocalMediaProfiles,
     ])
-    const selectedCollectionSlug: string | undefined = selectedCollection?.slug
-
-    // Fetch seasons and existing download profiles for the selected show
-    const {data: seasonsData} = useCollectionSeasons(selectedCollectionSlug)
-    const {data: collectionProfiles} = useDownloadProfilesByCollectionSlug(selectedCollectionSlug)
-
-    // Prepare seasons for the season filter (detached: name, slug)
-    const seasonsForForm: SeasonItem[] = useMemo((): SeasonItem[] => (seasonsData ?? []).map((s: SeasonRead): SeasonItem => ({
-        name: s.name,
-        slug: s.slug,
-    })), [seasonsData])
-    // Like a new collection, a seasonal collection starts with its latest season and the upcoming ones.
-    const seasonsDefaultedFor = useRef<string | undefined>(undefined)
-    useEffect(() => {
-        if (!seasonsData || !selectedCollectionSlug || seasonsDefaultedFor.current === selectedCollectionSlug) return
-        seasonsDefaultedFor.current = selectedCollectionSlug
-        if (episodeIdentifier !== EpisodeIdentifierReg.Enum.seasonal) return
-        const latest = [...seasonsData].sort((a, b) => b.index - a.index)[0]
-        if (latest) setValue('seasons', [{name: latest.name, slug: latest.slug}], {shouldDirty: true})
-    }, [seasonsData, selectedCollectionSlug, episodeIdentifier, setValue])
-
-    const disabledEpisodeTypes = useMemo(() => {
-        if (typeof localMediaProfileId !== 'number' || !selectedCollection) return new Set<string>()
-        return new Set<string>(
-            (collectionProfiles ?? [])
-                .filter((profile) => (
-                    profile.collectionId === selectedCollection.id
-                    && profile.localMediaProfileId === localMediaProfileId
-                ))
-                .flatMap((profile) => profile.epIdTypeList)
-        )
-    }, [localMediaProfileId, selectedCollection?.id, collectionProfiles])
 
     return (
         <section className="view" aria-labelledby="add-download-profile-title">
@@ -255,6 +221,7 @@ export default function AddDownloadProfilePage() {
                                 options={mediaProfileReg.options}
                                 value={mediaProfileReg.options.find(o => Number(o.value) === field.value) ?? null}
                                 onChange={(opt) => field.onChange(opt ? Number(opt.value) : null)}
+                                isOptionDisabled={(opt) => usedLocalMediaProfiles.has(Number(opt.value))}
                                 onBlur={field.onBlur}
                                 isDisabled={mediaProfileReg.options.length === 0}
                                 placeholder={!mediaProfiles ? 'Loading profiles...' : mediaProfileReg.options.length === 0 ? 'No profiles found' : undefined}
@@ -272,7 +239,7 @@ export default function AddDownloadProfilePage() {
                     <div className="help" id="local-media-profile-help">
                         <ReadMore summary={<span>The Local Media Profile defines the type and output path of downloaded media.</span>}>
                             <p>Add a Local Media Profile to define the type of media to download and where to store it.</p>
-                            <p>The same Local Media Profile can be used by multiple Download Profiles for a collection, but each episode type can belong to only one of those profiles.</p>
+                            <p>A collection has one Download Profile per Local Media Profile. Local Media Profiles the collection already uses cannot be chosen.</p>
                         </ReadMore>
                     </div>
                 </div>
@@ -281,10 +248,8 @@ export default function AddDownloadProfilePage() {
                     form={form}
                     episodeIdentifier={episodeIdentifier}
                     collectionId={selectedCollection?.id}
-                    seasons={seasonsForForm}
+                    seasons={seasonsData}
                     collectionRoot={false}
-                    disabledEpisodeTypes={disabledEpisodeTypes}
-                    startOpen
                 />
 
                 <div className="actions">

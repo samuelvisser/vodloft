@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.services.check_frequency import check_suggestion
+from backend.services.sites import place_collection
 from backend.api.models.collection import *
 from fastapi import HTTPException
 
@@ -199,6 +200,7 @@ def get_collection(s: Session, collection_slug: str) -> CollectionAPIRead:
 def create_collection(s: Session, body: CollectionAPICreate, *, added_by_id: int | None = None) -> CollectionAPIRead:
     collection = create_database_fields(Collection, body)
     collection.added_by_id = added_by_id
+    place_collection(s, collection)
     s.add(collection)
     s.flush()
 
@@ -358,7 +360,7 @@ def request_collection_download_all(
         Episode.collection_id == collection.id,
         Episode.publish_status.in_((
             EpisodePublishStatus.PUBLISHED_FINAL,
-            EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
+            EpisodePublishStatus.PUBLISHED_PRELIMINARY,
         )),
         episode_identifier_type_predicate(Episode.episode_identifier, set(body.episode_types)),
         # Media protected by DRM, or no longer at the Source, cannot be downloaded.
@@ -474,7 +476,7 @@ def _select_collection_downloads_older_than(
         Episode.collection_id == scope.collection.id,
         Episode.publish_status.in_((
             EpisodePublishStatus.PUBLISHED_FINAL,
-            EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
+            EpisodePublishStatus.PUBLISHED_PRELIMINARY,
         )),
         published_at.is_not(None),
     )

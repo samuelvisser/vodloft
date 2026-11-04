@@ -12,7 +12,7 @@ from .local_media_profile import (
 LocalMediaProfile = CollectionLocalMediaProfile
 from .Season import Season
 from .Settings import Settings
-from .SourceDomainPreference import SourceDomainPreference
+from .Site import Site
 from .QuickDownloadHistory import QuickDownloadHistory
 from .user import User, UserAccess, UserSourceAccess
 from .Collection import Collection
@@ -25,7 +25,7 @@ from .Notification import (
     NotificationDelivery, NotificationDestination, NotificationEvent, NotificationRule, PushSubscription, PushVapidKey,
 )
 
-from .download_profile import DownloadProfile, DownloadProfileRule
+from .download_profile import DownloadProfile, DownloadProfileFilter
 from .media_download import MediaDownloadBase
 from .media_download import MediaDownloadHistory
 from .media_item import MediaItemBase

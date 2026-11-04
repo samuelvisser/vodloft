@@ -327,3 +327,91 @@ def test_canceling_waiting_critical_task_releases_scheduled_work_pause(task_data
         assert not scheduler_module.scheduled_work_is_paused()
     finally:
         scheduler_module.shutdown_scheduler(wait=False)
+
+
+def _finished_operation(session, *, status: str) -> str:
+    from sqlalchemy import update
+
+    from task_manager.scheduler.db import TaskOperation
+    from task_manager.scheduler.operations import create_operation
+
+    operation = create_operation(
+        session,
+        kind="collection.index",
+        resource_type="collection",
+        resource_id=5,
+        title="Collection 5",
+        targets=[],
+    )
+    session.flush()
+    session.execute(update(TaskOperation).where(TaskOperation.id == operation.id).values(status=status))
+    session.commit()
+    return operation.id
+
+
+@pytest.mark.parametrize(("status", "runs"), [("SUCCEEDED", True), ("FAILED", True), ("CANCELED", False)])
+def test_work_an_operation_started_runs_unless_the_operation_was_canceled(task_database, monkeypatch, status, runs):
+    """A Download Profile run an index started must not be dropped because the index finished first."""
+    from task_manager.scheduler.executor import execute_task
+
+    ran: list[int] = []
+
+    async def worker(*, resource_id=None, progress=None):
+        ran.append(resource_id)
+
+    _install_task(monkeypatch, key="test_follow_up", function=worker)
+    with task_database() as session:
+        operation_id = _finished_operation(session, status=status)
+
+    execute_task(
+        def_key="test_follow_up", resource_type="collection", resource_id=5,
+        operation_ids=(operation_id,), operation_ids_inherited=True,
+    )
+
+    assert ran == ([5] if runs else [])
+
+
+def test_work_a_finished_operation_owns_does_not_run(task_database, monkeypatch):
+    from task_manager.scheduler.executor import execute_task
+
+    ran: list[int] = []
+
+    async def worker(*, resource_id=None, progress=None):
+        ran.append(resource_id)
+
+    _install_task(monkeypatch, key="test_owned", function=worker)
+    with task_database() as session:
+        operation_id = _finished_operation(session, status="SUCCEEDED")
+
+    execute_task(def_key="test_owned", resource_type="collection", resource_id=5, operation_ids=(operation_id,))
+
+    assert ran == []
+
+
+def test_trigger_now_marks_operation_ids_it_inherited(monkeypatch):
+    from types import SimpleNamespace
+
+    import task_manager.scheduler.scheduler as scheduler_module
+    from task_manager.scheduler.operation_context import operation_context
+
+    jobs: list[dict] = []
+
+    class FakeScheduler:
+        timezone = __import__("datetime").timezone.utc
+
+        def add_job(self, *args, **kwargs):
+            jobs.append(kwargs["kwargs"])
+            return SimpleNamespace(id="job-id")
+
+    monkeypatch.setattr(scheduler_module, "_scheduler_for_task", lambda _def_key: FakeScheduler())
+    monkeypatch.setattr(scheduler_module, "_task_meta", lambda _def_key: None)
+    monkeypatch.setattr(scheduler_module, "_executor_alias_for_task", lambda _def_key: "default")
+
+    with operation_context(("index-operation",)):
+        scheduler_module.trigger_now(def_key="worker", resource_type="collection", resource_id=1)
+        scheduler_module.trigger_now(def_key="worker", resource_type="collection", resource_id=1, operation_ids=("own",))
+
+    assert jobs[0]["operation_ids"] == ("index-operation",)
+    assert jobs[0]["operation_ids_inherited"] is True
+    assert jobs[1]["operation_ids"] == ("own",)
+    assert "operation_ids_inherited" not in jobs[1]

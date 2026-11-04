@@ -20,7 +20,8 @@ import {
     RssStreamProfileBundleIn,
     RssStreamProfileBundleOut,
 } from "../../types/schemas/collection_as_bundle";
-import {downloadProfileDefaultsFor} from "../../types/schemas/download_profile";
+import {defaultEpisodeFilters} from "../../types/schemas/download_profile";
+import {downloadedEpisodeTypes} from "../DownloadProfile/episodeFilters";
 import {useQueryClient} from "@tanstack/react-query";
 import {SeasonDetachedOut} from "../../types/schemas/season";
 import {useEpisodeTags, useSourceLookup} from "../../lib/queries";
@@ -103,12 +104,19 @@ function clearWizardState() {
     }
 }
 
-const defaultDownloadProfile = (episodeIdentifier?: string, tags?: EpisodeTagRead[]): Partial<DownloadProfileBundleIn> => ({
+/** The seasons come oldest first; a new profile starts with the latest one. */
+const latestSeasonSlug = (seasons?: SeasonDetachedOut[]) => seasons?.[seasons.length - 1]?.slug
+
+const defaultDownloadProfile = (episodeIdentifier?: string, tags?: EpisodeTagRead[], seasons?: SeasonDetachedOut[]): Partial<DownloadProfileBundleIn> => ({
     ...getZodDefaults(DownloadProfileBundleSchema),
-    ...downloadProfileDefaultsFor(episodeIdentifier, tags),
+    filters: defaultEpisodeFilters(episodeIdentifier, tags, latestSeasonSlug(seasons)),
 })
 
 const collectionTagsKey = (collection?: CollectionCreatePayloadOut) => (collection ? `${collection.sourceKey} ${collection.sharingUrl}` : undefined)
+/** The starting filters follow the collection's Source tags and its latest season. */
+const filterDefaultsKey = (collection?: CollectionCreatePayloadOut, seasons?: SeasonDetachedOut[]) => (
+    collection ? `${collectionTagsKey(collection)} ${latestSeasonSlug(seasons) ?? ''}` : undefined
+)
 
 const defaultStreamProfile = (action?: CollectionAction): Partial<RssStreamProfileBundleIn> => ({
     enableProfile: true,
@@ -161,16 +169,16 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
         () => persisted?.existingFiles ?? {enabled: false, folder: '', template: ''},
     )
 
-    // The episode tags to download by default come from the show's Source once the show is chosen.
+    // The filters to start with come from the show's Source and seasons once the show is chosen.
     const {data: collectionEpisodeTags} = useEpisodeTags(collectionSubmit?.sourceKey, collectionSubmit?.sharingUrl)
-    const tagDefaultsAppliedFor = useRef(persisted?.downloadProfile.input ? collectionTagsKey(persisted?.collection.submit) : undefined)
+    const tagDefaultsAppliedFor = useRef(persisted?.downloadProfile.input ? filterDefaultsKey(persisted?.collection.submit, persisted?.seasons) : undefined)
     useEffect(() => {
-        const key = collectionTagsKey(collectionSubmit)
+        const key = filterDefaultsKey(collectionSubmit, seasonsSubmit)
         if (!collectionSubmit || !collectionEpisodeTags || downloadProfileSubmit || tagDefaultsAppliedFor.current === key) return
         tagDefaultsAppliedFor.current = key
-        const {epIdTypeList} = downloadProfileDefaultsFor(collectionSubmit.episodeIdentifier, collectionEpisodeTags)
-        setDownloadProfileInput((current) => ({...current, epIdTypeList}))
-    }, [downloadProfileSubmit, collectionEpisodeTags, collectionSubmit])
+        const filters = defaultEpisodeFilters(collectionSubmit.episodeIdentifier, collectionEpisodeTags, latestSeasonSlug(seasonsSubmit))
+        setDownloadProfileInput((current) => ({...current, filters}))
+    }, [downloadProfileSubmit, collectionEpisodeTags, collectionSubmit, seasonsSubmit])
 
     const downloadProfileSubmitRef = useRef(downloadProfileSubmit)
     const streamProfileSubmitRef = useRef(streamProfileSubmit)
@@ -179,7 +187,7 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
         if (!localMediaProfileSubmit || !downloadProfileSubmit) return []
         return [{
             preferredFormat: localMediaProfileSubmit.preferredFormat,
-            episodeTypes: downloadProfileSubmit.epIdTypeList,
+            episodeTypes: downloadedEpisodeTypes(downloadProfileSubmit.filters),
             enabled: downloadProfileSubmit.enableProfile,
         }]
     }, [localMediaProfileSubmit, downloadProfileSubmit])
@@ -368,7 +376,8 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
                         if (collectionSubmit?.episodeIdentifier !== value.episodeIdentifier || collectionTagsKey(collectionSubmit) !== collectionTagsKey(value)) {
                             const tags = qc.getQueryData<EpisodeTagRead[]>(['episodeTags', value.sourceKey, value.sharingUrl])
                             setDownloadProfileInput(defaultDownloadProfile(value.episodeIdentifier, tags))
-                            if (!tags) tagDefaultsAppliedFor.current = undefined
+                            // The starting filters follow once the show's seasons are known too.
+                            tagDefaultsAppliedFor.current = undefined
                             setDownloadProfileSubmit(undefined)
                             downloadProfileSubmitRef.current = undefined
                         }

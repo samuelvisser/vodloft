@@ -107,11 +107,13 @@ A VPN or private overlay network is also a good option when you do not want to e
 
 ## Updating VODLoft
 
-For a normal Compose installation:
+To upgrade to the newest version:
 
 ```bash
 docker compose pull
 docker compose up -d
 ```
+
+Each [VODLoft release](https://github.com/samuelvisser/vodloft/releases) also lists the commands to install exactly that version.
 
 VODLoft applies database migrations when the container starts. Back up `/config` before important upgrades. See [[Backups-and-Upgrades]].

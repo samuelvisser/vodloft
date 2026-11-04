@@ -1,83 +1,65 @@
-import {Fragment, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode} from 'react'
-import {useFieldArray, useWatch, type UseFormReturn} from 'react-hook-form'
+import {Fragment, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent} from 'react'
+import {Controller, useFieldArray, useWatch, type UseFormReturn} from 'react-hook-form'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import Select from 'react-select'
+import Switch from 'react-switch'
 
 import {faIcon} from '../../icons/faIcon'
 import ReadMore from '../../utils/ReadMore'
 import TimeInterval from '../../utils/TimeInterval'
 import SimpleSelect from '../common/SimpleSelect'
+import NumberInput from '../common/NumberInput'
+import DateInput from '../common/DateInput'
 import RegexEditor from '../RegexEditor/RegexEditor'
 import {EpisodeIdentifierReg} from '../../types/collection'
 import {
     DurationOperatorReg,
-    EpisodeRuleActionReg,
-    EpisodeRuleFieldReg,
-    downloadProfileDefaultsFor,
-    newEpisodeRule,
-    type EpisodeRule,
+    EpisodeFilterActionReg,
+    EpisodeFilterFieldReg,
+    newEpisodeFilter,
+    type EpisodeFilter,
+    type EpisodeFilterAction,
+    type EpisodeFilterField,
 } from '../../types/schemas/download_profile'
+import type {SeasonDetachedOut} from '../../types/schemas/season'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import type {EpisodeTagRead} from '../../types/schemas/source'
-import type {SeasonItem} from './DownloadProfileSeasonFilter'
 import {useWhichEpisodes} from './useWhichEpisodes'
 import {useCollectionExamples} from '../../lib/collectionExamples'
-import {dateSentence, plainText, ruleComplete, ruleSentence, seasonsSentence, typesSentence, type Part} from './whichEpisodesText'
+import {insertIndex, isDateLine, joinIgnoreCase, splitIgnoreCase} from './episodeFilters'
+import {filterComplete, filterSentence, plainText, type Part} from './whichEpisodesText'
 import './WhichEpisodes.css'
 
 type Props = {
     form: UseFormReturn<any>
     episodeIdentifier?: string
     tags?: readonly EpisodeTagRead[]
-    seasons: SeasonItem[]
+    /** The collection's seasons, oldest first. */
+    seasons: readonly SeasonDetachedOut[]
     /** The saved Collection; counts need its indexed episodes. */
     collectionId?: number
-    /** Creating a profile opens the built-in lines, so they aren't hidden the first time. */
-    startOpen?: boolean
-    typesField: ReactNode
-    seasonsField: ReactNode
-    datesField: ReactNode
 }
 
-const BUILT_IN_FIELDS: Record<string, string[]> = {
-    types: ['epIdTypeList'],
-    seasons: ['seasons', 'includeUpcomingSeasons', 'allSeasons'],
-    dates: [
-        'downloadDaysInPast', 'downloadEpisodeCount',
-        'downloadStartingFrom', 'deleteOlderEpisodes', 'retentionFrom',
-    ],
-}
+/** A date line downloads or keeps; skipping by date would not mean anything. */
+const DateLineActionReg = createSelectRegistry('DateLineAction', {
+    only: {label: 'Only download'},
+    keep: {label: 'Keep'},
+})
 
-// What a line looks at. Episode types, seasons and the two dates are also built-in lines, while those lines aren't there.
-const FILTER_KINDS = {
-    title: {label: 'title'},
-    description: {label: 'description'},
-    duration: {label: 'duration'},
-    types: {label: 'episode type'},
-    seasons: {label: 'season'},
-    published: {label: 'published'},
-    downloaded: {label: 'downloaded'},
-}
-type FilterKind = keyof typeof FILTER_KINDS
-const DATE_KINDS: readonly FilterKind[] = ['published', 'downloaded']
+// Read after "Only download" or "Keep".
+const PublishedModeReg = createSelectRegistry('PublishedMode', {
+    count: {label: 'the latest … episodes'},
+    days: {label: 'episodes published in the last … days'},
+    since: {label: 'episodes published since a date'},
+})
+type PublishedMode = (typeof PublishedModeReg)['values'][number]
 
-/** A new rule of a kind, with the defaults its editor starts from. */
-function ruleOf(kind: EpisodeRule['field'], action: EpisodeRule['action']): EpisodeRule {
-    const rule = {...newEpisodeRule(), action, field: kind}
-    if (kind === 'duration') return {...rule, durationOperator: 'shorter', durationSeconds: 120}
-    if (kind === 'types') return {...rule, episodeTypes: []}
-    if (kind === 'seasons') return {...rule, seasonSlugs: []}
-    return rule
-}
-/** Without a seasons line, every season downloads, upcoming ones included. */
-const SEASONS_RESET = {seasons: [], includeUpcomingSeasons: true, allSeasons: true}
-const DATE_RESET = {downloadDaysInPast: 0, downloadEpisodeCount: 0, downloadStartingFrom: null, deleteOlderEpisodes: false, retentionFrom: 'published'}
+const UPCOMING_SEASONS = '__upcoming__'
 
-const LEFT_OUT_LABELS: Record<string, string> = {
-    unavailable: 'Can’t be downloaded',
-    types: 'Episode types',
-    seasons: 'Seasons',
-    dates: 'Date window',
+function publishedMode(filter: EpisodeFilter): PublishedMode {
+    if (filter.startingFrom !== null) return 'since'
+    if (filter.days !== null) return 'days'
+    return 'count'
 }
 
 function Sentence({parts}: {parts: Part[]}) {
@@ -90,66 +72,73 @@ function Sentence({parts}: {parts: Part[]}) {
     )
 }
 
-/** Without an episode types line above it, the date line starts the sentence itself. */
-function withLead(lead: boolean, parts: Part[]): Part[] {
-    return lead ? [{text: 'Download episodes '}, ...parts] : parts
-}
-
 /** Clicking a line's sentence opens or closes it, unless the click was on one of its controls. */
 function toggleFromSentence(event: MouseEvent<HTMLDivElement>, toggle: () => void) {
     if ((event.target as HTMLElement).closest('button, a, input, select, textarea, [class*="select__"]')) return
     toggle()
 }
 
-function CountBadge({count, label}: {count: number | undefined; label?: string}) {
-    if (count === undefined) return null
+function CountBadge({count, waiting}: {count: number | undefined; waiting: boolean}) {
+    if (count === undefined) {
+        // The counts load after the form; the line shows it is waiting for its number.
+        return waiting ? <span className="which-episodes-count is-loading" aria-label="Counting">…</span> : null
+    }
     return (
-        <span className={`which-episodes-count${count === 0 ? ' is-zero' : ''}`} title="Indexed episodes this line leaves out">
-            −{count}{label ? ` ${label}` : ''}
+        <span className={`which-episodes-count${count === 0 ? ' is-zero' : ''}`} title="Indexed episodes this filter leaves out">
+            −{count}
         </span>
     )
 }
 
-/** One section of sentences that decides which episodes a Download Profile downloads. */
-export default function WhichEpisodes({
-    form, episodeIdentifier, tags, seasons, collectionId, startOpen = false, typesField, seasonsField, datesField,
-}: Props) {
+/** A number field of a filter: empty means no number yet. */
+function numberOrNull(value: string): number | null {
+    if (value.trim() === '') return null
+    const number = Number(value)
+    return Number.isFinite(number) ? Math.round(number) : null
+}
+
+/** One list of filters, from top to bottom, that decides which episodes a Download Profile downloads and keeps. */
+export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, collectionId}: Props) {
     const {control, getValues, setValue, trigger} = form
-    const {fields, append, remove} = useFieldArray({control, name: 'rules'})
+    const {fields, insert, remove, move} = useFieldArray({control, name: 'filters'})
     const seasonal = episodeIdentifier === EpisodeIdentifierReg.Enum.seasonal
-    const builtIns = ['types', ...(seasonal && !getValues('allSeasons') ? ['seasons'] : []), ...(episodeIdentifier !== undefined ? ['dates'] : [])]
-    const datesAllowed = episodeIdentifier !== undefined
-    // While creating, every built-in line stays open until you open or close one yourself.
-    const [chosenOpen, setOpen] = useState<Set<string> | null>(startOpen ? null : new Set())
-    const open = chosenOpen ?? new Set(builtIns)
-    const [showWhich, setShowWhich] = useState(false)
-    // Values when a line was opened, so Cancel can put them back; a new rule has none and is removed instead.
-    const snapshots = useRef(new Map<string, unknown>())
 
     const values = useWatch({control}) as Record<string, any>
-    const rules: EpisodeRule[] = values.rules ?? []
+    const filters: EpisodeFilter[] = values.filters ?? []
+    const deleteOlder = !!values.deleteOlderEpisodes
 
     // While a collection is added, the counts run over its newest episodes.
     const examples = useCollectionExamples()
     const exampleCollection = collectionId === undefined && examples && !examples.failed ? examples.collection : undefined
+
+    // One line is open at a time. What it was when opened lets Cancel put it back; a new line has nothing and is removed.
+    const [openId, setOpenId] = useState<string | null>(null)
+    const snapshot = useRef<{filter: EpisodeFilter; deleteOlder: boolean} | null>(null)
+    const [showWhich, setShowWhich] = useState(false)
+    const dragFrom = useRef<number | null>(null)
+    const [dragOver, setDragOver] = useState<number | null>(null)
+
+    // Filters still being written are left out of the count until they are complete.
+    const sentIndexes = useMemo(() => filters.flatMap((filter, index) => filterComplete(filter) ? [index] : []), [filters])
     const request = useMemo(() => {
         if (collectionId === undefined && exampleCollection === undefined) return null
         return {
             ...(collectionId !== undefined ? {collectionId} : {exampleCollection}),
-            epIdTypeList: values.epIdTypeList ?? [],
             downloadWithCountdown: !!values.downloadWithCountdown,
-            downloadDaysInPast: Number.isFinite(values.downloadDaysInPast) ? values.downloadDaysInPast : 0,
-            downloadEpisodeCount: Number.isFinite(values.downloadEpisodeCount) ? values.downloadEpisodeCount : 0,
-            downloadStartingFrom: values.downloadStartingFrom ?? null,
-            seasonSlugs: (values.seasons ?? []).map((season: SeasonItem) => season.slug),
-            includeUpcomingSeasons: !!values.includeUpcomingSeasons,
-            allSeasons: !!values.allSeasons,
-            // Lines still being written are left out of the count until they are complete.
-            rules: rules.filter(ruleComplete),
+            filters: sentIndexes.map((index) => filters[index]),
             includeEpisodes: showWhich,
         }
-    }, [collectionId, exampleCollection, values, rules, showWhich])
+    }, [collectionId, exampleCollection, values.downloadWithCountdown, filters, sentIndexes, showWhich])
     const {result, episodes, hasMore, loadingMore, moreFailed, loadMore} = useWhichEpisodes(request)
+    const counts = useMemo(() => {
+        const byIndex = new Map<number, number>()
+        sentIndexes.forEach((index, sent) => {
+            const count = result?.filters[sent]
+            if (count !== undefined) byIndex.set(index, count)
+        })
+        return byIndex
+    }, [sentIndexes, result])
+
     // The list loads its next page when its end scrolls into view.
     const listRef = useRef<HTMLUListElement | null>(null)
     const endRef = useRef<HTMLLIElement | null>(null)
@@ -163,254 +152,258 @@ export default function WhichEpisodes({
         observer.observe(node)
         return () => observer.disconnect()
     }, [hasMore, loadingMore, moreFailed, loadMore])
-    // Counts of the rules sent, mapped back to every rule line (unfinished lines have none).
-    const ruleCounts = useMemo(() => {
-        const counts: Array<number | undefined> = []
-        let sent = 0
-        for (const rule of rules) {
-            const complete = ruleComplete(rule)
-            counts.push(complete && result ? result.rules[sent] : undefined)
-            if (complete) sent += 1
-        }
-        return counts
-    }, [rules, result])
-    const sentRuleIndexes = useMemo(() => rules.flatMap((rule, index) => ruleComplete(rule) ? [index] : []), [rules])
-
-    const openLine = (key: string, fieldNames: string[]) => {
-        snapshots.current.set(key, fieldNames.map((name) => getValues(name)))
-        setOpen(new Set([key]))
-    }
-    const closeLine = (key: string) => {
-        snapshots.current.delete(key)
-        setOpen((current) => {
-            const next = new Set(current ?? builtIns)
-            next.delete(key)
-            return next
-        })
-    }
-    const cancelLine = (key: string, fieldNames: string[], ruleIndex?: number) => {
-        const snapshot = snapshots.current.get(key) as unknown[] | (() => void) | undefined
-        if (typeof snapshot === 'function') {
-            // A built-in line that became this new rule: Cancel removes the rule and brings the line back.
-            if (ruleIndex !== undefined) remove(ruleIndex)
-            closeLine(key)
-            snapshot()
-            return
-        }
-        if (snapshot) {
-            fieldNames.forEach((name, index) => setValue(name, snapshot[index], {shouldDirty: true, shouldValidate: true}))
-        } else if (ruleIndex !== undefined) {
-            remove(ruleIndex)
-        }
-        closeLine(key)
-    }
-    const doneLine = async (key: string, fieldNames: string[]) => {
-        if (await trigger(fieldNames)) closeLine(key)
-    }
-
-    // Episode types, the seasons and the date window are filters you can remove and add again; while open they stay.
-    const typesShown = (values.epIdTypeList ?? []).length > 0 || open.has('types')
-    const seasonsShown = seasonal && (!values.allSeasons || open.has('seasons'))
-    const hasDateLimit = (values.downloadDaysInPast ?? 0) > 0 || (values.downloadEpisodeCount ?? 0) > 0
-        || !!values.downloadStartingFrom || values.retentionFrom === 'downloaded'
-    const datesShown = datesAllowed && (hasDateLimit || open.has('dates'))
-    /** What a line can look at: every rule kind (seasons only by season), and the dates while there is no date line or this is it. */
-    const kindRegFor = (current: FilterKind) => createSelectRegistry('WhichEpisodesFilterKind', FILTER_KINDS, [
-        ...EpisodeRuleFieldReg.values.filter((field) => field !== 'seasons' || seasonal),
-        ...(datesAllowed && (!datesShown || DATE_KINDS.includes(current)) ? DATE_KINDS : []),
-    ])
-    const setDateField = (kind: string) => {
-        const days = Number.isFinite(values.downloadDaysInPast) ? values.downloadDaysInPast : 0
-        setValue('retentionFrom', kind, {shouldDirty: true, shouldValidate: true})
-        if (kind === 'downloaded') {
-            // Counting from the download date only works with a number of days.
-            setValue('downloadEpisodeCount', 0, {shouldDirty: true, shouldValidate: true})
-            setValue('downloadStartingFrom', null, {shouldDirty: true, shouldValidate: true})
-            setValue('downloadDaysInPast', days > 0 ? days : 180, {shouldDirty: true, shouldValidate: true})
-            setValue('deleteOlderEpisodes', true, {shouldDirty: true, shouldValidate: true})
-        }
-    }
-    /** A built-in line becomes a new rule; Cancel on that rule brings the line back as it was. */
-    const builtInToRule = (key: 'types' | 'seasons' | 'dates', rule: EpisodeRule) => {
-        const names = BUILT_IN_FIELDS[key]
-        const saved = names.map((name) => getValues(name))
-        removeBuiltIn(key)
-        const index = fields.length
-        append(rule)
-        snapshots.current.set(`rule-new-${index}`, () => {
-            names.forEach((name, position) => setValue(name, saved[position], {shouldDirty: true, shouldValidate: true}))
-            openLine(key, names)
-        })
-        setOpen(new Set([`rule-new-${index}`]))
-    }
-    /** A built-in line becomes another built-in line, through a new rule that Cancel takes away again. */
-    const builtInToBuiltIn = (key: 'types' | 'seasons' | 'dates', kind: 'types' | 'seasons' | 'published' | 'downloaded') => {
-        removeBuiltIn(key)
-        const index = fields.length
-        append(newEpisodeRule())
-        addBuiltIn(index, kind)
-    }
-    const changeTypesLine = (action: EpisodeRule['action'], kind: FilterKind) => {
-        if (DATE_KINDS.includes(kind) || (kind === 'seasons' && action === 'only' && !seasonsShown)) {
-            builtInToBuiltIn('types', kind as 'seasons' | 'published' | 'downloaded')
-            return
-        }
-        const rule = ruleOf(kind as EpisodeRule['field'], action)
-        builtInToRule('types', kind === 'types' ? {...rule, episodeTypes: [...(values.epIdTypeList ?? [])]} : rule)
-    }
-    const changeDatesLine = (kind: FilterKind) => {
-        if (DATE_KINDS.includes(kind)) {
-            setDateField(kind)
-        } else if ((kind === 'types' && !typesShown) || (kind === 'seasons' && !seasonsShown)) {
-            builtInToBuiltIn('dates', kind)
-        } else {
-            builtInToRule('dates', ruleOf(kind as EpisodeRule['field'], 'only'))
-        }
-    }
-    const changeSeasonsLine = (action: EpisodeRule['action'], kind: FilterKind) => {
-        if (DATE_KINDS.includes(kind) || (kind === 'types' && action === 'only' && !typesShown)) {
-            builtInToBuiltIn('seasons', kind as 'types' | 'published' | 'downloaded')
-            return
-        }
-        const rule = ruleOf(kind as EpisodeRule['field'], action)
-        const slugs = (values.seasons ?? []).map((season: SeasonItem) => season.slug)
-        builtInToRule('seasons', kind === 'seasons' ? {...rule, seasonSlugs: slugs} : rule)
-    }
-    const removeBuiltIn = (key: string) => {
-        closeLine(key)
-        if (key === 'types') setValue('epIdTypeList', [], {shouldDirty: true, shouldValidate: true})
-        if (key === 'seasons') {
-            for (const [name, value] of Object.entries(SEASONS_RESET)) setValue(name, value, {shouldDirty: true, shouldValidate: true})
-        }
-        if (key === 'dates') {
-            for (const [name, value] of Object.entries(DATE_RESET)) setValue(name, value, {shouldDirty: true, shouldValidate: true})
-        }
-    }
-    // A new filter turned into a built-in line: the line opens, and Cancel takes it away again.
-    const addBuiltIn = (ruleIndex: number, kind: 'types' | 'seasons' | 'published' | 'downloaded') => {
-        remove(ruleIndex)
-        const key = kind === 'types' || kind === 'seasons' ? kind : 'dates'
-        openLine(key, BUILT_IN_FIELDS[key])
-        if (kind === 'types') {
-            setValue('epIdTypeList', downloadProfileDefaultsFor(episodeIdentifier, tags).epIdTypeList, {shouldDirty: true})
-        } else if (kind === 'seasons') {
-            // The seasons line starts again from the latest season and the upcoming ones.
-            setValue('seasons', seasons.length > 0 ? [seasons[seasons.length - 1]] : [], {shouldDirty: true})
-            setValue('includeUpcomingSeasons', true, {shouldDirty: true})
-            setValue('allSeasons', false, {shouldDirty: true})
-        } else {
-            // Like a new profile: the latest 25 episodes. Counting from the download date only works with days.
-            setValue('downloadDaysInPast', kind === 'downloaded' ? 180 : 0, {shouldDirty: true})
-            setValue('downloadEpisodeCount', kind === 'downloaded' ? 0 : 25, {shouldDirty: true})
-            setValue('downloadStartingFrom', null, {shouldDirty: true})
-            setValue('retentionFrom', kind, {shouldDirty: true})
-            setValue('deleteOlderEpisodes', true, {shouldDirty: true})
-        }
-    }
 
     const typeLabel = (key: string) => tags?.find((tag) => tag.key === key)?.label ?? key
+    const seasonLabel = (slug: string) => seasons.find((season) => season.slug === slug)?.name ?? slug
+    const sentenceOf = (filter: EpisodeFilter) => filterSentence(filter, typeLabel, seasonLabel, deleteOlder)
     const tagOptions = createSelectRegistry(
         'WhichEpisodesEpisodeTypes',
         Object.fromEntries((tags ?? []).map((tag) => [tag.key, {label: tag.label}])),
         (tags ?? []).map((tag) => tag.key),
     ).options
-    const seasonLabel = (slug: string) => seasons.find((season) => season.slug === slug)?.name ?? slug
-    // Newest season first, like the seasons line.
+    // Upcoming seasons first, then the newest season first.
     const seasonOptions = createSelectRegistry(
         'WhichEpisodesSeasons',
-        Object.fromEntries(seasons.map((season) => [season.slug, {label: season.name}])),
-        [...seasons].reverse().map((season) => season.slug),
+        {
+            [UPCOMING_SEASONS]: {label: 'Upcoming seasons'},
+            ...Object.fromEntries(seasons.map((season) => [season.slug, {label: season.name}])),
+        },
+        [UPCOMING_SEASONS, ...[...seasons].reverse().map((season) => season.slug)],
     ).options
-    const unselectedTypes = (tags ?? []).filter((tag) => !(values.epIdTypeList ?? []).includes(tag.key))
-    /** Names the episode types a line leaves out on its count badge, when there are few enough to fit. */
-    const excludedTypesLabel = (labels: string[]) => labels.length > 0 && labels.length <= 2 ? labels.join(', ') : undefined
-    /** A type filter's count badge names the types it leaves out, like the built-in types line does. */
-    const ruleCountLabel = (rule: EpisodeRule) => {
-        if (rule.field !== 'types' || !rule.episodeTypes?.length) return undefined
-        if (rule.action === 'skip') return excludedTypesLabel(rule.episodeTypes.map(typeLabel))
-        return excludedTypesLabel((tags ?? []).filter((tag) => !rule.episodeTypes?.includes(tag.key)).map((tag) => tag.label))
+
+    /** What a line can look at: a collection with seasons can filter on them, and the list has one line per date. */
+    const fieldRegFor = (index: number) => createSelectRegistry('WhichEpisodesFilterField', Object.fromEntries(
+        EpisodeFilterFieldReg.values.filter((field) => {
+            if (field === 'seasons') return seasonal || seasons.length > 0 || filters[index]?.field === 'seasons'
+            if (isDateLine({field})) return !filters.some((filter, other) => other !== index && filter.field === field)
+            return true
+        }).map((field) => [field, EpisodeFilterFieldReg.spec[field]]),
+    ))
+
+    const openLine = (id: string, index: number) => {
+        snapshot.current = {filter: getValues(`filters.${index}`), deleteOlder: !!getValues('deleteOlderEpisodes')}
+        setOpenId(id)
     }
-    const typeLabels = (values.epIdTypeList ?? []).map((key: string) => tags?.find((tag) => tag.key === key)?.label ?? key)
-    const seasonNames = (values.seasons ?? []).map((season: SeasonItem) => seasons.find((item) => item.slug === season.slug)?.name ?? season.name)
-
-    /** An open line's header: what the line does, and what it looks at. */
-    const lineHead = (
-        id: string, action: EpisodeRule['action'], kind: FilterKind,
-        onAction: ((action: EpisodeRule['action']) => void) | null, onKind: (kind: FilterKind) => void,
-    ) => (
-        <span className="which-episodes-text which-episodes-rule-head">
-            <SimpleSelect
-                inputId={`${id}-action`} registry={EpisodeRuleActionReg} value={action}
-                aria-label="What the filter does" isDisabled={onAction === null}
-                onChange={(value) => onAction?.(value as EpisodeRule['action'])}
-            />
-            <span>if</span>
-            <SimpleSelect
-                inputId={`${id}-field`} registry={kindRegFor(kind)} value={kind}
-                aria-label="What the filter looks at"
-                onChange={(value) => onKind(value as FilterKind)}
-            />
-        </span>
-    )
-
-    const builtInHead = (key: string) => {
-        if (key === 'types') return lineHead('types', 'only', 'types', (action) => action !== 'only' && changeTypesLine(action, 'types'), (kind) => kind !== 'types' && changeTypesLine('only', kind))
-        if (key === 'seasons') return lineHead('seasons', 'only', 'seasons', (action) => action !== 'only' && changeSeasonsLine(action, 'seasons'), (kind) => kind !== 'seasons' && changeSeasonsLine('only', kind))
-        if (key === 'dates') {
-            const kind: FilterKind = values.retentionFrom === 'downloaded' ? 'downloaded' : 'published'
-            // The date line only says which episodes to download; Keep and Skip would not mean anything for it.
-            return lineHead('dates', 'only', kind, null, (next) => next !== kind && changeDatesLine(next))
+    const closeLine = () => {
+        snapshot.current = null
+        setOpenId(null)
+    }
+    const cancelLine = (index: number) => {
+        if (snapshot.current) {
+            setValue(`filters.${index}`, snapshot.current.filter, {shouldDirty: true, shouldValidate: true})
+            setValue('deleteOlderEpisodes', snapshot.current.deleteOlder, {shouldDirty: true})
+        } else {
+            remove(index)
         }
-        return null
+        closeLine()
     }
-
-    const builtInLine = (key: string, parts: Part[], count: number | undefined, content: ReactNode, countLabel?: string) => {
-        const isOpen = open.has(key)
-        const names = BUILT_IN_FIELDS[key]
-        const head = isOpen ? builtInHead(key) : null
-        return (
-            <li key={key} className={`which-episodes-line${isOpen ? ' is-open' : ''}`}>
-                <div className="which-episodes-sentence" onClick={(event) => toggleFromSentence(event, () => isOpen ? closeLine(key) : openLine(key, names))}>
-                    {head ?? <span className="which-episodes-text"><Sentence parts={parts}/></span>}
-                    <CountBadge count={count} label={countLabel}/>
-                    <button
-                        type="button" className={`which-episodes-icon${isOpen ? ' is-active' : ''}`}
-                        aria-label={`Edit: ${plainText(parts)}`} aria-expanded={isOpen}
-                        onClick={() => isOpen ? closeLine(key) : openLine(key, names)}
-                    >
-                        <FontAwesomeIcon icon={faIcon('fass', 'pen')}/>
-                    </button>
-                    <button type="button" className="which-episodes-icon" aria-label={`Remove: ${plainText(parts)}`} onClick={() => removeBuiltIn(key)}>
-                        <FontAwesomeIcon icon={faIcon('fass', 'trash')}/>
-                    </button>
-                </div>
-                {isOpen && (
-                    <div className="which-episodes-editor">
-                        {content}
-                        <div className="which-episodes-editor-actions">
-                            <button type="button" className="btn" onClick={() => cancelLine(key, names)}>Cancel</button>
-                            <button type="button" className="btn btn-primary" onClick={() => doneLine(key, names)}>Done</button>
-                        </div>
-                    </div>
-                )}
-            </li>
-        )
+    const doneLine = async (index: number) => {
+        if (await trigger([`filters.${index}`, 'filters'])) closeLine()
     }
 
     const addFilter = () => {
-        const index = fields.length
-        append(newEpisodeRule())
-        // A new rule has no snapshot: Cancel removes it.
-        setOpen(new Set([`rule-new-${index}`]))
+        const filter = newEpisodeFilter('title')
+        const index = insertIndex(filters, filter.field)
+        insert(index, filter)
+        // A new line has no snapshot: Cancel removes it. Its id is known after the insert renders.
+        snapshot.current = null
+        setOpenId(`new:${index}`)
+    }
+    useEffect(() => {
+        if (!openId?.startsWith('new:')) return
+        const id = fields[Number(openId.slice(4))]?.id
+        if (id) setOpenId(id)
+    }, [openId, fields])
+
+    const changeField = (index: number, field: EpisodeFilterField) => {
+        const current = filters[index]
+        setValue(`filters.${index}`, newEpisodeFilter(field, current?.action), {shouldDirty: true})
+        // A line you are adding moves to where a filter of its kind goes.
+        if (!snapshot.current) {
+            const target = insertIndex(filters.filter((_, other) => other !== index), field)
+            if (target !== index) move(index, target)
+        }
+    }
+    const changePublishedMode = (index: number, mode: PublishedMode) => {
+        const name = `filters.${index}`
+        setValue(`${name}.count`, mode === 'count' ? 25 : null, {shouldDirty: true})
+        setValue(`${name}.days`, mode === 'days' ? 180 : null, {shouldDirty: true})
+        setValue(`${name}.startingFrom`, mode === 'since' ? new Date().toISOString().slice(0, 10) : null, {shouldDirty: true})
+    }
+
+    const onDragStart = (event: DragEvent<HTMLLIElement>, index: number) => {
+        dragFrom.current = index
+        event.dataTransfer.effectAllowed = 'move'
+        event.dataTransfer.setData('text/plain', String(index))
+    }
+    const onDrop = (event: DragEvent<HTMLLIElement>, index: number) => {
+        event.preventDefault()
+        const from = dragFrom.current
+        dragFrom.current = null
+        setDragOver(null)
+        if (from !== null && from !== index) move(from, index)
     }
 
     const leftOutLabel = (key: string | null) => {
         if (!key) return null
-        if (key.startsWith('rule:')) {
-            const rule = rules[sentRuleIndexes[Number(key.slice(5))]]
-            return rule ? plainText(ruleSentence(rule, typeLabel, seasonLabel)) : 'A filter'
+        if (key === 'unavailable') return 'Can’t be downloaded'
+        if (key.startsWith('filter:')) {
+            const filter = filters[sentIndexes[Number(key.slice(7))]]
+            return filter ? plainText(sentenceOf(filter)) : 'A filter'
         }
-        return LEFT_OUT_LABELS[key] ?? key
+        return key
+    }
+
+    const editor = (filter: EpisodeFilter, index: number) => {
+        const name = `filters.${index}`
+        const id = `filter-${index}`
+        if (filter.field === 'types') {
+            return (
+                <div className="form-row">
+                    <label htmlFor={`${id}-types`}>Is any of</label>
+                    <Select
+                        inputId={`${id}-types`} isMulti closeMenuOnSelect={false}
+                        classNamePrefix="select"
+                        options={tagOptions}
+                        value={tagOptions.filter((option) => (filter.episodeTypes ?? []).includes(option.value))}
+                        onChange={(options) => setValue(`${name}.episodeTypes`, options.map((option) => option.value), {shouldDirty: true})}
+                    />
+                    <div className="help">
+                        <ReadMore summary={<span>The episode types of the collection’s Source</span>}>
+                            {(tags ?? []).map((tag) => <p key={tag.key}><b>{tag.label}</b>: {tag.help}.</p>)}
+                        </ReadMore>
+                    </div>
+                </div>
+            )
+        }
+        if (filter.field === 'seasons') {
+            const chosen = [...(filter.includeUpcoming ? [UPCOMING_SEASONS] : []), ...(filter.seasonSlugs ?? [])]
+            return (
+                <div className="form-row">
+                    <label htmlFor={`${id}-seasons`}>Is any of</label>
+                    <Select
+                        inputId={`${id}-seasons`} isMulti closeMenuOnSelect={false}
+                        classNamePrefix="select"
+                        options={seasonOptions}
+                        value={seasonOptions.filter((option) => chosen.includes(option.value))}
+                        onChange={(options) => {
+                            const picked = options.map((option) => option.value)
+                            setValue(`${name}.includeUpcoming`, picked.includes(UPCOMING_SEASONS), {shouldDirty: true})
+                            setValue(`${name}.seasonSlugs`, picked.filter((value) => value !== UPCOMING_SEASONS), {shouldDirty: true})
+                        }}
+                    />
+                    <div className="help">With upcoming seasons, a season the collection gets later is added to this filter.</div>
+                </div>
+            )
+        }
+        if (filter.field === 'duration') {
+            return (
+                <div className="which-episodes-duration">
+                    <SimpleSelect
+                        inputId={`${id}-operator`} registry={DurationOperatorReg}
+                        value={filter.durationOperator ?? 'shorter'} aria-label="Shorter or longer"
+                        onChange={(value) => setValue(`${name}.durationOperator`, value, {shouldDirty: true})}
+                    />
+                    <TimeInterval
+                        idPrefix={`${id}-duration`} backendUnit="seconds"
+                        value={filter.durationSeconds ?? 0}
+                        onChange={(value) => setValue(
+                            `${name}.durationSeconds`, Number.isFinite(value) && value > 0 ? Math.round(value) : null,
+                            {shouldDirty: true},
+                        )}
+                    />
+                    <div className="help">Episodes whose length isn’t known yet are never left out by a duration filter.</div>
+                </div>
+            )
+        }
+        if (filter.field === 'published' || filter.field === 'downloaded') {
+            const mode = filter.field === 'downloaded' ? 'days' : publishedMode(filter)
+            const deletes = filter.action === 'only' && mode !== 'since'
+            return (
+                <>
+                    {filter.field === 'published' && (
+                        <div className="form-row">
+                            <SimpleSelect
+                                inputId={`${id}-mode`} aria-label="Which episodes by date"
+                                registry={PublishedModeReg} value={mode}
+                                onChange={(value) => changePublishedMode(index, value as PublishedMode)}
+                            />
+                        </div>
+                    )}
+                    {mode === 'count' && (
+                        <div className="form-row">
+                            <label htmlFor={`${id}-count`}>Episodes</label>
+                            <NumberInput
+                                id={`${id}-count`} inputMode="numeric" min={1} step={1}
+                                value={filter.count ?? ''}
+                                onChange={(event) => setValue(`${name}.count`, numberOrNull(event.target.value), {shouldDirty: true})}
+                            />
+                            <div className="help">The newest episodes that pass the filters above this one.</div>
+                        </div>
+                    )}
+                    {mode === 'days' && (
+                        <div className="form-row">
+                            <label htmlFor={`${id}-days`}>{filter.field === 'downloaded' && filter.action === 'keep' ? 'Keep each download for … days' : 'Days'}</label>
+                            <NumberInput
+                                id={`${id}-days`} inputMode="numeric" min={1} step={1}
+                                value={filter.days ?? ''}
+                                onChange={(event) => setValue(`${name}.days`, numberOrNull(event.target.value), {shouldDirty: true})}
+                            />
+                            {filter.field === 'downloaded' && filter.action === 'only' && (
+                                <div className="help">Only episodes published in this many days are downloaded.</div>
+                            )}
+                        </div>
+                    )}
+                    {mode === 'since' && (
+                        <div className="form-row">
+                            <label htmlFor={`${id}-since`}>On or after</label>
+                            <DateInput
+                                id={`${id}-since`}
+                                value={filter.startingFrom}
+                                onChange={(value) => setValue(`${name}.startingFrom`, value, {shouldDirty: true})}
+                                clearButtonLabel="Clear the date"
+                            />
+                            {filter.action === 'only' && (
+                                <div className="help">Episodes from before the date that are already downloaded are not deleted.</div>
+                            )}
+                        </div>
+                    )}
+                    {deletes && (
+                        <div className="form-row">
+                            <label htmlFor={`${id}-delete`}>{filter.field === 'downloaded'
+                                ? `And delete them ${filter.days || '…'} ${filter.days === 1 ? 'day' : 'days'} after downloading`
+                                : mode === 'count' ? 'And delete them once they are no longer among the latest' : 'And delete them once they are older'}</label>
+                            <Controller
+                                control={control}
+                                name="deleteOlderEpisodes"
+                                render={({field}) => (
+                                    <Switch
+                                        id={`${id}-delete`}
+                                        checked={!!field.value}
+                                        onChange={(checked) => field.onChange(checked)}
+                                        onColor="#0ea5e9"
+                                        offColor="#d1d5db"
+                                        uncheckedIcon={false}
+                                        checkedIcon={false}
+                                    />
+                                )}
+                            />
+                            <div className="help">Downloads you keep, and downloads a Keep filter matches, are never deleted.</div>
+                        </div>
+                    )}
+                </>
+            )
+        }
+        const regex = splitIgnoreCase(filter.pattern)
+        return (
+            <RegexEditor
+                id={`${id}-regex`}
+                field={filter.field === 'description' ? 'description' : 'title'}
+                collectionId={collectionId ?? null}
+                value={regex}
+                onChange={(value) => setValue(`${name}.pattern`, joinIgnoreCase(value), {shouldDirty: true})}
+            />
+        )
     }
 
     return (
@@ -422,57 +415,74 @@ export default function WhichEpisodes({
                 </button>
             </div>
             <ul className="which-episodes-lines">
-                {typesShown && builtInLine(
-                    'types', typesSentence(typeLabels), result?.types, typesField,
-                    excludedTypesLabel(unselectedTypes.map((tag) => tag.label)),
+                {fields.length === 0 && (
+                    <li className="which-episodes-line">
+                        <div className="which-episodes-sentence is-empty">
+                            <span className="which-episodes-text">Download <b>every</b> episode</span>
+                        </div>
+                    </li>
                 )}
-                {seasonsShown && builtInLine('seasons', withLead(!typesShown, seasonsSentence(seasonNames, !!values.includeUpcomingSeasons)), result?.seasons, seasonsField)}
-                {datesShown && builtInLine('dates', withLead(!typesShown && !seasonsShown, dateSentence({
-                    downloadDaysInPast: values.downloadDaysInPast ?? 0,
-                    downloadEpisodeCount: values.downloadEpisodeCount ?? 0,
-                    downloadStartingFrom: values.downloadStartingFrom ?? null,
-                    deleteOlderEpisodes: !!values.deleteOlderEpisodes,
-                    retentionFrom: values.retentionFrom ?? 'published',
-                })), result?.dates, datesField)}
                 {fields.map((item, index) => {
-                    const rule: EpisodeRule = rules[index] ?? newEpisodeRule()
-                    const key = open.has(`rule-new-${index}`) ? `rule-new-${index}` : `rule-${item.id}`
-                    const isOpen = open.has(key)
-                    const name = `rules.${index}`
-                    const parts = ruleSentence(rule, typeLabel, seasonLabel)
+                    const filter: EpisodeFilter = filters[index] ?? newEpisodeFilter()
+                    const isOpen = openId === item.id
+                    const parts = sentenceOf(filter)
+                    const toggle = () => isOpen ? closeLine() : openLine(item.id, index)
+                    const fieldReg = fieldRegFor(index)
                     return (
-                        <li key={item.id} className={`which-episodes-line${isOpen ? ' is-open' : ''}`}>
-                            <div className="which-episodes-sentence" onClick={(event) => toggleFromSentence(event, () => isOpen ? closeLine(key) : openLine(key, [name]))}>
-                                {isOpen ? lineHead(`rule-${index}`, rule.action, rule.field, (action) => setValue(`${name}.action`, action, {shouldDirty: true}), (value) => {
-                                    if (value === 'published' || value === 'downloaded'
-                                        || (value === 'types' && rule.action === 'only' && !typesShown)
-                                        || (value === 'seasons' && rule.action === 'only' && !seasonsShown)) {
-                                        addBuiltIn(index, value)
-                                        return
-                                    }
-                                    const next = ruleOf(value as EpisodeRule['field'], rule.action)
-                                    setValue(`${name}.field`, next.field, {shouldDirty: true})
-                                    if (value === 'duration' && !rule.durationOperator) {
-                                        setValue(`${name}.durationOperator`, next.durationOperator, {shouldDirty: true})
-                                        setValue(`${name}.durationSeconds`, next.durationSeconds, {shouldDirty: true})
-                                    }
-                                    if (value === 'types' && !rule.episodeTypes) setValue(`${name}.episodeTypes`, [], {shouldDirty: true})
-                                    if (value === 'seasons' && !rule.seasonSlugs) setValue(`${name}.seasonSlugs`, [], {shouldDirty: true})
-                                }) : <span className="which-episodes-text"><Sentence parts={parts}/></span>}
-                                {rule.action === 'keep'
+                        <li
+                            key={item.id}
+                            className={`which-episodes-line${isOpen ? ' is-open' : ''}${dragOver === index ? ' is-drop-target' : ''}`}
+                            draggable={!isOpen}
+                            onDragStart={(event) => onDragStart(event, index)}
+                            onDragOver={(event) => {
+                                if (dragFrom.current === null) return
+                                event.preventDefault()
+                                if (dragOver !== index) setDragOver(index)
+                            }}
+                            onDragLeave={() => setDragOver((current) => current === index ? null : current)}
+                            onDrop={(event) => onDrop(event, index)}
+                            onDragEnd={() => {
+                                dragFrom.current = null
+                                setDragOver(null)
+                            }}
+                        >
+                            <div className="which-episodes-sentence" onClick={(event) => toggleFromSentence(event, toggle)}>
+                                {!isOpen && (
+                                    <span className="which-episodes-grip" title="Drag to change the order" aria-hidden="true">
+                                        <FontAwesomeIcon icon={faIcon('fass', 'grip-vertical')}/>
+                                    </span>
+                                )}
+                                {isOpen ? (
+                                    <span className="which-episodes-text which-episodes-rule-head">
+                                        <SimpleSelect
+                                            inputId={`filter-${index}-action`}
+                                            registry={isDateLine(filter) ? DateLineActionReg : EpisodeFilterActionReg}
+                                            value={filter.action}
+                                            aria-label="What the filter does"
+                                            onChange={(value) => setValue(`filters.${index}.action`, value as EpisodeFilterAction, {shouldDirty: true})}
+                                        />
+                                        {!isDateLine(filter) && <span>if</span>}
+                                        <SimpleSelect
+                                            inputId={`filter-${index}-field`} registry={fieldReg} value={filter.field}
+                                            aria-label="What the filter looks at"
+                                            onChange={(value) => value !== filter.field && changeField(index, value as EpisodeFilterField)}
+                                        />
+                                    </span>
+                                ) : <span className="which-episodes-text"><Sentence parts={parts}/></span>}
+                                {filter.action === 'keep'
                                     ? <span className="which-episodes-count is-keep" title="Keep never stops a download; it protects matching downloads from deletion">keeps</span>
-                                    : <CountBadge count={ruleCounts[index]} label={ruleCountLabel(rule)}/>}
+                                    : <CountBadge count={counts.get(index)} waiting={request !== null && filterComplete(filter)}/>}
                                 <button
                                     type="button" className={`which-episodes-icon${isOpen ? ' is-active' : ''}`}
                                     aria-label={`Edit: ${plainText(parts)}`} aria-expanded={isOpen}
-                                    onClick={() => isOpen ? closeLine(key) : openLine(key, [name])}
+                                    onClick={toggle}
                                 >
                                     <FontAwesomeIcon icon={faIcon('fass', 'pen')}/>
                                 </button>
                                 <button
                                     type="button" className="which-episodes-icon" aria-label={`Remove: ${plainText(parts)}`}
                                     onClick={() => {
-                                        closeLine(key)
+                                        if (isOpen) closeLine()
                                         remove(index)
                                     }}
                                 >
@@ -481,61 +491,24 @@ export default function WhichEpisodes({
                             </div>
                             {isOpen && (
                                 <div className="which-episodes-editor">
-                                    {rule.field === 'types' ? (
-                                        <div className="form-row">
-                                            <label htmlFor={`rule-${index}-types`}>Is any of</label>
-                                            <Select
-                                                inputId={`rule-${index}-types`} isMulti closeMenuOnSelect={false}
-                                                classNamePrefix="select"
-                                                options={tagOptions}
-                                                value={tagOptions.filter((option) => (rule.episodeTypes ?? []).includes(option.value))}
-                                                onChange={(options) => setValue(`${name}.episodeTypes`, options.map((option) => option.value), {shouldDirty: true})}
-                                            />
-                                        </div>
-                                    ) : rule.field === 'seasons' ? (
-                                        <div className="form-row">
-                                            <label htmlFor={`rule-${index}-seasons`}>Is any of</label>
-                                            <Select
-                                                inputId={`rule-${index}-seasons`} isMulti closeMenuOnSelect={false}
-                                                classNamePrefix="select"
-                                                options={seasonOptions}
-                                                value={seasonOptions.filter((option) => (rule.seasonSlugs ?? []).includes(option.value))}
-                                                onChange={(options) => setValue(`${name}.seasonSlugs`, options.map((option) => option.value), {shouldDirty: true})}
-                                            />
-                                        </div>
-                                    ) : rule.field === 'duration' ? (
-                                        <div className="which-episodes-duration">
-                                            <SimpleSelect
-                                                inputId={`rule-${index}-operator`} registry={DurationOperatorReg}
-                                                value={rule.durationOperator ?? 'shorter'} aria-label="Shorter or longer"
-                                                onChange={(value) => setValue(`${name}.durationOperator`, value, {shouldDirty: true})}
-                                            />
-                                            <TimeInterval
-                                                idPrefix={`rule-${index}-duration`} backendUnit="seconds"
-                                                value={rule.durationSeconds ?? 0}
-                                                onChange={(value) => setValue(
-                                                    `${name}.durationSeconds`, Number.isFinite(value) && value > 0 ? Math.round(value) : null,
-                                                    {shouldDirty: true},
-                                                )}
-                                            />
-                                            <div className="help">Episodes whose length isn’t known yet are never left out by a duration filter.</div>
-                                        </div>
-                                    ) : (
-                                        <RegexEditor
-                                            id={`rule-${index}-regex`}
-                                            field={rule.field === 'description' ? 'description' : 'title'}
-                                            collectionId={collectionId ?? null}
-                                            value={{pattern: rule.pattern ?? '', ignoreCase: rule.ignoreCase}}
-                                            onChange={(value) => {
-                                                setValue(`${name}.pattern`, value.pattern, {shouldDirty: true})
-                                                setValue(`${name}.ignoreCase`, value.ignoreCase, {shouldDirty: true})
-                                            }}
-                                        />
-                                    )}
-                                    <RuleError form={form} index={index}/>
+                                    {editor(filter, index)}
+                                    <FilterError form={form} index={index}/>
                                     <div className="which-episodes-editor-actions">
-                                        <button type="button" className="btn" onClick={() => cancelLine(key, [name], index)}>Cancel</button>
-                                        <button type="button" className="btn btn-primary" onClick={() => doneLine(key, [name])}>Done</button>
+                                        <button
+                                            type="button" className="btn which-episodes-move" disabled={index === 0}
+                                            onClick={() => move(index, index - 1)} aria-label="Move up"
+                                        >
+                                            <FontAwesomeIcon icon={faIcon('fass', 'chevron-up')}/>
+                                        </button>
+                                        <button
+                                            type="button" className="btn which-episodes-move" disabled={index === fields.length - 1}
+                                            onClick={() => move(index, index + 1)} aria-label="Move down"
+                                        >
+                                            <FontAwesomeIcon icon={faIcon('fass', 'chevron-down')}/>
+                                        </button>
+                                        <span className="which-episodes-editor-spacer"/>
+                                        <button type="button" className="btn" onClick={() => cancelLine(index)}>Cancel</button>
+                                        <button type="button" className="btn btn-primary" onClick={() => doneLine(index)}>Done</button>
                                     </div>
                                 </div>
                             )}
@@ -560,6 +533,7 @@ export default function WhichEpisodes({
                     </li>
                 )}
             </ul>
+            <ListError form={form}/>
             {showWhich && episodes && (
                 <ul className="which-episodes-list" ref={listRef}>
                     {episodes.map((episode) => (
@@ -582,12 +556,17 @@ export default function WhichEpisodes({
                 </ul>
             )}
             <div className="help">
-                <ReadMore summary={<span>Each line narrows the one above it. The numbers show how many {exampleCollection
+                <ReadMore summary={<span>Filters apply from top to bottom. Drag a filter to change the order. The numbers show how many {exampleCollection
                     ? 'of the newest episodes, looked up for this collection before it is saved,'
-                    : 'indexed episodes'} each line leaves out.</span>}>
+                    : 'indexed episodes'} each filter leaves out.</span>}>
                     <p>
-                        An episode is downloaded when it passes the built-in lines and every <b>Skip</b> and <b>Only download</b> filter.
-                        A <b>Keep</b> filter never stops a download; it protects matching downloads from being deleted by the date line.
+                        An episode is downloaded when no <b>Skip</b> or <b>Only download</b> filter leaves it out. Each filter looks only at
+                        the episodes the filters above it let through, so “the latest 25 episodes” below an episode type filter are the
+                        latest 25 of those types.
+                    </p>
+                    <p>
+                        A <b>Keep</b> filter never stops a download. Wherever it is in the list, it protects the downloads it matches from
+                        being deleted. Only a published or downloaded filter deletes downloads, and only when you turn that on.
                     </p>
                     <p>
                         Changing filters later only affects episodes that aren’t downloaded yet. An episode a filter skips can still be
@@ -599,10 +578,20 @@ export default function WhichEpisodes({
     )
 }
 
-function RuleError({form, index}: {form: UseFormReturn<any>; index: number}) {
+function FilterError({form, index}: {form: UseFormReturn<any>; index: number}) {
     const errors = form.formState.errors as any
-    const ruleErrors = errors?.rules?.[index]
-    const message = ruleErrors?.pattern?.message ?? ruleErrors?.durationSeconds?.message ?? ruleErrors?.episodeTypes?.message ?? ruleErrors?.seasonSlugs?.message ?? ruleErrors?.message ?? ruleErrors?.root?.message
+    const filterErrors = errors?.filters?.[index]
+    const message = filterErrors?.pattern?.message ?? filterErrors?.durationSeconds?.message ?? filterErrors?.episodeTypes?.message
+        ?? filterErrors?.seasonSlugs?.message ?? filterErrors?.days?.message ?? filterErrors?.count?.message
+        ?? filterErrors?.startingFrom?.message ?? filterErrors?.action?.message ?? filterErrors?.message ?? filterErrors?.root?.message
+    if (!message) return null
+    return <div className="error" role="alert" aria-live="polite">{String(message)}</div>
+}
+
+/** An error about the list as a whole, such as two published lines, or one the server gave. */
+function ListError({form}: {form: UseFormReturn<any>}) {
+    const errors = form.formState.errors as any
+    const message = errors?.filters?.root?.message ?? errors?.filters?.message
     if (!message) return null
     return <div className="error" role="alert" aria-live="polite">{String(message)}</div>
 }

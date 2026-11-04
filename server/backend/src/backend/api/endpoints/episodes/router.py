@@ -143,7 +143,7 @@ def episode_metadata_refresh(episode_slug: str):
     status_code=status.HTTP_202_ACCEPTED,
 )
 def episode_early_delete(episode_slug: str):
-    """Immediately remove one episode that is currently stuck in dw_processing."""
+    """Immediately remove one episode that is currently stuck in source_processing."""
     with db_session() as s:
         try:
             result = request_episode_early_delete(s, episode_slug)

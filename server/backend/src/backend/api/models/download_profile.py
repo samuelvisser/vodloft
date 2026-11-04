@@ -6,16 +6,15 @@ from pydantic import Field, field_validator, model_validator
 
 from backend.api.models.base import ResponseBase, RequestBase, response_model_config
 from backend.api.models.collection_example import ExampleCollectionAPIIn
-from backend.api.models.season import SeasonAPIRequestDetached, SeasonAPIRead
 from backend.services.regex_check import MAX_PATTERN_LENGTH, PatternError, compile_pattern, split_inline_ignore_case
 from backend.types.download_profile_types import (
+    DATE_FIELDS,
     DurationOperator,
-    EpisodeRuleAction,
-    EpisodeRuleField,
+    EpisodeFilterAction,
+    EpisodeFilterField,
     EpisodeTagKey,
     AutoSubtitles,
     DEFAULT_SPONSORBLOCK_SEGMENTS,
-    RetentionFrom,
     SponsorBlockAction,
     SponsorBlockCategory,
     DEFAULT_UPGRADE_IMPROVEMENTS,
@@ -24,70 +23,83 @@ from backend.types.download_profile_types import (
 )
 
 
-class DownloadProfileRuleAPIIn(RequestBase):
-    """One of your own lines in Which episodes."""
+class DownloadProfileFilterAPIIn(RequestBase):
+    """One line of Which episodes."""
 
-    action: EpisodeRuleAction
-    field: EpisodeRuleField
+    action: EpisodeFilterAction
+    field: EpisodeFilterField
     pattern: str | None = Field(default=None, max_length=MAX_PATTERN_LENGTH)
-    ignore_case: bool = False
+    """A title or description line's regular expression; a leading (?i) ignores case."""
     duration_operator: DurationOperator | None = None
     duration_seconds: int | None = Field(default=None, ge=1)
     episode_types: list[EpisodeTagKey] | None = None
     season_slugs: list[str] | None = None
+    include_upcoming: bool = False
+    days: int | None = Field(default=None, ge=1)
+    count: int | None = Field(default=None, ge=1)
+    starting_from: date | None = None
 
     @model_validator(mode="after")
-    def _validate_rule(self):
-        if self.field == EpisodeRuleField.TYPES:
+    def _validate_filter(self):
+        if self.field in DATE_FIELDS:
+            if self.action == EpisodeFilterAction.SKIP:
+                raise ValueError("A date line can only download or keep episodes")
+            if self.field == EpisodeFilterField.DOWNLOADED:
+                if self.days is None or self.count is not None or self.starting_from is not None:
+                    raise ValueError("Choose a number of days")
+            elif sum(value is not None for value in (self.days, self.count, self.starting_from)) != 1:
+                raise ValueError("Choose a number of days, a number of episodes or a date")
+            return self
+        if self.field == EpisodeFilterField.TYPES:
             if not self.episode_types:
                 raise ValueError("Choose at least one episode type")
             return self
-        if self.field == EpisodeRuleField.SEASONS:
-            if not self.season_slugs:
-                raise ValueError("Choose at least one season")
+        if self.field == EpisodeFilterField.SEASONS:
+            if not self.season_slugs and not self.include_upcoming:
+                raise ValueError("Choose at least one season, or upcoming seasons")
             return self
-        if self.field == EpisodeRuleField.DURATION:
+        if self.field == EpisodeFilterField.DURATION:
             if self.duration_operator is None or self.duration_seconds is None:
-                raise ValueError("A duration rule needs shorter or longer than, and a duration")
+                raise ValueError("A duration filter needs shorter or longer than, and a duration")
             return self
-        self.pattern, self.ignore_case = split_inline_ignore_case(self.pattern or "", self.ignore_case)
         try:
-            compile_pattern(self.pattern, self.ignore_case)
+            compile_pattern(*split_inline_ignore_case(self.pattern or "", False))
         except PatternError as exc:
             raise ValueError(str(exc)) from None
         return self
 
 
-class DownloadProfileRuleAPIRead(ResponseBase):
+def _one_line_per_date(filters: list[DownloadProfileFilterAPIIn]) -> list[DownloadProfileFilterAPIIn]:
+    for date_field in DATE_FIELDS:
+        if sum(item.field == date_field for item in filters) > 1:
+            raise ValueError(f"Use one {date_field} line at most")
+    return filters
+
+
+class DownloadProfileFilterAPIRead(ResponseBase):
     id: int
-    action: EpisodeRuleAction
-    field: EpisodeRuleField
+    action: EpisodeFilterAction
+    field: EpisodeFilterField
     pattern: str | None
-    ignore_case: bool
     duration_operator: DurationOperator | None
     duration_seconds: int | None
     episode_types: list[str] | None = None
     season_slugs: list[str] | None = None
+    include_upcoming: bool
+    days: int | None
+    count: int | None
+    starting_from: date | None
 
 
 # ---------- Strict input (create/update) ----------
 class DownloadProfileAPIBaseIn(RequestBase):
-    """Fields for requests: validate here (constraints allowed).
-
-    The season fields only apply to a collection identified by season, the other
-    filters apply to every collection.
-    """
+    """Fields for requests: validate here (constraints allowed)."""
 
     enable_profile: bool
-    ep_id_type_list: list[EpisodeTagKey]
 
     download_with_countdown: bool
     redownload_final: bool
-    download_days_in_past: int = Field(ge=0)
-    download_episode_count: int = Field(ge=0)
-    download_starting_from: date | None
     delete_older_episodes: bool
-    retention_from: RetentionFrom = RetentionFrom.PUBLISHED
     auto_subtitles: AutoSubtitles = AutoSubtitles.FALLBACK
     sponsorblock_enabled: bool = True
     sponsorblock_segments: dict[SponsorBlockCategory, SponsorBlockAction] = Field(
@@ -100,11 +112,7 @@ class DownloadProfileAPIBaseIn(RequestBase):
         default_factory=lambda: list(DEFAULT_UPGRADE_IMPROVEMENTS), max_length=len(UpgradeImprovement),
     )
 
-    seasons: list[SeasonAPIRequestDetached]
-    include_upcoming_seasons: bool
-    # Without a seasons line every season downloads, and the two season fields above are not used.
-    all_seasons: bool = False
-    rules: list[DownloadProfileRuleAPIIn] = Field(default_factory=list, max_length=50)
+    filters: list[DownloadProfileFilterAPIIn] = Field(default_factory=list, max_length=50)
 
     @field_validator("sponsorblock_segments")
     @classmethod
@@ -118,15 +126,7 @@ class DownloadProfileAPIBaseIn(RequestBase):
     def _unique_improvements(cls, value: list) -> list:
         return list(dict.fromkeys(value))
 
-    @model_validator(mode="after")
-    def _validate_download_limit(self):
-        if self.download_days_in_past > 0 and self.download_episode_count > 0:
-            raise ValueError("Choose either a date limit or an episode-count limit, not both")
-        if self.download_starting_from is not None and (
-            self.download_days_in_past > 0 or self.download_episode_count > 0
-        ):
-            raise ValueError("Download starting from can only be used when Limit by is set to No limits")
-        return self
+    _one_line_per_date = field_validator("filters")(classmethod(lambda cls, value: _one_line_per_date(value)))
 
 
 class DownloadProfileAPICreateBundle(DownloadProfileAPIBaseIn):
@@ -155,15 +155,10 @@ class DownloadProfileAPIBaseOut(ResponseBase):
     collection_id: int
     local_media_profile_id: int
     enable_profile: bool
-    ep_id_type_list: list[EpisodeTagKey]
 
     download_with_countdown: bool
     redownload_final: bool
-    download_days_in_past: int
-    download_episode_count: int
-    download_starting_from: date | None
     delete_older_episodes: bool
-    retention_from: RetentionFrom
     auto_subtitles: AutoSubtitles
     sponsorblock_enabled: bool
     sponsorblock_segments: dict[str, SponsorBlockAction]
@@ -172,10 +167,7 @@ class DownloadProfileAPIBaseOut(ResponseBase):
     upgrade_repeat: UpgradeRepeat
     upgrade_improvements: list[UpgradeImprovement]
 
-    seasons: list[SeasonAPIRead]
-    include_upcoming_seasons: bool
-    all_seasons: bool
-    rules: list[DownloadProfileRuleAPIRead]
+    filters: list[DownloadProfileFilterAPIRead]
 
 
 class DownloadProfileAPIRead(DownloadProfileAPIBaseOut):
@@ -194,15 +186,8 @@ class WhichEpisodesAPIRequest(RequestBase):
 
     collection_id: int | None = None
     example_collection: ExampleCollectionAPIIn | None = None
-    ep_id_type_list: list[EpisodeTagKey]
     download_with_countdown: bool
-    download_days_in_past: int = Field(ge=0)
-    download_episode_count: int = Field(ge=0)
-    download_starting_from: date | None
-    season_slugs: list[str] = Field(default_factory=list)
-    include_upcoming_seasons: bool
-    all_seasons: bool = False
-    rules: list[DownloadProfileRuleAPIIn] = Field(default_factory=list, max_length=50)
+    filters: list[DownloadProfileFilterAPIIn] = Field(default_factory=list, max_length=50)
     include_episodes: bool = False
     # The episode list is read a page at a time, newest first, as the form scrolls through it.
     episodes_offset: int = Field(default=0, ge=0)
@@ -221,28 +206,26 @@ class WhichEpisodesEpisodeAPIRead(ResponseBase):
     title: str
     published_at: datetime | None
     left_out_by: str | None
-    """None when the episode will be downloaded; otherwise unavailable, types, seasons, dates or rule:<index>."""
+    """None when the episode will be downloaded; otherwise unavailable, or filter:<index>."""
 
 
 class WhichEpisodesAPIRead(ResponseBase):
     total: int
     unavailable: int
-    types: int
-    seasons: int
-    dates: int
-    rules: list[int]
+    filters: list[int]
+    """How many episodes each filter leaves out, in the order they were sent; 0 for Keep."""
     downloaded: int
     episodes: list[WhichEpisodesEpisodeAPIRead] | None = None
     """One page of the Collection's indexed episodes, from episodes_offset; None unless include_episodes."""
 
 
 class SkippedByFilterAPIRead(ResponseBase):
-    """An episode a Download Profile would download if one of its own rules did not leave it out."""
+    """An episode a Download Profile would download if one of its filters did not leave it out."""
 
     episode_id: int
     download_profile_id: int
     local_media_profile_id: int
-    rule: DownloadProfileRuleAPIRead
+    filter: DownloadProfileFilterAPIRead
 
 
 class AutoSubtitlesUseAPIRead(ResponseBase):
@@ -251,6 +234,4 @@ class AutoSubtitlesUseAPIRead(ResponseBase):
     download_profile_id: int
     collection_id: int
     collection_title: str
-    episode_types: list[str]
-    """The episode types, only when the Collection has more than one Download Profile on this Local Media Profile."""
     auto_subtitles: AutoSubtitles

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from profile_filters import filter_rows, line
+
 from datetime import datetime, timezone
 
 from conftest import available_artifact
@@ -41,8 +43,8 @@ def test_download_profile_view_reports_storage_of_its_own_downloads() -> None:
         def add_profile(local_media_profile):
             profile = DownloadProfile(
                 collection_id=collection.id, local_media_profile_id=local_media_profile.id, enable_profile=True,
-                ep_id_type_list=[EpIdType.EP.value], download_with_countdown=False, redownload_final=False,
-                download_days_in_past=0, download_episode_count=0, delete_older_episodes=False,
+                filters=filter_rows(line("only", "types", episode_types=[EpIdType.EP.value])), download_with_countdown=False, redownload_final=False,
+                delete_older_episodes=False,
             )
             session.add(profile)
             return profile

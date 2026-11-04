@@ -120,7 +120,7 @@ def observe_episode_detail(
         and hls_duration_seconds > 12
     ):
         return EpisodeRemoteSnapshot(
-            EpisodePublishStatus.DW_PROCESSING,
+            EpisodePublishStatus.SOURCE_PROCESSING,
             False,
             hls_duration_seconds,
         )
@@ -134,7 +134,7 @@ def observe_episode_detail(
 
     if not detail.is_downloadable:
         return EpisodeRemoteSnapshot(
-            EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
+            EpisodePublishStatus.PUBLISHED_PRELIMINARY,
             True,
             hls_duration_seconds,
         )
@@ -181,7 +181,7 @@ def resolve_episode_status(
     # supply safe_live_ended; record-only callers deliberately fall back to The
     # Daily Wire's published timestamp.
     if (
-        snapshot.status is EpisodePublishStatus.DW_PROCESSING
+        snapshot.status is EpisodePublishStatus.SOURCE_PROCESSING
         and age_minutes is not None
         and age_minutes >= timing.dw_processing_max_minutes
     ):
@@ -197,8 +197,8 @@ def resolve_episode_status(
     if (
         current is EpisodePublishStatus.PUBLISHED_FINAL
         and snapshot.status in {
-            EpisodePublishStatus.DW_PROCESSING,
-            EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
+            EpisodePublishStatus.SOURCE_PROCESSING,
+            EpisodePublishStatus.PUBLISHED_PRELIMINARY,
         }
     ):
         return EpisodeRemoteSnapshot(
@@ -211,7 +211,7 @@ def resolve_episode_status(
     # published countdown state; scheduled/delayed/live and no-usable states have
     # already returned above and can never be overwritten by episode age.
     if (
-        snapshot.status is EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN
+        snapshot.status is EpisodePublishStatus.PUBLISHED_PRELIMINARY
         and age_minutes is not None
         and age_minutes >= timing.published_final_after_minutes
     ):

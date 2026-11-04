@@ -4,7 +4,9 @@ from backend.api.models.operations import TaskOperationAccepted
 from backend.api.models.settings import (
     LibraryDefaultsAPIRead, SettingsAPIRead, SettingsAPIUpdate, SpeedLimitStatusRead,
 )
+from backend.api.models.site_refresh import SiteRefreshAPIRead, SiteRefreshAPIUpdate
 from backend.services import speed_limit
+from backend.services.site_refresh import UnknownSiteError, list_site_refresh, set_site_refresh
 from config import get_settings
 from backend.app import db_session
 from backend.services.collection_assets import request_collection_asset_reconciliation
@@ -48,6 +50,27 @@ def library_defaults():
 def settings_speed_limit():
     """The download speed limit as it applies right now, and the connection speed VODLoft measured."""
     return SpeedLimitStatusRead.model_validate(speed_limit.status())
+
+
+@router.get("/site-refresh", dependencies=[requires(Area.SETTINGS, Level.MANAGE)], response_model=list[SiteRefreshAPIRead])
+def site_refresh_list():
+    """The metadata refresh schedule of every Site VODLoft has seen."""
+    with db_session() as s:
+        return [SiteRefreshAPIRead.model_validate(site) for site in list_site_refresh(s)]
+
+
+@router.put("/site-refresh/{key}", dependencies=[requires(Area.SETTINGS, Level.MANAGE)], response_model=SiteRefreshAPIRead)
+def site_refresh_update(key: str, body: SiteRefreshAPIUpdate):
+    """Choose the schedule a Site's items follow while VODLoft looks them up again, and whether its upcoming
+    and live videos are added."""
+    with db_session() as s:
+        try:
+            result = set_site_refresh(s, key, body.refresh_mode, body.refresh_intervals, body.pending_checks)
+        except UnknownSiteError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        read = SiteRefreshAPIRead.model_validate(result)
+        s.commit()
+        return read
 
 
 @router.put("", dependencies=[requires(Area.SETTINGS, Level.MANAGE)], response_model=SettingsAPIRead)

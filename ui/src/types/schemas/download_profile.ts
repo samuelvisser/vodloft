@@ -2,27 +2,29 @@ import type {EpisodeTagRead} from "./source";
 import {z} from 'zod'
 import {EpisodeIdentifierReg, EpisodeIdentifierValue} from "../collection";
 import {ApiDateTimeSchema} from "./datetime";
-import {SeasonDetachedSchema, SeasonReadSchema} from "./season";
 import {createSelectRegistry} from "../../utils/selectRegistry";
 import {DEFAULT_SPONSORBLOCK_SEGMENTS} from '../sponsorblock'
+import {DATE_FIELDS, isDateLine, joinIgnoreCase, splitIgnoreCase} from '../../components/DownloadProfile/episodeFilters'
 
 
-// ---------- Which episodes: your own rules ----------
-export const EpisodeRuleActionReg = createSelectRegistry('EpisodeRuleAction', {
+// ---------- Which episodes: one ordered list of filters ----------
+export const EpisodeFilterActionReg = createSelectRegistry('EpisodeFilterAction', {
     skip: {label: 'Skip'},
     only: {label: 'Only download'},
     keep: {label: 'Keep'},
 })
-export type EpisodeRuleAction = (typeof EpisodeRuleActionReg)['values'][number]
+export type EpisodeFilterAction = (typeof EpisodeFilterActionReg)['values'][number]
 
-export const EpisodeRuleFieldReg = createSelectRegistry('EpisodeRuleField', {
+export const EpisodeFilterFieldReg = createSelectRegistry('EpisodeFilterField', {
     title: {label: 'title'},
     description: {label: 'description'},
     duration: {label: 'duration'},
     types: {label: 'episode type'},
     seasons: {label: 'season'},
+    published: {label: 'published'},
+    downloaded: {label: 'downloaded'},
 })
-export type EpisodeRuleField = (typeof EpisodeRuleFieldReg)['values'][number]
+export type EpisodeFilterField = (typeof EpisodeFilterFieldReg)['values'][number]
 
 export const DurationOperatorReg = createSelectRegistry('DurationOperator', {
     shorter: {label: 'is shorter than'},
@@ -30,50 +32,107 @@ export const DurationOperatorReg = createSelectRegistry('DurationOperator', {
 })
 export type DurationOperator = (typeof DurationOperatorReg)['values'][number]
 
-export const EpisodeRuleSchema = z.object({
-    action: z.enum(['skip', 'only', 'keep']).default('only'),
-    field: z.enum(['title', 'description', 'duration', 'types', 'seasons']).default('title'),
+export const EpisodeFilterSchema = z.object({
+    action: z.enum(EpisodeFilterActionReg.values).default('only'),
+    field: z.enum(EpisodeFilterFieldReg.values).default('title'),
+    /** A title or description filter's regular expression; a leading (?i) ignores case. */
     pattern: z.string().nullable().default(null),
-    ignoreCase: z.boolean().default(false),
-    durationOperator: z.enum(['shorter', 'longer']).nullable().default(null),
+    durationOperator: z.enum(DurationOperatorReg.values).nullable().default(null),
     durationSeconds: z.int().min(1).nullable().default(null),
     episodeTypes: z.array(z.string()).nullable().default(null),
     seasonSlugs: z.array(z.string()).nullable().default(null),
-}).superRefine((rule, ctx) => {
-    if (rule.field === 'types') {
-        if (!rule.episodeTypes?.length) ctx.addIssue({code: 'custom', path: ['episodeTypes'], message: 'Choose at least one episode type'})
-    } else if (rule.field === 'seasons') {
-        if (!rule.seasonSlugs?.length) ctx.addIssue({code: 'custom', path: ['seasonSlugs'], message: 'Choose at least one season'})
-    } else if (rule.field === 'duration') {
-        if (!rule.durationOperator || !rule.durationSeconds) {
+    includeUpcoming: z.boolean().default(false),
+    days: z.int('Enter a number of days').min(1, 'Use at least 1 day').nullable().default(null),
+    count: z.int('Enter a number of episodes').min(1, 'Use at least 1 episode').nullable().default(null),
+    startingFrom: z.iso.date().nullable().default(null),
+}).superRefine((filter, ctx) => {
+    if (isDateLine(filter)) {
+        if (filter.action === 'skip') ctx.addIssue({code: 'custom', path: ['action'], message: 'A date line can only download or keep episodes'})
+        if (filter.field === 'downloaded') {
+            if (!filter.days) ctx.addIssue({code: 'custom', path: ['days'], message: 'Choose a number of days'})
+        } else if ([filter.days, filter.count, filter.startingFrom].filter((value) => value !== null).length !== 1) {
+            ctx.addIssue({code: 'custom', path: ['days'], message: 'Choose a number of days, a number of episodes or a date'})
+        }
+    } else if (filter.field === 'types') {
+        if (!filter.episodeTypes?.length) ctx.addIssue({code: 'custom', path: ['episodeTypes'], message: 'Choose at least one episode type'})
+    } else if (filter.field === 'seasons') {
+        if (!filter.seasonSlugs?.length && !filter.includeUpcoming) {
+            ctx.addIssue({code: 'custom', path: ['seasonSlugs'], message: 'Choose at least one season, or upcoming seasons'})
+        }
+    } else if (filter.field === 'duration') {
+        if (!filter.durationOperator || !filter.durationSeconds) {
             ctx.addIssue({code: 'custom', path: ['durationSeconds'], message: 'Choose a duration'})
         }
-    } else if (!rule.pattern) {
+    } else if (!splitIgnoreCase(filter.pattern).pattern) {
         ctx.addIssue({code: 'custom', path: ['pattern'], message: 'Type what to look for'})
     }
 })
-export type EpisodeRuleIn = z.input<typeof EpisodeRuleSchema>
-export type EpisodeRule = z.output<typeof EpisodeRuleSchema>
+export type EpisodeFilterIn = z.input<typeof EpisodeFilterSchema>
+export type EpisodeFilter = z.output<typeof EpisodeFilterSchema>
 
-/** A new filter line: skip titles containing a whole word, in any capitalisation. */
-export function newEpisodeRule(): EpisodeRule {
-    return {action: 'only', field: 'title', pattern: '', ignoreCase: true, durationOperator: null, durationSeconds: null, episodeTypes: null, seasonSlugs: null}
+const EMPTY_FILTER: Omit<EpisodeFilter, 'action' | 'field'> = {
+    pattern: null, durationOperator: null, durationSeconds: null, episodeTypes: null,
+    seasonSlugs: null, includeUpcoming: false, days: null, count: null, startingFrom: null,
+}
+
+/** A new filter of a field, with the values its editor starts from. A date line cannot skip. */
+export function newEpisodeFilter(field: EpisodeFilterField = 'title', action: EpisodeFilterAction = 'only'): EpisodeFilter {
+    const filter: EpisodeFilter = {...EMPTY_FILTER, action: isDateLine({field}) && action === 'skip' ? 'only' : action, field}
+    if (field === 'title' || field === 'description') return {...filter, pattern: joinIgnoreCase({pattern: '', ignoreCase: true})}
+    if (field === 'duration') return {...filter, durationOperator: 'shorter', durationSeconds: 120}
+    if (field === 'types') return {...filter, episodeTypes: []}
+    if (field === 'seasons') return {...filter, seasonSlugs: []}
+    if (field === 'published') return {...filter, count: 25}
+    if (field === 'downloaded') return {...filter, days: 180}
+    return filter
+}
+
+/** The episode types a new profile starts with: the Source's defaults, without bonus content for a seasonal collection. */
+export function defaultEpisodeTypes(
+    episodeIdentifier: EpisodeIdentifierValue | string | undefined,
+    tags: readonly EpisodeTagRead[] | undefined,
+): string[] {
+    const seasonal = episodeIdentifier === EpisodeIdentifierReg.Enum.seasonal
+    const types = (tags ?? [])
+        .filter((tag) => tag.selectedByDefault && (!seasonal || tag.rssEpisodeType === 'full'))
+        .map((tag) => tag.key)
+    return types.length ? types : ['ep']
+}
+
+/**
+ * The filters a new profile starts with: for a seasonal collection its latest season and the
+ * upcoming ones, then the Source's default episode types, then the latest 25 episodes.
+ */
+export function defaultEpisodeFilters(
+    episodeIdentifier: EpisodeIdentifierValue | string | undefined,
+    tags: readonly EpisodeTagRead[] | undefined,
+    latestSeasonSlug?: string,
+): EpisodeFilter[] {
+    const filters: EpisodeFilter[] = []
+    if (episodeIdentifier === EpisodeIdentifierReg.Enum.seasonal) {
+        filters.push({...newEpisodeFilter('seasons'), seasonSlugs: latestSeasonSlug ? [latestSeasonSlug] : [], includeUpcoming: true})
+    }
+    filters.push({...newEpisodeFilter('types'), episodeTypes: defaultEpisodeTypes(episodeIdentifier, tags)})
+    filters.push(newEpisodeFilter('published'))
+    return filters
+}
+
+function refineOneLinePerDate(filters: readonly {field: string}[], ctx: z.RefinementCtx) {
+    for (const field of DATE_FIELDS) {
+        if (filters.filter((filter) => filter.field === field).length > 1) {
+            ctx.addIssue({code: 'custom', message: `Use one ${field} line at most`})
+        }
+    }
 }
 
 
 // ---------- Strict request (create/update) ----------
-// The season fields only apply to a collection identified by season, the other
-// filters apply to every collection.
 export const DownloadProfileSchemaRequest = z.object({
     enableProfile: z.boolean().default(true),
-    epIdTypeList: z.array(z.string()).default([]),
     downloadWithCountdown: z.boolean().default(false),
     redownloadFinal: z.boolean().default(true),
-    downloadDaysInPast: z.int().min(0).default(0),
-    downloadEpisodeCount: z.int().min(0).default(25),
-    downloadStartingFrom: z.iso.date().nullable().default(null),
+    /** Whether an Only date line deletes the downloads it leaves out. */
     deleteOlderEpisodes: z.boolean().default(true),
-    retentionFrom: z.enum(['published', 'downloaded']).default('published'),
     autoSubtitles: z.enum(['never', 'fallback', 'always']).default('fallback'),
     sponsorblockEnabled: z.boolean().default(true),
     sponsorblockSegments: z.record(z.string(), z.enum(['keep', 'chapter', 'cut'])).default(() => ({...DEFAULT_SPONSORBLOCK_SEGMENTS})),
@@ -81,85 +140,19 @@ export const DownloadProfileSchemaRequest = z.object({
     upgradeAfterDays: z.int('Enter a number of days').min(1, 'Check after at least 1 day').max(365, 'Check within a year').default(7),
     upgradeRepeat: z.enum(['once', 'twice', 'every']).default('once'),
     upgradeImprovements: z.array(z.enum(['resolution', 'sponsorblock', 'subtitles', 'codec'])).default(() => ['resolution' as const, 'sponsorblock' as const]),
-    seasons: z.array(SeasonDetachedSchema).default([]),
-    includeUpcomingSeasons: z.boolean().default(true),
-    // Without a seasons line every season downloads, and the two season fields above are not used.
-    allSeasons: z.boolean().default(false),
-    rules: z.array(EpisodeRuleSchema).default([]),
+    filters: z.array(EpisodeFilterSchema).max(50).superRefine(refineOneLinePerDate).default([]),
 })
-
-type DownloadLimitFields = {
-    downloadDaysInPast: number
-    downloadEpisodeCount: number
-    downloadStartingFrom: string | null
-}
-
-export function refineDownloadLimit(value: DownloadLimitFields, ctx: z.RefinementCtx) {
-    if (value.downloadDaysInPast > 0 && value.downloadEpisodeCount > 0) {
-        ctx.addIssue({
-            code: 'custom',
-            path: ['downloadDaysInPast'],
-            message: 'Choose either a date limit or an episode-count limit, not both',
-        })
-    }
-    if (value.downloadStartingFrom !== null && (value.downloadDaysInPast > 0 || value.downloadEpisodeCount > 0)) {
-        ctx.addIssue({
-            code: 'custom',
-            path: ['downloadStartingFrom'],
-            message: 'Download starting from can only be used when Limit by is set to No limits',
-        })
-    }
-}
-
-type SeasonFields = {
-    seasons: readonly unknown[]
-    includeUpcomingSeasons: boolean
-    allSeasons: boolean
-}
-
-function refineSeasonChoice(value: SeasonFields, ctx: z.RefinementCtx) {
-    if (!value.allSeasons && !value.includeUpcomingSeasons && value.seasons.length === 0) {
-        ctx.addIssue({
-            code: 'custom',
-            path: ['seasons'],
-            message: 'Choose at least one season or enable "Include upcoming seasons".',
-        })
-    }
-}
-
-/** A seasonal collection needs a season to download; other collections ignore the season fields. */
-export function forEpisodeIdentifier<Schema extends z.ZodType<SeasonFields>>(
-    schema: Schema,
-    episodeIdentifier: EpisodeIdentifierValue | string | undefined,
-): Schema {
-    return episodeIdentifier === EpisodeIdentifierReg.Enum.seasonal
-        ? schema.superRefine(refineSeasonChoice) as Schema
-        : schema
-}
-
-/** Starting values that fit how a collection identifies its episodes and the tags its Source gives them. */
-export function downloadProfileDefaultsFor(
-    episodeIdentifier: EpisodeIdentifierValue | string | undefined,
-    tags: readonly EpisodeTagRead[] | undefined,
-) {
-    // A seasonal collection downloads its full episodes, without its bonus content.
-    const seasonal = episodeIdentifier === EpisodeIdentifierReg.Enum.seasonal
-    const epIdTypeList = (tags ?? [])
-        .filter((tag) => tag.selectedByDefault && (!seasonal || tag.rssEpisodeType === 'full'))
-        .map((tag) => tag.key)
-    return {epIdTypeList: epIdTypeList.length ? epIdTypeList : ['ep']}
-}
 
 export const DownloadProfileCreateSchema = DownloadProfileSchemaRequest.extend({
     collectionId: z.int(),
     localMediaProfileId: z.int(),
-}).superRefine(refineDownloadLimit)
+})
 export type DownloadProfileCreateIn = z.input<typeof DownloadProfileCreateSchema>
 export type DownloadProfileCreateOut = z.output<typeof DownloadProfileCreateSchema>
 
 export const DownloadProfileUpdateSchema = DownloadProfileSchemaRequest.extend({
     localMediaProfileId: z.int(),
-}).superRefine(refineDownloadLimit)
+})
 export type DownloadProfileUpdateIn = z.input<typeof DownloadProfileUpdateSchema>
 export type DownloadProfileUpdateOut = z.output<typeof DownloadProfileUpdateSchema>
 
@@ -170,14 +163,9 @@ export const DownloadProfileReadSchema = z.looseObject({
     collectionId: z.int(),
     localMediaProfileId: z.int(),
     enableProfile: z.boolean(),
-    epIdTypeList: z.array(z.string()),
     downloadWithCountdown: z.boolean(),
     redownloadFinal: z.boolean(),
-    downloadDaysInPast: z.int(),
-    downloadEpisodeCount: z.int(),
-    downloadStartingFrom: z.iso.date().nullable(),
     deleteOlderEpisodes: z.boolean(),
-    retentionFrom: z.string(),
     autoSubtitles: z.string().default('fallback'),
     sponsorblockEnabled: z.boolean().default(false),
     sponsorblockSegments: z.record(z.string(), z.enum(['keep', 'chapter', 'cut'])).default(() => ({...DEFAULT_SPONSORBLOCK_SEGMENTS})),
@@ -185,17 +173,19 @@ export const DownloadProfileReadSchema = z.looseObject({
     upgradeAfterDays: z.int(),
     upgradeRepeat: z.enum(['once', 'twice', 'every']),
     upgradeImprovements: z.array(z.enum(['resolution', 'sponsorblock', 'subtitles', 'codec'])),
-    seasons: z.array(SeasonReadSchema),
-    includeUpcomingSeasons: z.boolean(),
-    allSeasons: z.boolean(),
-    rules: z.array(z.looseObject({
+    filters: z.array(z.looseObject({
         id: z.int(),
-        action: z.string(),
-        field: z.string(),
+        action: z.enum(EpisodeFilterActionReg.values),
+        field: z.enum(EpisodeFilterFieldReg.values),
         pattern: z.string().nullable(),
-        ignoreCase: z.boolean(),
-        durationOperator: z.string().nullable(),
+        durationOperator: z.enum(DurationOperatorReg.values).nullable(),
         durationSeconds: z.int().nullable(),
+        episodeTypes: z.array(z.string()).nullable(),
+        seasonSlugs: z.array(z.string()).nullable(),
+        includeUpcoming: z.boolean(),
+        days: z.int().nullable(),
+        count: z.int().nullable(),
+        startingFrom: z.iso.date().nullable(),
     })),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
@@ -207,10 +197,8 @@ export type DownloadProfileRead = z.infer<typeof DownloadProfileReadSchema>
 export const WhichEpisodesSchema = z.object({
     total: z.int(),
     unavailable: z.int(),
-    types: z.int(),
-    seasons: z.int(),
-    dates: z.int(),
-    rules: z.array(z.int()),
+    /** How many episodes each filter sent leaves out, in the order they were sent. */
+    filters: z.array(z.int()),
     downloaded: z.int(),
     episodes: z.array(z.object({
         id: z.int(),
@@ -226,7 +214,7 @@ export const SkippedByFilterSchema = z.object({
     episodeId: z.int(),
     downloadProfileId: z.int(),
     localMediaProfileId: z.int(),
-    rule: EpisodeRuleSchema,
+    filter: EpisodeFilterSchema,
 })
 export type SkippedByFilter = z.infer<typeof SkippedByFilterSchema>
 
@@ -234,7 +222,6 @@ export const AutoSubtitlesUseSchema = z.object({
     downloadProfileId: z.number(),
     collectionId: z.number(),
     collectionTitle: z.string(),
-    episodeTypes: z.array(z.string()),
     autoSubtitles: z.string(),
 })
 export type AutoSubtitlesUse = z.infer<typeof AutoSubtitlesUseSchema>

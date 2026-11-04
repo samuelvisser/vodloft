@@ -8,8 +8,13 @@ import './StreamProfileAdvisory.css'
 export type StreamDownloadProfileDefault = {
     id?: number
     preferredFormat: string
-    episodeTypes: string[]
+    /** The episode types the profile downloads; null when its filters don't look at episode types. */
+    episodeTypes: string[] | null
     enabled?: boolean
+}
+
+function downloadsType(profile: StreamDownloadProfileDefault, episodeType: string): boolean {
+    return profile.episodeTypes === null || profile.episodeTypes.includes(episodeType)
 }
 
 type DownloadMediaKind = 'audio' | 'video' | 'hls'
@@ -135,23 +140,20 @@ function coverageForKind(
     const enabledProfiles = matchingProfiles.filter((profile) => profile.enabled !== false)
     const disabledProfiles = matchingProfiles.filter((profile) => profile.enabled === false)
 
-    const enabledEpisodeTypes = new Set(
-        enabledProfiles.flatMap((profile) => profile.episodeTypes)
-    )
     const uncoveredEpisodeTypes = selectedEpisodeTypes.filter(
-        (episodeType) => !enabledEpisodeTypes.has(episodeType)
+        (episodeType) => !enabledProfiles.some((profile) => downloadsType(profile, episodeType))
     )
     const disabledCoverageEpisodeTypes = uncoveredEpisodeTypes.filter(
-        (episodeType) => disabledProfiles.some((profile) => profile.episodeTypes.includes(episodeType))
+        (episodeType) => disabledProfiles.some((profile) => downloadsType(profile, episodeType))
     )
     const createEpisodeTypes = uncoveredEpisodeTypes.filter(
-        (episodeType) => !matchingProfiles.some((profile) => profile.episodeTypes.includes(episodeType))
+        (episodeType) => !matchingProfiles.some((profile) => downloadsType(profile, episodeType))
     )
 
     const coverageCount = (
         profile: StreamDownloadProfileDefault,
         episodeTypes: string[],
-    ) => episodeTypes.filter((type) => profile.episodeTypes.includes(type)).length
+    ) => episodeTypes.filter((type) => downloadsType(profile, type)).length
 
     const bestDisabledProfile = [...disabledProfiles]
         .filter((profile) => coverageCount(profile, uncoveredEpisodeTypes) > 0)

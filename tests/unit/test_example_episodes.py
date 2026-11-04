@@ -137,19 +137,19 @@ def test_the_regex_test_runs_on_the_examples(client):
 
 def test_which_episodes_counts_the_examples(client):
     body = client.post("/api/download-profiles/which-episodes", json={
-        "exampleCollection": EXAMPLE, "epIdTypeList": ["ep"], "downloadWithCountdown": False,
-        "downloadDaysInPast": 0, "downloadEpisodeCount": 1, "downloadStartingFrom": None,
-        "includeUpcomingSeasons": False, "includeEpisodes": True,
+        "exampleCollection": EXAMPLE, "downloadWithCountdown": False, "includeEpisodes": True, "filters": [
+            {"action": "only", "field": "types", "episodeTypes": ["ep"]},
+            {"action": "only", "field": "published", "count": 1},
+        ],
     }).json()
 
-    assert (body["total"], body["types"], body["dates"], body["downloaded"]) == (3, 1, 1, 1)
-    assert [episode["leftOutBy"] for episode in body["episodes"]] == [None, "types", "dates"]
+    assert (body["total"], body["filters"], body["downloaded"]) == (3, [1, 1], 1)
+    assert [episode["leftOutBy"] for episode in body["episodes"]] == [None, "filter:0", "filter:1"]
 
 
 def test_which_episodes_needs_one_collection(client):
     response = client.post("/api/download-profiles/which-episodes", json={
-        "epIdTypeList": [], "downloadWithCountdown": False, "downloadDaysInPast": 0, "downloadEpisodeCount": 0,
-        "downloadStartingFrom": None, "includeUpcomingSeasons": False,
+        "downloadWithCountdown": False,
     })
 
     assert response.status_code == 422

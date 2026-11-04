@@ -15,11 +15,7 @@ New-episode discovery runs every **30 minutes** by default. Known episodes that 
 
 ## An episode has an old title, image, or number
 
-Daily Wire can change metadata after publication. VODLoft refreshes recently published episode metadata by default after:
-
-```text
-15m,30m,1h,3h,6h,24h,3d
-```
+Sites such as The Daily Wire and YouTube can change an item's information after publication. VODLoft looks recent episodes and videos up again for a while, on the schedule of their Site under **Settings → Automation**. See [[Automation-and-Background-Tasks]].
 
 Use **Sync now** when you want to check the collection immediately. If the problem persists much longer, check the Daily Wire version itself to confirm whether the upstream metadata has actually changed.
 
