@@ -96,6 +96,12 @@ Selecting all seasons in the UI also enables future seasons so the profile keeps
 Remove the seasons line to stop filtering by season: every season is downloaded, including ones added later, and only the
 other lines decide. To filter by season again, use **Add filter** and pick **season**.
 
+### Skip or keep seasons
+
+Seasons work like episode types: switch the seasons line to **Skip** to leave chosen seasons out, or to **Keep** to protect
+their downloads from being deleted by the date line. Either one becomes a filter of its own, and every other season is
+downloaded.
+
 ## Date options
 
 The date line filters on one of two dates, chosen in its header. **Published** offers the limits below. **Downloaded** keeps each
