@@ -15,6 +15,7 @@ from backend.api.models.source import ResolvedLinkAPIRead
 from backend.api.models.quick_download import (
     QuickDownloadAPICreate,
     QuickDownloadAPIRead,
+    QuickDownloadActiveAPIRead,
     QuickDownloadHistoryAPIRead,
     QuickDownloadOptionsAPIRead,
     QuickDownloadOptionsAPIRequest,
@@ -175,7 +176,11 @@ def quick_download_options(s: Session, access: Access, body: QuickDownloadOption
 
 def owner_of(access: Access) -> str | None:
     """How a quick download remembers who asked: the user's id, or None without user accounts."""
-    return None if access.user_id is None else str(access.user_id)
+    return owner_of_user_id(access.user_id)
+
+
+def owner_of_user_id(user_id: int | None) -> str | None:
+    return None if user_id is None else str(user_id)
 
 
 def sees_everyones(access: Access) -> bool:
@@ -200,16 +205,28 @@ def _ready() -> list[QuickFolder]:
 
 def list_quick_downloads(s: Session, access: Access) -> QuickDownloadsAPIRead:
     """The user's own quick downloads, or everyone's for those who manage Quick downloads."""
-    active = [get_operation(operation.id) for operation in _my_operations(s, access)]
+    operations = _my_operations(s, access)
     manifests = [folder.manifest for folder in _ready() if _mine(access, folder.manifest.owner)]
-    names = _owner_names(s, access, (manifest.owner for manifest in manifests))
+    names = _owner_names(s, access, [
+        *(_operation_owner(operation) for operation in operations),
+        *(manifest.owner for manifest in manifests),
+    ])
+    active = [(get_operation(operation.id), _operation_owner(operation)) for operation in operations]
     return QuickDownloadsAPIRead(
-        active=[TaskOperationRead.model_validate(snapshot) for snapshot in active if snapshot is not None],
+        active=[
+            QuickDownloadActiveAPIRead(operation=TaskOperationRead.model_validate(snapshot), owner_name=names.get(owner))
+            for snapshot, owner in active if snapshot is not None
+        ],
         ready=[
             QuickDownloadAPIRead.model_validate(manifest).model_copy(update={"owner_name": names.get(manifest.owner)})
             for manifest in manifests
         ],
     )
+
+
+def _operation_owner(operation) -> str | None:
+    """The owner of a running quick download, in the form a ready file's manifest keeps it."""
+    return owner_of_user_id(operation.requested_by_user_id)
 
 
 def _owner_names(s: Session, access: Access, owners) -> dict[str | None, str]:

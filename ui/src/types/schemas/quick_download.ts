@@ -76,8 +76,14 @@ export const QuickDownloadReadySchema = z.object({
 })
 export type QuickDownloadReady = z.infer<typeof QuickDownloadReadySchema>
 
+export const QuickDownloadActiveSchema = z.object({
+    operation: TaskOperationReadSchema,
+    /** Who asked for it; only for those who see everyone's quick downloads. */
+    ownerName: z.string().nullable().optional(),
+})
+
 export const QuickDownloadsSchema = z.object({
-    active: z.array(TaskOperationReadSchema),
+    active: z.array(QuickDownloadActiveSchema),
     ready: z.array(QuickDownloadReadySchema),
 })
 export type QuickDownloads = z.infer<typeof QuickDownloadsSchema>

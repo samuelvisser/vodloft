@@ -104,9 +104,17 @@ class QuickDownloadAPIRead(ResponseBase):
     """Who asked for it; only for those who see everyone's quick downloads."""
 
 
+class QuickDownloadActiveAPIRead(ResponseBase):
+    """A quick download still queued or working."""
+
+    operation: TaskOperationRead
+    owner_name: Optional[str] = None
+    """Who asked for it; only for those who see everyone's quick downloads."""
+
+
 class QuickDownloadsAPIRead(ResponseBase):
-    active: list[TaskOperationRead]
-    """Quick downloads still queued or working, as their operations."""
+    active: list[QuickDownloadActiveAPIRead]
+    """Quick downloads still queued or working, oldest first."""
     ready: list[QuickDownloadAPIRead]
     """Files waiting to be downloaded, newest first."""
 

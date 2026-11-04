@@ -695,7 +695,7 @@ export default function MoviePage() {
                                 <strong>{download.type === 'movie_extra' ? movieExtraTypeLabel(download.movieExtraType) : 'Movie'} · {download.localMediaProfileName}</strong>
                                 <small>{download.mediaTitle && download.type === 'movie_extra' ? `${download.mediaTitle} • ` : ''}{download.formatDownloaded || download.preferredFormat || 'Waiting for format'}</small>
                             </div>
-                            <DownloadProgressStatus download={download}/>
+                            <DownloadProgressStatus presentation={download.presentation}/>
                         </div>
                     ))}
                 </section>
