@@ -40,8 +40,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ steps.release.outputs.tag }}
-          # All tags, so release.py can find the release to go back to.
-          fetch-depth: 0
 
       - name: Verify tag matches VODLoft version
         env:
@@ -79,7 +77,7 @@ jobs:
           else
             channel=--latest
           fi
-          # Every release explains how to upgrade to exactly this version. GitHub adds its
+          # Every release says how to upgrade to exactly this version. GitHub adds its
           # generated notes (the full changelog) after these.
           {
             printf '## Upgrading\n\n'

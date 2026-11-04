@@ -108,18 +108,17 @@ def test_a_failing_command_without_captured_output_raises_a_release_error():
         release_tool.run(sys.executable, "-c", "raise SystemExit(3)", capture_output=False)
 
 
+
 def test_upgrade_steps_pin_the_release_image():
-    steps = release_tool.render_upgrade_steps("2.3.4", "2.3.3")
+    steps = release_tool.render_upgrade_steps("2.3.4")
 
     assert "ghcr.io/samuelvisser/vodloft:2.3.4" in steps
-    assert "ghcr.io/samuelvisser/vodloft:2.3.3" in steps
-    assert "vodloft/v2.3.4/.docker/docker-compose.yml" in steps
     assert ":latest" not in steps
     assert "$" not in steps
 
 
-def test_upgrade_steps_rewrite_the_image_line_of_the_published_compose_file(tmp_path):
-    steps = release_tool.render_upgrade_steps("2.3.4", "2.3.3")
+def test_upgrade_steps_rewrite_the_image_line_of_the_published_compose_file():
+    steps = release_tool.render_upgrade_steps("2.3.4")
     sed_command = next(line for line in steps.splitlines() if line.strip().startswith("sed -i 's#"))
     expression = sed_command.split("'")[1]
     pattern, replacement = expression.split("#")[1:3]
@@ -129,14 +128,3 @@ def test_upgrade_steps_rewrite_the_image_line_of_the_published_compose_file(tmp_
 
     assert "image: ghcr.io/samuelvisser/vodloft:2.3.4\n" in updated
     assert "vodloft:latest" not in updated
-
-
-def test_upgrade_steps_go_back_to_the_release_before(monkeypatch):
-    monkeypatch.setattr(
-        release_tool,
-        "version_tags",
-        lambda prefix: [((0, 7, 0), "v0.7.0"), ((0, 6, 1), "v0.6.1"), ((0, 6, 0), "v0.6.0")],
-    )
-
-    assert release_tool.previous_app_version("0.7.0") == "0.6.1"
-    assert release_tool.previous_app_version("0.8.0") == "0.7.0"

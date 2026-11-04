@@ -522,26 +522,15 @@ def publish_release(args: argparse.Namespace) -> None:
     )
 
 
-def previous_app_version(version: str) -> str:
-    target = parse_semver(version)
-    for parsed, tag in version_tags("v"):
-        if parsed < target:
-            return tag.removeprefix("v")
-    raise ReleaseError(f"No VODLoft release before {version} to go back to. Pass --previous-version.")
-
-
-def render_upgrade_steps(version: str, previous_version: str) -> str:
-    """The step-by-step upgrade instructions for one release, with its exact image tag."""
+def render_upgrade_steps(version: str) -> str:
+    """The short upgrade instructions for one release, pinned to its exact image tag."""
     parse_semver(version)
-    parse_semver(previous_version)
-    template = Template(UPGRADE_STEPS_TEMPLATE.read_text(encoding="utf-8"))
-    return template.substitute(version=version, previous_version=previous_version)
+    return Template(UPGRADE_STEPS_TEMPLATE.read_text(encoding="utf-8")).substitute(version=version)
 
 
 def print_upgrade_steps(args: argparse.Namespace) -> None:
     version = args.version or read_project(ROOT / "pyproject.toml")[1]
-    previous_version = args.previous_version or previous_app_version(version)
-    print(render_upgrade_steps(version, previous_version), end="")
+    print(render_upgrade_steps(version), end="")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -574,13 +563,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     upgrade_steps = subparsers.add_parser(
         "upgrade-steps",
-        help="Print the step-by-step upgrade instructions for a release's notes, pinned to its image tag.",
+        help="Print the upgrade instructions for a release's notes, pinned to its image tag.",
     )
     upgrade_steps.add_argument("--version", help="The release (default: the version in pyproject.toml).")
-    upgrade_steps.add_argument(
-        "--previous-version",
-        help="The release to go back to (default: the newest release tag before --version).",
-    )
     return parser
 
 
