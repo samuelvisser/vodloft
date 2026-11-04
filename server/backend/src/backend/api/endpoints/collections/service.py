@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.services.check_frequency import check_suggestion
+from backend.services.sites import place_collection
 from backend.api.models.collection import *
 from fastapi import HTTPException
 
@@ -199,6 +200,7 @@ def get_collection(s: Session, collection_slug: str) -> CollectionAPIRead:
 def create_collection(s: Session, body: CollectionAPICreate, *, added_by_id: int | None = None) -> CollectionAPIRead:
     collection = create_database_fields(Collection, body)
     collection.added_by_id = added_by_id
+    place_collection(s, collection)
     s.add(collection)
     s.flush()
 

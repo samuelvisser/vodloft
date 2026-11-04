@@ -61,7 +61,7 @@ import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
     ApiStatusRead, ApiStatusReadSchema, CookiesRead, EpisodeTagRead, EpisodeTagReadSchema, CookiesReadSchema, ProgramStatusRead, SourceProblemRead,
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
-    ResolvedLinkReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceDomainRead, SourceDomainReadSchema, SourceRead,
+    ResolvedLinkReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SourceRead,
     SourceReadSchema,
     YtdlpOptionsReadSchema,
 } from "../types/schemas/source";
@@ -439,27 +439,27 @@ export function useSourceProblems() {
     })
 }
 
-/** Every site a Source names, and the Source VODLoft asks first for its links. */
-export function useSourceDomains() {
-    return useQuery<SourceDomainRead[], Error, SourceDomainRead[], readonly ['sourceDomains']>({
-        queryKey: ['sourceDomains'] as const,
+/** Every Site a Source is made for, and the Source VODLoft asks first for its links. */
+export function useSourceSites() {
+    return useQuery<SourceSiteRead[], Error, SourceSiteRead[], readonly ['sourceSites']>({
+        queryKey: ['sourceSites'] as const,
         queryFn: async ({signal}) => {
-            const value = await fetchJSON<unknown>(`${(window as any).appConfig.API_URL}/sources/domains`, signal)
-            return SourceDomainReadSchema.array().parse(value)
+            const value = await fetchJSON<unknown>(`${(window as any).appConfig.API_URL}/sources/sites`, signal)
+            return SourceSiteReadSchema.array().parse(value)
         },
     })
 }
 
-/** Choose the Source to ask first for a site's links; ``null`` goes back to the default. */
-export async function saveSourceDomain(domain: string, preferredSourceKey: string | null): Promise<SourceDomainRead> {
-    const response = await fetch(`${(window as any).appConfig.API_URL}/sources/domains/${encodeURIComponent(domain)}`, {
+/** Choose the Source to ask first for a Site's links; ``null`` goes back to the default. */
+export async function saveSourceSite(key: string, preferredSourceKey: string | null): Promise<SourceSiteRead> {
+    const response = await fetch(`${(window as any).appConfig.API_URL}/sources/sites/${encodeURIComponent(key)}`, {
         method: 'PUT',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({preferredSourceKey}),
     })
     if (!response.ok) throw await responseError(response)
-    return SourceDomainReadSchema.parse(await response.json())
+    return SourceSiteReadSchema.parse(await response.json())
 }
 
 /** Shows and videos at a Source whose name matches the query. */

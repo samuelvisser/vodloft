@@ -4,8 +4,8 @@ A Source is everything VODLoft knows about one service. Each lives in its own
 subpackage (``sources.dailywire``); the rest of VODLoft reaches it through the
 contract in ``sources.contract`` and the registry below.
 """
-from .contract import ANY_DOMAIN, ApiKeyRejected, ApiQuotaShare, ApiStatus, EpisodeMedia, EpisodeTag, Feature, ItemRef, ItemRefresh, MAIN_TAG, LinkKind, LinkPreview, Playback, PlaybackKind, ProgramStatus, ResolvedLink, RssEpisodeType, SearchNotice, SearchResults, SeasonRef, CollectionDetails, CookiesStatus, Source, SourceProblem, SponsorBlockSegment, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats
-from .registry import UnknownSourceError, all_sources, get_source, named_domains, register, sources_for
+from .contract import ANY_DOMAIN, ApiKeyRejected, ApiQuotaShare, ApiStatus, EpisodeMedia, EpisodeTag, Feature, ItemRef, ItemRefresh, MAIN_TAG, LinkKind, LinkPreview, Playback, PlaybackKind, ProgramStatus, ResolvedLink, RssEpisodeType, SearchNotice, SearchResults, SeasonRef, CollectionDetails, CookiesStatus, Site, Source, SourceProblem, SponsorBlockSegment, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats
+from .registry import UnknownSourceError, all_sources, collection_on_site, get_source, named_site_for, named_sites, register, site_for, sources_for
 from .dailywire import DailyWireSource
 from .npo import NpoSource
 from .ytdlp import YtDlpSource
@@ -42,6 +42,7 @@ __all__ = [
     "SearchResults",
     "SeasonRef",
     "CollectionDetails",
+    "Site",
     "Source",
     "SourceProblem",
     "CookiesStatus",
@@ -51,8 +52,11 @@ __all__ = [
     "VideoFormats",
     "YtDlpSource",
     "all_sources",
+    "collection_on_site",
     "get_source",
     "register",
     "sources_for",
-    "named_domains",
+    "named_site_for",
+    "named_sites",
+    "site_for",
 ]

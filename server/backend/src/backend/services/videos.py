@@ -6,6 +6,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from backend.db.models import Video
+from backend.services.sites import place_video
 from backend.services.thumbnails import is_own_thumbnail
 from backend.types.media_types import MediaType
 from backend.utils.helpers import generate_uuid
@@ -49,5 +50,6 @@ def index_video(s: Session, source_key: str, details: VideoDetails) -> tuple[Vid
         )
         s.add(video)
     apply_video_details(video, details)
+    place_video(s, video)
     s.flush()
     return video, created
