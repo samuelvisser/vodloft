@@ -55,6 +55,9 @@ class Feature(StrEnum):
     YTDLP_DOWNLOADS = "ytdlp_downloads"
     """Your own yt-dlp options apply to this Source's downloads. Only the yt-dlp Source has it: NPO Start
     also downloads with yt-dlp, but as a Source of its own it takes no yt-dlp options."""
+    METADATA_REFRESH = "metadata_refresh"
+    """Looking published items up again for a while, with ``refresh_metadata``, so a
+    title or picture changed after publication reaches VODLoft."""
     UPGRADE_CHECKS = "upgrade_checks"
     """Telling what a downloaded episode is offered as now, with ``upgrade_offer``, so the upgrade check
     only downloads it again when something improved."""
@@ -450,6 +453,10 @@ class Site:
     key: str
     name: str
     domains: tuple[str, ...] = ()
+    refresh_intervals: str | None = None
+    """How long after publication VODLoft looks the Site's items up again, such as
+    ``30m,2h,24h``, for a Site whose titles and pictures keep changing on a schedule of
+    its own. Without it, the Site follows VODLoft's system schedule."""
 
 
 def link_host(url: str) -> str:
@@ -605,6 +612,11 @@ class Source(ABC):
         """What the Source says now about these items of the collection at ``url``.
         Only Sources with ``Feature.CATALOGUE_REFRESH`` implement it."""
         raise NotImplementedError(f"{self.name} cannot refresh a collection's items")
+
+    def refresh_metadata(self, items: Sequence[ItemRef]) -> ItemRefresh:
+        """What the Source says now about these items, which can be of any collection or
+        none. Only Sources with ``Feature.METADATA_REFRESH`` implement it."""
+        raise NotImplementedError(f"{self.name} cannot refresh items")
 
     def quick_check_minutes(self, collections: Sequence[tuple[str, int]]) -> int:
         """How often each of these collections, given as link and episode count, can

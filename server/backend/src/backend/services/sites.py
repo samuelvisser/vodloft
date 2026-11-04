@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, Site, Video
+from backend.types.site_types import SiteRefreshMode
 from sources import Site as SourceSite, collection_on_site, site_for
 
 
@@ -28,7 +29,12 @@ def site_record(s: Session, site: SourceSite) -> Site:
     """The row of a Site, made when VODLoft sees the Site for the first time, with the domain seen added."""
     record = s.get(Site, site.key)
     if record is None:
-        record = Site(key=site.key, name=site.name, domains=list(site.domains))
+        record = Site(
+            key=site.key, name=site.name, domains=list(site.domains),
+            # A Site the sources package knows a schedule for starts on it; any other follows the system schedule.
+            refresh_mode=(SiteRefreshMode.OWN if site.refresh_intervals else SiteRefreshMode.SYSTEM).value,
+            refresh_intervals=site.refresh_intervals,
+        )
         s.add(record)
         s.flush()
     elif any(domain not in record.domains for domain in site.domains):

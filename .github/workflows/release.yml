@@ -68,7 +68,8 @@ jobs:
         shell: bash
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "GitHub Release $RELEASE_TAG already exists."
+            echo "GitHub Release $RELEASE_TAG already exists; making sure it has the compose file."
+            gh release upload "$RELEASE_TAG" .docker/docker-compose.yml --clobber
             exit 0
           fi
           # 0.x versions are betas, so they are marked as pre-releases.
@@ -77,9 +78,17 @@ jobs:
           else
             channel=--latest
           fi
+          # Every release says how to upgrade to exactly this version. GitHub adds its
+          # generated notes (the full changelog) after these.
+          {
+            printf '## Upgrading\n\n'
+            python release.py upgrade-steps --version "${RELEASE_TAG#v}"
+          } > "$RUNNER_TEMP/release-notes.md"
           gh release create "$RELEASE_TAG" \
             --verify-tag \
             --draft \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
             --generate-notes \
             "$channel" \
-            --title "VODLoft ${RELEASE_TAG#v}"
+            --title "VODLoft ${RELEASE_TAG#v}" \
+            .docker/docker-compose.yml

@@ -105,3 +105,21 @@ def test_a_failing_command_without_captured_output_raises_a_release_error():
 
     with pytest.raises(release_tool.ReleaseError, match="exit code 3"):
         release_tool.run(sys.executable, "-c", "raise SystemExit(3)", capture_output=False)
+
+
+
+def test_upgrade_steps_pin_the_release_image():
+    steps = release_tool.render_upgrade_steps("2.3.4")
+
+    assert "docker pull ghcr.io/samuelvisser/vodloft:2.3.4 " in steps
+    assert "docker compose pull" not in steps
+    assert "$" not in steps
+
+
+
+def test_upgrade_steps_tag_the_release_as_the_image_compose_starts():
+    steps = release_tool.render_upgrade_steps("2.3.4")
+    compose = (REPOSITORY_ROOT / ".docker" / "docker-compose.yml").read_text()
+
+    assert "docker tag ghcr.io/samuelvisser/vodloft:2.3.4 ghcr.io/samuelvisser/vodloft:latest" in steps
+    assert "image: ghcr.io/samuelvisser/vodloft:latest\n" in compose

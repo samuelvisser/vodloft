@@ -19,6 +19,7 @@ import {
     useLazyCollection,
 } from './lazyCollection'
 import {useFrontendPuller} from './puller'
+import {SiteRefreshReadSchema, type SiteRefreshFormValues, type SiteRefreshRead} from '../types/schemas/siteRefresh'
 import {downloadStatusesForApi} from './downloadStatusFilters'
 import {
     episodeQueryKeys,
@@ -462,6 +463,27 @@ export function useSourceSites() {
             const value = await fetchJSON<unknown>(`${(window as any).appConfig.API_URL}/sources/sites`, signal)
             return SourceSiteReadSchema.array().parse(value)
         },
+    })
+}
+
+/** The metadata refresh schedule of every Site VODLoft has seen. */
+export function useSiteRefresh() {
+    return useQuery<SiteRefreshRead[], Error, SiteRefreshRead[], readonly ['siteRefresh']>({
+        queryKey: ['siteRefresh'] as const,
+        queryFn: async ({signal}) => {
+            const value = await fetchJSON<unknown>(`${(window as any).appConfig.API_URL}/settings/site-refresh`, signal)
+            return SiteRefreshReadSchema.array().parse(value)
+        },
+    })
+}
+
+/** Choose the schedule a Site's items follow; the form reads the response for field errors. */
+export function saveSiteRefresh(key: string, values: SiteRefreshFormValues): Promise<Response> {
+    return fetch(`${(window as any).appConfig.API_URL}/settings/site-refresh/${encodeURIComponent(key)}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({refreshMode: values.refreshMode, refreshIntervals: values.refreshIntervals.trim() || null}),
     })
 }
 

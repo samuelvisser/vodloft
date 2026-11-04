@@ -52,6 +52,10 @@ git pull --ff-only
 
 The separate application tag push triggers `.github/workflows/release.yml`. The workflow verifies that the tag matches the version in the root `pyproject.toml` and creates a draft GitHub Release with generated notes. While VODLoft is in beta, every `v0.*` release is marked as a pre-release; from 1.0.0 on, releases are marked as the latest release. Review and edit those notes in GitHub, then publish the Release manually when it is ready.
 
+The draft starts with an **Upgrading** section: back up `config`, then two commands that pull `ghcr.io/samuelvisser/vodloft:MAJOR.MINOR.PATCH`, tag it as `latest` (the tag the shipped `docker-compose.yml` uses) and start it, with a link to the step-by-step guide in the wiki (Backups and Upgrades). Users keep `latest` in their compose file, and the commands on an older release page still install that release. The text lives in `.github/release-notes/upgrade-steps.md`; `./release.py upgrade-steps --version X.Y.Z` prints it for any release. Put upgrade notes that only apply to this release above those lines and keep them short; longer explanations belong in the wiki.
+
+The draft also has the release's `.docker/docker-compose.yml` attached as `docker-compose.yml`, so the compose file for any version can be downloaded from `https://github.com/samuelvisser/vodloft/releases/download/vX.Y.Z/docker-compose.yml`.
+
 If the tag-triggered workflow ever needs to be retried, open **Actions → Publish GitHub Release → Run workflow**, enter the existing application tag (for example `v1.0.0`), and run it. The manual workflow checks out that exact tag and performs the same version verification and draft-release creation as the automatic flow.
 
 If the container has already been published separately, use:

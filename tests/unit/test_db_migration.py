@@ -26,7 +26,7 @@ VODLOFT_0_1_0_REVISION = "f4abb559e3ab"
 VODLOFT_0_5_0_REVISION = "817515eb8209"
 VODLOFT_0_6_0_REVISION = "d0f28c7f863e"
 VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
-SITES_REVISION = "2bd0eb5fe4a6"
+SITE_REFRESH_REVISION = "5b75b63e55f2"
 HEAD_REVISION = "b9dbb772c34e"
 
 
@@ -464,12 +464,38 @@ def test_sites_migration_places_named_sources_and_moves_the_domain_preference(mi
         )).all() == [("dailywire", "The Daily Wire", '["dailywire.com"]', None), ("npo", "NPO Start", '["npo.nl"]', "ytdlp")]
 
 
+def test_site_refresh_migration_gives_the_daily_wire_and_youtube_their_own_schedule(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "2bd0eb5fe4a6")
+    with engine.begin() as connection:
+        for key, name in (("dailywire", "The Daily Wire"), ("youtube", "YouTube"), ("vimeo", "Vimeo")):
+            connection.execute(text(
+                "INSERT INTO sites (key, name, domains) VALUES (:key, :name, '[]')"
+            ), {"key": key, "name": name})
+
+    command.upgrade(config, "5b75b63e55f2")
+
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT key, refresh_mode, refresh_intervals FROM sites ORDER BY key"
+        )).all() == [
+            ("dailywire", "own", "15m,30m,1h,3h,6h,24h,3d"),
+            ("vimeo", "system", None),
+            ("youtube", "own", "30m,2h,6h,24h,3d,7d,14d"),
+        ]
+        columns = {row.name: row for row in connection.execute(text("PRAGMA table_info(media_items_video)"))}
+        assert columns["metadata_is_final"].dflt_value == "'1'"
+
+
 def test_publish_statuses_get_names_every_source_shares(migration_database):
     _database_path, engine = migration_database
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, SITES_REVISION)
+    command.upgrade(config, SITE_REFRESH_REVISION)
     with engine.begin() as connection:
         connection.execute(text("PRAGMA foreign_keys = OFF"))
         for episode_id, status in ((10, "dw_processing"), (11, "published_with_countdown"), (12, "published_final")):
