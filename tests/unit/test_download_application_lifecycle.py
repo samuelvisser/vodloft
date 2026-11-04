@@ -100,11 +100,11 @@ def test_cancellation_wins_before_transactional_completion(library):
     from task_manager.scheduler.executor import ProgressUpdater
     from task_manager.scheduler.operation_control import cancel_task_run
     from task_manager.scheduler.results import TaskResult
-    from downloader import DownloadCancelled
+    from downloader import DownloadCanceled
     factory,(download_id,_) = library
     run_id,_ = start_run(factory,download_id)
     cancel_task_run(run_id,reason='Cancel first')
-    with factory() as session, pytest.raises(DownloadCancelled):
+    with factory() as session, pytest.raises(DownloadCanceled):
         ProgressUpdater(run_id).complete_transactionally(session,TaskResult('Done'))
 
 

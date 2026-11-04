@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from .errors import DownloadCancelled, DownloadError, EncryptedMediaError, FileTooLargeError, MediaUnavailableError
+from .errors import DownloadCanceled, DownloadError, EncryptedMediaError, FileTooLargeError, MediaUnavailableError
 from .models import CancelCheck, DownloadProgress, DownloadResult, ProgressCallback, SponsorSegment, VideoStream, WrittenSubtitle
 from .plan import ResolvedDownloadSource, YtdlpSponsorBlock, YtdlpSubtitles
 from .source import FORMAT_HEIGHTS
@@ -458,7 +458,7 @@ def download_ytdlp(
     result. A subtitle that fails never fails the download.
     """
     if should_cancel and should_cancel():
-        raise DownloadCancelled("Download cancelled")
+        raise DownloadCanceled("Download canceled")
     work = Path(dest_path + ".ytdlp")
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)
@@ -500,7 +500,7 @@ def download_ytdlp(
     try:
         while True:
             if should_cancel and should_cancel():
-                raise DownloadCancelled("Download cancelled")
+                raise DownloadCanceled("Download canceled")
             try:
                 line = lines.get(timeout=0.5)
             except queue.Empty:

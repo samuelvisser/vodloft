@@ -361,7 +361,7 @@ def test_the_background_migration_marks_stored_programmes_that_need_npo_plus(npo
     monkeypatch.setattr(migration, "NpoClient", lambda: client)
 
     class Context:
-        def raise_if_cancelled(self):
+        def raise_if_canceled(self):
             pass
 
         def update_progress(self, *args):

@@ -643,21 +643,21 @@ def test_operation_history_dedupes_per_task_run_not_forever():
         first = record_media_download_operation_history_once(
             session,
             download.id,
-            MediaDownloadHistoryAction.CANCELLED,
+            MediaDownloadHistoryAction.CANCELED,
             operation_ids=("operation-1",),
             metadata={"operation_id": "operation-1", "task_run_id": 10},
         )
         duplicate = record_media_download_operation_history_once(
             session,
             download.id,
-            MediaDownloadHistoryAction.CANCELLED,
+            MediaDownloadHistoryAction.CANCELED,
             operation_ids=("operation-1",),
             metadata={"operation_id": "operation-1", "task_run_id": 10},
         )
         second_attempt = record_media_download_operation_history_once(
             session,
             download.id,
-            MediaDownloadHistoryAction.CANCELLED,
+            MediaDownloadHistoryAction.CANCELED,
             operation_ids=("operation-1",),
             metadata={"operation_id": "operation-1", "task_run_id": 11},
         )
@@ -670,7 +670,7 @@ def test_operation_history_dedupes_per_task_run_not_forever():
         assert second_attempt.id != first.id
         assert session.query(MediaDownloadHistory).filter_by(
             media_download_id=download.id,
-            action=MediaDownloadHistoryAction.CANCELLED,
+            action=MediaDownloadHistoryAction.CANCELED,
         ).count() == 2
     finally:
         session.close()
@@ -1312,14 +1312,14 @@ def test_delete_unavailable_media_download_removes_not_downloaded_record():
         engine.dispose()
 
 
-def test_delete_unavailable_media_download_removes_cancelled_record():
+def test_delete_unavailable_media_download_removes_canceled_record():
     from backend.services.download_actions import delete_unavailable_media_download
     from backend.db.models.media_download import MediaDownloadBase
 
     session, engine = _session()
     try:
-        download = _make_download(session, slug="delete-cancelled")
-        download.file_path = "/definitely/not/present/delete-cancelled.m4a"
+        download = _make_download(session, slug="delete-canceled")
+        download.file_path = "/definitely/not/present/delete-canceled.m4a"
         download.automatic_retry_suppressed = True
         download_id = download.id
         session.commit()

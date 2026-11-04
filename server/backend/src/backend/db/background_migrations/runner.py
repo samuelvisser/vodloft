@@ -37,9 +37,9 @@ class BackgroundMigrationContext:
         self.migration_total = migration_total
         self._progress = progress
 
-    def raise_if_cancelled(self) -> None:
-        if self._progress is not None and hasattr(self._progress, "raise_if_cancelled"):
-            self._progress.raise_if_cancelled()
+    def raise_if_canceled(self) -> None:
+        if self._progress is not None and hasattr(self._progress, "raise_if_canceled"):
+            self._progress.raise_if_canceled()
 
     def _set(
         self,
@@ -124,14 +124,14 @@ async def run_pending_background_migrations(
             migration_total=len(pending),
             progress=progress,
         )
-        context.raise_if_cancelled()
+        context.raise_if_canceled()
         context.started()
 
         result = migration.migrate(context)
         if inspect.isawaitable(result):
             await result
 
-        context.raise_if_cancelled()
+        context.raise_if_canceled()
         advance_background_migration_revision(
             expected_revision=migration.down_revision,
             new_revision=migration.revision,

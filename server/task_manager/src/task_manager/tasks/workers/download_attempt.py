@@ -20,13 +20,13 @@ def serialize_download_attempt(media_download_id: int, *, progress=None) -> Iter
     """
     with _ATTEMPT_LOCKS_GUARD:
         lock = _ATTEMPT_LOCKS.setdefault(media_download_id, threading.Lock())
-    from downloader import DownloadCancelled
+    from downloader import DownloadCanceled
     waiting = False
     acquired = False
     try:
         while not acquired:
             if progress is not None and callable(progress) and progress():
-                raise DownloadCancelled("Canceled while waiting for the previous attempt")
+                raise DownloadCanceled("Canceled while waiting for the previous attempt")
             acquired = lock.acquire(timeout=0.1)
             if not acquired and not waiting and hasattr(progress, "set_wait_state"):
                 progress.set_wait_state("previous_attempt", "Waiting for the previous download to stop")

@@ -8,7 +8,7 @@ import os
 import tempfile
 from typing import Callable
 
-from downloader import DownloadCancelled
+from downloader import DownloadCanceled
 from sqlalchemy import String, and_, cast, func, or_, select
 
 from backend.db.models import DownloadProfile, Episode, EpisodeMediaDownload, Collection, CollectionLocalMediaProfile
@@ -162,7 +162,7 @@ def _owner(session, rows, plan: AssetPlan, target: Path) -> CollectionLocalAsset
 def _claim_fresh_asset(
     plan: AssetPlan,
     now: datetime,
-    check_cancelled: Callable[[], None],
+    check_canceled: Callable[[], None],
 ) -> tuple[bool, Path | None]:
     with db_session() as session:
         if not _current(session, plan):
@@ -187,7 +187,7 @@ def _claim_fresh_asset(
         ]
 
     for target in dict.fromkeys(candidates):
-        check_cancelled()
+        check_canceled()
         with asset_file_lock(plan.download_root, target):
             with db_session() as session:
                 if not _current(session, plan):
@@ -236,7 +236,7 @@ def _claim_fresh_asset(
 def _cleanup_obsolete_variants(
     plan: AssetPlan,
     current_target: Path,
-    check_cancelled: Callable[[], None],
+    check_canceled: Callable[[], None],
 ) -> None:
     with db_session() as session:
         obsolete = [
@@ -256,7 +256,7 @@ def _cleanup_obsolete_variants(
         ]
 
     for record_id, path in obsolete:
-        check_cancelled()
+        check_canceled()
         try:
             with asset_file_lock(plan.download_root, path):
                 with db_session() as session:
@@ -289,14 +289,14 @@ def _cleanup_obsolete_variants(
             logger.warning("Old collection artwork variant was left untouched: %s", exc)
 
 
-def _refresh_asset(plan: AssetPlan, check_cancelled: Callable[[], None]) -> bool:
-    check_cancelled()
+def _refresh_asset(plan: AssetPlan, check_canceled: Callable[[], None]) -> bool:
+    check_canceled()
     now = datetime.now(timezone.utc)
-    current, fresh_target = _claim_fresh_asset(plan, now, check_cancelled)
+    current, fresh_target = _claim_fresh_asset(plan, now, check_canceled)
     if not current:
         return False
     if fresh_target is not None:
-        _cleanup_obsolete_variants(plan, fresh_target, check_cancelled)
+        _cleanup_obsolete_variants(plan, fresh_target, check_canceled)
         return True
 
     with tempfile.TemporaryDirectory(prefix="vodloft-show-assets-") as temporary:
@@ -307,13 +307,13 @@ def _refresh_asset(plan: AssetPlan, check_cancelled: Callable[[], None]) -> bool
             ffmpeg_path=settings.ffmpeg_path,
             fallback_format=settings.collection_artwork_fallback_format,
             forced_format=plan.forced_format,
-            check_cancelled=check_cancelled,
+            check_canceled=check_canceled,
         )
         target = plan.directory / f"{plan.kind}.{prepared.output_format}"
         new_hash = asset_file_hash(prepared.path)
         if new_hash is None:
             raise ValueError("Prepared collection artwork disappeared before publication")
-        check_cancelled()
+        check_canceled()
         with asset_file_lock(plan.download_root, target):
             with db_session() as session:
                 if not _current(session, plan):
@@ -331,7 +331,7 @@ def _refresh_asset(plan: AssetPlan, check_cancelled: Callable[[], None]) -> bool
                         target,
                         download_root=plan.download_root,
                         expected_hash=previous_hash,
-                        check_cancelled=check_cancelled,
+                        check_canceled=check_canceled,
                     )
                 for row in rows:
                     row.content_hash = new_hash
@@ -341,13 +341,13 @@ def _refresh_asset(plan: AssetPlan, check_cancelled: Callable[[], None]) -> bool
                     row.checked_at = now
                 session.commit()
 
-    _cleanup_obsolete_variants(plan, target, check_cancelled)
+    _cleanup_obsolete_variants(plan, target, check_canceled)
     return True
 
 
 def _cleanup_old_roots(
     collection_id: int, profile_id: int, current_root: Path, download_root: Path,
-    check_cancelled: Callable[[], None],
+    check_canceled: Callable[[], None],
 ) -> None:
     with db_session() as session:
         obsolete = [
@@ -368,7 +368,7 @@ def _cleanup_old_roots(
             .where(Episode.collection_id == collection_id, EpisodeMediaDownload.local_media_profile_id == profile_id)
         ) if path]
     for record_id, path in obsolete:
-        check_cancelled()
+        check_canceled()
         if any(media.is_relative_to(path.parent) and not media.is_relative_to(current_root) for media in media_paths):
             continue
         try:
@@ -416,7 +416,7 @@ def _cleanup_old_roots(
 
 
 def run_reconcile_collection_assets(
-    *, resource_id=None, resource_type=None, progress=None, check_cancelled: Callable[[], None],
+    *, resource_id=None, resource_type=None, progress=None, check_canceled: Callable[[], None],
 ) -> None:
     warnings = []
     plans = []
@@ -430,7 +430,7 @@ def run_reconcile_collection_assets(
             collection_id = profile.collection_id
         else:
             collection_id = resource_id or None
-        check_cancelled()
+        check_canceled()
         roots = collection_profile_roots(session)
         indexed_collection_ids = set(session.scalars(select(Episode.collection_id).distinct()))
         for (current_collection_id, profile_id), root in roots.items():
@@ -471,9 +471,9 @@ def run_reconcile_collection_assets(
     for index, plan in enumerate(plans):
         update_progress(progress, int(index * 90 / max(1, len(plans))), f"Reconciling collection artwork ({index + 1}/{len(plans)})")
         try:
-            if not _refresh_asset(plan, check_cancelled):
+            if not _refresh_asset(plan, check_canceled):
                 failed_pairs.add((plan.collection_id, plan.profile_id))
-        except DownloadCancelled:
+        except DownloadCanceled:
             raise
         except ArtworkConflict as exc:
             warnings.append(str(exc))
@@ -484,7 +484,7 @@ def run_reconcile_collection_assets(
             failed_pairs.add((plan.collection_id, plan.profile_id))
     for collection_id, profile_id, directory in cleanup:
         if (collection_id, profile_id) not in failed_pairs:
-            _cleanup_old_roots(collection_id, profile_id, directory, download_root, check_cancelled)
+            _cleanup_old_roots(collection_id, profile_id, directory, download_root, check_canceled)
     for warning in warnings:
         logger.warning("Collection artwork: %s", warning)
     if errors:

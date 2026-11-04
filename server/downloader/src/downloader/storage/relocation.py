@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Callable
 from uuid import uuid4
 
-from ..errors import DownloadCancelled
+from ..errors import DownloadCanceled
 from .copying import copy_file
 from .temporary import _publish_complete_file
 
@@ -36,7 +36,7 @@ def _private_path(path: Path) -> Path:
 def _move(source: Path, destination: Path, should_cancel: Callable[[], bool]) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     if should_cancel():
-        raise DownloadCancelled('File relocation canceled')
+        raise DownloadCanceled('File relocation canceled')
     try:
         _publish_complete_file(source, destination)
         return

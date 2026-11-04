@@ -164,6 +164,7 @@ export default function TasksPage() {
     const query = useTaskLedgerInfinite({
         definitionKey: definitionKey || undefined,
         status: selectedStatuses,
+        orderBy: 'workflow',
         limit: 100,
         enabled: statuses.size > 0,
     })
@@ -274,7 +275,8 @@ export default function TasksPage() {
                 <h1 id="tasks-title">Tasks</h1>
                 <PageSubtitle summary={<>Background and user-triggered work performed by VODLoft.</>}>
                     <p>
-                        This ledger contains every task execution. Active tasks report progress when available.
+                        This ledger contains every task execution. Running tasks come first, then tasks waiting to run, then
+                        finished ones, newest first. Active tasks report progress when available.
                     </p>
                     <p>
                         Use this view to diagnose certain problems or track task progress.

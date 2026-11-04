@@ -111,7 +111,7 @@ export function DownloadRow({
                         </span>
                     )
                     : download && !offersDownload(download, downloadStateKnown)
-                        ? <DownloadProgressStatus download={download} details={false}/>
+                        ? <DownloadProgressStatus presentation={download.presentation} details={false}/>
                         : <button
                             type="button"
                             className="btn btn-primary"

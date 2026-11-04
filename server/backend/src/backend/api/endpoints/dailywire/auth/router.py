@@ -158,7 +158,7 @@ async def poll_for_authorization(request: PollRequest):
             _cancel_events.pop(request.device_code, None)
             return PollResponse(
                 status="denied",
-                message="User denied authorization or operation was cancelled"
+                message="User denied authorization or operation was canceled"
             )
 
     except HTTPException:

@@ -26,8 +26,8 @@ from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from config import get_settings
 from sources import get_source
-from sources.pacing import RequestCancelled, request_context
-from downloader import DownloadCancelled, EncryptedMediaError, SubscriptionRequiredError
+from sources.pacing import RequestCanceled, request_context
+from downloader import DownloadCanceled, EncryptedMediaError, SubscriptionRequiredError
 from downloader.capacity import resources
 from downloader.coordinator import DownloadExecution, execute_download_plan
 from downloader.storage.replacement import (
@@ -85,7 +85,7 @@ class DownloadProgressReporter:
                     wait_state=wait,
                 )
             except TaskCancellationRequested as exc:
-                raise DownloadCancelled(str(exc)) from exc
+                raise DownloadCanceled(str(exc)) from exc
         else:
             self.progress.set(percent, message, meta=metadata)
 
@@ -125,7 +125,7 @@ def run_download(
 ) -> TaskResult:
     download = session.get(MediaDownloadBase, media_download_id)
     if download is None:
-        raise DownloadCancelled("Media download was deleted before it started")
+        raise DownloadCanceled("Media download was deleted before it started")
     title = download.media.title
     publish_status = getattr(download.media, "publish_status", None)
     operation_ids = current_operation_ids()
@@ -153,7 +153,7 @@ def run_download(
                 tracker.preparing("prepare_existing_artifact")
                 current = session.get(MediaDownloadBase, media_download_id)
                 if current is None:
-                    raise DownloadCancelled("Media download was deleted before replacement preparation")
+                    raise DownloadCanceled("Media download was deleted before replacement preparation")
                 preserving_artifact = (
                     current.artifact_status != MediaDownloadArtifactStatus.ABSENT.value
                 )
@@ -196,7 +196,7 @@ def run_download(
             def reserved(destination: str) -> None:
                 current = session.get(MediaDownloadBase, media_download_id)
                 if current is None:
-                    raise DownloadCancelled("Download was deleted before reserving its destination")
+                    raise DownloadCanceled("Download was deleted before reserving its destination")
                 if not preserving_artifact:
                     current.file_path = destination
                     session.commit()
@@ -217,7 +217,7 @@ def run_download(
             session.expire_all()
             download = session.get(MediaDownloadBase, media_download_id)
             if download is None:
-                raise DownloadCancelled("Download was deleted during execution")
+                raise DownloadCanceled("Download was deleted during execution")
             from task_manager.scheduler.executor import ProgressUpdater
             identity = execution.identity
             download.file_path = execution.result.path
@@ -285,7 +285,7 @@ def run_download(
                 )
         return result
     except BaseException as exc:
-        tracker.cancel(user_requested=isinstance(exc, (DownloadCancelled, RequestCancelled)))
+        tracker.cancel(user_requested=isinstance(exc, (DownloadCanceled, RequestCanceled)))
         tracker.stop_reporting()
         session.rollback()
         if execution is not None and not committed:
@@ -297,9 +297,9 @@ def run_download(
             started_at=started, finished_at=finished, is_redownload=is_redownload,
             **attempt, error=exc, lifecycle=asdict(tracker.snapshot()),
         )
-        if isinstance(exc, (DownloadCancelled, RequestCancelled)):
+        if isinstance(exc, (DownloadCanceled, RequestCanceled)):
             entry = record_media_download_operation_history_once(
-                session, media_download_id, MediaDownloadHistoryAction.CANCELLED,
+                session, media_download_id, MediaDownloadHistoryAction.CANCELED,
                 operation_ids=operation_ids, metadata=metadata, occurred_at=finished,
             )
         else:
@@ -314,7 +314,7 @@ def run_download(
             return TaskResult(summary=f"{title} is protected by DRM and cannot be downloaded", outcome="failed")
         if isinstance(exc, SubscriptionRequiredError) and _mark_needs_subscription(session, media_download_id):
             return TaskResult(summary=f"{title} needs a subscription and cannot be downloaded", outcome="failed")
-        if not isinstance(exc, (DownloadCancelled, RequestCancelled)):
+        if not isinstance(exc, (DownloadCanceled, RequestCanceled)):
             try:
                 # A Collection with automatic cookies uses the cookies file from the retry on.
                 note_failed_download(session, media_download_id, str(exc))

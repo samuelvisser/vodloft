@@ -18,7 +18,7 @@ class _Context:
     def __init__(self):
         self.progress = []
 
-    def raise_if_cancelled(self):
+    def raise_if_canceled(self):
         return None
 
     def update_progress(self, current, total, message=None):

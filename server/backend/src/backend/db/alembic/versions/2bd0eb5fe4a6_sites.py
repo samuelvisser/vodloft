@@ -1,7 +1,7 @@
 """Sites: the website a collection or video is on, whichever Source fetches it.
 
 Revision ID: 2bd0eb5fe4a6
-Revises: c89f1a5ea2ba
+Revises: 7b3e9d2a4c61
 Create Date: 2026-11-04
 
 A Site, such as YouTube or The Daily Wire, can span several domains and can be
@@ -23,7 +23,7 @@ from alembic import op
 
 
 revision = "2bd0eb5fe4a6"
-down_revision = "c89f1a5ea2ba"
+down_revision = "7b3e9d2a4c61"
 branch_labels = None
 depends_on = None
 

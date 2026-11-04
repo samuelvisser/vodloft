@@ -16,10 +16,10 @@ def test_atomic_publication_and_replacement(tmp_path):
     source = tmp_path / "source.jpg"
     source.write_bytes(b"first image")
     target = tmp_path / "collection" / "poster.jpg"
-    files.publish_collection_asset(source, target, download_root=tmp_path, expected_hash=None, check_cancelled=_active)
+    files.publish_collection_asset(source, target, download_root=tmp_path, expected_hash=None, check_canceled=_active)
     original = files.asset_file_hash(target)
     source.write_bytes(b"second image")
-    files.publish_collection_asset(source, target, download_root=tmp_path, expected_hash=original, check_cancelled=_active)
+    files.publish_collection_asset(source, target, download_root=tmp_path, expected_hash=original, check_canceled=_active)
     assert target.read_bytes() == b"second image"
     assert not list(target.parent.glob(".vodloft-artwork-*"))
 
@@ -30,7 +30,7 @@ def test_custom_artwork_and_external_edits_are_preserved(tmp_path):
     target = tmp_path / "poster.jpg"
     target.write_bytes(b"custom image")
     with pytest.raises(files.ArtworkConflict):
-        files.publish_collection_asset(source, target, download_root=tmp_path, expected_hash=None, check_cancelled=_active)
+        files.publish_collection_asset(source, target, download_root=tmp_path, expected_hash=None, check_canceled=_active)
     assert target.read_bytes() == b"custom image"
     assert not list(tmp_path.glob(".vodloft-artwork-*"))
 
@@ -47,7 +47,7 @@ def test_external_creation_during_atomic_claim_is_not_overwritten(tmp_path, monk
 
     monkeypatch.setattr(files.os, "link", competing_writer)
     with pytest.raises(files.ArtworkConflict):
-        files.publish_collection_asset(source, target, download_root=tmp_path, expected_hash=None, check_cancelled=_active)
+        files.publish_collection_asset(source, target, download_root=tmp_path, expected_hash=None, check_canceled=_active)
     assert target.read_bytes() == b"custom image"
 
 
@@ -63,7 +63,7 @@ def test_failed_replacement_keeps_existing_image_and_cleans_temporary(tmp_path, 
 
     monkeypatch.setattr(files.os, "replace", fail_replace)
     with pytest.raises(OSError):
-        files.publish_collection_asset(source, target, download_root=tmp_path, expected_hash=expected, check_cancelled=_active)
+        files.publish_collection_asset(source, target, download_root=tmp_path, expected_hash=expected, check_canceled=_active)
     assert target.read_bytes() == b"old image"
     assert not list(tmp_path.glob(".vodloft-artwork-*"))
 
@@ -117,7 +117,7 @@ def test_non_images_and_oversize_responses_are_rejected(tmp_path, monkeypatch):
                 tmp_path,
                 ffmpeg_path="ffmpeg",
                 fallback_format="jpg",
-                check_cancelled=_active,
+                check_canceled=_active,
             )
     assert not list(tmp_path.glob("asset.*"))
 
@@ -134,7 +134,7 @@ def test_native_png_stays_png(tmp_path, monkeypatch):
         tmp_path,
         ffmpeg_path="ffmpeg",
         fallback_format="jpg",
-        check_cancelled=_active,
+        check_canceled=_active,
     )
     assert result.source_format == "png"
     assert result.output_format == "png"
@@ -158,7 +158,7 @@ def test_non_native_image_uses_configured_fallback(tmp_path, monkeypatch):
         tmp_path / "jpg",
         ffmpeg_path="ffmpeg",
         fallback_format="jpg",
-        check_cancelled=_active,
+        check_canceled=_active,
     )
     assert jpg.source_format == "other"
     assert jpg.output_format == "jpg"
@@ -169,7 +169,7 @@ def test_non_native_image_uses_configured_fallback(tmp_path, monkeypatch):
         tmp_path / "png",
         ffmpeg_path="ffmpeg",
         fallback_format="png",
-        check_cancelled=_active,
+        check_canceled=_active,
     )
     assert png.source_format == "other"
     assert png.output_format == "png"
@@ -193,7 +193,7 @@ def test_forced_png_overrides_fallback_for_clearlogos(tmp_path, monkeypatch):
         ffmpeg_path="ffmpeg",
         fallback_format="jpg",
         forced_format="png",
-        check_cancelled=_active,
+        check_canceled=_active,
     )
     assert result.source_format == "other"
     assert result.output_format == "png"
@@ -213,6 +213,6 @@ def test_cancellation_before_publication_leaves_no_target(tmp_path):
         raise RuntimeError("canceled")
 
     with pytest.raises(RuntimeError, match="canceled"):
-        files.publish_collection_asset(source, target, download_root=tmp_path, expected_hash=None, check_cancelled=canceled)
+        files.publish_collection_asset(source, target, download_root=tmp_path, expected_hash=None, check_canceled=canceled)
     assert not target.exists()
     assert not list(target.parent.glob(".vodloft-artwork-*"))

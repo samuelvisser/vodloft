@@ -57,7 +57,7 @@ def test_canceling_queue_follower_does_not_leave_a_ticket_hole(monkeypatch):
         follower = pool.submit(second)
         assert enqueued.wait(2)
         cancel.set()
-        with pytest.raises(pacing.RequestCancelled):
+        with pytest.raises(pacing.RequestCanceled):
             follower.result(timeout=2)
         primary.result(timeout=2)
     pacer.wait()

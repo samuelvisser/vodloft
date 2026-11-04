@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Callable
 
-from ..errors import DownloadCancelled
+from ..errors import DownloadCanceled
 from ..models import DownloadProgress
 
 
@@ -22,7 +22,7 @@ def copy_file(
             created = True
             while True:
                 if should_cancel is not None and should_cancel():
-                    raise DownloadCancelled("Canceled while copying files into the library")
+                    raise DownloadCanceled("Canceled while copying files into the library")
                 chunk = incoming.read(1024 * 1024)
                 if not chunk:
                     break

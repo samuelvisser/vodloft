@@ -29,16 +29,16 @@ export default function App() {
 
   useEffect(() => {
     if (authState !== 'checking') return
-    let cancelled = false
+    let canceled = false
     loadAccess()
       .then((access) => {
-        if (!cancelled) setAuthState(access ? 'ok' : 'no')
+        if (!canceled) setAuthState(access ? 'ok' : 'no')
       })
       .catch(() => {
-        if (!cancelled) setAuthState('no')
+        if (!canceled) setAuthState('no')
       })
     return () => {
-      cancelled = true
+      canceled = true
     }
   }, [authState])
 

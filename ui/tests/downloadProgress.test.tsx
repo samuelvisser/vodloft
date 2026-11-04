@@ -13,6 +13,7 @@ import ProgressBar from '../src/components/common/ProgressBar'
 import DownloadProgressStatus from '../src/components/DownloadProgress/DownloadProgressStatus'
 import DownloadProgressActionItem from '../src/components/DownloadProgress/DownloadProgressActionItem'
 import DownloadProgressButton from '../src/components/DownloadProgress/DownloadProgressButton'
+import {QuickActiveSummary} from '../src/components/QuickDownload/QuickDownloadLists'
 import type {TaskOperationRead} from '../src/types/schemas/operation'
 import {FrontendPullReadSchema, FrontendPullVersionSchema} from '../src/types/schemas/puller'
 library.add(fas)
@@ -95,7 +96,7 @@ test('post-publication wait within 12 hours shows only its delay time inline',()
         const deadline=view.label.replace(/^Delayed until /,'').replace(/\.\.\.$/,'')
         assert.match(view.detail,/post-publication safety delay/);assert.ok(view.detail.includes(deadline))
         assert.doesNotMatch(view.detail,/Backend/)
-        const markup=renderToStaticMarkup(<DownloadProgressStatus download={{id:1,presentation:view,operation:op} as any}/>)
+        const markup=renderToStaticMarkup(<DownloadProgressStatus presentation={view}/>)
         assert.match(markup,/Delayed until /);assert.doesNotMatch(markup,/2026/)
     } finally {
         Date.now=originalNow
@@ -187,7 +188,7 @@ test('all three layouts render the same activity',()=>{
     const download={id:1,presentation,operation:op} as any
     const client=new QueryClient()
     const button=renderToStaticMarkup(<QueryClientProvider client={client}><FrontendPuller><DownloadProgressButton download={download} onStart={()=>{}}/></FrontendPuller></QueryClientProvider>)
-    const standalone=renderToStaticMarkup(<DownloadProgressStatus download={download}/>)
+    const standalone=renderToStaticMarkup(<DownloadProgressStatus presentation={download.presentation}/>)
     const menu=renderToStaticMarkup(<DownloadProgressActionItem presentation={presentation}/>)
     assert.match(button,/Embedding\.\.\./);assert.match(menu,/Embedding\.\.\./);assert.match(standalone,/Embedding artwork and metadata/)
     assert.doesNotMatch(button,/aria-valuenow/);assert.doesNotMatch(standalone,/aria-valuenow/)
@@ -219,4 +220,10 @@ test('idle re-download uses the same plain icon button treatment as ledger actio
     )
     assert.match(markup,/class="icon-btn"/)
     assert.doesNotMatch(markup,/class="progress-button-control"/)
+})
+test('a quick download shows the same status, bar and details button as a library download, with its owner',()=>{
+    const quick={...active(),kind:'quick.download',resourceType:'quick_download',resourceId:null,title:'Election Night',context:{choice:'Video · 1080p MP4',source_key:'dailywire'}} as TaskOperationRead
+    const markup=renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}><QuickActiveSummary operation={quick} ownerName="sam"/></QueryClientProvider>)
+    assert.match(markup,/42%/);assert.match(markup,/aria-label="Progress details"/);assert.match(markup,/role="progressbar"/)
+    assert.match(markup,/For sam · Video · 1080p MP4/)
 })

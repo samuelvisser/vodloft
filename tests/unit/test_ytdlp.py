@@ -320,11 +320,11 @@ def test_ytdlp_errors_say_what_went_wrong(fake_ytdlp, tmp_path):
     assert list(tmp_path.glob("*.mp4*")) == []
 
 
-def test_a_cancelled_ytdlp_download_stops_it(fake_ytdlp, tmp_path):
-    from downloader.errors import DownloadCancelled
+def test_a_canceled_ytdlp_download_stops_it(fake_ytdlp, tmp_path):
+    from downloader.errors import DownloadCanceled
     from downloader.ytdlp import download_ytdlp
 
-    with pytest.raises(DownloadCancelled):
+    with pytest.raises(DownloadCanceled):
         download_ytdlp("https://x/video", str(tmp_path / "c.mp4"), command=fake_ytdlp, should_cancel=lambda: True)
     assert list(tmp_path.glob("c.mp4*")) == []
 

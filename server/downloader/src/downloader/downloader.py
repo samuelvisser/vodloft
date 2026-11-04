@@ -5,7 +5,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
-from .errors import DownloadCancelled, DownloadError
+from .errors import DownloadCanceled, DownloadError
 from .hls import (
     is_master_playlist,
     is_playlist,
@@ -79,10 +79,10 @@ def download_hls(
     Writes to ``<dest_path>.part`` and renames on success.
     """
     if should_cancel and should_cancel():
-        raise DownloadCancelled("Download cancelled")
+        raise DownloadCanceled("Download canceled")
     playlist_text = http_get_text_checked(rendition_url)
     if should_cancel and should_cancel():
-        raise DownloadCancelled("Download cancelled")
+        raise DownloadCanceled("Download canceled")
     playlist = parse_media_playlist(playlist_text, base_url=rendition_url)
     if not playlist.is_endlist:
         raise DownloadError("Refusing to download a live/incomplete HLS playlist (no EXT-X-ENDLIST)")
@@ -116,7 +116,7 @@ def download_hls(
 
             for i, segment_url in enumerate(playlist.segment_urls):
                 if should_cancel and should_cancel():
-                    raise DownloadCancelled("Download cancelled")
+                    raise DownloadCanceled("Download canceled")
                 bytes_downloaded += _download_into(
                     segment_url,
                     out,
@@ -126,7 +126,7 @@ def download_hls(
 
         report(segments_total, force=True)
         if should_cancel and should_cancel():
-            raise DownloadCancelled("Download cancelled")
+            raise DownloadCanceled("Download canceled")
         os.replace(part_path, dest_path)
     except BaseException:
         _remove_quietly(part_path)
@@ -151,7 +151,7 @@ def download_file(
     Writes to ``<dest_path>.part`` and renames on success.
     """
     if should_cancel and should_cancel():
-        raise DownloadCancelled("Download cancelled")
+        raise DownloadCanceled("Download canceled")
     part_path = dest_path + ".part"
     _ensure_parent_dir(part_path)
 
@@ -166,7 +166,7 @@ def download_file(
             with open(part_path, "wb") as out:
                 for chunk in resp.iter_chunks(_CHUNK_SIZE):
                     if should_cancel and should_cancel():
-                        raise DownloadCancelled("Download cancelled")
+                        raise DownloadCanceled("Download canceled")
                     out.write(chunk)
                     bytes_downloaded += len(chunk)
 
@@ -182,7 +182,7 @@ def download_file(
         if progress:
             progress(DownloadProgress(bytes_downloaded=bytes_downloaded, total_bytes=total))
         if should_cancel and should_cancel():
-            raise DownloadCancelled("Download cancelled")
+            raise DownloadCanceled("Download canceled")
         os.replace(part_path, dest_path)
     except BaseException:
         _remove_quietly(part_path)
@@ -254,7 +254,7 @@ def _download_into(url: str, out, *, should_cancel: Optional[CancelCheck] = None
     with http_get(url) as resp:
         for chunk in resp.iter_chunks(_CHUNK_SIZE):
             if should_cancel and should_cancel():
-                raise DownloadCancelled("Download cancelled")
+                raise DownloadCanceled("Download canceled")
             out.write(chunk)
             written += len(chunk)
     return written

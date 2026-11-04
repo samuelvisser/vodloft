@@ -678,7 +678,7 @@ def cancel_media_download_operation(
         record_media_download_operation_history_once(
             session,
             media_download_id,
-            MediaDownloadHistoryAction.CANCELLED,
+            MediaDownloadHistoryAction.CANCELED,
             operation_ids=(snapshot.id,),
             metadata=metadata,
             occurred_at=snapshot.finished_at,
@@ -728,7 +728,7 @@ def restart_media_download_operation(operation_id: str):
             record_media_download_operation_history_once(
                 session,
                 media_download_id,
-                MediaDownloadHistoryAction.CANCELLED,
+                MediaDownloadHistoryAction.CANCELED,
                 operation_ids=(operation_id,),
                 metadata=cancel_metadata,
             )
