@@ -41,15 +41,17 @@ Podcast Download Profiles can decide whether they should wait for the final medi
 
 ## Recent metadata updates
 
-The Daily Wire sometimes changes titles, thumbnails, episode numbers, or other information shortly after publication.
+Creators often change a title, description or thumbnail shortly after publishing. The Daily Wire also corrects episode numbers.
 
-VODLoft revisits newly published episodes at several gradually increasing intervals:
+VODLoft therefore looks each new episode and video up again at several gradually increasing intervals after it is published. Once the last one has passed, its information is considered final. Each **Site**, the website an item comes from such as YouTube, has its own setting under **Settings → Automation**:
 
-```text
-15m,30m,1h,3h,6h,24h,3d
-```
+- **System schedule**: the default for every Site, `1h,6h,24h,3d` unless you change it.
+- **Own schedule**: The Daily Wire starts with `15m,30m,1h,3h,6h,24h,3d`, and YouTube with `30m,2h,6h,24h,3d,7d,14d`, because YouTube creators keep testing titles and thumbnails for up to two weeks.
+- **Off**: the Site's new uploads are not looked up again.
 
-This keeps recent metadata accurate without repeatedly refreshing the entire historical library.
+With a YouTube API key, VODLoft refreshes up to 50 YouTube videos for a single unit of quota. A video YouTube no longer has is marked as removed from its Source.
+
+A refresh only changes what VODLoft shows and what its RSS feeds serve. Files you already downloaded keep their names and the information they were saved with.
 
 ## Episodes without usable media
 

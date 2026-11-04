@@ -128,7 +128,7 @@ class AppSettings(SettingsBase):
         monitor_pending_episode_cron="*/2 * * * *",
         monitor_no_usable_media_episode_cron_enabled=True,
         monitor_no_usable_media_episode_cron="*/20 * * * *",
-        metadata_refresh_intervals="15m,30m,1h,3h,6h,24h,3d",
+        metadata_refresh_intervals="1h,6h,24h,3d",
     ))
     episode_status_timing: EpisodeStatusTiming = Field(default=EpisodeStatusTiming(
         published_final_after_minutes=3 * 60,

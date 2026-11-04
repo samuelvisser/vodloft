@@ -1,5 +1,6 @@
 import type {SettingsTabProps} from './SettingsTabTypes'
 import CronEditor from './CronEditor'
+import SiteRefreshCard from './SiteRefreshCard'
 import {
     DurationField,
     NumberField,
@@ -243,7 +244,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                 />
                 <TextField
                     id="settings-metadata-refresh-intervals"
-                    label="Metadata refresh intervals"
+                    label="Metadata refresh: system schedule"
                     value={draft.newEpisodeSchedule.metadataRefreshIntervals}
                     error={errorFor('newEpisodeSchedule.metadataRefreshIntervals')}
                     environmentVariable={environmentVariableFor('newEpisodeSchedule.metadataRefreshIntervals')}
@@ -251,11 +252,12 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                         next.newEpisodeSchedule.metadataRefreshIntervals = value
                     })}
                     help={
-                        <ReadMore summary={<span>Intervals to refresh episode metadata after it is published.</span>}>
+                        <ReadMore summary={<span>When VODLoft looks new uploads up again, for Sites that follow the system schedule.</span>}>
                             <p>
-                                While an episode is live, VODLoft closely monitors it for status, title and thumbnail updates. After
-                                publication, these targeted metadata refreshes keep reconciling late changes at the source, including corrected episode
-                                numbers.
+                                Creators often change a title, description or thumbnail after publishing. VODLoft looks each
+                                new episode and video up again at these offsets after publication, and after the last one its
+                                metadata is final. The Daily Wire and YouTube have schedules of their own, which you can change
+                                per Site below.
                             </p>
                             <p>
                                 Value is a list of comma-separated offsets after publication. Use s, m, h or d, for example: 120s,30m,3h,2d
@@ -263,6 +265,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                         </ReadMore>
                     }
                 />
+                <SiteRefreshCard/>
             </SettingsSection>
 
             <SettingsDisclosure

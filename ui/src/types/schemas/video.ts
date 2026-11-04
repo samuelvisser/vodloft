@@ -1,7 +1,7 @@
 import {z} from 'zod'
 
 import {ApiDateTimeSchema} from './datetime'
-import {SourcedFields} from './source'
+import {SiteReadSchema, SourcedFields} from './source'
 
 
 export const VideoReadSchema = z.looseObject({
@@ -16,6 +16,8 @@ export const VideoReadSchema = z.looseObject({
     /** Who added it, with user accounts on. */
     addedBy: z.string().nullable().optional(),
     sharingUrl: z.string(),
+    /** The website it is on; null for an older video until VODLoft has found it. */
+    site: SiteReadSchema.nullable().optional(),
     authorName: z.string().nullable(),
     authorUrl: z.string().nullable(),
     publishedAt: ApiDateTimeSchema.nullable(),

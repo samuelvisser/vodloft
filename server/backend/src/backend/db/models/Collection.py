@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING, TypeAlias
 
-from sqlalchemy import ForeignKey, Text, func
+from sqlalchemy import ForeignKey, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
@@ -12,19 +12,25 @@ from backend.db.mixins.CreatedByMixin import CreatedByMixin
 if TYPE_CHECKING:
     from backend.db.models.media_item import Episode
     from backend.db.models.stream_profile import StreamProfileBase
-    from backend.db.models import Season, DownloadProfile
+    from backend.db.models import Season, DownloadProfile, Site
     from backend.db.models import CustomIndexState
 
 
 class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     __tablename__ = "collections"
     __task_resource_types__ = ("collection",)
+    # The same collection is added once per Site, whichever Source fetches it.
+    __table_args__ = (UniqueConstraint("site_key", "site_ref"),)
 
     # Columns
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     uuid: Mapped[str] = mapped_column(index=True, unique=True)
     source_key: Mapped[str] = mapped_column(index=True, comment="Id of the Source this comes from, as registered in sources")
     slug: Mapped[str] = mapped_column(index=True, unique=True)
+    site_key: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("sites.key"), index=True, comment="The Site the collection is on; filled in the background for older collections",
+    )
+    site_ref: Mapped[Optional[str]] = mapped_column(comment="The Site's own id for the collection")
     title: Mapped[str]
     description: Mapped[Optional[str]]
     sharing_url: Mapped[str] = mapped_column(unique=True)
@@ -67,6 +73,7 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     )
 
     # Relationships
+    site: Mapped[Optional["Site"]] = relationship(lazy="joined")
     episodes: Mapped[list["Episode"]] = relationship(
         back_populates="collection", cascade="all, delete-orphan", order_by="desc(Episode.index)"
     )

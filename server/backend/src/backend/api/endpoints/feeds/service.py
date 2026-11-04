@@ -50,7 +50,7 @@ _RECONCILABLE_ARTIFACT_STATUSES = (
 )
 _UNAVAILABLE_PUBLISH_STATUSES = {
     EpisodePublishStatus.NO_USABLE_MEDIA.value,
-    EpisodePublishStatus.DW_PROCESSING.value,
+    EpisodePublishStatus.SOURCE_PROCESSING.value,
 }
 _VIDEO_HEIGHTS = {
     PreferredFormat.FORMAT_4K.value: 2160,
@@ -665,7 +665,7 @@ def get_episode_for_feed(
 
     if episode.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value:
         raise HTTPException(status_code=404, detail="Episode has no usable media")
-    if episode.publish_status == EpisodePublishStatus.DW_PROCESSING.value:
+    if episode.publish_status == EpisodePublishStatus.SOURCE_PROCESSING.value:
         raise HTTPException(status_code=404, detail="Episode media is still processing")
 
     if downloads is None:

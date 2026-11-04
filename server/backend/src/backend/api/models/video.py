@@ -6,7 +6,7 @@ from typing import Optional
 from pydantic import Field
 
 from backend.api.models.base import RequestBase
-from backend.api.models.source import SourcedResponse
+from backend.api.models.source import SiteAPIRead, SourcedResponse
 
 
 class VideoAPICreate(RequestBase):
@@ -31,6 +31,8 @@ class VideoAPIRead(SourcedResponse):
     added_by: Optional[str] = None
     """Who added it, with user accounts on."""
     sharing_url: str
+    site: Optional[SiteAPIRead] = None
+    """The website the video is on; None until the background migration finds it for an older video."""
     author_name: Optional[str]
     author_url: Optional[str]
     published_at: Optional[datetime]

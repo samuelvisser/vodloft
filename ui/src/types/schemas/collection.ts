@@ -2,7 +2,7 @@ import {z} from "zod";
 import {EpisodeIdentifierReg, CollectionTypeReg} from "../collection";
 import {DwMembershipLevelReg} from "../dailywire_user_info";
 import {ApiDateTimeSchema} from "./datetime";
-import {SourcedFields} from "./source";
+import {SiteReadSchema, SourcedFields} from "./source";
 
 
 /** Ensure https:// if a scheme is missing */
@@ -117,6 +117,8 @@ export const CollectionReadSchema = z.looseObject({
     title: z.string(),
     description: z.string().nullable(),
     sharingUrl: z.string(),
+    /** The website it is on; null for an older collection until VODLoft has found it. */
+    site: SiteReadSchema.nullable().optional(),
     backgroundImagePath: z.string().nullable().optional(),
     logoImagePath: z.string().nullable().optional(),
 

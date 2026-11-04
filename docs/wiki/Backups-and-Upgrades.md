@@ -46,12 +46,72 @@ Restoring only `vodloft.db` while losing the accompanying key and authentication
 
 ## Upgrade VODLoft
 
-Before an important upgrade, make a fresh `/config` backup.
-
-Then update a normal Compose installation with:
+The quickest way to upgrade to the newest version is:
 
 ```bash
 docker compose pull
+docker compose up -d
+```
+
+Every [VODLoft release](https://github.com/samuelvisser/vodloft/releases) also lists two commands that install exactly that version, even if a newer one is out. This section explains them step by step. The examples use version `0.7.0`; use the version from the release you want instead.
+
+These steps are for the standard Docker Compose setup from [[Installation]], whose `docker-compose.yml` uses `ghcr.io/samuelvisser/vodloft:latest`. Type each command in a terminal on the computer or server that runs VODLoft, and press Enter after each one.
+
+1. **Go to your VODLoft folder**, the folder with your `docker-compose.yml` in it. If you followed [[Installation]], that is the `vodloft` folder in your home folder:
+
+   ```bash
+   cd ~/vodloft
+   ```
+
+   To check you are in the right place, run `ls`. You should see `docker-compose.yml` and a `config` folder.
+
+2. **Stop VODLoft and back up** its `config` folder, which holds your database and settings. With this backup you can always go back.
+
+   ```bash
+   docker compose stop
+   sudo cp -a config config-before-0.7.0
+   ```
+
+   `sudo` may ask for your own password. If your system has no `sudo`, for example because you are logged in as root, leave it out.
+
+3. **Download version 0.7.0** and make it the version your `docker-compose.yml` starts. The first part downloads it; the second gives it the name `latest`, which is the name your `docker-compose.yml` asks for:
+
+   ```bash
+   docker pull ghcr.io/samuelvisser/vodloft:0.7.0 && docker tag ghcr.io/samuelvisser/vodloft:0.7.0 ghcr.io/samuelvisser/vodloft:latest
+   ```
+
+4. **Start it:**
+
+   ```bash
+   docker compose up -d
+   ```
+
+   Don't run `docker compose pull` here: that would download the newest version again in place of 0.7.0.
+
+5. **Check that it worked.** Open VODLoft in your browser. The bottom of the sidebar shows the version, such as **v0.7.0**. The first start after an upgrade can take a minute while VODLoft upgrades its database. If VODLoft does not open, this shows what went wrong:
+
+   ```bash
+   docker compose logs --tail 100
+   ```
+
+Keep the `config-before-0.7.0` folder until you are sure everything works. After that you can delete it with `sudo rm -rf config-before-0.7.0`.
+
+### If a command does not work
+
+- `docker compose` gives "unknown command" or "is not a docker command": your Docker is older. Type `docker-compose` (with a dash) instead of `docker compose`.
+- Docker says "permission denied": put `sudo` in front of each `docker` command.
+
+### Go back to an earlier version
+
+A new version may have upgraded the database, and an older version cannot read the upgraded one. Going back therefore puts back the backup from step 2. Anything you changed in VODLoft since the upgrade is lost; downloaded files stay where they are.
+
+In your VODLoft folder, with the version you are going back to (here `0.6.1`):
+
+```bash
+docker compose stop
+sudo mv config config-from-0.7.0
+sudo mv config-before-0.7.0 config
+docker pull ghcr.io/samuelvisser/vodloft:0.6.1 && docker tag ghcr.io/samuelvisser/vodloft:0.6.1 ghcr.io/samuelvisser/vodloft:latest
 docker compose up -d
 ```
 

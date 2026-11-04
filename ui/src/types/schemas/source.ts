@@ -133,13 +133,22 @@ export function pluralKindName(name: string): string {
     return name.endsWith('s') ? name : `${name}s`
 }
 
-export const SourceDomainReadSchema = z.object({
-    domain: z.string(),
+/** The website a collection or video is on, such as YouTube, whichever Source fetches it. */
+export const SiteReadSchema = z.object({
+    key: z.string(),
+    name: z.string(),
+})
+export type SiteRead = z.infer<typeof SiteReadSchema>
+
+export const SourceSiteReadSchema = z.object({
+    key: z.string(),
+    name: z.string(),
+    domains: z.array(z.string()),
     sourceKeys: z.array(z.string()),
     defaultSourceKey: z.string(),
     preferredSourceKey: z.string().nullable(),
 })
-export type SourceDomainRead = z.infer<typeof SourceDomainReadSchema>
+export type SourceSiteRead = z.infer<typeof SourceSiteReadSchema>
 
 export const ProgramStatusReadSchema = z.object({
     name: z.string(),
@@ -160,6 +169,14 @@ export const EpisodeTagReadSchema = z.object({
     main: z.boolean(),
 })
 export type EpisodeTagRead = z.infer<typeof EpisodeTagReadSchema>
+
+/** What a Source calls one publish status, such as The Daily Wire's "Published (still contains countdown)". */
+export const PublishStatusLabelReadSchema = z.object({
+    status: z.string(),
+    label: z.string(),
+    help: z.string(),
+})
+export type PublishStatusLabelRead = z.infer<typeof PublishStatusLabelReadSchema>
 
 export function episodeTagLabel(tags: readonly EpisodeTagRead[] | undefined, key: string): string {
     return tags?.find((tag) => tag.key === key)?.label ?? key

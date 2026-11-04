@@ -4,7 +4,7 @@ import {Link, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {useCollection, useEpisode, useEpisodeDownloads, useLocalMediaProfiles, useSkippedByFilter, useSourceLookup} from '../../lib/queries'
+import {useCollection, useEpisode, useEpisodeDownloads, useLocalMediaProfiles, usePublishStatusLabels, useSkippedByFilter, useSourceLookup} from '../../lib/queries'
 import {useLibraryDefaults} from '../../lib/settings'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
 import {isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableForSource} from '../../types/local_media_profile'
@@ -72,6 +72,7 @@ export default function EpisodePage() {
     const {data: profiles, error: profilesError} = useLocalMediaProfiles()
     const sourceName = useSourceLookup().name(episode?.sourceKey ?? collection?.sourceKey)
     const subscriptionLocked = useSubscriptionLocked(episode?.sourceKey, episode?.needsSubscription)
+    const {data: publishStatusLabels} = usePublishStatusLabels(episode?.sourceKey)
     const {
         data: downloads,
         error: downloadsError,
@@ -138,12 +139,13 @@ export default function EpisodePage() {
     }
 
     const publishStatus = String(episode.publishStatus)
-    const statusLabel = PUBLISH_STATUS_LABELS[publishStatus] ?? publishStatus
+    const sourceStatus = publishStatusLabels?.[publishStatus]
+    const statusLabel = sourceStatus?.label ?? PUBLISH_STATUS_LABELS[publishStatus] ?? publishStatus
     const isLive = publishStatus === 'live' || publishStatus === EpisodePublishStatus.live
     const earlyDeleteAvailable = episode.earlyDeleteAvailable
     const containsCountdown = (
-        publishStatus === 'published_with_countdown'
-        || publishStatus === EpisodePublishStatus.publishedWithCountdown
+        publishStatus === 'published_preliminary'
+        || publishStatus === EpisodePublishStatus.publishedPreliminary
     )
     const isDownloadable = (
         containsCountdown
@@ -269,7 +271,7 @@ export default function EpisodePage() {
                         />
                     </div>
                     <div className="episode-summary" aria-label="Episode metadata">
-                        <span className={`episode-status${isLive ? ' is-live' : ''}`}>
+                        <span className={`episode-status${isLive ? ' is-live' : ''}`} title={sourceStatus?.help}>
                             {isLive && <span className="episode-status-dot" aria-hidden="true"/>}
                             {statusLabel}
                         </span>

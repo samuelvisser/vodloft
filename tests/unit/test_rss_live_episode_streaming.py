@@ -345,7 +345,7 @@ def test_live_handoff_keeps_same_remote_hls_url_usable_until_final_hls_exists(
     remember_live_episode_handoff(profile, episode)
     assert profile.live_episode_handoff_ids == [episode.id]
 
-    episode.publish_status = "dw_processing"
+    episode.publish_status = "source_processing"
     db_session.flush()
 
     assert get_feed_items(db_session, profile) == [(episode, None)]
@@ -401,7 +401,7 @@ def test_live_handoff_is_not_dropped_just_because_episode_leaves_rss_window(
     )
 
     remember_live_episode_handoff(profile, live_episode)
-    live_episode.publish_status = "dw_processing"
+    live_episode.publish_status = "source_processing"
 
     # Add a newer live episode so the original cached RSS item falls outside
     # max_items. Its previously published stable URL must still retain handoff state.

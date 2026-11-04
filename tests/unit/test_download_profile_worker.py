@@ -193,7 +193,7 @@ def test_download_profile_worker_uses_dedicated_scoped_event():
     assert "download_profile.added" not in event_names
     assert "download_profile.updated" not in event_names
     assert "episode.published_final" not in event_names
-    assert "episode.published_with_countdown" not in event_names
+    assert "episode.published_preliminary" not in event_names
 
 
 def test_episode_trigger_creates_visible_delayed_download_operation(db_session, monkeypatch):
@@ -228,12 +228,12 @@ def test_episode_trigger_creates_visible_delayed_download_operation(db_session, 
     )
     track_monitor_publication_timing(
         episode,
-        old_status=EpisodePublishStatus.DW_PROCESSING.value,
-        new_status=EpisodePublishStatus.DW_PROCESSING,
+        old_status=EpisodePublishStatus.SOURCE_PROCESSING.value,
+        new_status=EpisodePublishStatus.SOURCE_PROCESSING,
     )
     track_monitor_publication_timing(
         episode,
-        old_status=EpisodePublishStatus.DW_PROCESSING.value,
+        old_status=EpisodePublishStatus.SOURCE_PROCESSING.value,
         new_status=EpisodePublishStatus.PUBLISHED_FINAL,
     )
     assert episode.safe_published_final is not None
@@ -267,7 +267,7 @@ def test_podcast_profile_filters_by_type_status_and_countdown(db_session):
     lmp = _make_local_media_profile(db_session)
     now = _now()
     final_ep = _make_episode(db_session, collection, season, slug="final", ep_id="ep.1", status="published_final", published_at=now, index=1)
-    countdown_ep = _make_episode(db_session, collection, season, slug="countdown", ep_id="ep.2", status="published_with_countdown", published_at=now, index=2)
+    countdown_ep = _make_episode(db_session, collection, season, slug="countdown", ep_id="ep.2", status="published_preliminary", published_at=now, index=2)
     _make_episode(db_session, collection, season, slug="live", ep_id="ep.3", status="live", published_at=now, index=3)
     _make_episode(db_session, collection, season, slug="trailer", ep_id="trailer.1", status="published_final", published_at=now, index=4)
     profile = _make_podcast_profile(db_session, collection, lmp)
@@ -339,7 +339,7 @@ def test_countdown_download_delay_uses_safe_live_ended(db_session, monkeypatch):
         season,
         slug="countdown-after-live",
         ep_id="ep.1",
-        status="published_with_countdown",
+        status="published_preliminary",
         published_at=_now() - timedelta(hours=1),
         index=1,
     )
@@ -351,7 +351,7 @@ def test_countdown_download_delay_uses_safe_live_ended(db_session, monkeypatch):
     track_monitor_publication_timing(
         episode,
         old_status=EpisodePublishStatus.LIVE.value,
-        new_status=EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
+        new_status=EpisodePublishStatus.PUBLISHED_PRELIMINARY,
     )
 
     assert episode.safe_live_ended is not None
@@ -388,12 +388,12 @@ def test_final_download_delay_uses_safe_published_final(db_session, monkeypatch)
     )
     track_monitor_publication_timing(
         episode,
-        old_status=EpisodePublishStatus.DW_PROCESSING.value,
-        new_status=EpisodePublishStatus.DW_PROCESSING,
+        old_status=EpisodePublishStatus.SOURCE_PROCESSING.value,
+        new_status=EpisodePublishStatus.SOURCE_PROCESSING,
     )
     track_monitor_publication_timing(
         episode,
-        old_status=EpisodePublishStatus.DW_PROCESSING.value,
+        old_status=EpisodePublishStatus.SOURCE_PROCESSING.value,
         new_status=EpisodePublishStatus.PUBLISHED_FINAL,
     )
 
@@ -585,7 +585,7 @@ def test_final_download_falls_back_instead_of_using_safe_live_ended(db_session, 
     track_monitor_publication_timing(
         episode,
         old_status=EpisodePublishStatus.LIVE.value,
-        new_status=EpisodePublishStatus.DW_PROCESSING,
+        new_status=EpisodePublishStatus.SOURCE_PROCESSING,
     )
 
     assert episode.safe_live_ended is not None
@@ -848,7 +848,7 @@ def test_ensure_episode_download_leaves_final_replacement_to_event_handler(db_se
         episode,
         lmp,
         profile,
-        publish_status="published_with_countdown",
+        publish_status="published_preliminary",
     )
     existing.redownload_when_final = True
     db_session.commit()
@@ -858,7 +858,7 @@ def test_ensure_episode_download_leaves_final_replacement_to_event_handler(db_se
     assert action.needs_operation is False
     assert action.is_redownload is False
     assert existing.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
-    assert existing.downloaded_publish_status == "published_with_countdown"
+    assert existing.downloaded_publish_status == "published_preliminary"
     assert existing.redownload_when_final is True
 
 
@@ -875,7 +875,7 @@ def test_ensure_episode_download_marks_automatic_countdown_for_final_replacement
         season,
         slug="countdown",
         ep_id="ep.1",
-        status="published_with_countdown",
+        status="published_preliminary",
         published_at=_now(),
         index=1,
     )
@@ -908,7 +908,7 @@ def test_ensure_episode_download_respects_profile_redownload_policy(db_session):
         season,
         slug="countdown-no-replace",
         ep_id="ep.2",
-        status="published_with_countdown",
+        status="published_preliminary",
         published_at=_now(),
         index=2,
     )

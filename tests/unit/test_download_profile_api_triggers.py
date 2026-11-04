@@ -266,7 +266,7 @@ def test_download_profile_worker_subscribes_only_to_dedicated_run_event():
     assert "download_profile.added" not in event_names
     assert "download_profile.updated" not in event_names
     assert "episode.published_final" not in event_names
-    assert "episode.published_with_countdown" not in event_names
+    assert "episode.published_preliminary" not in event_names
 
 
 @pytest.mark.parametrize(

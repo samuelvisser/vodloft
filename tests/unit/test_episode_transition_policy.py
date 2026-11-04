@@ -67,7 +67,7 @@ def test_final_episode_does_not_regress_to_inferred_countdown(monkeypatch):
         snapshot=observed,
     )
 
-    assert observed.status is EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN
+    assert observed.status is EpisodePublishStatus.PUBLISHED_PRELIMINARY
     assert resolved.status is EpisodePublishStatus.PUBLISHED_FINAL
 
 

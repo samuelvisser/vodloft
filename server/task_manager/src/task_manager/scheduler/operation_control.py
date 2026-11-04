@@ -83,6 +83,48 @@ def operation_ids_allow_execution(session: Session, operation_ids: Iterable[str]
     ) is not None
 
 
+def active_operation_ids(session: Session, operation_ids: Iterable[str]) -> tuple[str, ...]:
+    """The operations among ``operation_ids`` that are still active and not being canceled."""
+    ids = tuple(dict.fromkeys(str(value) for value in operation_ids if value))
+    if not ids:
+        return ()
+    cancel_requested = func.coalesce(
+        TaskOperation.context[OPERATION_CANCEL_REQUESTED_CONTEXT_KEY].as_boolean(),
+        False,
+    )
+    active = set(session.scalars(
+        select(TaskOperation.id).where(
+            TaskOperation.id.in_(ids),
+            TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES),
+            cancel_requested.is_(False),
+        )
+    ))
+    return tuple(value for value in ids if value in active)
+
+
+def operation_ids_canceled(session: Session, operation_ids: Iterable[str]) -> bool:
+    """Return whether every one of the operations was canceled, or is being canceled.
+
+    Work an operation's worker started along the way, such as a Download Profile
+    run after an index, only stops when the user stopped that operation. That the
+    operation finished in the meantime is no reason to drop it.
+    """
+    ids = tuple(dict.fromkeys(str(value) for value in operation_ids if value))
+    if not ids:
+        return False
+    cancel_requested = func.coalesce(
+        TaskOperation.context[OPERATION_CANCEL_REQUESTED_CONTEXT_KEY].as_boolean(),
+        False,
+    )
+    canceled = session.scalar(
+        select(func.count()).select_from(TaskOperation).where(
+            TaskOperation.id.in_(ids),
+            (TaskOperation.status == OperationStatus.CANCELED.value) | cancel_requested.is_(True),
+        )
+    )
+    return canceled == len(ids)
+
+
 def run_cancel_requested(run: TaskRun) -> bool:
     return (
         isinstance(run.meta, dict)

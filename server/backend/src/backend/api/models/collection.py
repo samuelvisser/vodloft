@@ -7,7 +7,7 @@ from pydantic import AliasChoices, AliasPath, computed_field, Field, ValidationI
 
 from backend.api.models.base import RequestBase, ResponseBase, response_model_config
 from backend.api.models.custom_metadata import CustomMetadataResponseBase
-from backend.api.models.source import SourcedResponse
+from backend.api.models.source import SiteAPIRead, SourcedResponse
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.collection_types import CheckFrequency, CollectionType, CookiesMode, EpisodeIdentifier
 from config.settings.cron_validation import CronExpressionError, validate_cron_expression
@@ -170,6 +170,8 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     title: str
     description: Optional[str] = None
     sharing_url: str
+    site: Optional[SiteAPIRead] = None
+    """The website the collection is on; None until the background migration finds it for an older collection."""
     author_name: str
     author_headshot_path: Optional[str] = None
     background_image_path: Optional[str] = None

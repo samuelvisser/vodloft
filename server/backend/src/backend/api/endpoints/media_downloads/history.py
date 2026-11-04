@@ -34,7 +34,7 @@ def _format_duration(duration_ms: int | None) -> str | None:
 
 def _format_publish_status(value: object) -> str | None:
     labels = {
-        "published_with_countdown": "Countdown version",
+        "published_preliminary": "Preliminary version",
         "published_final": "Final version",
     }
     return labels.get(value) if isinstance(value, str) else None

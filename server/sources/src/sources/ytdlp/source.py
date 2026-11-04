@@ -16,11 +16,11 @@ from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
     ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, Feature, LinkKind, LinkPreview, Playback, PlaybackKind, ProgramStatus,
-    ResolvedLink, SearchResults, CollectionDetails, Source, SourceProblem, SponsorBlockSegment, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
+    ResolvedLink, SearchResults, CollectionDetails, Site, Source, SourceProblem, SponsorBlockSegment, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
 )
 from .. import pacing, ytdlp_runner as runner
-from . import thumbnails, youtube_rss, youtube_search
+from . import sites, thumbnails, youtube_rss, youtube_search
 from .youtube_api import ApiKeyError, QuotaExceededError, Share, YouTubeApiClient, YouTubeApiError, key as api_key, mapping, quota
 from .youtube_api.catalogue import Catalogue
 from .youtube_api.client import MAX_RESULTS
@@ -232,7 +232,7 @@ class YtDlpSource(Source):
     features = frozenset({
         Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.OPTIONAL_COOKIES, Feature.API_KEY,
         Feature.QUICK_CHECK, Feature.CATALOGUE_REFRESH, Feature.SEARCH, Feature.COSTLY_SEARCH,
-        Feature.FORMAT_CHOICES, Feature.YTDLP_DOWNLOADS, Feature.UPGRADE_CHECKS,
+        Feature.FORMAT_CHOICES, Feature.YTDLP_DOWNLOADS, Feature.UPGRADE_CHECKS, Feature.METADATA_REFRESH,
     })
     episode_tags = _YOUTUBE_TAGS
     # Search covers YouTube only; other sites are added by link.
@@ -245,6 +245,10 @@ class YtDlpSource(Source):
         self._cache_lock = threading.Lock()
         # A channel's handle never changes its ID, so it is looked up once.
         self._channel_ids: dict[str, str] = {}
+
+    def site_for(self, url: str) -> Site:
+        """The site of the yt-dlp extractor that handles the link: one Site for all of YouTube's domains."""
+        return sites.site_for(url)
 
     def episode_tags_for(self, url: str | None) -> tuple[EpisodeTag, ...]:
         """Shorts and livestreams are YouTube's; other sites only have videos."""
@@ -616,6 +620,38 @@ class YtDlpSource(Source):
                         removed.add(video_id)
         if listed:
             details.update(self._refresh_from_listing(url, frozenset(listed)))
+        return ItemRefresh(details=details, removed=frozenset(removed))
+
+    def refresh_metadata(self, items: Sequence[ItemRef]) -> ItemRefresh:
+        """YouTube videos through the API, 50 a unit; the rest, or a batch the API could not answer, one by one with yt-dlp.
+
+        Only the API can say a video is gone: it leaves deleted and private videos
+        out of its answer. A yt-dlp lookup that fails may just have been refused
+        this time, so the video stays as it is.
+        """
+        details: dict[str, VideoDetails] = {}
+        removed: set[str] = set()
+        youtube = [item for item in items if _is_youtube(item.url)]
+        catalogue = self._catalogue(adding=False) if youtube else None
+        looked_up = [item for item in items if catalogue is None or item not in youtube]
+        if catalogue is not None:
+            for start in range(0, len(youtube), MAX_RESULTS):
+                batch = youtube[start:start + MAX_RESULTS]
+                try:
+                    found = {item["id"]: item for item in catalogue.videos([ref.slug for ref in batch])}
+                except YouTubeApiError as exc:
+                    logger.info("Refreshing %d videos with yt-dlp, because the YouTube API could not: %s", len(batch), exc)
+                    looked_up += batch
+                    continue
+                for ref in batch:
+                    item = found.get(ref.slug)
+                    if item is None:
+                        removed.add(ref.slug)
+                    elif not mapping.is_pending(item):
+                        details[ref.slug] = mapping.video(item, short=False)
+        for ref in looked_up:
+            if found_details := self._look_up(ref.url):
+                details[ref.slug] = found_details
         return ItemRefresh(details=details, removed=frozenset(removed))
 
     def _refresh_from_listing(self, url: str, wanted: frozenset[str]) -> dict[str, VideoDetails]:

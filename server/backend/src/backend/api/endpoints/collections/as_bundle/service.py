@@ -7,6 +7,7 @@ from fastapi import HTTPException, Request
 
 from backend.db.model_mapping import create_database_fields
 from backend.services.episode_filters import set_profile_filters
+from backend.services.sites import place_collection
 from backend.api.models.collection import CollectionAPIRead
 from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPICreate, CollectionLocalMediaProfileAPIUpdate
 from backend.api.models.collection_as_bundle import (
@@ -69,6 +70,7 @@ def create_collection_bundle(
         # upload year. Seasons given here are the Source's, picked for a Download
         # Profile; indexing matches them by slug and numbers them.
         collection.membership_level = DwMembershipLevel.FREE.value
+    place_collection(s, collection)
     s.add(collection)
 
     # The Add Show flow supplies seasons as part of the initial bundle, before the

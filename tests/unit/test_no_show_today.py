@@ -301,7 +301,7 @@ def test_download_profile_excludes_unusable_and_processing_statuses(db_session):
         ep_id="aux.2",
         title="Processing episode",
         index=3,
-        publish_status=EpisodePublishStatus.DW_PROCESSING.value,
+        publish_status=EpisodePublishStatus.SOURCE_PROCESSING.value,
     )
 
     profile = DownloadProfile(
@@ -617,7 +617,7 @@ def test_monitor_ignores_genuine_dw_processing(db_session, monkeypatch):
         ep_id="ep.1",
         title="Real processing episode",
         index=1,
-        publish_status=EpisodePublishStatus.DW_PROCESSING.value,
+        publish_status=EpisodePublishStatus.SOURCE_PROCESSING.value,
         published_at=(datetime.now(timezone.utc) - timedelta(hours=10)),
     )
     db_session.commit()

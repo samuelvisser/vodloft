@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from types import MappingProxyType
 
-from ..contract import MAIN_TAG, EpisodeMedia, EpisodeTag, Feature, LinkKind, Playback, ResolvedLink, RssEpisodeType, Source
+from ..contract import (
+    MAIN_TAG, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback, PublishStatusLabel, ResolvedLink,
+    RssEpisodeType, Site, Source, publish_status_labels_with,
+)
 from .api.dw_api.client import MiddlewareClient
 from .api.dw_api.movie import MovieMiddlewareClient
 from .auth import DeviceAuthClient
-from .links import resolve_link
+from .links import parse_link, resolve_link
 from .playback import resolve_movie_playback
 
 
@@ -14,6 +17,7 @@ class DailyWireSource(Source):
     id = "dailywire"
     name = "The Daily Wire"
     domains = ("dailywire.com",)
+    sites = (Site("dailywire", "The Daily Wire", domains, refresh_intervals="15m,30m,1h,3h,6h,24h,3d"),)
     kind_names = MappingProxyType({LinkKind.COLLECTION: "Show"})
     features = frozenset({
         Feature.COLLECTIONS,
@@ -37,6 +41,24 @@ class DailyWireSource(Source):
         ),
         EpisodeTag("aux", "Auxiliary", "Extra content for the show", rss_episode_type=RssEpisodeType.BONUS),
     )
+    publish_status_labels = publish_status_labels_with(
+        PublishStatusLabel(EpisodePublishStatus.SCHEDULED, "Scheduled", "The Daily Wire has scheduled the episode."),
+        PublishStatusLabel(
+            EpisodePublishStatus.DELAYED, "Officially delayed", "The Daily Wire has delayed the start of the episode.",
+        ),
+        PublishStatusLabel(
+            EpisodePublishStatus.SOURCE_PROCESSING, "Processing at The Daily Wire",
+            "The episode has ended, but The Daily Wire is still preparing the recording.",
+        ),
+        PublishStatusLabel(
+            EpisodePublishStatus.PUBLISHED_PRELIMINARY, "Published (still contains countdown)",
+            "Published, but the recording still opens with the countdown. VODLoft downloads it again once The Daily Wire removes it.",
+        ),
+    )
+
+    def collection_ref(self, url: str) -> str | None:
+        parsed = parse_link(url)
+        return parsed[1] if parsed is not None and parsed[0] is LinkKind.COLLECTION else None
 
     def resolve(self, url: str) -> ResolvedLink | None:
         return resolve_link(url)

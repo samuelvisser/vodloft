@@ -22,6 +22,7 @@ _WORKER_EXPORTS = {
     "fetch_new_episodes": ".fetch_new_episodes",
     "monitor_no_usable_media_episode": ".monitor_no_usable_media_episode",
     "refresh_episode_metadata": ".refresh_episode_metadata",
+    "refresh_metadata": ".refresh_metadata",
     "scan_existing_files": ".scan_existing_files",
     "import_run": ".import_run",
     "import_adopt_files": ".import_run",

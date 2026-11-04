@@ -120,7 +120,7 @@ def ensure_episode_download(
     redownload_when_final = (
         profile.download_with_countdown
         and profile.redownload_final
-        and episode.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN
+        and episode.publish_status == EpisodePublishStatus.PUBLISHED_PRELIMINARY
     )
 
     if existing is None:

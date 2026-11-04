@@ -7,6 +7,7 @@ from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Episode
+from backend.services.metadata_refresh import refresh_watch_expired, sweeps_metadata
 from backend.services.custom_indexes import request_collection_custom_index_reconciliation
 from backend.services.episode_metadata_refresh import (
     episode_metadata_refresh_source_keys,
@@ -26,11 +27,7 @@ from task_manager.scheduler.executor import trigger_now
 from task_manager.scheduler.types import OperationStatus
 from ...helpers.episodes.events import episode_event_payload, queue_episode_status_events
 from ...helpers.episodes.identifier_reconciliation import reconcile_episode_identifier
-from ...helpers.episodes.metadata import (
-    metadata_refresh_offsets_seconds,
-    metadata_watch_expired,
-    update_episode_from_dailywire,
-)
+from ...helpers.episodes.metadata import episode_refresh_offsets, update_episode_from_dailywire
 from ...helpers.episodes.no_show import is_no_show_today_slug
 from ...helpers.episodes.same_episode import PENDING_EPISODE_PUBLISH_STATUSES
 from ...helpers.episodes.status import observe_episode_detail, resolve_episode_status
@@ -59,8 +56,9 @@ async def run_refresh_episode_metadata(
     if episode is None:
         return False
     if not refreshes_episode_metadata(episode.source_key):
-        # The daily catalogue refresh keeps listed episodes up to date.
-        if not episode.metadata_is_final:
+        # The daily catalogue refresh keeps listed episodes up to date, and the
+        # metadata refresh sweep follows new ones of a Source that has it.
+        if not episode.metadata_is_final and not sweeps_metadata(episode.source_key):
             episode.metadata_is_final = True
             s.commit()
         remove_episode_metadata_jobs(episode.id)
@@ -71,7 +69,13 @@ async def run_refresh_episode_metadata(
     if episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value:
         return False
 
-    configured_offsets = metadata_refresh_offsets_seconds()
+    configured_offsets = episode_refresh_offsets(episode)
+    if not configured_offsets:
+        # The episode's Site has its refresh turned off.
+        episode.metadata_is_final = True
+        s.commit()
+        remove_episode_metadata_jobs(episode.id)
+        return False
     if refresh and scheduled_offset_seconds is not None and scheduled_offset_seconds not in configured_offsets:
         refresh = False
 
@@ -113,7 +117,8 @@ async def run_refresh_episode_metadata(
     now = datetime.now(timezone.utc)
     metadata_publication_time = best_effort_published_date(episode)
 
-    if refresh and metadata_watch_expired(metadata_publication_time, now=now):
+    offsets = episode_refresh_offsets(episode)
+    if refresh and refresh_watch_expired(metadata_publication_time, offsets, now=now):
         episode.metadata_is_final = True
         s.commit()
         remove_episode_metadata_jobs(episode.id)
@@ -122,11 +127,12 @@ async def run_refresh_episode_metadata(
     pending_jobs = schedule_remaining_metadata_checks(
         episode_id=episode.id,
         publication_time=metadata_publication_time,
+        offsets=offsets,
         now=now,
     )
     if refresh:
         s.commit()
-    if not pending_jobs and metadata_watch_expired(metadata_publication_time, now=now):
+    if not pending_jobs and refresh_watch_expired(metadata_publication_time, offsets, now=now):
         trigger_now(
             def_key=_TASK_KEY,
             resource_type="episode",
@@ -167,7 +173,7 @@ def _queue_startup_recovery(s: Session) -> None:
 def _no_usable_reason(detail, observed_status: EpisodePublishStatus) -> NoUsableMediaReason:
     if is_no_show_today_slug(detail.slug):
         return NoUsableMediaReason.NO_SHOW_TODAY
-    if observed_status is EpisodePublishStatus.DW_PROCESSING:
+    if observed_status is EpisodePublishStatus.SOURCE_PROCESSING:
         return NoUsableMediaReason.PROCESSING_TIMEOUT
     return NoUsableMediaReason.MEDIA_UNUSABLE
 

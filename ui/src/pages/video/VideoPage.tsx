@@ -203,7 +203,7 @@ export default function VideoPage() {
                         <span className="episode-summary-separator" aria-hidden="true"/>
                         <a className="episode-summary-item" href={video.sharingUrl} target="_blank" rel="noreferrer">
                             <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')} aria-hidden="true"/>
-                            <span>Open on {siteName(video.sharingUrl) ?? sourceName}</span>
+                            <span>Open on {video.site?.name ?? siteName(video.sharingUrl) ?? sourceName}</span>
                         </a>
                     </div>
                 </header>

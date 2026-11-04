@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
 from backend.db.datetime_types import utc_datetime
 from backend.db.models import Episode
 from backend.types.episode_types import EpisodePublishStatus
-from config import get_settings
-from config.settings.submodels import parse_metadata_refresh_intervals
+from backend.services.metadata_refresh import refresh_watch_expired, site_refresh_offsets
 from sources.dailywire.api.records import DwEpisodeDetailRecord
 
 
@@ -22,36 +21,16 @@ def ensure_utc(value: datetime) -> datetime:
     return utc_datetime(value)
 
 
-def metadata_refresh_offsets_seconds() -> tuple[int, ...]:
-    return parse_metadata_refresh_intervals(
-        get_settings().new_episode_schedule.metadata_refresh_intervals
-    )
-
-
-def metadata_watch_deadline(publication_time: datetime | None) -> datetime | None:
-    if publication_time is None:
-        return None
-    return ensure_utc(publication_time) + timedelta(
-        seconds=metadata_refresh_offsets_seconds()[-1]
-    )
-
-
-def metadata_watch_expired(
-        publication_time: datetime | None,
-        *,
-        now: datetime | None = None,
-) -> bool:
-    """Whether the last refresh offset from the selected publication clock passed."""
-    deadline = metadata_watch_deadline(publication_time)
-    if deadline is None:
-        return True
-    current = ensure_utc(now or datetime.now(timezone.utc))
-    return current >= deadline
+def episode_refresh_offsets(episode: Episode) -> tuple[int, ...]:
+    """The refresh schedule of the episode's Site, in seconds after publication."""
+    collection = episode.collection
+    return site_refresh_offsets(collection.site if collection is not None else None)
 
 
 def metadata_is_final_for_new_episode(
         publish_status: str | EpisodePublishStatus,
         published_date: datetime | None,
+        offsets: tuple[int, ...],
         *,
         now: datetime | None = None,
 ) -> bool:
@@ -63,7 +42,7 @@ def metadata_is_final_for_new_episode(
     )
     if status != EpisodePublishStatus.PUBLISHED_FINAL.value:
         return False
-    return metadata_watch_expired(published_date, now=now)
+    return refresh_watch_expired(published_date, offsets, now=now)
 
 
 def update_episode_from_dailywire(

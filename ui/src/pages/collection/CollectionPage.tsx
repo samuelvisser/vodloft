@@ -452,7 +452,7 @@ export default function CollectionPage() {
             {collection.sharingUrl && (
               <a className="btn" href={collection.sharingUrl} target="_blank" rel="noreferrer">
                 <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')} aria-hidden="true"/>
-                <span>Open on {sources.get(collection.sourceKey)?.domains.includes('*') ? siteName(collection.sharingUrl) ?? sources.name(collection.sourceKey) : sources.name(collection.sourceKey)}</span>
+                <span>Open on {collection.site?.name ?? (sources.get(collection.sourceKey)?.domains.includes('*') ? siteName(collection.sharingUrl) ?? sources.name(collection.sourceKey) : sources.name(collection.sourceKey))}</span>
               </a>
             )}
             {can('library', 'manage') && (

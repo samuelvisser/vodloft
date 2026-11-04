@@ -6,6 +6,8 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from backend.db.models import Video
+from backend.services.metadata_refresh import new_item_metadata_is_final
+from backend.services.sites import place_video
 from backend.services.thumbnails import is_own_thumbnail
 from backend.types.media_types import MediaType
 from backend.utils.helpers import generate_uuid
@@ -49,5 +51,11 @@ def index_video(s: Session, source_key: str, details: VideoDetails) -> tuple[Vid
         )
         s.add(video)
     apply_video_details(video, details)
+    place_video(s, video)
+    if created:
+        # The metadata refresh sweep follows a new upload for a while; an older one is done.
+        video.metadata_is_final = new_item_metadata_is_final(
+            s, source_key=source_key, site_key=video.site_key, published_at=details.published_at,
+        )
     s.flush()
     return video, created

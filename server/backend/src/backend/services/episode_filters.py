@@ -166,7 +166,7 @@ def _subscription_active(source_key: str) -> bool:
 def _available(selection: EpisodeSelection, episode: Episode, subscribed: bool) -> bool:
     eligible = {EpisodePublishStatus.PUBLISHED_FINAL.value}
     if selection.download_with_countdown:
-        eligible.add(EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN.value)
+        eligible.add(EpisodePublishStatus.PUBLISHED_PRELIMINARY.value)
     return (
         episode.publish_status in eligible
         # Media protected by DRM cannot be downloaded, nor can media the Source no longer has.

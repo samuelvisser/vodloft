@@ -79,7 +79,7 @@ def _replacement_for_quarantined_episode(s: Session, episode: Episode) -> Episod
 def _reason_for_unusable_detail(detail, observed_status: EpisodePublishStatus) -> NoUsableMediaReason:
     if is_no_show_today_slug(detail.slug):
         return NoUsableMediaReason.NO_SHOW_TODAY
-    if observed_status is EpisodePublishStatus.DW_PROCESSING:
+    if observed_status is EpisodePublishStatus.SOURCE_PROCESSING:
         return NoUsableMediaReason.PROCESSING_TIMEOUT
     return NoUsableMediaReason.MEDIA_UNUSABLE
 
