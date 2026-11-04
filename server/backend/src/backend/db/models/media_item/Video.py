@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import ForeignKey
+from sqlalchemy import Boolean, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db.datetime_types import UTCDateTime
@@ -34,6 +34,10 @@ class Video(MediaItemBase, MediaContentMetadataMixin, CreatedByMixin):
     author_name: Mapped[Optional[str]]
     author_url: Mapped[Optional[str]]
     published_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
+    metadata_is_final: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="1",
+        comment="False while VODLoft still looks the video up again after publication",
+    )
 
     site: Mapped[Optional["Site"]] = relationship(lazy="joined")
 

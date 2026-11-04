@@ -192,7 +192,8 @@ const cronExpression = z.string().refine((value) => {
     const fields = value.trim().split(/\s+/)
     return fields.length === 5 && fields.every((field) => field.length > 0 && !field.includes('_'))
 }, 'Enter a complete five-part cron expression.')
-const metadataRefreshIntervals = z.string().refine((value) => {
+/** Increasing offsets after publication, such as 30m,2h,24h; the backend checks the same rules. */
+export const metadataRefreshIntervals = z.string().refine((value) => {
     const unitSeconds: Record<string, number> = {
         s: 1,
         m: 60,

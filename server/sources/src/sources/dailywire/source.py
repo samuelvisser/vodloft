@@ -14,7 +14,7 @@ class DailyWireSource(Source):
     id = "dailywire"
     name = "The Daily Wire"
     domains = ("dailywire.com",)
-    sites = (Site("dailywire", "The Daily Wire", domains),)
+    sites = (Site("dailywire", "The Daily Wire", domains, refresh_intervals="15m,30m,1h,3h,6h,24h,3d"),)
     kind_names = MappingProxyType({LinkKind.COLLECTION: "Show"})
     features = frozenset({
         Feature.COLLECTIONS,

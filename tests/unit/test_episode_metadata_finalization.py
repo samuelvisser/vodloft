@@ -38,7 +38,7 @@ def test_app_settings_exposes_default_metadata_refresh_intervals():
 
     assert (
         AppSettings().new_episode_schedule.metadata_refresh_intervals
-        == "15m,30m,1h,3h,6h,24h,3d"
+        == "1h,6h,24h,3d"
     )
 
 
@@ -46,26 +46,25 @@ def test_new_episode_metadata_finality_uses_last_interval(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
     from task_manager.tasks.helpers.episodes import metadata
 
-    monkeypatch.setattr(
-        metadata,
-        "metadata_refresh_offsets_seconds",
-        lambda: (300, 900, 1800, 3600, 10800, 21600, 86400),
-    )
+    offsets = (300, 900, 1800, 3600, 10800, 21600, 86400)
     now = datetime(2026, 9, 2, 12, tzinfo=timezone.utc)
 
     assert metadata.metadata_is_final_for_new_episode(
         EpisodePublishStatus.LIVE,
         now - timedelta(days=2),
+        offsets,
         now=now,
     ) is False
     assert metadata.metadata_is_final_for_new_episode(
         EpisodePublishStatus.PUBLISHED_FINAL,
         now - timedelta(hours=23),
+        offsets,
         now=now,
     ) is False
     assert metadata.metadata_is_final_for_new_episode(
         EpisodePublishStatus.PUBLISHED_FINAL,
         now - timedelta(hours=25),
+        offsets,
         now=now,
     ) is True
 
@@ -83,17 +82,13 @@ def test_remaining_metadata_checks_are_anchored_to_publish_time(monkeypatch):
 
     scheduler = FakeScheduler()
     monkeypatch.setattr(scheduling, "start_scheduler", lambda: scheduler)
-    monkeypatch.setattr(
-        scheduling,
-        "metadata_refresh_offsets_seconds",
-        lambda: (300, 900, 1800, 3600, 10800, 21600, 86400),
-    )
 
     published_at = datetime(2026, 9, 2, 10, tzinfo=timezone.utc)
     now = published_at + timedelta(hours=1, minutes=30)
     job_ids = scheduling.schedule_remaining_metadata_checks(
         episode_id=42,
         publication_time=published_at,
+        offsets=(300, 900, 1800, 3600, 10800, 21600, 86400),
         now=now,
     )
 
@@ -135,11 +130,11 @@ def test_metadata_refresh_timing_explicitly_prefers_safe_final(monkeypatch, has_
             return episode
 
     scheduled: list[datetime | None] = []
-    monkeypatch.setattr(service, "metadata_refresh_offsets_seconds", lambda: (900, 1800))
+    monkeypatch.setattr(service, "episode_refresh_offsets", lambda _episode: (900, 1800))
     monkeypatch.setattr(
         service,
         "schedule_remaining_metadata_checks",
-        lambda *, episode_id, publication_time, now: (
+        lambda *, episode_id, publication_time, offsets, now: (
             scheduled.append(publication_time) or ["future-job"]
         ),
     )
@@ -186,11 +181,11 @@ def test_metadata_refresh_timing_ignores_ensure_safe_delay_setting(monkeypatch):
             return episode
 
     scheduled: list[datetime | None] = []
-    monkeypatch.setattr(service, "metadata_refresh_offsets_seconds", lambda: (900, 1800))
+    monkeypatch.setattr(service, "episode_refresh_offsets", lambda _episode: (900, 1800))
     monkeypatch.setattr(
         service,
         "schedule_remaining_metadata_checks",
-        lambda *, episode_id, publication_time, now: (
+        lambda *, episode_id, publication_time, offsets, now: (
             scheduled.append(publication_time) or ["future-job"]
         ),
     )

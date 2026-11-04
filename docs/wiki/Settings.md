@@ -180,7 +180,7 @@ These settings are available under **Settings → Automation**.
 | `newEpisodeSchedule.monitorPendingEpisodeCron` | `VL_NEW_EPISODE_SCHEDULE__MONITOR_PENDING_EPISODE_CRON` | `*/2 * * * *` | Rechecks known episodes that are scheduled, live, processing, or otherwise not final. |
 | `newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled` | `VL_NEW_EPISODE_SCHEDULE__MONITOR_NO_USABLE_MEDIA_EPISODE_CRON_ENABLED` | `true` | Enables recurring checks for episodes without usable media. |
 | `newEpisodeSchedule.monitorNoUsableMediaEpisodeCron` | `VL_NEW_EPISODE_SCHEDULE__MONITOR_NO_USABLE_MEDIA_EPISODE_CRON` | `*/20 * * * *` | Rechecks episodes that temporarily have no usable Daily Wire media. |
-| `newEpisodeSchedule.metadataRefreshIntervals` | `VL_NEW_EPISODE_SCHEDULE__METADATA_REFRESH_INTERVALS` | `15m,30m,1h,3h,6h,24h,3d` | Follow-up metadata refreshes after publication. |
+| `newEpisodeSchedule.metadataRefreshIntervals` | `VL_NEW_EPISODE_SCHEDULE__METADATA_REFRESH_INTERVALS` | `1h,6h,24h,3d` | The system schedule: follow-up metadata refreshes after publication for Sites that follow it. Each Site can also have a schedule of its own, or none, on the Automation tab. |
 
 A quick check looks only at a collection's newest videos and looks up the ones VODLoft does not have yet. For YouTube it reads the first page of the channel's uploads through the YouTube Data API (1 unit). Without a key, or once the quota is used up, it reads the channel's RSS feed, and if that fails, lists the newest videos with yt-dlp. A collection that was never indexed gets its full first index instead.
 
