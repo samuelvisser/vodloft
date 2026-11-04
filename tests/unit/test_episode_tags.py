@@ -68,6 +68,9 @@ def test_each_source_declares_its_tags_with_the_main_one_first():
     # A finished livestream stays a livestream, whatever yt-dlp calls the media.
     ({"media_type": "video", "live_status": "was_live"}, "livestream"),
     ({"live_status": "is_upcoming"}, "livestream"),
+    # yt-dlp calls an upcoming premiere a video.
+    ({"media_type": "video", "live_status": "is_upcoming"}, "ep"),
+    ({"media_type": "livestream", "live_status": "is_upcoming"}, "livestream"),
     ({"webpage_url": "https://www.youtube.com/shorts/abc"}, "short"),
     ({"media_type": "video", "live_status": "not_live"}, "ep"),
 ])

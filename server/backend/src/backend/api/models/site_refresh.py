@@ -19,12 +19,17 @@ class SiteRefreshAPIRead(ResponseBase):
     domains: list[str]
     refresh_mode: SiteRefreshMode
     refresh_intervals: Optional[str] = None
+    pending_checks: bool
     # Whether a Source the Site's collections and videos come through looks items up again.
     refreshes: bool
+    # Whether a Source the Site's collections come through follows upcoming and live videos.
+    checks_pending: bool
 
 
 class SiteRefreshAPIUpdate(RequestBase):
     refresh_mode: SiteRefreshMode
+    # Left out, the Site keeps its choice.
+    pending_checks: Optional[bool] = None
     # Kept while the Site follows another schedule, so it is back when the Site gets its own again.
     refresh_intervals: Optional[str] = Field(default=None, validate_default=True)
 

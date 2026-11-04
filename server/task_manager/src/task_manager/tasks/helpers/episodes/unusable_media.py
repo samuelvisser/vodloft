@@ -1,12 +1,16 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Episode
+from backend.db.models import Episode, EpisodeMediaDownload
+from backend.services.custom_indexes import request_collection_custom_index_reconciliation
 from backend.types.episode_types import EpisodePublishStatus
+from task_manager.events.transactional import queue_event
+from .events import episode_event_payload
 from .metadata import ensure_utc
 from .quarantine import quarantine_episode_identifier
 
@@ -76,3 +80,28 @@ def episode_no_usable_media_since(episode: Episode) -> datetime | None:
         return ensure_utc(datetime.fromisoformat(raw))
     except ValueError:
         return None
+
+
+def no_usable_media_incident_expired(episode: Episode, *, now: datetime, minutes: int) -> bool:
+    since = episode_no_usable_media_since(episode)
+    return since is not None and now - since >= timedelta(minutes=max(0, minutes))
+
+
+def delete_no_usable_media_episode(s: Session, episode: Episode) -> bool:
+    """Delete an episode the Source no longer has. One with downloads is kept, hidden, and returns False."""
+    media_download = s.scalar(
+        select(EpisodeMediaDownload.id).where(
+            EpisodeMediaDownload.media_item_id == episode.id,
+        ).limit(1)
+    )
+    if media_download is not None:
+        # The quarantined Episode remains the durable owner of its download history.
+        # It stays hidden by its NO_USABLE_MEDIA state until the Collection is deleted.
+        s.commit()
+        return False
+
+    queue_event(s, "episode.deleted", episode_event_payload(episode=episode, collection=episode.collection))
+    request_collection_custom_index_reconciliation(s, episode.collection_id)
+    s.delete(episode)
+    s.commit()
+    return True

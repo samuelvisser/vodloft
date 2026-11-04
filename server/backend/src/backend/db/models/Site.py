@@ -1,6 +1,6 @@
 from typing import Optional
 
-from sqlalchemy import JSON, String
+from sqlalchemy import JSON, Boolean, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.db import Base
@@ -24,4 +24,8 @@ class Site(Base):
     )
     refresh_intervals: Mapped[Optional[str]] = mapped_column(
         comment="The Site's own refresh schedule, such as 30m,2h,24h, used when refresh_mode is own",
+    )
+    pending_checks: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="1",
+        comment="Whether upcoming and live videos are added and followed until they are published",
     )
