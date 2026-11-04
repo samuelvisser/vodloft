@@ -24,12 +24,13 @@ class DownloadProfileRule(Base):
     download_profile_id: Mapped[int] = mapped_column(ForeignKey("download_profiles.id", ondelete="CASCADE"), index=True)
     position: Mapped[int] = mapped_column(comment="Order of the line within the profile, from 0")
     action: Mapped[str] = mapped_column(String(16), comment="skip, only or keep")
-    field: Mapped[str] = mapped_column(String(16), comment="title, description, duration or types")
+    field: Mapped[str] = mapped_column(String(16), comment="title, description, duration, types or seasons")
     pattern: Mapped[Optional[str]] = mapped_column(comment="The regular expression of a title or description rule")
     ignore_case: Mapped[bool] = mapped_column(default=False)
     duration_operator: Mapped[Optional[str]] = mapped_column(String(16), comment="shorter or longer, for a duration rule")
     duration_seconds: Mapped[Optional[int]]
     episode_types: Mapped[Optional[list[str]]] = mapped_column(JSON, comment="The episode type keys of a types rule")
+    season_slugs: Mapped[Optional[list[str]]] = mapped_column(JSON, comment="The season slugs of a seasons rule")
 
     download_profile: Mapped["DownloadProfile"] = relationship(back_populates="rules")
 

@@ -47,13 +47,13 @@ const BUILT_IN_FIELDS: Record<string, string[]> = {
     ],
 }
 
-// What a line looks at. Episode types, the season and the two dates are also built-in lines, while those lines aren't there.
+// What a line looks at. Episode types, seasons and the two dates are also built-in lines, while those lines aren't there.
 const FILTER_KINDS = {
     title: {label: 'title'},
     description: {label: 'description'},
     duration: {label: 'duration'},
     types: {label: 'episode type'},
-    season: {label: 'season'},
+    seasons: {label: 'season'},
     published: {label: 'published'},
     downloaded: {label: 'downloaded'},
 }
@@ -65,6 +65,7 @@ function ruleOf(kind: EpisodeRule['field'], action: EpisodeRule['action']): Epis
     const rule = {...newEpisodeRule(), action, field: kind}
     if (kind === 'duration') return {...rule, durationOperator: 'shorter', durationSeconds: 120}
     if (kind === 'types') return {...rule, episodeTypes: []}
+    if (kind === 'seasons') return {...rule, seasonSlugs: []}
     return rule
 }
 /** Without a seasons line, every season downloads, upcoming ones included. */
@@ -209,10 +210,9 @@ export default function WhichEpisodes({
     const hasDateLimit = (values.downloadDaysInPast ?? 0) > 0 || (values.downloadEpisodeCount ?? 0) > 0
         || !!values.downloadStartingFrom || values.retentionFrom === 'downloaded'
     const datesShown = datesAllowed && (hasDateLimit || open.has('dates'))
-    /** What a line can look at: every rule kind, the season while there is no seasons line, and the dates while there is no date line or this is it. */
+    /** What a line can look at: every rule kind (seasons only by season), and the dates while there is no date line or this is it. */
     const kindRegFor = (current: FilterKind) => createSelectRegistry('WhichEpisodesFilterKind', FILTER_KINDS, [
-        ...EpisodeRuleFieldReg.values,
-        ...(seasonal && !seasonsShown ? ['season' as const] : []),
+        ...EpisodeRuleFieldReg.values.filter((field) => field !== 'seasons' || seasonal),
         ...(datesAllowed && (!datesShown || DATE_KINDS.includes(current)) ? DATE_KINDS : []),
     ])
     const setDateField = (kind: string) => {
@@ -227,7 +227,7 @@ export default function WhichEpisodes({
         }
     }
     /** A built-in line becomes a new rule; Cancel on that rule brings the line back as it was. */
-    const builtInToRule = (key: 'types' | 'dates', rule: EpisodeRule) => {
+    const builtInToRule = (key: 'types' | 'seasons' | 'dates', rule: EpisodeRule) => {
         const names = BUILT_IN_FIELDS[key]
         const saved = names.map((name) => getValues(name))
         removeBuiltIn(key)
@@ -240,15 +240,15 @@ export default function WhichEpisodes({
         setOpen(new Set([`rule-new-${index}`]))
     }
     /** A built-in line becomes another built-in line, through a new rule that Cancel takes away again. */
-    const builtInToBuiltIn = (key: 'types' | 'dates', kind: 'types' | 'season' | 'published' | 'downloaded') => {
+    const builtInToBuiltIn = (key: 'types' | 'seasons' | 'dates', kind: 'types' | 'seasons' | 'published' | 'downloaded') => {
         removeBuiltIn(key)
         const index = fields.length
         append(newEpisodeRule())
         addBuiltIn(index, kind)
     }
     const changeTypesLine = (action: EpisodeRule['action'], kind: FilterKind) => {
-        if (DATE_KINDS.includes(kind) || kind === 'season') {
-            builtInToBuiltIn('types', kind as 'season' | 'published' | 'downloaded')
+        if (DATE_KINDS.includes(kind) || (kind === 'seasons' && action === 'only' && !seasonsShown)) {
+            builtInToBuiltIn('types', kind as 'seasons' | 'published' | 'downloaded')
             return
         }
         const rule = ruleOf(kind as EpisodeRule['field'], action)
@@ -257,11 +257,20 @@ export default function WhichEpisodes({
     const changeDatesLine = (kind: FilterKind) => {
         if (DATE_KINDS.includes(kind)) {
             setDateField(kind)
-        } else if ((kind === 'types' && !typesShown) || kind === 'season') {
+        } else if ((kind === 'types' && !typesShown) || (kind === 'seasons' && !seasonsShown)) {
             builtInToBuiltIn('dates', kind)
         } else {
             builtInToRule('dates', ruleOf(kind as EpisodeRule['field'], 'only'))
         }
+    }
+    const changeSeasonsLine = (action: EpisodeRule['action'], kind: FilterKind) => {
+        if (DATE_KINDS.includes(kind) || (kind === 'types' && action === 'only' && !typesShown)) {
+            builtInToBuiltIn('seasons', kind as 'types' | 'published' | 'downloaded')
+            return
+        }
+        const rule = ruleOf(kind as EpisodeRule['field'], action)
+        const slugs = (values.seasons ?? []).map((season: SeasonItem) => season.slug)
+        builtInToRule('seasons', kind === 'seasons' ? {...rule, seasonSlugs: slugs} : rule)
     }
     const removeBuiltIn = (key: string) => {
         closeLine(key)
@@ -274,13 +283,13 @@ export default function WhichEpisodes({
         }
     }
     // A new filter turned into a built-in line: the line opens, and Cancel takes it away again.
-    const addBuiltIn = (ruleIndex: number, kind: 'types' | 'season' | 'published' | 'downloaded') => {
+    const addBuiltIn = (ruleIndex: number, kind: 'types' | 'seasons' | 'published' | 'downloaded') => {
         remove(ruleIndex)
-        const key = kind === 'types' ? 'types' : kind === 'season' ? 'seasons' : 'dates'
+        const key = kind === 'types' || kind === 'seasons' ? kind : 'dates'
         openLine(key, BUILT_IN_FIELDS[key])
         if (kind === 'types') {
             setValue('epIdTypeList', downloadProfileDefaultsFor(episodeIdentifier, tags).epIdTypeList, {shouldDirty: true})
-        } else if (kind === 'season') {
+        } else if (kind === 'seasons') {
             // The seasons line starts again from the latest season and the upcoming ones.
             setValue('seasons', seasons.length > 0 ? [seasons[seasons.length - 1]] : [], {shouldDirty: true})
             setValue('includeUpcomingSeasons', true, {shouldDirty: true})
@@ -300,6 +309,13 @@ export default function WhichEpisodes({
         'WhichEpisodesEpisodeTypes',
         Object.fromEntries((tags ?? []).map((tag) => [tag.key, {label: tag.label}])),
         (tags ?? []).map((tag) => tag.key),
+    ).options
+    const seasonLabel = (slug: string) => seasons.find((season) => season.slug === slug)?.name ?? slug
+    // Newest season first, like the seasons line.
+    const seasonOptions = createSelectRegistry(
+        'WhichEpisodesSeasons',
+        Object.fromEntries(seasons.map((season) => [season.slug, {label: season.name}])),
+        [...seasons].reverse().map((season) => season.slug),
     ).options
     const unselectedTypes = (tags ?? []).filter((tag) => !(values.epIdTypeList ?? []).includes(tag.key))
     /** Names the episode types a line leaves out on its count badge, when there are few enough to fit. */
@@ -335,6 +351,7 @@ export default function WhichEpisodes({
 
     const builtInHead = (key: string) => {
         if (key === 'types') return lineHead('types', 'only', 'types', (action) => action !== 'only' && changeTypesLine(action, 'types'), (kind) => kind !== 'types' && changeTypesLine('only', kind))
+        if (key === 'seasons') return lineHead('seasons', 'only', 'seasons', (action) => action !== 'only' && changeSeasonsLine(action, 'seasons'), (kind) => kind !== 'seasons' && changeSeasonsLine('only', kind))
         if (key === 'dates') {
             const kind: FilterKind = values.retentionFrom === 'downloaded' ? 'downloaded' : 'published'
             // The date line only says which episodes to download; Keep and Skip would not mean anything for it.
@@ -387,7 +404,7 @@ export default function WhichEpisodes({
         if (!key) return null
         if (key.startsWith('rule:')) {
             const rule = rules[sentRuleIndexes[Number(key.slice(5))]]
-            return rule ? plainText(ruleSentence(rule, typeLabel)) : 'A filter'
+            return rule ? plainText(ruleSentence(rule, typeLabel, seasonLabel)) : 'A filter'
         }
         return LEFT_OUT_LABELS[key] ?? key
     }
@@ -418,12 +435,14 @@ export default function WhichEpisodes({
                     const key = open.has(`rule-new-${index}`) ? `rule-new-${index}` : `rule-${item.id}`
                     const isOpen = open.has(key)
                     const name = `rules.${index}`
-                    const parts = ruleSentence(rule, typeLabel)
+                    const parts = ruleSentence(rule, typeLabel, seasonLabel)
                     return (
                         <li key={item.id} className={`which-episodes-line${isOpen ? ' is-open' : ''}`}>
                             <div className="which-episodes-sentence" onClick={(event) => toggleFromSentence(event, () => isOpen ? closeLine(key) : openLine(key, [name]))}>
                                 {isOpen ? lineHead(`rule-${index}`, rule.action, rule.field, (action) => setValue(`${name}.action`, action, {shouldDirty: true}), (value) => {
-                                    if (value === 'season' || value === 'published' || value === 'downloaded' || (value === 'types' && rule.action === 'only' && !typesShown)) {
+                                    if (value === 'published' || value === 'downloaded'
+                                        || (value === 'types' && rule.action === 'only' && !typesShown)
+                                        || (value === 'seasons' && rule.action === 'only' && !seasonsShown)) {
                                         addBuiltIn(index, value)
                                         return
                                     }
@@ -434,6 +453,7 @@ export default function WhichEpisodes({
                                         setValue(`${name}.durationSeconds`, next.durationSeconds, {shouldDirty: true})
                                     }
                                     if (value === 'types' && !rule.episodeTypes) setValue(`${name}.episodeTypes`, [], {shouldDirty: true})
+                                    if (value === 'seasons' && !rule.seasonSlugs) setValue(`${name}.seasonSlugs`, [], {shouldDirty: true})
                                 }) : <span className="which-episodes-text"><Sentence parts={parts}/></span>}
                                 {rule.action === 'keep'
                                     ? <span className="which-episodes-count is-keep" title="Keep never stops a download; it protects matching downloads from deletion">keeps</span>
@@ -466,6 +486,17 @@ export default function WhichEpisodes({
                                                 options={tagOptions}
                                                 value={tagOptions.filter((option) => (rule.episodeTypes ?? []).includes(option.value))}
                                                 onChange={(options) => setValue(`${name}.episodeTypes`, options.map((option) => option.value), {shouldDirty: true})}
+                                            />
+                                        </div>
+                                    ) : rule.field === 'seasons' ? (
+                                        <div className="form-row">
+                                            <label htmlFor={`rule-${index}-seasons`}>Is any of</label>
+                                            <Select
+                                                inputId={`rule-${index}-seasons`} isMulti closeMenuOnSelect={false}
+                                                classNamePrefix="select"
+                                                options={seasonOptions}
+                                                value={seasonOptions.filter((option) => (rule.seasonSlugs ?? []).includes(option.value))}
+                                                onChange={(options) => setValue(`${name}.seasonSlugs`, options.map((option) => option.value), {shouldDirty: true})}
                                             />
                                         </div>
                                     ) : rule.field === 'duration' ? (
@@ -564,7 +595,7 @@ export default function WhichEpisodes({
 function RuleError({form, index}: {form: UseFormReturn<any>; index: number}) {
     const errors = form.formState.errors as any
     const ruleErrors = errors?.rules?.[index]
-    const message = ruleErrors?.pattern?.message ?? ruleErrors?.durationSeconds?.message ?? ruleErrors?.episodeTypes?.message ?? ruleErrors?.message ?? ruleErrors?.root?.message
+    const message = ruleErrors?.pattern?.message ?? ruleErrors?.durationSeconds?.message ?? ruleErrors?.episodeTypes?.message ?? ruleErrors?.seasonSlugs?.message ?? ruleErrors?.message ?? ruleErrors?.root?.message
     if (!message) return null
     return <div className="error" role="alert" aria-live="polite">{String(message)}</div>
 }

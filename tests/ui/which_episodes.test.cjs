@@ -43,6 +43,15 @@ test('a duration rule names the length in words', () => {
     assert.equal(text.formatDuration(120), '2 minutes')
 })
 
+test('a season rule names its seasons', () => {
+    const names = {s1: 'Season 1', s2: 'Season 2'}
+    assert.equal(
+        text.plainText(text.ruleSentence({action: 'keep', field: 'seasons', seasonSlugs: ['s1', 's2']}, undefined, (slug) => names[slug])),
+        'Keep if the season is Season 1 or Season 2',
+    )
+    assert.equal(text.ruleComplete({action: 'skip', field: 'seasons', seasonSlugs: []}), false)
+})
+
 test('the built-in lines read as one sentence', () => {
     assert.equal(sentence(text.typesSentence(['Video', 'Livestream'])), 'Download Video and Livestream episodes')
     assert.equal(sentence(text.seasonsSentence(['Season 1'], true)), 'from Season 1 and upcoming seasons')

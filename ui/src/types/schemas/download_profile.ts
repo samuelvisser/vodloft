@@ -20,6 +20,7 @@ export const EpisodeRuleFieldReg = createSelectRegistry('EpisodeRuleField', {
     description: {label: 'description'},
     duration: {label: 'duration'},
     types: {label: 'episode type'},
+    seasons: {label: 'season'},
 })
 export type EpisodeRuleField = (typeof EpisodeRuleFieldReg)['values'][number]
 
@@ -31,15 +32,18 @@ export type DurationOperator = (typeof DurationOperatorReg)['values'][number]
 
 export const EpisodeRuleSchema = z.object({
     action: z.enum(['skip', 'only', 'keep']).default('only'),
-    field: z.enum(['title', 'description', 'duration', 'types']).default('title'),
+    field: z.enum(['title', 'description', 'duration', 'types', 'seasons']).default('title'),
     pattern: z.string().nullable().default(null),
     ignoreCase: z.boolean().default(false),
     durationOperator: z.enum(['shorter', 'longer']).nullable().default(null),
     durationSeconds: z.int().min(1).nullable().default(null),
     episodeTypes: z.array(z.string()).nullable().default(null),
+    seasonSlugs: z.array(z.string()).nullable().default(null),
 }).superRefine((rule, ctx) => {
     if (rule.field === 'types') {
         if (!rule.episodeTypes?.length) ctx.addIssue({code: 'custom', path: ['episodeTypes'], message: 'Choose at least one episode type'})
+    } else if (rule.field === 'seasons') {
+        if (!rule.seasonSlugs?.length) ctx.addIssue({code: 'custom', path: ['seasonSlugs'], message: 'Choose at least one season'})
     } else if (rule.field === 'duration') {
         if (!rule.durationOperator || !rule.durationSeconds) {
             ctx.addIssue({code: 'custom', path: ['durationSeconds'], message: 'Choose a duration'})
@@ -53,7 +57,7 @@ export type EpisodeRule = z.output<typeof EpisodeRuleSchema>
 
 /** A new filter line: skip titles containing a whole word, in any capitalisation. */
 export function newEpisodeRule(): EpisodeRule {
-    return {action: 'only', field: 'title', pattern: '', ignoreCase: true, durationOperator: null, durationSeconds: null, episodeTypes: null}
+    return {action: 'only', field: 'title', pattern: '', ignoreCase: true, durationOperator: null, durationSeconds: null, episodeTypes: null, seasonSlugs: null}
 }
 
 

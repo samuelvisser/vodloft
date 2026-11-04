@@ -80,10 +80,12 @@ def _profile(session, collection, rules=(), **values):
     return profile
 
 
-def _rule(action, field, pattern=None, ignore_case=False, duration_operator=None, duration_seconds=None, episode_types=None):
+def _rule(action, field, pattern=None, ignore_case=False, duration_operator=None, duration_seconds=None, episode_types=None,
+          season_slugs=None):
     return SimpleNamespace(
         action=action, field=field, pattern=pattern, ignore_case=ignore_case,
         duration_operator=duration_operator, duration_seconds=duration_seconds, episode_types=episode_types,
+        season_slugs=season_slugs,
     )
 
 
@@ -359,3 +361,38 @@ def test_without_a_seasons_line_every_season_is_downloaded(db_session):
     profile.all_seasons = True
     db_session.flush()
     assert _wanted_titles(db_session, profile) == {"First season", "Second season"}
+
+
+def test_season_rules_skip_only_download_and_keep_seasons(db_session):
+    from backend.db.models import Season
+    from backend.services.episode_rules import kept_by_rule, set_profile_rules
+    from backend.services.which_episodes import EpisodeSelection, which_episodes
+
+    collection, first = _collection(db_session)
+    collection.episode_identifier = "seasonal"
+    second = Season(collection=collection, index=2, slug="which-s2", name="Two")
+    db_session.add(second)
+    db_session.flush()
+    one = _episode(db_session, collection, first, 1, "First season")
+    two = _episode(db_session, collection, second, 2, "Second season")
+    profile = _profile(db_session, collection, all_seasons=True, rules=[
+        {"action": "skip", "field": "seasons", "season_slugs": ["which-s1"]},
+    ])
+    assert _wanted_titles(db_session, profile) == {"Second season"}
+    assert which_episodes(db_session, EpisodeSelection.of_profile(profile)).left_out_by == {one.id: "rule:0"}
+
+    set_profile_rules(profile, [
+        _rule("only", "seasons", season_slugs=["which-s1"]),
+        _rule("keep", "seasons", season_slugs=["which-s2"]),
+    ])
+    db_session.flush()
+    assert _wanted_titles(db_session, profile) == {"First season"}
+    assert kept_by_rule(profile.rules, two) and not kept_by_rule(profile.rules, one)
+
+
+def test_a_season_rule_request_needs_a_season():
+    from backend.api.models.download_profile import DownloadProfileRuleAPIIn
+
+    with pytest.raises(ValueError, match="at least one season"):
+        DownloadProfileRuleAPIIn(action="skip", field="seasons", season_slugs=[])
+    assert DownloadProfileRuleAPIIn(action="keep", field="seasons", season_slugs=["s1"]).season_slugs == ["s1"]

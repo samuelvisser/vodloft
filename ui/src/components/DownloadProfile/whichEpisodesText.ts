@@ -37,20 +37,29 @@ export type RuleLike = {
     durationOperator?: string | null
     durationSeconds?: number | null
     episodeTypes?: string[] | null
+    seasonSlugs?: string[] | null
 }
 
 /** Whether a rule says enough to count which episodes it leaves out. */
 export function ruleComplete(rule: RuleLike): boolean {
     if (rule.field === 'types') return !!rule.episodeTypes?.length
+    if (rule.field === 'seasons') return !!rule.seasonSlugs?.length
     if (rule.field === 'duration') return !!rule.durationSeconds && !!rule.durationOperator
     return !!rule.pattern
 }
 
 /** "Skip if the title contains the word “trailer”", with the regex itself at the end. */
-export function ruleSentence(rule: RuleLike, typeLabel: (key: string) => string = (key) => key): Part[] {
-    if (rule.field === 'types') {
-        const labels = (rule.episodeTypes ?? []).map(typeLabel)
-        const parts: Part[] = [{text: `${ACTION_WORDS[rule.action] ?? ACTION_WORDS.skip} `}, {text: 'episode type', strong: true}]
+export function ruleSentence(
+    rule: RuleLike,
+    typeLabel: (key: string) => string = (key) => key,
+    seasonLabel: (slug: string) => string = (slug) => slug,
+): Part[] {
+    if (rule.field === 'types' || rule.field === 'seasons') {
+        const labels = rule.field === 'types' ? (rule.episodeTypes ?? []).map(typeLabel) : (rule.seasonSlugs ?? []).map(seasonLabel)
+        const parts: Part[] = [
+            {text: `${ACTION_WORDS[rule.action] ?? ACTION_WORDS.skip} `},
+            {text: rule.field === 'types' ? 'episode type' : 'season', strong: true},
+        ]
         if (!labels.length) return [...parts, {text: ' is …'}]
         return [...parts, {text: ' is '}, ...strongList(labels).flatMap((part) => (
             part.text === ' and ' ? [{text: ' or '}] : [part]

@@ -24,6 +24,7 @@ class EpisodeRule(Protocol):
     duration_operator: Optional[str]
     duration_seconds: Optional[int]
     episode_types: Optional[list[str]]
+    season_slugs: Optional[list[str]]
 
 
 def rule_matches(rule: EpisodeRule, episode: Episode) -> Optional[bool]:
@@ -34,6 +35,8 @@ def rule_matches(rule: EpisodeRule, episode: Episode) -> Optional[bool]:
     """
     if rule.field == EpisodeRuleField.TYPES:
         return episode.episode_type in (rule.episode_types or ())
+    if rule.field == EpisodeRuleField.SEASONS:
+        return episode.season is not None and episode.season.slug in (rule.season_slugs or ())
     if rule.field == EpisodeRuleField.DURATION:
         duration = episode.duration or 0
         if duration <= 0 or not rule.duration_seconds:
@@ -89,6 +92,7 @@ def set_profile_rules(profile: DownloadProfile, rules: Sequence[EpisodeRule]) ->
             duration_operator=str(rule.duration_operator) if rule.field == EpisodeRuleField.DURATION else None,
             duration_seconds=rule.duration_seconds if rule.field == EpisodeRuleField.DURATION else None,
             episode_types=list(rule.episode_types or []) if rule.field == EpisodeRuleField.TYPES else None,
+            season_slugs=list(rule.season_slugs or []) if rule.field == EpisodeRuleField.SEASONS else None,
         )
         for position, rule in enumerate(rules)
     ]

@@ -63,6 +63,7 @@ class EpisodeRuleField(StrEnum):
     DESCRIPTION = "description"
     DURATION = "duration"
     TYPES = "types"
+    SEASONS = "seasons"
 
 
 class DurationOperator(StrEnum):
