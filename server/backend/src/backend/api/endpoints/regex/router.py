@@ -11,6 +11,7 @@ from backend.db.models.media_item import Episode
 from backend.security.access import Area, Level
 from backend.security import deps
 from backend.security.deps import requires
+from backend.services.example_episodes import example_session
 from backend.services.regex_check import check_pattern
 
 
@@ -39,6 +40,18 @@ def check(body: RegexCheckRequest, request: Request):
                     .limit(_COLLECTION_SAMPLES)
                 )
             ]
+    elif body.example_collection is not None:
+        if not deps.request_access(request).allows_source(body.example_collection.source_key):
+            raise HTTPException(status_code=404, detail="Source not found")
+        try:
+            with example_session(body.example_collection.example()) as (_session, _collection, examples):
+                episodes = [
+                    ((example.episode.title if body.field == RegexSampleField.TITLE else example.episode.description) or "",
+                     example.episode.published_date)
+                    for example in examples
+                ]
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Could not look up the newest episodes: {exc}") from exc
     own = [text for text in body.samples if text.strip()]
     result = check_pattern(body.pattern, body.ignore_case, own + [text for text, _ in episodes])
     samples = [

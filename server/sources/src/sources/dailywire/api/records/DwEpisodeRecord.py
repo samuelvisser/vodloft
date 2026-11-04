@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Optional
 from pydantic import (
     model_validator,
@@ -10,6 +11,8 @@ from sources.dailywire.api.records.BaseRecord import BaseRecord
 from sources.dailywire.api.types.user_info import DwMembershipLevel
 from sources.dailywire.api.utils.thumbnails import normalize_thumbnail_aliases
 from sources.dailywire.api.utils.validators import ValOrNone, ValOrZero, ValOrEmpty, AvailableForList
+
+_OFFICIAL_TRAILER_RE = re.compile(r"\bofficial\s+trailer\b", re.IGNORECASE)
 
 
 class DwEpisodeRecord(BaseRecord):
@@ -52,6 +55,15 @@ class DwEpisodeRecord(BaseRecord):
     @model_validator(mode="after")
     def discard_duplicate_thumbnail_aliases(self):
         return normalize_thumbnail_aliases(self, default="landscape")
+
+    @property
+    def trailer(self) -> bool:
+        """A trailer, from affirmative API or explicit title evidence.
+
+        The Daily Wire currently returns false for some records whose titles explicitly
+        label them as "Official Trailer", so a false flag cannot override that title.
+        """
+        return bool(_OFFICIAL_TRAILER_RE.search(self.title or "")) or self.is_trailer is True
 
     @property
     def ep_number(self) -> Optional[int]:

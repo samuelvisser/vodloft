@@ -25,6 +25,7 @@ import type {SeasonDetachedOut} from '../../types/schemas/season'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import type {EpisodeTagRead} from '../../types/schemas/source'
 import {useWhichEpisodes} from './useWhichEpisodes'
+import {useCollectionExamples} from '../../lib/collectionExamples'
 import {insertIndex, isDateLine, joinIgnoreCase, splitIgnoreCase} from './episodeFilters'
 import {filterComplete, filterSentence, plainText, type Part} from './whichEpisodesText'
 import './WhichEpisodes.css'
@@ -106,6 +107,10 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
     const filters: EpisodeFilter[] = values.filters ?? []
     const deleteOlder = !!values.deleteOlderEpisodes
 
+    // While a collection is added, the counts run over its newest episodes.
+    const examples = useCollectionExamples()
+    const exampleCollection = collectionId === undefined && examples && !examples.failed ? examples.collection : undefined
+
     // One line is open at a time. What it was when opened lets Cancel put it back; a new line has nothing and is removed.
     const [openId, setOpenId] = useState<string | null>(null)
     const snapshot = useRef<{filter: EpisodeFilter; deleteOlder: boolean} | null>(null)
@@ -116,14 +121,14 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
     // Filters still being written are left out of the count until they are complete.
     const sentIndexes = useMemo(() => filters.flatMap((filter, index) => filterComplete(filter) ? [index] : []), [filters])
     const request = useMemo(() => {
-        if (collectionId === undefined) return null
+        if (collectionId === undefined && exampleCollection === undefined) return null
         return {
-            collectionId,
+            ...(collectionId !== undefined ? {collectionId} : {exampleCollection}),
             downloadWithCountdown: !!values.downloadWithCountdown,
             filters: sentIndexes.map((index) => filters[index]),
             includeEpisodes: showWhich,
         }
-    }, [collectionId, values.downloadWithCountdown, filters, sentIndexes, showWhich])
+    }, [collectionId, exampleCollection, values.downloadWithCountdown, filters, sentIndexes, showWhich])
     const {result, episodes, hasMore, loadingMore, moreFailed, loadMore} = useWhichEpisodes(request)
     const counts = useMemo(() => {
         const byIndex = new Map<number, number>()
@@ -466,7 +471,7 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
                                 ) : <span className="which-episodes-text"><Sentence parts={parts}/></span>}
                                 {filter.action === 'keep'
                                     ? <span className="which-episodes-count is-keep" title="Keep never stops a download; it protects matching downloads from deletion">keeps</span>
-                                    : <CountBadge count={counts.get(index)} waiting={collectionId !== undefined && filterComplete(filter)}/>}
+                                    : <CountBadge count={counts.get(index)} waiting={request !== null && filterComplete(filter)}/>}
                                 <button
                                     type="button" className={`which-episodes-icon${isOpen ? ' is-active' : ''}`}
                                     aria-label={`Edit: ${plainText(parts)}`} aria-expanded={isOpen}
@@ -515,7 +520,8 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
                         <span className="which-episodes-total">
                             <span className="which-episodes-total__label">Total</span>
                             <span>
-                                <b className="which-episodes-total__count">{result.downloaded} of {result.total}</b> indexed episodes will be downloaded
+                                <b className="which-episodes-total__count">{result.downloaded} of {result.total}</b>
+                                {exampleCollection ? ' newest episodes would be downloaded' : ' indexed episodes will be downloaded'}
                                 {result.unavailable > 0 && <span className="which-episodes-muted"> ({result.unavailable} can’t be downloaded)</span>}
                             </span>
                         </span>
@@ -550,7 +556,9 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
                 </ul>
             )}
             <div className="help">
-                <ReadMore summary={<span>Filters apply from top to bottom. Drag a filter to change the order. The numbers show how many indexed episodes each filter leaves out.</span>}>
+                <ReadMore summary={<span>Filters apply from top to bottom. Drag a filter to change the order. The numbers show how many {exampleCollection
+                    ? 'of the newest episodes, looked up for this collection before it is saved,'
+                    : 'indexed episodes'} each filter leaves out.</span>}>
                     <p>
                         An episode is downloaded when no <b>Skip</b> or <b>Only download</b> filter leaves it out. Each filter looks only at
                         the episodes the filters above it let through, so “the latest 25 episodes” below an episode type filter are the

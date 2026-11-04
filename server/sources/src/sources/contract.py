@@ -338,6 +338,9 @@ class VideoDetails:
     """The episode's number in its season, when the Source has one."""
     tag: str = MAIN_TAG
     """The key of one of the Source's episode tags."""
+    number_text: str | None = None
+    """The episode's number exactly as the Source writes it, when that says more than
+    ``episode_number``, such as 2460.10 for an extra of episode 2460 at The Daily Wire."""
     publish_status: EpisodePublishStatus = EpisodePublishStatus.PUBLISHED_FINAL
     """Where the video is in its life, for a Source with ``Feature.PENDING_CHECKS``: an upcoming or
     live video has nothing to download yet."""
@@ -381,6 +384,10 @@ class CollectionDetails:
     seasons: tuple[SeasonRef, ...] = ()
     """The collection's own seasons, for a Source that has them, so they can be picked
     before the episodes are indexed."""
+
+
+MIN_NEWEST_EPISODES = 5
+"""A Source whose cheapest lookup gives fewer episodes looks a little further, up to this many."""
 
 
 @dataclass(frozen=True)
@@ -607,6 +614,13 @@ class Source(ABC):
         scan tries it again.
         """
         raise NotImplementedError(f"{self.name} does not list episodes")
+
+    def newest_episodes(self, url: str) -> list[VideoDetails]:
+        """The newest episodes of the collection at this link, from whatever lookup costs the Source least,
+        such as one page of its API or an RSS feed, newest first, and at least ``MIN_NEWEST_EPISODES`` when it has them.
+        VODLoft shows them as examples while the collection is added, and never saves them.
+        Only Sources with ``Feature.COLLECTIONS`` implement it."""
+        raise NotImplementedError(f"{self.name} has no collections")
 
     def latest_items(self, url: str) -> list[ItemRef]:
         """The collection's newest items, newest first. Only Sources with ``Feature.QUICK_CHECK`` implement it."""

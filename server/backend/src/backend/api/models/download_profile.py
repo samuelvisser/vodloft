@@ -5,6 +5,7 @@ from datetime import date, datetime
 from pydantic import Field, field_validator, model_validator
 
 from backend.api.models.base import ResponseBase, RequestBase, response_model_config
+from backend.api.models.collection_example import ExampleCollectionAPIIn
 from backend.services.regex_check import MAX_PATTERN_LENGTH, PatternError, compile_pattern, split_inline_ignore_case
 from backend.types.download_profile_types import (
     DATE_FIELDS,
@@ -178,15 +179,25 @@ class DownloadProfileAPIRead(DownloadProfileAPIBaseOut):
 
 # ---------- Which episodes ----------
 class WhichEpisodesAPIRequest(RequestBase):
-    """The Which episodes lines of a profile form, saved or not, to count against a Collection."""
+    """The Which episodes lines of a profile form, saved or not, to count against a Collection.
 
-    collection_id: int
+    A Collection that is not saved yet is counted on its newest episodes, given as ``example_collection``.
+    """
+
+    collection_id: int | None = None
+    example_collection: ExampleCollectionAPIIn | None = None
     download_with_countdown: bool
     filters: list[DownloadProfileFilterAPIIn] = Field(default_factory=list, max_length=50)
     include_episodes: bool = False
     # The episode list is read a page at a time, newest first, as the form scrolls through it.
     episodes_offset: int = Field(default=0, ge=0)
     episodes_limit: int = Field(default=50, ge=1, le=200)
+
+    @model_validator(mode="after")
+    def _one_collection(self) -> "WhichEpisodesAPIRequest":
+        if (self.collection_id is None) == (self.example_collection is None):
+            raise ValueError("Give either collectionId or exampleCollection")
+        return self
 
 
 class WhichEpisodesEpisodeAPIRead(ResponseBase):

@@ -7,6 +7,7 @@ from typing import Optional
 from pydantic import Field
 
 from backend.api.models.base import RequestBase, ResponseBase
+from backend.api.models.collection_example import ExampleCollectionAPIIn
 from backend.services.regex_check import MAX_PATTERN_LENGTH
 
 
@@ -20,6 +21,9 @@ class RegexCheckRequest(RequestBase):
     ignore_case: bool = False
     samples: list[str] = Field(default_factory=list, max_length=50, description="Your own test texts")
     collection_id: Optional[int] = Field(default=None, description="Also test on this Collection's indexed episodes")
+    example_collection: Optional[ExampleCollectionAPIIn] = Field(
+        default=None, description="Or on the newest episodes of this collection that is not saved yet",
+    )
     field: RegexSampleField = RegexSampleField.TITLE
 
 

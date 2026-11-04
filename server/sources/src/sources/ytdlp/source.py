@@ -118,6 +118,13 @@ _SPONSORBLOCK_URL = "https://sponsor.ajay.app/api/skipSegments"
 _SPONSORBLOCK_TIMEOUT_SECONDS = 15
 
 
+def _feed(ref: mapping.YouTubeRef) -> dict[str, str]:
+    """Which RSS feed lists a YouTube channel's or playlist's newest videos."""
+    if ref.kind == "channel" and ref.tab == "videos":
+        return {"channel_id": ref.value}
+    return {"playlist_id": ref.value if ref.kind == "playlist" else ref.uploads_playlist(ref.value)}
+
+
 def _is_youtube(url: str) -> bool:
     host = link_host(url)
     return on_domain(host, "youtube.com") or host == "youtu.be"
@@ -633,15 +640,39 @@ class YtDlpSource(Source):
         try:
             ref = self._channel_ref(url, None)
             if ref is not None:
-                if ref.kind == "channel" and ref.tab == "videos":
-                    ids = youtube_rss.latest_video_ids(channel_id=ref.value)
-                else:
-                    playlist = ref.value if ref.kind == "playlist" else ref.uploads_playlist(ref.value)
-                    ids = youtube_rss.latest_video_ids(playlist_id=playlist)
+                ids = youtube_rss.latest_video_ids(**_feed(ref))
                 return [ItemRef(video_id, mapping.video_url(video_id)) for video_id in ids]
         except (youtube_rss.FeedError, runner.YtDlpError) as exc:
             logger.info("Checking %s with yt-dlp, because its RSS feed could not be read: %s", url, exc)
         return self._latest_with_ytdlp(url)
+
+    def newest_episodes(self, url: str) -> list[VideoDetails]:
+        """A YouTube collection's 50 newest videos through the API, for 2 units, else its RSS feed's 15,
+        else the first 15 of yt-dlp's listing without looking each one up."""
+        url = collection_url(url)
+        if mapping.youtube_ref(url) is not None:
+            catalogue = self._catalogue(adding=False)
+            if catalogue is not None:
+                try:
+                    ref = self._channel_ref(url, catalogue)
+                    if ref is not None:
+                        ids = catalogue.latest_ids(catalogue.playlist_id(ref))
+                        return list(self._details_from_api(catalogue, ids))
+                except (YouTubeApiError, runner.YtDlpError) as exc:
+                    logger.info("Reading the newest videos of %s without the YouTube API, because it could not: %s", url, exc)
+            try:
+                ref = self._channel_ref(url, None)
+                if ref is not None:
+                    return youtube_rss.latest_videos(**_feed(ref))
+            except (youtube_rss.FeedError, runner.YtDlpError) as exc:
+                logger.info("Reading the newest videos of %s with yt-dlp, because its RSS feed could not be read: %s", url, exc)
+        listing = runner.run_json("--flat-playlist", "--playlist-items", f"1:{_LATEST_COUNT}", _listing_urls(url)[0])
+        return [
+            self._video(entry, entry.get("url") or entry.get("webpage_url"))
+            for entry in listing.get("entries") or []
+            if isinstance(entry, dict) and entry.get("id") and (entry.get("url") or entry.get("webpage_url"))
+            and entry.get("title") not in _UNAVAILABLE_TITLES
+        ]
 
     def _latest_with_ytdlp(self, url: str) -> list[ItemRef]:
         items: dict[str, ItemRef] = {}

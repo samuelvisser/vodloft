@@ -584,3 +584,14 @@ def test_npo_renewing_the_sign_in_updates_the_cookies_file(signed_in, monkeypatc
     assert oct(signed_in.cookies_path().stat().st_mode & 0o777) == "0o600"
     # The anonymous catalogue requests never carry the sign-in.
     assert not http._http.cookies
+
+
+def test_the_newest_episodes_fill_up_from_the_season_before(npo):
+    source, client = npo
+
+    newest = source.newest_episodes("https://npo.nl/start/serie/een-huis-vol")
+
+    # The newest season has two programmes, so the season before fills them up to five.
+    assert [video.slug for video in newest] == [f"een-huis-vol_{n}" for n in (12, 11, 3, 2, 1)]
+    assert newest[0].season.slug == "seizoen-2_2" and newest[-1].season.slug == "seizoen-2"
+    assert client.stream_requests == []

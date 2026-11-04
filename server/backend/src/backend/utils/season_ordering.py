@@ -55,6 +55,21 @@ def order_initial_seasons(seasons: Sequence[SeasonT]) -> list[SeasonT]:
     return [season for _, season in decorated]
 
 
+def number_initial_seasons(seasons: Sequence[SeasonT]) -> list[tuple[SeasonT, int, SeasonType, int]]:
+    """Each season of a newly added collection in its persistent order, with its index, type and number.
+
+    Normal seasons are numbered from 1 in that order, and seasons of extras are numbered 0.
+    """
+    numbered: list[tuple[SeasonT, int, SeasonType, int]] = []
+    regular_season_number = 0
+    for index, season in enumerate(order_initial_seasons(seasons), start=1):
+        season_type = season_type_from_name(season.name)
+        if season_type is SeasonType.NORMAL:
+            regular_season_number += 1
+        numbered.append((season, index, season_type, regular_season_number if season_type is SeasonType.NORMAL else 0))
+    return numbered
+
+
 def _structured_season_value(slug: str) -> int | None:
     for pattern in _YEAR_SEASON_PATTERNS:
         match = pattern.search(slug)

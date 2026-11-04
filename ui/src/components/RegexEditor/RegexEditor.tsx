@@ -34,6 +34,7 @@ import {
 } from './regexModel'
 import NumberInput from '../common/NumberInput'
 import {useRegexCheck} from './useRegexCheck'
+import {useCollectionExamples} from '../../lib/collectionExamples'
 import './RegexEditor.css'
 
 export type {RegexValue} from './regexModel'
@@ -330,7 +331,11 @@ export default function RegexEditor({id, value, onChange, field = 'title', colle
     const [filter, setFilter] = useState<FilterMode>('all')
     const [shown, setShown] = useState(8)
 
-    const check = useRegexCheck({pattern, ignoreCase, samples: ownSamples, collectionId, field})
+    // While a collection is added, its newest episodes are tested instead of its indexed ones.
+    const examples = useCollectionExamples()
+    const exampleCollection = collectionId === null && examples && !examples.failed ? examples.collection : null
+    const tested = collectionId !== null || exampleCollection !== null
+    const check = useRegexCheck({pattern, ignoreCase, samples: ownSamples, collectionId, exampleCollection, field})
     const blocks = useMemo(() => parseBlocks(pattern), [pattern])
     const result = check.result
     const serverError = result && !result.valid ? result.error ?? 'This pattern is not valid' : null
@@ -853,10 +858,10 @@ export default function RegexEditor({id, value, onChange, field = 'title', colle
 
             <div className="regex-editor__section regex-editor__tester">
                 <div className="regex-editor__tester-head">
-                    <strong>{collectionId !== null ? 'Test on this Collection' : `Test ${plural}`}</strong>
+                    <strong>{collectionId !== null ? 'Test on this Collection' : exampleCollection !== null ? 'Test on the newest episodes' : `Test ${plural}`}</strong>
                     <span className="regex-editor__count">
-                        {check.loading && !result ? 'Testing…' : collectionId !== null && result?.valid
-                            ? <><b>{result.collectionMatches} of {result.collectionTotal}</b> {plural} match</>
+                        {check.loading && !result ? 'Testing…' : tested && result?.valid
+                            ? <><b>{result.collectionMatches} of {result.collectionTotal}</b> {exampleCollection !== null ? `newest ${plural}` : plural} match</>
                             : result?.valid && ownSamples.length
                                 ? <><b>{ownMatches} of {ownSamples.length}</b> {plural} match</>
                                 : null}
@@ -907,6 +912,8 @@ export default function RegexEditor({id, value, onChange, field = 'title', colle
                         <li className="regex-editor__empty">
                             {samples.length ? `No ${plural} here.` : collectionId !== null
                                 ? `This Collection has no indexed episodes yet. Add your own test ${plural} below.`
+                                : exampleCollection !== null
+                                ? `No newest episodes were found. Add your own test ${plural} below.`
                                 : `Add your own test ${plural} below. Once the Collection is added, its episodes are tested too.`}
                         </li>
                     ) : null}

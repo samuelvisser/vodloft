@@ -1,4 +1,6 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
+
+from backend.api.models.collection_example import ExampleCollectionAPIIn
 
 from backend.api.models.local_media_profile import (
     LocalMediaProfileTemplateSource,
@@ -26,6 +28,7 @@ from backend.types.local_media_profile_types import (
 )
 
 from .output_template import (
+    get_example_template_sources,
     get_output_template_source_page,
     get_random_collection_template_source,
     get_output_template_variables,
@@ -45,6 +48,7 @@ from .service import (
     get_local_media_profiles_list,
 )
 from backend.security.access import Area, Level
+from backend.security import deps
 from backend.security.deps import may_delete_files, requires, requires_any
 
 router = APIRouter(prefix="/local-media-profiles", tags=["Media Profiles (base)"])
@@ -110,10 +114,26 @@ def local_media_profile_template_sources(
 )
 def local_media_profile_random_collection_template_source(
     collection_scope: CollectionLocalMediaProfileScope = Query(CollectionLocalMediaProfileScope.BOTH),
+    local_media_profile_id: int | None = Query(None, description="Prefer a Collection that uses this profile"),
 ):
     """Choose a fresh initial episode without weighting Collections by episode count."""
     with db_session() as s:
-        return get_random_collection_template_source(s, collection_scope)
+        return get_random_collection_template_source(s, collection_scope, local_media_profile_id=local_media_profile_id)
+
+
+@router.post(
+    "/template/sources/examples",
+    dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)],
+    response_model=list[LocalMediaProfileTemplateSource],
+)
+def local_media_profile_example_template_sources(body: ExampleCollectionAPIIn, request: Request):
+    """The newest episodes of a collection that is being added, as examples. They are never saved."""
+    if not deps.request_access(request).allows_source(body.source_key):
+        raise HTTPException(status_code=404, detail="Source not found")
+    try:
+        return get_example_template_sources(body.example())
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not look up the newest episodes: {exc}") from exc
 
 
 @router.get(

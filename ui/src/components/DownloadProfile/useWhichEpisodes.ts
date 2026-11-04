@@ -1,9 +1,12 @@
 import {useCallback, useEffect, useRef, useState} from 'react'
 
+import type {ExampleCollection} from '../../lib/collectionExamples'
 import {WhichEpisodesSchema, type EpisodeFilter, type WhichEpisodes} from '../../types/schemas/download_profile'
 
 export type WhichEpisodesRequest = {
-    collectionId: number
+    /** The saved Collection, or the newest episodes of the one that is being added. */
+    collectionId?: number
+    exampleCollection?: ExampleCollection
     downloadWithCountdown: boolean
     filters: EpisodeFilter[]
     includeEpisodes: boolean

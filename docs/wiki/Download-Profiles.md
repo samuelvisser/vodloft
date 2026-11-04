@@ -35,6 +35,10 @@ how many are left, for example **37 of 412 indexed episodes will be downloaded**
 and for each one that won't be downloaded, the filter that left it out. These numbers load after the page, so a large
 collection never makes the page wait.
 
+While you add a collection, it has no indexed episodes yet. The counts and the title and description tests then use
+the collection's newest episodes instead, as many as the site gives in one cheap lookup (at least 5), for example
+**14 of 15 newest episodes would be downloaded**. Nothing is saved until you finish adding the collection.
+
 ### A new profile
 
 A new profile starts with these filters, which you can change, move or remove:

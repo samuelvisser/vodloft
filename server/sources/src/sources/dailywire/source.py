@@ -3,14 +3,46 @@ from __future__ import annotations
 from types import MappingProxyType
 
 from ..contract import (
-    MAIN_TAG, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback, PublishStatusLabel, ResolvedLink,
-    RssEpisodeType, Site, Source, publish_status_labels_with,
+    MAIN_TAG, MIN_NEWEST_EPISODES, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
+    PublishStatusLabel, ResolvedLink, RssEpisodeType, SeasonRef, Site, Source, VideoDetails, publish_status_labels_with,
 )
-from .api.dw_api.client import MiddlewareClient
+from .api.dw_api.client import ByShowSeason, MiddlewareClient
 from .api.dw_api.movie import MovieMiddlewareClient
+from .api.records import DwEpisodeRecord
 from .auth import DeviceAuthClient
-from .links import parse_link, resolve_link
+from .links import _access_token, _first, parse_link, resolve_link
 from .playback import resolve_movie_playback
+
+# Episode numbers .01 to .19 belong to an episode; .20 and up are the show's own extra content.
+_SHOW_EXTRA_SEGMENT = 20
+
+
+def _tag(record: DwEpisodeRecord) -> str:
+    """The episode tag VODLoft gives the record, from its episode number and whether it is a trailer."""
+    segment = record.ep_segment
+    if record.ep_number is not None and 0 < segment < _SHOW_EXTRA_SEGMENT:
+        return "ep-extra"
+    if record.trailer:
+        return "trailer"
+    if record.ep_number is None or segment:
+        return "aux"
+    return MAIN_TAG
+
+
+def _video(record: DwEpisodeRecord, season: SeasonRef | None) -> VideoDetails:
+    return VideoDetails(
+        slug=record.slug,
+        url=record.sharing_url,
+        title=record.title,
+        description=record.description,
+        duration=record.duration or None,
+        image_url=_first(record.thumbnail_landscape_path, record.background_image_path),
+        published_at=record.published_date,
+        season=season,
+        episode_number=record.ep_number,
+        number_text=record.episode_number or None,
+        tag=_tag(record),
+    )
 
 
 class DailyWireSource(Source):
@@ -62,6 +94,30 @@ class DailyWireSource(Source):
 
     def resolve(self, url: str) -> ResolvedLink | None:
         return resolve_link(url)
+
+    def newest_episodes(self, url: str) -> list[VideoDetails]:
+        """The episodes on the show's page, which lists its newest season's latest ones.
+        When that page has fewer than a handful, the newest seasons' first pages fill them up."""
+        parsed = parse_link(url)
+        if parsed is None or parsed[0] is not LinkKind.COLLECTION:
+            raise ValueError("This is not a link to a show on The Daily Wire")
+        client = MiddlewareClient(access_token=_access_token(), request_priority="interactive")
+        show = client.get_show_page(slug=parsed[1])
+        # The show page lists its seasons newest first.
+        oldest_first = list(reversed(show.seasons))
+        refs = {
+            season.slug: SeasonRef(slug=season.slug, number=position, title=season.name)
+            for position, season in enumerate(oldest_first, start=1)
+        }
+        found = [(record, show.latest_season.slug) for record in dict.fromkeys(show.latest_episodes)]
+        for season in show.seasons:
+            if len(found) >= MIN_NEWEST_EPISODES:
+                break
+            page = client.get_episodes_paginated(show.slug, ByShowSeason(season_dw_id=season.dw_id, page_size=50))
+            known = {record.slug for record, _ in found}
+            found += [(record, season.slug) for record in dict.fromkeys(page.items) if record.slug not in known]
+        found.sort(key=lambda item: item[0].published_date, reverse=True)
+        return [_video(record, refs.get(season_slug)) for record, season_slug in found]
 
     def episode_media(self, *, slug: str, members_only: bool, interactive: bool = False) -> EpisodeMedia:
         client = MiddlewareClient(request_priority="interactive") if interactive else MiddlewareClient()

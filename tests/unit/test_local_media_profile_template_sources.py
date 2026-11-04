@@ -414,6 +414,36 @@ def test_random_collection_source_respects_profile_scope(db_session):
     assert source.values["collection_title"] == "Series"
 
 
+def test_a_saved_profile_starts_on_a_collection_that_downloads_to_it(db_session):
+    from backend.api.endpoints.local_media_profiles import output_template
+    from backend.db.models import CollectionLocalMediaProfile
+    from backend.db.models.download_profile import DownloadProfile
+    from backend.types.collection_types import CollectionType
+
+    profile = CollectionLocalMediaProfile(
+        slug="shows", name="Shows", output_template="/downloads/{{ collection }}/{{ episode }}.ext",
+        preferred_format="format_1080p", collection_scope="both",
+    )
+    db_session.add(profile)
+    collections = [
+        _make_collection(db_session, slug=f"show-{number}", collection_type=CollectionType.SERIES.value)
+        for number in range(5)
+    ]
+    for collection in collections:
+        _add_episode(db_session, collection, index=1)
+    db_session.add(DownloadProfile(
+        collection=collections[3], local_media_profile=profile, enable_profile=True,
+        download_with_countdown=False, redownload_final=False, delete_older_episodes=False,
+    ))
+    db_session.flush()
+
+    for _ in range(5):
+        source = output_template.get_random_collection_template_source(db_session, local_media_profile_id=profile.id)
+        assert source.values["collection"] == "show-3"
+    # A profile no collection downloads to yet starts anywhere.
+    assert output_template.get_random_collection_template_source(db_session, local_media_profile_id=999) is not None
+
+
 def test_collection_source_anchor_opens_at_selected_episode_in_natural_order(db_session):
     from backend.api.endpoints.local_media_profiles.output_template import (
         get_output_template_source_page,
