@@ -61,10 +61,11 @@ def site_refresh_list():
 
 @router.put("/site-refresh/{key}", dependencies=[requires(Area.SETTINGS, Level.MANAGE)], response_model=SiteRefreshAPIRead)
 def site_refresh_update(key: str, body: SiteRefreshAPIUpdate):
-    """Choose the schedule a Site's items follow while VODLoft looks them up again."""
+    """Choose the schedule a Site's items follow while VODLoft looks them up again, and whether its upcoming
+    and live videos are added."""
     with db_session() as s:
         try:
-            result = set_site_refresh(s, key, body.refresh_mode, body.refresh_intervals)
+            result = set_site_refresh(s, key, body.refresh_mode, body.refresh_intervals, body.pending_checks)
         except UnknownSiteError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         read = SiteRefreshAPIRead.model_validate(result)

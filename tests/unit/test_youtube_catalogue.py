@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sources import LinkKind, MAIN_TAG
+from sources import EpisodePublishStatus, LinkKind, MAIN_TAG
 from sources import ytdlp_runner as runner
 from sources.ytdlp import YtDlpSource
 from sources.ytdlp.youtube_api import Share, client as client_module, key as key_store, mapping, quota
@@ -223,6 +223,21 @@ def test_a_premiere_is_a_video_as_ytdlp_says(youtube, lookups):
     ]
 
 
+def test_an_upcoming_video_in_the_api_listing_is_looked_up_with_ytdlp(youtube, lookups):
+    """Only yt-dlp tells when an upcoming video starts, and whether it is a premiere."""
+    answers, _ = lookups
+    youtube.playlists["PL1"] = ["soon"]
+    youtube.videos["soon"] = _video_item("soon", broadcast="upcoming")
+    answers[("--no-playlist", "https://www.youtube.com/watch?v=soon")] = {
+        "id": "soon", "extractor_key": "Youtube", "title": "Soon", "release_timestamp": 4102444800,
+        "webpage_url": "https://www.youtube.com/watch?v=soon", "media_type": "video", "live_status": "is_upcoming",
+    }
+
+    [video] = YtDlpSource().list_episodes("https://www.youtube.com/playlist?list=PL1", known=frozenset())
+
+    assert (video.publish_status, video.tag, video.scheduled_at.year) == (EpisodePublishStatus.SCHEDULED, MAIN_TAG, 2100)
+
+
 def test_a_rescan_only_details_new_videos_and_pays_from_the_checks_share(youtube):
     youtube.playlists["UU1"] = [f"v{n}" for n in range(120)]
     youtube.videos.update({f"v{n}": _video_item(f"v{n}") for n in range(120)})
@@ -281,8 +296,10 @@ def test_without_the_api_a_channel_lists_its_videos_shorts_and_live_tabs(lookups
 
     found = list(YtDlpSource().list_episodes(f"{base}/videos", known=frozenset()))
 
-    # The channel has no Shorts tab, and its livestream is still live.
-    assert [video.slug for video in found] == ["v1"]
+    # The channel has no Shorts tab. Its livestream is still live, which VODLoft shows until it is published.
+    assert [(video.slug, video.publish_status) for video in found] == [
+        ("v1", EpisodePublishStatus.PUBLISHED_FINAL), ("l1", EpisodePublishStatus.LIVE),
+    ]
     assert [args[-1] for args in calls if args[0] == "--flat-playlist"] == [
         f"{base}/videos", f"{base}/shorts", f"{base}/streams",
     ]

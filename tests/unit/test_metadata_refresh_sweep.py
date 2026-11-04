@@ -208,7 +208,8 @@ def test_a_sites_schedule_is_chosen_in_the_settings(client, session):
     [row] = client.get("/api/settings/site-refresh").json()
     assert row == {
         "key": "youtube", "name": "YouTube", "domains": ["youtube.com"],
-        "refreshMode": "own", "refreshIntervals": "30m,2h", "refreshes": True,
+        "refreshMode": "own", "refreshIntervals": "30m,2h", "pendingChecks": True, "refreshes": True,
+        "checksPending": True,
     }
 
     saved = client.put("/api/settings/site-refresh/youtube", json={"refreshMode": "system", "refreshIntervals": None}).json()
