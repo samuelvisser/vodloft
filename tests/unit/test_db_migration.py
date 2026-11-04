@@ -24,7 +24,7 @@ VODLOFT_0_1_0_REVISION = "f4abb559e3ab"
 VODLOFT_0_5_0_REVISION = "817515eb8209"
 VODLOFT_0_6_0_REVISION = "d0f28c7f863e"
 VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
-HEAD_REVISION = "7b3e9d2a4c61"
+HEAD_REVISION = "2bd0eb5fe4a6"
 
 
 @pytest.fixture
@@ -431,3 +431,31 @@ def test_canceled_history_actions_are_spelled_like_the_rest_of_vodloft(migration
     with engine.connect() as connection:
         actions = dict(connection.execute(text("SELECT id, action FROM media_download_history")).all())
     assert actions == {1: "canceled", 2: "completed", 3: "cancel_requested"}
+
+
+def test_sites_migration_places_named_sources_and_moves_the_domain_preference(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "7b3e9d2a4c61")
+    with engine.begin() as connection:
+        for collection_id, slug, source_key in ((1, "a-show", "dailywire"), (2, "UC123", "ytdlp")):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key) VALUES (:id, :uuid, :slug, :slug, 'https://example.test/' || :slug, "
+                "'free', 'series', 'numbered', 'Author', 'author', :source_key)"
+            ), {"id": collection_id, "uuid": f"uuid-{collection_id}", "slug": slug, "source_key": source_key})
+        connection.execute(text(
+            "INSERT INTO source_domain_preferences (domain, source_key) VALUES ('npo.nl', 'ytdlp')"
+        ))
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT slug, site_key, site_ref FROM collections ORDER BY id"
+        )).all() == [("a-show", "dailywire", "a-show"), ("UC123", None, None)]
+        assert connection.execute(text(
+            "SELECT key, name, domains, preferred_source_key FROM sites ORDER BY key"
+        )).all() == [("dailywire", "The Daily Wire", '["dailywire.com"]', None), ("npo", "NPO Start", '["npo.nl"]', "ytdlp")]

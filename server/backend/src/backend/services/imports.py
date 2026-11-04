@@ -30,6 +30,8 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from backend.services.sites import CollectionAlreadyAddedError
+
 import importer.pinchflat  # noqa: F401  (registers the importer)
 import importer.wireloft  # noqa: F401  (registers the importer)
 from config import get_settings
@@ -1021,13 +1023,19 @@ def _upsert_collection(session: Session, plan: CollectionPlan, library, links, r
         try:
             with session.begin_nested():
                 existing = _create_collection(session, plan)
+        except CollectionAlreadyAddedError as exc:
+            # The same collection, through another Source or under another link.
+            existing = exc.existing
+            report.add("linked", plan.title, f"Already in the Library as {existing.title}; linked, not added twice")
+            report.counts["collections_linked"] += 1
         except Exception as exc:  # noqa: BLE001  (one source that can't be looked up doesn't stop the rest)
             report.add("failed", plan.title, f"Could not add it: {exc}")
             return None, False
-        created = True
-        library[_normalise_url(existing.sharing_url)] = existing
-        report.add("created", plan.title, "Added to the Library", warnings=[_warning(warning) for warning in plan.warnings])
-        report.counts["collections_created"] += 1
+        else:
+            created = True
+            library[_normalise_url(existing.sharing_url)] = existing
+            report.add("created", plan.title, "Added to the Library", warnings=[_warning(warning) for warning in plan.warnings])
+            report.counts["collections_created"] += 1
     options = plan.settings.get("ytdlp_options")
     if isinstance(options, str) and options and not existing.ytdlp_options:
         # Added once; after that, the Collection's yt-dlp options are yours to change.

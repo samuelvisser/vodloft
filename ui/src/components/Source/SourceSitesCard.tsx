@@ -1,30 +1,30 @@
 import {useMemo, useState} from 'react'
 import {useQueryClient} from '@tanstack/react-query'
 
-import {saveSourceDomain, useSourceDomains, useSourceLookup} from '../../lib/queries'
-import type {SourceDomainRead} from '../../types/schemas/source'
+import {saveSourceSite, useSourceSites, useSourceLookup} from '../../lib/queries'
+import type {SourceSiteRead} from '../../types/schemas/source'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import SimpleSelect from '../common/SimpleSelect'
 import SourceSection from './SourceSection'
 
-function DomainSourceSelect({row, disabled, onChange}: {
-    row: SourceDomainRead
+function SiteSourceSelect({row, disabled, onChange}: {
+    row: SourceSiteRead
     disabled: boolean
     onChange: (sourceKey: string) => void
 }) {
     const sources = useSourceLookup()
     const registry = useMemo(() => createSelectRegistry(
-        `SourceDomain:${row.domain}`,
+        `SourceSite:${row.key}`,
         Object.fromEntries(row.sourceKeys.map((key) => [
             key,
             {label: `${sources.name(key)}${key === row.defaultSourceKey ? ' (default)' : ''}`},
         ])),
         row.sourceKeys,
-    ), [row.domain, row.sourceKeys, row.defaultSourceKey, sources])
+    ), [row.key, row.sourceKeys, row.defaultSourceKey, sources])
 
     return (
         <SimpleSelect
-            aria-label={`Source to ask first for ${row.domain}`}
+            aria-label={`Source to ask first for ${row.name}`}
             registry={registry}
             value={row.preferredSourceKey ?? row.defaultSourceKey}
             isDisabled={disabled}
@@ -35,19 +35,19 @@ function DomainSourceSelect({row, disabled, onChange}: {
 }
 
 /** Which Source VODLoft asks first for links on a site that several Sources can handle. */
-export default function SourceDomainsCard() {
+export default function SourceSitesCard() {
     const queryClient = useQueryClient()
-    const {data: domains, error: loadError} = useSourceDomains()
+    const {data: sites, error: loadError} = useSourceSites()
     const [saving, setSaving] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
 
-    const choose = async (row: SourceDomainRead, sourceKey: string) => {
-        setSaving(row.domain)
+    const choose = async (row: SourceSiteRead, sourceKey: string) => {
+        setSaving(row.key)
         setError(null)
         try {
-            const saved = await saveSourceDomain(row.domain, sourceKey === row.defaultSourceKey ? null : sourceKey)
-            queryClient.setQueryData<SourceDomainRead[]>(['sourceDomains'], (current) =>
-                current?.map((item) => (item.domain === saved.domain ? saved : item)))
+            const saved = await saveSourceSite(row.key, sourceKey === row.defaultSourceKey ? null : sourceKey)
+            queryClient.setQueryData<SourceSiteRead[]>(['sourceSites'], (current) =>
+                current?.map((item) => (item.key === saved.key ? saved : item)))
         } catch (exc) {
             setError(exc instanceof Error ? exc.message : String(exc))
         } finally {
@@ -55,7 +55,7 @@ export default function SourceDomainsCard() {
         }
     }
 
-    const rows = (domains ?? []).filter((row) => row.sourceKeys.length > 1)
+    const rows = (sites ?? []).filter((row) => row.sourceKeys.length > 1)
     if (!loadError && !rows.length) return null
     return (
         <SourceSection
@@ -65,18 +65,18 @@ export default function SourceDomainsCard() {
             {loadError && <p className="source-setting-error" role="alert">Could not load sites: {loadError.message}</p>}
             {error && <p className="source-setting-error" role="alert">{error}</p>}
             {rows.length > 0 && (
-                <table className="source-domain-table">
+                <table className="source-site-table">
                     <thead>
                         <tr><th scope="col">Site</th><th scope="col">Ask first</th></tr>
                     </thead>
                     <tbody>
                         {rows.map((row) => (
-                            <tr key={row.domain}>
-                                <td>{row.domain}</td>
+                            <tr key={row.key}>
+                                <td>{row.name}<span className="source-site-domains"> · {row.domains.join(', ')}</span></td>
                                 <td>
-                                    <DomainSourceSelect
+                                    <SiteSourceSelect
                                         row={row}
-                                        disabled={saving === row.domain}
+                                        disabled={saving === row.key}
                                         onChange={(sourceKey) => void choose(row, sourceKey)}
                                     />
                                 </td>
