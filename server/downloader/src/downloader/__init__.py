@@ -7,7 +7,7 @@ snapshots; filesystem ownership and optional download behavior live here.
 
 from .downloader import download_file, download_hls, measure_rendition, probe
 from .errors import (
-    DownloadCancelled,
+    DownloadCanceled,
     DownloadError,
     EncryptedMediaError,
     FileTooLargeError,
@@ -56,7 +56,7 @@ __all__ = [
     "EncryptedMediaError",
     "FileTooLargeError",
     "SubscriptionRequiredError",
-    "DownloadCancelled",
+    "DownloadCanceled",
     "FfmpegNotFoundError",
     "__version__",
 ]

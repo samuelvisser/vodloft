@@ -57,12 +57,12 @@ def test_pause_holds_downloads_until_it_ends():
     assert announced == [until, None]
 
 
-def test_pause_can_be_cancelled():
-    from downloader.errors import DownloadCancelled
+def test_pause_can_be_canceled():
+    from downloader.errors import DownloadCanceled
 
     limiter = SpeedLimiter()
     limiter.configure(lambda: SpeedPolicy(paused_until=time.time() + 60))
-    with pytest.raises(DownloadCancelled):
+    with pytest.raises(DownloadCanceled):
         limiter.wait_while_paused(should_cancel=lambda: True)
 
 

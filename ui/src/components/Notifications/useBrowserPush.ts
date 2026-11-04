@@ -13,21 +13,21 @@ export function useBrowserPush(onChange?: () => void) {
 
     useEffect(() => {
         if (!supported) return
-        let cancelled = false
+        let canceled = false
         void (async () => {
             try {
                 const current = await existingPushSubscription()
                 const on = current ? await pushIsOn(current) : false
-                if (cancelled) return
+                if (canceled) return
                 setSubscription(current)
                 setEnabled(on)
             } catch (cause) {
-                if (!cancelled) setError(cause instanceof Error ? cause.message : 'Could not check push on this device')
+                if (!canceled) setError(cause instanceof Error ? cause.message : 'Could not check push on this device')
             } finally {
-                if (!cancelled) setLoading(false)
+                if (!canceled) setLoading(false)
             }
         })()
-        return () => { cancelled = true }
+        return () => { canceled = true }
     }, [supported])
 
     const run = useCallback(async (action: () => Promise<void>, failure: string) => {

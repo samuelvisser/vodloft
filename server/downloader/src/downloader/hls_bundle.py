@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import BinaryIO, Optional
 from urllib.parse import urljoin, urlparse
 
-from .errors import DownloadCancelled, DownloadError, EncryptedMediaError, MediaUnavailableError
+from .errors import DownloadCanceled, DownloadError, EncryptedMediaError, MediaUnavailableError
 from .hls import is_master_playlist, is_playlist, parse_attribute_list, parse_master_playlist
 from .http import http_get, http_get_text
 from .models import CancelCheck, DownloadProgress, DownloadResult, ProgressCallback, VideoRendition
@@ -75,7 +75,7 @@ def download_hls_bundle(
     hundreds of loose segment files. The master and media playlists remain
     normal HLS and use paths served by VODLoft's stable RSS endpoint.
     """
-    _ensure_not_cancelled(should_cancel)
+    _ensure_not_canceled(should_cancel)
     master_text = http_get_text(master_url)
     if not is_playlist(master_text) or not is_master_playlist(master_text):
         raise DownloadError("HLS output requires a master playlist")
@@ -138,7 +138,7 @@ def download_hls_bundle(
             report()
 
         for job in jobs:
-            _ensure_not_cancelled(should_cancel)
+            _ensure_not_canceled(should_cancel)
             playlist_lines = _mirror_media_playlist(
                 job,
                 should_cancel=should_cancel,
@@ -155,7 +155,7 @@ def download_hls_bundle(
             "\n".join(master_lines).rstrip() + "\n",
             encoding="utf-8",
         )
-        _ensure_not_cancelled(should_cancel)
+        _ensure_not_canceled(should_cancel)
         os.replace(staging_asset_root, asset_root)
         os.replace(part_path, master_path)
         report(force=True)
@@ -365,7 +365,7 @@ def _mirror_media_playlist(
 
     with media_path.open("xb") as media_file:
         for raw in job.text.splitlines():
-            _ensure_not_cancelled(should_cancel)
+            _ensure_not_canceled(should_cancel)
             line = raw.strip()
 
             if line.startswith("#EXT-X-MAP:"):
@@ -463,7 +463,7 @@ def _download_into(
     written = 0
     with http_get(url) as response:
         for chunk in response.iter_chunks(_CHUNK_SIZE):
-            _ensure_not_cancelled(should_cancel)
+            _ensure_not_canceled(should_cancel)
             destination.write(chunk)
             written += len(chunk)
     return written
@@ -507,6 +507,6 @@ def _missing_playlist_files(playlist: Path, *, root: Path) -> list[Path]:
     return missing
 
 
-def _ensure_not_cancelled(should_cancel: Optional[CancelCheck]) -> None:
+def _ensure_not_canceled(should_cancel: Optional[CancelCheck]) -> None:
     if should_cancel and should_cancel():
-        raise DownloadCancelled("Download cancelled")
+        raise DownloadCanceled("Download canceled")

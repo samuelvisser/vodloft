@@ -836,7 +836,7 @@ def test_ensure_episode_download_respects_user_retry_suppression(db_session):
         download_profile_id=profile.id,
         artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
         automatic_retry_suppressed=True,
-        file_path="/downloads/cancelled.m4a",
+        file_path="/downloads/canceled.m4a",
     )
     db_session.add(download)
     db_session.commit()

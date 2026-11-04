@@ -28,7 +28,7 @@ from config import get_settings
 logger = logging.getLogger(__name__)
 
 from sources.pacing import (
-    RequestCancelled, RequestPriority, check_cancelled,
+    RequestCanceled, RequestPriority, check_canceled,
     wait_before_request, wait_for_retry,
 )
 
@@ -492,7 +492,7 @@ class MiddlewareClient:
             try:
                 with urlopen(req, timeout=self._req_timeout) as resp:
                     data = resp.read()
-                check_cancelled()
+                check_canceled()
                 break
             except HTTPError as e:
                 try:
@@ -508,7 +508,7 @@ class MiddlewareClient:
                     wait_for_retry(e, attempt, base_delay=self._TRANSIENT_RETRY_DELAY_S)
                     continue
                 raise MiddlewareAPIError(f"Network error: {e.reason}") from e
-            except RequestCancelled:
+            except RequestCanceled:
                 raise
             except Exception as e:
                 raise MiddlewareAPIError(str(e)) from e

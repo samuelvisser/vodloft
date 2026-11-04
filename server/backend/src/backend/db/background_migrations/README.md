@@ -51,7 +51,7 @@ that still need repair rather than repeating all historical work.
 Do not hold a database transaction or checked-out connection across slow network calls. Use
 short-lived sessions around reads/writes, and report granular work with
 `context.update_progress(current, total, message)` for long migrations. Use
-`context.raise_if_cancelled()` at useful checkpoints.
+`context.raise_if_canceled()` at useful checkpoints.
 
 TaskOperation is only the execution layer. It provides progress, retries, restart recovery and UI
 visibility for the single `background_migration_runner` task; it is never the migration ledger.

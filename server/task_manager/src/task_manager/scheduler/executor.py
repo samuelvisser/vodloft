@@ -39,8 +39,8 @@ from config.network import (
     NoInternetConnectionError,
     is_no_internet_error,
 )
-from sources.pacing import RequestCancelled, RequestWait, request_context
-from downloader import DownloadCancelled
+from sources.pacing import RequestCanceled, RequestWait, request_context
+from downloader import DownloadCanceled
 from task_manager.scheduler import scheduler
 
 
@@ -90,11 +90,11 @@ class ProgressUpdater:
         self.run_id = run_id
         self.tracks_progress = tracks_progress
         self._last_cancel_check = 0.0
-        self._cancelled = False
+        self._canceled = False
         self._cancel_reason = "Canceled"
 
     def _read_cancellation(self, *, force: bool = False) -> tuple[bool, str]:
-        if self._cancelled:
+        if self._canceled:
             return True, self._cancel_reason
 
         now = time.monotonic()
@@ -108,7 +108,7 @@ class ProgressUpdater:
                 select(TaskRun.status, TaskRun.meta).where(TaskRun.id == self.run_id)
             ).one_or_none()
             if row is None:
-                self._cancelled = True
+                self._canceled = True
                 self._cancel_reason = "Task resource was deleted"
                 return True, self._cancel_reason
 
@@ -123,13 +123,13 @@ class ProgressUpdater:
                     if isinstance(meta, dict)
                     else None
                 )
-                self._cancelled = True
+                self._canceled = True
                 self._cancel_reason = (
                     reason if isinstance(reason, str) and reason else "Canceled"
                 )
                 return True, self._cancel_reason
             if not _run_has_active_operation_owner(s, self.run_id):
-                self._cancelled = True
+                self._canceled = True
                 self._cancel_reason = "Owning operation was canceled"
                 return True, self._cancel_reason
             return False, self._cancel_reason
@@ -147,7 +147,7 @@ class ProgressUpdater:
         canceled, _ = self._read_cancellation()
         return canceled
 
-    def raise_if_cancelled(self) -> None:
+    def raise_if_canceled(self) -> None:
         canceled, reason = self._read_cancellation(force=True)
         if canceled:
             raise TaskCancellationRequested(reason)
@@ -181,7 +181,7 @@ class ProgressUpdater:
                         select(TaskRun.status, TaskRun.meta).where(TaskRun.id == self.run_id)
                     ).one_or_none()
                     if row is None:
-                        self._cancelled = True
+                        self._canceled = True
                         self._cancel_reason = "Task resource was deleted"
                         raise TaskCancellationRequested(self._cancel_reason)
 
@@ -198,13 +198,13 @@ class ProgressUpdater:
                             if isinstance(current_meta, dict)
                             else None
                         )
-                        self._cancelled = True
+                        self._canceled = True
                         self._cancel_reason = (
                             reason if isinstance(reason, str) and reason else "Canceled"
                         )
                         raise TaskCancellationRequested(self._cancel_reason)
                     if not _run_has_active_operation_owner(s, self.run_id):
-                        self._cancelled = True
+                        self._canceled = True
                         self._cancel_reason = "Owning operation was canceled"
                         raise TaskCancellationRequested(self._cancel_reason)
 
@@ -249,7 +249,7 @@ class ProgressUpdater:
                     )
                     if result.rowcount == 0:
                         s.rollback()
-                        self._cancelled = True
+                        self._canceled = True
                         self._cancel_reason = "Task resource was deleted"
                         raise TaskCancellationRequested(self._cancel_reason)
                     s.commit()
@@ -288,7 +288,7 @@ class ProgressUpdater:
             ).execution_options(synchronize_session=False)
         )
         if changed.rowcount != 1:
-            raise DownloadCancelled("Download was canceled before publication committed")
+            raise DownloadCanceled("Download was canceled before publication committed")
         refresh_operations_for_run(session, self.run_id)
 
     def set_wait_state(self, reason: str | None, message: str | None = None, *, until: float | None = None) -> None:
@@ -732,7 +732,7 @@ def execute_task(
                         progress=updater,
                         **prepared.call_kwargs,
                     )
-    except (TaskCancellationRequested, DownloadCancelled, RequestCancelled) as exc:
+    except (TaskCancellationRequested, DownloadCanceled, RequestCanceled) as exc:
         cancellation_reason = str(exc) or "Canceled"
     except Exception as exc:
         if is_no_internet_error(exc):

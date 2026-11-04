@@ -290,7 +290,7 @@ export default function MoviePage() {
                 return
             }
             const retryLabel = download.artifactStatus === 'available' ? 'Re-download queued' : 'Download queued for retry'
-            toast.success(action === 'retry' ? retryLabel : 'Download cancelled')
+            toast.success(action === 'retry' ? retryLabel : 'Download canceled')
         } catch {
             toast.error(`Could not ${action} the download`)
         } finally {

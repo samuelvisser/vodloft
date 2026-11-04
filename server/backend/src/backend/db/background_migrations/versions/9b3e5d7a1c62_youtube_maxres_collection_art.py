@@ -63,7 +63,7 @@ async def migrate(context) -> None:
     total = len(collections)
     context.update_progress(0, total, "Looking up YouTube's 16:9 Collection artwork")
     for done, (collection_id, artwork) in enumerate(collections, start=1):
-        context.raise_if_cancelled()
+        context.raise_if_canceled()
         changes: dict[str, str] = {}
         upgraded: dict[str, str | None] = {}
         for field, url in artwork.items():

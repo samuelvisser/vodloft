@@ -30,7 +30,7 @@ class MediaDownloadStatus(Enum):
     DOWNLOADING = "downloading"
     REDOWNLOADED = "redownloaded"
     LOCAL_PROCESSING = "local_processing"
-    CANCELLED = "cancelled"
+    CANCELED = "canceled"
     ERROR = "error"
     MISSING = "missing"
     CORRUPTED = "corrupted"

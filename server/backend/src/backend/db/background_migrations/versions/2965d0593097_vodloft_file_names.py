@@ -212,19 +212,19 @@ async def _wait_for_startup_recovery(context) -> None:
     from task_manager.scheduler.scheduler import scheduled_work_is_paused_by
 
     while scheduled_work_is_paused_by(STARTUP_RECOVERY_PAUSE_OWNER):
-        context.raise_if_cancelled()
+        context.raise_if_canceled()
         await asyncio.sleep(_RECOVERY_POLL_SECONDS)
 
 
 async def migrate(context) -> None:
     from backend.services.download_recovery import recover_download_filesystem
 
-    context.raise_if_cancelled()
+    context.raise_if_canceled()
     context.update_progress(0, 4, "Moving the Daily Wire login and secret key")
     await asyncio.to_thread(_move_daily_wire_login)
     await asyncio.to_thread(_rename_secret_file)
 
-    context.raise_if_cancelled()
+    context.raise_if_canceled()
     context.update_progress(1, 4, "Waiting for the download folder recovery to finish")
     await _wait_for_startup_recovery(context)
 
@@ -234,7 +234,7 @@ async def migrate(context) -> None:
     roots = {Path(download_settings.download_root), Path(download_settings.temporary_download_root)}
     configured = roots | {Path(download_settings.rss_cache_root)}
     for root in sorted(roots):
-        context.raise_if_cancelled()
+        context.raise_if_canceled()
         if root.is_dir():
             renamed = await asyncio.to_thread(_rename_tree, root, configured=configured)
             logger.info("Renamed %s WireLoft files and folders in %s", renamed, root)
