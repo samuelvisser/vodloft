@@ -68,7 +68,8 @@ jobs:
         shell: bash
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "GitHub Release $RELEASE_TAG already exists."
+            echo "GitHub Release $RELEASE_TAG already exists; making sure it has the compose file."
+            gh release upload "$RELEASE_TAG" .docker/docker-compose.yml --clobber
             exit 0
           fi
           # 0.x versions are betas, so they are marked as pre-releases.
@@ -89,4 +90,5 @@ jobs:
             --notes-file "$RUNNER_TEMP/release-notes.md" \
             --generate-notes \
             "$channel" \
-            --title "VODLoft ${RELEASE_TAG#v}"
+            --title "VODLoft ${RELEASE_TAG#v}" \
+            .docker/docker-compose.yml

@@ -54,6 +54,8 @@ The separate application tag push triggers `.github/workflows/release.yml`. The 
 
 The draft starts with an **Upgrading** section: back up `config`, then two commands that pull `ghcr.io/samuelvisser/vodloft:MAJOR.MINOR.PATCH`, tag it as `latest` (the tag the shipped `docker-compose.yml` uses) and start it, with a link to the step-by-step guide in the wiki (Backups and Upgrades). Users keep `latest` in their compose file, and the commands on an older release page still install that release. The text lives in `.github/release-notes/upgrade-steps.md`; `./release.py upgrade-steps --version X.Y.Z` prints it for any release. Put upgrade notes that only apply to this release above those lines and keep them short; longer explanations belong in the wiki.
 
+The draft also has the release's `.docker/docker-compose.yml` attached as `docker-compose.yml`, so the compose file for any version can be downloaded from `https://github.com/samuelvisser/vodloft/releases/download/vX.Y.Z/docker-compose.yml`.
+
 If the tag-triggered workflow ever needs to be retried, open **Actions → Publish GitHub Release → Run workflow**, enter the existing application tag (for example `v1.0.0`), and run it. The manual workflow checks out that exact tag and performs the same version verification and draft-release creation as the automatic flow.
 
 If the container has already been published separately, use:
