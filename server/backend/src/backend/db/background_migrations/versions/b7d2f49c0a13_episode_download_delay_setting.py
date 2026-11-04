@@ -75,7 +75,7 @@ def _renamed_delay_setting(source: str) -> str:
 
 
 async def migrate(context) -> None:
-    context.raise_if_cancelled()
+    context.raise_if_canceled()
     path = get_config_path()
     try:
         original = path.read_text(encoding="utf-8")
@@ -101,7 +101,7 @@ async def migrate(context) -> None:
             temporary_file.write(updated)
 
         temporary_path.chmod(stat.S_IMODE(path.stat().st_mode))
-        context.raise_if_cancelled()
+        context.raise_if_canceled()
         os.replace(temporary_path, path)
     finally:
         if temporary_path is not None:

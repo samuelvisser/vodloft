@@ -14,7 +14,7 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Callable, Iterator
 
-from .errors import DownloadCancelled
+from .errors import DownloadCanceled
 
 _MIN_SAMPLE_BYTES = 5 * 1024 * 1024
 _WINDOW_SECONDS = 10.0
@@ -68,7 +68,7 @@ class SpeedLimiter:
                     waiting(None)
                 return
             if should_cancel and should_cancel():
-                raise DownloadCancelled("Canceled while downloads were paused")
+                raise DownloadCanceled("Canceled while downloads were paused")
             if not announced and waiting:
                 waiting(paused_until)
                 announced = True
@@ -115,7 +115,7 @@ class SpeedLimiter:
             if left <= 0:
                 return True
             if should_cancel and should_cancel():
-                raise DownloadCancelled("Download cancelled")
+                raise DownloadCanceled("Download canceled")
             time.sleep(min(0.25, left))
 
     def record(self, bytes_per_second: float) -> None:

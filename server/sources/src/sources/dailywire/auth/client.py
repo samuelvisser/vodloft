@@ -102,14 +102,14 @@ class DeviceAuthClient:
             if stop_event is not None:
                 # Event.wait returns True if set during the wait; treat as cancellation
                 if getattr(stop_event, "wait", lambda t: False)(seconds):
-                    raise PermissionError("Authorization cancelled by logout.")
+                    raise PermissionError("Authorization canceled by logout.")
             else:
                 _t.sleep(seconds)
 
         while True:
             # Cancellation check at loop start
             if stop_event is not None and getattr(stop_event, "is_set", lambda: False)():
-                raise PermissionError("Authorization cancelled by logout.")
+                raise PermissionError("Authorization canceled by logout.")
 
             if _t.time() - start > expires_in:
                 raise RuntimeError("Device code expired before authorization.")

@@ -8,7 +8,7 @@ from time import monotonic, time
 from typing import Callable, Iterator, Literal
 from uuid import uuid4
 
-from .errors import DownloadCancelled
+from .errors import DownloadCanceled
 from .models import DownloadProgress
 from .plan import DownloadPlan, Phase, StageSpec
 from .transfer_context import TransferWait, transfer_context
@@ -175,7 +175,7 @@ class DownloadTracker:
         if self._error is not None:
             raise self._error
         if self.is_canceled():
-            raise DownloadCancelled("Download was canceled")
+            raise DownloadCanceled("Download was canceled")
 
     def cancel(self, *, user_requested: bool = True) -> None:
         """Stop owned writers before cleanup; failures are not user cancellation."""
@@ -357,7 +357,7 @@ class DownloadTracker:
                 yield
             self.ensure_active()
         except BaseException as exc:
-            self._finish(activity, "canceled" if isinstance(exc, DownloadCancelled) else "failed")
+            self._finish(activity, "canceled" if isinstance(exc, DownloadCanceled) else "failed")
             raise
         else:
             self.complete(activity)

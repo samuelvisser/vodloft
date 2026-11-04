@@ -10,7 +10,7 @@ from time import sleep
 from typing import Callable
 from uuid import uuid4
 
-from ..errors import DownloadCancelled, DownloadError
+from ..errors import DownloadCanceled, DownloadError
 from ..hls_bundle import hls_asset_marker, hls_asset_root
 from ..models import DownloadProgress
 from .copying import copy_file
@@ -71,7 +71,7 @@ class PublicationJournal:
         self._write()
         while True:
             if should_cancel():
-                raise DownloadCancelled("Canceled while publishing a sidecar")
+                raise DownloadCanceled("Canceled while publishing a sidecar")
             lock = _claim_publication_lock(destination)
             if lock is not None:
                 break

@@ -599,3 +599,70 @@ def test_task_ledger_can_include_unscoped_runs():
         assert [run.resource_id for run in unscoped_only.items] == [None]
 
     engine.dispose()
+
+
+def test_task_ledger_workflow_order_puts_running_then_waiting_before_history():
+    import backend.db.models  # noqa: F401
+    from backend.api.endpoints.tasks.service import query_ledger
+    from backend.db import Base
+    from task_manager.scheduler.db import TaskDefinition, TaskRun
+    from task_manager.scheduler.types import ResourceType, TaskStatus
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        definition = TaskDefinition(
+            key="fetch_new_episodes",
+            title="Fetch episodes",
+            allowed_resource_types=["collection"],
+        )
+        session.add(definition)
+        session.flush()
+        base = datetime(2026, 11, 4, 9, 0, tzinfo=timezone.utc)
+
+        def run(name, status, *, created, started=None, finished=None):
+            return TaskRun(
+                definition_id=definition.id,
+                resource_type=ResourceType.COLLECTION,
+                resource_id=None,
+                status=status,
+                progress=0,
+                attempt_count=1,
+                max_retries=0,
+                message=name,
+                created_at=base + timedelta(minutes=created),
+                started_at=base + timedelta(minutes=started) if started is not None else None,
+                finished_at=base + timedelta(minutes=finished) if finished is not None else None,
+            )
+
+        session.add_all([
+            run("old finished", TaskStatus.SUCCEEDED, created=0, started=0, finished=1),
+            run("long running", TaskStatus.RUNNING, created=1, started=2),
+            run("new finished", TaskStatus.FAILED, created=10, started=10, finished=11),
+            run("queued later", TaskStatus.QUEUED, created=12),
+            run("newer running", TaskStatus.RUNNING, created=5, started=6),
+            run("queued first", TaskStatus.SCHEDULED, created=8),
+            run("retry", TaskStatus.RETRY_SCHEDULED, created=9),
+            run("newest finished", TaskStatus.CANCELED, created=13, started=13, finished=14),
+        ])
+        session.commit()
+
+        expected = [
+            "long running", "newer running",
+            "queued first", "retry", "queued later",
+            "newest finished", "new finished", "old finished",
+        ]
+        everything = query_ledger(session, definition_key=None, order_by="workflow")
+        assert [item.message for item in everything.items] == expected
+
+        seen = []
+        cursor = None
+        while True:
+            page = query_ledger(session, definition_key=None, order_by="workflow", cursor=cursor, limit=3)
+            seen.extend(item.message for item in page.items)
+            cursor = page.next_cursor
+            if cursor is None:
+                break
+        assert seen == expected
+
+    engine.dispose()

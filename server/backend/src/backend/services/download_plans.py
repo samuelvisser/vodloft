@@ -26,7 +26,7 @@ from config import get_settings
 from config.network import is_no_internet_error
 from config.settings.submodels import MetadataMode, ThumbnailMode
 from downloader import (
-    DownloadCancelled, DownloadError, EncryptedMediaError, MediaUnavailableError, SubscriptionRequiredError,
+    DownloadCanceled, DownloadError, EncryptedMediaError, MediaUnavailableError, SubscriptionRequiredError,
 )
 from downloader.lifecycle import DownloadTracker
 from downloader.metadata import render_nfo
@@ -39,7 +39,7 @@ from sources import Feature, PlaybackKind, get_source
 def prepare_download_plan(session: Session, media_download_id: int, tracker: DownloadTracker) -> DownloadPlan:
     download = session.get(MediaDownloadBase, media_download_id)
     if download is None:
-        raise DownloadCancelled("The download was deleted before preparation")
+        raise DownloadCanceled("The download was deleted before preparation")
     media = download.media
     profile = download.local_media_profile
     episode = media if isinstance(media, Episode) else None
@@ -140,7 +140,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
                 tracker.ensure_active()
                 current = session.get(Episode, media_id)
                 if current is None:
-                    raise DownloadCancelled("Episode was deleted during preparation")
+                    raise DownloadCanceled("Episode was deleted during preparation")
                 video_url, audio_url = detail.video_url, detail.audio_url
                 current.video_url, current.audio_url = video_url, audio_url
                 session.commit()
@@ -188,7 +188,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         if playback.metadata is not None and is_extra:
             current = session.get(MovieExtra, media_id)
             if current is None:
-                raise DownloadCancelled("Movie extra was deleted during preparation")
+                raise DownloadCanceled("Movie extra was deleted during preparation")
             update_movie_extra_source_metadata(current.source, playback.metadata)
             if playback.metadata.model_fields_set & {"thumbnail_landscape_path", "thumbnail_portrait_path", "thumbnail_square_path", "background_image_path"}:
                 thumbnail_url = select_thumbnail_url(playback.metadata)
@@ -201,7 +201,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     session.expire_all()
     download = session.get(MediaDownloadBase, media_download_id)
     if download is None:
-        raise DownloadCancelled("Download was deleted while preparing output paths")
+        raise DownloadCanceled("Download was deleted while preparing output paths")
     media = download.media
     if isinstance(media, Episode):
         destination = resolve_episode_output_path(output_template, episode=media, local_media_profile=download.local_media_profile, media_download=download, extension=source.extension)

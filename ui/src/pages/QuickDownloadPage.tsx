@@ -11,11 +11,10 @@ import {ClearInputButton} from '../components/common/ClearInputButton'
 import {useOperations} from '../components/OperationNotifier/OperationNotifier'
 import QuickOptionList from '../components/QuickDownload/QuickOptionList'
 import QuickFormatPanel from '../components/QuickDownload/QuickFormatPanel'
-import {QuickHistoryList, QuickInProgressList, QuickReadyList} from '../components/QuickDownload/QuickDownloadLists'
+import {QuickHistoryList, QuickInProgressList, QuickReadyList, quickDownloadOwners} from '../components/QuickDownload/QuickDownloadLists'
 import '../components/QuickDownload/QuickDownload.css'
 import {refreshFrontendPuller} from '../lib/puller'
 import {
-    QUICK_DOWNLOAD_OPERATION_KIND,
     choiceFromHistory,
     choiceFromSettings,
     choiceSize,
@@ -35,6 +34,7 @@ import {
     useQuickDownloadHistory,
     useQuickDownloadSettings,
     useQuickDownloads,
+    activeQuickDownloads,
     type QuickDownloadPreview,
 } from '../lib/quickDownloads'
 import {saveSettingsRequest, useSettings} from '../lib/settings'
@@ -42,8 +42,6 @@ import {can, getAccess} from '../lib/access'
 import type {QuickChoice, QuickDownloadHistoryEntry, QuickDownloadOptions} from '../types/schemas/quick_download'
 import type {SettingsFieldPath} from '../types/schemas/settings'
 import type {SourceRead} from '../types/schemas/source'
-
-const ACTIVE = new Set(['QUEUED', 'RUNNING', 'WAITING'])
 
 function duration(seconds: number | null | undefined): string | null {
     if (!seconds) return null
@@ -205,7 +203,7 @@ export default function QuickDownloadPage() {
         }
     }
 
-    const active = operations.filter((operation) => operation.kind === QUICK_DOWNLOAD_OPERATION_KIND && ACTIVE.has(operation.status))
+    const active = activeQuickDownloads(operations)
     const ready = quickDownloads?.ready ?? []
     // The history lists what is finished; what is still working or ready to fetch shows above it.
     const shownAbove = new Set([
@@ -322,7 +320,7 @@ export default function QuickDownloadPage() {
                 )}
             </div>
 
-            <QuickInProgressList operations={active}/>
+            <QuickInProgressList operations={active} owners={quickDownloadOwners(quickDownloads)}/>
             <QuickReadyList ready={ready}/>
             {keepHistory && <QuickHistoryList entries={finished} onDownloadAgain={downloadAgain}/>}
 

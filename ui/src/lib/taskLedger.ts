@@ -19,7 +19,7 @@ export type TaskLedgerCollectionQuery = {
   includeUnscoped?: boolean
   status?: readonly string[]
   startedAfter?: Date | string
-  orderBy?: 'started_at' | 'finished_at' | 'created_at'
+  orderBy?: 'workflow' | 'started_at' | 'finished_at' | 'created_at'
   order?: 'asc' | 'desc'
   limit?: number
   enabled?: boolean
@@ -142,7 +142,7 @@ export function deriveTaskLedgerCollectionPlaceholder(
     includeUnscoped?: boolean
     statuses: readonly string[] | undefined
     startedAfter: string | undefined
-    orderBy: 'started_at' | 'finished_at' | 'created_at'
+    orderBy: 'workflow' | 'started_at' | 'finished_at' | 'created_at'
     order: 'asc' | 'desc'
     initialCount: number
   },

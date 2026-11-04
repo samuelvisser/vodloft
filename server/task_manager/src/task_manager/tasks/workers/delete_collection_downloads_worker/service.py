@@ -5,7 +5,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from backend.utils.episode_download_scope import EpisodeDownloadScope
-from downloader import DownloadCancelled
+from downloader import DownloadCanceled
 from task_manager.tasks.helpers.download_profiles import (
     disable_download_profiles_for_episode_scope,
 )
@@ -69,7 +69,7 @@ def run_delete_collection_downloads_worker(
 
     for index, download in enumerate(downloads, start=1):
         if progress is not None and callable(progress) and progress():
-            raise DownloadCancelled("Collection download deletion was canceled")
+            raise DownloadCanceled("Collection download deletion was canceled")
 
         # Also protect against a retry started after the operation began, by the
         # user or, for a partial delete, by a Download Profile that is still on.

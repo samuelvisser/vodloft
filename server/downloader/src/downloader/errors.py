@@ -25,8 +25,8 @@ class FileTooLargeError(DownloadError):
     """The file is larger than the caller allows, so the download stopped."""
 
 
-class DownloadCancelled(DownloadError):
-    """The download was cancelled through the should_cancel callback."""
+class DownloadCanceled(DownloadError):
+    """The download was canceled through the should_cancel callback."""
 
 
 class FfmpegNotFoundError(DownloadError):

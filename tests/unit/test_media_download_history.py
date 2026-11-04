@@ -76,7 +76,7 @@ def test_interrupted_download_history_shows_premature_shutdown():
     )
 
     assert entry.label == "Canceled due to premature shutdown"
-    assert entry.status == "cancelled"
+    assert entry.status == "canceled"
     assert entry.duration == "42.0 s"
     assert entry.detail is None
 

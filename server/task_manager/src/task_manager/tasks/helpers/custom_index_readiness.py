@@ -80,8 +80,8 @@ async def wait_for_custom_index_pair(
     try:
         deadline = monotonic() + timeout
         while True:
-            if progress is not None and hasattr(progress, "raise_if_cancelled"):
-                progress.raise_if_cancelled()
+            if progress is not None and hasattr(progress, "raise_if_canceled"):
+                progress.raise_if_canceled()
             with db_session() as session:
                 profile = session.get(CollectionLocalMediaProfile, local_media_profile_id)
                 if profile is None or not profile_uses_custom_indexes(profile):

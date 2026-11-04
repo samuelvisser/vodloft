@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Callable
 from uuid import uuid4
 
-from ..errors import DownloadCancelled, DownloadError
+from ..errors import DownloadCanceled, DownloadError
 from ..hls_bundle import hls_asset_marker, hls_asset_root
 from ..models import DownloadProgress
 from .helpers import _path_is_within
@@ -270,7 +270,7 @@ def publish_replacement(
         }
 
         if should_cancel():
-            raise DownloadCancelled("Canceled before replacing the existing file")
+            raise DownloadCanceled("Canceled before replacing the existing file")
 
         # Check every previous target again immediately before publication. No
         # unrelated file should be overwritten if the filesystem changed during
@@ -293,7 +293,7 @@ def publish_replacement(
     except BaseException:
         if record_written:
             # Once any final path changed the journal must survive. If no
-            # replacement happened this safely discards a cancelled attempt.
+            # replacement happened this safely discards a canceled attempt.
             ReplacementJournal(journal_path, record).discard_unpublished()
         else:
             for path in staged_paths:

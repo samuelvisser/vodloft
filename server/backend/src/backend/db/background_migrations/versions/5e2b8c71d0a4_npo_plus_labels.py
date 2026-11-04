@@ -111,7 +111,7 @@ async def migrate(context) -> None:
     client = NpoClient()
     done = 0
     for collection_id, url in collections:
-        context.raise_if_cancelled()
+        context.raise_if_canceled()
         context.update_progress(done, total, "Checking which NPO Start programmes need NPO Plus")
         try:
             premium = await asyncio.to_thread(_premium_in_series, client, url)
@@ -121,7 +121,7 @@ async def migrate(context) -> None:
             _mark_episodes(collection_id, premium)
         done += 1
     for slug, url in videos:
-        context.raise_if_cancelled()
+        context.raise_if_canceled()
         context.update_progress(done, total, "Checking which NPO Start videos need NPO Plus")
         try:
             premium = await asyncio.to_thread(_premium_video, client, slug, url)

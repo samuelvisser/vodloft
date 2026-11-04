@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from threading import Condition
 from typing import Callable, Iterator
 
-from .errors import DownloadCancelled
+from .errors import DownloadCanceled
 
 
 class CapacityLimiter:
@@ -34,7 +34,7 @@ class CapacityLimiter:
         try:
             while True:
                 if should_cancel():
-                    raise DownloadCancelled("Canceled while waiting for capacity")
+                    raise DownloadCanceled("Canceled while waiting for capacity")
                 with self._condition:
                     if self._active < self._limit:
                         self._active += 1

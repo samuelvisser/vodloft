@@ -65,7 +65,7 @@ def test_episode_delay_config_migration_reloads_settings(tmp_path, monkeypatch):
     monkeypatch.setattr(migration, "reload_settings", lambda: reload_calls.append(True))
 
     class Context:
-        def raise_if_cancelled(self):
+        def raise_if_canceled(self):
             pass
 
     asyncio.run(migration.migrate(Context()))

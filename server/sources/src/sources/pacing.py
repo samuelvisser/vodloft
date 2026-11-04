@@ -26,7 +26,7 @@ RequestPriority = Literal["interactive", "bulk", "background"]
 _SLOW_COOLDOWN_UNPACED_GRACE_REQUESTS = 10
 
 
-class RequestCancelled(InterruptedError):
+class RequestCanceled(InterruptedError):
     """A waiting or retrying request was canceled by its owning operation."""
 
 
@@ -58,10 +58,10 @@ def request_context(
             variable.reset(token)
 
 
-def check_cancelled() -> None:
+def check_canceled() -> None:
     check = _cancel.get()
     if check is not None and check():
-        raise RequestCancelled("Canceled while waiting to send a request")
+        raise RequestCanceled("Canceled while waiting to send a request")
 
 
 def notify_wait(event: RequestWait | None) -> None:
@@ -69,7 +69,7 @@ def notify_wait(event: RequestWait | None) -> None:
     if observer is not None:
         try:
             observer(event)
-        except RequestCancelled:
+        except RequestCanceled:
             raise
         except Exception:
             # Reporting is not permission to send a request. Cancellation is
@@ -184,7 +184,7 @@ class RequestPacer:
 
         # user-interactive API calls never wait for global pacing.
         if selected_priority == "interactive":
-            check_cancelled()
+            check_canceled()
             self.record_unpaced()
             return
 
@@ -206,7 +206,7 @@ class RequestPacer:
         previous: RequestWait | None = None
         try:
             while True:
-                check_cancelled()
+                check_canceled()
                 with self.condition:
                     now = monotonic()
 
@@ -332,13 +332,13 @@ def wait_for_retry(error: Exception, attempt: int, *, base_delay: float = 1.5) -
 def pause(seconds: float, reason: str = "request_spacing") -> None:
     """Wait before the next request, reporting the wait and stopping when the work is canceled."""
     if seconds <= 0:
-        check_cancelled()
+        check_canceled()
         return
     deadline = monotonic() + seconds
     notify_wait(RequestWait(reason, time() + seconds))
     try:
         while True:
-            check_cancelled()
+            check_canceled()
             remaining = deadline - monotonic()
             if remaining <= 0:
                 return

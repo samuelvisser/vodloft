@@ -78,10 +78,10 @@ def writer(tmp_path, monkeypatch):
         ffmpeg_path,
         fallback_format,
         forced_format=None,
-        check_cancelled,
+        check_canceled,
     ):
         assert state.active_sessions == 0, "HTTP must not pin a database transaction"
-        check_cancelled()
+        check_canceled()
         state.requests += 1
         fallback = str(getattr(fallback_format, "value", fallback_format))
         output_format = forced_format or (

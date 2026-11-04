@@ -6,7 +6,7 @@ from threading import Event
 
 import pytest
 
-from downloader.errors import DownloadCancelled
+from downloader.errors import DownloadCanceled
 from downloader.lifecycle import DownloadTracker, download_completion_fraction
 from downloader.models import DownloadProgress, DownloadResult
 from downloader.plan import ResolvedDownloadSource, SidecarSpec, build_download_plan
@@ -167,7 +167,7 @@ def test_required_sidecar_failure_aborts_media_and_joins_writers(tmp_path, monke
         while not should_cancel():
             assert time.monotonic() < deadline, 'Required asset failure did not cancel media'
             time.sleep(.005)
-        raise DownloadCancelled('Media stopped')
+        raise DownloadCanceled('Media stopped')
     monkeypatch.setattr(coordinator, 'download_file', download)
     with DownloadTracker() as tracker:
         value = plan(tmp_path, tracker, assets=(SidecarSpec('artwork', 'thumbnail', url='https://media.test/a.jpg'),))

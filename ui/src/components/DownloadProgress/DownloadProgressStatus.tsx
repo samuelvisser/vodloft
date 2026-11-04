@@ -1,13 +1,13 @@
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import type {MediaDownloadViewRead} from '../../types/schemas/media_download'
+import type {DownloadPresentation} from '../../types/progress'
 import ProgressBar from '../common/ProgressBar'
 import ProgressExplanation from '../common/ProgressExplanation'
 import './DownloadProgress.css'
 
-export default function DownloadProgressStatus({download, compact = false, details = true, labelOverride}: {
-    download: MediaDownloadViewRead; compact?: boolean; details?: boolean; labelOverride?: string
+/** The status, progress bar and info button of one download, a library download or a quick download. */
+export default function DownloadProgressStatus({presentation: state, compact = false, details = true, labelOverride}: {
+    presentation: DownloadPresentation; compact?: boolean; details?: boolean; labelOverride?: string
 }) {
-    const state = download.presentation
     const label = labelOverride ?? (compact ? state.compactLabel || state.label : state.label)
     return <span className={`download-progress download-progress-status${compact ? ' is-compact' : ''}`}>
         <span className="download-progress-heading">
