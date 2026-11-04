@@ -466,8 +466,8 @@ def update_episode(s: Session, episode_slug: str, body: EpisodeAPIUpdate) -> Epi
 
         if new_status is EpisodePublishStatus.PUBLISHED_FINAL:
             queue_event(s, "episode.published_final", event_data)
-        elif new_status is EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN:
-            queue_event(s, "episode.published_with_countdown", event_data)
+        elif new_status is EpisodePublishStatus.PUBLISHED_PRELIMINARY:
+            queue_event(s, "episode.published_preliminary", event_data)
 
     request_collection_custom_index_reconciliation(s, episode.collection_id)
     return _episode_api_read(episode)

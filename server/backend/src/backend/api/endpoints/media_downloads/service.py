@@ -625,14 +625,14 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
         raise HTTPException(status_code=404, detail="Episode not found")
     if episode.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value:
         raise HTTPException(status_code=422, detail="Episode has no usable media")
-    if episode.publish_status == EpisodePublishStatus.DW_PROCESSING.value:
+    if episode.publish_status == EpisodePublishStatus.SOURCE_PROCESSING.value:
         raise HTTPException(status_code=422, detail="Episode media is still processing on Daily Wire")
     _ensure_downloadable(episode)
 
     profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.COLLECTION, episode.source_key)
     redownload_when_final = (
         body.redownload_when_final
-        and episode.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN.value
+        and episode.publish_status == EpisodePublishStatus.PUBLISHED_PRELIMINARY.value
     )
     redownload_when_delay_passed = (
         body.redownload_when_delay_passed

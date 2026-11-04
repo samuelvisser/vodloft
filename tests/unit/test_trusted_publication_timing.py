@@ -105,7 +105,7 @@ def test_monitor_records_safe_live_end_and_published_final_separately():
         track_monitor_publication_timing(
             episode,
             old_status=EpisodePublishStatus.LIVE.value,
-            new_status=EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
+            new_status=EpisodePublishStatus.PUBLISHED_PRELIMINARY,
             observed_at=live_ended,
         )
         assert episode.safe_live_ended == live_ended
@@ -113,7 +113,7 @@ def test_monitor_records_safe_live_end_and_published_final_separately():
 
         track_monitor_publication_timing(
             episode,
-            old_status=EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN.value,
+            old_status=EpisodePublishStatus.PUBLISHED_PRELIMINARY.value,
             new_status=EpisodePublishStatus.PUBLISHED_FINAL,
             observed_at=published_final,
         )
@@ -235,7 +235,7 @@ def test_new_lifecycle_does_not_reuse_prior_live_monitor_evidence():
         track_monitor_publication_timing(
             episode,
             old_status=EpisodePublishStatus.LIVE.value,
-            new_status=EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
+            new_status=EpisodePublishStatus.PUBLISHED_PRELIMINARY,
             observed_at=datetime(2026, 10, 2, 10, 1, tzinfo=timezone.utc),
         )
 
@@ -264,7 +264,7 @@ def test_restart_materializes_last_known_pending_without_claiming_safe_final():
 
         track_monitor_publication_timing(
             episode,
-            old_status=EpisodePublishStatus.DW_PROCESSING.value,
+            old_status=EpisodePublishStatus.SOURCE_PROCESSING.value,
             new_status=EpisodePublishStatus.PUBLISHED_FINAL,
             observed_at=first_final_observation,
         )
@@ -298,7 +298,7 @@ def test_best_effort_uses_later_dailywire_date_than_interrupted_pending_observat
 
         track_monitor_publication_timing(
             episode,
-            old_status=EpisodePublishStatus.DW_PROCESSING.value,
+            old_status=EpisodePublishStatus.SOURCE_PROCESSING.value,
             new_status=EpisodePublishStatus.PUBLISHED_FINAL,
             observed_at=first_final_observation,
         )
@@ -322,7 +322,7 @@ def test_episode_lifecycle_records_final_without_monitor_continuity():
             session,
             episode=episode,
             collection=episode.collection,
-            old_status=EpisodePublishStatus.DW_PROCESSING.value,
+            old_status=EpisodePublishStatus.SOURCE_PROCESSING.value,
             new_status=EpisodePublishStatus.PUBLISHED_FINAL,
             was_created=False,
         )

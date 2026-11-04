@@ -360,7 +360,7 @@ def request_collection_download_all(
         Episode.collection_id == collection.id,
         Episode.publish_status.in_((
             EpisodePublishStatus.PUBLISHED_FINAL,
-            EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
+            EpisodePublishStatus.PUBLISHED_PRELIMINARY,
         )),
         episode_identifier_type_predicate(Episode.episode_identifier, set(body.episode_types)),
         # Media protected by DRM, or no longer at the Source, cannot be downloaded.
@@ -476,7 +476,7 @@ def _select_collection_downloads_older_than(
         Episode.collection_id == scope.collection.id,
         Episode.publish_status.in_((
             EpisodePublishStatus.PUBLISHED_FINAL,
-            EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
+            EpisodePublishStatus.PUBLISHED_PRELIMINARY,
         )),
         published_at.is_not(None),
     )

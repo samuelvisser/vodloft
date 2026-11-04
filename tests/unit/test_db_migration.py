@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from pathlib import Path
 
 import pytest
@@ -24,7 +26,8 @@ VODLOFT_0_1_0_REVISION = "f4abb559e3ab"
 VODLOFT_0_5_0_REVISION = "817515eb8209"
 VODLOFT_0_6_0_REVISION = "d0f28c7f863e"
 VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
-HEAD_REVISION = "5b75b63e55f2"
+SITE_REFRESH_REVISION = "5b75b63e55f2"
+HEAD_REVISION = "b9dbb772c34e"
 
 
 @pytest.fixture
@@ -485,3 +488,53 @@ def test_site_refresh_migration_gives_the_daily_wire_and_youtube_their_own_sched
         ]
         columns = {row.name: row for row in connection.execute(text("PRAGMA table_info(media_items_video)"))}
         assert columns["metadata_is_final"].dflt_value == "'1'"
+
+
+def test_publish_statuses_get_names_every_source_shares(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, SITE_REFRESH_REVISION)
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA foreign_keys = OFF"))
+        for episode_id, status in ((10, "dw_processing"), (11, "published_with_countdown"), (12, "published_final")):
+            connection.execute(text(
+                "INSERT INTO media_items_episode (id, collection_id, season_id, \"index\", episode_identifier, slug, "
+                "publish_status, sharing_url, source_slug) VALUES (:id, 1, 1, :id, 'ep.' || :id, 'e' || :id, "
+                ":status, 'https://example.test', 'e' || :id)"
+            ), {"id": episode_id, "status": status})
+        connection.execute(text(
+            "INSERT INTO media_downloads_episode (id, downloaded_publish_status) VALUES (1, 'published_with_countdown')"
+        ))
+        connection.execute(text(
+            "INSERT INTO media_download_history (id, media_download_id, action, metadata, occurred_at) VALUES "
+            "(1, 1, 'started', '{\"started_publish_status\": \"published_with_countdown\", \"is_redownload\": true}', "
+            "'2026-11-04 10:00:00')"
+        ))
+        connection.execute(text(
+            "INSERT INTO task_operations (id, kind, source, resource_type, title, status, context, result) VALUES "
+            "('op-1', 'episode.early_delete', 'user', 'episode', 'Early delete', 'succeeded', "
+            "'{\"episode_publish_status\": \"dw_processing\"}', '{\"publish_status\": \"published_with_countdown\"}')"
+        ))
+        connection.execute(text(
+            "INSERT INTO metadata (parent_table, parent_id, key, value) VALUES "
+            "('media_items_episode', 10, 'ep_status.dw_processing.slug', 'e10')"
+        ))
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        assert dict(connection.execute(text("SELECT id, publish_status FROM media_items_episode")).all()) == {
+            10: "source_processing", 11: "published_preliminary", 12: "published_final",
+        }
+        assert connection.execute(text(
+            "SELECT downloaded_publish_status FROM media_downloads_episode"
+        )).scalar_one() == "published_preliminary"
+        assert json.loads(connection.execute(text("SELECT metadata FROM media_download_history")).scalar_one()) == {
+            "started_publish_status": "published_preliminary", "is_redownload": True,
+        }
+        context, result = connection.execute(text("SELECT context, result FROM task_operations")).one()
+        assert json.loads(context) == {"episode_publish_status": "source_processing"}
+        assert json.loads(result) == {"publish_status": "published_preliminary"}
+        assert connection.execute(text("SELECT key FROM metadata")).scalar_one() == "ep_status.source_processing.slug"

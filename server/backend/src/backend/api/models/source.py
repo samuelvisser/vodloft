@@ -165,6 +165,12 @@ class EpisodeTagAPIRead(ResponseBase):
     main: bool
 
 
+class PublishStatusLabelAPIRead(ResponseBase):
+    status: str
+    label: str
+    help: str
+
+
 class ApiQuotaShareAPIRead(ResponseBase):
     name: str
     used: int

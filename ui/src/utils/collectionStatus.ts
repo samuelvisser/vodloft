@@ -15,10 +15,10 @@ export function statusIcon(status: string) {
             return faIcon('fass', 'circle-video')
         case 'no_usable_media':
             return faIcon('fass', 'circle-exclamation')
-        case 'dw_processing':
+        case 'source_processing':
         case 'local_processing':
             return faIcon('fass', 'spinner')
-        case 'published_with_countdown':
+        case 'published_preliminary':
         case 'published_final':
             return faIcon('fass', 'circle-play')
         case 'downloaded':
@@ -47,7 +47,7 @@ export function statusLabel(status: string) {
             return 'Officially delayed'
         case 'live':
             return 'Live'
-        case 'published_with_countdown':
+        case 'published_preliminary':
         case 'published_final':
             return 'Published'
         case 'downloaded':
@@ -61,7 +61,7 @@ export function statusLabel(status: string) {
             return 'Downloading'
         case 'no_usable_media':
             return 'No usable media'
-        case 'dw_processing':
+        case 'source_processing':
             return 'The source is still processing the episode'
         case 'local_processing':
             return 'Locally processing the episode'

@@ -173,7 +173,7 @@ def _queue_startup_recovery(s: Session) -> None:
 def _no_usable_reason(detail, observed_status: EpisodePublishStatus) -> NoUsableMediaReason:
     if is_no_show_today_slug(detail.slug):
         return NoUsableMediaReason.NO_SHOW_TODAY
-    if observed_status is EpisodePublishStatus.DW_PROCESSING:
+    if observed_status is EpisodePublishStatus.SOURCE_PROCESSING:
         return NoUsableMediaReason.PROCESSING_TIMEOUT
     return NoUsableMediaReason.MEDIA_UNUSABLE
 

@@ -76,7 +76,7 @@ def _published_at():
 def _availability(selection: EpisodeSelection, stmt: Select) -> Select:
     eligible_statuses = [EpisodePublishStatus.PUBLISHED_FINAL]
     if selection.download_with_countdown:
-        eligible_statuses.append(EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN)
+        eligible_statuses.append(EpisodePublishStatus.PUBLISHED_PRELIMINARY)
     stmt = stmt.where(
         Episode.publish_status.in_(eligible_statuses),
         # Media protected by DRM cannot be downloaded.
