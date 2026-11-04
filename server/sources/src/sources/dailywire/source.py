@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from types import MappingProxyType
 
-from ..contract import MAIN_TAG, EpisodeMedia, EpisodeTag, Feature, LinkKind, Playback, ResolvedLink, RssEpisodeType, Site, Source
+from ..contract import (
+    MAIN_TAG, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback, PublishStatusLabel, ResolvedLink,
+    RssEpisodeType, Site, Source, publish_status_labels_with,
+)
 from .api.dw_api.client import MiddlewareClient
 from .api.dw_api.movie import MovieMiddlewareClient
 from .auth import DeviceAuthClient
@@ -37,6 +40,20 @@ class DailyWireSource(Source):
             rss_episode_type=RssEpisodeType.TRAILER,
         ),
         EpisodeTag("aux", "Auxiliary", "Extra content for the show", rss_episode_type=RssEpisodeType.BONUS),
+    )
+    publish_status_labels = publish_status_labels_with(
+        PublishStatusLabel(EpisodePublishStatus.SCHEDULED, "Scheduled", "The Daily Wire has scheduled the episode."),
+        PublishStatusLabel(
+            EpisodePublishStatus.DELAYED, "Officially delayed", "The Daily Wire has delayed the start of the episode.",
+        ),
+        PublishStatusLabel(
+            EpisodePublishStatus.SOURCE_PROCESSING, "Processing at The Daily Wire",
+            "The episode has ended, but The Daily Wire is still preparing the recording.",
+        ),
+        PublishStatusLabel(
+            EpisodePublishStatus.PUBLISHED_PRELIMINARY, "Published (still contains countdown)",
+            "Published, but the recording still opens with the countdown. VODLoft downloads it again once The Daily Wire removes it.",
+        ),
     )
 
     def collection_ref(self, url: str) -> str | None:

@@ -28,7 +28,7 @@ def episode_download_delay_ready_at(episode: Episode) -> datetime | None:
                 publication_time = best_effort_published_date(episode)
         else:
             publication_time = best_effort_published_date(episode)
-    elif episode.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN:
+    elif episode.publish_status == EpisodePublishStatus.PUBLISHED_PRELIMINARY:
         publication_time = episode.safe_live_ended
         if publication_time is None and episode.published_date is not None:
             publication_time = utc_datetime(episode.published_date)

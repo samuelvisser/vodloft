@@ -99,7 +99,7 @@ def test_feed_limit_scans_past_ineligible_newest_items():
     now = datetime(2026, 1, 1, 12, 0, 0)
     episodes = [_episode(index, now - timedelta(minutes=index)) for index in range(60)]
     for episode in episodes[:55]:
-        episode.publish_status = "dw_processing"
+        episode.publish_status = "source_processing"
 
     items = get_feed_items(_FakeSession(episodes), _profile(2))
 

@@ -88,7 +88,7 @@ def test_monitor_timing_uses_first_trusted_exit_from_live():
     track_monitor_publication_timing(
         episode,
         old_status=EpisodePublishStatus.LIVE.value,
-        new_status=EpisodePublishStatus.DW_PROCESSING,
+        new_status=EpisodePublishStatus.SOURCE_PROCESSING,
         observed_at=live_ended,
     )
 
@@ -97,7 +97,7 @@ def test_monitor_timing_uses_first_trusted_exit_from_live():
 
     track_monitor_publication_timing(
         episode,
-        old_status=EpisodePublishStatus.DW_PROCESSING.value,
+        old_status=EpisodePublishStatus.SOURCE_PROCESSING.value,
         new_status=EpisodePublishStatus.PUBLISHED_FINAL,
         observed_at=became_final,
     )
@@ -183,7 +183,7 @@ def test_monitor_timing_does_not_trust_live_state_from_previous_process():
     track_monitor_publication_timing(
         episode,
         old_status=EpisodePublishStatus.LIVE.value,
-        new_status=EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
+        new_status=EpisodePublishStatus.PUBLISHED_PRELIMINARY,
         observed_at=datetime(2026, 10, 2, 9, 0, tzinfo=timezone.utc),
     )
 

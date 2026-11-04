@@ -59,13 +59,13 @@ def test_identifier_change_event_only_fires_after_initial_publication(monkeypatc
     )
 
     episode.episode_identifier = "ep-extra.other.2500.1"
-    episode.publish_status = EpisodePublishStatus.DW_PROCESSING.value
+    episode.publish_status = EpisodePublishStatus.SOURCE_PROCESSING.value
     events.queue_episode_status_events(
         object(),
         episode=episode,
         collection=episode.collection,
         old_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
-        new_status=EpisodePublishStatus.DW_PROCESSING,
+        new_status=EpisodePublishStatus.SOURCE_PROCESSING,
         was_created=False,
     )
     assert metadata["ep_status.was_published"] == "1"
@@ -75,7 +75,7 @@ def test_identifier_change_event_only_fires_after_initial_publication(monkeypatc
         object(),
         episode,
         object(),
-        previous_publish_status=EpisodePublishStatus.DW_PROCESSING.value,
+        previous_publish_status=EpisodePublishStatus.SOURCE_PROCESSING.value,
     ) is True
 
     matching = [

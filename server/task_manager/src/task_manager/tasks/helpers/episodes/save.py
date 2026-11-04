@@ -156,7 +156,7 @@ def resolve_dw_episodes(
                 if status is EpisodePublishStatus.NO_USABLE_MEDIA:
                     if is_no_show_today_slug(detail.slug):
                         reason = NoUsableMediaReason.NO_SHOW_TODAY
-                    elif observed.status is EpisodePublishStatus.DW_PROCESSING:
+                    elif observed.status is EpisodePublishStatus.SOURCE_PROCESSING:
                         reason = NoUsableMediaReason.PROCESSING_TIMEOUT
                     else:
                         reason = NoUsableMediaReason.MEDIA_UNUSABLE

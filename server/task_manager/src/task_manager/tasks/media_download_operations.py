@@ -514,7 +514,7 @@ def attach_redownload_dependencies(
         ) else None
         waiting_for_countdown = (
             episode is not None
-            and episode.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN
+            and episode.publish_status == EpisodePublishStatus.PUBLISHED_PRELIMINARY
         )
         ready_at = (
             episode_download_delay_ready_at(episode)

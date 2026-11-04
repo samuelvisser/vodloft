@@ -89,7 +89,7 @@ def test_countdown_timeout_only_advances_current_countdown_snapshot(monkeypatch)
         downloadable=False,
     )
     observed = status.observe_episode_detail(detail)
-    assert observed.status is EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN
+    assert observed.status is EpisodePublishStatus.PUBLISHED_PRELIMINARY
     assert status.resolve_episode_status(
         detail,
         publication_timing_reference=detail.published_date,
@@ -110,7 +110,7 @@ def test_countdown_timeout_can_use_explicit_safe_live_reference(monkeypatch):
         downloadable=False,
     )
     observed = status.observe_episode_detail(detail)
-    assert observed.status is EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN
+    assert observed.status is EpisodePublishStatus.PUBLISHED_PRELIMINARY
 
     # The Daily Wire timestamp alone would trip the 180-minute fallback. A
     # trusted live-end observation explicitly selected by the caller must not.
@@ -120,7 +120,7 @@ def test_countdown_timeout_can_use_explicit_safe_live_reference(monkeypatch):
         now=now,
         snapshot=observed,
     )
-    assert resolved.status is EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN
+    assert resolved.status is EpisodePublishStatus.PUBLISHED_PRELIMINARY
 
 
 def test_dw_processing_uses_short_metadata_long_hls_and_times_out(monkeypatch):
@@ -138,11 +138,11 @@ def test_dw_processing_uses_short_metadata_long_hls_and_times_out(monkeypatch):
         duration=11.8,
         published_at=datetime.now(timezone.utc) - timedelta(minutes=61),
     )
-    assert status.observe_episode_detail(recent).status is EpisodePublishStatus.DW_PROCESSING
+    assert status.observe_episode_detail(recent).status is EpisodePublishStatus.SOURCE_PROCESSING
     assert status.resolve_episode_status(
         recent,
         publication_timing_reference=recent.published_date,
-    ).status is EpisodePublishStatus.DW_PROCESSING
+    ).status is EpisodePublishStatus.SOURCE_PROCESSING
     assert status.resolve_episode_status(
         stale,
         publication_timing_reference=stale.published_date,
@@ -168,7 +168,7 @@ def test_transition_policy_reuses_the_single_hls_observation(monkeypatch):
         snapshot=observed,
     )
 
-    assert resolved.status is EpisodePublishStatus.DW_PROCESSING
+    assert resolved.status is EpisodePublishStatus.SOURCE_PROCESSING
     get_vod_info.assert_called_once_with(detail.video_url)
 
 

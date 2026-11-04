@@ -52,7 +52,7 @@ def test_published_status_update_requests_episode_scope_without_worker_specific_
             "episode.status_updated",
             resource_id=501,
             collection_id=12,
-            status="published_with_countdown",
+            status="published_preliminary",
         ),
     ) == [
         (
@@ -121,7 +121,7 @@ def test_collection_scope_subsumes_profile_and_episode_scopes_for_same_collectio
             collection_id=12,
         ),
         _event(
-            "episode.published_with_countdown",
+            "episode.published_preliminary",
             resource_id=501,
             collection_id=12,
         ),
