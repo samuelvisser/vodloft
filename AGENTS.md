@@ -178,6 +178,13 @@ Keep both `faIcon()` arguments statically analyzable: use literal strings or con
 ## Releasing a new version
 Whenever we are about to release a new version, keep the following in mind.
 
+### Release notes
+Every release's notes end their **Upgrading** section with the step-by-step instructions that
+`./release.py upgrade-steps --version X.Y.Z` prints (see RELEASING.md): two commands that pull the release's own image
+tag, tag it as `latest` and start it, plus a link to the step-by-step guide in the wiki. Keep release notes short:
+write release-specific upgrade notes above them, put longer explanations in the wiki, and never replace them with a
+bare `docker compose pull`, which takes whatever version is newest.
+
 ### AGENT branches cleanup
 All branches created by agents, for example `codex/*` branches, usually need a cleanup before a release.
 
