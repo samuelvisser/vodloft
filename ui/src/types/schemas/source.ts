@@ -161,6 +161,14 @@ export const EpisodeTagReadSchema = z.object({
 })
 export type EpisodeTagRead = z.infer<typeof EpisodeTagReadSchema>
 
+/** What a Source calls one publish status, such as The Daily Wire's "Published (still contains countdown)". */
+export const PublishStatusLabelReadSchema = z.object({
+    status: z.string(),
+    label: z.string(),
+    help: z.string(),
+})
+export type PublishStatusLabelRead = z.infer<typeof PublishStatusLabelReadSchema>
+
 export function episodeTagLabel(tags: readonly EpisodeTagRead[] | undefined, key: string): string {
     return tags?.find((tag) => tag.key === key)?.label ?? key
 }

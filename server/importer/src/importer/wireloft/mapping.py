@@ -40,6 +40,8 @@ _TEMPLATE_PREFIXES = (("meta_show_", "meta_collection_"),)
 # Stored values VODLoft renamed (VODLoft's stored-names migration).
 _MEMBERSHIP_LEVELS = {"WL_ANY": "HIGHEST_ALLOWED"}
 _HISTORY_ACTIONS = {"cancelled": "canceled"}
+_PUBLISH_STATUSES = {"dw_processing": "source_processing", "published_with_countdown": "published_preliminary"}
+_METADATA_KEYS = {"ep_status.dw_processing.slug": "ep_status.source_processing.slug"}
 _VALUE_PREFIXES = (
     ("wireloft:last_known_pending:", "vodloft:last_known_pending:"),
     ("wireloft:recorded_published_final:", "vodloft:recorded_published_final:"),
@@ -111,6 +113,17 @@ def _value(value: str) -> str:
         if value.startswith(old):
             return new + value[len(old):]
     return value
+
+
+def _publish_status(value: object) -> object:
+    return _PUBLISH_STATUSES.get(value, value) if isinstance(value, str) else value
+
+
+def _history_metadata(value: object) -> object:
+    metadata = _json(value)
+    if isinstance(metadata, dict) and "started_publish_status" in metadata:
+        return {**metadata, "started_publish_status": _publish_status(metadata["started_publish_status"])}
+    return metadata
 
 
 def _ref(kind: str, row_id: object) -> Reference:
@@ -224,7 +237,7 @@ def _split_episode_metadata(meta: Mapping[str, str]) -> tuple[dict[str, str], tu
         if match:
             assignments.append((f"local_media_profile:{match['profile']}", "custom_index.", f".{match['key']}", value))
         elif key != _SOURCE_SLUG_KEY:
-            own[key] = _value(value)
+            own[_METADATA_KEYS.get(key, key)] = _value(value)
     return own, tuple(assignments)
 
 
@@ -238,6 +251,7 @@ def _episodes(data: WireLoftData) -> list[RecordPlan]:
         episode_meta = meta.get(episode_id, {})
         own, assignments = _split_episode_metadata(episode_meta)
         values = {name: row[name] for name in _EPISODE_FIELDS}
+        values["publish_status"] = _publish_status(values["publish_status"])
         values.update(uuid=item["uuid"], type=item["type"], source_key=SOURCE,
                       source_slug=episode_meta.get(_SOURCE_SLUG_KEY) or row["slug"])
         records.append(RecordPlan(
@@ -375,15 +389,14 @@ def _downloads(data: WireLoftData, paths: _Paths) -> list[RecordPlan]:
         }
         if kind == "episode" and download_id in episode_downloads:
             extra = episode_downloads[download_id]
-            values.update({name: extra[name] for name in (
-                "downloaded_publish_status", "redownload_when_final", "redownload_when_delay_passed",
-            )})
+            values.update({name: extra[name] for name in ("redownload_when_final", "redownload_when_delay_passed")})
+            values["downloaded_publish_status"] = _publish_status(extra["downloaded_publish_status"])
             if extra.get("download_profile_id"):
                 references["download_profile_id"] = _ref("download_profile", extra["download_profile_id"])
         children = tuple(
             RecordPlan("download_history", str(item["id"]), values={
                 "action": _HISTORY_ACTIONS.get(item["action"], item["action"]),
-                "metadata": _json(item["metadata"]), "occurred_at": item["occurred_at"],
+                "metadata": _history_metadata(item["metadata"]), "occurred_at": item["occurred_at"],
             })
             for item in history.get(download_id, [])
         ) + tuple(

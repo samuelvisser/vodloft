@@ -13,7 +13,7 @@ from task_manager.events.transactional import queue_event
 EPISODE_IDENTIFIER_CHANGED_EVENT = "episode.identifier_changed"
 _EPISODE_WAS_PUBLISHED_META_KEY = "ep_status.was_published"
 _PUBLISHED_STATUSES = frozenset({
-    EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN.value,
+    EpisodePublishStatus.PUBLISHED_PRELIMINARY.value,
     EpisodePublishStatus.PUBLISHED_FINAL.value,
 })
 
@@ -116,7 +116,7 @@ def queue_episode_status_events(
 
     Mirrors the single source of truth for "an episode appeared or changed phase":
     ``episode.added`` on creation, and ``episode.status_updated`` plus the
-    phase-specific ``published_with_countdown`` / ``published_final`` events whenever
+    phase-specific ``published_preliminary`` / ``published_final`` events whenever
     the resolved status differs from the previous one. Job-lifecycle events (such as
     the monitor-completed event) are intentionally left to their owning worker.
 
@@ -145,7 +145,7 @@ def queue_episode_status_events(
 
     if old_status != new_status.value:
         queue_event(s, "episode.status_updated", event_data)
-        if new_status is EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN:
-            queue_event(s, "episode.published_with_countdown", event_data)
+        if new_status is EpisodePublishStatus.PUBLISHED_PRELIMINARY:
+            queue_event(s, "episode.published_preliminary", event_data)
         elif new_status is EpisodePublishStatus.PUBLISHED_FINAL:
             queue_event(s, "episode.published_final", event_data)

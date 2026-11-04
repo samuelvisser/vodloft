@@ -3,18 +3,22 @@ export enum EpisodePublishStatus {
     delayed = 'Delayed',
     live = 'Live',
     noUsableMedia = 'No usable media',
-    dwProcessing = 'Processing at the source',
-    publishedWithCountdown = 'Published (with countdown)',
+    sourceProcessing = 'Processing at the source',
+    publishedPreliminary = 'Preliminary version',
     publishedFinal = 'Published',
 }
 
-/** Wire values (snake_case, as sent by the backend) of an episode's publishStatus. */
+/**
+ * Neutral names for the wire values (snake_case, as sent by the backend) of an episode's publishStatus,
+ * for places that do not know the episode's Source. Where the Source is known, use its own names
+ * from usePublishStatusLabels.
+ */
 export const PUBLISH_STATUS_LABELS: Record<string, string> = {
-    scheduled: 'Scheduled',
-    delayed: 'Officially delayed',
+    scheduled: 'Upcoming',
+    delayed: 'Delayed',
     live: 'Live',
     no_usable_media: 'No usable media',
-    dw_processing: 'Processing at the source',
-    published_with_countdown: 'Published (still contains countdown)',
+    source_processing: 'Processing at the source',
+    published_preliminary: 'Preliminary version',
     published_final: 'Published',
 }

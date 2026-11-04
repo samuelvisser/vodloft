@@ -392,7 +392,7 @@ def test_collection_download_all_countdown_wait_transitions_to_post_publication_
     session, add_collection, add_season, add_episode, add_profile = library
     collection = add_collection("podcast", "podcast")
     season = add_season(collection, 1)
-    episode = add_episode(collection, season, 1, "ep.1", status="published_with_countdown")
+    episode = add_episode(collection, season, 1, "ep.1", status="published_preliminary")
     profile = add_profile("audio")
     monkeypatch.setattr(
         media_download_operations,
@@ -437,7 +437,7 @@ def test_collection_download_all_countdown_without_safety_delay_becomes_queued(l
     session, add_collection, add_season, add_episode, add_profile = library
     collection = add_collection("series", "series")
     season = add_season(collection, 1)
-    episode = add_episode(collection, season, 1, "ep.S01E01", status="published_with_countdown")
+    episode = add_episode(collection, season, 1, "ep.S01E01", status="published_preliminary")
     profile = add_profile("series", "series")
     monkeypatch.setattr(media_download_operations, "episode_download_delay_ready_at", lambda _episode: None)
 
@@ -529,7 +529,7 @@ def test_bulk_download_does_not_rearm_countdown_after_explicit_download_now(libr
     session, add_collection, add_season, add_episode, add_profile = library
     collection = add_collection("podcast", "podcast")
     season = add_season(collection, 1)
-    add_episode(collection, season, 1, "ep.1", status="published_with_countdown")
+    add_episode(collection, season, 1, "ep.1", status="published_preliminary")
     profile = add_profile("audio")
     first = request_collection_download_all(session, collection.slug, _request(profile.id, types=["ep"]))
     first_child = _dependencies(session, first["operation_id"])[0].child_operation

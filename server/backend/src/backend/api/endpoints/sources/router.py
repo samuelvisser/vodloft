@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.models.source import (
     SiteOptionsAPIRead, YtdlpOptionLineAPIRead, YtdlpOptionsAPIRead, YtdlpOptionsAPIUpdate, YtdlpOptionsCheckAPIRequest,
-    ApiKeyAPIUpdate, ApiStatusAPIRead, CookiesAPIRead, EpisodeTagAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultsAPIRead,
+    ApiKeyAPIUpdate, ApiStatusAPIRead, CookiesAPIRead, EpisodeTagAPIRead, PublishStatusLabelAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultsAPIRead,
     CollectionDetailsAPIRead, SourceAPIRead, SourceDomainAPIRead, SourceDomainAPIUpdate,
 )
 from backend.app import db_session
@@ -79,6 +79,16 @@ def episode_tags(source_id: str, url: str | None = Query(default=None, max_lengt
     except UnknownSourceError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return [EpisodeTagAPIRead.model_validate(tag) for tag in source.episode_tags_for(url)]
+
+
+@router.get("/sources/{source_id}/publish-statuses", dependencies=[signed_in()], response_model=list[PublishStatusLabelAPIRead])
+def publish_statuses(source_id: str):
+    """What the Source calls each publish status, such as Scheduled or Published (still contains countdown)."""
+    try:
+        source = get_source(source_id)
+    except UnknownSourceError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return [PublishStatusLabelAPIRead.model_validate(label) for label in source.publish_status_labels]
 
 
 @router.get("/sources/{source_id}/site-options", dependencies=[requires_any((Area.LIBRARY, Level.VIEW), (Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW))], response_model=SiteOptionsAPIRead)

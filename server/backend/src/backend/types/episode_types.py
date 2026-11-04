@@ -1,49 +1,29 @@
 from enum import StrEnum
 
+from sources.contract import EpisodePublishStatus
+
+__all__ = [
+    "EpisodeExtraType", "EpisodePublishStatus", "PENDING_EPISODE_PUBLISH_STATUSES",
+    "POST_LIVE_EPISODE_PUBLISH_STATUSES", "PRE_PUBLISH_EPISODE_PUBLISH_STATUSES",
+]
+
 
 class EpisodeExtraType(StrEnum):
     OTHER = "other"
     TRAILER = "trailer"
 
 
-class EpisodePublishStatus(StrEnum):
-    # Daily Wire explicitly reports the episode as scheduled.
-    SCHEDULED = "scheduled"
-
-    # Daily Wire reports PUBLISHED while but its slug contains delayed-start,
-    # meaning this episode is delayed.
-    DELAYED = "delayed"
-
-    # Daily Wire explicitly reports the episode as live.
-    LIVE = "live"
-
-    # VODLoft quarantines the episode because Daily Wire currently exposes no settled usable media.
-    NO_USABLE_MEDIA = "no_usable_media"
-
-    # Daily Wire reports PUBLISHED while metadata duration is still below 12 seconds,
-    # but the actual HLS playlist is already longer than 12 seconds.
-    DW_PROCESSING = "dw_processing"
-
-    # Daily Wire reports PUBLISHED with settled usable media, but the episode is
-    # still not marked downloadable and therefore still represents countdown media.
-    PUBLISHED_WITH_COUNTDOWN = "published_with_countdown"
-
-    # Daily Wire reports PUBLISHED with settled usable media, and the episode is downloadable,
-    # or VODLoft's countdown-only final safeguard has elapsed.
-    PUBLISHED_FINAL = "published_final"
-
-
 PENDING_EPISODE_PUBLISH_STATUSES = frozenset({
     EpisodePublishStatus.SCHEDULED,
     EpisodePublishStatus.DELAYED,
     EpisodePublishStatus.LIVE,
-    EpisodePublishStatus.DW_PROCESSING,
-    EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
+    EpisodePublishStatus.SOURCE_PROCESSING,
+    EpisodePublishStatus.PUBLISHED_PRELIMINARY,
 })
 
 POST_LIVE_EPISODE_PUBLISH_STATUSES = frozenset({
-    EpisodePublishStatus.DW_PROCESSING,
-    EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
+    EpisodePublishStatus.SOURCE_PROCESSING,
+    EpisodePublishStatus.PUBLISHED_PRELIMINARY,
     EpisodePublishStatus.PUBLISHED_FINAL,
 })
 

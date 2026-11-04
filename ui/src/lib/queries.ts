@@ -59,7 +59,7 @@ import {TaskOperationRead} from "../types/schemas/operation";
 import {MovieRead, MovieReadSchema} from "../types/schemas/movie";
 import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
-    ApiStatusRead, ApiStatusReadSchema, CookiesRead, EpisodeTagRead, EpisodeTagReadSchema, CookiesReadSchema, ProgramStatusRead, SourceProblemRead,
+    ApiStatusRead, ApiStatusReadSchema, CookiesRead, EpisodeTagRead, EpisodeTagReadSchema, PublishStatusLabelRead, PublishStatusLabelReadSchema, CookiesReadSchema, ProgramStatusRead, SourceProblemRead,
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
     ResolvedLinkReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceDomainRead, SourceDomainReadSchema, SourceRead,
     SourceReadSchema,
@@ -371,6 +371,21 @@ export function useEpisodeTags(sourceKey?: string | null, url?: string | null) {
             EpisodeTagReadSchema.array(),
             signal,
         ),
+    })
+}
+
+/** What a Source calls each publish status, by status. */
+export function usePublishStatusLabels(sourceKey?: string | null) {
+    return useQuery<PublishStatusLabelRead[], Error, Record<string, PublishStatusLabelRead>, readonly ['publishStatusLabels', string]>({
+        queryKey: ['publishStatusLabels', sourceKey ?? ''] as const,
+        enabled: !!sourceKey,
+        staleTime: Infinity,
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceKey ?? '')}/publish-statuses`,
+            PublishStatusLabelReadSchema.array(),
+            signal,
+        ),
+        select: (labels) => Object.fromEntries(labels.map((label) => [label.status, label])),
     })
 }
 

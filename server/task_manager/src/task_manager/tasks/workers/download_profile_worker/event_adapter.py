@@ -15,7 +15,7 @@ DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT = "download_profile.run_requested"
 
 DownloadProfileRunResourceType = Literal["download_profile", "collection", "episode"]
 _PUBLISHED_DOWNLOAD_STATUSES = frozenset({
-    EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN.value,
+    EpisodePublishStatus.PUBLISHED_PRELIMINARY.value,
     EpisodePublishStatus.PUBLISHED_FINAL.value,
 })
 _PROFILE_EVENTS = frozenset({
@@ -23,7 +23,7 @@ _PROFILE_EVENTS = frozenset({
     "download_profile.updated",
 })
 _EPISODE_EVENTS = frozenset({
-    "episode.published_with_countdown",
+    "episode.published_preliminary",
     "episode.published_final",
 })
 

@@ -91,6 +91,61 @@ class EpisodeTag:
     main: bool = False
 
 
+class EpisodePublishStatus(StrEnum):
+    """Where an episode is in its life at the Source. Each Source names these its own way."""
+
+    SCHEDULED = "scheduled"
+    """Announced for a later time, such as an upcoming livestream or premiere."""
+    DELAYED = "delayed"
+    """Its planned start has passed, but it has not started."""
+    LIVE = "live"
+    """Live right now."""
+    SOURCE_PROCESSING = "source_processing"
+    """Finished, but the Source is still preparing the recording."""
+    PUBLISHED_PRELIMINARY = "published_preliminary"
+    """Published and downloadable, but the Source will still replace the media, such as
+    a Daily Wire episode that still opens with its countdown."""
+    PUBLISHED_FINAL = "published_final"
+    """Published for good."""
+    NO_USABLE_MEDIA = "no_usable_media"
+    """The Source has nothing usable for it right now; VODLoft keeps checking for a while."""
+
+
+@dataclass(frozen=True)
+class PublishStatusLabel:
+    """How a Source names one publish status, with a sentence about what it means there."""
+
+    status: EpisodePublishStatus
+    label: str
+    help: str
+
+
+DEFAULT_PUBLISH_STATUS_LABELS: tuple[PublishStatusLabel, ...] = (
+    PublishStatusLabel(EpisodePublishStatus.SCHEDULED, "Upcoming", "Announced for a later time."),
+    PublishStatusLabel(EpisodePublishStatus.DELAYED, "Delayed", "Its planned start has passed, but it has not started yet."),
+    PublishStatusLabel(EpisodePublishStatus.LIVE, "Live", "Live right now."),
+    PublishStatusLabel(
+        EpisodePublishStatus.SOURCE_PROCESSING, "Processing at the source",
+        "Finished, but the source is still preparing the recording.",
+    ),
+    PublishStatusLabel(
+        EpisodePublishStatus.PUBLISHED_PRELIMINARY, "Preliminary version",
+        "Published, but the source will still replace the media with a final version.",
+    ),
+    PublishStatusLabel(EpisodePublishStatus.PUBLISHED_FINAL, "Published", "Published for good."),
+    PublishStatusLabel(
+        EpisodePublishStatus.NO_USABLE_MEDIA, "No usable media",
+        "The source has nothing usable for it right now. VODLoft keeps checking for a while.",
+    ),
+)
+
+
+def publish_status_labels_with(*overrides: PublishStatusLabel) -> tuple[PublishStatusLabel, ...]:
+    """The default labels, with a Source's own names for some statuses in their place."""
+    own = {label.status: label for label in overrides}
+    return tuple(own.get(label.status, label) for label in DEFAULT_PUBLISH_STATUS_LABELS)
+
+
 @dataclass(frozen=True)
 class EpisodeMedia:
     """Where the current media of an episode can be fetched from."""
@@ -411,6 +466,8 @@ class Source(ABC):
     "YouTube, and many more" for yt-dlp."""
     search_label: ClassVar[str | None] = None
     """What the search button names, when that is not the Source's name, such as YouTube for yt-dlp."""
+    publish_status_labels: ClassVar[tuple[PublishStatusLabel, ...]] = DEFAULT_PUBLISH_STATUS_LABELS
+    """What the Source calls each publish status, every status included."""
     kind_names: ClassVar[Mapping[LinkKind, str]] = MappingProxyType({})
     """What the Source calls a kind of media where its own word differs from VODLoft's, such as
     Show for a Daily Wire collection. VODLoft uses these words only where it shows the Source's
