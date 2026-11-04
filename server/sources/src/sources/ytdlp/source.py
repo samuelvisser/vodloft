@@ -40,7 +40,7 @@ _YOUTUBE_TAGS = (
     EpisodeTag("short", "Short", "A YouTube Short", selected_by_default=False, rss_episode_type=RssEpisodeType.BONUS),
     EpisodeTag(
         "livestream", "Livestream",
-        "A livestream or premiere: upcoming, live now or finished. Finishing does not change the tag.",
+        "A livestream: upcoming, live now or finished. Finishing does not change the tag. A premiere is a video.",
     ),
 )
 # yt-dlp reports a livestream that is still live, upcoming or long finished alike.
@@ -489,7 +489,12 @@ class YtDlpSource(Source):
                         yield details
                 continue
             for item in items:
-                if not mapping.is_pending(item):
+                if mapping.is_pending(item):
+                    continue
+                if mapping.may_be_premiere(item):
+                    # yt-dlp calls a finished premiere a video and a livestream a livestream.
+                    yield self._look_up(mapping.video_url(item["id"])) or mapping.video(item, short=False)
+                else:
                     yield mapping.video(item, short=item["id"] in shorts)
 
     def _look_up(self, url: str) -> VideoDetails | None:

@@ -172,7 +172,7 @@ def test_a_channel_is_listed_through_the_api_with_its_shorts_and_livestreams(you
         "short1": _video_item("short1", duration="PT45S"),
         "long-short": _video_item("long-short", duration="PT20M"),
         "live1": _video_item("live1", published="2024-05-01T12:00:00Z", duration="PT2H",
-                             live={"actualStartTime": "2024-05-01T10:00:00Z"}),
+                             live={"actualStartTime": "2024-05-01T10:00:00Z", "actualEndTime": "2024-05-01T12:00:00Z"}),
         "upcoming": _video_item("upcoming", duration="P0D", live={"scheduledStartTime": "2030-01-01T00:00:00Z"},
                                 broadcast="upcoming"),
     })
@@ -191,6 +191,36 @@ def test_a_channel_is_listed_through_the_api_with_its_shorts_and_livestreams(you
     # A first index is paid from the units kept free for adding collections.
     status = quota.status()
     assert (status.usage(Share.RESERVE).used, status.usage(Share.CHECKS).used) == (4, 0)
+
+
+def test_a_premiere_is_a_video_as_ytdlp_says(youtube, lookups):
+    """The API gives a premiere live details just like a livestream, so yt-dlp settles which it was."""
+    answers, calls = lookups
+    youtube.playlists["PL1"] = ["premiere", "stream", "unknown"]
+    premiere = {"scheduledStartTime": "2025-04-03T16:00:00Z", "actualStartTime": "2025-04-03T16:01:00Z",
+                "actualEndTime": "2025-04-03T16:30:00Z"}
+    youtube.videos.update({
+        "premiere": _video_item("premiere", published="2025-04-03T16:00:00Z", duration="PT29M", live=premiere),
+        "unknown": _video_item("unknown", published="2025-04-03T16:00:00Z", duration="PT29M", live=premiere),
+        # A livestream's recording is published after the broadcast, so the API alone knows it was one.
+        "stream": _video_item("stream", published="2025-04-03T18:05:00Z", duration="PT2H", live={
+            "actualStartTime": "2025-04-03T16:00:00Z", "actualEndTime": "2025-04-03T18:00:00Z",
+        }),
+    })
+    answers[("--no-playlist", "https://www.youtube.com/watch?v=premiere")] = {
+        "id": "premiere", "extractor_key": "Youtube", "title": "Premiere", "upload_date": "20250403",
+        "webpage_url": "https://www.youtube.com/watch?v=premiere", "media_type": "video", "live_status": "not_live",
+    }
+
+    found = list(YtDlpSource().list_episodes("https://www.youtube.com/playlist?list=PL1", known=frozenset()))
+
+    # yt-dlp could not look the last one up, so it keeps what the API says, without guessing it was live.
+    assert [(video.slug, video.tag) for video in found] == [
+        ("premiere", MAIN_TAG), ("stream", "livestream"), ("unknown", MAIN_TAG),
+    ]
+    assert [args[-1] for args in calls] == [
+        "https://www.youtube.com/watch?v=premiere", "https://www.youtube.com/watch?v=unknown",
+    ]
 
 
 def test_a_rescan_only_details_new_videos_and_pays_from_the_checks_share(youtube):
