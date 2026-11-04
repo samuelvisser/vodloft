@@ -253,15 +253,14 @@
 }
 
 @media (max-width: 640px) {
-    /* A line keeps its count and icons beside its sentence or dropdowns. Dragging needs a mouse, so phones
-       move a filter with the arrows in its editor and the handle goes. */
+    /* A line keeps its handle, count and icons beside its sentence or dropdowns. */
     .which-episodes-sentence {
         gap: 4px;
         padding: 10px 6px 10px 12px;
     }
 
     .which-episodes-grip {
-        display: none;
+        padding: 6px 4px 6px 0;
     }
 
     .which-episodes-icon {
