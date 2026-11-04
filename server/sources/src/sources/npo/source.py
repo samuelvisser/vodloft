@@ -8,7 +8,7 @@ from types import MappingProxyType
 from urllib.parse import urlsplit
 
 from ..contract import (
-    Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, SearchResults, SeasonRef, CollectionDetails, Source,
+    MIN_NEWEST_EPISODES, Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, SearchResults, SeasonRef, CollectionDetails, Source,
     CookiesStatus, SourceProblem, VideoDetails,
 )
 from .. import ytdlp_runner as runner
@@ -299,6 +299,23 @@ class NpoSource(Source):
             drm = self._season_drm(new)
             for program in new:
                 yield self._video(program, season=ref, drm_protected=drm.get(program["slug"], False))
+
+    def newest_episodes(self, url: str) -> list[VideoDetails]:
+        """The newest season's programmes, which npo.nl lists newest first, and the season before while
+        there are fewer than a handful.
+        DRM is not looked up for these, so none of them is marked protected."""
+        parsed = parse_link(url)
+        if parsed is None or parsed[0] is not LinkKind.COLLECTION:
+            raise NpoError("This is not a link to a series on NPO Start")
+        found: list[VideoDetails] = []
+        for guid, ref in reversed(self._seasons(self._series(parsed[1]))):
+            if len(found) >= MIN_NEWEST_EPISODES:
+                break
+            found += [
+                self._video(program, season=ref)
+                for program in self._client.programs_by_season(guid) if program.get("slug")
+            ]
+        return found
 
     def video_playback(self, *, slug: str, url: str, use_cookies: bool = True) -> Playback:
         parsed = parse_link(url)

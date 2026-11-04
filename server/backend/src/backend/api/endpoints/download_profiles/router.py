@@ -4,6 +4,7 @@ from .service import *
 from .as_view import download_profile_view_router
 from ...models.download_profile import *
 from backend.app import db_session
+from backend.services.example_episodes import example_session
 from backend.security.access import Area, Level
 from backend.security import deps
 from backend.security.deps import requires, requires_any
@@ -38,6 +39,16 @@ def download_profiles_by_collection_slug_list(collection_slug: str):
 @router.post("/which-episodes", dependencies=[requires_any((Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW))], response_model=WhichEpisodesAPIRead)
 def download_profiles_which_episodes(body: WhichEpisodesAPIRequest, request: Request):
     """How many of the Collection's indexed episodes each Which episodes line leaves out, and optionally which."""
+    if body.example_collection is not None:
+        if not deps.request_access(request).allows_source(body.example_collection.source_key):
+            raise HTTPException(status_code=404, detail="Source not found")
+        try:
+            with example_session(body.example_collection.example()) as (s, collection, _examples):
+                return count_which_episodes(s, collection, body)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Could not look up the newest episodes: {exc}") from exc
     with db_session() as s:
         collection = s.get(Collection, body.collection_id)
         if collection is None or not deps.request_access(request).allows_source(collection.source_key):

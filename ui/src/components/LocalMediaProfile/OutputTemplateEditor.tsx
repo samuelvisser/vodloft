@@ -34,6 +34,7 @@ import {
     type JinjaBlockNode,
 } from './outputTemplateFormatting'
 import {getOutputTemplateVariables, type OutputTemplateVariable} from './outputTemplateVariables'
+import {isExampleSource, useCollectionExamples} from '../../lib/collectionExamples'
 import './OutputTemplateEditor.css'
 import './OutputTemplateEditorIde.css'
 
@@ -520,6 +521,8 @@ const FILENAME_MODE_NAMES: Record<string, string> = {
     restricted: 'Restricted',
 }
 
+const NO_SOURCES: LocalMediaProfileTemplateSource[] = []
+
 function describeTypedCharacter(char: string): string {
     if (char === ' ') return 'space'
     if (char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127) return 'control character'
@@ -558,12 +561,21 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
     const [selectedSource, setSelectedSource] = useState<LocalMediaProfileTemplateSource | null>(null)
     const [testValues, setTestValues] = useState<Record<string, string>>({})
     const [testValuesExpanded, setTestValuesExpanded] = useState(false)
+    // While a collection is added, its own newest episodes are the examples, and the preview starts on one.
+    const collectionExamples = useCollectionExamples()
+    const exampleSources = useMemo(
+        () => mode === 'collection' ? collectionExamples?.sources ?? NO_SOURCES : NO_SOURCES,
+        [collectionExamples?.sources, mode],
+    )
+    const chosenSource = useRef(false)
     const sourceQuery = useLocalMediaProfileTemplateSources(mode, {
         collectionScope,
         search: sourceSearch,
-        anchorSourceId: selectedSource?.id,
+        anchorSourceId: isExampleSource(selectedSource) ? undefined : selectedSource?.id,
     })
-    const randomCollectionSourceQuery = useRandomCollectionTemplateSource(collectionScope, mode === 'collection')
+    const randomCollectionSourceQuery = useRandomCollectionTemplateSource(
+        collectionScope, mode === 'collection', localMediaProfileId,
+    )
     const variableQuery = useLocalMediaProfileTemplateVariables(mode)
     const customVariables = (variableQuery.data ?? []) as OutputTemplateVariable[]
     const variables = useMemo(
@@ -745,13 +757,24 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
 
     const sources = useMemo(() => {
         const byId = new Map<string, LocalMediaProfileTemplateSource>()
+        const search = sourceSearch.trim().toLowerCase()
+        for (const source of exampleSources) {
+            if (!search || source.label.toLowerCase().includes(search)) byId.set(source.id, source)
+        }
         for (const page of sourceQuery.data?.pages ?? []) {
             for (const source of page.items) {
                 if (!byId.has(source.id)) byId.set(source.id, source)
             }
         }
         return [...byId.values()]
-    }, [sourceQuery.data])
+    }, [exampleSources, sourceQuery.data, sourceSearch])
+    useEffect(() => {
+        // The examples usually arrive before this step; when they come later, they still replace an example nobody chose.
+        if (chosenSource.current || !exampleSources.length || isExampleSource(selectedSource)) return
+        const example = exampleSources[Math.floor(Math.random() * exampleSources.length)]
+        setSelectedSource(example)
+        setTestValues({...example.values})
+    }, [exampleSources, selectedSource])
     useEffect(() => {
         setSelectedSource(null)
         setTestValues({})
@@ -803,6 +826,17 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
         indexingValues: mode === 'collection' ? indexingValues : null,
     } : null)
     const previewPath = preview.result?.output.outputPath ?? ''
+    // An example of a collection that is not saved yet cannot know its custom indexes, nor the
+    // numbers VODLoft counts from the oldest episode; the preview shows their names instead.
+    const unsavedNames = useMemo(() => {
+        if (!isExampleSource(selectedSource)) return []
+        const output = preview.result?.output
+        const pending = new Set(selectedSource?.pending ?? [])
+        return [...new Set([
+            ...(output?.usedIndexingValues ?? []).filter((name) => !(output?.missingIndexingValues ?? []).includes(name)),
+            ...(output?.usedVariables ?? []).filter((name) => pending.has(name)),
+        ])].sort()
+    }, [preview.result, selectedSource])
     const previewError = preview.error || preview.result?.output.error || ''
     const previewLoading = preview.loading
     const previewIndicatorLoading = selectedSource
@@ -822,6 +856,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
     }, [preview.loading, preview.result])
 
     function chooseSource(source: LocalMediaProfileTemplateSource) {
+        chosenSource.current = true
         setSelectedSource(source)
         setTestValues({...source.values})
     }
@@ -906,6 +941,16 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
                             ))}
                             {provisionalIndexingValueNames.length === 1 ? ' is' : ' are'} simulated from the current draft. Previewing does not save
                             an assignment.
+                        </div>
+                    )}
+                    {unsavedNames.length > 0 && (
+                        <div className="template-preview-status" role="status">
+                            This collection is not saved yet, so the example shows
+                            {' '}{unsavedNames.map((name, index) => (
+                                <span key={name}>{index > 0 ? ', ' : ''}<code>[{name}]</code></span>
+                            ))}{' '}
+                            by name. VODLoft numbers {unsavedNames.length === 1 ? 'it' : 'them'} from all of the
+                            collection's episodes once it is saved.
                         </div>
                     )}
                     {replacedTyped.characters.length > 0 && (

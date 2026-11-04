@@ -24,9 +24,8 @@ from backend.utils.feed_urls import build_rss_feed_url, request_base_url
 from backend.utils.helpers import generate_stream_profile_token
 from task_manager.scheduler.requester import current_requester
 from backend.types.dailywire_user_info import DwMembershipLevel
-from backend.types.season_types import SeasonType
 from sources import Feature, UnknownSourceError, get_source
-from backend.utils.season_ordering import order_initial_seasons, season_type_from_name
+from backend.utils.season_ordering import number_initial_seasons
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.operation_factory import create_operation
 
@@ -75,15 +74,8 @@ def create_collection_bundle(
     # fetch-new-episodes worker runs. Normalize them here so their persistent
     # indices are correct from the moment they are first stored.
     seasons: list[Season] = []
-    regular_season_number = 0
-    for index, season_in in enumerate(order_initial_seasons(payload.seasons), start=1):
+    for season_in, index, season_type, season_number in number_initial_seasons(payload.seasons):
         season = create_database_fields(Season, season_in)
-        season_type = season_type_from_name(season_in.name)
-        if season_type is SeasonType.NORMAL:
-            regular_season_number += 1
-            season_number = regular_season_number
-        else:
-            season_number = 0
         season.index = index
         season.season_type = season_type.value
         season.season_number = season_number

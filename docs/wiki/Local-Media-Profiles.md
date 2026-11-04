@@ -122,6 +122,12 @@ The `/downloads/` prefix maps to VODLoft's configured **Download root**. In a no
 
 The Local Media Profile editor includes a variable picker and path preview. Use those rather than memorizing the full reference below. The preview is especially helpful when optional values or Jinja conditionals are involved.
 
+The preview starts on an episode of a collection that uses the profile, when one does, and you can pick any other
+episode. While you
+add a collection, it starts on one of that collection's newest episodes, which VODLoft looks up in the background
+without saving them. Some numbers are only known once the collection is saved and all of its episodes are indexed, such
+as `episode_index` and custom indexes, so the preview shows their names in brackets, like `[episode_index]`, until then.
+
 ## Optional values and conditionals
 
 Some metadata, such as a release date, may not exist for every item. Missing values are empty, so Jinja conditionals can omit the punctuation or folder that belongs with them.

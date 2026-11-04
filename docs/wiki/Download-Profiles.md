@@ -30,6 +30,10 @@ Each line narrows the one above it. The number next to a line says how many of t
 line leaves out, and the bottom line says how many are left, for example **37 of 412 indexed episodes will be
 downloaded**. **Show which** lists every episode, and for each one that won't be downloaded, the line that left it out.
 
+While you add a collection, it has no indexed episodes yet. The counts and the title and description tests then use
+the collection's newest episodes instead, as many as the site gives in one cheap lookup (at least 5), for example
+**14 of 15 newest episodes would be downloaded**. Nothing is saved until you finish adding the collection.
+
 A new profile starts with two lines, which you can remove with the bin icon and add again with **Add filter**:
 
 - the **episode types**. The types come from the show's Source: The Daily Wire has Episode, Ep. Extra, Trailer and

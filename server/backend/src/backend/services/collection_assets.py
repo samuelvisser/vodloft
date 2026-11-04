@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from backend.db.models import DownloadProfile, Episode, EpisodeMediaDownload, Collection, CollectionLocalMediaProfile
 from backend.db.models.CollectionLocalAsset import CollectionLocalAsset
+from backend.services.example_episodes import EXAMPLE_SOURCE_PREFIX
 from backend.utils.custom_metadata import custom_metadata_template_values, get_custom_metadata
 from backend.utils.output_template import (
     COLLECTION_OUTPUT_TEMPLATE_FIELDS, COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
@@ -199,7 +200,9 @@ def get_collection_asset_root_preview(
         if episode is None:
             return CollectionAssetRootPreview(None, "The selected episode no longer exists.", None, enabled)
         collection = episode.collection
-    elif source_id not in {None, "example:collection"} or values_overrides is None:
+    elif (
+        source_id not in {None, "example:collection"} and not source_id.startswith(EXAMPLE_SOURCE_PREFIX)
+    ) or values_overrides is None:
         return CollectionAssetRootPreview(None, "Select an episode in the Jinja editor to resolve its collection's root.", None, enabled)
     result = resolve_collection_media_directory(collection, output_template, values_overrides=values_overrides)
     if result.path:

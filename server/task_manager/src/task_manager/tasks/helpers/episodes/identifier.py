@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from typing import Dict, List, Optional, Tuple, TYPE_CHECKING, assert_never
 
 from sqlalchemy import select
@@ -28,19 +27,10 @@ type EpisodeWithIdentifier = Tuple[str, DwEpisodeRecord]
 # and above is collection-level auxiliary content and must use VODLoft's collection-global
 # AUX/TRAILER namespace instead of an episode-extra identifier.
 _COLLECTION_AUX_SEGMENT_START = 20
-_OFFICIAL_TRAILER_RE = re.compile(r"\bofficial\s+trailer\b", re.IGNORECASE)
 
 
 def is_episode_trailer(ep: DwEpisodeRecord) -> bool:
-    """Return trailer semantics from affirmative API or explicit title evidence.
-
-    The Daily Wire currently returns false for some records whose titles explicitly
-    label them as "Official Trailer", so a false flag cannot override that title.
-    """
-    return (
-        bool(_OFFICIAL_TRAILER_RE.search(ep.title or ""))
-        or ep.is_trailer is True
-    )
+    return ep.trailer
 
 
 def identify_episodes_in_season(

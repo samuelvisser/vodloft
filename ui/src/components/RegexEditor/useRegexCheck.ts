@@ -1,5 +1,6 @@
 import {useEffect, useState} from 'react'
 
+import type {ExampleCollection} from '../../lib/collectionExamples'
 import {RegexCheckSchema, type RegexCheck} from '../../types/schemas/regex'
 
 export type RegexCheckRequest = {
@@ -7,6 +8,8 @@ export type RegexCheckRequest = {
     ignoreCase: boolean
     samples: string[]
     collectionId: number | null
+    /** Or the newest episodes of the collection that is being added. */
+    exampleCollection: ExampleCollection | null
     field: 'title' | 'description'
 }
 

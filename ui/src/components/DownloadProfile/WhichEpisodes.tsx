@@ -21,6 +21,7 @@ import {createSelectRegistry} from '../../utils/selectRegistry'
 import type {EpisodeTagRead} from '../../types/schemas/source'
 import type {SeasonItem} from './DownloadProfileSeasonFilter'
 import {useWhichEpisodes} from './useWhichEpisodes'
+import {useCollectionExamples} from '../../lib/collectionExamples'
 import {dateSentence, plainText, ruleComplete, ruleSentence, seasonsSentence, typesSentence, type Part} from './whichEpisodesText'
 import './WhichEpisodes.css'
 
@@ -128,10 +129,13 @@ export default function WhichEpisodes({
     const values = useWatch({control}) as Record<string, any>
     const rules: EpisodeRule[] = values.rules ?? []
 
+    // While a collection is added, the counts run over its newest episodes.
+    const examples = useCollectionExamples()
+    const exampleCollection = collectionId === undefined && examples && !examples.failed ? examples.collection : undefined
     const request = useMemo(() => {
-        if (collectionId === undefined) return null
+        if (collectionId === undefined && exampleCollection === undefined) return null
         return {
-            collectionId,
+            ...(collectionId !== undefined ? {collectionId} : {exampleCollection}),
             epIdTypeList: values.epIdTypeList ?? [],
             downloadWithCountdown: !!values.downloadWithCountdown,
             downloadDaysInPast: Number.isFinite(values.downloadDaysInPast) ? values.downloadDaysInPast : 0,
@@ -144,7 +148,7 @@ export default function WhichEpisodes({
             rules: rules.filter(ruleComplete),
             includeEpisodes: showWhich,
         }
-    }, [collectionId, values, rules, showWhich])
+    }, [collectionId, exampleCollection, values, rules, showWhich])
     const {result, episodes, hasMore, loadingMore, moreFailed, loadMore} = useWhichEpisodes(request)
     // The list loads its next page when its end scrolls into view.
     const listRef = useRef<HTMLUListElement | null>(null)
@@ -543,7 +547,8 @@ export default function WhichEpisodes({
                         <span className="which-episodes-total">
                             <span className="which-episodes-total__label">Total</span>
                             <span>
-                                <b className="which-episodes-total__count">{result.downloaded} of {result.total}</b> indexed episodes will be downloaded
+                                <b className="which-episodes-total__count">{result.downloaded} of {result.total}</b>
+                                {exampleCollection ? ' newest episodes would be downloaded' : ' indexed episodes will be downloaded'}
                                 {result.unavailable > 0 && <span className="which-episodes-muted"> ({result.unavailable} can’t be downloaded)</span>}
                             </span>
                         </span>
@@ -577,7 +582,9 @@ export default function WhichEpisodes({
                 </ul>
             )}
             <div className="help">
-                <ReadMore summary={<span>Each line narrows the one above it. The numbers show how many indexed episodes each line leaves out.</span>}>
+                <ReadMore summary={<span>Each line narrows the one above it. The numbers show how many {exampleCollection
+                    ? 'of the newest episodes, looked up for this collection before it is saved,'
+                    : 'indexed episodes'} each line leaves out.</span>}>
                     <p>
                         An episode is downloaded when it passes the built-in lines and every <b>Skip</b> and <b>Only download</b> filter.
                         A <b>Keep</b> filter never stops a download; it protects matching downloads from being deleted by the date line.

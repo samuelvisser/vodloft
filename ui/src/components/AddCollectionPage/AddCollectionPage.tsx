@@ -25,6 +25,7 @@ import {useQueryClient} from "@tanstack/react-query";
 import {SeasonDetachedOut} from "../../types/schemas/season";
 import {useEpisodeTags, useSourceLookup} from "../../lib/queries";
 import {EpisodeTagRead, SourceFeature, sourceHas} from "../../types/schemas/source";
+import {CollectionExamplesContext, useCollectionExamplesQuery} from "../../lib/collectionExamples";
 
 export type Props = {
     onCancel: () => void
@@ -324,6 +325,9 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
         setStep(3)
     }
 
+    // The newest episodes serve as examples in the later steps; they load in the background.
+    const examples = useCollectionExamplesQuery(collectionSubmit, seasonsSubmit)
+
     const totalSteps = collectionAction === 'download-stream' ? 6 : collectionAction === 'download' ? 5 : collectionAction === 'stream' ? 3 : 2
     const stepTitle = step === 1 ? 'Choose collection'
         : step === 2 ? 'Choose what VODLoft should do'
@@ -334,6 +338,7 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
         : 'Stream Profile'
 
     return (
+        <CollectionExamplesContext.Provider value={examples}>
         <div>
             {globalMessage && (
                 <div
@@ -488,5 +493,6 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
                 />
             )}
         </div>
+        </CollectionExamplesContext.Provider>
     )
 }

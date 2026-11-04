@@ -17,6 +17,8 @@ export type LocalMediaProfileTemplateSource = {
     label: string
     values: Record<string, string>
     fallback: boolean
+    /** An example of a collection that is not saved yet: the values it shows by name. */
+    pending?: string[]
 }
 
 export type LocalMediaProfileTemplateSourcePage = {
@@ -115,15 +117,18 @@ export function useLocalMediaProfileTemplateSources(
 export function useRandomCollectionTemplateSource(
     collectionScope: CollectionLocalMediaProfileScope = 'both',
     enabled = true,
+    /** A saved profile starts on an episode of a collection that downloads to it. */
+    localMediaProfileId: number | null = null,
 ) {
     // A per-mount key makes reopening the form request a fresh example instead
     // of reusing React Query's cache from the previous page visit.
     const [requestKey] = useState(() => Math.random())
     return useQuery<LocalMediaProfileTemplateSource | null>({
-        queryKey: ['randomCollectionTemplateSource', collectionScope, requestKey],
+        queryKey: ['randomCollectionTemplateSource', collectionScope, localMediaProfileId, requestKey],
         enabled,
         queryFn: ({signal}) => fetchTemplateJson(
-            `sources/random-collection-episode?collection_scope=${encodeURIComponent(collectionScope)}`,
+            `sources/random-collection-episode?collection_scope=${encodeURIComponent(collectionScope)}`
+            + (localMediaProfileId !== null ? `&local_media_profile_id=${localMediaProfileId}` : ''),
             signal,
             'no-store',
         ),

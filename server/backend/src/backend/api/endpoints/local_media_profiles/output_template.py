@@ -19,12 +19,18 @@ from backend.api.models.local_media_profile import (
     LocalMediaProfileTemplateSourcePage,
     LocalMediaProfileTemplateVariable,
 )
-from backend.db.models import Episode, Movie, MovieExtra, MovieExtraSource, Season, Collection, CollectionLocalMediaProfile, Video
+from backend.db.models import DownloadProfile, Episode, Movie, MovieExtra, MovieExtraSource, Season, Collection, CollectionLocalMediaProfile, Video
 from backend.services.custom_index_preview import (
     CustomIndexPreviewMode,
     plan_custom_index_preview,
 )
 from backend.services.custom_indexes import simulate_episode_indexes
+from backend.services.example_episodes import (
+    EXAMPLE_SOURCE_PREFIX,
+    ExampleCollection,
+    example_session,
+    example_template_values,
+)
 from backend.types.local_media_profile_types import (
     LocalMediaProfileType,
     PreferredFormat,
@@ -461,9 +467,14 @@ def _collection_source_page(
 def get_random_collection_template_source(
     session: Session,
     collection_scope: CollectionLocalMediaProfileScope = CollectionLocalMediaProfileScope.BOTH,
+    *,
+    local_media_profile_id: int | None = None,
 ) -> LocalMediaProfileTemplateSource | None:
-    """Choose an example uniformly by Collection, then uniformly within that Collection."""
-    collection_id = session.scalar(
+    """Choose an example uniformly by Collection, then uniformly within that Collection.
+
+    With a profile, a Collection that downloads to it is chosen when there is one.
+    """
+    candidates = (
         select(Episode.collection_id)
         .join(Episode.collection)
         .join(Episode.season)
@@ -472,6 +483,13 @@ def get_random_collection_template_source(
         .order_by(func.random())
         .limit(1)
     )
+    collection_id = session.scalar(
+        candidates.where(Episode.collection_id.in_(
+            select(DownloadProfile.collection_id).where(DownloadProfile.local_media_profile_id == local_media_profile_id)
+        ))
+    ) if local_media_profile_id is not None else None
+    if collection_id is None:
+        collection_id = session.scalar(candidates)
     if collection_id is None:
         return None
 
@@ -483,6 +501,20 @@ def get_random_collection_template_source(
         .limit(1)
     )
     return _collection_template_source(episode) if episode is not None else None
+
+
+def get_example_template_sources(collection: ExampleCollection) -> list[LocalMediaProfileTemplateSource]:
+    """The newest episodes of a collection that is not saved yet, newest first."""
+    with example_session(collection) as (_session, _collection, examples):
+        return [
+            LocalMediaProfileTemplateSource(
+                id=f"{EXAMPLE_SOURCE_PREFIX}{example.episode.source_slug}",
+                label=f"{collection.title} — {example.episode.title}",
+                values=example_template_values(example),
+                pending=sorted(example.pending),
+            )
+            for example in examples
+        ]
 
 
 def _movie_source_page(
@@ -923,6 +955,19 @@ def _render_collection_preview(
         if body.indexing_values is not None
         else indexing_value_definition_keys(profile) if profile is not None else frozenset()
     )
+    if (body.source_id or "").startswith(EXAMPLE_SOURCE_PREFIX):
+        # An example of a collection that is not saved yet: its custom indexes are worked out when it is saved.
+        return (
+            render_output_template(
+                body.output_template,
+                body.values,
+                allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
+                allowed_metadata_scopes=COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
+                custom_index_resolver=lambda key, _group: f"[{key}]" if key in definitions else "",
+            ),
+            definitions,
+            frozenset(),
+        )
     if not index_keys & definitions:
         return (
             render_output_template(

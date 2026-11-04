@@ -35,6 +35,7 @@ from .output_template import (
     get_output_template_preview,
 )
 from backend.security.access import Area, Level
+from backend.services.example_episodes import EXAMPLE_SOURCE_PREFIX
 from backend.security.deps import requires_any
 
 router = APIRouter()
@@ -49,6 +50,9 @@ def _example_values(session: Session, body: LocalMediaProfilePreviewRequest) -> 
             "movie": _EXAMPLE_MOVIE_VALUES,
             "video": _EXAMPLE_VIDEO_VALUES,
         }[body.type]
+    elif source_id.startswith(EXAMPLE_SOURCE_PREFIX):
+        # An example of a collection that is not saved yet only lives in the form, which sends all of its values.
+        original = {}
     else:
         kind, separator, identifier = source_id.partition(":")
         models = {

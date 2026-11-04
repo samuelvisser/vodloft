@@ -189,6 +189,9 @@ class LocalMediaProfileTemplateSource(ResponseBase):
     label: str
     values: dict[str, str]
     fallback: bool = False
+    pending: list[str] = Field(default_factory=list)
+    """For an example of a collection that is not saved yet: the values it shows by name, because
+    VODLoft counts them from the collection's oldest episode."""
 
 
 class LocalMediaProfileTemplateSourcePage(CursorPageRead[LocalMediaProfileTemplateSource]):
