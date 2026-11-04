@@ -99,8 +99,20 @@ def is_pending(item: dict) -> bool:
 
 
 def is_livestream(item: dict) -> bool:
-    """The API keeps a livestream's details after the broadcast, as yt-dlp keeps calling it one."""
-    return bool(item.get("liveStreamingDetails"))
+    """A finished livestream, as yt-dlp keeps calling it one after the broadcast.
+
+    Premieres keep the same live details, so those alone do not tell the two
+    apart. A livestream's recording is published once the broadcast has ended;
+    a premiere was published before it started playing.
+    """
+    live = item.get("liveStreamingDetails") or {}
+    ended, published = _time(live.get("actualEndTime")), _time((item.get("snippet") or {}).get("publishedAt"))
+    return bool(ended and published and published >= ended)
+
+
+def may_be_premiere(item: dict) -> bool:
+    """A broadcast the API cannot tell from a livestream, so only yt-dlp can say which it was."""
+    return bool(item.get("liveStreamingDetails")) and not is_livestream(item)
 
 
 def may_be_short(item: dict) -> bool:
