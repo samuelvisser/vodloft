@@ -119,13 +119,6 @@
     color: var(--we-accent);
 }
 
-.which-episodes-icon.is-placeholder {
-    cursor: default;
-    background: transparent;
-    color: var(--muted);
-    opacity: 0.6;
-}
-
 .which-episodes-editor {
     display: grid;
     gap: 12px;

@@ -41,6 +41,7 @@ class EpisodeSelection:
     download_starting_from: Optional[date]
     season_ids: Sequence[int]
     include_upcoming_seasons: bool
+    all_seasons: bool
     rules: Sequence[EpisodeRule] = field(default_factory=tuple)
 
     @classmethod
@@ -54,6 +55,7 @@ class EpisodeSelection:
             download_starting_from=profile.download_starting_from,
             season_ids=[season.id for season in profile.seasons],
             include_upcoming_seasons=profile.include_upcoming_seasons,
+            all_seasons=profile.all_seasons,
             rules=list(profile.rules),
         )
 
@@ -98,8 +100,8 @@ def _types(selection: EpisodeSelection, stmt: Select) -> Select:
 
 
 def uses_seasons(selection: EpisodeSelection) -> bool:
-    """Only a Collection identified by season filters its episodes by season."""
-    return selection.collection.episode_identifier == EpisodeIdentifier.SEASONAL.value
+    """Only a Collection identified by season filters its episodes by season, and only while it has a seasons line."""
+    return selection.collection.episode_identifier == EpisodeIdentifier.SEASONAL.value and not selection.all_seasons
 
 
 def _seasons(s: Session, selection: EpisodeSelection, stmt: Select) -> Select:

@@ -82,6 +82,10 @@ class DownloadProfile(Base, HasTaskResourcesMixin):
 
     # Season filter, used only when the collection is identified by season
     include_upcoming_seasons: Mapped[bool] = mapped_column(default=True)
+    all_seasons: Mapped[bool] = mapped_column(
+        default=False, server_default="0",
+        comment="The seasons line was removed: every season downloads, upcoming ones included",
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()

@@ -271,6 +271,7 @@ def count_which_episodes(s: Session, collection: Collection, body: WhichEpisodes
         download_starting_from=body.download_starting_from,
         season_ids=season_ids,
         include_upcoming_seasons=body.include_upcoming_seasons,
+        all_seasons=body.all_seasons,
         rules=body.rules,
     )
     result = which_episodes(s, selection)

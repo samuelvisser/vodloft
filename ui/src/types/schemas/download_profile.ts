@@ -66,7 +66,7 @@ export const DownloadProfileSchemaRequest = z.object({
     downloadWithCountdown: z.boolean().default(false),
     redownloadFinal: z.boolean().default(true),
     downloadDaysInPast: z.int().min(0).default(0),
-    downloadEpisodeCount: z.int().min(0).default(0),
+    downloadEpisodeCount: z.int().min(0).default(25),
     downloadStartingFrom: z.iso.date().nullable().default(null),
     deleteOlderEpisodes: z.boolean().default(true),
     retentionFrom: z.enum(['published', 'downloaded']).default('published'),
@@ -79,6 +79,8 @@ export const DownloadProfileSchemaRequest = z.object({
     upgradeImprovements: z.array(z.enum(['resolution', 'sponsorblock', 'subtitles', 'codec'])).default(() => ['resolution' as const, 'sponsorblock' as const]),
     seasons: z.array(SeasonDetachedSchema).default([]),
     includeUpcomingSeasons: z.boolean().default(true),
+    // Without a seasons line every season downloads, and the two season fields above are not used.
+    allSeasons: z.boolean().default(false),
     rules: z.array(EpisodeRuleSchema).default([]),
 })
 
@@ -108,10 +110,11 @@ export function refineDownloadLimit(value: DownloadLimitFields, ctx: z.Refinemen
 type SeasonFields = {
     seasons: readonly unknown[]
     includeUpcomingSeasons: boolean
+    allSeasons: boolean
 }
 
 function refineSeasonChoice(value: SeasonFields, ctx: z.RefinementCtx) {
-    if (!value.includeUpcomingSeasons && value.seasons.length === 0) {
+    if (!value.allSeasons && !value.includeUpcomingSeasons && value.seasons.length === 0) {
         ctx.addIssue({
             code: 'custom',
             path: ['seasons'],
@@ -135,13 +138,12 @@ export function downloadProfileDefaultsFor(
     episodeIdentifier: EpisodeIdentifierValue | string | undefined,
     tags: readonly EpisodeTagRead[] | undefined,
 ) {
-    // A seasonal collection downloads the chosen seasons whole, without its bonus content;
-    // other collections a recent window.
+    // A seasonal collection downloads its full episodes, without its bonus content.
     const seasonal = episodeIdentifier === EpisodeIdentifierReg.Enum.seasonal
     const epIdTypeList = (tags ?? [])
         .filter((tag) => tag.selectedByDefault && (!seasonal || tag.rssEpisodeType === 'full'))
         .map((tag) => tag.key)
-    return {epIdTypeList: epIdTypeList.length ? epIdTypeList : ['ep'], downloadDaysInPast: seasonal ? 0 : 180}
+    return {epIdTypeList: epIdTypeList.length ? epIdTypeList : ['ep']}
 }
 
 export const DownloadProfileCreateSchema = DownloadProfileSchemaRequest.extend({
@@ -181,6 +183,7 @@ export const DownloadProfileReadSchema = z.looseObject({
     upgradeImprovements: z.array(z.enum(['resolution', 'sponsorblock', 'subtitles', 'codec'])),
     seasons: z.array(SeasonReadSchema),
     includeUpcomingSeasons: z.boolean(),
+    allSeasons: z.boolean(),
     rules: z.array(z.looseObject({
         id: z.int(),
         action: z.string(),

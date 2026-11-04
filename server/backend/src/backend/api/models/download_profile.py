@@ -95,6 +95,8 @@ class DownloadProfileAPIBaseIn(RequestBase):
 
     seasons: list[SeasonAPIRequestDetached]
     include_upcoming_seasons: bool
+    # Without a seasons line every season downloads, and the two season fields above are not used.
+    all_seasons: bool = False
     rules: list[DownloadProfileRuleAPIIn] = Field(default_factory=list, max_length=50)
 
     @field_validator("sponsorblock_segments")
@@ -165,6 +167,7 @@ class DownloadProfileAPIBaseOut(ResponseBase):
 
     seasons: list[SeasonAPIRead]
     include_upcoming_seasons: bool
+    all_seasons: bool
     rules: list[DownloadProfileRuleAPIRead]
 
 
@@ -187,6 +190,7 @@ class WhichEpisodesAPIRequest(RequestBase):
     download_starting_from: date | None
     season_slugs: list[str] = Field(default_factory=list)
     include_upcoming_seasons: bool
+    all_seasons: bool = False
     rules: list[DownloadProfileRuleAPIIn] = Field(default_factory=list, max_length=50)
     include_episodes: bool = False
     # The episode list is read a page at a time, newest first, as the form scrolls through it.

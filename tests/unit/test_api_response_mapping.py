@@ -78,6 +78,7 @@ def test_download_profile_view_uses_relationship_aliases():
         upgrade_improvements=["resolution"],
         seasons=[],
         include_upcoming_seasons=True,
+        all_seasons=False,
         rules=[],
     )
 

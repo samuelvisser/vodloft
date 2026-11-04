@@ -383,11 +383,12 @@ def _has_download_profile_for_episode(
         .where(Season.id == episode.season_id)
         .scalar_subquery()
     )
-    # Only a collection identified by season filters its episodes by season.
+    # Only a collection identified by season filters its episodes by season, and only with a seasons line.
     season_allows_episode = (
         true()
         if episode.collection.episode_identifier != EpisodeIdentifier.SEASONAL.value
         else or_(
+            DownloadProfile.all_seasons.is_(True),
             selected_season,
             and_(
                 DownloadProfile.include_upcoming_seasons.is_(True),

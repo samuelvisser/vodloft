@@ -11,6 +11,7 @@ export type WhichEpisodesRequest = {
     downloadStartingFrom: string | null
     seasonSlugs: string[]
     includeUpcomingSeasons: boolean
+    allSeasons: boolean
     rules: EpisodeRule[]
     includeEpisodes: boolean
 }

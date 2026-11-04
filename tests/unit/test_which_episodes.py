@@ -339,3 +339,23 @@ def test_episode_type_rules_skip_and_keep_types(db_session):
     assert not kept_by_rule(profile.rules, short)
     with pytest.raises(ValueError, match="at least one episode type"):
         DownloadProfileRuleAPIIn.model_validate({"action": "skip", "field": "types", "episodeTypes": []})
+
+
+def test_without_a_seasons_line_every_season_is_downloaded(db_session):
+    from backend.db.models import Season
+
+    collection, first = _collection(db_session)
+    collection.episode_identifier = "seasonal"
+    second = Season(collection=collection, index=2, slug="which-s2", name="Two")
+    db_session.add(second)
+    db_session.flush()
+    _episode(db_session, collection, first, 1, "First season")
+    _episode(db_session, collection, second, 2, "Second season")
+    profile = _profile(db_session, collection, include_upcoming_seasons=False)
+    profile.seasons = [second]
+    db_session.flush()
+    assert _wanted_titles(db_session, profile) == {"Second season"}
+
+    profile.all_seasons = True
+    db_session.flush()
+    assert _wanted_titles(db_session, profile) == {"First season", "Second season"}

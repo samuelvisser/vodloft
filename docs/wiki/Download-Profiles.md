@@ -37,7 +37,8 @@ A new profile starts with two lines, which you can remove with the bin icon and 
 - the **date window**, on the **publication date** or the **download date** (see Date options below). Without this
   line, episodes of any date are downloaded and nothing is deleted.
 
-A seasonal collection also has a **seasons** line, which stays. Click the pencil on a line to change it, and **Done**
+A seasonal collection also has a **seasons** line. A new profile starts with the latest season and upcoming seasons;
+remove the line to download every season, including ones added later. Click the pencil on a line to change it, and **Done**
 to fold it back into its sentence. An open line starts with two dropdowns that read as the start of its sentence, such as
 **Only download** if **published**: what the line does, and what it looks at. Changing either one changes the line. When you create a profile, these lines start open so you see them the first time.
 
@@ -90,6 +91,11 @@ This is useful for an ongoing series where you do not want to edit the profile e
 
 Selecting all seasons in the UI also enables future seasons so the profile keeps following the complete series.
 
+### Every season
+
+Remove the seasons line to stop filtering by season: every season is downloaded, including ones added later, and only the
+other lines decide. To filter by season again, use **Add filter** and pick **season**.
+
 ## Date options
 
 The date line filters on one of two dates, chosen in its header. **Published** offers the limits below. **Downloaded** keeps each
@@ -103,6 +109,7 @@ Choose which episodes the profile should consider. On a seasonal collection the 
 - **at any time** — every eligible episode can be downloaded.
 - **in the last … days** — only episodes inside a recent number-of-days window are eligible.
 - **as one of the latest … episodes** — only the newest selected number of eligible episodes are kept in the active window.
+  A new profile starts with the latest 25 episodes, and deletes older ones.
 
 ### On or after
 

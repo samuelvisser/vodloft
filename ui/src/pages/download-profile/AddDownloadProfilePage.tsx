@@ -12,7 +12,7 @@ import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import Select from 'react-select'
 import {isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableForSource, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
 import {SelectRegistry} from "../../utils/selectRegistry";
-import {buildCollectionSelectRegistry} from "../../types/collection";
+import {buildCollectionSelectRegistry, EpisodeIdentifierReg} from "../../types/collection";
 import {useQueryClient} from "@tanstack/react-query";
 import {getZodDefaults} from "../../utils/defaultZod";
 import ReadMore from "../../utils/ReadMore";
@@ -58,13 +58,9 @@ export default function AddDownloadProfilePage() {
 
     const selectCollection = useCallback((id: number) => {
         setValue('collectionId', id, {shouldDirty: true, shouldValidate: true})
-        // Seasons belong to one collection; the other filters start from what fits the collection.
+        // Seasons belong to one collection.
         setValue('seasons', [], {shouldDirty: true})
-        const defaults = downloadProfileDefaultsFor(collections?.find((collection) => collection.id === id)?.episodeIdentifier, undefined)
-        if (!getFieldState('downloadDaysInPast').isDirty && !getFieldState('downloadEpisodeCount').isDirty) {
-            setValue('downloadDaysInPast', defaults.downloadDaysInPast)
-        }
-    }, [getFieldState, setValue, collections])
+    }, [setValue])
     // The episode tags to start with depend on the collection's Source, which answers after the collection is picked.
     const {data: episodeTags} = useCollectionEpisodeTags({collectionId: selectedCollection?.id})
     useEffect(() => {
@@ -178,6 +174,15 @@ export default function AddDownloadProfilePage() {
         name: s.name,
         slug: s.slug,
     })), [seasonsData])
+    // Like a new collection, a seasonal collection starts with its latest season and the upcoming ones.
+    const seasonsDefaultedFor = useRef<string | undefined>(undefined)
+    useEffect(() => {
+        if (!seasonsData || !selectedCollectionSlug || seasonsDefaultedFor.current === selectedCollectionSlug) return
+        seasonsDefaultedFor.current = selectedCollectionSlug
+        if (episodeIdentifier !== EpisodeIdentifierReg.Enum.seasonal) return
+        const latest = [...seasonsData].sort((a, b) => b.index - a.index)[0]
+        if (latest) setValue('seasons', [{name: latest.name, slug: latest.slug}], {shouldDirty: true})
+    }, [seasonsData, selectedCollectionSlug, episodeIdentifier, setValue])
 
     const disabledEpisodeTypes = useMemo(() => {
         if (typeof localMediaProfileId !== 'number' || !selectedCollection) return new Set<string>()
