@@ -809,15 +809,18 @@ export default function RegexEditor({id, value, onChange, field = 'title', colle
                             onBlur={() => setTouched(true)}
                         />
                     </div>
-                    <button
-                        type="button"
-                        className={`regex-editor__case${ignoreCase ? ' is-active' : ''}`}
-                        aria-pressed={ignoreCase}
-                        disabled={disabled}
-                        onClick={() => set({ignoreCase: !ignoreCase})}
-                    >
-                        Aa Ignore case
-                    </button>
+                    {/* Contains and Any of these have their own Ignore case switch above. */}
+                    {preset === 'pattern' || preset === 'custom' ? (
+                        <button
+                            type="button"
+                            className={`regex-editor__case${ignoreCase ? ' is-active' : ''}`}
+                            aria-pressed={ignoreCase}
+                            disabled={disabled}
+                            onClick={() => set({ignoreCase: !ignoreCase})}
+                        >
+                            Aa Ignore case
+                        </button>
+                    ) : null}
                 </div>
                 {shownError ? (
                     <div className="regex-editor__error" role="alert">
