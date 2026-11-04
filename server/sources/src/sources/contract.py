@@ -439,8 +439,27 @@ class ApiKeyRejected(ValueError):
 ANY_DOMAIN = "*"
 
 
+@dataclass(frozen=True)
+class Site:
+    """One website as the user knows it, such as YouTube or The Daily Wire, whichever Source fetches it.
+
+    ``key`` is stored with every collection and video, so it never changes. One Site can
+    span several domains, such as youtube.com and youtu.be; ``domains`` holds the ones known.
+    """
+
+    key: str
+    name: str
+    domains: tuple[str, ...] = ()
+
+
 def link_host(url: str) -> str:
     return (urlsplit(url).hostname or "").lower().rstrip(".")
+
+
+def domain_site(url: str) -> Site:
+    """The Site of a link that belongs to no known site: its own domain, without www."""
+    host = link_host(url).removeprefix("www.")
+    return Site(f"generic:{host}", host, (host,))
 
 
 def on_domain(host: str, domain: str) -> bool:
@@ -461,6 +480,9 @@ class Source(ABC):
     """What the Source calls the paid subscription some of its videos need, such as NPO Plus."""
     cookies_help: ClassVar[str | None] = None
     """What a cookies file does for this Source, for a Source with ``Feature.COOKIES``."""
+    sites: ClassVar[tuple[Site, ...]] = ()
+    """The Sites this Source is made for, such as The Daily Wire. A Source that serves many
+    sites, as yt-dlp does, names none and tells them apart in ``site_for``."""
     sites_label: ClassVar[str | None] = None
     """What the Source downloads from, in a few words, when its name does not say so, such as
     "YouTube, and many more" for yt-dlp."""
@@ -482,6 +504,16 @@ class Source(ABC):
             return True
         host = link_host(url)
         return any(on_domain(host, domain) for domain in self.domains)
+
+    def site_for(self, url: str) -> Site | None:
+        """The Site of a link, told without a network request, or None when this Source cannot tell."""
+        host = link_host(url)
+        return next((site for site in self.sites if any(on_domain(host, domain) for domain in site.domains)), None)
+
+    def collection_ref(self, url: str) -> str | None:
+        """The id one of this Source's ``sites`` gives the collection at the link, told from the
+        link alone, or None when it is not a collection's link. A Source that names Sites implements it."""
+        return None
 
     def episode_tags_for(self, url: str | None) -> tuple[EpisodeTag, ...]:
         """The tags episodes of the collection at this link can get, or all of them without a link."""

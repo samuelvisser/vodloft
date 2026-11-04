@@ -9,7 +9,7 @@ or seasonal collection that place can move the videos after it up a number,
 so their identifiers change too, and their downloaded files are renamed.
 
 Revision ID: c65c0a26c4e2
-Revises: 4dac3ac7c70e
+Revises: 7ffa406cf785
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from sources import MAIN_TAG, Feature, ItemRef, get_source
 
 
 revision = "c65c0a26c4e2"
-down_revision = "4dac3ac7c70e"
+down_revision = "7ffa406cf785"
 title = "Turn YouTube premieres tagged as livestreams into videos"
 
 logger = logging.getLogger(__name__)

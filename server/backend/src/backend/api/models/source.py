@@ -250,14 +250,23 @@ class SearchResultsAPIRead(ResponseBase):
     notice: Optional[SearchNoticeAPIRead] = None
 
 
-class SourceDomainAPIRead(ResponseBase):
-    domain: str
-    # The Sources that can handle links on this domain, in the order VODLoft asks them by default.
+class SiteAPIRead(ResponseBase):
+    """The website a collection or video is on, such as YouTube, whichever Source fetches it."""
+
+    key: str
+    name: str
+
+
+class SourceSiteAPIRead(ResponseBase):
+    key: str
+    name: str
+    domains: list[str]
+    # The Sources that can handle links on this Site, in the order VODLoft asks them by default.
     source_keys: list[str]
     default_source_key: str
     preferred_source_key: Optional[str] = None
 
 
-class SourceDomainAPIUpdate(RequestBase):
+class SourceSiteAPIUpdate(RequestBase):
     # None goes back to the default order.
     preferred_source_key: Optional[str] = None

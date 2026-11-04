@@ -1,7 +1,7 @@
 """Publish statuses every Source shares: dw_processing and published_with_countdown get neutral names.
 
 Revision ID: b9dbb772c34e
-Revises: 7b3e9d2a4c61
+Revises: 2bd0eb5fe4a6
 Create Date: 2026-11-04
 
 A Source now names each publish status its own way, so the stored values no longer
@@ -17,7 +17,7 @@ from alembic import op
 
 
 revision = "b9dbb772c34e"
-down_revision = "7b3e9d2a4c61"
+down_revision = "2bd0eb5fe4a6"
 branch_labels = None
 depends_on = None
 

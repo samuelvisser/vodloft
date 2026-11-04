@@ -12,7 +12,7 @@ from .local_media_profile import (
 LocalMediaProfile = CollectionLocalMediaProfile
 from .Season import Season
 from .Settings import Settings
-from .SourceDomainPreference import SourceDomainPreference
+from .Site import Site
 from .QuickDownloadHistory import QuickDownloadHistory
 from .user import User, UserAccess, UserSourceAccess
 from .Collection import Collection

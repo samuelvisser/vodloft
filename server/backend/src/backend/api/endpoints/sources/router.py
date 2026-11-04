@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Query
 from backend.api.models.source import (
     SiteOptionsAPIRead, YtdlpOptionLineAPIRead, YtdlpOptionsAPIRead, YtdlpOptionsAPIUpdate, YtdlpOptionsCheckAPIRequest,
     ApiKeyAPIUpdate, ApiStatusAPIRead, CookiesAPIRead, EpisodeTagAPIRead, PublishStatusLabelAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultsAPIRead,
-    CollectionDetailsAPIRead, SourceAPIRead, SourceDomainAPIRead, SourceDomainAPIUpdate,
+    CollectionDetailsAPIRead, SourceAPIRead, SourceSiteAPIRead, SourceSiteAPIUpdate,
 )
 from backend.app import db_session
 from sources import ApiKeyRejected, Feature, Source, UnknownSourceError, get_source
@@ -11,9 +11,9 @@ from sources.ytdlp_options import check_ytdlp_options
 from backend.services.source_options import save_ytdlp_source_options, ytdlp_source_options
 
 from .service import (
-    LinkNotRecognisedError, SourceFeatureMissingError, UnknownDomainError, get_api_status, get_program_status,
-    list_source_problems, list_source_domains,
-    list_sources, lookup_show_details, resolve_link, search_source, set_domain_preference, source_with,
+    LinkNotRecognisedError, SourceFeatureMissingError, UnknownSiteError, get_api_status, get_program_status,
+    list_source_problems, list_source_sites,
+    list_sources, lookup_show_details, resolve_link, search_source, set_site_preference, source_with,
     update_source_program,
 )
 from backend.security.access import Access, Area, Level
@@ -42,20 +42,20 @@ def source_problems():
     return list_source_problems()
 
 
-@router.get("/sources/domains", dependencies=[signed_in()], response_model=list[SourceDomainAPIRead])
-def source_domains():
-    """Every domain a Source names, with the Sources that can handle its links."""
+@router.get("/sources/sites", dependencies=[signed_in()], response_model=list[SourceSiteAPIRead])
+def source_sites():
+    """Every Site a Source is made for, with the Sources that can handle its links."""
     with db_session() as s:
-        return list_source_domains(s)
+        return list_source_sites(s)
 
 
-@router.put("/sources/domains/{domain}", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SourceDomainAPIRead)
-def update_source_domain(domain: str, body: SourceDomainAPIUpdate):
-    """Choose the Source to ask first for links on a domain."""
+@router.put("/sources/sites/{key}", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SourceSiteAPIRead)
+def update_source_site(key: str, body: SourceSiteAPIUpdate):
+    """Choose the Source to ask first for links on a Site."""
     with db_session() as s:
         try:
-            result = set_domain_preference(s, domain, body.preferred_source_key)
-        except UnknownDomainError as exc:
+            result = set_site_preference(s, key, body.preferred_source_key)
+        except UnknownSiteError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         s.commit()
         return result

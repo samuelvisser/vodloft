@@ -1,7 +1,7 @@
 import {useSources} from '../../lib/queries'
 import {ANY_DOMAIN, SourceFeature, SourceRead, sourceHas} from '../../types/schemas/source'
 import SourceCookiesCard from '../Source/SourceCookiesCard'
-import SourceDomainsCard from '../Source/SourceDomainsCard'
+import SourceSitesCard from '../Source/SourceSitesCard'
 import SourceProgramCard from '../Source/SourceProgramCard'
 import SourceSection from '../Source/SourceSection'
 import SourceYtdlpOptionsCard from '../Source/SourceYtdlpOptionsCard'
@@ -69,7 +69,7 @@ export default function SourcesSettingsTab(tabProps: SettingsTabProps) {
             {(sources ?? []).map((source) => (
                 <SourceCard key={source.id} source={source} tabProps={tabProps}/>
             ))}
-            <SourceDomainsCard/>
+            <SourceSitesCard/>
         </div>
     )
 }

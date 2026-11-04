@@ -133,13 +133,22 @@ export function pluralKindName(name: string): string {
     return name.endsWith('s') ? name : `${name}s`
 }
 
-export const SourceDomainReadSchema = z.object({
-    domain: z.string(),
+/** The website a collection or video is on, such as YouTube, whichever Source fetches it. */
+export const SiteReadSchema = z.object({
+    key: z.string(),
+    name: z.string(),
+})
+export type SiteRead = z.infer<typeof SiteReadSchema>
+
+export const SourceSiteReadSchema = z.object({
+    key: z.string(),
+    name: z.string(),
+    domains: z.array(z.string()),
     sourceKeys: z.array(z.string()),
     defaultSourceKey: z.string(),
     preferredSourceKey: z.string().nullable(),
 })
-export type SourceDomainRead = z.infer<typeof SourceDomainReadSchema>
+export type SourceSiteRead = z.infer<typeof SourceSiteReadSchema>
 
 export const ProgramStatusReadSchema = z.object({
     name: z.string(),
