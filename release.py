@@ -7,11 +7,13 @@ import shutil
 import subprocess
 import sys
 import tomllib
+from string import Template
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
 ROOT = Path(__file__).resolve().parent
+UPGRADE_STEPS_TEMPLATE = ROOT / ".github" / "release-notes" / "upgrade-steps.md"
 SEMVER_PATTERN = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 VERSION_LINE_PATTERN = re.compile(r'^(?P<prefix>\s*version\s*=\s*")[^"]+(?P<suffix>".*)$')
 MODULE_VERSION_PATTERN = re.compile(
@@ -520,6 +522,28 @@ def publish_release(args: argparse.Namespace) -> None:
     )
 
 
+def previous_app_version(version: str) -> str:
+    target = parse_semver(version)
+    for parsed, tag in version_tags("v"):
+        if parsed < target:
+            return tag.removeprefix("v")
+    raise ReleaseError(f"No VODLoft release before {version} to go back to. Pass --previous-version.")
+
+
+def render_upgrade_steps(version: str, previous_version: str) -> str:
+    """The step-by-step upgrade instructions for one release, with its exact image tag."""
+    parse_semver(version)
+    parse_semver(previous_version)
+    template = Template(UPGRADE_STEPS_TEMPLATE.read_text(encoding="utf-8"))
+    return template.substitute(version=version, previous_version=previous_version)
+
+
+def print_upgrade_steps(args: argparse.Namespace) -> None:
+    version = args.version or read_project(ROOT / "pyproject.toml")[1]
+    previous_version = args.previous_version or previous_app_version(version)
+    print(render_upgrade_steps(version, previous_version), end="")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Prepare and publish VODLoft application and workspace package releases."
@@ -547,6 +571,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Do not run deploy.sh to build/push the GHCR image.",
     )
     publish.add_argument("--yes", action="store_true", help="Skip the final publish confirmation.")
+
+    upgrade_steps = subparsers.add_parser(
+        "upgrade-steps",
+        help="Print the step-by-step upgrade instructions for a release's notes, pinned to its image tag.",
+    )
+    upgrade_steps.add_argument("--version", help="The release (default: the version in pyproject.toml).")
+    upgrade_steps.add_argument(
+        "--previous-version",
+        help="The release to go back to (default: the newest release tag before --version).",
+    )
     return parser
 
 
@@ -561,6 +595,8 @@ def main(argv: Iterable[str] | None = None) -> int:
             prepare_release(args)
         elif args.command == "publish":
             publish_release(args)
+        elif args.command == "upgrade-steps":
+            print_upgrade_steps(args)
         else:
             parser.error(f"Unknown command {args.command}")
     except (ReleaseError, OSError, tomllib.TOMLDecodeError) as exc:

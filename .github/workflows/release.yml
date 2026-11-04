@@ -40,6 +40,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ steps.release.outputs.tag }}
+          # All tags, so release.py can find the release to go back to.
+          fetch-depth: 0
 
       - name: Verify tag matches VODLoft version
         env:
@@ -77,9 +79,16 @@ jobs:
           else
             channel=--latest
           fi
+          # Every release explains how to upgrade to exactly this version. GitHub adds its
+          # generated notes (the full changelog) after these.
+          {
+            printf '## Upgrading\n\n'
+            python release.py upgrade-steps --version "${RELEASE_TAG#v}"
+          } > "$RUNNER_TEMP/release-notes.md"
           gh release create "$RELEASE_TAG" \
             --verify-tag \
             --draft \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
             --generate-notes \
             "$channel" \
             --title "VODLoft ${RELEASE_TAG#v}"

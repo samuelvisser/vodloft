@@ -46,9 +46,9 @@ Restoring only `vodloft.db` while losing the accompanying key and authentication
 
 ## Upgrade VODLoft
 
-Before an important upgrade, make a fresh `/config` backup.
+Every [VODLoft release](https://github.com/samuelvisser/vodloft/releases) has an **Upgrading** section with the exact commands for that version: how to make a backup, how to set `docker-compose.yml` to that version, how to start it and how to go back. Follow the steps on the page of the version you want.
 
-Then update a normal Compose installation with:
+Those steps set the `image:` line in `docker-compose.yml` to one version, such as `ghcr.io/samuelvisser/vodloft:0.7.0`. That way you decide when VODLoft changes, and a backup always matches a known version. With `ghcr.io/samuelvisser/vodloft:latest`, every `docker compose pull` takes whatever version is newest at that moment:
 
 ```bash
 docker compose pull
