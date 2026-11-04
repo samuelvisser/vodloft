@@ -1,6 +1,8 @@
 """Moving episode downloads from one Local Media Profile to another."""
 from __future__ import annotations
 
+from profile_filters import filter_rows, latest
+
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -207,7 +209,7 @@ def test_retention_counts_the_moved_episodes_the_target_would_delete(library):
     session, collection, source, target, episodes, downloads, root = library
     downloads[0].kept = True
     session.add(DownloadProfile(
-        collection=collection, local_media_profile=target, download_episode_count=1, delete_older_episodes=True,
+        collection=collection, local_media_profile=target, filters=filter_rows(latest(1)), delete_older_episodes=True,
     ))
     session.commit()
 

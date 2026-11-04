@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException, Request
 
 from backend.db.model_mapping import create_database_fields
-from backend.services.episode_rules import set_profile_rules
+from backend.services.episode_filters import set_profile_filters
 from backend.api.models.collection import CollectionAPIRead
 from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPICreate, CollectionLocalMediaProfileAPIUpdate
 from backend.api.models.collection_as_bundle import (
@@ -103,15 +103,10 @@ def create_collection_bundle(
         download_profile = create_database_fields(
             DownloadProfile,
             payload.download_profile,
-            exclude_fields={"seasons", "rules"},
+            exclude_fields={"filters"},
         )
-        set_profile_rules(download_profile, payload.download_profile.rules)
-        selected_slugs = {
-            season.slug for season in payload.download_profile.seasons
-        }
-        download_profile.seasons = [
-            season for season in seasons if season.slug in selected_slugs
-        ]
+        # Season filters name seasons by slug, so they work before indexing numbers the seasons.
+        set_profile_filters(download_profile, payload.download_profile.filters)
         s.add(download_profile)
         download_profile.collection = collection
         download_profile.local_media_profile = local_media_profile

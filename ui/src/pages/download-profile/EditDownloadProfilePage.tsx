@@ -5,7 +5,7 @@ import {Link, useNavigate, useParams} from 'react-router-dom'
 import {useDownloadProfilesByCollectionSlug, useLocalMediaProfiles, useCollectionSeasons} from '../../lib/queries'
 import DownloadProfileForm from '../../components/DownloadProfile/DownloadProfileForm'
 import {
-    DownloadProfileUpdateIn, DownloadProfileUpdateOut, DownloadProfileUpdateSchema, forEpisodeIdentifier,
+    DownloadProfileUpdateIn, DownloadProfileUpdateOut, DownloadProfileUpdateSchema,
 } from '../../types/schemas/download_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import Select from 'react-select'
@@ -42,12 +42,8 @@ export default function EditDownloadProfilePage() {
     const {data: collectionProfiles} = useDownloadProfilesByCollectionSlug(downloadProfile?.collectionSlug)
 
     const episodeIdentifier = downloadProfile?.collectionEpisodeIdentifier
-    const schema = useMemo(
-        () => forEpisodeIdentifier(DownloadProfileUpdateSchema, episodeIdentifier),
-        [episodeIdentifier],
-    )
     const form = useForm<DownloadProfileUpdateIn>({
-        resolver: zodResolver(schema),
+        resolver: zodResolver(DownloadProfileUpdateSchema),
         mode: 'onBlur',
         shouldFocusError: true,
     })
@@ -73,19 +69,12 @@ export default function EditDownloadProfilePage() {
         'collection',
         collectionType === 'podcast' || collectionType === 'series' ? collectionType : undefined,
     )
-    const selectedLocalMediaProfileId = form.watch('localMediaProfileId')
-
-    const disabledEpisodeTypes = useMemo(() => {
-        if (typeof selectedLocalMediaProfileId !== 'number') return new Set<string>()
-        return new Set<string>(
-            (collectionProfiles ?? [])
-                .filter((profile) => (
-                    profile.id !== profileId
-                    && profile.localMediaProfileId === selectedLocalMediaProfileId
-                ))
-                .flatMap((profile) => profile.epIdTypeList)
-        )
-    }, [profileId, selectedLocalMediaProfileId, collectionProfiles])
+    // A collection has one Download Profile per Local Media Profile.
+    const usedLocalMediaProfiles = useMemo(() => new Set(
+        (collectionProfiles ?? [])
+            .filter((profile) => profile.id !== profileId)
+            .map((profile) => profile.localMediaProfileId),
+    ), [collectionProfiles, profileId])
 
     const onCancel = useCallback(() => navigate('/download-profiles'), [navigate])
 
@@ -169,6 +158,7 @@ export default function EditDownloadProfilePage() {
                                     options={mediaProfileReg.options}
                                     value={mediaProfileReg.options.find(o => Number(o.value) === field.value) ?? null}
                                     onChange={(opt) => field.onChange((opt as any) ? Number((opt as any).value) : null)}
+                                    isOptionDisabled={(opt) => usedLocalMediaProfiles.has(Number(opt.value))}
                                     onBlur={field.onBlur}
                                     isDisabled={mediaProfileReg.options.length === 0}
                                     placeholder={!mediaProfiles ? 'Loading profiles...' : mediaProfileReg.options.length === 0 ? 'No profiles found' : undefined}
@@ -186,7 +176,7 @@ export default function EditDownloadProfilePage() {
                             <ReadMore summary={<span>The Local Media Profile defines the type and output path of downloaded media.</span>}>
                                 <p>When changing the Local Media Profile for an existing Download Profile, new episodes will be downloaded to the new
                                     location in the new format. Old episodes will be left in their original location.</p>
-                                <p>The same Local Media Profile can be used by multiple Download Profiles for a collection, but each episode type can belong to only one of those profiles.</p>
+                                <p>A collection has one Download Profile per Local Media Profile. Local Media Profiles the collection already uses cannot be chosen.</p>
                             </ReadMore>
                         </div>
                     </div>
@@ -197,7 +187,6 @@ export default function EditDownloadProfilePage() {
                         collectionId={downloadProfile?.collectionId}
                         seasons={seasonsData}
                         collectionRoot={false}
-                        disabledEpisodeTypes={disabledEpisodeTypes}
                     />
 
                     <div className="actions">

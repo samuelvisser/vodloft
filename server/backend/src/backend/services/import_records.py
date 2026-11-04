@@ -48,7 +48,9 @@ from backend.db.models.media_item.MovieExtraSource import MovieExtraSource
 from backend.db.models.stream_profile.RssStreamProfile import RssStreamProfile
 from backend.services.adoption import AdoptionError, real_path
 from backend.services.media_download_history import record_media_download_history
-from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.types.download_profile_types import EpisodeFilterField, MediaDownloadArtifactStatus
+from backend.services.episode_filters import set_profile_filters
+from backend.services.import_filters import filters_from_plan
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.utils.feed_urls import build_rss_feed_url
 from downloader.storage.identity import inspect_artifact
@@ -283,6 +285,11 @@ class _Applier:
                 wanted_on = bool(values.get("enable_profile"))
                 values["enable_profile"] = False
             entity = model(**values)
+            if record.kind == "download_profile":
+                # A series profile lists its seasons; the season records add them one by one.
+                set_profile_filters(entity, filters_from_plan(
+                    record.values, seasons="include_upcoming_seasons" in record.values,
+                ))
             self.session.add(entity)
             self.session.flush()
             self._metadata(entity, record)
@@ -324,8 +331,12 @@ class _Applier:
     def _download_profile_season(self, record: RecordPlan) -> None:
         profile = self.session.get(DownloadProfile, self.resolve(record.references["download_profile_id"]))
         season = self.session.get(Season, self.resolve(record.references["season_id"]))
-        if profile is not None and season is not None and season not in profile.seasons:
-            profile.seasons.append(season)
+        if profile is None or season is None:
+            return
+        # Only a profile with a seasons line lists seasons; without one it downloads every season.
+        for item in profile.filters:
+            if item.field == EpisodeFilterField.SEASONS and season.slug not in (item.season_slugs or []):
+                item.season_slugs = [*(item.season_slugs or []), season.slug]
 
     # Downloads -----------------------------------------------------------------
 

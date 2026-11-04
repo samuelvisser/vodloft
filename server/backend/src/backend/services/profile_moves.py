@@ -13,7 +13,6 @@ import os
 from collections import Counter, defaultdict
 from collections.abc import Collection as CollectionOf, Sequence
 from dataclasses import dataclass, field
-from datetime import timedelta
 from pathlib import Path
 
 from sqlalchemy import select
@@ -28,11 +27,10 @@ from backend.services.download_options import effective_metadata_mode, effective
 from backend.services.download_relocation import (
     DownloadRelocation, filter_relocation_conflicts, plan_download_relocation, relocate_downloads,
 )
-from backend.services.episode_rules import kept_by_rule
 from backend.services.media_download_history import record_media_download_history
 from backend.services.no_ascii_names import settle_no_ascii_name
-from backend.services.which_episodes import EpisodeSelection, _utc_now, episodes_in_window
-from backend.types.download_profile_types import MediaDownloadArtifactStatus, RetentionFrom
+from backend.services.episode_filters import EpisodeSelection, date_line_leaves_out, evaluate, is_date_line, protected
+from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.local_media_profile_types import EpisodeMoveOutcome
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.utils.custom_index import CustomIndexNotReadyError
@@ -211,29 +209,16 @@ def _retention_at_risk(
     """How many of these downloads the Download Profile's retention would delete once they are its own.
 
     Follows the Download Profile worker's cleanup: only a profile that deletes older
-    episodes removes files, and kept downloads or Keep rules protect them.
+    episodes removes files, and kept downloads or Keep filters protect them.
     """
     if not downloads or not profile.delete_older_episodes:
         return 0
-    if profile.download_episode_count > 0:
-        in_window = {episode.id for episode in episodes_in_window(session, EpisodeSelection.of_profile(profile))}
-
-        def outside(download: EpisodeMediaDownload) -> bool:
-            return download.media_item_id not in in_window
-    elif profile.download_days_in_past > 0:
-        cutoff = _utc_now() - timedelta(days=profile.download_days_in_past)
-
-        def outside(download: EpisodeMediaDownload) -> bool:
-            if profile.retention_from == RetentionFrom.DOWNLOADED:
-                moment = download.downloaded_at
-            else:
-                moment = download.media.published_date
-            return moment is not None and moment < cutoff
-    else:
+    if not any(is_date_line(item) for item in profile.filters):
         return 0
+    evaluation = evaluate(session, EpisodeSelection.of_profile(profile))
     return sum(
         1 for download in downloads
-        if not download.kept and not kept_by_rule(profile.rules, download.media) and outside(download)
+        if not protected(evaluation, download) and date_line_leaves_out(evaluation, download)
     )
 
 

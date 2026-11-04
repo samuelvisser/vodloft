@@ -78,7 +78,6 @@ def test_podcast_profile_create_and_update_fire_transactional_events(db_session)
         DownloadProfileAPICreate,
         DownloadProfileAPIUpdate,
     )
-    from backend.types.download_profile_types import EpIdType
     from backend.types.collection_types import CollectionType
     from task_manager.events.registry import VodloftEventLinker, wait_for_events
     from task_manager.tasks.workers.download_profile_worker.event_adapter import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
@@ -94,15 +93,9 @@ def test_podcast_profile_create_and_update_fire_transactional_events(db_session)
             collection_id=collection.id,
             local_media_profile_id=media_profile.id,
             enable_profile=True,
-            ep_id_type_list=[EpIdType.EP.value],
             download_with_countdown=False,
             redownload_final=False,
-            download_days_in_past=0,
-            download_episode_count=0,
             delete_older_episodes=False,
-            download_starting_from=None,
-            seasons=[],
-            include_upcoming_seasons=True,
         ),
     )
 
@@ -128,15 +121,9 @@ def test_podcast_profile_create_and_update_fire_transactional_events(db_session)
         DownloadProfileAPIUpdate(
             local_media_profile_id=media_profile.id,
             enable_profile=True,
-            ep_id_type_list=[EpIdType.EP.value],
             download_with_countdown=True,
             redownload_final=False,
-            download_days_in_past=0,
-            download_episode_count=0,
             delete_older_episodes=False,
-            download_starting_from=None,
-            seasons=[],
-            include_upcoming_seasons=True,
         ),
     )
 
@@ -166,7 +153,6 @@ def test_series_profile_create_and_update_fire_transactional_events(db_session):
         DownloadProfileAPIUpdate,
     )
     from backend.db.models import Season
-    from backend.types.download_profile_types import EpIdType
     from backend.types.collection_types import CollectionType
     from task_manager.events.registry import VodloftEventLinker, wait_for_events
     from task_manager.tasks.workers.download_profile_worker.event_adapter import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
@@ -186,14 +172,8 @@ def test_series_profile_create_and_update_fire_transactional_events(db_session):
             collection_id=collection.id,
             local_media_profile_id=media_profile.id,
             enable_profile=True,
-            ep_id_type_list=[EpIdType.EP.value],
-            seasons=[season_input],
-            include_upcoming_seasons=False,
             download_with_countdown=False,
             redownload_final=False,
-            download_days_in_past=0,
-            download_episode_count=0,
-            download_starting_from=None,
             delete_older_episodes=False,
         ),
     )
@@ -220,14 +200,8 @@ def test_series_profile_create_and_update_fire_transactional_events(db_session):
         DownloadProfileAPIUpdate(
             local_media_profile_id=media_profile.id,
             enable_profile=True,
-            ep_id_type_list=[EpIdType.EP.value],
-            seasons=[season_input],
-            include_upcoming_seasons=True,
             download_with_countdown=False,
             redownload_final=False,
-            download_days_in_past=0,
-            download_episode_count=0,
-            download_starting_from=None,
             delete_older_episodes=False,
         ),
     )
@@ -250,7 +224,6 @@ def test_series_profile_create_and_update_fire_transactional_events(db_session):
 def test_download_profile_events_are_discarded_on_rollback(db_session):
     from backend.api.endpoints.download_profiles.service import create_download_profile
     from backend.api.models.download_profile import DownloadProfileAPICreate
-    from backend.types.download_profile_types import EpIdType
     from backend.types.collection_types import CollectionType
     from task_manager.events.registry import wait_for_events
     from task_manager.tasks.workers.download_profile_worker.event_adapter import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
@@ -266,15 +239,9 @@ def test_download_profile_events_are_discarded_on_rollback(db_session):
             collection_id=collection.id,
             local_media_profile_id=media_profile.id,
             enable_profile=True,
-            ep_id_type_list=[EpIdType.EP.value],
             download_with_countdown=False,
             redownload_final=False,
-            download_days_in_past=0,
-            download_episode_count=0,
             delete_older_episodes=False,
-            download_starting_from=None,
-            seasons=[],
-            include_upcoming_seasons=True,
         ),
     )
     db_session.rollback()

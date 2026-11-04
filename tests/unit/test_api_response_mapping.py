@@ -55,7 +55,6 @@ def test_download_profile_view_uses_relationship_aliases():
         collection_id=1,
         local_media_profile_id=2,
         enable_profile=True,
-        ep_id_type_list=["ep", "aux"],
         created_at=NOW,
         updated_at=NOW,
         collection=SimpleNamespace(
@@ -64,11 +63,7 @@ def test_download_profile_view_uses_relationship_aliases():
         local_media_profile=SimpleNamespace(name="Audio", preferred_format="audio"),
         download_with_countdown=False,
         redownload_final=False,
-        download_days_in_past=0,
-        download_episode_count=25,
-        download_starting_from=None,
         delete_older_episodes=True,
-        retention_from="published",
         auto_subtitles="fallback",
         sponsorblock_enabled=False,
         sponsorblock_segments={},
@@ -76,10 +71,10 @@ def test_download_profile_view_uses_relationship_aliases():
         upgrade_after_days=7,
         upgrade_repeat="once",
         upgrade_improvements=["resolution"],
-        seasons=[],
-        include_upcoming_seasons=True,
-        all_seasons=False,
-        rules=[],
+        filters=[SimpleNamespace(
+            id=7, action="only", field="published", pattern=None, duration_operator=None, duration_seconds=None,
+            episode_types=None, season_slugs=None, include_upcoming=False, days=None, count=25, starting_from=None,
+        )],
     )
 
     view = DownloadProfileAPIReadView.model_validate(
@@ -90,7 +85,7 @@ def test_download_profile_view_uses_relationship_aliases():
     assert view.local_media_profile_name == "Audio"
     assert view.collection_episode_identifier == "seasonal"
     assert view.collection_source_key == "ytdlp"
-    assert view.download_episode_count == 25
+    assert view.filters[0].count == 25
     assert view.storage_size_bytes == 2048
 
 

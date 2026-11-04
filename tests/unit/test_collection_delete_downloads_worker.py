@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from profile_filters import filter_rows, line
+
 from conftest import available_artifact
 from datetime import datetime, timezone
 from pathlib import Path
@@ -90,11 +92,9 @@ def _library(session: Session, tmp_path: Path):
             collection_id=collection.id,
             local_media_profile_id=local_media_profile.id,
             enable_profile=True,
-            ep_id_type_list=[EpIdType.EP.value],
+            filters=filter_rows(line("only", "types", episode_types=[EpIdType.EP.value])),
             download_with_countdown=False,
             redownload_final=False,
-            download_days_in_past=0,
-            download_episode_count=0,
             delete_older_episodes=False,
         )
         session.add(profile)

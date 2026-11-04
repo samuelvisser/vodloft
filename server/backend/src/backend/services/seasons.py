@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from backend.db.models import Season
+from backend.services.episode_filters import add_upcoming_season
 from backend.types.season_types import SeasonType
 from backend.types.collection_types import CollectionType
 from backend.utils.season_ordering import season_type_from_name
@@ -49,8 +50,7 @@ def create_season_record(
 
     if update_collection_profiles and season.collection.type == CollectionType.SERIES.value:
         for profile in season.collection.download_profiles:
-            if profile.include_upcoming_seasons:
-                profile.seasons.append(season)
+            add_upcoming_season(profile, season.slug)
         s.flush()
 
     queue_event(

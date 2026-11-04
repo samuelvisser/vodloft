@@ -23,7 +23,7 @@ import re
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, replace
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -42,12 +42,13 @@ from sources.ytdlp_options import check_ytdlp_options
 
 from backend.db.core import begin_write_transaction
 from backend.db.models import (
-    Collection, CollectionLocalMediaProfile, DownloadProfile, DownloadProfileRule, Episode, ExistingFileScan, ImportLink, ImportRun, ImportStep,
+    Collection, CollectionLocalMediaProfile, DownloadProfile, Episode, ExistingFileScan, ImportLink, ImportRun, ImportStep,
     LocalMediaProfileBase, MediaDownloadBase, MovieLocalMediaProfile,
 )
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.adoption import AdoptionError, adopt, download_root, real_path
-from backend.services.episode_rules import set_profile_rules
+from backend.services.episode_filters import set_profile_filters
+from backend.services.import_filters import filters_from_plan
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.custom_index import (
     INDEX_ASSIGNMENT_PREFIX, get_indexing_value_definitions, remove_episode_index_assignments,
@@ -73,10 +74,7 @@ _PROFILE_FIELDS = (
     "subtitle_languages", "subtitle_language_mode", "quality_goal", "video_codecs", "container", "audio_codec",
     "audio_language",
 )
-_DOWNLOAD_PROFILE_FIELDS = (
-    "ep_id_type_list", "download_days_in_past", "download_episode_count", "download_starting_from",
-    "delete_older_episodes", "retention_from", "auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments",
-)
+_DOWNLOAD_PROFILE_FIELDS = ("delete_older_episodes", "auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments")
 _OPTIONAL_DOWNLOAD_PROFILE_FIELDS = ("upgrade_check", "upgrade_after_days", "upgrade_repeat")
 """Download Profile fields an importer only sends when the other program had the setting."""
 _COLLECTION_FIELDS = ("cookies_mode", "check_frequency", "check_cron")
@@ -380,8 +378,6 @@ def _profile_wanted(plan: ProfilePlan) -> dict[str, object]:
 def _download_profile_values(profile: DownloadProfile) -> dict[str, object]:
     values = {name: getattr(profile, name) for name in (*_DOWNLOAD_PROFILE_FIELDS, *_OPTIONAL_DOWNLOAD_PROFILE_FIELDS)}
     values["sponsorblock_segments"] = dict(values["sponsorblock_segments"])
-    starting = values["download_starting_from"]
-    values["download_starting_from"] = starting.isoformat() if isinstance(starting, date) else starting
     return values
 
 
@@ -391,17 +387,6 @@ def _download_profile_wanted(plan: CollectionPlan) -> dict[str, object]:
         **{name: fields.get(name) for name in _DOWNLOAD_PROFILE_FIELDS},
         **{name: fields[name] for name in _OPTIONAL_DOWNLOAD_PROFILE_FIELDS if name in fields},
     }
-
-
-def _download_profile_rules(plan: CollectionPlan) -> list[DownloadProfileRule]:
-    return [
-        DownloadProfileRule(
-            action=rule["action"], field=rule["field"], pattern=rule.get("pattern"),
-            ignore_case=bool(rule.get("ignore_case")), duration_operator=rule.get("duration_operator"),
-            duration_seconds=rule.get("duration_seconds"), episode_types=rule.get("episode_types"),
-        )
-        for rule in (plan.download_profile or {}).get("rules") or []
-    ]
 
 
 def _normalise_url(url: str) -> str:
@@ -1075,14 +1060,11 @@ def _upsert_download_profile(
     wanted = _download_profile_wanted(plan)
     unsupported = _unsupported(plan.warnings)
     if existing is None:
-        values = dict(wanted)
-        starting = values.get("download_starting_from")
         existing = DownloadProfile(
             collection_id=collection.id, local_media_profile_id=profile.id, enable_profile=False,
-            download_with_countdown=False, redownload_final=False, include_upcoming_seasons=True,
-            **{**values, "download_starting_from": date.fromisoformat(starting) if starting else None},
+            download_with_countdown=False, redownload_final=False, **wanted,
         )
-        set_profile_rules(existing, _download_profile_rules(plan))
+        set_profile_filters(existing, filters_from_plan(plan.download_profile, seasons=False))
         session.add(existing)
         session.flush()
         _write, hashes, _changes = _merge_fields(_download_profile_values(existing), wanted, None, unsupported)
@@ -1090,10 +1072,10 @@ def _upsert_download_profile(
     else:
         write, hashes, changes = _merge_fields(_download_profile_values(existing), wanted, link, unsupported)
         for name, value in write.items():
-            setattr(existing, name, date.fromisoformat(value) if name == "download_starting_from" and value else value)
-        if not existing.rules:
-            # Rules are added once; after that, Which episodes is yours to change.
-            set_profile_rules(existing, _download_profile_rules(plan))
+            setattr(existing, name, value)
+        if not existing.filters:
+            # Filters are added once; after that, Which episodes is yours to change.
+            set_profile_filters(existing, filters_from_plan(plan.download_profile, seasons=False))
         _report_changes(report, f"{collection.title} Download Profile", changes)
     _remember(session, links, run.importer, "download_profile", external_id, existing.id, hashes, unsupported, run.id)
     return existing

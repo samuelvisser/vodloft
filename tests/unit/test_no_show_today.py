@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from profile_filters import filter_rows, line
+
 import asyncio
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -306,10 +308,9 @@ def test_download_profile_excludes_unusable_and_processing_statuses(db_session):
         collection=collection,
         local_media_profile=lmp,
         enable_profile=True,
-        ep_id_type_list=[EpIdType.EP.value, EpIdType.AUX.value],
+        filters=filter_rows(line("only", "types", episode_types=[EpIdType.EP.value, EpIdType.AUX.value])),
         download_with_countdown=False,
         redownload_final=False,
-        download_days_in_past=0,
         delete_older_episodes=False,
     )
     db_session.add(profile)

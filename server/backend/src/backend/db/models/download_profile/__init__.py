@@ -1,2 +1,2 @@
-from .DownloadProfile import DownloadProfile, download_profile_seasons
-from .DownloadProfileRule import DownloadProfileRule
+from .DownloadProfile import DownloadProfile
+from .DownloadProfileFilter import DownloadProfileFilter

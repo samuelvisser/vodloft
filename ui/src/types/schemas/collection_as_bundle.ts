@@ -1,5 +1,5 @@
 import {CollectionCreatePayloadSchema} from './collection'
-import {DownloadProfileSchemaRequest, refineDownloadLimit} from './download_profile'
+import {DownloadProfileSchemaRequest} from './download_profile'
 import {
     CollectionLocalMediaProfileCreateSchema,
     CollectionLocalMediaProfileUpdateSchema,
@@ -9,12 +9,8 @@ import {z} from 'zod'
 import {SeasonDetachedSchema} from './season'
 
 
-export const DownloadProfileBundleSchema = DownloadProfileSchemaRequest.extend({
-    // The add-show wizard supplies the latest available season dynamically.
-    // Keep this required here so getZodDefaults can distinguish an untouched
-    // wizard profile from one where the user deliberately cleared all seasons.
-    seasons: z.array(SeasonDetachedSchema),
-}).superRefine(refineDownloadLimit)
+// The add-show wizard supplies the starting filters, which follow the collection's seasons and Source.
+export const DownloadProfileBundleSchema = DownloadProfileSchemaRequest
 export type DownloadProfileBundleIn = z.input<typeof DownloadProfileBundleSchema>
 export type DownloadProfileBundleOut = z.output<typeof DownloadProfileBundleSchema>
 

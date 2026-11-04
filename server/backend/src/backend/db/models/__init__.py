@@ -25,7 +25,7 @@ from .Notification import (
     NotificationDelivery, NotificationDestination, NotificationEvent, NotificationRule, PushSubscription, PushVapidKey,
 )
 
-from .download_profile import DownloadProfile, DownloadProfileRule
+from .download_profile import DownloadProfile, DownloadProfileFilter
 from .media_download import MediaDownloadBase
 from .media_download import MediaDownloadHistory
 from .media_item import MediaItemBase
