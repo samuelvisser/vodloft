@@ -37,17 +37,19 @@ async def migrate(context) -> None:
         collections = list(session.scalars(select(Collection).where(Collection.site_key.is_(None)).order_by(Collection.id)))
         videos = list(session.scalars(select(Video).where(Video.site_key.is_(None)).order_by(Video.id)))
         total = len(collections) + len(videos)
+        # Each one is saved on its own, so VODLoft is never locked out of the database for the whole run, and a
+        # run that stops halfway goes on where it was: only what has no Site yet is looked up again.
         for done, collection in enumerate(collections):
             context.update_progress(done, total, "Finding the Site of collections")
             try:
                 place_collection(session, collection)
             except CollectionAlreadyAddedError as exc:
                 logger.warning("'%s' is the same collection as '%s', so it keeps no Site", collection.title, exc.existing.title)
-            session.flush()
+            session.commit()
         for done, video in enumerate(videos, start=len(collections)):
             context.update_progress(done, total, "Finding the Site of videos")
             place_video(session, video)
-        session.commit()
+            session.commit()
         context.update_progress(total, total, "Finding the Site of collections and videos")
     except Exception:
         session.rollback()
