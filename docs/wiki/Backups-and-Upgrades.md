@@ -46,9 +46,16 @@ Restoring only `vodloft.db` while losing the accompanying key and authentication
 
 ## Upgrade VODLoft
 
-Every [VODLoft release](https://github.com/samuelvisser/vodloft/releases) lists the commands to upgrade to exactly that version. This section explains them step by step. The examples use version `0.7.0`; use the version from the release you want instead.
+The quickest way to upgrade to the newest version is:
 
-These steps are for the standard Docker Compose setup from [[Installation]]. Type each command in a terminal on the computer or server that runs VODLoft, and press Enter after each one.
+```bash
+docker compose pull
+docker compose up -d
+```
+
+Every [VODLoft release](https://github.com/samuelvisser/vodloft/releases) also lists two commands that install exactly that version, even if a newer one is out. This section explains them step by step. The examples use version `0.7.0`; use the version from the release you want instead.
+
+These steps are for the standard Docker Compose setup from [[Installation]], whose `docker-compose.yml` uses `ghcr.io/samuelvisser/vodloft:latest`. Type each command in a terminal on the computer or server that runs VODLoft, and press Enter after each one.
 
 1. **Go to your VODLoft folder**, the folder with your `docker-compose.yml` in it. If you followed [[Installation]], that is the `vodloft` folder in your home folder:
 
@@ -67,21 +74,19 @@ These steps are for the standard Docker Compose setup from [[Installation]]. Typ
 
    `sudo` may ask for your own password. If your system has no `sudo`, for example because you are logged in as root, leave it out.
 
-3. **Choose the version.** This command changes the `image:` line in `docker-compose.yml` so it names version 0.7.0, and the second shows the result:
+3. **Download version 0.7.0** and make it the version your `docker-compose.yml` starts. The first part downloads it; the second gives it the name `latest`, which is the name your `docker-compose.yml` asks for:
 
    ```bash
-   sed -i 's#ghcr.io/samuelvisser/vodloft[:a-z0-9.-]*#ghcr.io/samuelvisser/vodloft:0.7.0#' docker-compose.yml
-   grep image: docker-compose.yml
+   docker pull ghcr.io/samuelvisser/vodloft:0.7.0 && docker tag ghcr.io/samuelvisser/vodloft:0.7.0 ghcr.io/samuelvisser/vodloft:latest
    ```
 
-   It should show `image: ghcr.io/samuelvisser/vodloft:0.7.0`. On a Mac, write `sed -i ''` instead of `sed -i`. You can also make this change by hand: open `docker-compose.yml` in a text editor, such as `nano docker-compose.yml`, and change the `image:` line.
-
-4. **Download the new version and start it:**
+4. **Start it:**
 
    ```bash
-   docker compose pull
    docker compose up -d
    ```
+
+   Don't run `docker compose pull` here: that would download the newest version again in place of 0.7.0.
 
 5. **Check that it worked.** Open VODLoft in your browser. The bottom of the sidebar shows the version, such as **v0.7.0**. The first start after an upgrade can take a minute while VODLoft upgrades its database. If VODLoft does not open, this shows what went wrong:
 
@@ -90,8 +95,6 @@ These steps are for the standard Docker Compose setup from [[Installation]]. Typ
    ```
 
 Keep the `config-before-0.7.0` folder until you are sure everything works. After that you can delete it with `sudo rm -rf config-before-0.7.0`.
-
-Once `docker-compose.yml` names a version, `docker compose pull` on its own no longer moves you to a newer one: you decide when VODLoft changes, and a backup always matches a known version. With `ghcr.io/samuelvisser/vodloft:latest` instead, every `docker compose pull` takes whatever version is newest at that moment.
 
 ### If a command does not work
 
@@ -108,8 +111,7 @@ In your VODLoft folder, with the version you are going back to (here `0.6.1`):
 docker compose stop
 sudo mv config config-from-0.7.0
 sudo mv config-before-0.7.0 config
-sed -i 's#ghcr.io/samuelvisser/vodloft[:a-z0-9.-]*#ghcr.io/samuelvisser/vodloft:0.6.1#' docker-compose.yml
-docker compose pull
+docker pull ghcr.io/samuelvisser/vodloft:0.6.1 && docker tag ghcr.io/samuelvisser/vodloft:0.6.1 ghcr.io/samuelvisser/vodloft:latest
 docker compose up -d
 ```
 

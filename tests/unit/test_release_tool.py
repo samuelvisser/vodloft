@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
-import re
 from pathlib import Path
 import sys
 
@@ -112,19 +111,15 @@ def test_a_failing_command_without_captured_output_raises_a_release_error():
 def test_upgrade_steps_pin_the_release_image():
     steps = release_tool.render_upgrade_steps("2.3.4")
 
-    assert "ghcr.io/samuelvisser/vodloft:2.3.4" in steps
-    assert ":latest" not in steps
+    assert "docker pull ghcr.io/samuelvisser/vodloft:2.3.4 " in steps
+    assert "docker compose pull" not in steps
     assert "$" not in steps
 
 
-def test_upgrade_steps_rewrite_the_image_line_of_the_published_compose_file():
+
+def test_upgrade_steps_tag_the_release_as_the_image_compose_starts():
     steps = release_tool.render_upgrade_steps("2.3.4")
-    sed_command = next(line for line in steps.splitlines() if line.strip().startswith("sed -i 's#"))
-    expression = sed_command.split("'")[1]
-    pattern, replacement = expression.split("#")[1:3]
     compose = (REPOSITORY_ROOT / ".docker" / "docker-compose.yml").read_text()
 
-    updated = re.sub(pattern.replace(".", r"\."), replacement, compose)
-
-    assert "image: ghcr.io/samuelvisser/vodloft:2.3.4\n" in updated
-    assert "vodloft:latest" not in updated
+    assert "docker tag ghcr.io/samuelvisser/vodloft:2.3.4 ghcr.io/samuelvisser/vodloft:latest" in steps
+    assert "image: ghcr.io/samuelvisser/vodloft:latest\n" in compose

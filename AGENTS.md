@@ -180,10 +180,10 @@ Whenever we are about to release a new version, keep the following in mind.
 
 ### Release notes
 Every release's notes end their **Upgrading** section with the step-by-step instructions that
-`./release.py upgrade-steps --version X.Y.Z` prints (see RELEASING.md): a few lines that pin the release's own image
-tag and link to the step-by-step guide in the wiki. Keep release notes short: write release-specific upgrade notes
-above them, put longer explanations in the wiki, never replace them with a bare `docker compose pull`, and never point
-an upgrade at `latest`.
+`./release.py upgrade-steps --version X.Y.Z` prints (see RELEASING.md): two commands that pull the release's own image
+tag, tag it as `latest` and start it, plus a link to the step-by-step guide in the wiki. Keep release notes short:
+write release-specific upgrade notes above them, put longer explanations in the wiki, and never replace them with a
+bare `docker compose pull`, which takes whatever version is newest.
 
 ### AGENT branches cleanup
 All branches created by agents, for example `codex/*` branches, usually need a cleanup before a release.
