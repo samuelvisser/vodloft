@@ -521,6 +521,8 @@ def trigger_now(
     Operation correlation is scheduler infrastructure, not a worker parameter.
     Child tasks started from inside a worker automatically remain associated with
     the same high-level operation unless the caller explicitly overrides it.
+    Inherited work is not owned by that operation: it still runs when the
+    operation finished first, and only stops when the operation was canceled.
     """
     from .operation_context import current_operation_ids
 
@@ -536,6 +538,8 @@ def trigger_now(
     )
     if inherited_ids:
         execution_kwargs["operation_ids"] = inherited_ids
+        if operation_ids is None:
+            execution_kwargs["operation_ids_inherited"] = True
     if operation_slot is not None:
         execution_kwargs["operation_slot"] = operation_slot
 
