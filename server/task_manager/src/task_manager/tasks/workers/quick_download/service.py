@@ -16,13 +16,13 @@ from backend.services.quick_downloads import (
 )
 from backend.services import quick_download_history as history
 from config import get_settings
-from downloader import DownloadCancelled, EncryptedMediaError, FileTooLargeError, SubscriptionRequiredError
+from downloader import DownloadCanceled, EncryptedMediaError, FileTooLargeError, SubscriptionRequiredError
 from downloader.capacity import resources
 from downloader.coordinator import execute_download_plan
 from downloader.lifecycle import DownloadTracker
 from downloader.storage.quick import remove_quick_folder, reserve_quick_folder, write_manifest
 from downloader.transfer_context import transfer_context
-from sources.pacing import RequestCancelled, request_context
+from sources.pacing import RequestCanceled, request_context
 from task_manager.scheduler.results import TaskResult
 from task_manager.tasks.download_adapter import DownloadProgressReporter
 from task_manager.tasks.media_download_operations import on_media_download_transfer_complete
@@ -102,7 +102,7 @@ def run_quick_download(request_input: dict[str, Any], *, progress=None) -> TaskR
             },
         )
     except BaseException as exc:
-        tracker.cancel(user_requested=isinstance(exc, (DownloadCancelled, RequestCancelled)))
+        tracker.cancel(user_requested=isinstance(exc, (DownloadCanceled, RequestCanceled)))
         tracker.stop_reporting()
         # Retrying cannot help with any of these.
         if isinstance(exc, EncryptedMediaError):

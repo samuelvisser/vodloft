@@ -8,7 +8,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .capacity import DownloadResources
-from .errors import DownloadCancelled, DownloadError, MediaUnavailableError
+from .errors import DownloadCanceled, DownloadError, MediaUnavailableError
 from .http import http_get, wait_for_retry
 from .lifecycle import DownloadTracker
 from .models import DownloadProgress, WrittenSubtitle, _extension_for_direct_file
@@ -89,7 +89,7 @@ def acquire_sidecar(spec: SidecarSpec, workspace: Path, tracker: DownloadTracker
             except BaseException as exc:
                 if path is not None:
                     path.unlink(missing_ok=True)
-                if isinstance(exc, (DownloadCancelled, InvalidSidecar, MediaUnavailableError)) or not isinstance(exc, Exception):
+                if isinstance(exc, (DownloadCanceled, InvalidSidecar, MediaUnavailableError)) or not isinstance(exc, Exception):
                     raise
                 if attempt + 1 == spec.attempts:
                     raise
@@ -121,7 +121,7 @@ class SidecarDownloads:
     def _required_finished(self, future: Future[AcquiredSidecar]) -> None:
         if not future.cancelled():
             error = future.exception()
-            if error is not None and not isinstance(error, DownloadCancelled):
+            if error is not None and not isinstance(error, DownloadCanceled):
                 self._tracker.fail(error)
 
     def fulfil(self, asset_id: str, subtitles: tuple[WrittenSubtitle, ...]) -> None:
@@ -158,7 +158,7 @@ class SidecarDownloads:
             result = future.result()
             self._resolved[asset_id] = result
             return result
-        except DownloadCancelled:
+        except DownloadCanceled:
             raise
         except Exception:
             spec = self._specs[asset_id]

@@ -128,7 +128,7 @@ export default function DownloadLogDialog({row, onClose}: Props) {
                         <div>
                             <dt>Current status</dt>
                             <dd>
-                                <DownloadProgressStatus download={row}/>
+                                <DownloadProgressStatus presentation={row.presentation}/>
                             </dd>
                         </div>
                         {currentAttempt && <div><dt>Current attempt</dt><dd>{currentAttempt}</dd></div>}

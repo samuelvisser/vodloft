@@ -17,10 +17,23 @@ import {
     Mp3Bitrate,
 } from '../types/schemas/quick_download'
 import type {QuickDownloadSettings} from '../types/schemas/settings'
+import type {TaskOperationRead} from '../types/schemas/operation'
 import {formatBytes} from '../utils/formatting'
 
 export const QUICK_DOWNLOAD_OPERATION_KIND = 'quick.download'
 export const quickDownloadsQueryKey = ['quickDownloads'] as const
+const ACTIVE_QUICK_DOWNLOAD_STATUSES = new Set(['QUEUED', 'RUNNING', 'WAITING'])
+
+/**
+ * The quick downloads still queued or working, among the operations the frontend receives:
+ * the ones working first, then the queue, each oldest first, as on Downloads.
+ */
+export function activeQuickDownloads(operations: readonly TaskOperationRead[]): TaskOperationRead[] {
+    const queued = (operation: TaskOperationRead) => operation.status === 'QUEUED' ? 1 : 0
+    return operations
+        .filter((operation) => operation.kind === QUICK_DOWNLOAD_OPERATION_KIND && ACTIVE_QUICK_DOWNLOAD_STATUSES.has(operation.status))
+        .sort((left, right) => queued(left) - queued(right) || (left.createdAt ?? '').localeCompare(right.createdAt ?? ''))
+}
 
 export const CODEC_NAMES: Record<QuickCodec, string> = {h264: 'H.264', h265: 'H.265', vp9: 'VP9', av1: 'AV1'}
 export const CODEC_NOTES: Record<QuickCodec, string> = {

@@ -39,6 +39,7 @@ _TEMPLATE_NAMES = {"show": "collection", "show_title": "collection_title"}
 _TEMPLATE_PREFIXES = (("meta_show_", "meta_collection_"),)
 # Stored values VODLoft renamed (VODLoft's stored-names migration).
 _MEMBERSHIP_LEVELS = {"WL_ANY": "HIGHEST_ALLOWED"}
+_HISTORY_ACTIONS = {"cancelled": "canceled"}
 _VALUE_PREFIXES = (
     ("wireloft:last_known_pending:", "vodloft:last_known_pending:"),
     ("wireloft:recorded_published_final:", "vodloft:recorded_published_final:"),
@@ -381,7 +382,8 @@ def _downloads(data: WireLoftData, paths: _Paths) -> list[RecordPlan]:
                 references["download_profile_id"] = _ref("download_profile", extra["download_profile_id"])
         children = tuple(
             RecordPlan("download_history", str(item["id"]), values={
-                "action": item["action"], "metadata": _json(item["metadata"]), "occurred_at": item["occurred_at"],
+                "action": _HISTORY_ACTIONS.get(item["action"], item["action"]),
+                "metadata": _json(item["metadata"]), "occurred_at": item["occurred_at"],
             })
             for item in history.get(download_id, [])
         ) + tuple(

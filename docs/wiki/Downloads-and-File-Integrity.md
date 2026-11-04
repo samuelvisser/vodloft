@@ -4,7 +4,7 @@ The **Downloads** page is the central place to see actual media-file activity in
 
 Each row represents one media item and Local Media Profile combination, so the same episode can appear more than once when you keep multiple formats.
 
-Files from **Quick download** do not appear here, because they never go into the library. See [[Quick-Download]].
+Files from **Quick download** are not in this list, because they never go into the library. While one is still being made, a **Quick downloads in progress** box at the top of the page shows how far along it is; cancel it or fetch the file on the **Quick download** page. See [[Quick-Download]].
 
 ## Download statuses
 
@@ -14,7 +14,7 @@ VODLoft can collection downloads as:
 - **Downloading** — media is currently being transferred;
 - **Processing** — the primary media transfer finished, but artwork, metadata, or final publication is still being completed;
 - **Downloaded** — the local file completed successfully;
-- **Cancelled** — the download was stopped;
+- **Canceled** — the download was stopped;
 - **Error** — the attempt failed;
 - **Missing** — VODLoft expected a completed file but cannot find it;
 - **Corrupted** — the file exists but failed VODLoft's integrity checks.
@@ -31,13 +31,13 @@ A queued item can be **Prioritized**. Prioritized items are chosen before ordina
 
 ### Cancel
 
-Active or queued work can be cancelled. Cancellation stops the VODLoft download operation; it does not delete a previously completed media file.
+Active or queued work can be canceled. Cancellation stops the VODLoft download operation; it does not delete a previously completed media file.
 
 ### Retry
 
-Failed, cancelled, missing, or corrupted downloads can be retried where appropriate. Queued items do not show Retry because they have not failed—they can be prioritized instead.
+Failed, canceled, missing, or corrupted downloads can be retried where appropriate. Queued items do not show Retry because they have not failed—they can be prioritized instead.
 
-When you **re-download an existing file**, VODLoft keeps the previous version available while it transfers the replacement, completes processing, and publishes the new file. It switches to the finished replacement only after successful publication. A failed or cancelled replacement leaves the previous completed download intact.
+When you **re-download an existing file**, VODLoft keeps the previous version available while it transfers the replacement, completes processing, and publishes the new file. It switches to the finished replacement only after successful publication. A failed or canceled replacement leaves the previous completed download intact.
 
 For ordinary files with an unchanged destination, the completed replacement is staged beside the original file and then atomically renamed over it. The recorded file path never changes. If VODLoft crashes during publication, the existing startup filesystem recovery verifies file identities and finishes any interrupted replacement without downloading everything again.
 

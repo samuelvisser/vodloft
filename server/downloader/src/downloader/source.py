@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from .downloader import probe
-from .errors import DownloadCancelled, DownloadError, MediaUnavailableError
+from .errors import DownloadCanceled, DownloadError, MediaUnavailableError
 from .models import MediaKind, VideoRendition
 from .plan import ResolvedDownloadSource
 
@@ -12,9 +12,9 @@ FORMAT_HEIGHTS = {
 }
 
 
-def ensure_not_cancelled(cancellation) -> None:
+def ensure_not_canceled(cancellation) -> None:
     if cancellation is not None and callable(cancellation) and cancellation():
-        raise DownloadCancelled("Download was canceled")
+        raise DownloadCanceled("Download was canceled")
 
 
 def select_rendition(
@@ -76,9 +76,9 @@ def resolve_download_source(
 
     ``quality`` picks a video rendition at most that high in place of ``preferred_format``.
     """
-    ensure_not_cancelled(cancellation)
+    ensure_not_canceled(cancellation)
     info = probe(url)
-    ensure_not_cancelled(cancellation)
+    ensure_not_canceled(cancellation)
 
     if video_fallback_for_audio and not audio_only:
         raise DownloadError("Video fallback can only be used for an audio-only download")

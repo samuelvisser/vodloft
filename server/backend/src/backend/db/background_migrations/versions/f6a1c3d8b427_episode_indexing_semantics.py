@@ -665,7 +665,7 @@ async def migrate(context) -> None:
     total = len(collections)
 
     for index, local_collection in enumerate(collections, start=1):
-        context.raise_if_cancelled()
+        context.raise_if_canceled()
         context.update_progress(
             index - 1,
             total,
@@ -677,7 +677,7 @@ async def migrate(context) -> None:
             client,
             local_collection,
         )
-        context.raise_if_cancelled()
+        context.raise_if_canceled()
 
         plan = _plan_collection(local_collection, remote_by_season)
         _apply_collection_plan(plan)

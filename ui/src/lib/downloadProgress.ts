@@ -96,12 +96,12 @@ export function presentDownloadProgress(download?: MediaDownloadDomainViewRead, 
     }
     if (operation?.status === 'SUCCEEDED') return terminal(operation.context?.is_redownload ? 'redownloaded' : 'downloaded', 'Downloaded', 'All required outputs were published successfully.', 'success')
     if (operation?.status === 'FAILED' || operation?.status === 'PARTIAL') return terminal('error', 'Failed', operation.error || operation.message || 'Download failed.', 'error')
-    if (operation?.status === 'CANCELED') return terminal('cancelled', 'Canceled', 'The download was canceled.', 'canceled')
+    if (operation?.status === 'CANCELED') return terminal('canceled', 'Canceled', 'The download was canceled.', 'canceled')
     if (download?.artifactStatus === 'available') return terminal(download.latestTaskIsRedownload ? 'redownloaded' : 'downloaded', 'Downloaded', 'The media file is available.', 'success')
     if (download?.artifactStatus === 'missing') return terminal('missing', 'Missing', 'The downloaded file could not be found.', 'error')
     if (download?.artifactStatus === 'corrupted') return terminal('corrupted', 'Corrupted', download.artifactError || 'The downloaded file failed verification.', 'error')
     if (download?.latestTaskStatus === 'RUNNING') return {status: 'preparing', ...workingPresentation('Preparing', 'Waiting for the current execution snapshot.')}
     if (download?.latestTaskStatus === 'FAILED') return terminal('error', 'Failed', download.latestTaskError || 'Download failed.', 'error')
-    if (download?.automaticRetrySuppressed || download?.latestTaskStatus === 'CANCELED') return terminal('cancelled', 'Canceled', 'No automatic replacement is queued.', 'canceled')
+    if (download?.automaticRetrySuppressed || download?.latestTaskStatus === 'CANCELED') return terminal('canceled', 'Canceled', 'No automatic replacement is queued.', 'canceled')
     return terminal('not_downloaded', 'Not downloaded', 'No download is currently queued.')
 }

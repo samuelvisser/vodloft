@@ -8,7 +8,7 @@ from pathlib import Path
 from collections.abc import Mapping
 from typing import Optional
 
-from .errors import DownloadCancelled, DownloadError, FfmpegNotFoundError
+from .errors import DownloadCanceled, DownloadError, FfmpegNotFoundError
 from .language_codes import mp4_language_code
 from .models import CancelCheck
 
@@ -292,7 +292,7 @@ def _run_cancellable(command: list[str], should_cancel: CancelCheck):
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait()
-                raise DownloadCancelled("Download cancelled during local processing")
+                raise DownloadCanceled("Download canceled during local processing")
             try:
                 output, _ = process.communicate(timeout=0.1)
                 break

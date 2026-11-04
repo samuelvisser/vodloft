@@ -11,6 +11,7 @@ import ConfirmDialog from '../components/ConfirmDialog/ConfirmDialog'
 import {useActiveOperation} from '../components/OperationNotifier/OperationNotifier'
 import PageSubtitle from '../components/common/PageSubtitle'
 import DownloadProgressStatus from '../components/DownloadProgress/DownloadProgressStatus'
+import QuickDownloadsInProgressBox from '../components/QuickDownload/QuickDownloadsInProgressBox'
 import ProgressButton from '../components/common/ProgressButton'
 import {frontendOperationDefinitions} from '../lib/operationDefinitions'
 import {useControlOperation, useStartOperation} from '../lib/operations'
@@ -74,7 +75,7 @@ function setsEqual(a: Set<string>, b: Set<string>): boolean {
 
 
 function StatusCell({row}: {row: MediaDownloadViewRead}) {
-    return <DownloadProgressStatus download={row} compact/>
+    return <DownloadProgressStatus presentation={row.presentation} compact/>
 }
 
 function isRetryableDownload(row: MediaDownloadViewRead): boolean {
@@ -419,8 +420,13 @@ export default function DownloadsPage() {
                         Records without a file or active queue item are marked Not downloaded and can also be retried.
                         Download records are persistent history; any record whose artifact is Absent or Missing can be deleted individually or in bulk, regardless of its download status.
                     </p>
+                    <p>
+                        Quick downloads that are still running show in a box above the list. They never go into the library,
+                        so they are managed on the Quick download page.
+                    </p>
                 </PageSubtitle>
             </div>
+            <QuickDownloadsInProgressBox/>
             <div className="downloads-filter-row">
                 <div className="filter-chip-group" role="group" aria-label="Filter downloads by status">
                     {DOWNLOAD_STATUS_FILTER_OPTIONS.map((option) => (
@@ -520,7 +526,7 @@ export default function DownloadsPage() {
                     emptyMessage={
                         downloads.length > 0
                             ? 'No downloads match the selected filters.'
-                            : "No downloads yet. Start one from an episode or movie page."
+                            : "No downloads here. Start one from an episode or movie page."
                     }
                     rowKey={(row) => row.id}
                     rowAriaLabel={(row) => `${rowTitle(row)} (${row.localMediaProfileName})`}
@@ -528,7 +534,7 @@ export default function DownloadsPage() {
                         <>
                             <span className="mobile-summary-title">{rowTitle(row)}</span>
                             <span className="mobile-summary-subtitle">{rowContext(row)}</span>
-                            <DownloadProgressStatus download={row} compact details={false}/>
+                            <DownloadProgressStatus presentation={row.presentation} compact details={false}/>
                             <span className="mobile-summary-meta">
                                 <span>{formatBytes(row.artifactSizeBytes)}</span>
                                 <span>{row.formatDownloaded ?? 'Unknown format'}</span>

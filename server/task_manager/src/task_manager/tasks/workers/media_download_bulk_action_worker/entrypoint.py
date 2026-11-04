@@ -28,7 +28,7 @@ async def media_download_bulk_action_worker(
     """Execute one target of a bulk media-download action."""
     del resource_id  # Bulk targets coordinate work but do not own the MediaDownload row.
     if progress is not None:
-        progress.raise_if_cancelled()
+        progress.raise_if_canceled()
 
     if media_download_id is None:
         raise ValueError(f"Bulk media download action '{action}' requires media_download_id")

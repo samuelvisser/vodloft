@@ -100,7 +100,7 @@ async def migrate(context) -> None:
     total = len(collections)
     context.update_progress(0, total, _TITLE)
     for done, (collection_id, source_key, url, known, missing) in enumerate(collections, start=1):
-        context.raise_if_cancelled()
+        context.raise_if_canceled()
         try:
             details = await asyncio.to_thread(_list, source_key, url, known, missing)
         except Exception as exc:

@@ -12,7 +12,7 @@ from typing import Callable, Iterator
 
 from .capacity import DownloadResources, resources as default_resources
 from .downloader import download_file, download_hls
-from .errors import DownloadCancelled, DownloadError
+from .errors import DownloadCanceled, DownloadError
 from .ffmpeg import convert_video_to_m4a, embed_media, remux_to_mp4
 from .hls_bundle import download_hls_bundle, hls_asset_marker, hls_asset_root, missing_hls_bundle_files
 from .lifecycle import DownloadTracker
@@ -346,7 +346,7 @@ def execute_download_plan(
             replacement_journal=replacement_journal,
         )
     except BaseException as exc:
-        tracker.cancel(user_requested=isinstance(exc, DownloadCancelled) and tracker.failure is None)
+        tracker.cancel(user_requested=isinstance(exc, DownloadCanceled) and tracker.failure is None)
         if tracker.failure is not None and tracker.failure is not exc:
             raise tracker.failure from exc
         raise

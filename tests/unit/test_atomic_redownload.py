@@ -270,20 +270,20 @@ def test_retiring_replaced_hls_removes_only_owned_bundle(tmp_path):
     assert not marker.parent.exists()
 
 
-def test_cancelled_redownload_keeps_the_previous_download(old_download, monkeypatch):
+def test_canceled_redownload_keeps_the_previous_download(old_download, monkeypatch):
     from backend.db.models.media_download import MediaDownloadBase
-    from downloader import DownloadCancelled, coordinator
+    from downloader import DownloadCanceled, coordinator
     from task_manager.tasks import download_adapter
 
     factory, media_download_id, old, sidecar, downloaded_at = old_download
 
-    def cancelled_download(_url, path, **kwargs):
+    def canceled_download(_url, path, **kwargs):
         assert old.read_bytes() == b"existing complete media"
         Path(path).write_bytes(b"incomplete replacement")
-        raise DownloadCancelled("User cancelled the attempt")
+        raise DownloadCanceled("User canceled the attempt")
 
-    monkeypatch.setattr(coordinator, "download_file", cancelled_download)
-    with factory() as session, pytest.raises(DownloadCancelled):
+    monkeypatch.setattr(coordinator, "download_file", canceled_download)
+    with factory() as session, pytest.raises(DownloadCanceled):
         download_adapter.run_download(
             session, media_download_id=media_download_id,
             is_redownload=True, prepare_existing_artifact=True,

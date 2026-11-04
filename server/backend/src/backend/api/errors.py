@@ -5,6 +5,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 
+from backend.services.sites import CollectionAlreadyAddedError
 from backend.services.source_requests import SourceRequestError
 
 def _columns_from_constraint_name(name: str) -> List[str]:
@@ -93,3 +94,8 @@ async def integrity_error_handler(request: Request, exc: Exception) -> JSONRespo
 async def source_request_error_handler(request: Request, exc: Exception) -> JSONResponse:
     """A Source that could not answer is a bad gateway."""
     return JSONResponse(status_code=502, content={"detail": str(cast(SourceRequestError, exc))})
+
+
+async def collection_already_added_handler(request: Request, exc: Exception) -> JSONResponse:
+    """The Site's collection is already in VODLoft, possibly through another Source."""
+    return JSONResponse(status_code=409, content={"detail": str(cast(CollectionAlreadyAddedError, exc))})

@@ -8,7 +8,7 @@ from typing import Iterator, Mapping, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from .errors import DownloadCancelled, DownloadError, MediaUnavailableError
+from .errors import DownloadCanceled, DownloadError, MediaUnavailableError
 from .speed import limiter
 from .transfer_context import TransferWait, cancel_check, wait_observer
 
@@ -34,14 +34,14 @@ class HttpResponse:
         self.headers: Mapping[str, str] = raw.headers
 
     def read(self) -> bytes:
-        _check_cancelled()
+        _check_canceled()
         result = self._raw.read()
-        _check_cancelled()
+        _check_canceled()
         return result
 
     def iter_chunks(self, chunk_size: int = 256 * 1024) -> Iterator[bytes]:
         while True:
-            _check_cancelled()
+            _check_canceled()
             chunk = self._raw.read(chunk_size)
             if not chunk:
                 return
@@ -83,7 +83,7 @@ def http_get(
 
     last_error: Optional[Exception] = None
     for attempt in range(retries + 1):
-        _check_cancelled()
+        _check_canceled()
         req = Request(request_url, headers=request_headers, method="GET")
         try:
             return HttpResponse(urlopen(req, timeout=timeout))
@@ -93,7 +93,7 @@ def http_get(
             last_error = e
             if e.code not in _TRANSIENT_STATUS_CODES:
                 break
-        except DownloadCancelled:
+        except DownloadCanceled:
             raise
         except URLError as e:
             last_error = e
@@ -116,10 +116,10 @@ def _safe_url(url: str) -> str:
     return urlunsplit((parsed.scheme, parsed.hostname or "", parsed.path, "", ""))
 
 
-def _check_cancelled() -> None:
+def _check_canceled() -> None:
     check = cancel_check.get()
     if check is not None and check():
-        raise DownloadCancelled("Download was canceled")
+        raise DownloadCanceled("Download was canceled")
 
 
 def retry_delay(error: BaseException | None, attempt: int) -> tuple[float, str]:
@@ -151,7 +151,7 @@ def wait_for_retry(error: BaseException | None, attempt: int) -> None:
         observer(TransferWait(reason, time.time() + delay))
     try:
         while True:
-            _check_cancelled()
+            _check_canceled()
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 break

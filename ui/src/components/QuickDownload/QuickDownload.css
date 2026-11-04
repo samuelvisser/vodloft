@@ -260,3 +260,22 @@
         box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.25);
     }
 }
+
+/* Quick downloads in progress, on the Downloads page */
+.quick-progress-box {
+    margin: 4px 0 18px;
+    padding: 12px 14px;
+    border: 1px solid rgba(100, 116, 139, 0.32);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--bg) 92%, #3b82f6 8%);
+}
+.quick-progress-box-head { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.quick-progress-box h2 { margin: 0; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.quick-progress-box h2 svg { color: #3b82f6; }
+.quick-progress-box-head a, .quick-progress-box-more { font-size: 13px; font-weight: 600; }
+.quick-progress-box ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.quick-progress-box-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(160px, 260px); gap: 6px 14px; align-items: center; }
+.quick-progress-box-more { display: inline-block; margin-top: 8px; }
+@media (max-width: 640px) {
+    .quick-progress-box-row { grid-template-columns: minmax(0, 1fr); }
+}

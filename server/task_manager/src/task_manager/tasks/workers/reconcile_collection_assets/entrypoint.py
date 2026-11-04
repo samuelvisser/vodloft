@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from threading import Event
 
-from downloader import DownloadCancelled
+from downloader import DownloadCanceled
 
 from backend.services.collection_assets import COLLECTION_ASSETS_REQUESTED
 from task_manager.scheduler.registry import on_event, task
@@ -28,16 +28,16 @@ from .service import run_reconcile_collection_assets
 async def reconcile_collection_assets(*, resource_id: int | None = None, resource_type: str | None = None, progress=None):
     stopped = Event()
 
-    def check_cancelled():
+    def check_canceled():
         if stopped.is_set() or (callable(progress) and progress()):
-            raise DownloadCancelled("Collection artwork reconciliation was canceled")
+            raise DownloadCanceled("Collection artwork reconciliation was canceled")
 
     # Sessions are created in the worker thread, never transferred between threads.
     # Cancellation must also reach the thread before it can publish downloaded bytes.
     try:
         await asyncio.to_thread(
             run_reconcile_collection_assets, resource_id=resource_id, resource_type=resource_type,
-            progress=progress, check_cancelled=check_cancelled,
+            progress=progress, check_canceled=check_canceled,
         )
     finally:
         stopped.set()

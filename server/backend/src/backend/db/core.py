@@ -174,6 +174,7 @@ def seed_db() -> None:
 
     from backend.db.fake_data import episodes_for, collections as seed_collections
     from backend.db.models import Episode, Season, Collection
+    from backend.services.sites import place_collection
 
     session = get_session()
     try:
@@ -181,6 +182,7 @@ def seed_db() -> None:
             if session.scalar(select(Collection.id).where(Collection.uuid == collection_data["uuid"])) is not None:
                 continue
             collection = Collection(**collection_data)
+            place_collection(session, collection)
             season = Season(collection=collection, index=1, slug=f"{collection.slug}-episodes", name="Episodes", season_number=1)
             session.add_all([collection, season])
             session.flush()

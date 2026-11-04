@@ -14,8 +14,8 @@ import {
 } from '../../lib/quickDownloads'
 import {formatBytes} from '../../utils/formatting'
 import type {TaskOperationRead} from '../../types/schemas/operation'
-import type {QuickDownloadHistoryEntry, QuickDownloadReady} from '../../types/schemas/quick_download'
-import ProgressBar from '../common/ProgressBar'
+import type {QuickDownloadHistoryEntry, QuickDownloadReady, QuickDownloads} from '../../types/schemas/quick_download'
+import DownloadProgressStatus from '../DownloadProgress/DownloadProgressStatus'
 import SourceBadge from '../Source/SourceBadge'
 
 function untilLabel(until: Date, now: number): string {
@@ -35,7 +35,34 @@ function useNow(intervalMs = 30_000): number {
     return now
 }
 
-export function QuickInProgressList({operations}: {operations: TaskOperationRead[]}) {
+/** Who asked for each running quick download, by operation id; only for those who see everyone's. */
+export function quickDownloadOwners(quickDownloads: QuickDownloads | undefined): Map<string, string> {
+    const owners = new Map<string, string>()
+    for (const entry of quickDownloads?.active ?? []) {
+        if (entry.ownerName) owners.set(entry.operation.id, entry.ownerName)
+    }
+    return owners
+}
+
+/** What one running quick download is, and how far along: shared by Quick download and Downloads. */
+export function QuickActiveSummary({operation, ownerName}: {operation: TaskOperationRead; ownerName?: string}) {
+    const choice = typeof operation.context?.choice === 'string' ? operation.context.choice : ''
+    const sourceKey = typeof operation.context?.source_key === 'string' ? operation.context.source_key : null
+    return (
+        <>
+            <span className="quick-list-what">
+                <SourceBadge sourceKey={sourceKey}/>
+                <span className="quick-list-title">{operation.title}</span>
+                <small className="quick-muted">{[ownerName && `For ${ownerName}`, choice].filter(Boolean).join(' · ')}</small>
+            </span>
+            <span className="quick-list-progress">
+                <DownloadProgressStatus presentation={presentDownloadProgress(undefined, operation)}/>
+            </span>
+        </>
+    )
+}
+
+export function QuickInProgressList({operations, owners}: {operations: TaskOperationRead[]; owners: Map<string, string>}) {
     const control = useControlOperation()
     const [busy, setBusy] = useState<string | null>(null)
     if (!operations.length) return null
@@ -57,20 +84,9 @@ export function QuickInProgressList({operations}: {operations: TaskOperationRead
             <ul>
                 {operations.map((operation) => {
                     const state = presentDownloadProgress(undefined, operation)
-                    const choice = typeof operation.context?.choice === 'string' ? operation.context.choice : ''
-                    const sourceKey = typeof operation.context?.source_key === 'string' ? operation.context.source_key : null
                     return (
                         <li key={operation.id} className="quick-list-row">
-                            <span className="quick-list-what">
-                                <SourceBadge sourceKey={sourceKey}/>
-                                <span className="quick-list-title">{operation.title}</span>
-                                <small className="quick-muted">{choice}</small>
-                            </span>
-                            <span className="quick-list-progress">
-                                <small>{state.label}{state.secondary ? ` · ${state.secondary}` : ''}</small>
-                                <ProgressBar value={state.mode === 'determinate' ? state.percent : null} mode={state.mode}
-                                             ariaLabel={`Progress of ${operation.title}`} detail={state.detail}/>
-                            </span>
+                            <QuickActiveSummary operation={operation} ownerName={owners.get(operation.id)}/>
                             <span className="quick-list-actions">
                                 <button type="button" className="btn" disabled={busy === operation.id || state.canCancel === false}
                                         onClick={() => void cancel(operation)}>

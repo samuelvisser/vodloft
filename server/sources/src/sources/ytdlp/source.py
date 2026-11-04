@@ -16,11 +16,11 @@ from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
     ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, Feature, LinkKind, LinkPreview, Playback, PlaybackKind, ProgramStatus,
-    ResolvedLink, SearchResults, CollectionDetails, Source, SourceProblem, SponsorBlockSegment, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
+    ResolvedLink, SearchResults, CollectionDetails, Site, Source, SourceProblem, SponsorBlockSegment, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
 )
 from .. import pacing, ytdlp_runner as runner
-from . import thumbnails, youtube_rss, youtube_search
+from . import sites, thumbnails, youtube_rss, youtube_search
 from .youtube_api import ApiKeyError, QuotaExceededError, Share, YouTubeApiClient, YouTubeApiError, key as api_key, mapping, quota
 from .youtube_api.catalogue import Catalogue
 from .youtube_api.client import MAX_RESULTS
@@ -40,7 +40,7 @@ _YOUTUBE_TAGS = (
     EpisodeTag("short", "Short", "A YouTube Short", selected_by_default=False, rss_episode_type=RssEpisodeType.BONUS),
     EpisodeTag(
         "livestream", "Livestream",
-        "A livestream or premiere: upcoming, live now or finished. Finishing does not change the tag.",
+        "A livestream: upcoming, live now or finished. Finishing does not change the tag. A premiere is a video.",
     ),
 )
 # yt-dlp reports a livestream that is still live, upcoming or long finished alike.
@@ -245,6 +245,10 @@ class YtDlpSource(Source):
         self._cache_lock = threading.Lock()
         # A channel's handle never changes its ID, so it is looked up once.
         self._channel_ids: dict[str, str] = {}
+
+    def site_for(self, url: str) -> Site:
+        """The site of the yt-dlp extractor that handles the link: one Site for all of YouTube's domains."""
+        return sites.site_for(url)
 
     def episode_tags_for(self, url: str | None) -> tuple[EpisodeTag, ...]:
         """Shorts and livestreams are YouTube's; other sites only have videos."""
@@ -489,7 +493,12 @@ class YtDlpSource(Source):
                         yield details
                 continue
             for item in items:
-                if not mapping.is_pending(item):
+                if mapping.is_pending(item):
+                    continue
+                if mapping.may_be_premiere(item):
+                    # yt-dlp calls a finished premiere a video and a livestream a livestream.
+                    yield self._look_up(mapping.video_url(item["id"])) or mapping.video(item, short=False)
+                else:
                     yield mapping.video(item, short=item["id"] in shorts)
 
     def _look_up(self, url: str) -> VideoDetails | None:

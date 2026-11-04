@@ -22,7 +22,7 @@ CHANNEL = "https://www.youtube.com/channel/UC1/videos"
 
 
 class _Context:
-    def raise_if_cancelled(self):
+    def raise_if_canceled(self):
         return None
 
     def update_progress(self, current, total, message=None):

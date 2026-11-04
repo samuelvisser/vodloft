@@ -50,7 +50,7 @@ async def migrate(context) -> None:
     if total == 0:
         return
     for start in range(0, total, _BATCH):
-        context.raise_if_cancelled()
+        context.raise_if_canceled()
         context.update_progress(start, total, _MESSAGE)
         await asyncio.to_thread(_take, item_ids[start:start + _BATCH])
     context.update_progress(total, total, _MESSAGE)
