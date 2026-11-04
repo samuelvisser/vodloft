@@ -11,7 +11,7 @@ import re
 from collections.abc import Callable
 from urllib.parse import urlsplit
 
-from .errors import DownloadCancelled, DownloadError
+from .errors import DownloadCanceled, DownloadError
 from .hls import is_playlist, parse_media_playlist
 from .http import http_get
 from .models import DownloadProgress
@@ -106,11 +106,11 @@ def _fetch_limited(
     chunks: list[bytes] = []
     size = 0
     if should_cancel():
-        raise DownloadCancelled("Subtitle download canceled")
+        raise DownloadCanceled("Subtitle download canceled")
     with http_get(url) as response:
         for chunk in response.iter_chunks(256 * 1024):
             if should_cancel():
-                raise DownloadCancelled("Subtitle download canceled")
+                raise DownloadCanceled("Subtitle download canceled")
             size += len(chunk)
             if size > remaining_bytes:
                 raise DownloadError("HLS subtitles exceed the configured size limit")

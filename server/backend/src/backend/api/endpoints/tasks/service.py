@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from hashlib import blake2b
 from typing import Literal, Optional
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
-from backend.api.pagination import InvalidCursorError, decode_cursor, encode_cursor
+from backend.api.pagination import InvalidCursorError, KeysetField, decode_cursor, encode_cursor, keyset_after
 from backend.api.models.tasks import (
     TaskDefinitionRead,
     TaskLedgerEntryRead,
@@ -17,11 +17,19 @@ from backend.api.models.tasks import (
     TaskScheduleRead,
     TaskTriggerRead,
 )
+
 from backend.db.core import get_session
+from backend.services.media_download_collection import stored_sort_text
 from task_manager.scheduler.db import TaskDefinition, TaskRun, TaskSchedule
 from task_manager.scheduler.executor import trigger_now as exec_trigger_now
 from task_manager.scheduler.scheduler import remove_job, schedule_job
 from task_manager.scheduler.types import ResourceType, TaskStatus
+
+TaskLedgerOrder = Literal["workflow", "started_at", "finished_at", "created_at"]
+
+_RUNNING_STATUSES = (TaskStatus.RUNNING,)
+_WAITING_STATUSES = (TaskStatus.SCHEDULED, TaskStatus.QUEUED, TaskStatus.RETRY_SCHEDULED)
+_NO_SORT_TIME = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
 def list_definitions() -> list[TaskDefinitionRead]:
@@ -157,7 +165,6 @@ def _task_ledger_collection_revision(
     filters: list,
     definition_key: str | None,
     ordering,
-    tie_breaker,
 ) -> tuple[str, int]:
     """Fingerprint only the ordered task IDs matching these filters.
 
@@ -175,11 +182,50 @@ def _task_ledger_collection_revision(
     digest = blake2b(digest_size=16)
     total = 0
     for run_id in session.scalars(
-        statement.order_by(ordering, tie_breaker)
+        statement.order_by(*ordering)
     ).yield_per(512):
         digest.update(f"{run_id},".encode("ascii"))
         total += 1
     return digest.hexdigest(), total
+
+
+def _workflow_bucket():
+    """Running tasks, then tasks waiting to run, then finished ones."""
+    return case(
+        (TaskRun.status.in_(_RUNNING_STATUSES), 0),
+        (TaskRun.status.in_(_WAITING_STATUSES), 1),
+        else_=2,
+    )
+
+
+def _workflow_active_at():
+    """Running tasks by when they started, waiting tasks by when they were queued: oldest first."""
+    return case(
+        (TaskRun.status.in_(_RUNNING_STATUSES), func.coalesce(TaskRun.started_at, TaskRun.created_at)),
+        (TaskRun.status.in_(_WAITING_STATUSES), TaskRun.created_at),
+        else_=_NO_SORT_TIME,
+    )
+
+
+def _workflow_finished_at():
+    """Finished tasks by when they ended: newest first."""
+    return case(
+        (
+            TaskRun.status.not_in((*_RUNNING_STATUSES, *_WAITING_STATUSES)),
+            func.coalesce(TaskRun.finished_at, TaskRun.started_at, TaskRun.created_at),
+        ),
+        else_=_NO_SORT_TIME,
+    )
+
+
+def _workflow_keyset(anchor) -> list[KeysetField]:
+    """The workflow ordering as keyset fields, compared as SQLite stores the timestamps."""
+    return [
+        KeysetField(_workflow_bucket(), anchor[0]),
+        KeysetField(stored_sort_text(_workflow_active_at()), anchor[1]),
+        KeysetField(stored_sort_text(_workflow_finished_at()), anchor[2], descending=True),
+        KeysetField(TaskRun.id, anchor[3], descending=True),
+    ]
 
 
 def query_ledger(
@@ -191,7 +237,7 @@ def query_ledger(
     include_unscoped: bool = False,
     statuses: list[str] | None = None,
     started_after: datetime | None = None,
-    order_by: Literal["started_at", "finished_at", "created_at"] = "started_at",
+    order_by: TaskLedgerOrder = "started_at",
     order: Literal["asc", "desc"] = "desc",
     cursor: str | None = None,
     limit: int = 50,
@@ -224,25 +270,33 @@ def query_ledger(
         "started_after": started_after.isoformat() if started_after is not None else None,
     }
 
-    order_column = {
-        "started_at": TaskRun.started_at,
-        "finished_at": TaskRun.finished_at,
-        "created_at": TaskRun.created_at,
-    }[order_by]
+    workflow = order_by == "workflow"
     descending = order == "desc"
-    ordering = (
-        order_column.desc().nulls_last()
-        if descending
-        else order_column.asc().nulls_last()
-    )
-    tie_breaker = TaskRun.id.desc() if descending else TaskRun.id.asc()
+    if workflow:
+        # Like the Downloads list: what runs now, then what waits, then history.
+        order_column = None
+        ordering = (
+            _workflow_bucket().asc(),
+            _workflow_active_at().asc(),
+            _workflow_finished_at().desc(),
+            TaskRun.id.desc(),
+        )
+    else:
+        order_column = {
+            "started_at": TaskRun.started_at,
+            "finished_at": TaskRun.finished_at,
+            "created_at": TaskRun.created_at,
+        }[order_by]
+        ordering = (
+            order_column.desc().nulls_last() if descending else order_column.asc().nulls_last(),
+            TaskRun.id.desc() if descending else TaskRun.id.asc(),
+        )
 
     revision, total = _task_ledger_collection_revision(
         s,
         filters=filters,
         definition_key=definition_key,
         ordering=ordering,
-        tie_breaker=tie_breaker,
     )
 
     if cursor:
@@ -261,7 +315,16 @@ def query_ledger(
             if values.get("revision") == revision:
                 # Resolve the cursor row's current sort key to avoid skips when its
                 # timestamp moves without changing its relative rank.
-                anchor_stmt = select(order_column).where(TaskRun.id == cursor_id, *filters)
+                anchor_columns = (
+                    (
+                        _workflow_bucket(),
+                        stored_sort_text(_workflow_active_at()),
+                        stored_sort_text(_workflow_finished_at()),
+                        TaskRun.id,
+                    )
+                    if workflow else (order_column,)
+                )
+                anchor_stmt = select(*anchor_columns).where(TaskRun.id == cursor_id, *filters)
                 if definition_key is not None:
                     anchor_stmt = anchor_stmt.join(
                         TaskDefinition,
@@ -270,12 +333,16 @@ def query_ledger(
                 anchor = s.execute(anchor_stmt).first()
                 if anchor is None:
                     raise InvalidCursorError("Invalid task ledger cursor id")
-                filters.append(_task_ledger_cursor_filter(
-                    order_column,
-                    value=anchor[0],
-                    run_id=cursor_id,
-                    descending=descending,
-                ))
+                filters.append(
+                    keyset_after(_workflow_keyset(anchor))
+                    if workflow
+                    else _task_ledger_cursor_filter(
+                        order_column,
+                        value=anchor[0],
+                        run_id=cursor_id,
+                        descending=descending,
+                    )
+                )
             # Otherwise restart at the first page. The shared lazy collection
             # reconciles mismatched page revisions using the authoritative head.
         except (InvalidCursorError, ValueError) as exc:
@@ -294,7 +361,7 @@ def query_ledger(
 
     runs = list(s.scalars(
         run_stmt
-        .order_by(ordering, tie_breaker)
+        .order_by(*ordering)
         .limit(limit + 1)
     ).all())
     has_more = len(runs) > limit
@@ -330,7 +397,7 @@ def list_ledger(
     include_unscoped: bool = False,
     statuses: list[str] | None = None,
     started_after: datetime | None = None,
-    order_by: Literal["started_at", "finished_at", "created_at"] = "started_at",
+    order_by: TaskLedgerOrder = "started_at",
     order: Literal["asc", "desc"] = "desc",
     cursor: str | None = None,
     limit: int = 50,

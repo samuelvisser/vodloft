@@ -126,7 +126,7 @@ class DownloadResult:
 
 # Called periodically during a download with a progress snapshot.
 ProgressCallback = Callable[[DownloadProgress], None]
-# Checked periodically; returning True aborts the download with DownloadCancelled.
+# Checked periodically; returning True aborts the download with DownloadCanceled.
 CancelCheck = Callable[[], bool]
 
 

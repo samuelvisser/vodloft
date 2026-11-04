@@ -123,12 +123,12 @@ def download_collection_asset(
     ffmpeg_path: str,
     fallback_format,
     forced_format: str | None = None,
-    check_cancelled: Callable[[], None],
+    check_canceled: Callable[[], None],
 ) -> PreparedCollectionAsset:
     """Preserve JPEG/PNG sources and convert other image formats as configured."""
     if not url.startswith(("http://", "https://")):
         raise ValueError("Collection artwork requires an HTTP(S) URL")
-    check_cancelled()
+    check_canceled()
     workspace.mkdir(parents=True, exist_ok=True)
     source = workspace / "source.image"
     with requests.get(url, stream=True, timeout=(5, 30)) as response:
@@ -140,13 +140,13 @@ def download_collection_asset(
         size = 0
         with source.open("wb") as output:
             for chunk in response.iter_content(64 * 1024):
-                check_cancelled()
+                check_canceled()
                 size += len(chunk)
                 if size > MAX_ASSET_BYTES:
                     raise ValueError("Collection artwork exceeds the 20 MiB limit")
                 output.write(chunk)
 
-    check_cancelled()
+    check_canceled()
     source_format = _source_image_format(source)
     output_format = _output_format(
         forced_format
@@ -177,7 +177,7 @@ def download_collection_asset(
         stderr=subprocess.PIPE,
         timeout=45,
     )
-    check_cancelled()
+    check_canceled()
     if not destination.is_file() or not 0 < destination.stat().st_size <= MAX_ASSET_BYTES:
         raise ValueError(f"Collection artwork could not be converted to a bounded {output_format.upper()} image")
     return PreparedCollectionAsset(destination, source_format, output_format)
@@ -185,7 +185,7 @@ def download_collection_asset(
 
 def publish_collection_asset(
     source: Path, target: Path, *, download_root: Path, expected_hash: str | None,
-    check_cancelled: Callable[[], None],
+    check_canceled: Callable[[], None],
 ) -> None:
     """Copy to the target filesystem, then replace only the observed version."""
     target = safe_asset_path(download_root, target)
@@ -198,7 +198,7 @@ def publish_collection_asset(
                 shutil.copyfileobj(incoming, output)
             output.flush()
             os.fsync(output.fileno())
-        check_cancelled()
+        check_canceled()
         safe_asset_path(download_root, target)
         if asset_file_hash(target) != expected_hash:
             raise ArtworkConflict(f"Artwork changed during download and was left untouched: {target}")

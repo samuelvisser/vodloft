@@ -165,7 +165,7 @@ export default function HomePage() {
                     {active.length ? active.map((download) => (
                         <Link className="operation-download" key={download.id} to={downloadHref(download)}>
                             <span className="operation-icon"><FontAwesomeIcon icon={faIcon('fass', download.movieSlug ? 'clapperboard' : 'podcast')}/></span>
-                            <span className="operation-download-copy"><strong>{mediaTitle(download)}</strong><small>{mediaContext(download)} • {download.localMediaProfileName}</small><DownloadProgressStatus download={download} compact details={false}/></span>
+                            <span className="operation-download-copy"><strong>{mediaTitle(download)}</strong><small>{mediaContext(download)} • {download.localMediaProfileName}</small><DownloadProgressStatus presentation={download.presentation} compact details={false}/></span>
                         </Link>
                     )) : <div className="operation-empty"><FontAwesomeIcon icon={faIcon('fass', 'check')}/><span>No active downloads</span></div>}
                 </section>

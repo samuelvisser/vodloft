@@ -78,7 +78,7 @@ Background work can fail temporarily because of network problems, upstream error
 
 The default background-task retry count is **3**, with increasing pauses between attempts.
 
-VODLoft also watches work that is supposed to be making progress. If its progress does not change for **20 minutes** by default, the work is treated as stalled and cancelled rather than being allowed to sit indefinitely.
+VODLoft also watches work that is supposed to be making progress. If its progress does not change for **20 minutes** by default, the work is treated as stalled and canceled rather than being allowed to sit indefinitely.
 
 ## Download verification and file watching
 

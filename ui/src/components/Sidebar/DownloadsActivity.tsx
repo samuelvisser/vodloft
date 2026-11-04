@@ -1,14 +1,14 @@
 import {useFrontendPuller} from '../../lib/puller'
 
 /**
- * A quiet marker on the Downloads icon while a download is running: a faint
+ * A quiet marker on the Downloads icon while a download, library or quick, is running: a faint
  * turning arc, or a still dot when the browser asks for reduced motion.
  * Queued downloads that have not started do not count.
  */
 export default function DownloadsActivity() {
     const {data} = useFrontendPuller()
     const running = (data?.operations ?? []).some(
-        (operation) => operation.kind === 'media.download' && operation.status === 'RUNNING',
+        (operation) => (operation.kind === 'media.download' || operation.kind === 'quick.download') && operation.status === 'RUNNING',
     )
     if (!running) return null
 

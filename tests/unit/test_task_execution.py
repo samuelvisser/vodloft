@@ -174,14 +174,14 @@ def test_zero_retry_override_is_terminal(task_database, monkeypatch):
         assert run.next_retry_at is None
 
 
-def test_cancelled_task_is_terminal_without_scheduling_retry(task_database, monkeypatch):
+def test_canceled_task_is_terminal_without_scheduling_retry(task_database, monkeypatch):
     import task_manager.scheduler.scheduler as scheduler_module
-    from downloader import DownloadCancelled
+    from downloader import DownloadCanceled
     from task_manager.scheduler.db import TaskRun
     from task_manager.scheduler.executor import execute_task
 
     async def worker(*, resource_id=None, progress=None):
-        raise DownloadCancelled("Replaced by a fresh attempt")
+        raise DownloadCanceled("Replaced by a fresh attempt")
 
     _install_task(monkeypatch, key="test_cancel", function=worker, default_max_retries=3)
     schedule_retry = Mock()

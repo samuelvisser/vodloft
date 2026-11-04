@@ -52,7 +52,7 @@ def remove_download_artifacts(
                         raise
                     # An in-flight writer can briefly keep a file open on some hosts.
                     # The worker calls this helper again after observing cancellation.
-                    logger.warning("Could not remove cancelled download artifact '%s'", path, exc_info=True)
+                    logger.warning("Could not remove canceled download artifact '%s'", path, exc_info=True)
 
             if base_path.suffix.lower() == ".m3u8":
                 asset_root = hls_asset_root(base_path)

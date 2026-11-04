@@ -58,7 +58,7 @@ async def migrate(context) -> None:
     if collection_count == 0:
         return
 
-    context.raise_if_cancelled()
+    context.raise_if_canceled()
     context.update_progress(
         0,
         collection_count,
@@ -71,7 +71,7 @@ async def migrate(context) -> None:
     )
     thumbnails = await asyncio.to_thread(client.get_square_show_thumbnails)
 
-    context.raise_if_cancelled()
+    context.raise_if_canceled()
     _apply_square_thumbnails(thumbnails)
 
     context.update_progress(

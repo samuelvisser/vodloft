@@ -54,7 +54,7 @@ _RETRYABLE_STATUSES = (
     "error",
     "missing",
     "corrupted",
-    "cancelled",
+    "canceled",
 )
 _CANCELABLE_STATUSES = (
     "pending",
@@ -285,7 +285,7 @@ def _persistent_download_status():
                 MediaDownloadBase.automatic_retry_suppressed.is_(True),
                 TaskRun.status == TaskStatus.CANCELED,
             ),
-            "cancelled",
+            "canceled",
         ),
         else_="not_downloaded",
     )
@@ -464,7 +464,7 @@ def _workflow_terminal_at(status_source):
             ),
         ),
         (
-            status_source.c.status.in_(("error", "cancelled")),
+            status_source.c.status.in_(("error", "canceled")),
             func.coalesce(
                 status_source.c.run_finished_at,
                 status_source.c.updated_at,

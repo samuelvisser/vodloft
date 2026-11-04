@@ -537,7 +537,8 @@ def test_starting_a_quick_download_queues_one_operation(api):
     body = response.json()
 
     listed = api.client.get("/api/quick-downloads").json()
-    [active] = listed["active"]
+    [entry] = listed["active"]
+    active = entry["operation"]
     assert active["id"] == body["operationId"] and active["kind"] == "quick.download"
     assert active["context"]["quick_download_id"] == body["quickDownloadId"]
     assert active["context"]["choice"] == "Audio · M4A"
@@ -583,8 +584,8 @@ def test_choices_a_source_does_not_offer_are_refused(api):
         "url": "https://tube.example/v/abc", "choice": {"kind": "audio", "audioFormat": "mp3", "audioBitrate": 192},
     })
     assert response.status_code == 202, response.text
-    [active] = api.client.get("/api/quick-downloads").json()["active"]
-    assert active["context"]["choice"] == "Audio · MP3 192 kbps"
+    [entry] = api.client.get("/api/quick-downloads").json()["active"]
+    assert entry["operation"]["context"]["choice"] == "Audio · MP3 192 kbps"
 
 
 def _ready_file(temporary_root: Path, content: bytes = b"0123456789", quick_id: str | None = None) -> str:
@@ -693,7 +694,8 @@ def test_locked_defaults_and_a_quality_limit_shape_the_download(api, quick_sourc
 
     _rules(monkeypatch, lock_to_defaults=True, default_kind="audio", default_audio_format="mp3", default_mp3_bitrate=128)
     assert _start(api, "https://tube.example/v/abc", quality=2160).status_code == 202
-    [operation] = api.client.get("/api/quick-downloads").json()["active"]
+    [entry] = api.client.get("/api/quick-downloads").json()["active"]
+    operation = entry["operation"]
     assert operation["context"]["choice"] == "Audio · MP3 128 kbps"
 
     _rules(monkeypatch, lock_to_defaults=False, max_quality="720p", fixed_codec="h264", max_file_gigabytes=1)

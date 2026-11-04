@@ -266,7 +266,7 @@ def test_a_canceled_scan_stops_between_lookups_and_saves_nothing(lookups, sessio
     def looked_up() -> int:
         return sum(1 for args in calls if args[0] == "--no-playlist")
 
-    with pacing.request_context(should_cancel=lambda: looked_up() > 0), pytest.raises(pacing.RequestCancelled):
+    with pacing.request_context(should_cancel=lambda: looked_up() > 0), pytest.raises(pacing.RequestCanceled):
         index_listed_collection(session, collection_id=collection.id, source=YtDlpSource())
 
     assert looked_up() == 1

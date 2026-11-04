@@ -182,7 +182,7 @@ def test_the_migration_waits_for_the_startup_recovery(tmp_path, monkeypatch):
     (tmp_path / "temporary").mkdir()
 
     class Context:
-        def raise_if_cancelled(self):
+        def raise_if_canceled(self):
             events.append("checked")
 
         def update_progress(self, current, total, message):

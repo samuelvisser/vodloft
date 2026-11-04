@@ -22,7 +22,7 @@ from downloader import hls_asset_marker, hls_asset_root
 from .copying import copy_file
 from .quick import is_within_quick_root
 from ..models import DownloadProgress
-from ..errors import DownloadCancelled
+from ..errors import DownloadCanceled
 
 from .helpers import (
     _numbered_candidate,
@@ -294,7 +294,7 @@ def _copy_completed_file(
     should_cancel: Callable[[], bool] | None = None,
 ) -> None:
     if should_cancel is not None and should_cancel():
-        raise DownloadCancelled("Canceled while publishing media")
+        raise DownloadCanceled("Canceled while publishing media")
     try:
         os.replace(source, destination)
         if progress is not None:
@@ -422,7 +422,7 @@ def publish_temporary_download(
 
         for number in count(0):
             if should_cancel is not None and should_cancel():
-                raise DownloadCancelled("Canceled while publishing media")
+                raise DownloadCanceled("Canceled while publishing media")
             candidate = _numbered_candidate(requested, number)
             lock = _claim_publication_lock(candidate)
             if lock is None:
