@@ -142,6 +142,8 @@ export default function EpisodePage() {
     const sourceStatus = publishStatusLabels?.[publishStatus]
     const statusLabel = sourceStatus?.label ?? PUBLISH_STATUS_LABELS[publishStatus] ?? publishStatus
     const isLive = publishStatus === 'live' || publishStatus === EpisodePublishStatus.live
+    // An upcoming episode shows when it is due to start instead of when it was released.
+    const startsAt = (publishStatus === 'scheduled' || publishStatus === 'delayed') ? episode.scheduledDate : null
     const earlyDeleteAvailable = episode.earlyDeleteAvailable
     const containsCountdown = (
         publishStatus === 'published_preliminary'
@@ -281,7 +283,11 @@ export default function EpisodePage() {
                         <span className="episode-summary-separator" aria-hidden="true"/>
                         <span className="episode-summary-item">
                             <FontAwesomeIcon icon={faIcon('fass', 'calendar')} aria-hidden="true"/>
-                            <span>Released {formatDate(episode.publishedDate)}</span>
+                            <span>
+                                {startsAt
+                                    ? `${publishStatus === 'delayed' ? 'Was due' : 'Starts'} ${formatDate(startsAt)}`
+                                    : `Released ${formatDate(episode.publishedDate)}`}
+                            </span>
                         </span>
                         {latestDownloadedAt && (
                             <>

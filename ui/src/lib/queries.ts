@@ -483,7 +483,11 @@ export function saveSiteRefresh(key: string, values: SiteRefreshFormValues): Pro
         method: 'PUT',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({refreshMode: values.refreshMode, refreshIntervals: values.refreshIntervals.trim() || null}),
+        body: JSON.stringify({
+            refreshMode: values.refreshMode,
+            refreshIntervals: values.refreshIntervals.trim() || null,
+            pendingChecks: values.pendingChecks,
+        }),
     })
 }
 

@@ -1,7 +1,7 @@
 """Let a Download Profile download every season, without a seasons line, and filter on seasons in its own lines.
 
 Revision ID: ce5df2342e6f
-Revises: b9dbb772c34e
+Revises: 158c03681e52
 Create Date: 2026-11-04
 """
 from __future__ import annotations
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "ce5df2342e6f"
-down_revision = "b9dbb772c34e"
+down_revision = "158c03681e52"
 branch_labels = None
 depends_on = None
 

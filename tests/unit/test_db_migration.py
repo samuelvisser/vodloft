@@ -27,6 +27,8 @@ VODLOFT_0_5_0_REVISION = "817515eb8209"
 VODLOFT_0_6_0_REVISION = "d0f28c7f863e"
 VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 SITE_REFRESH_REVISION = "5b75b63e55f2"
+NEUTRAL_STATUSES_REVISION = "b9dbb772c34e"
+UPCOMING_VIDEOS_REVISION = "158c03681e52"
 HEAD_REVISION = "cbad9977fd7b"
 
 
@@ -651,3 +653,18 @@ def test_publish_statuses_get_names_every_source_shares(migration_database):
         assert json.loads(context) == {"episode_publish_status": "source_processing"}
         assert json.loads(result) == {"publish_status": "published_preliminary"}
         assert connection.execute(text("SELECT key FROM metadata")).scalar_one() == "ep_status.source_processing.slug"
+
+
+def test_every_site_adds_upcoming_and_live_videos(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, NEUTRAL_STATUSES_REVISION)
+    with engine.begin() as connection:
+        connection.execute(text("INSERT INTO sites (key, name, domains) VALUES ('youtube', 'YouTube', '[]')"))
+
+    command.upgrade(config, UPCOMING_VIDEOS_REVISION)
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT pending_checks FROM sites WHERE key = 'youtube'")).scalar_one() == 1

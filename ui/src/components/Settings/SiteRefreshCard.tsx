@@ -15,11 +15,15 @@ import {
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import SimpleSelect from '../common/SimpleSelect'
 
+function formValues(site: SiteRefreshRead): SiteRefreshFormIn {
+    return {refreshMode: site.refreshMode, refreshIntervals: site.refreshIntervals ?? '', pendingChecks: site.pendingChecks}
+}
+
 function SiteRefreshRow({site}: {site: SiteRefreshRead}) {
     const queryClient = useQueryClient()
     const form = useForm<SiteRefreshFormIn, unknown, SiteRefreshFormValues>({
         resolver: zodResolver(SiteRefreshFormSchema),
-        defaultValues: {refreshMode: site.refreshMode, refreshIntervals: site.refreshIntervals ?? ''},
+        defaultValues: formValues(site),
     })
     const {control, register, watch, formState: {errors, isDirty, isSubmitting}} = form
     const mode = watch('refreshMode')
@@ -29,14 +33,14 @@ function SiteRefreshRow({site}: {site: SiteRefreshRead}) {
         (values) => saveSiteRefresh(site.key, values),
         {
             fallbackField: 'refreshIntervals',
-            genericMessage: `Could not save the schedule of ${site.name}`,
+            genericMessage: `Could not save the settings of ${site.name}`,
             rootOnFieldErrors: false,
             onSuccess: (result, {resetForm}) => {
                 const saved = SiteRefreshReadSchema.parse(result)
                 queryClient.setQueryData<SiteRefreshRead[]>(['siteRefresh'], (current) =>
                     current?.map((item) => (item.key === saved.key ? saved : item)))
-                resetForm({refreshMode: saved.refreshMode, refreshIntervals: saved.refreshIntervals ?? ''})
-                toast.success(`Saved the schedule of ${site.name}`)
+                resetForm(formValues(saved))
+                toast.success(`Saved the settings of ${site.name}`)
             },
         },
     )
@@ -48,19 +52,27 @@ function SiteRefreshRow({site}: {site: SiteRefreshRead}) {
                 {site.name}
                 {site.domains.length ? <span className="source-site-domains"> · {site.domains.join(', ')}</span> : null}
             </td>
-            {site.refreshes ? (
+            {site.refreshes || site.checksPending ? (
                 <td>
                     <form className="site-refresh-form" onSubmit={submit} noValidate>
-                        <Controller control={control} name="refreshMode" render={({field}) => (
-                            <SimpleSelect
-                                aria-label={`Metadata refresh of ${site.name}`}
-                                registry={SiteRefreshModeReg}
-                                value={field.value}
-                                menuPlacement="auto"
-                                onChange={field.onChange}
-                            />
-                        )}/>
-                        {mode === 'own' ? (
+                        {site.refreshes ? (
+                            <Controller control={control} name="refreshMode" render={({field}) => (
+                                <SimpleSelect
+                                    aria-label={`Metadata refresh of ${site.name}`}
+                                    registry={SiteRefreshModeReg}
+                                    value={field.value}
+                                    menuPlacement="auto"
+                                    onChange={field.onChange}
+                                />
+                            )}/>
+                        ) : null}
+                        {site.checksPending ? (
+                            <label className="site-refresh-pending">
+                                <input type="checkbox" {...register('pendingChecks')}/>
+                                <span>Upcoming and live videos</span>
+                            </label>
+                        ) : null}
+                        {site.refreshes && mode === 'own' ? (
                             <input
                                 className="input settings-input"
                                 aria-label={`Refresh intervals of ${site.name}`}
@@ -87,12 +99,12 @@ export default function SiteRefreshCard() {
     const {data: sites, error} = useSiteRefresh()
     return (
         <div className="settings-field settings-field--wide">
-            <label>Metadata refresh per Site</label>
+            <label>Metadata refresh and upcoming videos per Site</label>
             {error ? <p className="error" role="alert">Could not load the Sites: {error.message}</p> : null}
             {sites?.length ? (
                 <table className="source-site-table site-refresh-table">
                     <thead>
-                        <tr><th scope="col">Site</th><th scope="col">Schedule</th></tr>
+                        <tr><th scope="col">Site</th><th scope="col">Settings</th></tr>
                     </thead>
                     <tbody>
                         {sites.map((site) => <SiteRefreshRow key={site.key} site={site}/>)}
@@ -102,7 +114,9 @@ export default function SiteRefreshCard() {
             {sites && !sites.length ? <p className="settings-field__help">Sites show up here once you add a collection or video.</p> : null}
             <div className="settings-field__help">
                 Each Site follows the system schedule above, a schedule of its own, or none. Only what VODLoft shows and
-                serves in its feeds changes: downloaded files keep their names and metadata.
+                serves in its feeds changes: downloaded files keep their names and metadata. With upcoming and live
+                videos on, VODLoft adds a stream or premiere as soon as it is announced and follows it until it is
+                published, then downloads it. It never records a stream while it is live.
             </div>
         </div>
     )

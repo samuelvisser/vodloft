@@ -64,6 +64,10 @@ class Feature(StrEnum):
     CATALOGUE_REFRESH = "catalogue_refresh"
     """Refreshing the titles, descriptions and thumbnails of a listed collection's
     episodes, and telling which ones the Source no longer has, with ``refresh_items``."""
+    PENDING_CHECKS = "pending_checks"
+    """Listing upcoming and live videos with their publish status, and looking them up again
+    with ``check_pending`` until they are published. VODLoft shows them, but never records one
+    while it is live."""
 
 
 class RssEpisodeType(StrEnum):
@@ -334,6 +338,11 @@ class VideoDetails:
     """The episode's number in its season, when the Source has one."""
     tag: str = MAIN_TAG
     """The key of one of the Source's episode tags."""
+    publish_status: EpisodePublishStatus = EpisodePublishStatus.PUBLISHED_FINAL
+    """Where the video is in its life, for a Source with ``Feature.PENDING_CHECKS``: an upcoming or
+    live video has nothing to download yet."""
+    scheduled_at: datetime | None = None
+    """When an upcoming video is due to start."""
 
 
 @dataclass(frozen=True)
@@ -617,6 +626,12 @@ class Source(ABC):
         """What the Source says now about these items, which can be of any collection or
         none. Only Sources with ``Feature.METADATA_REFRESH`` implement it."""
         raise NotImplementedError(f"{self.name} cannot refresh items")
+
+    def check_pending(self, items: Sequence[ItemRef]) -> ItemRefresh:
+        """What the Source says now about upcoming and live items, with their publish status.
+        ``removed`` holds the items it clearly no longer has, such as a cancelled stream.
+        Only Sources with ``Feature.PENDING_CHECKS`` implement it."""
+        raise NotImplementedError(f"{self.name} cannot check pending items")
 
     def quick_check_minutes(self, collections: Sequence[tuple[str, int]]) -> int:
         """How often each of these collections, given as link and episode count, can
