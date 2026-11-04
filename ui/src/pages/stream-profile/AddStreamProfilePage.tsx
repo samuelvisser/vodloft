@@ -13,6 +13,7 @@ import SegmentedOptions from '../../components/SegmentedOptions/SegmentedOptions
 import {RssStreamProfileCreateIn, RssStreamProfileCreateOut, RssStreamProfileCreateSchema} from '../../types/schemas/rss_stream_profile'
 import {useQueryClient} from '@tanstack/react-query'
 import ReadMore from "../../utils/ReadMore";
+import {downloadedEpisodeTypes} from '../../components/DownloadProfile/episodeFilters'
 
 export default function AddStreamProfilePage() {
     const navigate = useNavigate()
@@ -46,7 +47,7 @@ export default function AddStreamProfilePage() {
             .map((profile) => ({
                 id: profile.id,
                 preferredFormat: profile.localMediaProfilePreferredFormat,
-                episodeTypes: profile.epIdTypeList,
+                episodeTypes: downloadedEpisodeTypes(profile.filters),
                 enabled: profile.enableProfile,
             }))
     }, [downloadProfiles, selectedCollection?.slug])

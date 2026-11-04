@@ -1,6 +1,8 @@
 """The upgrade check: what counts as a better version, when it looks again, and downloading again."""
 from __future__ import annotations
 
+from profile_filters import filter_rows, line
+
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -54,7 +56,7 @@ def _download(session, *, local_values=None, profile_values=None, download_value
     session.add_all([collection, season, episode, local])
     session.flush()
     profile = DownloadProfile(
-        collection=collection, local_media_profile=local, enable_profile=True, ep_id_type_list=["ep"],
+        collection=collection, local_media_profile=local, enable_profile=True, filters=filter_rows(line("only", "types", episode_types=["ep"])),
         **{"upgrade_check": True, **(profile_values or {})},
     )
     session.add(profile)

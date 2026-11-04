@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from profile_filters import filter_rows, line, published_since
+
 from conftest import available_artifact
 from datetime import date, datetime, timezone
 from types import SimpleNamespace
@@ -87,12 +89,9 @@ def _make_podcast_profile(session, collection, local_media_profile, *, starting_
         collection=collection,
         local_media_profile=local_media_profile,
         enable_profile=True,
-        ep_id_type_list=[EpIdType.EP.value],
+        filters=filter_rows(line("only", "types", episode_types=[EpIdType.EP.value]), published_since(starting_from)),
         download_with_countdown=False,
         redownload_final=False,
-        download_days_in_past=0,
-        download_episode_count=0,
-        download_starting_from=starting_from,
         delete_older_episodes=True,
     )
     session.add(profile)
@@ -105,13 +104,13 @@ def db_session(tmp_path, monkeypatch):
     import backend.db.models  # noqa: F401
     from backend.db import Base
     from config import get_settings
-    from backend.services import which_episodes
+    from backend.services import episode_filters
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     session = Session(engine)
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
-    monkeypatch.setattr(which_episodes, "get_settings", lambda: SimpleNamespace(timezone="UTC"))
+    monkeypatch.setattr(episode_filters, "get_settings", lambda: SimpleNamespace(timezone="UTC"))
     yield session
     session.close()
     engine.dispose()
@@ -200,41 +199,10 @@ def test_starting_from_never_deletes_older_downloads(db_session, tmp_path):
     assert db_session.get(EpisodeMediaDownload, existing.id) is existing
 
 
-def test_api_rejects_starting_from_with_rolling_limit():
-    from backend.api.models.download_profile import DownloadProfileAPICreate
+def test_api_rejects_a_date_line_with_more_than_one_limit():
+    from backend.api.models.download_profile import DownloadProfileFilterAPIIn
 
-    with pytest.raises(ValidationError, match="Download starting from can only be used"):
-        DownloadProfileAPICreate(
-            collection_id=1,
-            local_media_profile_id=1,
-            enable_profile=True,
-            ep_id_type_list=["ep"],
-            download_with_countdown=False,
-            redownload_final=False,
-            download_days_in_past=30,
-            download_episode_count=0,
-            download_starting_from=date(2026, 1, 1),
-            delete_older_episodes=True,
-            seasons=[],
-            include_upcoming_seasons=True,
-        )
-
-
-def test_api_rejects_date_and_episode_count_limits_together():
-    from backend.api.models.download_profile import DownloadProfileAPICreate
-
-    with pytest.raises(ValidationError, match="Choose either a date limit or an episode-count limit, not both"):
-        DownloadProfileAPICreate(
-            collection_id=1,
-            local_media_profile_id=1,
-            enable_profile=True,
-            ep_id_type_list=["ep"],
-            download_with_countdown=False,
-            redownload_final=False,
-            download_days_in_past=30,
-            download_episode_count=5,
-            download_starting_from=None,
-            delete_older_episodes=True,
-            seasons=[],
-            include_upcoming_seasons=True,
-        )
+    with pytest.raises(ValidationError, match="a number of days, a number of episodes or a date"):
+        DownloadProfileFilterAPIIn(action="only", field="published", days=30, starting_from=date(2026, 1, 1))
+    with pytest.raises(ValidationError, match="a number of days, a number of episodes or a date"):
+        DownloadProfileFilterAPIIn(action="only", field="published", days=30, count=5)

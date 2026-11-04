@@ -28,7 +28,8 @@ VODLOFT_0_6_0_REVISION = "d0f28c7f863e"
 VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 SITE_REFRESH_REVISION = "5b75b63e55f2"
 NEUTRAL_STATUSES_REVISION = "b9dbb772c34e"
-HEAD_REVISION = "158c03681e52"
+UPCOMING_VIDEOS_REVISION = "158c03681e52"
+HEAD_REVISION = "cbad9977fd7b"
 
 
 @pytest.fixture
@@ -286,7 +287,7 @@ def test_download_profiles_without_episode_types_stop_downloading(migration_data
                 "VALUES (:id, 1, 5, 1, :types, 0, 0, 0, 0, 0, 1)"
             ), {"id": profile_id, "types": types})
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, VODLOFT_0_7_0_REVISION)
 
     with engine.connect() as connection:
         enabled = dict(connection.execute(text("SELECT id, enable_profile FROM download_profiles")).all())
@@ -353,7 +354,7 @@ def test_imported_seasons_get_their_slug_back_and_the_duplicate_is_merged(migrat
                 "'published_final', 'https://example.test', :slug)"
             ), {"id": episode_id, "season": season_id, "identifier": f"trailer.{episode_id}", "slug": f"e{episode_id}"})
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, VODLOFT_0_7_0_REVISION)
 
     with engine.connect() as connection:
         assert dict(connection.execute(text("SELECT id, slug FROM seasons")).all()) == {
@@ -435,6 +436,119 @@ def test_canceled_history_actions_are_spelled_like_the_rest_of_vodloft(migration
     with engine.connect() as connection:
         actions = dict(connection.execute(text("SELECT id, action FROM media_download_history")).all())
     assert actions == {1: "canceled", 2: "completed", 3: "cancel_requested"}
+
+
+def test_which_episodes_becomes_one_ordered_list_of_filters(migration_database):
+    _database_path, engine = migration_database
+    import json
+
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, VODLOFT_0_6_0_REVISION)
+    with engine.begin() as connection:
+        for collection_id, identifier in ((1, "seasonal"), (2, "numbered")):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key) VALUES (:id, :uuid, :slug, :slug, 'https://example.test/' || :slug, "
+                "'free', 'series', :identifier, 'Author', 'author', 'dailywire')"
+            ), {"id": collection_id, "uuid": f"uuid-{collection_id}", "slug": f"show-{collection_id}", "identifier": identifier})
+        for season_id, index in ((1, 1), (2, 2)):
+            connection.execute(text(
+                "INSERT INTO seasons (id, collection_id, \"index\", slug, name, season_type, season_number) "
+                "VALUES (:id, 1, :index, :slug, :slug, 'normal', :index)"
+            ), {"id": season_id, "index": index, "slug": f"season-{index}"})
+        for profile_id in (5, 6):
+            connection.execute(text(
+                "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, type) VALUES "
+                "(:id, :slug, :slug, '/downloads/' || :slug || '/{{ collection }}/{{ episode_title }}.ext', 'format_1080p', "
+                "'collection')"
+            ), {"id": profile_id, "slug": f"p{profile_id}"})
+        profiles = (
+            # (id, collection, local media profile, types, days, count, retention, all seasons)
+            (1, 1, 5, '["ep"]', 0, 25, "published", 0),
+            (2, 2, 5, '["ep"]', 30, 0, "downloaded", 0),
+            (3, 2, 5, '["trailer"]', 30, 0, "downloaded", 0),
+            (4, 2, 6, '["ep"]', 0, 10, "published", 0),
+            (5, 2, 6, '["aux"]', 0, 0, "published", 0),
+        )
+        for profile_id, collection_id, local_id, types, days, count, retention, all_seasons in profiles:
+            connection.execute(text(
+                "INSERT INTO download_profiles (id, collection_id, local_media_profile_id, enable_profile, ep_id_type_list, "
+                "download_with_countdown, redownload_final, download_days_in_past, download_episode_count, "
+                "delete_older_episodes, include_upcoming_seasons) "
+                "VALUES (:id, :collection, :local, :enabled, :types, 0, 0, :days, :count, 1, 1)"
+            ), {"id": profile_id, "collection": collection_id, "local": local_id, "types": types, "days": days,
+                "count": count, "enabled": int(profile_id != 3)})
+        connection.execute(text(
+            "INSERT INTO download_profile_seasons (download_profile_id, season_id) VALUES (1, 2)"
+        ))
+    command.upgrade(config, "ce5df2342e6f")
+    with engine.begin() as connection:
+        for profile_id, _collection, _local, _types, _days, _count, retention, all_seasons in profiles:
+            connection.execute(text(
+                "UPDATE download_profiles SET retention_from = :retention, all_seasons = :all WHERE id = :id"
+            ), {"id": profile_id, "retention": retention, "all": all_seasons})
+        connection.execute(text(
+            "INSERT INTO download_profile_rules (download_profile_id, position, action, field, pattern, ignore_case) "
+            "VALUES (1, 0, 'skip', 'title', 'trailer', 1)"
+        ))
+        connection.execute(text(
+            "INSERT INTO media_items (id, uuid, type, source_key) VALUES (10, 'episode-10', 'episode', 'dailywire')"
+        ))
+        connection.execute(text(
+            "INSERT INTO seasons (id, collection_id, \"index\", slug, name, season_type, season_number) "
+            "VALUES (3, 2, 1, 'season-1', 'Season 1', 'normal', 1)"
+        ))
+        connection.execute(text(
+            "INSERT INTO media_items_episode (id, collection_id, season_id, \"index\", episode_identifier, slug, "
+            "publish_status, sharing_url, source_slug) VALUES (10, 2, 3, 1, 'trailer.1', 'e10', "
+            "'published_final', 'https://example.test', 'e10')"
+        ))
+        connection.execute(text(
+            "INSERT INTO media_downloads (id, type, media_item_id, local_media_profile_id, artifact_status, file_path) "
+            "VALUES (20, 'episode', 10, 5, 'absent', '')"
+        ))
+        connection.execute(text(
+            "INSERT INTO media_downloads_episode (id, download_profile_id) VALUES (20, 3)"
+        ))
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        rows = connection.execute(text(
+            "SELECT download_profile_id, position, action, field, pattern, episode_types, season_slugs, include_upcoming, "
+            "days, count FROM download_profile_filters ORDER BY download_profile_id, position"
+        )).all()
+        enabled = dict(connection.execute(text("SELECT id, enable_profile FROM download_profiles")).all())
+        download_profile = connection.execute(text(
+            "SELECT download_profile_id FROM media_downloads_episode WHERE id = 20"
+        )).scalar_one()
+    by_profile: dict[int, list] = {}
+    for row in rows:
+        by_profile.setdefault(row.download_profile_id, []).append(
+            (row.action, row.field, row.pattern, row.episode_types and json.loads(row.episode_types),
+             row.season_slugs and json.loads(row.season_slugs), bool(row.include_upcoming), row.days, row.count)
+        )
+    # Seasons first, then episode types, then the rules, then the date line; ignore case is in the pattern.
+    assert by_profile[1] == [
+        ("only", "seasons", None, None, ["season-2"], True, None, None),
+        ("only", "types", None, ["ep"], None, False, None, None),
+        ("skip", "title", "(?i)trailer", None, None, False, None, None),
+        ("only", "published", None, None, None, False, None, 25),
+    ]
+    # Profiles 2 and 3 differed only in their episode types: one profile downloads both, with profile 3's downloads.
+    assert by_profile[2] == [
+        ("only", "types", None, ["ep", "trailer"], None, False, None, None),
+        ("only", "downloaded", None, None, None, False, 30, None),
+    ]
+    assert download_profile == 2
+    # Profiles 4 and 5 differ in their date line too: the oldest stays.
+    assert by_profile[4] == [
+        ("only", "types", None, ["ep"], None, False, None, None),
+        ("only", "published", None, None, None, False, None, 10),
+    ]
+    assert enabled == {1: 1, 2: 1, 4: 1}
 
 
 def test_sites_migration_places_named_sources_and_moves_the_domain_preference(migration_database):
@@ -550,7 +664,7 @@ def test_every_site_adds_upcoming_and_live_videos(migration_database):
     with engine.begin() as connection:
         connection.execute(text("INSERT INTO sites (key, name, domains) VALUES ('youtube', 'YouTube', '[]')"))
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, UPCOMING_VIDEOS_REVISION)
 
     with engine.connect() as connection:
         assert connection.execute(text("SELECT pending_checks FROM sites WHERE key = 'youtube'")).scalar_one() == 1

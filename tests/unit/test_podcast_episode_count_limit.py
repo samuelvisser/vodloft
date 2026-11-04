@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from profile_filters import filter_rows, latest, line
+
 from conftest import available_artifact
 from datetime import datetime, timedelta, timezone
 
@@ -85,11 +87,9 @@ def _make_podcast_profile(session, collection, local_media_profile, *, count: in
         collection=collection,
         local_media_profile=local_media_profile,
         enable_profile=True,
-        ep_id_type_list=[EpIdType.EP.value],
+        filters=filter_rows(line("only", "types", episode_types=[EpIdType.EP.value]), latest(count)),
         download_with_countdown=False,
         redownload_final=False,
-        download_days_in_past=0,
-        download_episode_count=count,
         delete_older_episodes=delete_older,
     )
     session.add(profile)

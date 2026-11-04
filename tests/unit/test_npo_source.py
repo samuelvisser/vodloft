@@ -1,6 +1,8 @@
 """NPO Start as a Source, against answers shaped like the ones npo.nl gives."""
 from __future__ import annotations
 
+from profile_filters import filter_rows, line
+
 from datetime import datetime, timezone
 
 import pytest
@@ -322,9 +324,9 @@ def test_episodes_that_need_npo_plus_are_stored_but_not_planned(npo, session):
     local = CollectionLocalMediaProfile(slug="collections", name="Collections", preferred_format="format_1080p",
                                   output_template="/downloads/{{ collection_title }}/{{ episode_title }}.ext")
     profile = DownloadProfile(
-        collection=collection, local_media_profile=local, enable_profile=True, ep_id_type_list=["ep"],
-        download_with_countdown=False, redownload_final=False, download_days_in_past=0,
-        download_episode_count=0, delete_older_episodes=False,
+        collection=collection, local_media_profile=local, enable_profile=True, filters=filter_rows(line("only", "types", episode_types=["ep"])),
+        download_with_countdown=False, redownload_final=False,
+        delete_older_episodes=False,
     )
     session.add_all([local, profile])
     session.flush()
@@ -450,9 +452,9 @@ def test_signed_in_episodes_that_need_npo_plus_are_planned(npo, session, signed_
     local = CollectionLocalMediaProfile(slug="collections", name="Collections", preferred_format="format_1080p",
                                   output_template="/downloads/{{ collection_title }}/{{ episode_title }}.ext")
     profile = DownloadProfile(
-        collection=collection, local_media_profile=local, enable_profile=True, ep_id_type_list=["ep"],
-        download_with_countdown=False, redownload_final=False, download_days_in_past=0,
-        download_episode_count=0, delete_older_episodes=False,
+        collection=collection, local_media_profile=local, enable_profile=True, filters=filter_rows(line("only", "types", episode_types=["ep"])),
+        download_with_countdown=False, redownload_final=False,
+        delete_older_episodes=False,
     )
     session.add_all([local, profile])
     session.flush()

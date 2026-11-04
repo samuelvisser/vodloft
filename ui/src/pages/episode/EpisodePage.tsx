@@ -335,7 +335,7 @@ export default function EpisodePage() {
                                     const download = downloadByProfileId.get(profile.id)
                                     const skippedBy = skipped?.find((item) => (
                                         item.episodeId === episode.id && item.localMediaProfileId === profile.id
-                                    ))?.rule
+                                    ))?.filter
                                     return (
                                         <EpisodeDownloadRow
                                             key={profile.id}

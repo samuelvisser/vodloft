@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from profile_filters import filter_rows, latest, line
+
 from conftest import available_artifact
 from datetime import datetime, timezone
 from pathlib import Path
@@ -107,11 +109,9 @@ def _download_profile(session: Session, collection, local_profile, *, enabled: b
         collection=collection,
         local_media_profile=local_profile,
         enable_profile=enabled,
-        ep_id_type_list=["ep"],
+        filters=filter_rows(line("only", "types", episode_types=["ep"]), latest(5)),
         download_with_countdown=False,
         redownload_final=False,
-        download_days_in_past=0,
-        download_episode_count=5,
         delete_older_episodes=True,
     )
     session.add(item)

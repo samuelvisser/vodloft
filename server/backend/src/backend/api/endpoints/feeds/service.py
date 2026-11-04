@@ -21,10 +21,9 @@ from backend.db.models import (
     Episode,
     LocalMediaProfileBase,
     RssStreamProfile,
-    Season,
 )
 from backend.db.models.media_download import EpisodeMediaDownload
-from backend.db.models.download_profile import download_profile_seasons
+from backend.services.episode_filters import filters_allow_new_episode
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.download_profile_types import EpIdType, MediaDownloadArtifactStatus
 from backend.types.episode_types import EpisodeExtraType, EpisodePublishStatus
@@ -352,68 +351,17 @@ def _has_download_profile_for_episode(
         episode: Episode,
         kind: Literal["audio", "mp4", "hls"],
 ) -> bool:
-    episode_type = _episode_type_prefix(episode)
-    if not episode_type:
-        return False
-
-    profile_episode_type = func.json_each(
-        DownloadProfile.ep_id_type_list
-    ).table_valued("key", "value").alias("profile_episode_type")
-    selected_season = exists(
-        select(download_profile_seasons.c.season_id).where(
-            download_profile_seasons.c.download_profile_id == DownloadProfile.id,
-            download_profile_seasons.c.season_id == episode.season_id,
-        )
-    )
-    max_selected_season_index = (
-        select(func.max(Season.index))
-        .select_from(
-            download_profile_seasons.join(
-                Season,
-                Season.id == download_profile_seasons.c.season_id,
-            )
-        )
-        .where(
-            download_profile_seasons.c.download_profile_id == DownloadProfile.id
-        )
-        .scalar_subquery()
-    )
-    episode_season_index = (
-        select(Season.index)
-        .where(Season.id == episode.season_id)
-        .scalar_subquery()
-    )
-    # Only a collection identified by season filters its episodes by season.
-    season_allows_episode = (
-        true()
-        if episode.collection.episode_identifier != EpisodeIdentifier.SEASONAL.value
-        else or_(
-            selected_season,
-            and_(
-                DownloadProfile.include_upcoming_seasons.is_(True),
-                max_selected_season_index.is_not(None),
-                episode_season_index > max_selected_season_index,
-            ),
-        )
-    )
-
-    return s.scalar(
-        select(DownloadProfile.id)
-        .select_from(DownloadProfile)
-        .join(
-            LocalMediaProfileBase,
-            LocalMediaProfileBase.id == DownloadProfile.local_media_profile_id,
-        )
-        .join(profile_episode_type, true())
+    """Whether an enabled Download Profile of this format will download the episode once it is published."""
+    profiles = s.scalars(
+        select(DownloadProfile)
+        .join(LocalMediaProfileBase, LocalMediaProfileBase.id == DownloadProfile.local_media_profile_id)
         .where(
             DownloadProfile.collection_id == episode.collection_id,
             DownloadProfile.enable_profile.is_(True),
             _download_profile_format_filter(kind),
-            profile_episode_type.c.value == episode_type,
-            season_allows_episode,
         )
-        .limit(1)
-    ) is not None
+    )
+    return any(filters_allow_new_episode(profile.filters, episode) for profile in profiles)
 
 
 def _can_stream_live_episode(

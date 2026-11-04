@@ -1,69 +1,32 @@
 import {Controller, UseFormReturn} from 'react-hook-form'
 import Switch from 'react-switch'
 import ReadMore from '../../utils/ReadMore'
-import DownloadProfileDateFilters from './DownloadProfileDateFilters'
-import DownloadProfileSeasonFilter, {SeasonItem} from './DownloadProfileSeasonFilter'
-import Select from "react-select";
 import {useCollectionEpisodeTags} from "../../lib/queries";
-import {episodeTagLabel} from "../../types/schemas/source";
-import {useEffect, useMemo} from "react";
+import type {SeasonDetachedOut} from "../../types/schemas/season";
 import WhichEpisodes from "./WhichEpisodes";
 import YouTubeSection from "./YouTubeSection";
 import UpgradeCheckCard from "./UpgradeCheckCard";
 
 type Props = {
     form: UseFormReturn<any>
-    /** How the collection identifies its episodes; the filters shown follow it. Unknown until a collection is chosen. */
+    /** How the collection identifies its episodes. Unknown until a collection is chosen. */
     episodeIdentifier?: string
-    seasons?: SeasonItem[]
+    /** The collection's seasons, oldest first. */
+    seasons?: readonly SeasonDetachedOut[]
     collectionRoot?: boolean
-    disabledEpisodeTypes?: ReadonlySet<string>
     /** The saved collection the profile is for. */
     collectionId?: number
     /** The Source of a collection that is not saved yet. */
     sourceKey?: string
     /** The link of a collection that is not saved yet, which decides the tags its episodes can get. */
     collectionUrl?: string
-    /** Creating a profile opens the built-in Which episodes lines. */
-    startOpen?: boolean
 }
 
-// Simple option model for react-select
-type UIOption = { value: string; label: string }
-
-const NO_DISABLED_EPISODE_TYPES = new Set<string>()
-
-export default function DownloadProfileForm({form, episodeIdentifier, seasons, collectionRoot, disabledEpisodeTypes, collectionId, sourceKey, collectionUrl, startOpen}: Props) {
-    const {control, watch, setValue, formState: {errors}} = form
+export default function DownloadProfileForm({form, episodeIdentifier, seasons, collectionRoot, collectionId, sourceKey, collectionUrl}: Props) {
+    const {control, formState: {errors}} = form
     collectionRoot ??= true
 
-    const unavailableEpisodeTypes = disabledEpisodeTypes ?? NO_DISABLED_EPISODE_TYPES
     const {data: tags} = useCollectionEpisodeTags({collectionId, sourceKey, url: collectionUrl})
-    const tagOptions: UIOption[] = useMemo(() => (tags ?? []).map((tag) => ({value: tag.key, label: tag.label})), [tags])
-
-    // Episode types multiselect wiring
-    const selectedTypes: string[] = watch('epIdTypeList') || []
-    const selectValue: UIOption[] = useMemo(() => (
-        (selectedTypes || []).map((v) => ({ value: v, label: episodeTagLabel(tags, v) }))
-    ), [selectedTypes, tags])
-
-    useEffect(() => {
-        const availableTypes = selectedTypes.filter((type) => !unavailableEpisodeTypes.has(type))
-        if (availableTypes.length !== selectedTypes.length) {
-            setValue('epIdTypeList', availableTypes, {shouldDirty: true, shouldValidate: true})
-        }
-    }, [selectedTypes, setValue, unavailableEpisodeTypes])
-
-    const handleSelectChange = (opts: readonly UIOption[] | null) => {
-        const arr = Array.isArray(opts) ? opts : []
-        const values = arr.map((o) => o.value)
-        setValue('epIdTypeList', values, {shouldDirty: true, shouldValidate: true})
-    }
-
-    const handleSelectAll = () => {
-        const availableTypes = tagOptions.map((option) => option.value).filter((type) => !unavailableEpisodeTypes.has(type))
-        setValue('epIdTypeList', availableTypes, {shouldDirty: true, shouldValidate: true})
-    }
 
     return (
         <>
@@ -112,55 +75,6 @@ export default function DownloadProfileForm({form, episodeIdentifier, seasons, c
                 tags={tags}
                 seasons={seasons ?? []}
                 collectionId={collectionId}
-                startOpen={startOpen}
-                typesField={(
-                    <div className="form-row">
-                        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                            <label htmlFor="ep-id-type-select">Is any of</label>
-                            <div>
-                                <button type="button" className="btn btn-link" onClick={handleSelectAll}>
-                                    Select all
-                                </button>
-                            </div>
-                        </div>
-                        <Controller
-                            control={control}
-                            name="epIdTypeList"
-                            render={() => (
-                                <Select
-                                    inputId="ep-id-type-select"
-                                    isMulti
-                                    options={tagOptions}
-                                    value={selectValue}
-                                    onChange={handleSelectChange as any}
-                                    closeMenuOnSelect={false}
-                                    getOptionValue={(o: UIOption) => o.value}
-                                    getOptionLabel={(o: UIOption) => o.label}
-                                    isOptionDisabled={(option: UIOption) => unavailableEpisodeTypes.has(option.value)}
-                                    aria-invalid={!!errors.epIdTypeList}
-                                    aria-describedby={errors.epIdTypeList ? 'ep-id-type-errors' : 'ep-id-type-help'}
-                                />
-                            )}
-                        />
-
-                        {errors.epIdTypeList && (
-                            <div id="ep-id-type-errors" className="error" role="alert" aria-live="polite">
-                                {errors.epIdTypeList.message as string}
-                            </div>
-                        )}
-                        <div className="help" id="ep-id-type-help">
-                            <ReadMore summary={<span>The episode types to download</span>}>
-                                <p>Select all episode types you want to download.</p>
-                                {(tags ?? []).map((tag) => <p key={tag.key}><b>{tag.label}</b>: {tag.help}.</p>)}
-                                {unavailableEpisodeTypes.size > 0 && (
-                                    <p>Episode types already used by another Download Profile with this Local Media Profile cannot be selected.</p>
-                                )}
-                            </ReadMore>
-                        </div>
-                    </div>
-                )}
-                seasonsField={<DownloadProfileSeasonFilter form={form} seasons={seasons ?? []}/>}
-                datesField={<DownloadProfileDateFilters form={form}/>}
             />
             <UpgradeCheckCard form={form} collectionId={collectionId} sourceKey={sourceKey} collectionUrl={collectionUrl}/>
             <YouTubeSection form={form} collectionId={collectionId} sourceKey={sourceKey} collectionUrl={collectionUrl}/>

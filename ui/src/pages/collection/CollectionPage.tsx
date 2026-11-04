@@ -50,7 +50,7 @@ export default function CollectionPage() {
   const { data: collection, isLoading, error } = useCollection(id)
   const { data: skipped } = useSkippedByFilter(collection?.id)
   const skippedByEpisode = useMemo(
-    () => new Map((skipped ?? []).map((item) => [item.episodeId, item.rule])),
+    () => new Map((skipped ?? []).map((item) => [item.episodeId, item.filter])),
     [skipped],
   )
   const sources = useSourceLookup()

@@ -5,8 +5,8 @@ import type {LocalMediaProfileRead} from '../../types/schemas/local_media_profil
 import type {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {faIcon} from '../../icons/faIcon'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import type {EpisodeRule} from '../../types/schemas/download_profile'
-import {plainText, ruleSentence} from '../DownloadProfile/whichEpisodesText'
+import type {EpisodeFilter} from '../../types/schemas/download_profile'
+import {filterSentence, plainText} from '../DownloadProfile/whichEpisodesText'
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import {DownloadRow, useDownloadRowRequest} from '../MediaDownload/DownloadRow'
 import {
@@ -40,7 +40,7 @@ export function EpisodeDownloadRow({
     confirmSafeDelayDownload: boolean
     safeDelayReadyAt: Date | null
     /** The Which episodes filter that keeps this episode from downloading automatically. */
-    skippedBy?: EpisodeRule
+    skippedBy?: EpisodeFilter
 }) {
     const {busy, request, cancel} = useDownloadRowRequest(['episodeDownloads', episodeSlug])
     const [countdownConfirm, setCountdownConfirm] = useState(false)
@@ -206,7 +206,7 @@ export function EpisodeDownloadRow({
         </button>
     ) : null
     const skippedNote = skippedBy && !download ? (
-        <span title="Which episodes on its Download Profile">Skipped by filter: {plainText(ruleSentence(skippedBy)).replace(/^\w/, (c) => c.toLowerCase())}</span>
+        <span title="Which episodes on its Download Profile">Skipped by filter: {plainText(filterSentence(skippedBy)).replace(/^\w/, (c) => c.toLowerCase())}</span>
     ) : kept ? <span>Kept</span> : null
     return (
         <DownloadRow

@@ -1,8 +1,8 @@
-from datetime import date, datetime
+from datetime import datetime
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
-from sqlalchemy import Column, Date, ForeignKey, JSON, String, Table, func
+from sqlalchemy import ForeignKey, JSON, String, UniqueConstraint, func
 from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -12,27 +12,21 @@ from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.types.download_profile_types import DEFAULT_SPONSORBLOCK_SEGMENTS, DEFAULT_UPGRADE_IMPROVEMENTS
 
 if TYPE_CHECKING:
-    from backend.db.models import EpisodeMediaDownload, LocalMediaProfileBase, Season, Collection
-    from .DownloadProfileRule import DownloadProfileRule
-
-
-download_profile_seasons = Table(
-    "download_profile_seasons",
-    Base.metadata,
-    Column("download_profile_id", ForeignKey("download_profiles.id", ondelete="CASCADE"), primary_key=True),
-    Column("season_id", ForeignKey("seasons.id", ondelete="CASCADE"), primary_key=True),
-)
+    from backend.db.models import EpisodeMediaDownload, LocalMediaProfileBase, Collection
+    from .DownloadProfileFilter import DownloadProfileFilter
 
 
 class DownloadProfile(Base, HasTaskResourcesMixin):
-    """Which episodes of a collection to download automatically.
+    """Which episodes of a collection to download automatically, to one Local Media Profile.
 
-    The options that apply follow the collection's episode identification: every collection
-    uses the episode-type and date filters, and a seasonal collection also filters by
-    season.
+    Which episodes is the ordered list of filters; a collection has at most one
+    Download Profile per Local Media Profile.
     """
 
     __tablename__ = "download_profiles"
+    __table_args__ = (
+        UniqueConstraint("collection_id", "local_media_profile_id", name="uq_download_profiles_collection_local_media_profile"),
+    )
     __task_resource_types__ = ("download_profile",)
 
     # Columns
@@ -40,23 +34,11 @@ class DownloadProfile(Base, HasTaskResourcesMixin):
     collection_id: Mapped[int] = mapped_column(ForeignKey("collections.id"))
     local_media_profile_id: Mapped[int] = mapped_column(ForeignKey("local_media_profiles.id"))
     enable_profile: Mapped[bool] = mapped_column(default=True)
-    ep_id_type_list: Mapped[list[str]] = mapped_column(
-        MutableList.as_mutable(JSON),
-        default=list,
-        nullable=False,
-    )
 
-    # Date filters
     download_with_countdown: Mapped[bool] = mapped_column(default=False)
     redownload_final: Mapped[bool] = mapped_column(default=False)
-    download_days_in_past: Mapped[int] = mapped_column(default=0)
-    download_episode_count: Mapped[int] = mapped_column(default=0)
-    download_starting_from: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    # Whether a download its date lines leave out is deleted.
     delete_older_episodes: Mapped[bool] = mapped_column(default=True)
-    retention_from: Mapped[str] = mapped_column(
-        String(16), default="published", server_default="published",
-        comment="Whether a date window deletes episodes N days after publication or after downloading",
-    )
     auto_subtitles: Mapped[str] = mapped_column(
         String(16), default="fallback", server_default="fallback",
         comment="YouTube's auto-generated subtitles: never, fallback (when there is no real one) or always",
@@ -80,9 +62,6 @@ class DownloadProfile(Base, HasTaskResourcesMixin):
         comment="What counts as a better version: resolution, sponsorblock, subtitles or codec",
     )
 
-    # Season filter, used only when the collection is identified by season
-    include_upcoming_seasons: Mapped[bool] = mapped_column(default=True)
-
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()
     )
@@ -93,12 +72,10 @@ class DownloadProfile(Base, HasTaskResourcesMixin):
     # Relationships
     collection: Mapped["Collection"] = relationship(back_populates="download_profiles")
     local_media_profile: Mapped["LocalMediaProfileBase"] = relationship(back_populates="download_profiles")
-    seasons: Mapped[list["Season"]] = relationship(secondary=download_profile_seasons)
-
-    rules: Mapped[list["DownloadProfileRule"]] = relationship(
+    filters: Mapped[list["DownloadProfileFilter"]] = relationship(
         back_populates="download_profile",
         cascade="all, delete-orphan",
-        order_by="DownloadProfileRule.position",
+        order_by="DownloadProfileFilter.position",
     )
     episode_downloads: Mapped[list["EpisodeMediaDownload"]] = relationship(
         back_populates="download_profile"

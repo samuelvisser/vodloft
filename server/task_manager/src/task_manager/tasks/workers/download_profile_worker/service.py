@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from backend.db.models import DownloadProfile, Episode
 from backend.db.models.media_download import MediaDownloadBase
 from backend.services.episode_download_delay import episode_download_delay_ready_at
+from backend.services.episode_filters import has_latest_count
 from task_manager.scheduler.types import OperationSource
 from task_manager.tasks.helpers.download_profiles import lock_enabled_download_profile
 from task_manager.tasks.helpers.custom_index_readiness import wait_for_custom_index_pair
@@ -123,7 +124,8 @@ async def run_download_profile_worker(
             )
             created += 1
 
-        should_cleanup = only_episode is None or profile.download_episode_count > 0
+        # A new episode can push an older one out of "the latest N".
+        should_cleanup = only_episode is None or has_latest_count(profile.filters)
         if should_cleanup:
             cleanup_older_episodes(s, profile)
 

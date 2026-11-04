@@ -48,8 +48,8 @@ class EpIdType(StrEnum):
     AUX = "aux"
 
 
-class EpisodeRuleAction(StrEnum):
-    """What a Which episodes rule does with the episodes it matches."""
+class EpisodeFilterAction(StrEnum):
+    """What a Which episodes filter does with the episodes it matches."""
 
     SKIP = "skip"
     ONLY = "only"
@@ -58,23 +58,26 @@ class EpisodeRuleAction(StrEnum):
     """Never stops a download; protects matching downloads from retention."""
 
 
-class EpisodeRuleField(StrEnum):
+class EpisodeFilterField(StrEnum):
+    """What a Which episodes filter looks at."""
+
     TITLE = "title"
     DESCRIPTION = "description"
     DURATION = "duration"
     TYPES = "types"
+    SEASONS = "seasons"
+    PUBLISHED = "published"
+    """A date line: the last N days, the latest N episodes, or since a date."""
+    DOWNLOADED = "downloaded"
+    """A date line: published in the last N days, deleted N days after downloading."""
+
+
+DATE_FIELDS = (EpisodeFilterField.PUBLISHED, EpisodeFilterField.DOWNLOADED)
 
 
 class DurationOperator(StrEnum):
     SHORTER = "shorter"
     LONGER = "longer"
-
-
-class RetentionFrom(StrEnum):
-    """What the date window's retention counts from."""
-
-    PUBLISHED = "published"
-    DOWNLOADED = "downloaded"
 
 
 class UpgradeRepeat(StrEnum):

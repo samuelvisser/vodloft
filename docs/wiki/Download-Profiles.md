@@ -2,7 +2,7 @@
 
 Download Profiles decide **which collection episodes VODLoft should download automatically**. The attached Local Media Profile decides the file format, download behavior, and output path. See [[Local-Media-Profiles]].
 
-A collection can have more than one Download Profile. For example, you can keep audio for every episode while retaining video only for the newest five.
+A collection can have one Download Profile per Local Media Profile. For example, you can keep audio for every episode with one profile, and video for only the newest five with another.
 
 Movies do not use Download Profiles; movie downloads are started manually from the movie page.
 
@@ -18,110 +18,96 @@ Disabling a profile keeps its configuration but stops it from automatically sele
 
 ## Which episodes
 
-Everything that decides which episodes a profile downloads sits in one section, written as sentences you can read
+Everything that decides which episodes a profile downloads is one list of filters, written as sentences you can read
 from top to bottom:
 
-> Download **Video** and **Livestream** episodes
-> published in the **last 90 days**, and delete them once they are older
+> Only download if the **season** is **Season 3** or **upcoming seasons**
+> Only download if the **episode type** is **Video** or **Livestream**
 > Skip if the **title** contains the word “trailer” or “teaser”
-> Skip if the **duration** is shorter than **2 minutes**
+> Only download the **latest 25** episodes, and delete older ones
 
-Each line narrows the one above it. The number next to a line says how many of the collection's indexed episodes that
-line leaves out, and the bottom line says how many are left, for example **37 of 412 indexed episodes will be
-downloaded**. **Show which** lists every episode, and for each one that won't be downloaded, the line that left it out.
+Filters apply from top to bottom, and each filter only looks at the episodes the filters above it let through. In the
+example, the latest 25 are the latest 25 Videos and Livestreams of Season 3 that aren't trailers. Drag a filter by its
+handle to change the order, or open it and use the arrow buttons.
 
-A new profile starts with two lines, which you can remove with the bin icon and add again with **Add filter**:
+The number next to a filter says how many of the collection's indexed episodes it leaves out, and the bottom line says
+how many are left, for example **37 of 412 indexed episodes will be downloaded**. **Show which** lists every episode,
+and for each one that won't be downloaded, the filter that left it out. These numbers load after the page, so a large
+collection never makes the page wait.
 
-- the **episode types**. The types come from the show's Source: The Daily Wire has Episode, Ep. Extra, Trailer and
-  Auxiliary, and YouTube has Video, Short and Livestream. Without this line, every type is downloaded;
-- the **date window**, on the **publication date** or the **download date** (see Date options below). Without this
-  line, episodes of any date are downloaded and nothing is deleted.
+### A new profile
 
-A seasonal collection also has a **seasons** line, which stays. Click the pencil on a line to change it, and **Done**
-to fold it back into its sentence. An open line starts with two dropdowns that read as the start of its sentence, such as
-**Only download** if **published**: what the line does, and what it looks at. Changing either one changes the line. When you create a profile, these lines start open so you see them the first time.
+A new profile starts with these filters, which you can change, move or remove:
 
-### Your own filters
+- for a seasonal collection, its **latest season and upcoming seasons**;
+- the **episode types** the Source downloads by default. The types come from the show's Source: The Daily Wire has
+  Episode, Ep. Extra, Trailer and Auxiliary, and YouTube has Video, Short and Livestream;
+- the **latest 25 episodes**, deleting older ones.
 
-**Add filter** adds a line of your own, set to **Only download**. Every filter has an action and something it looks at:
+Without any filters, a profile downloads every episode. **Add filter** adds a filter where its kind usually goes:
+seasons at the top, episode types below them, dates at the bottom, and every other filter just above the dates. Click
+the pencil on a filter to change it, and **Done** to fold it back into its sentence. An open filter starts with two
+dropdowns that read as the start of its sentence, such as **Only download** if **title**: what the filter does, and what
+it looks at.
+
+### What a filter does
 
 - **Skip** leaves out the episodes that match.
 - **Only download** leaves out the episodes that *don't* match.
-- **Keep** never stops a download. It protects the downloads it matches from being deleted by the date window, so you
-  can, for example, keep every episode with “interview” in its title forever while the rest rotate out.
+- **Keep** never stops a download. Wherever it is in the list, it protects the downloads it matches from being deleted,
+  so you can, for example, keep every episode with “interview” in its title forever while the rest rotate out.
 
-A filter can look at the **episode type**. **Only download** if the episode type is any of the types you choose is the
-built-in types line; **Skip** and **Keep** work on episode types too, for example to keep every Trailer forever. A filter
-can look at **published** or **downloaded**, which brings back the date line when it isn't there; the date line only
-says which episodes to download, so its action stays at **Only download**. A filter can look at the episode's **title** or **description**, using the regular expression editor (you don't need to
-know regular expressions: the Contains and Any of these tabs write one for you, and the tester shows which of the
-collection's episodes match), or at its **duration**: shorter or longer than a length you choose. An episode whose
-length isn't known yet is never left out by a duration filter.
+### What a filter looks at
 
-Changing filters later only affects episodes that aren't downloaded yet; it never deletes a download. An episode a
-filter skips says **Skipped by filter** on the collection page and on its own page, where **Download anyway** downloads it
-once by hand.
+- **Episode type**: any of the types you choose.
+- **Season**: any of the seasons you choose. Choose **Upcoming seasons** too to have seasons the collection gets later
+  added to the filter.
+- **Title** or **description**, using the regular expression editor. You don't need to know regular expressions: the
+  Contains and Any of these tabs write one for you, and the tester shows which of the collection's episodes match.
+- **Duration**: shorter or longer than a length you choose. An episode whose length isn't known yet is never left out by
+  a duration filter.
+- **Published** and **downloaded**, the date filters below.
+
+Changing filters later only affects episodes that aren't downloaded yet, apart from what a date filter deletes. An
+episode a filter skips says **Skipped by filter** on the collection page and on its own page, where **Download anyway**
+downloads it once by hand.
+
+### Date filters
+
+A profile has at most one **published** filter and one **downloaded** filter. They can **Only download** or **Keep**;
+skipping by date isn't offered.
+
+A **published** filter looks at when an episode came out:
+
+- **the latest … episodes**: the newest episodes that reach this filter;
+- **episodes published in the last … days**;
+- **episodes published since a date**: VODLoft starts archiving from that date and keeps downloading everything newer.
+  Older downloads are never deleted because of it.
+
+A **downloaded** filter keeps each download for a number of days, counted from the day it was downloaded, however old
+the episode already was. Only episodes published within that many days are downloaded. This is how Pinchflat's
+retention works.
+
+As a **Keep** filter, a date filter protects downloads instead: **Keep the latest 10 episodes** keeps those ten whatever
+the other filters say.
+
+### Deleting downloads
+
+Only an **Only download** date filter deletes downloads, and only with its **And delete them …** switch on. It then
+removes downloaded files that fall outside it: on **published**, once an episode is no longer among the latest or was
+published longer ago than the window; on **downloaded**, once it was downloaded longer ago. When a download is deleted,
+its download record and download history go as well, so it no longer appears on the Downloads page.
+
+Downloads you keep, and downloads a Keep filter matches, are never deleted. Downloads of episodes that can't be
+downloaded any more, for example because the Source removed them, are never deleted either.
+
+Leave the switch off if you only want the date filter to decide which new episodes are downloaded while keeping older
+files already on disk.
 
 ### Keeping a download
 
-The pin button next to a download on an episode's page keeps that one download: the date window never deletes it. Click
-it again to let the date window delete it as usual. Kept downloads are still listed and can still be deleted by hand.
-
-## Which options a profile shows
-
-The options follow how the collection identifies its episodes (its **Episode identification**, chosen when you add the collection), not whether it is a podcast or a series:
-
-- a **Seasonal** collection filters by season first, and can use every date option below on top of that;
-- a **Date-based** or **Numbered** collection uses the date options only.
-
-If you change a collection's episode identification later, its Download Profiles follow: the season choice only counts while the collection is seasonal.
-
-## Seasons
-
-### Seasons to download
-
-Select the known seasons that should be covered by the profile. Only selected episode types inside those seasons are eligible.
-
-### Include upcoming seasons
-
-Enable **Include upcoming seasons** when the same rules should automatically apply to seasons added later.
-
-This is useful for an ongoing series where you do not want to edit the profile every time a new season appears.
-
-Selecting all seasons in the UI also enables future seasons so the profile keeps following the complete series.
-
-## Date options
-
-The date line filters on one of two dates, chosen in its header. **Published** offers the limits below. **Downloaded** keeps each
-download for a number of days, counted from the day it was downloaded, however old the episode already was; only
-episodes published within that many days are downloaded. This is how Pinchflat's retention works.
-
-### Published when
-
-Choose which episodes the profile should consider. On a seasonal collection the limit counts only episodes in the chosen seasons:
-
-- **at any time** — every eligible episode can be downloaded.
-- **in the last … days** — only episodes inside a recent number-of-days window are eligible.
-- **as one of the latest … episodes** — only the newest selected number of eligible episodes are kept in the active window.
-
-### On or after
-
-With **at any time**, you can optionally set **On or after** to establish a fixed cutoff date.
-
-VODLoft will ignore eligible episodes older than that date and continue downloading new episodes published after it. Existing files are not deleted simply because they predate the cutoff.
-
-This is useful when you want to begin archiving a collection from a particular date without downloading its complete history.
-
-### Deleting older episodes
-
-When a rolling number of days or number of episodes is chosen, the **And delete them …** switch can also remove downloaded files that fall outside that window. When retention removes an episode, its download record and download history are removed as well, so it no longer appears on the Downloads page.
-
-On **published**, an episode is deleted once it was published longer ago than the window; on **downloaded**, once it
-was downloaded longer ago.
-
-Downloads you keep, and downloads a Keep filter matches, are never deleted.
-
-Leave it disabled if you only want the limit to control which new episodes are selected while keeping older files already on disk. Planned downloads that never produced a file are still discarded once they fall outside the active number of episodes window.
+The pin button next to a download on an episode's page keeps that one download: no date filter deletes it. Click it
+again to let the date filter delete it as usual. Kept downloads are still listed and can still be deleted by hand.
 
 ## Upgrade check
 
@@ -187,11 +173,11 @@ An episode you download by hand follows the Collection's Download Profile for th
 
 ## Using multiple profiles
 
-Multiple Download Profiles are useful whenever format or retention differs. Examples include:
+Multiple Download Profiles are useful whenever format or retention differs. Each one uses its own Local Media Profile.
+Examples include:
 
 - audio for all regular and auxiliary episodes with no limit;
 - 1080p video for regular episodes, latest five only;
-- a separate video profile for one particular season;
 - a high-quality archive profile alongside a smaller podcast-friendly copy.
 
 Because each profile points to a Local Media Profile, several versions of the same episode can coexist without being treated as the same local file.

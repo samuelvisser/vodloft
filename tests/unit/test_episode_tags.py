@@ -144,11 +144,12 @@ def test_the_episode_tags_endpoint_and_profiles_accept_source_tags():
     assert client.get("/api/sources/nope/episode-tags").status_code == 404
 
     body = {
-        "collection_id": 1, "local_media_profile_id": 1, "enable_profile": True, "ep_id_type_list": ["ep", "livestream"],
-        "download_with_countdown": False, "redownload_final": False, "download_days_in_past": 0,
-        "download_episode_count": 0, "download_starting_from": None, "delete_older_episodes": False,
-        "seasons": [], "include_upcoming_seasons": False,
+        "collection_id": 1, "local_media_profile_id": 1, "enable_profile": True,
+        "download_with_countdown": False, "redownload_final": False, "delete_older_episodes": False,
+        "filters": [{"action": "only", "field": "types", "episode_types": ["ep", "livestream"]}],
     }
-    assert DownloadProfileAPICreate.model_validate(body).ep_id_type_list == ["ep", "livestream"]
+    assert DownloadProfileAPICreate.model_validate(body).filters[0].episode_types == ["ep", "livestream"]
     with pytest.raises(ValidationError):
-        DownloadProfileAPICreate.model_validate({**body, "ep_id_type_list": ["ep; drop"]})
+        DownloadProfileAPICreate.model_validate(
+            {**body, "filters": [{"action": "only", "field": "types", "episode_types": ["ep; drop"]}]}
+        )
