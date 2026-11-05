@@ -551,6 +551,43 @@ def test_which_episodes_becomes_one_ordered_list_of_filters(migration_database):
     assert enabled == {1: 1, 2: 1, 4: 1}
 
 
+def test_a_start_date_becomes_a_published_filter_after_an_attempt_that_stopped(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, VODLOFT_0_6_0_REVISION)
+    with engine.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+            "author_name, author_slug, source_key) VALUES (1, 'uuid-1', 'show', 'show', 'https://example.test/show', "
+            "'free', 'podcast', 'date_based', 'Author', 'author', 'dailywire')"
+        ))
+        connection.execute(text(
+            "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, type) VALUES "
+            "(5, 'audio', 'audio', '/downloads/audio/{{ collection }}/{{ episode_title }}.ext', 'format_audio_only', "
+            "'collection')"
+        ))
+        connection.execute(text(
+            "INSERT INTO download_profiles (id, collection_id, local_media_profile_id, enable_profile, ep_id_type_list, "
+            "download_with_countdown, redownload_final, download_days_in_past, download_episode_count, "
+            "download_starting_from, delete_older_episodes, include_upcoming_seasons) "
+            "VALUES (1, 1, 5, 1, '[\"ep\"]', 0, 0, 0, 0, '2026-01-10', 1, 1)"
+        ))
+    command.upgrade(config, "ce5df2342e6f")
+    # An earlier attempt created the filters table, then stopped before converting anything.
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE download_profile_filters (id INTEGER PRIMARY KEY)"))
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        rows = connection.execute(text(
+            "SELECT action, field, starting_from FROM download_profile_filters ORDER BY position"
+        )).all()
+    assert [tuple(row) for row in rows] == [("only", "types", None), ("only", "published", "2026-01-10")]
+
+
 def test_sites_migration_places_named_sources_and_moves_the_domain_preference(migration_database):
     _database_path, engine = migration_database
     from backend.db.migrations import get_alembic_config

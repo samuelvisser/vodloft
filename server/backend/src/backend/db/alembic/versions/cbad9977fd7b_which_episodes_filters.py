@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 from collections import defaultdict
+from datetime import date
 
 import sqlalchemy as sa
 from alembic import op
@@ -60,7 +61,10 @@ def _date_line(profile) -> dict | None:
         field = "downloaded" if profile.retention_from == "downloaded" else "published"
         return _filter(profile.id, "only", field, days=profile.download_days_in_past)
     if profile.download_starting_from is not None:
-        return _filter(profile.id, "only", "published", starting_from=profile.download_starting_from)
+        # SQLite hands the stored day back as text, and the Date column only takes a date.
+        return _filter(
+            profile.id, "only", "published", starting_from=date.fromisoformat(str(profile.download_starting_from)[:10]),
+        )
     return None
 
 
@@ -158,6 +162,11 @@ def _merge_duplicates(bind, profiles, filters_by_profile: dict[int, list[dict]],
 
 
 def upgrade() -> None:
+    # SQLite keeps a created table even when the rest of this migration fails. While the old rules table is
+    # still here nothing was converted yet, so a filters table that such an attempt left behind can go.
+    inspector = sa.inspect(op.get_bind())
+    if inspector.has_table("download_profile_filters") and inspector.has_table("download_profile_rules"):
+        op.drop_table("download_profile_filters")
     op.create_table(
         "download_profile_filters",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),

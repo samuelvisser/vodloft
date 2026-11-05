@@ -253,14 +253,23 @@
 }
 
 @media (max-width: 640px) {
-    /* The sentence takes the whole row; its count and icons go under it, on the right. */
+    /* A line keeps its handle, count and icons beside its sentence or dropdowns. */
     .which-episodes-sentence {
-        flex-wrap: wrap;
-        justify-content: flex-end;
+        gap: 4px;
+        padding: 10px 6px 10px 12px;
     }
 
-    .which-episodes-text {
-        flex-basis: 100%;
+    .which-episodes-grip {
+        padding: 6px 4px 6px 0;
+    }
+
+    .which-episodes-icon {
+        width: 28px;
+    }
+
+    .which-episodes-rule-head > div {
+        min-width: 0;
+        flex: 1 1 140px;
     }
 
     .which-episodes-list li {
