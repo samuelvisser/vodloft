@@ -241,23 +241,51 @@
         justify-content: flex-start;
     }
 
+    /* Phones: every profile on one line that scrolls sideways instead of wrapping. */
     .collection-profile-summary {
         grid-column: 1;
-        display: grid;
-        gap: 10px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+        scrollbar-width: none;
+        padding: 8px 10px;
+    }
+
+    .collection-profile-summary::-webkit-scrollbar {
+        display: none;
+    }
+
+    .collection-profile-group,
+    .collection-profile-links,
+    .collection-profile-chip,
+    .collection-profile-chip-group {
+        flex-shrink: 0;
     }
 
     .collection-profile-group {
-        align-items: flex-start;
-        display: grid;
         gap: 7px;
     }
 
-    .collection-profile-group + .collection-profile-group {
-        padding-left: 0;
-        padding-top: 10px;
-        border-left: 0;
-        border-top: 1px solid rgba(148, 163, 184, 0.22);
+    .collection-profile-links {
+        flex-wrap: nowrap;
+    }
+
+    .collection-profile-chip {
+        white-space: nowrap;
+    }
+
+    .collection-profile-group-label {
+        position: relative;
+    }
+
+    /* The icon names the group; the words stay for screen readers and the tooltip. */
+    .collection-profile-group-name {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
     }
 
     .collection-season-filter {
@@ -283,5 +311,7 @@
     }
 }
 
-/* Links share the button row; match the size buttons get from the browser. */
-.collection-page-actions > a.btn { font-size: 0.8333rem; }
+/* Links and buttons share one row: give them one font size (browsers size buttons and links differently)
+   and drop the Actions menu's taller minimum so every button in the row is the same height. */
+.collection-page-actions .btn { font-size: 0.8333rem; }
+.collection-page-actions .action-menu-trigger { min-height: 0; }

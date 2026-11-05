@@ -13,6 +13,10 @@ import ReadMore from '../../utils/ReadMore'
 import {hasSourceFeature, SourceFeature} from '../../types/schemas/source'
 import CronEditor from '../../components/Settings/CronEditor'
 import {useQuery} from '@tanstack/react-query'
+import {toast} from 'react-hot-toast'
+import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
+import {removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from '../../lib/cache'
+import {episodeQueryKeys} from '../../lib/collectionQueryOptions'
 
 const CheckFrequencyReg = createSelectRegistry('CollectionCheckFrequency', {
   default: {label: 'Like other Collections'},
@@ -46,6 +50,7 @@ export default function EditCollectionPage() {
   const qc = useQueryClient()
   const [metadataOpen, setMetadataOpen] = useState(false)
   const [urlCopied, setUrlCopied] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [optionsError, setOptionsError] = useState<string | null>(null)
   const {data: collection} = useCollection(id)
   const initializedCollectionId = useRef<string | undefined>(undefined)
@@ -185,6 +190,48 @@ export default function EditCollectionPage() {
     ])
     navigate(`/collection/${id ?? ''}`)
   }
+
+  const closeDeleteConfirm = () => setDeleteConfirm(false)
+  const onConfirmDelete = async () => {
+    if (!id) return
+    const url = `${(window as any).appConfig.API_URL}/collections/${id}`
+    const r = await fetch(url, { method: 'DELETE', credentials: 'include' })
+    if (!r.ok) {
+      let friendly = `Failed to delete collection (HTTP ${r.status})`
+      try {
+        const data = await r.json().catch(() => null as any)
+        const details: any[] | undefined = data?.detail
+        if (Array.isArray(details)) {
+          const allErr = details.find((d) => Array.isArray(d?.loc) && d.loc[0] === 'body' && d.loc[1] === '__all__')
+          if (allErr && typeof allErr.msg === 'string' && allErr.msg.trim()) friendly = allErr.msg
+        }
+      } catch (_) {
+        // ignore JSON parse errors
+      }
+      console.error(friendly)
+      toast.error(friendly)
+      return
+    }
+    removeEpisodePreviewFromStorage(id)
+    removeSeasonsFromStorage(id)
+    setDeleteConfirm(false)
+
+    await Promise.all([
+      qc.cancelQueries({queryKey: ['collection', id]}),
+      qc.cancelQueries({queryKey: ['seasons', id]}),
+      qc.cancelQueries({queryKey: episodeQueryKeys.forCollection(id)}),
+    ])
+    qc.removeQueries({queryKey: ['collection', id]})
+    qc.removeQueries({queryKey: ['seasons', id]})
+    qc.removeQueries({queryKey: episodeQueryKeys.forCollection(id)})
+
+    await Promise.all([
+      qc.invalidateQueries({queryKey: ['collections']}),
+      qc.invalidateQueries({queryKey: ['collectionsView']}),
+    ])
+    navigate('/library?type=collections')
+  }
+
 
   if (!id) {
     return (
@@ -364,6 +411,16 @@ export default function EditCollectionPage() {
         )}
 
         <div className="actions">
+          <button
+            type="button"
+            className="btn btn-danger"
+            style={{marginRight: 'auto'}}
+            onClick={() => setDeleteConfirm(true)}
+            disabled={!collection}
+          >
+            <FontAwesomeIcon icon={faIcon('fass', 'trash')} aria-hidden="true"/>
+            <span>Delete collection</span>
+          </button>
           <button type="button" className="btn" onClick={onCancel}>Cancel</button>
           <button type="button" className="btn btn-primary" onClick={onSave} disabled={!collection}>Save changes</button>
         </div>
@@ -382,6 +439,21 @@ export default function EditCollectionPage() {
         ]}
         onDismiss={() => setMetadataOpen(false)}
       />
+
+      <ConfirmDialog
+        open={deleteConfirm}
+        title="Delete collection"
+        onDismiss={closeDeleteConfirm}
+        icon={faIcon('fass', 'trash')}
+        iconTone="danger"
+        confirmButton={{
+          label: 'Delete',
+          onClick: onConfirmDelete,
+          className: 'btn btn-danger',
+        }}
+      >
+        <p>Are you sure you want to delete "{collection?.title ?? id}"? This action cannot be undone.</p>
+      </ConfirmDialog>
     </section>
   )
 }
