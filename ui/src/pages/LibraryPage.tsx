@@ -3,6 +3,7 @@ import {can} from '../lib/access'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link, useSearchParams} from 'react-router-dom'
 import {faIcon} from '../icons/faIcon'
+import {ClearInputButton} from '../components/common/ClearInputButton'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import CollectionIndexingProgress from '../components/CollectionIndexingProgress/CollectionIndexingProgress'
@@ -92,6 +93,18 @@ function sameName(a: string, b: string) {
     return plain(a) === plain(b)
 }
 
+/** Lower case without accents, so "beyonce" finds "Beyoncé". */
+function foldForSearch(text: string) {
+    return text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
+}
+
+/** Whether every word of the search appears in the item's title or author. */
+function matchesLibrarySearch(item: {title: string, authorName?: string | null}, words: string[]) {
+    if (words.length === 0) return true
+    const haystack = foldForSearch(`${item.title} ${item.authorName ?? ''}`)
+    return words.every((word) => haystack.includes(word))
+}
+
 function formatVideoDuration(seconds: number) {
     if (!seconds) return null
     const total = Math.round(seconds)
@@ -101,10 +114,21 @@ function formatVideoDuration(seconds: number) {
     return hours ? `${hours}:${String(minutes).padStart(2, '0')}:${rest}` : `${minutes}:${rest}`
 }
 
+function NoMatches({search, what}: {search: boolean, what: string}) {
+    return (
+        <div className="catalog-empty">
+            <FontAwesomeIcon icon={search ? faIcon('fass', 'magnifying-glass') : faIcon('fass', 'filter')}/>
+            <p>{search ? `No ${what} match your search and filters.` : `No ${what} match the selected filters.`}</p>
+        </div>
+    )
+}
+
 export default function LibraryPage() {
     const [params, setParams] = useSearchParams()
     const [collectionTypeFilter, setCollectionTypeFilter] = useState(loadLibraryCollectionTypeFilter)
     const [sourceFilter, setSourceFilter] = useState(loadLibrarySourceFilter)
+    const [search, setSearch] = useState('')
+    const searchWords = useMemo(() => foldForSearch(search).split(/\s+/).filter(Boolean), [search])
     const {data: collections, isLoading: collectionsLoading, error: collectionsError} = useCollectionsView()
     const {data: movies, isLoading: moviesLoading, error: moviesError} = useMovies()
     const {data: videos, isLoading: videosLoading, error: videosError} = useVideos()
@@ -124,16 +148,21 @@ export default function LibraryPage() {
     const filteredCollections = useMemo(
         () => collections?.filter((collection) => (
             matchesCollectionTypeFilter(collection.type, collectionTypeFilter) && matchesSourceFilter(collection.sourceKey, activeSourceFilter)
+            && matchesLibrarySearch(collection, searchWords)
         )) ?? [],
-        [collections, collectionTypeFilter, activeSourceFilter],
+        [collections, collectionTypeFilter, activeSourceFilter, searchWords],
     )
     const filteredMovies = useMemo(
-        () => movies?.filter((movie) => matchesSourceFilter(movie.sourceKey, activeSourceFilter)) ?? [],
-        [movies, activeSourceFilter],
+        () => movies?.filter((movie) => (
+            matchesSourceFilter(movie.sourceKey, activeSourceFilter) && matchesLibrarySearch(movie, searchWords)
+        )) ?? [],
+        [movies, activeSourceFilter, searchWords],
     )
     const filteredVideos = useMemo(
-        () => videos?.filter((video) => matchesSourceFilter(video.sourceKey, activeSourceFilter)) ?? [],
-        [videos, activeSourceFilter],
+        () => videos?.filter((video) => (
+            matchesSourceFilter(video.sourceKey, activeSourceFilter) && matchesLibrarySearch(video, searchWords)
+        )) ?? [],
+        [videos, activeSourceFilter, searchWords],
     )
     const hasCollections = !!collections?.length
     const hasMovies = !!movies?.length
@@ -210,6 +239,22 @@ export default function LibraryPage() {
             )}
 
             {hasAny && (
+                <div className="browse-toolbar library-toolbar">
+                    <label className="browse-search">
+                        <span className="sr-only">Search {activeType}</span>
+                        <FontAwesomeIcon icon={faIcon('fass', 'magnifying-glass')} aria-hidden="true"/>
+                        <input
+                            enterKeyHint="search"
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
+                            placeholder={`Search ${activeType}`}
+                        />
+                        {search && <ClearInputButton label="Clear the search" onClear={() => setSearch('')}/>}
+                    </label>
+                </div>
+            )}
+
+            {hasAny && (
                 <SourceFilter
                     sourceKeys={sourceKeys}
                     selected={activeSourceFilter}
@@ -276,38 +321,39 @@ export default function LibraryPage() {
                         })}
                     </div>
                 ) : (
-                    <div className="catalog-empty">
-                        <FontAwesomeIcon icon={faIcon('fass', 'filter')}/>
-                        <p>No shows match the selected filters.</p>
-                    </div>
+                    <NoMatches search={searchWords.length > 0} what="collections"/>
                 )
             ) : activeType === 'movies' && hasMovies ? (
-                <div className="movie-poster-grid" role="list" aria-label="Movies">
-                    {filteredMovies.map((movie) => {
-                        const image = toImageUrl(
-                            movie.thumbnailPortraitPath
-                            || movie.thumbnailLandscapePath
-                            || movie.backgroundImagePath
-                            || movie.logoImagePath,
-                        )
-                        const download = latestMovieDownload(downloads, movie.slug)
-                        return (
-                            <Link className="movie-poster-card" to={`/movie/${movie.slug}`} key={movie.slug} role="listitem">
-                                <span className="movie-poster-art">
-                                    {image
-                                        ? <img src={image} alt="" loading="lazy" decoding="async"/>
-                                        : <FontAwesomeIcon icon={faIcon('fass', 'clapperboard')}/>
-                                    }
-                                    <DownloadStateBadge download={download}/>
-                                    {movie.drmProtected && <DrmBadge onCover/>}
-                                </span>
-                                <span className="movie-poster-title">{movie.title}</span>
-                                {movie.authorName && <span className="movie-poster-meta">{movie.authorName}</span>}
-                                <SourceBadge sourceKey={movie.sourceKey}/>
-                            </Link>
-                        )
-                    })}
-                </div>
+                filteredMovies.length > 0 ? (
+                    <div className="movie-poster-grid" role="list" aria-label="Movies">
+                        {filteredMovies.map((movie) => {
+                            const image = toImageUrl(
+                                movie.thumbnailPortraitPath
+                                || movie.thumbnailLandscapePath
+                                || movie.backgroundImagePath
+                                || movie.logoImagePath,
+                            )
+                            const download = latestMovieDownload(downloads, movie.slug)
+                            return (
+                                <Link className="movie-poster-card" to={`/movie/${movie.slug}`} key={movie.slug} role="listitem">
+                                    <span className="movie-poster-art">
+                                        {image
+                                            ? <img src={image} alt="" loading="lazy" decoding="async"/>
+                                            : <FontAwesomeIcon icon={faIcon('fass', 'clapperboard')}/>
+                                        }
+                                        <DownloadStateBadge download={download}/>
+                                        {movie.drmProtected && <DrmBadge onCover/>}
+                                    </span>
+                                    <span className="movie-poster-title">{movie.title}</span>
+                                    {movie.authorName && <span className="movie-poster-meta">{movie.authorName}</span>}
+                                    <SourceBadge sourceKey={movie.sourceKey}/>
+                                </Link>
+                            )
+                        })}
+                    </div>
+                ) : (
+                    <NoMatches search={searchWords.length > 0} what="movies"/>
+                )
             ) : activeType === 'videos' && hasVideos ? (
                 filteredVideos.length > 0 ? (
                     <div className="episodes-grid" role="list" aria-label="Videos">
@@ -333,10 +379,7 @@ export default function LibraryPage() {
                         })}
                     </div>
                 ) : (
-                    <div className="catalog-empty">
-                        <FontAwesomeIcon icon={faIcon('fass', 'filter')}/>
-                        <p>No videos match the selected filters.</p>
-                    </div>
+                    <NoMatches search={searchWords.length > 0} what="videos"/>
                 )
             ) : null}
         </section>
