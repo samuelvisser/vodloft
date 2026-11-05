@@ -201,9 +201,10 @@ export default function RssStreamProfileForm({
                     <div className="help" id="rss-proxy-source-stream-help">
                         <ReadMore summary={<span>Pass video from {siteName} through VODLoft, instead of letting your podcast app fetch it straight from {siteName}.</span>}>
                             <p>
-                                Passing video through VODLoft might make the feed more stable, for example when {siteName} stops
-                                accepting your podcast app. It does add bandwidth overhead: every video you watch is downloaded by
-                                your VODLoft server and uploaded again to your podcast app.
+                                This is on by default, because {siteName}'s own video links stop working after a while, and
+                                then your podcast app cannot play or continue the video. Through VODLoft, the links are fetched
+                                again when needed. It does add bandwidth overhead: every video you watch is downloaded by your
+                                VODLoft server and uploaded again to your podcast app.
                             </p>
                             <p>
                                 This only applies to video streamed from {siteName}. Downloaded video always comes from VODLoft.
