@@ -8,6 +8,7 @@ import time
 
 import requests
 from collections.abc import Iterator, Sequence
+from dataclasses import replace
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
@@ -15,7 +16,7 @@ from config import get_settings
 from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
-    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, DownloadOptions, Feature, LinkKind, LinkPreview, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
+    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, DownloadOptions, Feature, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
     ResolvedLink, SearchResults, CollectionDetails, Site, Source, SourceProblem, SponsorBlockSegment, StreamMethod, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
 )
@@ -228,6 +229,8 @@ def video_formats(info: dict) -> VideoFormats:
 
 # The formats a feed can pass on as they are: YouTube's M4A audio, and its one MP4 with sound (360p).
 _READY_AUDIO_FORMAT = "140"
+# The sound of YouTube's live streams is AAC, which yt-dlp does not say.
+_LIVE_AUDIO_CODECS = "mp4a.40.2"
 _READY_VIDEO_FORMAT = "18"
 _DIRECT_PROTOCOLS = {"http", "https"}
 
@@ -312,6 +315,44 @@ def tracks_of(info: dict, heights: Sequence[int]) -> MediaTracks | None:
     if audio is None or not video:
         return None
     return MediaTracks(video=tuple(video), audio=_media_stream(audio, ready=True))
+
+
+def _live_playlist(entry: dict) -> bool:
+    return isinstance(entry, dict) and bool(entry.get("url")) and "m3u8" in str(entry.get("protocol") or "") and not entry.get("has_drm")
+
+
+def live_of(info: dict, heights: Sequence[int]) -> LiveStream | None:
+    """The HLS playlists of a video while it is live, from yt-dlp's info: one per resolution up to the
+    highest of ``heights``, and the sound when YouTube lists it apart from the video. None when the
+    video is not live."""
+    if info.get("live_status") != "is_live":
+        return None
+    playlists = [entry for entry in info.get("formats") or [] if _live_playlist(entry)]
+    best: dict[int, dict] = {}
+    for entry in playlists:
+        height = entry.get("height") or 0
+        if (entry.get("vcodec") or "none") == "none" or not height or height > max(heights):
+            continue
+        if height not in best or (entry.get("tbr") or 0) > (best[height].get("tbr") or 0):
+            best[height] = entry
+    video = [_media_stream(best[height], ready=True) for height in sorted(best, reverse=True)]
+    if not video:
+        return None
+    if all((best[height].get("acodec") or "none") != "none" for height in best):
+        return LiveStream(video=tuple(video))
+    # YouTube lists the sound of most live streams apart, as 233 and 234 without a codec or bitrate:
+    # the higher number is the better one.
+    sound = max(
+        (entry for entry in playlists if entry.get("vcodec") == "none" and entry.get("acodec") != "none"),
+        key=lambda entry: (entry.get("language_preference") or 0, entry.get("tbr") or entry.get("abr") or 0, str(entry.get("format_id"))),
+        default=None,
+    )
+    if sound is None:
+        return None
+    audio = _media_stream(sound, ready=True)
+    if audio.codecs is None:
+        audio = replace(audio, codecs=_LIVE_AUDIO_CODECS)
+    return LiveStream(video=tuple(video), audio=audio)
 
 
 def _sponsorblock_segments(video_id: str, categories: Sequence[str]) -> tuple[SponsorBlockSegment, ...]:
@@ -936,6 +977,12 @@ class YtDlpSource(Source):
         if not self.site_for(url).streams:
             raise NotImplementedError(f"{self.site_for(url).name} cannot stream episodes")
         return stream_of(runner.run_json("--no-playlist", url, cookies=use_cookies), audio=audio)
+
+    def live_stream(self, url: str, *, use_cookies: bool = True) -> LiveStream | None:
+        site = self.site_for(url)
+        if StreamMethod.LIVE not in site.stream_methods:
+            raise NotImplementedError(f"{site.name} cannot stream live episodes")
+        return live_of(runner.run_json("--no-playlist", url, cookies=use_cookies), site.stream_video_heights)
 
     def media_tracks(self, url: str, *, use_cookies: bool = True) -> MediaTracks | None:
         site = self.site_for(url)

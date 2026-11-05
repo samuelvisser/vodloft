@@ -239,6 +239,16 @@ class MediaTracks:
     audio: MediaStream
 
 
+@dataclass(frozen=True)
+class LiveStream:
+    """An episode while it is live, as HLS media playlists that the Site keeps adding to."""
+
+    video: tuple[MediaStream, ...]
+    """One playlist per resolution, from the highest down. Each has sound unless ``audio`` is given."""
+    audio: MediaStream | None = None
+    """The sound as a playlist of its own, shared by every video playlist."""
+
+
 class PlaybackKind(StrEnum):
     """How the downloader fetches a playback URL."""
 
@@ -686,6 +696,12 @@ class Source(ABC):
         its MP4. Only Sources with ``Feature.EPISODE_LISTS`` whose Site streams ``StreamMethod.HLS``
         implement it. None when the episode has no such tracks."""
         raise NotImplementedError(f"{self.name} cannot stream episodes as tracks")
+
+    def live_stream(self, url: str, *, use_cookies: bool = True) -> LiveStream | None:
+        """A listed episode's HLS playlists while it is live, for an RSS feed. Only Sources with
+        ``Feature.EPISODE_LISTS`` whose Site streams ``StreamMethod.LIVE`` implement it. None when the
+        episode is not live."""
+        raise NotImplementedError(f"{self.name} cannot stream live episodes")
 
     def movie_playback(
         self, *, movie_slug: str, title: str, duration: float | None,

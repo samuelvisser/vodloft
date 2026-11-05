@@ -241,7 +241,7 @@ export default function RssStreamProfileForm({
                     <div className="help" id="rss-stream-live-episodes-help">
                         <ReadMore summary={<span>Include matching episodes while they are live.</span>}>
                             <p>
-                                With this setting enabled, you can view even episodes that are currently live at DW straight in your podcast player!
+                                With this setting enabled, you can view even episodes that are currently live at {siteName} straight in your podcast player!
                             </p>
                             <p>
                                 Live episodes still have to match this Stream Profile&apos;s episode-type filter in order to show up in the feed.
@@ -249,7 +249,7 @@ export default function RssStreamProfileForm({
                             {!useSourceStream && (
                                 <>
                                     <p>
-                                        Even though streaming from Daily Wire is disabled for this stream profile, streaming live episodes from DW
+                                        Even though streaming from {siteName} is disabled for this stream profile, streaming live episodes from {siteName}
                                         still works. VODLoft even provides a clean handoff to the downloaded HLS file after the episode is no longer
                                         live: it waits for the download to finish first, and only then switches to streaming from your local file.
                                         Your podcasting app should not even notice this switch!
@@ -263,6 +263,7 @@ export default function RssStreamProfileForm({
                             )}
                             <p>
                                 <strong>Note:</strong> live video only works if your podcast player supports playing HLS video.
+                                A live episode has no length yet, so your podcast player may show its progress oddly.
                             </p>
                         </ReadMore>
                     </div>
