@@ -902,6 +902,7 @@ def _append_item(
         media_base_url: str,
         episode: Episode,
         profile: RssStreamProfile,
+        download: Optional[EpisodeMediaDownload] = None,
 ) -> None:
     item = SubElement(channel, "item")
     _sub_text(item, "title", episode.title)
@@ -938,8 +939,13 @@ def _append_item(
     else:
         enclosure_url = mp4_url
         enclosure_type = "video/mp4"
-    # Apps show the length as the episode's size; audio is close to its estimate at 128 kbit/s.
-    estimated_size = estimated_audio_size(episode.duration) if enclosure_url == audio_url else None
+    # Apps show the length as the episode's size: a downloaded file's own size, and otherwise for audio
+    # its estimate at 128 kbit/s, which streamed audio has.
+    enclosure_kind = "audio" if enclosure_url == audio_url else "mp4"
+    if download is not None and _download_kind(download) == enclosure_kind and download.artifact_size_bytes:
+        estimated_size = download.artifact_size_bytes
+    else:
+        estimated_size = estimated_audio_size(episode.duration) if enclosure_kind == "audio" else None
 
     SubElement(
         item,
@@ -1061,12 +1067,13 @@ def render_rss_feed(
         _sub_text(image, "title", effective_title)
         _sub_text(image, "link", collection.sharing_url)
 
-    for episode, _download in items:
+    for episode, download in items:
         _append_item(
             channel,
             media_base_url=media_base_url,
             episode=episode,
             profile=profile,
+            download=download,
         )
 
     return tostring(rss, encoding="UTF-8", xml_declaration=True)

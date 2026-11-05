@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -12,9 +13,10 @@ from sources import MediaStream, StreamMethod, get_source, site_for
 from sources.ytdlp.source import stream_of
 
 
-def _format(format_id, *, vcodec="none", acodec="mp4a.40.2", protocol="https", abr=None, size=None, url=None):
+def _format(format_id, *, vcodec="none", acodec="mp4a.40.2", protocol="https", abr=None, size=None, url=None, language_preference=None):
     return {
         "format_id": format_id, "vcodec": vcodec, "acodec": acodec, "protocol": protocol, "abr": abr,
+        "language_preference": language_preference,
         "filesize": size, "url": url or f"https://rr1.googlevideo.com/videoplayback?itag={format_id}&expire=1900000000",
         "http_headers": {"User-Agent": "yt-dlp"},
     }
@@ -42,6 +44,15 @@ def test_audio_is_youtubes_m4a_when_it_is_offered():
     assert stream.headers == {"User-Agent": "yt-dlp"}
 
 
+def test_a_dubbed_video_plays_the_m4a_of_its_original_language():
+    stream = stream_of({"formats": [
+        _format("140-drc", abr=129, language_preference=10), _format("140-0", abr=129, language_preference=-1),
+        _format("140-1", abr=129, language_preference=10), _format("140-2", abr=129, language_preference=-1),
+    ]}, audio=True)
+    assert stream is not None and stream.ready
+    assert "itag=140-1" in stream.url
+
+
 def test_audio_without_m4a_is_the_best_audio_to_transcode():
     stream = stream_of({"formats": [
         _format("249", acodec="opus", abr=50), _format("251", acodec="opus", abr=160),
@@ -54,6 +65,32 @@ def test_audio_without_m4a_is_the_best_audio_to_transcode():
 def test_video_is_only_the_mp4_with_sound():
     assert "itag=18" in stream_of({"formats": [_format("137", vcodec="avc1", acodec="none"), _format("18", vcodec="avc1")]}, audio=False).url
     assert stream_of({"formats": [_format("137", vcodec="avc1", acodec="none"), _format("140")]}, audio=False) is None
+
+
+def test_youtube_video_missing_from_the_default_players_is_looked_up_with_others(monkeypatch):
+    from sources import ytdlp_runner
+
+    asked = []
+
+    def run_json(*args, cookies=True):
+        client = next((arg.split("=", 1)[1] for arg in args if arg.startswith("youtube:player_client=")), None)
+        asked.append(client)
+        if client == "mweb":
+            raise ytdlp_runner.YtDlpError("The page needs to be reloaded.")
+        if client == "android_vr":
+            return {"formats": [_format("18", vcodec="avc1")]}
+        return {"formats": [_format("137", vcodec="avc1", acodec="none")]}
+
+    monkeypatch.setattr(ytdlp_runner, "run_json", run_json)
+    stream = get_source("ytdlp").media_stream("https://www.youtube.com/watch?v=abc", audio=False)
+    assert stream is not None and "itag=18" in stream.url
+    assert asked == [None, "mweb", "android_vr"]
+
+
+def test_a_missing_stream_is_looked_up_again_soon():
+    from backend.api.endpoints.feeds import source_stream
+
+    assert source_stream._kept_until(None) - time.time() <= 2 * 60
 
 
 def test_a_site_that_cannot_stream_is_not_looked_up():

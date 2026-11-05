@@ -41,6 +41,8 @@ _UPSTREAM_TIMEOUT_SECONDS = 30
 _EXPIRY_MARGIN_SECONDS = 30 * 60
 # How long a stream is kept when its Source does not say when it expires.
 _UNKNOWN_EXPIRY_SECONDS = 60 * 60
+# How long an episode without a stream is believed: the site may well offer one at the next look.
+_MISSING_SECONDS = 2 * 60
 _RANGE = re.compile(r"^bytes=(\d*)-(\d*)$")
 
 _NO_CACHE_HEADERS = {
@@ -75,7 +77,9 @@ def _lock_for(key: tuple[str, bool]) -> threading.Lock:
 
 def _kept_until(stream: MediaStream | None) -> float:
     now = time.time()
-    if stream is None or stream.expires_at is None:
+    if stream is None:
+        return now + _MISSING_SECONDS
+    if stream.expires_at is None:
         return now + _UNKNOWN_EXPIRY_SECONDS
     return max(now, stream.expires_at - _EXPIRY_MARGIN_SECONDS)
 

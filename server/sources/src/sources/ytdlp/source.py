@@ -230,6 +230,7 @@ def video_formats(info: dict) -> VideoFormats:
 _READY_AUDIO_FORMAT = "140"
 _READY_VIDEO_FORMAT = "18"
 _DIRECT_PROTOCOLS = {"http", "https"}
+_FALLBACK_PLAYER_CLIENTS = ("mweb", "android_vr")
 
 
 def _direct(entry: dict) -> bool:
@@ -265,7 +266,13 @@ def stream_of(info: dict, *, audio: bool) -> MediaStream | None:
     """
     formats = [entry for entry in info.get("formats") or [] if _direct(entry)]
     wanted = _READY_AUDIO_FORMAT if audio else _READY_VIDEO_FORMAT
-    ready = next((entry for entry in formats if str(entry.get("format_id")) == wanted), None)
+    # A video with dubbed audio lists the format once per language, as 140-0, 140-1 and so on, and
+    # also as 140-drc with its loudness evened out. Take the original language as it was made.
+    versions = [
+        entry for entry in formats
+        if str(entry.get("format_id")).split("-")[0] == wanted and not str(entry.get("format_id")).endswith("-drc")
+    ]
+    ready = max(versions, key=lambda entry: entry.get("language_preference") or 0, default=None)
     if ready is not None:
         return _media_stream(ready, ready=True)
     if not audio:
@@ -273,10 +280,11 @@ def stream_of(info: dict, *, audio: bool) -> MediaStream | None:
     sound_only = [
         entry for entry in formats
         if (entry.get("vcodec") or "none") == "none" and (entry.get("acodec") or "none") != "none"
+        and not str(entry.get("format_id")).endswith("-drc")
     ]
     if not sound_only:
         return None
-    best = max(sound_only, key=lambda entry: entry.get("abr") or entry.get("tbr") or 0)
+    best = max(sound_only, key=lambda entry: (entry.get("language_preference") or 0, entry.get("abr") or entry.get("tbr") or 0))
     return _media_stream(best, ready=False)
 
 
@@ -895,9 +903,24 @@ class YtDlpSource(Source):
         return Playback(url=url, kind=PlaybackKind.YTDLP, command=runner.command(cookies=use_cookies))
 
     def media_stream(self, url: str, *, audio: bool, use_cookies: bool = True) -> MediaStream | None:
-        if not self.site_for(url).streams:
-            raise NotImplementedError(f"{self.site_for(url).name} cannot stream episodes")
-        return stream_of(runner.run_json("--no-playlist", url, cookies=use_cookies), audio=audio)
+        site = self.site_for(url)
+        if not site.streams:
+            raise NotImplementedError(f"{site.name} cannot stream episodes")
+        stream = stream_of(runner.run_json("--no-playlist", url, cookies=use_cookies), audio=audio)
+        if stream is not None or site.key != "youtube":
+            return stream
+        # YouTube's default players sometimes leave the MP4 out; these players still offer it.
+        for client in _FALLBACK_PLAYER_CLIENTS:
+            try:
+                info = runner.run_json(
+                    "--no-playlist", "--extractor-args", f"youtube:player_client={client}", url, cookies=use_cookies,
+                )
+            except runner.YtDlpError:
+                continue
+            stream = stream_of(info, audio=audio)
+            if stream is not None:
+                return stream
+        return None
 
     def needs_cookies(self, error: str) -> bool:
         text = error.lower()
