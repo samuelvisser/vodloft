@@ -425,7 +425,9 @@ function PreviewStep({importer, onReplace, onFinished, onRunStatus}: {
                 {error && (
                     <>
                         <p className="form-error-card" role="alert">{error}</p>
-                        <button type="button" className="btn" onClick={() => void onReplace()}>Upload again</button>
+                        <div className="import-actions">
+                            <button type="button" className="btn" onClick={() => void onReplace()}>Upload again</button>
+                        </div>
                     </>
                 )}
             </div>
