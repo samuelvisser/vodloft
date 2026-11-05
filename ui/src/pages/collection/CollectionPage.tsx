@@ -1,24 +1,21 @@
 import {sourceControls} from '../../lib/sourceControls'
 import {addedByLabel, can} from '../../lib/access'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useDownloadProfilesView, useEpisodePages, useCollection, useLocalMediaProfiles, useCollectionDownloads, useCollectionSeasons, useEpisodeTagsInCollection, useSkippedByFilter, useSourceLookup, useStreamProfilesView } from '../../lib/queries'
 import SourceBadge from '../../components/Source/SourceBadge'
-import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'react-hot-toast'
 import EpisodeCard, {groupDownloadsByEpisodeSlug} from '../../components/Episode/EpisodeCard'
 import ActionConfirmDialogue, {type ActionConfirmDialogueLocalMediaProfile} from '../../components/ActionConfirmDialogue/ActionConfirmDialogue'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
-import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
 import CollectionIndexingProgress from '../../components/CollectionIndexingProgress/CollectionIndexingProgress'
 import CollectionSyncLogModal from '../../components/CollectionSyncLogModal/CollectionSyncLogModal'
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import {OperationControlError, type OperationControlAction, useControlOperation, useStartOperation} from '../../lib/operations'
 import {PreferredFormatReg} from '../../types/local_media_profile'
-import {getEpisodePreviewTotal, loadEpisodePreviewFromStorage, removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from '../../lib/cache'
-import {episodeQueryKeys} from '../../lib/collectionQueryOptions'
+import {getEpisodePreviewTotal, loadEpisodePreviewFromStorage} from '../../lib/cache'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import CollectionDownloadAllDialog from './CollectionDownloadAllDialog'
 import {createSelectRegistry} from '../../utils/selectRegistry'
@@ -80,8 +77,6 @@ const OPERATION_WAITING_MESSAGE = 'Operation is waiting, it should resume soon.'
 
 export default function CollectionPage() {
   const { id } = useParams()
-  const navigate = useNavigate()
-  const qc = useQueryClient()
   const startOperation = useStartOperation()
   const controlOperation = useControlOperation()
   const PAGE_SIZE = 36
@@ -95,7 +90,6 @@ export default function CollectionPage() {
   const sources = useSourceLookup()
   const isSeasonal = collection?.episodeIdentifier === 'seasonal'
 
-  const [confirm, setConfirm] = useState(false)
   const [syncStarting, setSyncStarting] = useState(false)
   const [metadataRefreshConfirm, setMetadataRefreshConfirm] = useState(false)
   const [fileRenameConfirm, setFileRenameConfirm] = useState(false)
@@ -422,8 +416,6 @@ export default function CollectionPage() {
     ]
   }
 
-  const onDelete = () => setConfirm(true)
-
   const syncNow = async () => {
     if (syncBusy) {
       toast(`A sync is in progress for ${collection.title}`)
@@ -452,64 +444,27 @@ export default function CollectionPage() {
     }
   }
 
-  const closeConfirm = () => setConfirm(false)
-  const onConfirmDelete = async () => {
-    if (!id) return
-    const url = `${(window as any).appConfig.API_URL}/collections/${id}`
-    const r = await fetch(url, { method: 'DELETE', credentials: 'include' })
-    if (!r.ok) {
-      let friendly = `Failed to delete show (HTTP ${r.status})`
-      try {
-        const data = await r.json().catch(() => null as any)
-        const details: any[] | undefined = data?.detail
-        if (Array.isArray(details)) {
-          const allErr = details.find((d) => Array.isArray(d?.loc) && d.loc[0] === 'body' && d.loc[1] === '__all__')
-          if (allErr && typeof allErr.msg === 'string' && allErr.msg.trim()) friendly = allErr.msg
-        }
-      } catch (_) {
-        // ignore JSON parse errors
-      }
-      console.error(friendly)
-      toast.error(friendly)
-      return
-    }
-    removeEpisodePreviewFromStorage(id)
-    removeSeasonsFromStorage(id)
-    setConfirm(false)
-
-    await Promise.all([
-      qc.cancelQueries({queryKey: ['collection', id]}),
-      qc.cancelQueries({queryKey: ['seasons', id]}),
-      qc.cancelQueries({queryKey: episodeQueryKeys.forCollection(id)}),
-    ])
-    qc.removeQueries({queryKey: ['collection', id]})
-    qc.removeQueries({queryKey: ['seasons', id]})
-    qc.removeQueries({queryKey: episodeQueryKeys.forCollection(id)})
-
-    await Promise.all([
-      qc.invalidateQueries({queryKey: ['collections']}),
-      qc.invalidateQueries({queryKey: ['collectionsView']}),
-    ])
-    navigate('/library?type=collections')
-  }
+  const openOnName = collection.site?.name ?? (sources.get(collection.sourceKey)?.domains.includes('*') ? siteName(collection.sharingUrl) ?? sources.name(collection.sourceKey) : sources.name(collection.sourceKey))
 
   return (
     <section className="view collection-view" aria-labelledby="collection-title">
-      <div className="view-header"><h1 id="collection-title">{collection.title}</h1></div>
+      <div className="view-header collection-title-row">
+        <h1 id="collection-title">{collection.title}</h1>
+        <SourceBadge sourceKey={collection.sourceKey}/>
+      </div>
 
       <article className="collection-details" aria-label="Show details">
         <header className="collection-page-header">
           <div className="collection-page-heading">
-            <SourceBadge sourceKey={collection.sourceKey}/>
             <div className="collection-author">{collection.authorName}</div>
             <div className="collection-meta">{[`${total} episodes`, collection.years, addedByLabel(collection.addedBy)].filter(Boolean).join(' • ')}</div>
           </div>
 
           <div className="collection-page-actions">
             {collection.sharingUrl && (
-              <a className="btn" href={collection.sharingUrl} target="_blank" rel="noreferrer">
+              <a className="btn collection-open-link" href={collection.sharingUrl} target="_blank" rel="noreferrer" title={`Open on ${openOnName}`}>
                 <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')} aria-hidden="true"/>
-                <span>Open on {collection.site?.name ?? (sources.get(collection.sourceKey)?.domains.includes('*') ? siteName(collection.sharingUrl) ?? sources.name(collection.sourceKey) : sources.name(collection.sourceKey))}</span>
+                <span className="collection-open-label"><span className="collection-open-prefix">Open on </span>{openOnName}</span>
               </a>
             )}
             {can('library', 'manage') && (
@@ -518,10 +473,6 @@ export default function CollectionPage() {
               <FontAwesomeIcon icon={faIcon('fass', 'pen-to-square')} aria-hidden="true"/>
               <span>Edit</span>
             </Link>
-            <button type="button" className="btn btn-danger" onClick={onDelete}>
-              <FontAwesomeIcon icon={faIcon('fass', 'trash')} aria-hidden="true"/>
-              <span>Delete</span>
-            </button>
             <ActionMenu
               items={[
                 {
@@ -628,9 +579,9 @@ export default function CollectionPage() {
             <div className="collection-profile-summary" aria-label="Profiles attached to this show">
               {attachedDownloadProfiles.length > 0 && (
                 <div className="collection-profile-group">
-                  <div className="collection-profile-group-label">
+                  <div className="collection-profile-group-label" title={`Download ${attachedDownloadProfiles.length === 1 ? 'profile' : 'profiles'}`}>
                     <FontAwesomeIcon icon={faIcon('fass', 'download')} aria-hidden="true"/>
-                    <span>Download {attachedDownloadProfiles.length === 1 ? 'profile' : 'profiles'}</span>
+                    <span className="collection-profile-group-name">Download {attachedDownloadProfiles.length === 1 ? 'profile' : 'profiles'}</span>
                   </div>
                   <div className="collection-profile-links">
                     {attachedDownloadProfiles.map((profile) => (
@@ -650,9 +601,9 @@ export default function CollectionPage() {
 
               {attachedStreamProfiles.length > 0 && (
                 <div className="collection-profile-group">
-                  <div className="collection-profile-group-label">
+                  <div className="collection-profile-group-label" title={`Stream ${attachedStreamProfiles.length === 1 ? 'profile' : 'profiles'}`}>
                     <FontAwesomeIcon icon={faIcon('fass', 'rss')} aria-hidden="true"/>
-                    <span>Stream {attachedStreamProfiles.length === 1 ? 'profile' : 'profiles'}</span>
+                    <span className="collection-profile-group-name">Stream {attachedStreamProfiles.length === 1 ? 'profile' : 'profiles'}</span>
                   </div>
                   <div className="collection-profile-links">
                     {attachedStreamProfiles.map((profile) => {
@@ -870,20 +821,6 @@ export default function CollectionPage() {
         </p>
       </ActionConfirmDialogue>
 
-      <ConfirmDialog
-        open={confirm}
-        title="Delete show"
-        onDismiss={closeConfirm}
-        icon={faIcon('fass', 'trash')}
-        iconTone="danger"
-        confirmButton={{
-          label: 'Delete',
-          onClick: onConfirmDelete,
-          className: 'btn btn-danger',
-        }}
-      >
-        <p>Are you sure you want to delete "{collection.title}"? This action cannot be undone.</p>
-      </ConfirmDialog>
     </section>
   )
 }
