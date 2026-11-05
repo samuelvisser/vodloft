@@ -121,16 +121,16 @@ With YouTube streaming disabled, a feed serves only downloaded episodes. For an 
 
 Normally your podcast app fetches YouTube video straight from YouTube. With **Proxy video through VODLoft** enabled, VODLoft fetches it and passes it on instead. This might make the feed more stable, but every video you watch then goes through your VODLoft server's internet connection twice: once down from YouTube and once up to your app.
 
-Live episodes are not available for YouTube streams.
+A YouTube feed with an HLS output can also list videos while they are live (see below). Your podcast app plays the live video straight from YouTube, or through VODLoft with **Proxy video through VODLoft**. Audio-only playback of a live video comes as one endless stream without seeking, and many podcast apps play the video instead.
 
 ## Live episodes
 
 A video feed that uses HLS can also list episodes while they are still live, so you can listen or watch along.
 
-Live episodes are only available for Daily Wire shows.
+Live episodes are available for Daily Wire shows and YouTube channels and playlists.
 
-- With Daily Wire streaming enabled, live episodes always appear.
-- Without Daily Wire streaming, the feed only shows what your downloads can provide. A live episode is then listed only when your Download Profiles will download all of its media once it is published, for example both the audio and the HLS video for **Podcasting 2.0 direct stream with audio fallback**. If only part of the media is set to download, live episodes do not appear, and the Stream Profile shows a warning.
+- With streaming from The Daily Wire or YouTube enabled, live episodes always appear.
+- Without that streaming, the feed only shows what your downloads can provide. A live episode is then listed only when your Download Profiles will download all of its media once it is published, for example both the audio and the HLS video for **Podcasting 2.0 direct stream with audio fallback**. If only part of the media is set to download, live episodes do not appear, and the Stream Profile shows a warning.
 
 ## Copy and edit the feed URL
 

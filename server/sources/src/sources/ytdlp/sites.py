@@ -29,7 +29,7 @@ _REFRESH_INTERVALS = {"youtube": "30m,2h,6h,24h,3d,7d,14d"}
 # resolution as separate H.264 video and M4A audio, which VODLoft lists in an HLS playlist or joins.
 # Above 1080p, YouTube only has VP9 and AV1, which podcast apps often cannot play. Its links play
 # for any address, so apps can be sent straight to them.
-_STREAM_METHODS = {"youtube": frozenset({StreamMethod.FILE, StreamMethod.HLS})}
+_STREAM_METHODS = {"youtube": frozenset({StreamMethod.FILE, StreamMethod.HLS, StreamMethod.LIVE})}
 _STREAM_VIDEO_HEIGHTS = {"youtube": (360, 720, 1080)}
 _STREAM_FILE_HEIGHTS = {"youtube": 360}
 _STREAM_PROXY_CHOICE = {"youtube"}

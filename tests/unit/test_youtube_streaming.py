@@ -23,9 +23,9 @@ def _format(format_id, *, vcodec="none", acodec="mp4a.40.2", protocol="https", a
 
 
 def test_youtube_and_the_daily_wire_stream_but_other_sites_do_not():
-    # YouTube streams files and HLS; The Daily Wire also streams live episodes.
+    # YouTube and The Daily Wire stream files, HLS and live episodes.
     youtube = site_for("https://www.youtube.com/@channel", "ytdlp")
-    assert youtube.stream_methods == {StreamMethod.FILE, StreamMethod.HLS}
+    assert youtube.stream_methods == {StreamMethod.FILE, StreamMethod.HLS, StreamMethod.LIVE}
     assert youtube.stream_video_heights == (360, 720, 1080) and youtube.stream_file_height == 360
     assert youtube.stream_proxy_choice
     dailywire = site_for("https://www.dailywire.com/show/the-ben-shapiro-show", "dailywire")
@@ -108,8 +108,9 @@ def test_a_feed_on_a_site_that_cannot_stream_is_refused():
     ensure_site_can_stream(
         youtube, use_source_stream=False, stream_live_episodes=False, preferred_format="format_1080p", video_output_mode="mp4_hls",
     )
+    ensure_site_can_stream(youtube, use_source_stream=True, stream_live_episodes=True, **mp4)
     with pytest.raises(HTTPException, match="cannot stream live episodes"):
-        ensure_site_can_stream(youtube, use_source_stream=True, stream_live_episodes=True, **mp4)
+        ensure_site_can_stream(vimeo, use_source_stream=False, stream_live_episodes=True, **mp4)
 
 
 class _Upstream:

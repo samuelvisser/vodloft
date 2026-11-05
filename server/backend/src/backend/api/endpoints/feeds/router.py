@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 
 from .cached_video import get_cached_mp4_path, prepare_cached_mp4
 from .source_stream import episode_stream, proxy_response
+from .source_live import live_audio_response, live_master_response, live_part_response, live_playlist_response
 from .source_tracks import (
     EpisodeRef,
     join_in_background,
@@ -199,6 +200,8 @@ def rss_feed_episode_audio(token: str, episode_slug: str, request: Request):
             raise _not_streamed(profile, "audio")
 
         source = get_source(episode.source_key)
+        if source.has(Feature.EPISODE_LISTS) and episode.publish_status == EpisodePublishStatus.LIVE.value:
+            return live_audio_response(source, _episode_ref(episode), head_only=request.method == "HEAD")
         if source.has(Feature.EPISODE_LISTS):
             return proxy_response(
                 source, episode, audio=True, media_type="audio/mp4", filename=f"{episode.slug}.m4a",
@@ -328,6 +331,14 @@ def rss_feed_episode_video_hls(token: str, episode_slug: str, request: Request):
         if StreamMethod.HLS not in site.stream_methods:
             raise HTTPException(status_code=404, detail=f"{site.name} cannot stream episodes as HLS")
         source = get_source(episode.source_key)
+        if source.has(Feature.EPISODE_LISTS) and episode.publish_status == EpisodePublishStatus.LIVE.value:
+            if request.method != "HEAD":
+                remember_live_episode_handoff(profile, episode)
+                _commit_feed_state_if_changed(s)
+            return live_master_response(
+                source, _episode_ref(episode), height=_profile_stream_height(profile, site) or 0,
+                head_only=request.method == "HEAD",
+            )
         if source.has(Feature.EPISODE_LISTS):
             return master_playlist_response(
                 source, _episode_ref(episode), height=_profile_stream_height(profile, site) or 0,
@@ -347,6 +358,39 @@ def rss_feed_episode_video_hls(token: str, episode_slug: str, request: Request):
         source_url,
         head_only=request.method == "HEAD",
     )
+
+
+@router.api_route(
+    "/rss/{token}/episodes/{episode_slug}/live/{name}",
+    methods=["GET", "HEAD"],
+)
+def rss_feed_episode_live(token: str, episode_slug: str, name: str, request: Request, u: str | None = None, s: str | None = None):
+    """One of the live playlists of an episode of a Site whose episodes are listed, or a part of it,
+    passed on for a feed that proxies its Site's video."""
+    with db_session() as session:
+        profile = get_rss_stream_profile_by_token(session, token)
+        if (
+            profile.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value
+            or profile.video_output_mode not in RSS_HLS_OUTPUT_MODES
+        ):
+            raise HTTPException(status_code=404, detail="HLS video is not enabled for this feed")
+        episode = get_episode_for_feed(session, profile, episode_slug)
+        _commit_feed_state_if_changed(session)
+        if not can_stream_from_source(profile, episode):
+            raise _not_streamed(profile, "live video")
+        source = get_source(episode.source_key)
+        if not source.has(Feature.EPISODE_LISTS):
+            raise HTTPException(status_code=404, detail="No such playlist")
+        site = collection_site(profile.collection)
+        proxy = profile.proxy_source_stream or not site.stream_proxy_choice
+        episode_ref = _episode_ref(episode)
+
+    head_only = request.method == "HEAD"
+    if name == "part":
+        if not proxy or u is None or s is None:
+            raise HTTPException(status_code=404, detail="No such part")
+        return live_part_response(u, s, range_header=request.headers.get("range"), head_only=head_only)
+    return live_playlist_response(source, episode_ref, name, part_base="part" if proxy else None, head_only=head_only)
 
 
 @router.api_route(
