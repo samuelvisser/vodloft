@@ -1105,64 +1105,9 @@ export type MediaDownloadCollectionQuery = {
 
 const MEDIA_DOWNLOAD_COLLECTION_PREFIX = ['mediaDownloads'] as const
 
-// Temporary experiment: leave download ordering to backend-paginated results.
-// Set back to true to restore local reorder/optimistic insertion behavior.
-const ENABLE_FRONTEND_DOWNLOAD_REORDERING = false
 const ACTIVE_OR_QUEUED_DOWNLOAD_STATUSES = new Set([
     'pending', 'downloading', 'preparing', 'waiting', 'canceling', 'local_processing',
 ])
-
-export function compareMediaDownloadWorkflowOrder(left: MediaDownloadViewRead, right: MediaDownloadViewRead): number {
-    const leftStatus = String(left.downloadStatus)
-    const rightStatus = String(right.downloadStatus)
-    const activeStatuses = new Set(['downloading', 'preparing', 'waiting', 'canceling', 'local_processing'])
-    const leftActive = activeStatuses.has(leftStatus)
-    const rightActive = activeStatuses.has(rightStatus)
-    if (leftActive !== rightActive) return leftActive ? -1 : 1
-
-    const leftQueued = leftStatus === 'pending'
-    const rightQueued = rightStatus === 'pending'
-    if (leftQueued !== rightQueued) return leftQueued ? -1 : 1
-
-    if (leftQueued && rightQueued) {
-        if (left.queuePosition == null && right.queuePosition != null) return -1
-        if (left.queuePosition != null && right.queuePosition == null) return 1
-        if (left.queuePosition != null && right.queuePosition != null) {
-            const byPosition = left.queuePosition - right.queuePosition
-            if (byPosition !== 0) return byPosition
-        }
-    }
-
-    if (leftActive && rightActive) {
-        // Match the backend: the current execution's start takes precedence
-        // over the original download record's creation time.
-        const activeStart = (download: MediaDownloadViewRead): number => (
-            (download.latestTaskStatus === 'RUNNING' ? download.latestTaskStartedAt : null)
-            ?? download.startedAt
-            ?? operationDate(download.operation?.createdAt)
-            ?? download.createdAt
-        ).getTime()
-        const byStart = activeStart(left) - activeStart(right)
-        if (byStart !== 0) return byStart
-    }
-
-    // Completed downloads use their last successful download time, while other terminal statuses use ID ordering
-    const leftCompletedAt = leftStatus === 'downloaded' || leftStatus === 'redownloaded'
-        ? (left.downloadedAt ?? left.createdAt).getTime()
-        : 0
-    const rightCompletedAt = rightStatus === 'downloaded' || rightStatus === 'redownloaded'
-        ? (right.downloadedAt ?? right.createdAt).getTime()
-        : 0
-    const byDownloadedAt = rightCompletedAt - leftCompletedAt
-    return byDownloadedAt || right.id - left.id
-}
-
-function mediaDownloadRecentOrder(left: MediaDownloadViewRead, right: MediaDownloadViewRead): number {
-    const leftAt = left.finishedAt ?? left.downloadedAt ?? left.createdAt
-    const rightAt = right.finishedAt ?? right.downloadedAt ?? right.createdAt
-    const byTime = rightAt.getTime() - leftAt.getTime()
-    return byTime || right.id - left.id
-}
 
 function mediaDownloadStatusFilterContains(
     source: unknown,
@@ -1250,13 +1195,6 @@ export function deriveMediaDownloadCollectionPlaceholder(
 
         const byId = new Map<number, MediaDownloadDomainViewRead>()
         for (const download of contiguous.items) byId.set(download.id, download)
-        if (ENABLE_FRONTEND_DOWNLOAD_REORDERING) {
-            for (const operation of operations) {
-                if (operation.resourceId == null || byId.has(operation.resourceId)) continue
-                const synthetic = syntheticDownload(operation)
-                if (synthetic) byId.set(synthetic.id, synthetic)
-            }
-        }
 
         const matching = [...byId.values()]
             .map((download) => ({
@@ -1267,13 +1205,6 @@ export function deriveMediaDownloadCollectionPlaceholder(
                 ),
             }))
             .filter(({presented}) => targetStatusSet.has(String(presented.downloadStatus)))
-        if (ENABLE_FRONTEND_DOWNLOAD_REORDERING) {
-            matching.sort((left, right) => (
-                order === 'recent'
-                    ? mediaDownloadRecentOrder(left.presented, right.presented)
-                    : compareMediaDownloadWorkflowOrder(left.presented, right.presented)
-            ))
-        }
 
         const total = targetTotal ?? matching.length
         const items = matching.slice(0, Math.min(initialCount, total))
@@ -1346,7 +1277,7 @@ export function useMediaDownloadsCollection({
     // not change this signature and should not trigger an extra page request.
     useEffect(() => {
         if (
-            ENABLE_FRONTEND_DOWNLOAD_REORDERING || !enabled || !pullData
+            !enabled || !pullData
             || (
                 normalizedStatuses !== undefined
                 && !normalizedStatuses.some((status) => ACTIVE_OR_QUEUED_DOWNLOAD_STATUSES.has(status))
@@ -1409,14 +1340,6 @@ export function useMediaDownloadsCollection({
         const downloads = new Map<number, MediaDownloadDomainViewRead>()
         for (const download of collection.items) downloads.set(download.id, download)
 
-        if (ENABLE_FRONTEND_DOWNLOAD_REORDERING) {
-            for (const operation of operations) {
-                if (operation.resourceId == null || downloads.has(operation.resourceId)) continue
-                const synthetic = syntheticDownload(operation)
-                if (synthetic) downloads.set(synthetic.id, synthetic)
-            }
-        }
-
         const presented = [...downloads.values()]
             .map((download) => presentDownload(
                 download,
@@ -1426,12 +1349,8 @@ export function useMediaDownloadsCollection({
                 normalizedStatuses === undefined
                 || normalizedStatuses.includes(String(download.downloadStatus))
             ))
-
-        if (ENABLE_FRONTEND_DOWNLOAD_REORDERING) {
-            presented.sort(order === 'recent' ? mediaDownloadRecentOrder : compareMediaDownloadWorkflowOrder)
-        }
         return presented
-    }, [collection.items, normalizedStatuses, operations, order])
+    }, [collection.items, normalizedStatuses, operations])
 
     return {
         ...collection,

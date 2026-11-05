@@ -240,6 +240,18 @@ export default function DownloadsSettingsTab({
                     help="Where VODLoft keeps the thumbnails it makes itself, such as the first frame of a video that has no thumbnail. By default it is .vodloft-thumbnails inside the download root, so the thumbnails survive a container update."
                     wide
                 />
+                <TextField
+                    id="settings-lock-root"
+                    label="Lock folder"
+                    value={draft.downloadSettings.lockRoot}
+                    error={errorFor('downloadSettings.lockRoot')}
+                    environmentVariable={environmentVariableFor('downloadSettings.lockRoot')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.downloadSettings.lockRoot = value
+                    })}
+                    help="Where VODLoft keeps the small lock files that stop two tasks from changing the same artwork or episode numbering at once. By default it is the locks folder next to the config file, so they stay out of your library."
+                    wide
+                />
                 <DurationField
                     id="settings-rss-cache-retention"
                     label="RSS cache retention period"
