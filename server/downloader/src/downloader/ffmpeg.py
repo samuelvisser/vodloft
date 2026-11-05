@@ -193,12 +193,13 @@ def embed_media(
     media_path: str, *, metadata: Mapping[str, str] | None = None,
     thumbnail_path: str | None = None, audio_only: bool = False,
     subtitles: tuple[tuple[str, str, bool, str | None], ...] = (),
-    first_subtitle_default: bool = False,
+    default_subtitle: int | None = None,
     ffmpeg_path: str = "ffmpeg", should_cancel: Optional[CancelCheck] = None,
 ) -> None:
     """Apply artwork, metadata, and optional subtitles in one serialized pass.
 
-    Each subtitle is (language, SRT path, forced, track title or None).
+    Each subtitle is (language, SRT path, forced, track title or None);
+    ``default_subtitle`` is the index of the one players pick by default.
 
     FFmpeg's growing output is not a time/progress estimate: faststart can still
     rewrite a full file after that output has reached its apparent final size.
@@ -242,7 +243,7 @@ def embed_media(
                 command += [f"-metadata:s:s:{index}", f"language={code}"]
                 if title:
                     command += [f"-metadata:s:s:{index}", f"title={title}"]
-                disposition = "forced" if forced else "default" if index == 0 and first_subtitle_default else "0"
+                disposition = "forced" if forced else "default" if index == default_subtitle else "0"
                 command += [f"-disposition:s:{index}", disposition]
         if attach:
             extension = Path(thumbnail_path).suffix.lower().lstrip(".")
