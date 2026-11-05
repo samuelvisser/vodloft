@@ -125,12 +125,6 @@ export default function DownloadsSettingsTab({
     )
         ? childPath(draft.downloadSettings.downloadRoot, '.vodloft-quick-downloads')
         : draft.downloadSettings.quickDownloadRoot
-    const thumbnailRoot = (
-        !isFieldExplicit('downloadSettings.thumbnailRoot')
-        && !isFieldDirty('downloadSettings.thumbnailRoot')
-    )
-        ? childPath(draft.downloadSettings.downloadRoot, '.vodloft-thumbnails')
-        : draft.downloadSettings.thumbnailRoot
 
     const storageInspectionIsCurrent = ![
         'downloadSettings.downloadRoot',
@@ -231,13 +225,25 @@ export default function DownloadsSettingsTab({
                 <TextField
                     id="settings-thumbnail-root"
                     label="Thumbnail folder"
-                    value={thumbnailRoot}
+                    value={draft.downloadSettings.thumbnailRoot}
                     error={errorFor('downloadSettings.thumbnailRoot')}
                     environmentVariable={environmentVariableFor('downloadSettings.thumbnailRoot')}
                     onChange={(value) => updateDraft((next) => {
                         next.downloadSettings.thumbnailRoot = value
                     })}
-                    help="Where VODLoft keeps the thumbnails it makes itself, such as the first frame of a video that has no thumbnail. By default it is .vodloft-thumbnails inside the download root, so the thumbnails survive a container update."
+                    help="Where VODLoft keeps the thumbnails it makes itself, such as the first frame of a video that has no thumbnail. By default it is the thumbnails folder next to the config file, so they stay out of your library and survive a container update."
+                    wide
+                />
+                <TextField
+                    id="settings-lock-root"
+                    label="Lock folder"
+                    value={draft.downloadSettings.lockRoot}
+                    error={errorFor('downloadSettings.lockRoot')}
+                    environmentVariable={environmentVariableFor('downloadSettings.lockRoot')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.downloadSettings.lockRoot = value
+                    })}
+                    help="Where VODLoft keeps the small lock files that stop two tasks from changing the same artwork or episode numbering at once. By default it is the locks folder next to the config file, so they stay out of your library."
                     wide
                 />
                 <DurationField

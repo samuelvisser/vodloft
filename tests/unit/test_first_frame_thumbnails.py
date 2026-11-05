@@ -47,11 +47,12 @@ def thumbnail_root(monkeypatch, tmp_path):
     return tmp_path / ".vodloft-thumbnails"
 
 
-def test_the_thumbnail_folder_is_hidden_in_the_download_root(tmp_path):
+def test_the_thumbnail_folder_is_next_to_the_config_file(tmp_path, monkeypatch):
     from config.settings.submodels import DownloadSettings
 
-    settings = DownloadSettings(download_root=tmp_path)
-    assert settings.thumbnail_root == tmp_path / ".vodloft-thumbnails"
+    monkeypatch.setenv("VL_CONFIG_FILE", str(tmp_path / "config" / "config.yml"))
+    settings = DownloadSettings(download_root=tmp_path / "downloads")
+    assert settings.thumbnail_root == tmp_path / "config" / "thumbnails"
 
 
 @pytest.mark.parametrize("status, missing", [(404, True), (200, False)])

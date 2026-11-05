@@ -32,7 +32,7 @@ async def custom_index_pair_lock(
     That keeps maintenance out while still allowing separate downloads for the
     same Collection/Profile pair to use the configured global concurrency.
     """
-    root = Path(get_settings().download_settings.download_root) / ".vodloft-index-locks"
+    root = Path(get_settings().download_settings.lock_root) / "indexes"
     root.mkdir(parents=True, exist_ok=True)
     lock_file = (root / f"{collection_id}-{local_media_profile_id}.lock").open("a+b")
     lock_mode = fcntl.LOCK_SH if shared else fcntl.LOCK_EX

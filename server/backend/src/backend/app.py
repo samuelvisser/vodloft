@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from backend.services.download_recovery import STARTUP_RECOVERY_PAUSE_OWNER, recover_download_filesystem
+from backend.services.retired_folders import retire_changed_folders
 
 import logging
 import threading
@@ -61,6 +62,13 @@ def _recover_download_filesystem(download_settings, scheduled_work_pause) -> Non
     """
     try:
         logger.info("Starting background download filesystem recovery")
+        try:
+            retired = retire_changed_folders(download_settings)
+            if retired:
+                logger.info("Removed %s folder(s) VODLoft no longer uses after a folder setting changed", retired)
+        except Exception:
+            # Leaving an old folder behind must not keep crash leftovers from being cleaned up.
+            logger.exception("Could not remove the folders of changed folder settings")
         recovery = recover_download_filesystem(download_settings)
         logger.info(
             "Download filesystem recovery complete: reconciled %s replacement(s), cleaned %s stale path claim(s), %s temporary workspace(s), %s expired RSS cache file(s) and %s quick download(s)",
