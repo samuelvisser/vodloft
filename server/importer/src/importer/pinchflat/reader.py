@@ -74,6 +74,8 @@ class PinchflatSource:
     cookie_behaviour: str | None = None
     index_frequency_minutes: int | None = None
     """How often Pinchflat lists the source; -1 is never."""
+    fast_index: bool = False
+    """Whether Pinchflat looks for new videos every few minutes, which overrides the index frequency."""
     series_directory: str | None = None
     nfo_filepath: str | None = None
     poster_filepath: str | None = None
@@ -258,6 +260,7 @@ def _source(row: dict[str, Any]) -> PinchflatSource:
         max_duration_seconds=_int(row.get("max_duration_seconds")),
         cookie_behaviour=row.get("cookie_behaviour"),
         index_frequency_minutes=_int(row.get("index_frequency_minutes")),
+        fast_index=_bool(row.get("fast_index")),
         series_directory=row.get("series_directory"), nfo_filepath=row.get("nfo_filepath"),
         poster_filepath=row.get("poster_filepath"), fanart_filepath=row.get("fanart_filepath"),
         banner_filepath=row.get("banner_filepath"),

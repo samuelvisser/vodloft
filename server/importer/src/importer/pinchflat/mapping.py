@@ -319,10 +319,16 @@ def _checking(source: PinchflatSource, warnings: list[ImportWarning]) -> dict[st
 
     VODLoft checks YouTube channels more often than Pinchflat's daily default on its own, so a source indexed
     daily or more often keeps VODLoft's default.
+
+    Fast indexing overrides the index frequency, and VODLoft's quick check is its counterpart, so such a source
+    keeps the default too. It says so explicitly where the frequency alone would have given it its own schedule,
+    so that running the import again takes back a schedule an earlier import set.
     """
     minutes = source.index_frequency_minutes
     if minutes is None or 0 < minutes <= PINCHFLAT_INDEX_MINUTES:
         return {}
+    if source.fast_index:
+        return {"check_frequency": "default"}
     if minutes < 0:
         warnings.append(ImportWarning(
             "index_frequency_minutes",
