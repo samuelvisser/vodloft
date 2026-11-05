@@ -95,9 +95,24 @@ def test_the_first_embedded_subtitle_is_the_default_track_and_auto_generated_one
     media.write_bytes(b"x")
     ffmpeg.embed_media(
         str(media), subtitles=(("nl", "nl.srt", False, None), ("nl", "nl.auto.srt", False, "Auto-generated")),
-        first_subtitle_default=True,
+        default_subtitle=0,
     )
     command = commands[0]
     assert command[command.index("-disposition:s:0") + 1] == "default"
     assert command[command.index("-disposition:s:1") + 1] == "0"
     assert "title=Auto-generated" in command
+
+
+@pytest.mark.parametrize(("mode", "languages", "expected"), [
+    ("listed", ["nl", "en"], ("nl", "en")),
+    ("first", ["nl", "en"], ("nl", "en")),
+    ("site", ["nl", "en"], ("nl",)),
+    ("site", [], ()),
+])
+def test_with_every_language_only_the_first_on_the_list_becomes_the_default(mode, languages, expected):
+    from types import SimpleNamespace
+
+    from backend.services.download_quality import default_subtitle_languages
+
+    profile = SimpleNamespace(subtitle_language_mode=mode, subtitle_languages=languages)
+    assert default_subtitle_languages(profile) == expected

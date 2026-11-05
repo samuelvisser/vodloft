@@ -588,6 +588,11 @@ def domain_site(url: str) -> Site:
     return Site(f"generic:{host}", host, (host,))
 
 
+def names_a_podcast(name: str | None) -> bool:
+    """True when a collection's name or slug says it is a podcast, like "PBD Podcast" or "the-podcasts"."""
+    return "podcast" in (name or "").lower()
+
+
 def on_domain(host: str, domain: str) -> bool:
     """True when the host is the domain or a subdomain of it."""
     return host == domain or host.endswith(f".{domain}")

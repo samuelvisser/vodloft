@@ -129,7 +129,7 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
             includeEpisodes: showWhich,
         }
     }, [collectionId, exampleCollection, values.downloadWithCountdown, filters, sentIndexes, showWhich])
-    const {result, episodes, hasMore, loadingMore, moreFailed, loadMore} = useWhichEpisodes(request)
+    const {result, loading, episodes, hasMore, loadingMore, moreFailed, loadMore} = useWhichEpisodes(request)
     const counts = useMemo(() => {
         const byIndex = new Map<number, number>()
         sentIndexes.forEach((index, sent) => {
@@ -515,17 +515,27 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
                         </li>
                     )
                 })}
-                {result && (
-                    <li className="which-episodes-footer">
+                {request !== null && (
+                    // Shown before the count arrives, at the same height, so the form below does not move.
+                    <li className="which-episodes-footer" aria-busy={!result && loading}>
                         <span className="which-episodes-total">
                             <span className="which-episodes-total__label">Total</span>
-                            <span>
-                                <b className="which-episodes-total__count">{result.downloaded} of {result.total}</b>
-                                {exampleCollection ? ' newest episodes would be downloaded' : ' indexed episodes will be downloaded'}
-                                {result.unavailable > 0 && <span className="which-episodes-muted"> ({result.unavailable} can’t be downloaded)</span>}
-                            </span>
+                            {result ? (
+                                <span>
+                                    <b className="which-episodes-total__count">{result.downloaded} of {result.total}</b>
+                                    {exampleCollection ? ' newest episodes would be downloaded' : ' indexed episodes will be downloaded'}
+                                    {result.unavailable > 0 && <span className="which-episodes-muted"> ({result.unavailable} can’t be downloaded)</span>}
+                                </span>
+                            ) : loading ? (
+                                <span><FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin/> Counting episodes…</span>
+                            ) : (
+                                <span>Couldn’t count the episodes</span>
+                            )}
                         </span>
-                        <button type="button" className="which-episodes-show" aria-expanded={showWhich} onClick={() => setShowWhich((value) => !value)}>
+                        <button
+                            type="button" className="which-episodes-show" aria-expanded={showWhich} disabled={!result}
+                            onClick={() => setShowWhich((value) => !value)}
+                        >
                             <FontAwesomeIcon icon={faIcon('fass', 'list')}/>
                             {showWhich ? 'Hide the list' : 'Show which'}
                             <FontAwesomeIcon icon={faIcon('fass', showWhich ? 'chevron-up' : 'chevron-down')}/>

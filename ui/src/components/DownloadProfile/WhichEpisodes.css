@@ -196,10 +196,15 @@
     cursor: pointer;
 }
 
-.which-episodes-show:hover,
+.which-episodes-show:hover:not(:disabled),
 .which-episodes-show[aria-expanded="true"] {
     border-color: var(--we-accent);
     color: var(--we-accent);
+}
+
+.which-episodes-show:disabled {
+    opacity: 0.5;
+    cursor: default;
 }
 
 .which-episodes-muted {

@@ -166,8 +166,8 @@ class DownloadPlan:
     media_lane: tuple[str, int] | None = None
     """A named lane with its own limit on media transfers, such as one stream at a time for an account."""
     subtitle_asset_ids: tuple[str, ...] = ()
-    first_subtitle_default: bool = False
-    """The first embedded subtitle is the track players pick by default."""
+    default_subtitle_languages: tuple[str, ...] = ()
+    """The first of these languages that a subtitle has becomes the track players pick by default; none marks no track."""
 
     def __post_init__(self) -> None:
         stages = {stage.id: stage for stage in self.stages}
@@ -245,7 +245,7 @@ def build_download_plan(
     subtitle_asset_ids: tuple[str, ...] = (),
     attempt_id: str | None = None,
     media_lane: tuple[str, int] | None = None,
-    first_subtitle_default: bool = False,
+    default_subtitle_languages: tuple[str, ...] = (),
 ) -> DownloadPlan:
     """Resolve optional work once; the coordinator executes this plan verbatim."""
     if download_mode not in ("direct", "temporary"):
@@ -359,5 +359,5 @@ def build_download_plan(
         str(temporary_root), ffmpeg_path, tuple(assets), tuple(metadata_tags),
         artwork_asset_id, tuple(stages), copying, media_lane=media_lane,
         subtitle_asset_ids=tuple(subtitle_asset_ids),
-        first_subtitle_default=first_subtitle_default and bool(subtitle_asset_ids),
+        default_subtitle_languages=tuple(default_subtitle_languages),
     )

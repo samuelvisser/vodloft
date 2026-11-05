@@ -237,6 +237,8 @@ export const CollectionDetailsReadSchema = z.object({
     authorName: z.string(),
     authorSlug: z.string(),
     thumbnailLandscapePath: z.string().nullable(),
+    /** The type VODLoft suggests from the collection's name. */
+    probableCollectionType: z.string(),
     /** The collection's own seasons, oldest first; empty when VODLoft makes a season per upload year. */
     seasons: z.array(z.object({slug: z.string(), name: z.string()})),
 })

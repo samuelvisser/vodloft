@@ -73,7 +73,7 @@ export const episodeQueryKeys = {
 
 export async function fetchEpisodePage(
   collectionSlug: string,
-  params: {cursor: string | null; limit: number; seasonId?: number},
+  params: {cursor: string | null; limit: number; seasonId?: number; episodeTypes?: readonly string[]},
   signal?: AbortSignal,
 ) {
   const query = new URLSearchParams({
@@ -83,6 +83,7 @@ export async function fetchEpisodePage(
   if (params.seasonId !== undefined) {
     query.set('season_id', String(params.seasonId))
   }
+  for (const episodeType of params.episodeTypes ?? []) query.append('episode_type', episodeType)
   return fetchParsed(
     `${apiBase()}/episodes/as-view/by-collection-slug/${encodeURIComponent(collectionSlug)}/page?${query}`,
     EpisodeReadViewPageSchema,

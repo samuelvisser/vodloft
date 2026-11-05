@@ -16,7 +16,7 @@ from backend.db.models.media_download import MediaDownloadBase
 from backend.services.download_metadata import build_episode_metadata, build_movie_metadata, build_video_metadata, select_thumbnail_url
 from backend.services.download_options import effective_download_mode, effective_metadata_mode, effective_thumbnail_mode
 from backend.services.download_quality import (
-    chosen_subtitle_tracks, custom_ytdlp_options, first_subtitle_is_default, ytdlp_quality, ytdlp_sponsorblock, ytdlp_subtitles,
+    chosen_subtitle_tracks, custom_ytdlp_options, default_subtitle_languages, ytdlp_quality, ytdlp_sponsorblock, ytdlp_subtitles,
 )
 from backend.types.download_profile_types import AutoSubtitles
 from backend.services.source_options import ytdlp_source_options
@@ -86,7 +86,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     if episode is not None:
         option_texts.append((f"the Collection '{episode.collection.title}'", episode.collection.ytdlp_options))
     subtitle_request = ytdlp_subtitles(profile, AutoSubtitles.NEVER)
-    first_default = first_subtitle_is_default(profile)
+    default_languages = default_subtitle_languages(profile)
     remux, ffmpeg_path, temporary_root = settings.remux_video_to_mp4, settings.ffmpeg_path, str(settings.temporary_download_root)
     output_template = profile.output_template
     title, slug, media_id = media.title, media.slug, media.id
@@ -272,7 +272,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         temporary_root=temporary_root, ffmpeg_path=ffmpeg_path, assets=tuple(assets),
         metadata_tags=tags, artwork_asset_id=artwork_id,
         subtitle_asset_ids=tuple(embedded_subtitle_ids),
-        first_subtitle_default=first_default,
+        default_subtitle_languages=default_languages,
         attempt_id=tracker.attempt_id,
         media_lane=(f"source:{media_source.id}", streams) if (streams := media_source.download_streams) else None,
     )
