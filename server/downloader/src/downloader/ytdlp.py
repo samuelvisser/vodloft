@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from .hls_bundle import BundleTrack, write_hls_bundle
 from .errors import DownloadCanceled, DownloadError, EncryptedMediaError, FileTooLargeError, MediaUnavailableError
 from .models import CancelCheck, DownloadProgress, DownloadResult, ProgressCallback, SponsorSegment, VideoStream, WrittenSubtitle
 from .plan import ResolvedDownloadSource, YtdlpSponsorBlock, YtdlpSubtitles
@@ -30,6 +31,8 @@ _PROGRESS = "[vodloft-progress]"
 _FILE = "[vodloft-file]"
 _SPONSORBLOCK = "[vodloft-sponsorblock]"
 _VIDEO = "[vodloft-video]"
+_TRACK = "[vodloft-track]"
+_MARKS = (_FILE, _SPONSORBLOCK, _VIDEO, _TRACK)
 _CODECS = (("avc", "h264"), ("h264", "h264"), ("hev", "h265"), ("hvc", "h265"), ("h265", "h265"), ("vp09", "vp9"), ("vp9", "vp9"), ("av01", "av1"), ("av1", "av1"))
 # SponsorBlock's Highlight is a moment, not a part to skip: always a chapter.
 _HIGHLIGHT = "poi_highlight"
@@ -125,6 +128,20 @@ def ytdlp_format_options(
     )
 
 
+HLS_HEIGHTS = (360, 720, 1080)
+"""The resolutions of an HLS download. Podcast apps can play H.264, which sites such as YouTube
+only have up to 1080p."""
+
+
+def ytdlp_hls_options(language: str | None) -> tuple[str, ...]:
+    """yt-dlp options that download the H.264 video of each of ``HLS_HEIGHTS``, up to that height,
+    and the M4A audio as separate files, just as the site has them."""
+    videos = [f"bv[height<={height}][vcodec^=avc1][ext=mp4]" for height in HLS_HEIGHTS]
+    audio = "/".join(dict.fromkeys([*_with_language("ba[ext=m4a]", language)]))
+    # The files stay as they are: yt-dlp would otherwise rewrite the audio as a plain M4A.
+    return ("-f", ",".join((*videos, audio)), "--fixup", "never")
+
+
 def ytdlp_sponsorblock_options(sponsorblock: YtdlpSponsorBlock) -> tuple[str, ...]:
     """yt-dlp options that mark SponsorBlock segments as chapters and cut others out."""
     if not sponsorblock.enabled:
@@ -150,11 +167,15 @@ def resolve_ytdlp_source(
     """``custom_options`` are the user's own yt-dlp options; VODLoft's own come after them and win."""
     if not command:
         raise DownloadError("A yt-dlp download needs the yt-dlp command")
-    if preferred_format == "format_hls":
-        raise DownloadError("yt-dlp downloads cannot be kept as an HLS bundle")
+    hls = preferred_format == "format_hls"
+    if hls and audio_only:
+        raise DownloadError("HLS media format cannot be used for an audio-only download")
+    if hls:
+        # Parts cut from separate video and audio files would no longer line up, so an HLS bundle only marks them.
+        sponsorblock = YtdlpSponsorBlock(chapter=(*sponsorblock.chapter, *sponsorblock.cut))
     options = (
         *custom_options,
-        *ytdlp_format_options(preferred_format, audio_only=audio_only, quality=quality),
+        *(ytdlp_hls_options(quality.audio_language) if hls else ytdlp_format_options(preferred_format, audio_only=audio_only, quality=quality)),
         *ytdlp_sponsorblock_options(sponsorblock),
     )
     if os.sep in ffmpeg_path:
@@ -162,11 +183,13 @@ def resolve_ytdlp_source(
     height = FORMAT_HEIGHTS.get(preferred_format)
     return ResolvedDownloadSource(
         url=url,
-        format_downloaded=f"audio {quality.audio_format}" if audio_only else f"up to {height}p",
+        format_downloaded="HLS " + "/".join(f"{height}p" for height in HLS_HEIGHTS) if hls
+        else f"audio {quality.audio_format}" if audio_only else f"up to {height}p",
         use_hls=False,
         remux_to_mp4=False,
-        extension=quality.audio_format if audio_only else quality.container,
+        extension="m3u8" if hls else quality.audio_format if audio_only else quality.container,
         audio_only=audio_only,
+        hls_bundle=hls,
         ytdlp_command=(*command, *options),
         ytdlp_subtitles=subtitles,
         ytdlp_sponsorblock=sponsorblock,
@@ -474,14 +497,113 @@ def download_ytdlp(
         *(ytdlp_subtitle_options(subtitles) if subtitles_dir is not None else ()),
         "--", url,
     ]
-    lines: queue.Queue[str | None] = queue.Queue()
-    output: list[str] = []
     produced: str | None = None
     segments: tuple[SponsorSegment, ...] | None = None
     video: VideoStream | None = None
+    try:
+        output, marked = _run(argv, progress=progress, should_cancel=should_cancel)
+        for line in marked:
+            if line.startswith(_FILE):
+                produced = line.removeprefix(_FILE).strip()
+            elif line.startswith(_VIDEO):
+                video = _video_stream(line.removeprefix(_VIDEO).strip())
+            elif line.startswith(_SPONSORBLOCK):
+                segments = _sponsor_segments(line.removeprefix(_SPONSORBLOCK).strip(), sponsorblock)
+        if not produced or not Path(produced).is_file():
+            # --max-filesize ends without a file and without an error.
+            if any("larger than max-filesize" in line for line in output):
+                raise FileTooLargeError("The file is larger than the largest file allowed")
+            raise DownloadError("yt-dlp finished without producing a file")
+        size = Path(produced).stat().st_size
+        os.replace(produced, dest_path)
+        written: tuple[WrittenSubtitle, ...] = ()
+        if subtitles_dir is not None:
+            if subtitles.auto_generated == "always" and not (should_cancel and should_cancel()):
+                _write_auto_generated(url, work, command, subtitles)
+            written = _keep_subtitles(work, subtitles_dir, subtitles)
+        if progress:
+            progress(DownloadProgress(bytes_downloaded=size, total_bytes=size))
+        return DownloadResult(path=dest_path, bytes_downloaded=size, subtitles=written, sponsorblock=segments, video=video)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def download_ytdlp_hls_bundle(
+        url: str,
+        master_path: str,
+        *,
+        command: tuple[str, ...],
+        ffmpeg_path: str = "ffmpeg",
+        progress: Optional[ProgressCallback] = None,
+        should_cancel: Optional[CancelCheck] = None,
+        subtitles_dir: Path | None = None,
+        subtitles: YtdlpSubtitles = YtdlpSubtitles(),
+        sponsorblock: YtdlpSponsorBlock = YtdlpSponsorBlock(),
+) -> DownloadResult:
+    """Run yt-dlp with ``ytdlp_hls_options`` and keep the files it downloads as an HLS bundle at
+    ``master_path``, with a variant for each resolution the video has."""
+    if should_cancel and should_cancel():
+        raise DownloadCanceled("Download canceled")
+    work = Path(master_path + ".ytdlp")
+    shutil.rmtree(work, ignore_errors=True)
+    work.mkdir(parents=True)
+    argv = [
+        *command,
+        "--no-playlist", "--newline", "--progress", "--no-mtime",
+        "--progress-template",
+        f"download:{_PROGRESS} %(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s",
+        "--print", f"after_move:{_TRACK} %(format_id)s %(width)s %(height)s %(vcodec)s %(acodec)s %(tbr)s %(abr)s %(filepath)s",
+        *(("--print", f"after_move:{_SPONSORBLOCK} %(sponsorblock_chapters)j") if sponsorblock.enabled else ()),
+        "-P", str(work), "-o", "track-%(format_id)s.%(ext)s", "-o", "subtitle:media.%(ext)s",
+        *(ytdlp_subtitle_options(subtitles) if subtitles_dir is not None else ()),
+        "--", url,
+    ]
+    try:
+        _output, marked = _run(argv, progress=progress, should_cancel=should_cancel)
+        tracks: dict[str, BundleTrack] = {}
+        audio: BundleTrack | None = None
+        segments: tuple[SponsorSegment, ...] | None = None
+        for line in marked:
+            if line.startswith(_SPONSORBLOCK):
+                segments = _sponsor_segments(line.removeprefix(_SPONSORBLOCK).strip(), sponsorblock)
+            if not line.startswith(_TRACK):
+                continue
+            format_id, width, height, vcodec, acodec, tbr, abr, path = (line.removeprefix(_TRACK).strip().split(" ", 7) + ["NA"] * 8)[:8]
+            bitrate = _number(tbr) or _number(abr)
+            if vcodec in ("NA", "none"):
+                audio = BundleTrack(Path(path), codecs=None if acodec == "NA" else acodec, bitrate=bitrate * 1000 if bitrate else None)
+            else:
+                tracks[format_id] = BundleTrack(
+                    Path(path), codecs=vcodec, bitrate=bitrate * 1000 if bitrate else None,
+                    width=_number(width), height=_number(height),
+                )
+        # A video below 1080p gets the same file for more than one of the resolutions; keep it once.
+        videos = list({track.height: track for track in tracks.values()}.values())
+        if audio is None or not videos or not all(track.path.is_file() for track in (*videos, audio)):
+            raise DownloadError("yt-dlp did not download both the video and the audio")
+        write_hls_bundle(master_path, videos=videos, audio=audio, ffmpeg_path=ffmpeg_path, should_cancel=should_cancel)
+        written: tuple[WrittenSubtitle, ...] = ()
+        if subtitles_dir is not None:
+            if subtitles.auto_generated == "always" and not (should_cancel and should_cancel()):
+                _write_auto_generated(url, work, command, subtitles)
+            written = _keep_subtitles(work, subtitles_dir, subtitles)
+        size = sum(track.path.stat().st_size for track in (*videos, audio))
+        if progress:
+            progress(DownloadProgress(bytes_downloaded=size, total_bytes=size))
+        return DownloadResult(path=master_path, bytes_downloaded=size, subtitles=written, sponsorblock=segments)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+def _run(
+        argv: list[str], *, progress: Optional[ProgressCallback], should_cancel: Optional[CancelCheck],
+) -> tuple[list[str], list[str]]:
+    """Run yt-dlp, report its progress, and return its last lines of output and the lines VODLoft's
+    own ``--print`` options wrote, in order. Raises for a failure or when canceled."""
+    lines: queue.Queue[str | None] = queue.Queue()
+    output: list[str] = []
+    marked: list[str] = []
     finished = 0
     current = 0
-    current_total: int | None = None
 
     def read(stream) -> None:
         for line in stream:
@@ -493,7 +615,6 @@ def download_ytdlp(
             argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace",
         )
     except OSError as exc:
-        shutil.rmtree(work, ignore_errors=True)
         raise DownloadError(f"Could not start yt-dlp: {exc}") from exc
     reader = threading.Thread(target=read, args=(process.stdout,), daemon=True)
     reader.start()
@@ -522,32 +643,14 @@ def download_ytdlp(
                         bytes_downloaded=finished + current,
                         total_bytes=finished + current_total if current_total else None,
                     ))
-            elif line.startswith(_FILE):
-                produced = line.removeprefix(_FILE).strip()
-            elif line.startswith(_VIDEO):
-                video = _video_stream(line.removeprefix(_VIDEO).strip())
-            elif line.startswith(_SPONSORBLOCK):
-                segments = _sponsor_segments(line.removeprefix(_SPONSORBLOCK).strip(), sponsorblock)
+            elif line.startswith(_MARKS):
+                marked.append(line)
             else:
                 output.append(line)
                 del output[:-50]
         if process.wait() != 0:
             raise _error(output)
-        if not produced or not Path(produced).is_file():
-            # --max-filesize ends without a file and without an error.
-            if any("larger than max-filesize" in line for line in output):
-                raise FileTooLargeError("The file is larger than the largest file allowed")
-            raise DownloadError("yt-dlp finished without producing a file")
-        size = Path(produced).stat().st_size
-        os.replace(produced, dest_path)
-        written: tuple[WrittenSubtitle, ...] = ()
-        if subtitles_dir is not None:
-            if subtitles.auto_generated == "always" and not (should_cancel and should_cancel()):
-                _write_auto_generated(url, work, command, subtitles)
-            written = _keep_subtitles(work, subtitles_dir, subtitles)
-        if progress:
-            progress(DownloadProgress(bytes_downloaded=size, total_bytes=size))
-        return DownloadResult(path=dest_path, bytes_downloaded=size, subtitles=written, sponsorblock=segments, video=video)
+        return output, marked
     finally:
         if process.poll() is None:
             process.terminate()
@@ -556,4 +659,3 @@ def download_ytdlp(
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait()
-        shutil.rmtree(work, ignore_errors=True)

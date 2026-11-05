@@ -962,3 +962,22 @@ def test_download_only_mp4_hls_requires_both_advertised_video_sources(
     _make_hls_bundle(hls_path)
 
     assert get_feed_items(db_session, profile) == [(episode, mp4_download)]
+
+
+def test_a_downloaded_audio_enclosure_gives_the_file_size(db_session, tmp_path):
+    from backend.api.endpoints.feeds.service import render_rss_feed
+
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
+    episode = _make_episode(db_session, collection, season, index=1)
+    audio = _make_local_media_profile(db_session, slug="audio", preferred_format="format_audio_only")
+    download = _make_available_download(db_session, episode, audio, tmp_path / "episode.m4a")
+    download.artifact_size_bytes = 10
+    episode.duration = 3600.0
+    db_session.flush()
+    profile = _make_rss_profile(db_session, collection, mode="audio_mp4", preferred_format="format_audio_only")
+
+    xml = render_rss_feed(db_session, _FakeRequest(), profile).decode()
+
+    # The file's own ten bytes, not the 57,600,000 that an hour streamed at 128 kbit/s would get.
+    assert 'length="10"' in xml

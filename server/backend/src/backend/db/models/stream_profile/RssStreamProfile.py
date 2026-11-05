@@ -22,6 +22,11 @@ class RssStreamProfile(StreamProfileBase):
         server_default="0",
         nullable=False,
     )
+    proxy_source_stream: Mapped[bool] = mapped_column(
+        default=False,
+        server_default="0",
+        nullable=False,
+    )
     live_episode_handoff_ids: Mapped[list[int]] = mapped_column(
         MutableList.as_mutable(JSON),
         default=list,

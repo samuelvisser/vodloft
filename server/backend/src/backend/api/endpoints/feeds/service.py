@@ -33,12 +33,16 @@ from backend.types.collection_types import EpisodeIdentifier, CollectionType
 from backend.types.stream_profile_types import (
     RSS_AUDIO_PRIMARY_OUTPUT_MODES,
     RSS_HLS_OUTPUT_MODES,
+    RSS_MP4_OUTPUT_MODES,
     RssVideoOutputMode,
 )
 from backend.utils.feed_urls import request_base_url
+from .cached_video import get_cached_mp4_size
 from .source_stream import estimated_audio_size
+from .source_tracks import NEWEST_EPISODES_JOINED_AHEAD, EpisodeRef, join_in_background, joined_key, joins_mp4, stream_height
+from backend.services.collection_cookies import uses_cookies
 from config.network import is_no_internet_error
-from sources import EpisodeTag, Source, StreamMethod, UnknownSourceError, get_source
+from sources import EpisodeTag, Feature, Source, StreamMethod, UnknownSourceError, get_source
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 
@@ -902,6 +906,8 @@ def _append_item(
         media_base_url: str,
         episode: Episode,
         profile: RssStreamProfile,
+        download: Optional[EpisodeMediaDownload] = None,
+        joined_height: Optional[int] = None,
 ) -> None:
     item = SubElement(channel, "item")
     _sub_text(item, "title", episode.title)
@@ -938,8 +944,15 @@ def _append_item(
     else:
         enclosure_url = mp4_url
         enclosure_type = "video/mp4"
-    # Apps show the length as the episode's size; audio is close to its estimate at 128 kbit/s.
-    estimated_size = estimated_audio_size(episode.duration) if enclosure_url == audio_url else None
+    # Apps show the length as the episode's size: a downloaded file's own size, and otherwise for audio
+    # its estimate at 128 kbit/s, which streamed audio has.
+    enclosure_kind = "audio" if enclosure_url == audio_url else "mp4"
+    if download is not None and _download_kind(download) == enclosure_kind and download.artifact_size_bytes:
+        estimated_size = download.artifact_size_bytes
+    elif enclosure_kind == "audio":
+        estimated_size = estimated_audio_size(episode.duration)
+    else:
+        estimated_size = get_cached_mp4_size(joined_key(episode.uuid, joined_height)) if joined_height else None
 
     SubElement(
         item,
@@ -989,6 +1002,41 @@ def _append_item(
     # A thumbnail VODLoft made needs a signed-in browser, which a podcast app is not.
     if image_url and not is_own_thumbnail(image_url):
         SubElement(item, "itunes:image", {"href": image_url})
+
+
+def _joined_mp4_height(profile: RssStreamProfile) -> Optional[int]:
+    """The resolution a feed's MP4 video is joined at from its Site's tracks, when it serves MP4 video
+    that is not downloaded at a resolution the Site has no MP4 file with sound of."""
+    if (
+        not profile.use_source_stream
+        or profile.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value
+        or profile.video_output_mode not in RSS_MP4_OUTPUT_MODES
+    ):
+        return None
+    site = collection_site(profile.collection)
+    height = stream_height(site, PREFERRED_FORMAT_HEIGHTS.get(profile.preferred_format))
+    return height if joins_mp4(site, height) else None
+
+
+def _join_newest_ahead(
+        profile: RssStreamProfile, items: list[tuple[Episode, Optional[EpisodeMediaDownload]]], height: int,
+) -> None:
+    """Start joining the MP4 files of the feed's newest episodes that are not downloaded as MP4, so
+    they are ready before anyone plays them."""
+    try:
+        source = get_source(profile.collection.source_key)
+    except UnknownSourceError:
+        return
+    if not source.has(Feature.EPISODE_LISTS):
+        return
+    use_cookies = uses_cookies(profile.collection)
+    waiting = [
+        episode for episode, download in items
+        if (download is None or _download_kind(download) != "mp4")
+        and episode.publish_status != EpisodePublishStatus.LIVE.value
+    ]
+    for episode in waiting[:NEWEST_EPISODES_JOINED_AHEAD]:
+        join_in_background(source, EpisodeRef(episode.uuid, episode.sharing_url, use_cookies), height)
 
 
 def render_rss_feed(
@@ -1061,12 +1109,17 @@ def render_rss_feed(
         _sub_text(image, "title", effective_title)
         _sub_text(image, "link", collection.sharing_url)
 
-    for episode, _download in items:
+    joined_height = _joined_mp4_height(profile)
+    if joined_height is not None:
+        _join_newest_ahead(profile, items, joined_height)
+    for episode, download in items:
         _append_item(
             channel,
             media_base_url=media_base_url,
             episode=episode,
             profile=profile,
+            download=download,
+            joined_height=joined_height,
         )
 
     return tostring(rss, encoding="UTF-8", xml_declaration=True)

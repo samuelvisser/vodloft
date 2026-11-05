@@ -35,6 +35,11 @@ def _cache_path(episode_uuid: str) -> Path:
     return _video_cache_root() / f"{digest}.mp4"
 
 
+def mp4_cache_path(key: str) -> Path:
+    """Where the RSS cache keeps the MP4 file of ``key``, such as an episode's UUID."""
+    return _cache_path(key)
+
+
 def _is_current(path: Path) -> bool:
     try:
         stat = path.stat()

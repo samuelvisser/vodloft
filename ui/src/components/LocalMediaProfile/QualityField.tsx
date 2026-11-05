@@ -95,7 +95,8 @@ export default function QualityField({form, mode}: Props) {
             label: 'Other',
             options: [
                 ...(!offered || offered.audioOnly ? [option('format_audio_only')] : []),
-                ...(offered?.hlsBundle ? [option('format_hls')] : []),
+                // Only episodes of a collection are kept as an HLS bundle, for podcast feeds.
+                ...(mode === 'collection' && offered?.hlsBundle ? [option('format_hls')] : []),
             ],
         },
     ].filter((group) => group.options.length)
@@ -127,7 +128,7 @@ export default function QualityField({form, mode}: Props) {
                     {audioOnly
                         ? 'Audio only: no video is downloaded.'
                         : hls
-                            ? 'An HLS bundle keeps The Daily Wire’s 480p, 720p and 1080p versions together. Only for The Daily Wire.'
+                            ? 'An HLS bundle keeps several resolutions together, so podcast apps can pick one: 480p, 720p and 1080p from The Daily Wire, 360p, 720p and 1080p from YouTube.'
                             : 'VODLoft downloads the highest resolution the site has up to this, and falls back to lower ones.'}
                 </div>
             </div>

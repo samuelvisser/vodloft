@@ -38,6 +38,7 @@ class _RssStreamProfileAPIBaseIn(RequestBase):
         )
     )
     stream_live_episodes: bool = False
+    proxy_source_stream: bool = False
     max_items: int = Field(default=0, ge=0)
 
     @field_validator("title")
@@ -120,6 +121,7 @@ class _RssStreamProfileAPIBaseOut(ResponseBase):
     ep_id_type_list: list[str]
     video_output_mode: Optional[str]
     stream_live_episodes: bool
+    proxy_source_stream: bool
     max_items: int
     feed_url: str
 

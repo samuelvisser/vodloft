@@ -7,7 +7,19 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import FileResponse, RedirectResponse
 
 from .cached_video import get_cached_mp4_path, prepare_cached_mp4
-from .source_stream import proxy_response
+from .source_stream import episode_stream, proxy_response
+from .source_tracks import (
+    EpisodeRef,
+    join_in_background,
+    joined_mp4,
+    joined_mp4_response,
+    joins_mp4,
+    master_playlist_response,
+    note_file_streamed,
+    stream_height,
+    track_part_response,
+    track_playlist_response,
+)
 from .service import (
     can_stream_from_source,
     get_source_stream_url,
@@ -19,12 +31,13 @@ from .service import (
 )
 from backend.app import db_session
 from backend.types.episode_types import EpisodePublishStatus
-from backend.types.local_media_profile_types import PreferredFormat
+from backend.types.local_media_profile_types import PREFERRED_FORMAT_HEIGHTS, PreferredFormat
 from backend.types.stream_profile_types import (
     RSS_AUDIO_PRIMARY_OUTPUT_MODES,
     RSS_HLS_OUTPUT_MODES,
     RSS_MP4_OUTPUT_MODES,
 )
+from backend.services.collection_cookies import uses_cookies
 from backend.services.sites import collection_site
 from downloader import hls_asset_root
 from sources import Feature, StreamMethod, get_source
@@ -72,6 +85,38 @@ def _cached_mp4_head_response(file_path: Path | None, *, filename: str) -> Respo
         # Response adds Content-Length: 0 for the empty body; an uncached file has no known size.
         del response.headers["content-length"]
     return response
+
+
+def _episode_ref(episode) -> EpisodeRef:
+    return EpisodeRef(uuid=episode.uuid, url=episode.sharing_url, use_cookies=uses_cookies(episode.collection))
+
+
+def _profile_stream_height(profile, site) -> int | None:
+    return stream_height(site, PREFERRED_FORMAT_HEIGHTS.get(profile.preferred_format))
+
+
+def _site_video_mp4(source, profile, episode, request: Request) -> Response:
+    """The episode's MP4 from a Site whose episodes are listed, such as YouTube: joined from its tracks
+    when the feed's resolution needs that and it is ready, and otherwise the Site's own MP4 with sound."""
+    site = collection_site(profile.collection)
+    height = _profile_stream_height(profile, site)
+    head_only = request.method == "HEAD"
+    filename = f"{episode.slug}.mp4"
+    if joins_mp4(site, height):
+        joined = joined_mp4(episode.uuid, height)
+        if joined is not None:
+            return joined_mp4_response(joined, filename=filename)
+        join_in_background(source, _episode_ref(episode), height)
+        note_file_streamed(episode.uuid)
+    if profile.proxy_source_stream or not site.stream_proxy_choice:
+        return proxy_response(
+            source, episode, audio=False, media_type="video/mp4", filename=filename,
+            range_header=request.headers.get("range"), head_only=head_only,
+        )
+    stream = episode_stream(source, episode, audio=False)
+    if stream is None:
+        raise HTTPException(status_code=404, detail=f"No {source.name} video stream for this episode")
+    return _temporary_stream_redirect(stream.url, head_only=head_only)
 
 
 def _not_streamed(profile, media: str) -> HTTPException:
@@ -211,10 +256,7 @@ def rss_feed_episode_video_mp4(token: str, episode_slug: str, request: Request):
 
         source = get_source(episode.source_key)
         if source.has(Feature.EPISODE_LISTS):
-            return proxy_response(
-                source, episode, audio=False, media_type="video/mp4", filename=f"{episode.slug}.mp4",
-                range_header=request.headers.get("range"), head_only=request.method == "HEAD",
-            )
+            return _site_video_mp4(source, profile, episode, request)
 
         episode_uuid = episode.uuid
         filename = f"{episode.slug}.mp4"
@@ -285,6 +327,12 @@ def rss_feed_episode_video_hls(token: str, episode_slug: str, request: Request):
         site = collection_site(profile.collection)
         if StreamMethod.HLS not in site.stream_methods:
             raise HTTPException(status_code=404, detail=f"{site.name} cannot stream episodes as HLS")
+        source = get_source(episode.source_key)
+        if source.has(Feature.EPISODE_LISTS):
+            return master_playlist_response(
+                source, _episode_ref(episode), height=_profile_stream_height(profile, site) or 0,
+                head_only=request.method == "HEAD",
+            )
 
         source_url = get_source_stream_url(
             profile,
@@ -299,6 +347,37 @@ def rss_feed_episode_video_hls(token: str, episode_slug: str, request: Request):
         source_url,
         head_only=request.method == "HEAD",
     )
+
+
+@router.api_route(
+    "/rss/{token}/episodes/{episode_slug}/tracks/{name}",
+    methods=["GET", "HEAD"],
+)
+def rss_feed_episode_track(token: str, episode_slug: str, name: str, request: Request):
+    """A playlist of one of the video or audio tracks of a Site's HLS stream that VODLoft writes, or
+    that track's bytes, passed on for a feed that proxies its Site's video."""
+    with db_session() as s:
+        profile = get_rss_stream_profile_by_token(s, token)
+        if (
+            profile.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value
+            or profile.video_output_mode not in RSS_HLS_OUTPUT_MODES
+        ):
+            raise HTTPException(status_code=404, detail="HLS video is not enabled for this feed")
+        episode = get_episode_for_feed(s, profile, episode_slug)
+        _commit_feed_state_if_changed(s)
+        if not can_stream_from_source(profile, episode):
+            raise _not_streamed(profile, "HLS video")
+        source = get_source(episode.source_key)
+        if not source.has(Feature.EPISODE_LISTS):
+            raise HTTPException(status_code=404, detail="No such track")
+        site = collection_site(profile.collection)
+        proxy = profile.proxy_source_stream or not site.stream_proxy_choice
+        episode_ref = _episode_ref(episode)
+
+    head_only = request.method == "HEAD"
+    if name.endswith(".m3u8"):
+        return track_playlist_response(source, episode_ref, name, proxy=proxy, head_only=head_only)
+    return track_part_response(source, episode_ref, name, range_header=request.headers.get("range"), head_only=head_only)
 
 
 @router.api_route(
