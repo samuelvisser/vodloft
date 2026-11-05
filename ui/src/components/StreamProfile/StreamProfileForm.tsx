@@ -75,6 +75,7 @@ export default function StreamProfileForm({
     const canStreamFromSource = controls.rssStreaming
     const canStreamLiveEpisodes = controls.liveEpisodes
     const streamSourceName = collection ? sources.name(collection.sourceKey) : newCollectionSource?.name ?? 'The Daily Wire'
+    const streamSourceKnown = !!(collection || newCollectionSource)
 
     const useDownloads = watch('useDownloads')
     const useDwStream = watch('useDwStream')
@@ -87,6 +88,20 @@ export default function StreamProfileForm({
     const internalEpisodeTypesManuallyChanged = useRef(false)
     const episodeTypeDefaultsInitialized = useRef(false)
     const lastSuggestedTitle = useRef<string | undefined>(undefined)
+    const dwStreamClearedForSource = useRef(false)
+
+    // Direct streaming is on by default, but only a Source with RSS streaming can serve it.
+    // Turn it off for any other Source, and back on if the form moves to one that can stream.
+    useEffect(() => {
+        if (!streamSourceKnown) return
+        if (!canStreamFromSource && getValues('useDwStream')) {
+            setValue('useDwStream', false, {shouldDirty: false, shouldValidate: true})
+            dwStreamClearedForSource.current = true
+        } else if (canStreamFromSource && dwStreamClearedForSource.current) {
+            setValue('useDwStream', true, {shouldDirty: false, shouldValidate: true})
+            dwStreamClearedForSource.current = false
+        }
+    }, [streamSourceKnown, canStreamFromSource, getValues, setValue])
 
     useEffect(() => {
         if (!collectionTitle) return
@@ -204,6 +219,7 @@ export default function StreamProfileForm({
             collectionSlug={collectionSlug}
             canOpenDownloadProfiles={canOpenDownloadProfiles}
             sourceName={streamSourceName}
+            canStreamFromSource={canStreamFromSource}
             onEnableDownloads={() => setValue('useDownloads', true, {
                 shouldDirty: true,
                 shouldValidate: true,
@@ -258,12 +274,13 @@ export default function StreamProfileForm({
                                 </ReadMore>
                             ),
                         },
-                        ...(canStreamFromSource || useDwStream ? [{
+                        ...(canStreamFromSource ? [{
                             value: 'dw',
                             label: `Use ${streamSourceName} stream`,
                             description: (
-                                <ReadMore summary={<span>Stream directly from {streamSourceName}.</span>}>
-                                    <p>If enabled, streamed media can come directly from {streamSourceName}&apos;s own servers.</p>
+                                <ReadMore summary={<span>Stream episodes straight from {streamSourceName}.</span>}>
+                                    <p>If enabled, VODLoft can stream episodes straight from {streamSourceName},
+                                        without downloading them first.</p>
                                     <p>If Use Downloads is enabled too, VODLoft will prefer downloaded media,
                                         but stream directly when no downloaded media exists.
                                     </p>

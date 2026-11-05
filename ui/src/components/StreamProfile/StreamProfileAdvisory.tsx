@@ -32,6 +32,8 @@ type Props = {
     canOpenDownloadProfiles?: boolean
     /** The collection's Source, named in the streaming advice. */
     sourceName?: string
+    /** Whether the collection's Source can stream episodes that are not downloaded. */
+    canStreamFromSource?: boolean
     onEnableDownloads: () => void
     onDisableDwStream: () => void
 }
@@ -307,10 +309,13 @@ export default function StreamProfileAdvisory({
     collectionSlug,
     canOpenDownloadProfiles = true,
     sourceName = 'The Daily Wire',
+    canStreamFromSource = true,
     onEnableDownloads,
     onDisableDwStream,
 }: Props) {
     const streaming = `${sourceName} streaming`
+    // Why the feed depends on downloads: streaming is turned off, or the Source cannot stream at all.
+    const noStreaming = canStreamFromSource ? `${streaming} is disabled` : `${sourceName} cannot stream episodes directly`
     const isRssProfile = mode === 'rss'
     const downloadProfilesLoaded = downloadProfileDefaults !== undefined
     const downloadProfiles = downloadProfileDefaults ?? []
@@ -404,7 +409,7 @@ export default function StreamProfileAdvisory({
                             Every media type used by this RSS output needs enabled Download Profile coverage for every selected episode type. Multiple Download Profiles can combine to provide that coverage.
                         </p>
                         <p>
-                            Without complete local coverage, episodes missing any required media are left out of the RSS feed because {streaming} is disabled.
+                            Without complete local coverage, episodes missing any required media are left out of the RSS feed because {noStreaming}.
                         </p>
                         {!useDownloads ? (
                             <p>
@@ -416,12 +421,12 @@ export default function StreamProfileAdvisory({
             >
                 <p>
                     {hasPartialCoverage
-                        ? `${streaming} is disabled, but the existing Download Profiles do not fully cover this Stream Profile.`
-                        : `${streaming} is disabled and no enabled Download Profile matches the media coverage this Stream Profile is setup to include.`}
+                        ? `${noStreaming}, but the existing Download Profiles do not fully cover this Stream Profile.`
+                        : `${noStreaming} and no enabled Download Profile matches the media coverage this Stream Profile is setup to include.`}
                 </p>
                 {streamsLiveEpisodes ? (
                     <p>
-                        <strong>Live episodes will not show in this feed.</strong> Without {streaming}, a live episode is only listed when all of its media is set to download once it is published.
+                        <strong>Live episodes will not show in this feed.</strong> Without {canStreamFromSource ? streaming : 'direct streaming'}, a live episode is only listed when all of its media is set to download once it is published.
                     </p>
                 ) : null}
                 <div className="stream-profile-advisory-requirements">
@@ -451,7 +456,10 @@ export default function StreamProfileAdvisory({
                     </button>
                 )}
             >
-                Matching Download Profiles exist, but both {streaming} and Use Downloads are disabled. Enable downloads so this Stream Profile can serve its local media.
+                {canStreamFromSource
+                    ? <>Matching Download Profiles exist, but both {streaming} and Use Downloads are disabled.</>
+                    : <>Matching Download Profiles exist, but Use Downloads is disabled and {sourceName} cannot stream episodes directly.</>}
+                {' '}Enable downloads so this Stream Profile can serve its local media.
             </AdvisoryCard>
         )
     }

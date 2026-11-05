@@ -142,7 +142,9 @@ export default function EditStreamProfilePage() {
 
                     <div className="form-row">
                         <label>Collection</label>
-                        <div style={{padding: '6px 0'}}>{streamProfile?.collectionTitle}</div>
+                        <div style={{padding: '6px 0'}}>
+                            <Link className="quiet-link" to={`/collection/${streamProfile?.collectionSlug}`}>{streamProfile?.collectionTitle}</Link>
+                        </div>
                     </div>
 
                     {errors.root && (
