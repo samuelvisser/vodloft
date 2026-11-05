@@ -80,7 +80,6 @@ export default function YouTubeSection({form, collectionId, sourceKey, collectio
                 </div>
             )}
             {sponsorBlockShown && <SponsorBlockFields form={form}/>}
-            <div className="help">Only shown for YouTube Collections.</div>
         </section>
     )
 }
