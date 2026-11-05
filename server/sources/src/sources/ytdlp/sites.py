@@ -25,9 +25,14 @@ _NAMES = {
 # Creators keep changing titles and thumbnails for days, and YouTube tests them for up to two weeks.
 _REFRESH_INTERVALS = {"youtube": "30m,2h,6h,24h,3d,7d,14d"}
 # How RSS feeds can stream each Site without downloading first. Each needs its streams checked against
-# podcast apps before it is added. YouTube only offers its 360p MP4 and M4A audio as plain files.
-_STREAM_METHODS = {"youtube": frozenset({StreamMethod.FILE})}
-_STREAM_VIDEO_HEIGHTS = {"youtube": (360,)}
+# podcast apps before it is added. YouTube has its 360p MP4 with sound as one file, and every other
+# resolution as separate H.264 video and M4A audio, which VODLoft lists in an HLS playlist or joins.
+# Above 1080p, YouTube only has VP9 and AV1, which podcast apps often cannot play. Its links play
+# for any address, so apps can be sent straight to them.
+_STREAM_METHODS = {"youtube": frozenset({StreamMethod.FILE, StreamMethod.HLS})}
+_STREAM_VIDEO_HEIGHTS = {"youtube": (360, 720, 1080)}
+_STREAM_FILE_HEIGHTS = {"youtube": 360}
+_STREAM_PROXY_CHOICE = {"youtube"}
 _PREFIX = "yt_dlp.extractor."
 _extractors: list | None = None
 _lock = threading.Lock()
@@ -60,5 +65,6 @@ def site_for(url: str) -> Site:
     key = _family(extractor)
     return Site(
         key, _NAMES.get(key, host), (host,), _REFRESH_INTERVALS.get(key), stream_methods=_STREAM_METHODS.get(key, frozenset()),
-        stream_video_heights=_STREAM_VIDEO_HEIGHTS.get(key, ()),
+        stream_video_heights=_STREAM_VIDEO_HEIGHTS.get(key, ()), stream_file_height=_STREAM_FILE_HEIGHTS.get(key),
+        stream_proxy_choice=key in _STREAM_PROXY_CHOICE,
     )

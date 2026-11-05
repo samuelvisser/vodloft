@@ -47,9 +47,10 @@ def ensure_site_can_stream(
         raise HTTPException(status_code=422, detail=f"{site.name} cannot stream video as HLS; choose an MP4 video output")
     if stream_live_episodes and StreamMethod.LIVE not in site.stream_methods:
         raise HTTPException(status_code=422, detail=f"{site.name} cannot stream live episodes")
-    # A feed serves the downloaded version nearest to its format, or the Site's own stream.
+    # A feed serves the downloaded version nearest to its format, or the Site's own stream, which only
+    # comes in the resolutions the Site streams.
     height = PREFERRED_FORMAT_HEIGHTS.get(preferred_format)
-    heights = {*site.downloads.video_heights, *(site.stream_video_heights if use_source_stream else ())}
+    heights = set(site.stream_video_heights if use_source_stream and site.stream_video_heights else site.downloads.video_heights)
     if height is not None and height not in heights:
         raise HTTPException(status_code=422, detail=f"{site.name} has no {preferred_format.removeprefix('format_')} video")
 

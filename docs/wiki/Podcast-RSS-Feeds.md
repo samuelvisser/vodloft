@@ -108,14 +108,18 @@ A useful video setup is to keep a small number of recent episodes downloaded whi
 
 ## Streaming from YouTube
 
-YouTube's media links only work for the computer that asked for them, so VODLoft fetches the episode itself and passes it on to your podcast app. That means:
+VODLoft looks every episode up on YouTube when your podcast app first plays it, which takes a few seconds. Audio always goes through VODLoft, about 60 MB per hour. When YouTube offers no M4A audio for a video, VODLoft converts it to AAC while it plays, and seeking is then slightly less precise. Because of this, your podcast app must be able to reach VODLoft, also away from home (see [[Security-and-Remote-Access]]).
 
-- your podcast app must be able to reach VODLoft, also away from home (see [[Security-and-Remote-Access]]);
-- everything you play goes through VODLoft's internet connection, about 60 MB per hour of audio;
-- the first play of an episode takes a few seconds while VODLoft looks it up;
-- audio comes as YouTube offers it; when YouTube offers no M4A audio for a video, VODLoft converts it to AAC while it plays, and seeking is then slightly less precise;
-- video streams at 360p, the only YouTube quality that comes with sound in one file. Download the episodes if you want better video;
-- the HLS delivery choices and live episodes are not available for YouTube streams.
+YouTube streams video at 360p, 720p or 1080p. Higher resolutions only exist as video formats many podcast apps cannot play, so download the episodes if you want those. How the video reaches your app depends on the video podcast output:
+
+- **HLS** plays straight away at up to the feed's resolution, and lets the app pick a lower one on a slow connection.
+- **MP4** at 360p plays straight away too: it is YouTube's only video that comes with sound in one file. At 720p and 1080p, VODLoft first joins YouTube's separate video and audio into one file. Until that file is ready, the episode plays at 360p. VODLoft starts on the newest episodes of the feed as soon as your podcast app fetches it, so those are usually ready before you play them. The files are kept in the RSS cache.
+
+### Proxy video through VODLoft
+
+Normally your podcast app fetches YouTube video straight from YouTube. With **Proxy video through VODLoft** enabled, VODLoft fetches it and passes it on instead. This might make the feed more stable, but every video you watch then goes through your VODLoft server's internet connection twice: once down from YouTube and once up to your app.
+
+Live episodes are not available for YouTube streams.
 
 ## Live episodes
 

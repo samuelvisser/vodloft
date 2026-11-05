@@ -238,6 +238,8 @@ export const SiteOptionsSchema = z.object({
     streamMethods: z.array(z.enum(['file', 'hls', 'live'])),
     /** The resolutions the site streams video at. */
     streamVideoHeights: z.array(z.number().int()),
+    /** Whether a feed can send podcast apps straight to the site's video instead of passing it through VODLoft. */
+    streamProxyChoice: z.boolean().default(false),
     /** What the collection's site can download. */
     downloads: DownloadOptionsSchema,
 })

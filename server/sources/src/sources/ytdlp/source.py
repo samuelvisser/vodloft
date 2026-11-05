@@ -15,8 +15,8 @@ from config import get_settings
 from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
-    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, Feature, LinkKind, LinkPreview, MediaStream, Playback, PlaybackKind, ProgramStatus,
-    ResolvedLink, SearchResults, CollectionDetails, Site, Source, SourceProblem, SponsorBlockSegment, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
+    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, Feature, LinkKind, LinkPreview, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
+    ResolvedLink, SearchResults, CollectionDetails, Site, Source, SourceProblem, SponsorBlockSegment, StreamMethod, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
 )
 from .. import pacing, ytdlp_runner as runner
@@ -251,10 +251,21 @@ def _expires_at(url: str) -> float | None:
 
 def _media_stream(entry: dict, *, ready: bool) -> MediaStream:
     size = entry.get("filesize")
+    codecs = [entry.get(kind) for kind in ("vcodec", "acodec") if (entry.get(kind) or "none") != "none"]
+    bitrate = entry.get("tbr") or entry.get("abr")
     return MediaStream(
         url=entry["url"], headers=dict(entry.get("http_headers") or {}), expires_at=_expires_at(entry["url"]),
         size_bytes=int(size) if isinstance(size, (int, float)) and size > 0 else None, ready=ready,
+        codecs=",".join(codecs) or None, bitrate=int(bitrate * 1000) if bitrate else None,
+        width=entry.get("width"), height=entry.get("height"),
     )
+
+
+def _original_language(entries: list[dict]) -> dict | None:
+    """A video with dubbed audio lists each format once per language, as 140-0, 140-1 and so on, and
+    also as 140-drc with its loudness evened out. Take the original language as it was made."""
+    versions = [entry for entry in entries if not str(entry.get("format_id")).endswith("-drc")]
+    return max(versions, key=lambda entry: entry.get("language_preference") or 0, default=None)
 
 
 def stream_of(info: dict, *, audio: bool) -> MediaStream | None:
@@ -265,13 +276,7 @@ def stream_of(info: dict, *, audio: bool) -> MediaStream | None:
     """
     formats = [entry for entry in info.get("formats") or [] if _direct(entry)]
     wanted = _READY_AUDIO_FORMAT if audio else _READY_VIDEO_FORMAT
-    # A video with dubbed audio lists the format once per language, as 140-0, 140-1 and so on, and
-    # also as 140-drc with its loudness evened out. Take the original language as it was made.
-    versions = [
-        entry for entry in formats
-        if str(entry.get("format_id")).split("-")[0] == wanted and not str(entry.get("format_id")).endswith("-drc")
-    ]
-    ready = max(versions, key=lambda entry: entry.get("language_preference") or 0, default=None)
+    ready = _original_language([entry for entry in formats if str(entry.get("format_id")).split("-")[0] == wanted])
     if ready is not None:
         return _media_stream(ready, ready=True)
     if not audio:
@@ -285,6 +290,28 @@ def stream_of(info: dict, *, audio: bool) -> MediaStream | None:
         return None
     best = max(sound_only, key=lambda entry: (entry.get("language_preference") or 0, entry.get("abr") or entry.get("tbr") or 0))
     return _media_stream(best, ready=False)
+
+
+def tracks_of(info: dict, heights: Sequence[int]) -> MediaTracks | None:
+    """The H.264 video without sound at each of ``heights`` that YouTube has, and the M4A audio, from
+    yt-dlp's info for a video. None without audio or video."""
+    formats = [entry for entry in info.get("formats") or [] if _direct(entry)]
+    audio = _original_language([
+        entry for entry in formats if str(entry.get("format_id")).split("-")[0] == _READY_AUDIO_FORMAT
+    ])
+    video = []
+    for height in sorted(heights, reverse=True):
+        candidates = [
+            entry for entry in formats
+            if entry.get("height") == height and entry.get("ext") == "mp4" and (entry.get("acodec") or "none") == "none"
+            and str(entry.get("vcodec") or "").startswith("avc1")
+        ]
+        best = max(candidates, key=lambda entry: entry.get("tbr") or 0, default=None)
+        if best is not None:
+            video.append(_media_stream(best, ready=False))
+    if audio is None or not video:
+        return None
+    return MediaTracks(video=tuple(video), audio=_media_stream(audio, ready=True))
 
 
 def _sponsorblock_segments(video_id: str, categories: Sequence[str]) -> tuple[SponsorBlockSegment, ...]:
@@ -905,6 +932,12 @@ class YtDlpSource(Source):
         if not self.site_for(url).streams:
             raise NotImplementedError(f"{self.site_for(url).name} cannot stream episodes")
         return stream_of(runner.run_json("--no-playlist", url, cookies=use_cookies), audio=audio)
+
+    def media_tracks(self, url: str, *, use_cookies: bool = True) -> MediaTracks | None:
+        site = self.site_for(url)
+        if StreamMethod.HLS not in site.stream_methods:
+            raise NotImplementedError(f"{site.name} cannot stream episodes as tracks")
+        return tracks_of(runner.run_json("--no-playlist", url, cookies=use_cookies), site.stream_video_heights)
 
     def needs_cookies(self, error: str) -> bool:
         text = error.lower()

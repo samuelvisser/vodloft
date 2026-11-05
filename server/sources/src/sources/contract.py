@@ -206,10 +206,10 @@ class EpisodeMedia:
 
 @dataclass(frozen=True)
 class MediaStream:
-    """One stream of an episode that VODLoft fetches itself and passes on to a feed's player.
+    """One stream of an episode, for a feed's player.
 
-    The URL may only work for VODLoft, such as YouTube's, which only plays to the address that
-    looked it up, so VODLoft never sends a player there.
+    VODLoft passes it on, or, where the Site has ``stream_proxy_choice`` and the feed does not
+    proxy, sends the player straight to its URL.
     """
 
     url: str
@@ -221,6 +221,22 @@ class MediaStream:
     ready: bool = True
     """The stream already is what the feed asked for: M4A audio, or MP4 video with sound.
     Audio that is not ready is transcoded to AAC by VODLoft."""
+    codecs: str | None = None
+    """The stream's codecs as HLS names them, such as ``avc1.640028`` or ``mp4a.40.2``."""
+    bitrate: int | None = None
+    """Bits per second, on average."""
+    width: int | None = None
+    height: int | None = None
+
+
+@dataclass(frozen=True)
+class MediaTracks:
+    """An episode's video without sound and its audio, as fragmented MP4 files with a segment index,
+    from which VODLoft writes HLS playlists and joins MP4 files."""
+
+    video: tuple[MediaStream, ...]
+    """One per height the Site streams, from the highest down."""
+    audio: MediaStream
 
 
 class PlaybackKind(StrEnum):
@@ -539,6 +555,12 @@ class Site:
     first. A Site with none only serves downloads."""
     stream_video_heights: tuple[int, ...] = ()
     """The resolutions the Site streams video at, for a Site that ``streams``."""
+    stream_file_height: int | None = None
+    """The one resolution of ``stream_video_heights`` the Site has as an MP4 file with sound. The
+    others are separate ``media_tracks``, which VODLoft joins into an MP4 file before a feed plays it."""
+    stream_proxy_choice: bool = False
+    """The Site's streams play for any address, so a feed can send podcast apps straight to them
+    instead of passing them through VODLoft."""
     downloads: DownloadOptions = DownloadOptions()
 
     @property
@@ -658,6 +680,12 @@ class Source(ABC):
         with ``Feature.EPISODE_LISTS`` whose Site ``streams`` implement it. None when the episode has no
         such stream; ``use_cookies`` as for ``video_playback``."""
         raise NotImplementedError(f"{self.name} cannot stream episodes")
+
+    def media_tracks(self, url: str, *, use_cookies: bool = True) -> MediaTracks | None:
+        """The video and audio tracks of a listed episode, for an RSS feed that streams it as HLS or joins
+        its MP4. Only Sources with ``Feature.EPISODE_LISTS`` whose Site streams ``StreamMethod.HLS``
+        implement it. None when the episode has no such tracks."""
+        raise NotImplementedError(f"{self.name} cannot stream episodes as tracks")
 
     def movie_playback(
         self, *, movie_slug: str, title: str, duration: float | None,

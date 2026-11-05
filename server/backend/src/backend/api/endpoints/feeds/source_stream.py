@@ -1,8 +1,8 @@
-"""Streaming an episode that is not downloaded through VODLoft itself, for Sources whose URLs only work for VODLoft.
+"""Streaming an episode that is not downloaded through VODLoft itself, for Sources whose episodes are listed.
 
-YouTube's media URLs only play to the address that looked them up and stop working after a few hours,
-so a podcast app cannot be sent there. VODLoft looks the stream up when an episode is played, keeps it
-until shortly before it expires, and passes the bytes on, range by range, so the app can seek.
+YouTube's media URLs stop working after a few hours, so a feed cannot list them. VODLoft looks the stream
+up when an episode is played and keeps it until shortly before it expires. It passes audio on, range by
+range, so the app can seek, and video too unless the feed sends the app straight to the URL.
 
 Audio YouTube offers as M4A is passed on as it is. Other audio is transcoded to AAC on the fly. AAC in
 ADTS frames, unlike an M4A file, can start anywhere, so a seek starts a new transcode at the time the

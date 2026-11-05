@@ -81,7 +81,8 @@ def download_profiles_site_options(collection_id: int, request: Request):
             sponsorblock=source.sponsorblock_for(collection.sharing_url),
             upgrade_checks=source.has(Feature.UPGRADE_CHECKS),
             site_name=site.name, stream_methods=site.stream_methods,
-            stream_video_heights=site.stream_video_heights, downloads=DownloadOptionsAPIRead.model_validate(site.downloads),
+            stream_video_heights=site.stream_video_heights, stream_proxy_choice=site.stream_proxy_choice,
+            downloads=DownloadOptionsAPIRead.model_validate(site.downloads),
         )
 
 
