@@ -1,49 +1,42 @@
-"""EXPERIMENT: several ways of streaming YouTube video to podcast apps, side by side.
+"""EXPERIMENT: ways of streaming YouTube live streams to podcast apps, side by side.
 
-This module is for testing only and is not meant to be merged as it is. It adds a second feed next to
-a stream profile's own feed, ``/feeds/rss/{token}/experiments/feed.xml``, that lists the newest episodes
-once for every method below, so each method can be tried in a real podcast app. Every method plays
-an episode that is not downloaded; none of them looks at downloads.
+This module is for testing only and is not meant to be merged as it is. It adds a feed next to a
+stream profile's own feed that lists live YouTube videos once for every method below:
 
-The first round showed that YouTube's 360p MP4 (format 18) plays both straight from YouTube and through
-VODLoft. YouTube only has higher resolutions as separate video and audio, so the other methods join
-1080p H.264 video with M4A audio in different ways.
+    /feeds/rss/{token}/experiments/live/feed.xml?v=<video id>,<video id>
 
-  A  redirect          302 to format 18.
-  B  proxy             VODLoft passes format 18 on in 10 MB ranges (what PR #158 does).
-  C  download-first    yt-dlp downloads and joins 1080p into one MP4 first, then VODLoft serves that file
-                       with ranges. The first play waits until it is ready.
-  D  prepared          Like C, but the file is made as soon as the feed is fetched; until it is ready,
-                       the episode plays as A.
-  E  hls-parts-direct  An HLS playlist that VODLoft writes from the index in YouTube's own video and audio
-                       files, with every part fetched straight from YouTube. Nothing is joined or stored.
-  F  hls-parts-proxy   Like E, with every part passed on through VODLoft.
-  G  hls-live          ffmpeg joins video and audio into HLS parts on disk; the playlist is served while
-                       it is still being made.
-  H  hls-file          Like G, but the playlist is only served once every part is made.
+Without ``v`` it lists the profile's collection's episodes that are live now. Any live YouTube video
+works, such as a 24/7 news channel's.
 
-The HLS enclosures say video/mp4, because podcast apps leave out episodes whose enclosure is HLS. Their
-addresses end in .m3u8, from which players can still tell it is HLS.
+Video, as HLS (the enclosure says video/mp4, as apps leave HLS episodes out):
+  A  redirect      302 to YouTube's own master playlist.
+  B  direct        VODLoft writes the master playlist; each variant comes from VODLoft, which fetches
+                   YouTube's current variant playlist and points every segment straight at YouTube.
+  C  proxy         Like B, with every segment passed on through VODLoft.
 
-``/feeds/rss/{token}/experiments/{episode}/diagnose`` shows what YouTube offers for an episode.
+Audio, from the lowest video variant, as YouTube's live streams have no audio of their own:
+  D  audio-hls     ffmpeg writes the audio as a live audio-only HLS playlist.
+  E  audio-aac     ffmpeg sends the audio as one endless AAC stream, without length or seeking.
+
+  F  feed-shape    The shape a real feed would have: E as the enclosure, and B as a Podcasting 2.0
+                   alternate enclosure of type HLS.
+
+``/feeds/rss/{token}/experiments/live/{video id}/diagnose`` shows what each YouTube player client
+offers for the video, and ``.../check`` fetches the first playlist and segment of every method.
 """
 from __future__ import annotations
 
-import errno
-import hashlib
 import logging
-import math
-import os
 import re
 import shutil
 import subprocess
 import threading
 import time
 from collections.abc import Iterator
-from datetime import timedelta, timezone
 from email.utils import format_datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import quote, urljoin, urlsplit
 from xml.etree.ElementTree import Element, SubElement, register_namespace, tostring
 
 import requests
@@ -53,6 +46,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Stre
 from backend.app import db_session
 from backend.db.models import Episode
 from backend.services.collection_cookies import uses_cookies
+from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.feed_urls import request_base_url
 from config import get_settings
 from sources import ytdlp_runner
@@ -64,31 +58,32 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/feeds", tags=["Feeds"])
 
 _NO_CACHE = {"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache", "Expires": "0"}
-_UPSTREAM_CHUNK = 10 * 1024 * 1024
+_HLS_TYPE = "application/vnd.apple.mpegurl"
 _READ = 64 * 1024
 _TIMEOUT = 30
-_KEEP_SECONDS = 60 * 60
-_FILES_KEPT_SECONDS = 24 * 60 * 60
+_KEEP_SECONDS = 20 * 60
+_IDLE_SECONDS = 2 * 60
+_MAX_HEIGHT = 1080
+_CLIENTS = (None, "web", "mweb", "ios", "tv", "android_vr")
 _ITUNES = "http://www.itunes.com/dtds/podcast-1.0.dtd"
-_HLS_TYPE = "application/vnd.apple.mpegurl"
-_HEIGHT = 1080
+_PODCAST = "https://podcastindex.org/namespace/1.0"
+_VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{6,20}$")
+_ALLOWED_HOSTS = ("googlevideo.com", "youtube.com")
 
-# method: (label, enclosure file name)
-METHODS: dict[str, tuple[str, str]] = {
-    "redirect": ("A 360p from YouTube", "video.mp4"),
-    "proxy": ("B 360p through VODLoft", "video.mp4"),
-    "download-first": ("C 1080p MP4 made first", "video.mp4"),
-    "prepared": ("D 1080p MP4 made ahead, 360p until then", "video.mp4"),
-    "hls-parts-direct": ("E 1080p HLS from YouTube", "video.m3u8"),
-    "hls-parts-proxy": ("F 1080p HLS through VODLoft", "video.m3u8"),
-    "hls-live": ("G 1080p HLS made while playing", "video.m3u8"),
-    "hls-file": ("H 1080p HLS made first", "video.m3u8"),
+# method: (label, enclosure file name, enclosure type)
+METHODS: dict[str, tuple[str, str, str]] = {
+    "redirect": ("A live, redirect to YouTube", "video.m3u8", "video/mp4"),
+    "direct": ("B live, segments from YouTube", "video.m3u8", "video/mp4"),
+    "proxy": ("C live, segments through VODLoft", "video.m3u8", "video/mp4"),
+    "audio-hls": ("D live audio as HLS", "audio.m3u8", "audio/mp4"),
+    "audio-aac": ("E live audio as AAC", "audio.aac", "audio/aac"),
+    "feed-shape": ("F live, audio with HLS alternate", "audio.aac", "audio/aac"),
 }
 
 
-# --- Looking episodes up --------------------------------------------------------------------------
+# --- Looking videos up -----------------------------------------------------------------------------
 
-_infos: dict[str, tuple[float, dict]] = {}
+_infos: dict[tuple[str, str | None], tuple[float, dict]] = {}
 _locks: dict[str, threading.Lock] = {}
 _guard = threading.Lock()
 
@@ -98,331 +93,86 @@ def _lock(key: str) -> threading.Lock:
         return _locks.setdefault(key, threading.Lock())
 
 
-def _info(url: str, *, cookies: bool) -> dict:
-    """yt-dlp's info for the video, kept for an hour."""
-    with _lock(f"info:{url}"):
-        kept = _infos.get(url)
-        if kept is not None and kept[0] > time.time():
+def _watch_url(video_id: str) -> str:
+    return f"https://www.youtube.com/watch?v={video_id}"
+
+
+def _info(video_id: str, *, client: str | None = None, cookies: bool = False, fresh: bool = False) -> dict:
+    key = (video_id, client)
+    with _lock(f"info:{key}"):
+        kept = _infos.get(key)
+        if kept is not None and not fresh and kept[0] > time.time():
             return kept[1]
+        args = ["--no-playlist"]
+        if client:
+            args += ["--extractor-args", f"youtube:player_client={client}"]
         try:
-            info = ytdlp_runner.run_json("--no-playlist", url, cookies=cookies)
+            info = ytdlp_runner.run_json(*args, _watch_url(video_id), cookies=cookies)
         except ytdlp_runner.YtDlpError as exc:
-            raise HTTPException(status_code=502, detail=f"yt-dlp: {exc}") from exc
-        _infos[url] = (time.time() + _KEEP_SECONDS, info)
+            raise HTTPException(status_code=502, detail=f"yt-dlp ({client or 'default'}): {exc}") from exc
+        _infos[key] = (time.time() + _KEEP_SECONDS, info)
         return info
 
 
-def _formats(info: dict) -> list[dict]:
-    return [fmt for fmt in info.get("formats") or [] if fmt.get("url")]
-
-
-def _has(fmt: dict, kind: str) -> bool:
-    return (fmt.get(kind) or "none") != "none"
-
-
-def _direct(fmt: dict) -> bool:
-    return str(fmt.get("protocol", "")).startswith("http")
-
-
-def _format_18(info: dict) -> dict | None:
-    return next((fmt for fmt in _formats(info) if fmt.get("format_id") == "18"), None)
-
-
-def _video_1080(info: dict) -> dict | None:
-    """The best H.264 video without sound up to 1080p."""
-    candidates = [
-        fmt for fmt in _formats(info)
-        if _has(fmt, "vcodec") and not _has(fmt, "acodec") and str(fmt.get("vcodec", "")).startswith("avc1")
-        and fmt.get("ext") == "mp4" and _direct(fmt) and (fmt.get("height") or 0) <= _HEIGHT
+def live_variants(info: dict) -> list[dict]:
+    """The live HLS variants with video and sound up to 1080p, from the highest down."""
+    variants = [
+        fmt for fmt in info.get("formats") or []
+        if fmt.get("url") and "m3u8" in str(fmt.get("protocol", ""))
+        and (fmt.get("vcodec") or "none") != "none" and (fmt.get("height") or 0) <= _MAX_HEIGHT
     ]
-    return max(candidates, key=lambda fmt: (fmt.get("height") or 0, fmt.get("tbr") or 0), default=None)
+    return sorted(variants, key=lambda fmt: (fmt.get("height") or 0, fmt.get("tbr") or 0), reverse=True)
 
 
-def _audio_m4a(info: dict) -> dict | None:
-    """The M4A audio in the video's original language (dubbed videos list one per language)."""
-    candidates = [
-        fmt for fmt in _formats(info)
-        if not _has(fmt, "vcodec") and _has(fmt, "acodec") and fmt.get("ext") == "m4a" and _direct(fmt)
-        and not str(fmt.get("format_id")).endswith("-drc")
-    ]
-    return max(
-        candidates,
-        key=lambda fmt: (fmt.get("language_preference") or 0, str(fmt.get("format_id")).startswith("140"), fmt.get("abr") or 0),
-        default=None,
-    )
+def _variants(video_id: str, *, cookies: bool, fresh: bool = False) -> list[dict]:
+    info = _info(video_id, cookies=cookies, fresh=fresh)
+    if info.get("live_status") != "is_live":
+        raise HTTPException(status_code=404, detail=f"The video is not live ({info.get('live_status')})")
+    variants = live_variants(info)
+    if not variants:
+        raise HTTPException(status_code=404, detail="No live HLS variants; see /diagnose")
+    return variants
 
-
-def _video_and_audio(info: dict) -> tuple[dict, dict]:
-    video, audio = _video_1080(info), _audio_m4a(info)
-    if video is None or audio is None:
-        raise HTTPException(status_code=404, detail="No H.264 video or M4A audio; see /diagnose")
-    return video, audio
-
-
-def _required_18(info: dict) -> dict:
-    fmt = _format_18(info)
-    if fmt is None:
-        raise HTTPException(status_code=404, detail="No format 18; see /diagnose")
-    return fmt
-
-
-# --- Passing bytes on ------------------------------------------------------------------------------
 
 def _headers_of(fmt: dict) -> dict[str, str]:
     return {str(name): str(value) for name, value in (fmt.get("http_headers") or {}).items()}
 
 
-def _media_headers(media_type: str, extra: dict[str, str] | None = None) -> dict[str, str]:
-    return {**_NO_CACHE, "Accept-Ranges": "bytes", "Content-Type": media_type, **(extra or {})}
+# --- Playlists -------------------------------------------------------------------------------------
 
-
-def _upstream_chunks(fmt: dict, start: int, end: int | None) -> Iterator[bytes]:
-    """The format's bytes from ``start`` to ``end``, asked of YouTube 10 MB at a time."""
-    position = start
-    while end is None or position <= end:
-        last = position + _UPSTREAM_CHUNK - 1
-        if end is not None:
-            last = min(last, end)
-        upstream = requests.get(
-            fmt["url"], headers={**_headers_of(fmt), "Range": f"bytes={position}-{last}"}, stream=True, timeout=_TIMEOUT,
-        )
-        try:
-            if upstream.status_code == 416:
-                return
-            if upstream.status_code not in (200, 206):
-                logger.warning("YouTube experiment: upstream answered %s", upstream.status_code)
-                return
-            received = 0
-            for chunk in upstream.iter_content(_READ):
-                received += len(chunk)
-                yield chunk
-            position += received
-            if received == 0 or upstream.status_code == 200:
-                return
-        finally:
-            upstream.close()
-
-
-def _chunked(fmt: dict, *, range_header: str | None, head_only: bool, media_type: str = "video/mp4") -> Response:
-    """PR #158's way: YouTube in 10 MB ranges, whatever the player asked for."""
-    size = fmt.get("filesize") or fmt.get("filesize_approx")
-    start, end = 0, None
-    if range_header and range_header.startswith("bytes="):
-        first, _, last = range_header.removeprefix("bytes=").partition("-")
-        start = int(first or 0)
-        end = int(last) if last else None
-    if size:
-        end = min(end, size - 1) if end is not None else size - 1
-    extra = {}
-    if end is not None:
-        extra["Content-Length"] = str(end - start + 1)
-    if range_header and size:
-        extra["Content-Range"] = f"bytes {start}-{end}/{size}"
-    status = 206 if range_header else 200
-    headers = _media_headers(media_type, extra)
-    if head_only:
-        return Response(status_code=status, headers=headers)
-    return StreamingResponse(_upstream_chunks(fmt, start, end), status_code=status, headers=headers)
-
-
-# --- Files on disk ---------------------------------------------------------------------------------
-
-def _root() -> Path:
-    root = Path(get_settings().download_settings.rss_cache_root) / "youtube-experiment"
-    root.mkdir(parents=True, exist_ok=True)
-    return root
-
-
-def _key(episode_uuid: str) -> str:
-    return hashlib.sha256(episode_uuid.encode()).hexdigest()[:24]
-
-
-def _clean_up() -> None:
-    """Remove what earlier tries made more than a day ago."""
-    cutoff = time.time() - _FILES_KEPT_SECONDS
-    for entry in _root().iterdir():
-        try:
-            if entry.stat().st_mtime < cutoff:
-                shutil.rmtree(entry) if entry.is_dir() else entry.unlink()
-        except OSError:
-            pass
-
-
-# --- C and D: one MP4, made first ------------------------------------------------------------------
-
-_building: set[str] = set()
-_builds = threading.Semaphore(2)
-
-
-def _mp4_path(episode_uuid: str) -> Path:
-    return _root() / f"{_key(episode_uuid)}.mp4"
-
-
-def _build_mp4(episode_uuid: str, url: str, cookies: bool) -> Path:
-    """yt-dlp downloads 1080p H.264 and M4A audio and joins them, with the index at the front."""
-    path = _mp4_path(episode_uuid)
-    with _lock(f"mp4:{path}"):
-        if path.is_file():
-            return path
-        _clean_up()
-        with _builds:
-            started = time.time()
-            settings = get_settings().download_settings
-            working = path.with_name(f"{path.stem}.building")
-            command = [
-                *ytdlp_runner.command(cookies=cookies), "--no-playlist", "--no-progress",
-                "-f", f"bv*[height<={_HEIGHT}][vcodec^=avc1][ext=mp4]+ba[ext=m4a]/b[ext=mp4]",
-                "--merge-output-format", "mp4", "--ffmpeg-location", str(settings.ffmpeg_path),
-                "--postprocessor-args", "Merger+ffmpeg_o:-movflags +faststart",
-                "-o", f"{working}.%(ext)s", url,
-            ]
-            result = subprocess.run(command, capture_output=True, text=True, timeout=60 * 60)
-            made = working.with_suffix(".building.mp4")
-            if result.returncode != 0 or not made.is_file():
-                for leftover in path.parent.glob(f"{path.stem}.building*"):
-                    leftover.unlink(missing_ok=True)
-                raise HTTPException(status_code=502, detail=f"yt-dlp failed: {result.stderr[-800:]}")
-            made.replace(path)
-            logger.info("YouTube experiment: made %s in %.0f s", path.name, time.time() - started)
-            return path
-
-
-def _prepare_in_background(episode_uuid: str, url: str, cookies: bool) -> None:
-    with _guard:
-        if episode_uuid in _building or _mp4_path(episode_uuid).is_file():
-            return
-        _building.add(episode_uuid)
-
-    def run() -> None:
-        try:
-            _build_mp4(episode_uuid, url, cookies)
-        except Exception:
-            logger.exception("YouTube experiment: preparing %s failed", url)
-        finally:
-            with _guard:
-                _building.discard(episode_uuid)
-
-    threading.Thread(target=run, name="youtube-experiment-prepare", daemon=True).start()
-
-
-def _serve_file(path: Path, media_type: str) -> FileResponse:
-    return FileResponse(path, media_type=media_type, headers=_NO_CACHE, content_disposition_type="inline")
-
-
-# --- E and F: HLS from YouTube's own files ---------------------------------------------------------
-#
-# YouTube's video-only and audio-only MP4 files are fragmented: ``ftyp`` and ``moov`` first, then a
-# ``sidx`` box that lists every fragment's size and duration. That is all an HLS playlist needs: the
-# first boxes as its EXT-X-MAP, and every fragment as a byte range of the same file.
-
-_indexes: dict[tuple[str, str], tuple[float, tuple[int, list[tuple[int, int, float]]]]] = {}
-
-
-def _boxes(data: bytes) -> Iterator[tuple[int, int, bytes, int]]:
-    """(offset, size, type, header size) of every top-level box that starts within ``data``."""
-    position = 0
-    while position + 8 <= len(data):
-        size = int.from_bytes(data[position:position + 4], "big")
-        kind = data[position + 4:position + 8]
-        header = 8
-        if size == 1:
-            if position + 16 > len(data):
-                return
-            size = int.from_bytes(data[position + 8:position + 16], "big")
-            header = 16
-        if size < header:
-            return
-        yield position, size, kind, header
-        position += size
-
-
-def parse_index(data: bytes) -> tuple[int, list[tuple[int, int, float]]] | None:
-    """The size of the file's init part and (offset, size, seconds) of every fragment, from its first
-    bytes; None when ``data`` does not reach the end of the ``sidx`` box yet."""
-    init_end = None
-    for position, size, kind, header in _boxes(data):
-        if kind == b"moov":
-            init_end = position + size
-        elif kind == b"sidx":
-            if position + size > len(data):
-                return None
-            body = data[position + header:position + size]
-            timescale = int.from_bytes(body[8:12], "big")
-            if body[0] == 0:
-                first_offset, rest = int.from_bytes(body[16:20], "big"), 20
-            else:
-                first_offset, rest = int.from_bytes(body[20:28], "big"), 28
-            count = int.from_bytes(body[rest + 2:rest + 4], "big")
-            offset = position + size + first_offset
-            fragments = []
-            for index in range(count):
-                entry = body[rest + 4 + 12 * index:rest + 16 + 12 * index]
-                referenced = int.from_bytes(entry[0:4], "big") & 0x7FFFFFFF
-                fragments.append((offset, referenced, int.from_bytes(entry[4:8], "big") / timescale))
-                offset += referenced
-            if init_end is None:
-                raise HTTPException(status_code=502, detail="The file has a segment index but no moov box")
-            return init_end, fragments
-        elif kind in (b"moof", b"mdat"):
-            raise HTTPException(status_code=502, detail="The file has no segment index")
-    return None
-
-
-def _first_bytes(fmt: dict, count: int) -> bytes:
-    upstream = requests.get(
-        fmt["url"], headers={**_headers_of(fmt), "Range": f"bytes=0-{count - 1}"}, stream=True, timeout=_TIMEOUT,
-    )
-    try:
-        if upstream.status_code not in (200, 206):
-            raise HTTPException(status_code=502, detail=f"YouTube answered {upstream.status_code}")
-        data = bytearray()
-        for chunk in upstream.iter_content(_READ):
-            data += chunk
-            if len(data) >= count:
-                break
-        return bytes(data[:count])
-    finally:
-        upstream.close()
-
-
-def _index(url: str, fmt: dict) -> tuple[int, list[tuple[int, int, float]]]:
-    key = (url, str(fmt.get("format_id")))
-    with _lock(f"index:{key}"):
-        kept = _indexes.get(key)
-        if kept is not None and kept[0] > time.time():
-            return kept[1]
-        count = 256 * 1024
-        while count <= 16 * 1024 * 1024:
-            parsed = parse_index(_first_bytes(fmt, count))
-            if parsed is not None:
-                _indexes[key] = (time.time() + _KEEP_SECONDS, parsed)
-                return parsed
-            count *= 4
-        raise HTTPException(status_code=502, detail="The segment index did not end in the first 16 MB")
-
-
-def media_playlist(uri: str, init_size: int, fragments: list[tuple[int, int, float]]) -> str:
-    lines = [
-        "#EXTM3U", "#EXT-X-VERSION:7",
-        f"#EXT-X-TARGETDURATION:{math.ceil(max((seconds for *_, seconds in fragments), default=1))}",
-        "#EXT-X-PLAYLIST-TYPE:VOD", "#EXT-X-INDEPENDENT-SEGMENTS",
-        f'#EXT-X-MAP:URI="{uri}",BYTERANGE="{init_size}@0"',
-    ]
-    for offset, size, seconds in fragments:
-        lines += [f"#EXTINF:{seconds:.3f},", f"#EXT-X-BYTERANGE:{size}@{offset}", uri]
-    lines.append("#EXT-X-ENDLIST")
+def master_playlist(variants: list[dict]) -> str:
+    lines = ["#EXTM3U", "#EXT-X-VERSION:3", "#EXT-X-INDEPENDENT-SEGMENTS"]
+    for fmt in variants:
+        attributes = [f"BANDWIDTH={int((fmt.get('tbr') or 1000) * 1000)}"]
+        if fmt.get("width") and fmt.get("height"):
+            attributes.append(f"RESOLUTION={fmt['width']}x{fmt['height']}")
+        if fmt.get("vcodec") and fmt.get("acodec") and fmt.get("acodec") != "none":
+            attributes.append(f'CODECS="{fmt["vcodec"]},{fmt["acodec"]}"')
+        lines += [f"#EXT-X-STREAM-INF:{','.join(attributes)}", f"variant-{fmt['format_id']}.m3u8"]
     return "\n".join(lines) + "\n"
 
 
-def master_playlist(video: dict, audio: dict) -> str:
-    bandwidth = int(((video.get("tbr") or 5000) + (audio.get("tbr") or audio.get("abr") or 128)) * 1000)
-    resolution = f",RESOLUTION={video['width']}x{video['height']}" if video.get("width") and video.get("height") else ""
-    return "\n".join([
-        "#EXTM3U", "#EXT-X-VERSION:7", "#EXT-X-INDEPENDENT-SEGMENTS",
-        '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Audio",DEFAULT=YES,AUTOSELECT=YES,URI="audio-track.m3u8"',
-        f'#EXT-X-STREAM-INF:BANDWIDTH={bandwidth},CODECS="{video.get("vcodec")},{audio.get("acodec")}"{resolution},AUDIO="audio"',
-        "video-track.m3u8",
-    ]) + "\n"
+def rewrite_playlist(text: str, base_url: str, proxy) -> str:
+    """Every URI in the playlist made absolute, and passed through ``proxy`` when it is given."""
+    out = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            absolute = urljoin(base_url, stripped)
+            out.append(proxy(absolute) if proxy else absolute)
+        elif 'URI="' in line:
+            before, _, rest = line.partition('URI="')
+            uri, _, after = rest.partition('"')
+            absolute = urljoin(base_url, uri)
+            out.append(f'{before}URI="{proxy(absolute) if proxy else absolute}"{after}')
+        else:
+            out.append(line)
+    return "\n".join(out) + "\n"
+
+
+def _allowed(url: str) -> bool:
+    host = (urlsplit(url).hostname or "").lower()
+    return any(host == domain or host.endswith(f".{domain}") for domain in _ALLOWED_HOSTS)
 
 
 def _playlist_response(text: str, *, head_only: bool) -> Response:
@@ -431,270 +181,332 @@ def _playlist_response(text: str, *, head_only: bool) -> Response:
     return Response(content=b"" if head_only else content, headers=headers)
 
 
-def _hls_parts(method: str, filename: str, url: str, cookies: bool, *, head_only: bool) -> Response:
-    info = _info(url, cookies=cookies)
-    video, audio = _video_and_audio(info)
-    if filename == "video.m3u8":
-        return _playlist_response(master_playlist(video, audio), head_only=head_only)
-    track = {"video-track.m3u8": video, "audio-track.m3u8": audio}.get(filename)
-    if track is None:
-        raise HTTPException(status_code=404, detail="No such playlist")
-    init_size, fragments = _index(url, track)
-    uri = track["url"] if method == "hls-parts-direct" else f"part/{track['format_id']}"
-    return _playlist_response(media_playlist(uri, init_size, fragments), head_only=head_only)
+def _variant_playlist(video_id: str, format_id: str, *, cookies: bool, proxy_base: str | None) -> str:
+    """YouTube's current playlist of one variant, looked up again once when YouTube refuses its link."""
+    for fresh in (False, True):
+        fmt = next((fmt for fmt in _variants(video_id, cookies=cookies, fresh=fresh) if str(fmt.get("format_id")) == format_id), None)
+        if fmt is None:
+            raise HTTPException(status_code=404, detail="No such variant")
+        upstream = requests.get(fmt["url"], headers=_headers_of(fmt), timeout=_TIMEOUT)
+        if upstream.status_code == 200:
+            proxy = (lambda url: f"{proxy_base}?u={quote(url, safe='')}") if proxy_base else None
+            return rewrite_playlist(upstream.text, fmt["url"], proxy)
+        logger.warning("Live experiment: YouTube answered %s for variant %s", upstream.status_code, format_id)
+    raise HTTPException(status_code=502, detail=f"YouTube answered {upstream.status_code} for the variant playlist")
 
 
-# --- G and H: HLS made by ffmpeg -------------------------------------------------------------------
+def _segment_response(url: str, *, range_header: str | None, head_only: bool) -> Response:
+    if not _allowed(url):
+        raise HTTPException(status_code=400, detail="Not a YouTube address")
+    headers = {"Range": range_header} if range_header else {}
+    upstream = requests.get(url, headers=headers, stream=True, timeout=_TIMEOUT)
+    if upstream.status_code not in (200, 206):
+        upstream.close()
+        raise HTTPException(status_code=502, detail=f"YouTube answered {upstream.status_code} for a segment")
+    passed = {name: upstream.headers[name] for name in ("Content-Length", "Content-Range") if name in upstream.headers}
+    response_headers = {**_NO_CACHE, "Content-Type": upstream.headers.get("Content-Type", "video/mp2t"), **passed}
+    if head_only:
+        upstream.close()
+        return Response(status_code=upstream.status_code, headers=response_headers)
 
-_hls_processes: dict[str, subprocess.Popen] = {}
-_HLS_PART = re.compile(r"^(init\.mp4|part\d{5}\.m4s)$")
-
-
-def _feed_pipe(fmt: dict, pipe: Path, process: subprocess.Popen) -> None:
-    """Write the format into the named pipe that ffmpeg reads, once ffmpeg opens it."""
-    descriptor = None
-    while process.poll() is None:
+    def body() -> Iterator[bytes]:
         try:
-            descriptor = os.open(pipe, os.O_WRONLY | os.O_NONBLOCK)
-            break
-        except OSError as exc:
-            if exc.errno != errno.ENXIO:
-                raise
-            time.sleep(0.2)
-    if descriptor is None:
-        return
-    os.set_blocking(descriptor, True)
-    try:
-        with os.fdopen(descriptor, "wb") as out:
-            for chunk in _upstream_chunks(fmt, 0, None):
-                out.write(chunk)
-    except (BrokenPipeError, OSError):
-        pass
+            yield from upstream.iter_content(_READ)
+        finally:
+            upstream.close()
+
+    return StreamingResponse(body(), status_code=upstream.status_code, headers=response_headers)
 
 
-def _start_hls(episode_uuid: str, url: str, cookies: bool) -> Path:
-    directory = _root() / f"hls-{_key(episode_uuid)}"
-    with _lock(f"hls:{directory}"):
-        process = _hls_processes.get(str(directory))
-        if (directory / "done").is_file() or (process is not None and process.poll() is None):
-            return directory
-        _clean_up()
-        video, audio = _video_and_audio(_info(url, cookies=cookies))
+# --- Audio by ffmpeg -------------------------------------------------------------------------------
+
+def _ffmpeg_input(fmt: dict) -> list[str]:
+    headers = _headers_of(fmt)
+    command = []
+    agent = headers.pop("User-Agent", None)
+    if agent:
+        command += ["-user_agent", agent]
+    if headers:
+        command += ["-headers", "".join(f"{name}: {value}\r\n" for name, value in headers.items())]
+    return [*command, "-i", fmt["url"]]
+
+
+def _ffmpeg() -> str:
+    return str(get_settings().download_settings.ffmpeg_path)
+
+
+class _AudioHls:
+    def __init__(self, process: subprocess.Popen, directory: Path):
+        self.process = process
+        self.directory = directory
+        self.used = time.time()
+
+
+_audio_hls: dict[str, _AudioHls] = {}
+
+
+def _root() -> Path:
+    root = Path(get_settings().download_settings.rss_cache_root) / "youtube-live-experiment"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _stop_idle() -> None:
+    now = time.time()
+    for video_id, running in list(_audio_hls.items()):
+        if now - running.used > _IDLE_SECONDS or running.process.poll() is not None:
+            running.process.kill()
+            running.process.wait()
+            shutil.rmtree(running.directory, ignore_errors=True)
+            _audio_hls.pop(video_id, None)
+
+
+def _start_audio_hls(video_id: str, *, cookies: bool) -> _AudioHls:
+    """ffmpeg writing the audio of the lowest variant as a live audio-only HLS playlist; stopped when no
+    app asked for it for two minutes."""
+    with _lock(f"audio:{video_id}"):
+        with _guard:
+            _stop_idle()
+            running = _audio_hls.get(video_id)
+        if running is not None:
+            running.used = time.time()
+            return running
+        lowest = _variants(video_id, cookies=cookies)[-1]
+        directory = _root() / f"audio-{video_id}"
         shutil.rmtree(directory, ignore_errors=True)
         directory.mkdir(parents=True)
-        pipes = [directory / "video.pipe", directory / "audio.pipe"]
-        for pipe in pipes:
-            os.mkfifo(pipe)
         command = [
-            str(get_settings().download_settings.ffmpeg_path), "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
-            "-i", str(pipes[0]), "-i", str(pipes[1]), "-map", "0:v:0", "-map", "1:a:0", "-c", "copy",
-            "-f", "hls", "-hls_time", "6", "-hls_playlist_type", "event", "-hls_segment_type", "fmp4",
-            "-hls_flags", "temp_file+independent_segments",
-            "-hls_fmp4_init_filename", "init.mp4", "-hls_segment_filename", str(directory / "part%05d.m4s"),
-            str(directory / "index.m3u8"),
+            _ffmpeg(), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", *_ffmpeg_input(lowest),
+            "-vn", "-map", "0:a:0", "-c:a", "copy", "-f", "hls", "-hls_time", "6", "-hls_list_size", "30",
+            "-hls_flags", "delete_segments+temp_file+independent_segments", "-hls_segment_type", "mpegts",
+            "-hls_segment_filename", str(directory / "part%06d.ts"), str(directory / "index.m3u8"),
         ]
-        process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
-        _hls_processes[str(directory)] = process
-        for fmt, pipe in zip((video, audio), pipes):
-            threading.Thread(target=_feed_pipe, args=(fmt, pipe, process), daemon=True).start()
-
-        def finish() -> None:
-            errors = process.stderr.read()
-            if process.wait() == 0:
-                (directory / "done").touch()
-            else:
-                (directory / "error").write_text(errors[-2000:] or f"ffmpeg stopped with {process.returncode}")
-            for pipe in pipes:
-                pipe.unlink(missing_ok=True)
-
-        threading.Thread(target=finish, daemon=True).start()
-        return directory
+        with open(directory / "ffmpeg.log", "wb") as log:
+            process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=log)
+        running = _AudioHls(process, directory)
+        with _guard:
+            _audio_hls[video_id] = running
+        return running
 
 
-def _hls_made(method: str, filename: str, episode_uuid: str, url: str, cookies: bool, *, head_only: bool) -> Response:
-    directory = _start_hls(episode_uuid, url, cookies)
-    if filename != "video.m3u8":
-        if not _HLS_PART.match(filename) or not (directory / filename).is_file():
-            raise HTTPException(status_code=404, detail="No such part")
-        return _serve_file(directory / filename, "video/mp4")
+def _audio_hls_response(video_id: str, filename: str, *, cookies: bool, head_only: bool) -> Response:
+    running = _start_audio_hls(video_id, cookies=cookies)
+    if filename == "audio.m3u8":
+        playlist = running.directory / "index.m3u8"
+        give_up = time.time() + 45
+        while time.time() < give_up:
+            text = playlist.read_text() if playlist.is_file() else ""
+            if text.count("#EXTINF") >= 2:
+                return _playlist_response(text, head_only=head_only)
+            if running.process.poll() is not None:
+                log = running.directory / "ffmpeg.log"
+                detail = log.read_text(errors="replace")[-1000:] if log.is_file() else ""
+                raise HTTPException(status_code=502, detail=f"ffmpeg stopped: {detail}")
+            time.sleep(1)
+        raise HTTPException(status_code=504, detail="The audio playlist was not ready in time")
+    if not re.fullmatch(r"part\d{6}\.ts", filename) or not (running.directory / filename).is_file():
+        raise HTTPException(status_code=404, detail="No such part")
+    return FileResponse(running.directory / filename, media_type="video/mp2t", headers=_NO_CACHE)
 
-    playlist = directory / "index.m3u8"
-    give_up = time.time() + (90 if method == "hls-live" else 30 * 60)
-    while time.time() < give_up:
-        if (directory / "error").is_file():
-            raise HTTPException(status_code=502, detail=f"ffmpeg failed: {(directory / 'error').read_text()}")
-        done = (directory / "done").is_file()
-        text = playlist.read_text() if playlist.is_file() else ""
-        if done or (method == "hls-live" and text.count("#EXTINF") >= 2):
-            # Start at the beginning, not at the newest part, while the playlist still grows.
-            return _playlist_response(text.replace("#EXTM3U", "#EXTM3U\n#EXT-X-START:TIME-OFFSET=0", 1), head_only=head_only)
-        time.sleep(1)
-    raise HTTPException(status_code=504, detail="The HLS parts were not ready in time")
+
+def _audio_aac_response(video_id: str, *, cookies: bool, head_only: bool) -> Response:
+    headers = {**_NO_CACHE, "Content-Type": "audio/aac"}
+    if head_only:
+        return Response(status_code=200, headers=headers)
+    lowest = _variants(video_id, cookies=cookies)[-1]
+    command = [
+        _ffmpeg(), "-hide_banner", "-loglevel", "error", "-nostdin", *_ffmpeg_input(lowest),
+        "-vn", "-map", "0:a:0", "-c:a", "copy", "-f", "adts", "pipe:1",
+    ]
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+    def body() -> Iterator[bytes]:
+        try:
+            while chunk := process.stdout.read(_READ):
+                yield chunk
+        finally:
+            process.kill()
+            process.wait()
+
+    return StreamingResponse(body(), headers=headers)
 
 
 # --- Routes ----------------------------------------------------------------------------------------
 
-def _episodes(s, profile, limit: int) -> list[Episode]:
-    return (
-        s.query(Episode)
-        .filter(Episode.collection_id == profile.collection_id, Episode.publish_status.in_(("published_final", "published_preliminary")))
-        .order_by(Episode.published_date.desc())
-        .limit(limit)
-        .all()
-    )
-
-
-@router.api_route("/rss/{token}/experiments/feed.xml", methods=["GET", "HEAD"])
-def experiments_feed(token: str, request: Request, episodes: int = 2):
+def _profile(token: str) -> tuple[bool, list[tuple[str, str]]]:
+    """Whether the profile's collection uses cookies, and its live episodes as (video id, title)."""
     with db_session() as s:
         profile = get_rss_stream_profile_by_token(s, token)
-        collection = profile.collection
-        cookies = uses_cookies(collection)
-        items = [
-            (episode.slug, episode.uuid, episode.sharing_url, episode.title, episode.published_date, episode.duration,
-             episode.description)
-            for episode in _episodes(s, profile, max(1, min(episodes, 10)))
-        ]
-        title = collection.title
+        live = (
+            s.query(Episode)
+            .filter(Episode.collection_id == profile.collection_id, Episode.publish_status == EpisodePublishStatus.LIVE.value)
+            .all()
+        )
+        videos = []
+        for episode in live:
+            video_id = (re.search(r"[?&]v=([A-Za-z0-9_-]+)", episode.sharing_url or "") or [None, None])[1]
+            if video_id:
+                videos.append((video_id, episode.title))
+        return uses_cookies(profile.collection), videos
 
-    if request.method == "GET":
-        for _slug, uuid, sharing_url, *_rest in items:
-            _prepare_in_background(uuid, sharing_url, cookies)
 
-    base = f"{request_base_url(request)}/feeds/rss/{token}/experiments"
+def _video(video_id: str) -> str:
+    if not _VIDEO_ID.match(video_id):
+        raise HTTPException(status_code=404, detail="Not a YouTube video id")
+    return video_id
+
+
+@router.api_route("/rss/{token}/experiments/live/feed.xml", methods=["GET", "HEAD"])
+def live_experiments_feed(token: str, request: Request, v: str | None = None):
+    cookies, videos = _profile(token)
+    if v:
+        videos = []
+        for video_id in v.split(","):
+            video_id = _video(video_id.strip())
+            try:
+                title = _info(video_id, cookies=cookies).get("title") or video_id
+            except HTTPException:
+                title = video_id
+            videos.append((video_id, title))
+
+    base = f"{request_base_url(request)}/feeds/rss/{token}/experiments/live"
     register_namespace("itunes", _ITUNES)
+    register_namespace("podcast", _PODCAST)
     rss = Element("rss", {"version": "2.0"})
     channel = SubElement(rss, "channel")
-    SubElement(channel, "title").text = f"{title} (YouTube experiments)"
+    SubElement(channel, "title").text = "YouTube live experiments"
     SubElement(channel, "link").text = base
-    SubElement(channel, "description").text = "Every episode once per streaming method, to see which ones play."
+    SubElement(channel, "description").text = "Every live video once per streaming method, to see which ones play."
     SubElement(channel, "{%s}type" % _ITUNES).text = "episodic"
-    for slug, _uuid, _url, episode_title, published, duration, description in items:
-        for index, (method, (label, filename)) in enumerate(METHODS.items()):
+    now = datetime.now(timezone.utc)
+    for video_id, title in videos:
+        for index, (method, (label, filename, media_type)) in enumerate(METHODS.items()):
             item = SubElement(channel, "item")
-            SubElement(item, "title").text = f"[{label}] {episode_title}"
-            SubElement(item, "guid", {"isPermaLink": "false"}).text = f"{slug}-{method}-2"
-            SubElement(item, "description").text = f"Method {method}. {description or ''}"
-            if published is not None:
-                # A second apart, so apps keep the methods in order.
-                published_at = published if published.tzinfo else published.replace(tzinfo=timezone.utc)
-                SubElement(item, "pubDate").text = format_datetime(published_at - timedelta(seconds=index))
-            if duration:
-                SubElement(item, "{%s}duration" % _ITUNES).text = str(int(duration))
+            SubElement(item, "title").text = f"[{label}] {title}"
+            SubElement(item, "guid", {"isPermaLink": "false"}).text = f"live-{video_id}-{method}"
+            SubElement(item, "description").text = f"Method {method}."
+            # A second apart, so apps keep the methods in order.
+            SubElement(item, "pubDate").text = format_datetime(now - timedelta(seconds=index))
             SubElement(item, "{%s}episode" % _ITUNES).text = str(index + 1)
-            SubElement(item, "enclosure", {"url": f"{base}/{slug}/{method}/{filename}", "type": "video/mp4", "length": "0"})
+            url = f"{base}/{video_id}/{method}/{filename}"
+            SubElement(item, "enclosure", {"url": url, "type": media_type, "length": "0"})
+            if method == "feed-shape":
+                alternate = SubElement(item, "{%s}alternateEnclosure" % _PODCAST, {
+                    "type": "application/x-mpegURL", "length": "0", "title": "Live video", "rel": "alternate",
+                })
+                SubElement(alternate, "{%s}source" % _PODCAST, {"uri": f"{base}/{video_id}/direct/video.m3u8"})
     xml = b'<?xml version="1.0" encoding="UTF-8"?>\n' + tostring(rss)
     return Response(
         content=b"" if request.method == "HEAD" else xml, media_type="application/rss+xml; charset=utf-8", headers=_NO_CACHE,
     )
 
 
-def _episode(token: str, episode_slug: str) -> tuple[str, str, bool]:
-    with db_session() as s:
-        profile = get_rss_stream_profile_by_token(s, token)
-        episode = s.query(Episode).filter_by(slug=episode_slug, collection_id=profile.collection_id).one_or_none()
-        if episode is None:
-            raise HTTPException(status_code=404, detail="Episode not found")
-        return episode.sharing_url, episode.uuid, uses_cookies(episode.collection)
-
-
-@router.get("/rss/{token}/experiments/{episode_slug}/diagnose")
-def experiments_diagnose(token: str, episode_slug: str):
-    url, uuid, cookies = _episode(token, episode_slug)
-    started = time.time()
-    info = _info(url, cookies=cookies)
-    report = {"url": url, "cookies": cookies, "seconds": round(time.time() - started, 1)}
-    video, audio = _video_1080(info), _audio_m4a(info)
-    report.update({
-        "format_18": bool(_format_18(info)),
-        "video": (video or {}).get("format_id"), "audio": (audio or {}).get("format_id"),
-        "mp4_ready": _mp4_path(uuid).is_file(), "mp4_preparing": uuid in _building,
-    })
-    for name, fmt in (("video_index", video), ("audio_index", audio)):
-        if fmt is None:
-            continue
+@router.get("/rss/{token}/experiments/live/{video_id}/diagnose")
+def live_experiments_diagnose(token: str, video_id: str):
+    cookies, _videos = _profile(token)
+    video_id = _video(video_id)
+    report = {"url": _watch_url(video_id), "cookies": cookies, "clients": {}}
+    for client in _CLIENTS:
+        started = time.time()
         try:
-            init_size, fragments = _index(url, fmt)
-            report[name] = {"init_bytes": init_size, "parts": len(fragments),
-                            "seconds": round(sum(seconds for *_, seconds in fragments), 1)}
+            info = _info(video_id, client=client, cookies=cookies, fresh=True)
         except HTTPException as exc:
-            report[name] = {"error": exc.detail}
-    hls = _root() / f"hls-{_key(uuid)}"
-    if (hls / "error").is_file():
-        report["hls_error"] = (hls / "error").read_text()
-    report["formats"] = [
-        {
-            "id": fmt.get("format_id"), "ext": fmt.get("ext"), "protocol": fmt.get("protocol"),
-            "vcodec": fmt.get("vcodec"), "acodec": fmt.get("acodec"), "height": fmt.get("height"),
-            "language_preference": fmt.get("language_preference"),
-            "size": fmt.get("filesize") or fmt.get("filesize_approx"), "url_host": urlsplit(fmt["url"]).hostname,
-        }
-        for fmt in _formats(info)
-    ]
-    return JSONResponse(report, headers=_NO_CACHE)
-
-
-@router.get("/rss/{token}/experiments/{episode_slug}/check")
-def experiments_check(token: str, episode_slug: str, request: Request):
-    """Ask the quick methods for their first bytes from VODLoft itself, and say what each one answered."""
-    base = f"{request_base_url(request)}/feeds/rss/{token}/experiments/{episode_slug}"
-    report = {}
-    for method, (_label, filename) in METHODS.items():
-        if method in ("download-first", "hls-file"):
-            report[method] = "skipped: makes everything first"
+            report["clients"][client or "default"] = {"error": exc.detail, "seconds": round(time.time() - started, 1)}
             continue
-        names = [filename] + (["video-track.m3u8", "audio-track.m3u8"] if method.startswith("hls-parts") else [])
-        for name in names:
-            started = time.time()
-            try:
-                response = requests.get(
-                    f"{base}/{method}/{name}", headers={"Range": "bytes=0-1023"}, stream=True, timeout=120,
-                    allow_redirects=False,
-                )
-                first = next(response.iter_content(1024), b"")
-                report[f"{method}/{name}"] = {
-                    "status": response.status_code, "seconds": round(time.time() - started, 1),
-                    "content_type": response.headers.get("Content-Type"), "range": response.headers.get("Content-Range"),
-                    "location": (response.headers.get("Location") or "")[:80] or None,
-                    "start": first[:300].decode(errors="replace"),
-                }
-                response.close()
-            except Exception as exc:
-                report[f"{method}/{name}"] = {"error": str(exc)}
+        report["clients"][client or "default"] = {
+            "seconds": round(time.time() - started, 1),
+            "live_status": info.get("live_status"),
+            "manifest": bool(info.get("manifest_url")),
+            "variants": [
+                {"id": fmt.get("format_id"), "height": fmt.get("height"), "vcodec": fmt.get("vcodec"), "acodec": fmt.get("acodec"),
+                 "tbr": fmt.get("tbr")}
+                for fmt in live_variants(info)
+            ],
+            "other_formats": sorted({str(fmt.get("protocol")) for fmt in info.get("formats") or []}),
+        }
     return JSONResponse(report, headers=_NO_CACHE)
 
 
-@router.api_route("/rss/{token}/experiments/{episode_slug}/{method}/part/{format_id}", methods=["GET", "HEAD"])
-def experiments_part(token: str, episode_slug: str, method: str, format_id: str, request: Request):
-    """Part of YouTube's video or audio file, passed on (method F)."""
-    url, _uuid, cookies = _episode(token, episode_slug)
-    fmt = next((fmt for fmt in _formats(_info(url, cookies=cookies)) if str(fmt.get("format_id")) == format_id), None)
-    if fmt is None:
-        raise HTTPException(status_code=404, detail="No such format")
-    media_type = "video/mp4" if _has(fmt, "vcodec") else "audio/mp4"
-    return _chunked(fmt, range_header=request.headers.get("range"), head_only=request.method == "HEAD", media_type=media_type)
+@router.get("/rss/{token}/experiments/live/{video_id}/check")
+def live_experiments_check(token: str, video_id: str, request: Request):
+    """Fetch every method's playlists and first segment from VODLoft itself, and say what each answered."""
+    video_id = _video(video_id)
+    base = f"{request_base_url(request)}/feeds/rss/{token}/experiments/live/{video_id}"
+    report: dict[str, object] = {}
+
+    def fetch(name: str, url: str, *, text: bool) -> str | None:
+        started = time.time()
+        try:
+            response = requests.get(url, stream=True, timeout=60, allow_redirects=False)
+            first = next(response.iter_content(2048 if text else 1024), b"")
+            report[name] = {
+                "status": response.status_code, "seconds": round(time.time() - started, 1),
+                "type": response.headers.get("Content-Type"), "location": (response.headers.get("Location") or "")[:120] or None,
+                "start": first[:400].decode(errors="replace") if text or response.status_code >= 400 else first[:8].hex(),
+            }
+            response.close()
+            return first.decode(errors="replace") if text and response.status_code == 200 else None
+        except Exception as exc:
+            report[name] = {"error": str(exc)}
+            return None
+
+    fetch("redirect", f"{base}/redirect/video.m3u8", text=True)
+    for method in ("direct", "proxy"):
+        master = fetch(f"{method}/video.m3u8", f"{base}/{method}/video.m3u8", text=True) or ""
+        variant = next((line for line in master.splitlines() if line and not line.startswith("#")), None)
+        if variant is None:
+            continue
+        playlist = fetch(f"{method}/{variant}", f"{base}/{method}/{variant}", text=True) or ""
+        segment = next((line for line in playlist.splitlines() if line and not line.startswith("#")), None)
+        if segment:
+            fetch(f"{method}/first segment", urljoin(f"{base}/{method}/{variant}", segment), text=False)
+    fetch("audio-hls/audio.m3u8", f"{base}/audio-hls/audio.m3u8", text=True)
+    started = time.time()
+    try:
+        with requests.get(f"{base}/audio-aac/audio.aac", stream=True, timeout=60) as response:
+            received = 0
+            for chunk in response.iter_content(_READ):
+                received += len(chunk)
+                if received >= 256 * 1024 or time.time() - started > 20:
+                    break
+            report["audio-aac/audio.aac"] = {"status": response.status_code, "bytes_in_20s": received,
+                                             "seconds": round(time.time() - started, 1)}
+    except Exception as exc:
+        report["audio-aac/audio.aac"] = {"error": str(exc)}
+    return JSONResponse(report, headers=_NO_CACHE)
 
 
-@router.api_route("/rss/{token}/experiments/{episode_slug}/{method}/{filename}", methods=["GET", "HEAD"])
-def experiments_media(token: str, episode_slug: str, method: str, filename: str, request: Request):
+@router.api_route("/rss/{token}/experiments/live/{video_id}/{method}/segment", methods=["GET", "HEAD"])
+def live_experiments_segment(token: str, video_id: str, method: str, u: str, request: Request):
+    """One segment of YouTube's live stream, passed on (method C)."""
+    _profile(token)
+    return _segment_response(u, range_header=request.headers.get("range"), head_only=request.method == "HEAD")
+
+
+@router.api_route("/rss/{token}/experiments/live/{video_id}/{method}/{filename}", methods=["GET", "HEAD"])
+def live_experiments_media(token: str, video_id: str, method: str, filename: str, request: Request):
     if method not in METHODS:
         raise HTTPException(status_code=404, detail="Unknown method")
-    url, uuid, cookies = _episode(token, episode_slug)
+    cookies, _videos = _profile(token)
+    video_id = _video(video_id)
     head_only = request.method == "HEAD"
-    range_header = request.headers.get("range")
-    logger.info("YouTube experiment %s for %s: %s %s %s", method, episode_slug, request.method, filename, range_header)
+    logger.info("YouTube live experiment %s for %s: %s %s", method, video_id, request.method, filename)
 
     if method == "redirect":
-        return RedirectResponse(_required_18(_info(url, cookies=cookies))["url"], status_code=302, headers=_NO_CACHE)
-    if method == "proxy":
-        return _chunked(_required_18(_info(url, cookies=cookies)), range_header=range_header, head_only=head_only)
-    if method == "download-first":
-        return _serve_file(_build_mp4(uuid, url, cookies), "video/mp4")
-    if method == "prepared":
-        if _mp4_path(uuid).is_file():
-            return _serve_file(_mp4_path(uuid), "video/mp4")
-        _prepare_in_background(uuid, url, cookies)
-        return RedirectResponse(_required_18(_info(url, cookies=cookies))["url"], status_code=302, headers=_NO_CACHE)
-    if method.startswith("hls-parts"):
-        return _hls_parts(method, filename, url, cookies, head_only=head_only)
-    return _hls_made(method, filename, uuid, url, cookies, head_only=head_only)
+        info = _info(video_id, cookies=cookies)
+        manifest = info.get("manifest_url") or next((fmt.get("manifest_url") for fmt in live_variants(info) if fmt.get("manifest_url")), None)
+        if not manifest:
+            raise HTTPException(status_code=404, detail="No master playlist; see /diagnose")
+        return RedirectResponse(manifest, status_code=302, headers=_NO_CACHE)
+    if method in ("direct", "proxy"):
+        if filename == "video.m3u8":
+            return _playlist_response(master_playlist(_variants(video_id, cookies=cookies)), head_only=head_only)
+        match = re.fullmatch(r"variant-([\w-]+)\.m3u8", filename)
+        if match is None:
+            raise HTTPException(status_code=404, detail="No such playlist")
+        proxy_base = str(request.url).split("?", 1)[0].rsplit("/", 1)[0] + "/segment" if method == "proxy" else None
+        text = _variant_playlist(video_id, match.group(1), cookies=cookies, proxy_base=proxy_base)
+        return _playlist_response(text, head_only=head_only)
+    if method == "audio-hls":
+        return _audio_hls_response(video_id, filename, cookies=cookies, head_only=head_only)
+    return _audio_aac_response(video_id, cookies=cookies, head_only=head_only)
