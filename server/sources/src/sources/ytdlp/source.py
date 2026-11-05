@@ -230,7 +230,6 @@ def video_formats(info: dict) -> VideoFormats:
 _READY_AUDIO_FORMAT = "140"
 _READY_VIDEO_FORMAT = "18"
 _DIRECT_PROTOCOLS = {"http", "https"}
-_FALLBACK_PLAYER_CLIENTS = ("mweb", "android_vr")
 
 
 def _direct(entry: dict) -> bool:
@@ -903,24 +902,9 @@ class YtDlpSource(Source):
         return Playback(url=url, kind=PlaybackKind.YTDLP, command=runner.command(cookies=use_cookies))
 
     def media_stream(self, url: str, *, audio: bool, use_cookies: bool = True) -> MediaStream | None:
-        site = self.site_for(url)
-        if not site.streams:
-            raise NotImplementedError(f"{site.name} cannot stream episodes")
-        stream = stream_of(runner.run_json("--no-playlist", url, cookies=use_cookies), audio=audio)
-        if stream is not None or site.key != "youtube":
-            return stream
-        # YouTube's default players sometimes leave the MP4 out; these players still offer it.
-        for client in _FALLBACK_PLAYER_CLIENTS:
-            try:
-                info = runner.run_json(
-                    "--no-playlist", "--extractor-args", f"youtube:player_client={client}", url, cookies=use_cookies,
-                )
-            except runner.YtDlpError:
-                continue
-            stream = stream_of(info, audio=audio)
-            if stream is not None:
-                return stream
-        return None
+        if not self.site_for(url).streams:
+            raise NotImplementedError(f"{self.site_for(url).name} cannot stream episodes")
+        return stream_of(runner.run_json("--no-playlist", url, cookies=use_cookies), audio=audio)
 
     def needs_cookies(self, error: str) -> bool:
         text = error.lower()

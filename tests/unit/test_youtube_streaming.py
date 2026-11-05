@@ -67,26 +67,6 @@ def test_video_is_only_the_mp4_with_sound():
     assert stream_of({"formats": [_format("137", vcodec="avc1", acodec="none"), _format("140")]}, audio=False) is None
 
 
-def test_youtube_video_missing_from_the_default_players_is_looked_up_with_others(monkeypatch):
-    from sources import ytdlp_runner
-
-    asked = []
-
-    def run_json(*args, cookies=True):
-        client = next((arg.split("=", 1)[1] for arg in args if arg.startswith("youtube:player_client=")), None)
-        asked.append(client)
-        if client == "mweb":
-            raise ytdlp_runner.YtDlpError("The page needs to be reloaded.")
-        if client == "android_vr":
-            return {"formats": [_format("18", vcodec="avc1")]}
-        return {"formats": [_format("137", vcodec="avc1", acodec="none")]}
-
-    monkeypatch.setattr(ytdlp_runner, "run_json", run_json)
-    stream = get_source("ytdlp").media_stream("https://www.youtube.com/watch?v=abc", audio=False)
-    assert stream is not None and "itag=18" in stream.url
-    assert asked == [None, "mweb", "android_vr"]
-
-
 def test_a_missing_stream_is_looked_up_again_soon():
     from backend.api.endpoints.feeds import source_stream
 
