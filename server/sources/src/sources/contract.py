@@ -7,7 +7,7 @@ caller today; methods are added together with the feature that needs them.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -78,6 +78,38 @@ class StreamMethod(StrEnum):
     """An HLS playlist of the video."""
     LIVE = "live"
     """Episodes while they are live, as HLS."""
+
+
+VIDEO_HEIGHTS = (360, 480, 720, 1080, 1440, 2160, 4320)
+"""Every video resolution a Local Media Profile can download up to."""
+
+
+@dataclass(frozen=True)
+class DownloadOptions:
+    """What a Local Media Profile can choose for a Site's media. A Site that names none offers these defaults."""
+
+    video_heights: tuple[int, ...] = VIDEO_HEIGHTS
+    """The resolutions worth downloading up to: the Site has nothing higher than the highest one,
+    and asking for less than the lowest one still gets the lowest."""
+    audio_only: bool = True
+    hls_bundle: bool = False
+    """The Site's HLS stream, kept with every resolution in it."""
+    quality_choices: bool = True
+    """Codecs, container, quality goal, audio format and audio language pick the version that is
+    downloaded. A Site with fixed versions, such as The Daily Wire, has nothing to choose."""
+
+    @classmethod
+    def combined(cls, options: Iterable[DownloadOptions]) -> DownloadOptions:
+        """Everything that at least one of these offers."""
+        options = list(options)
+        if not options:
+            return cls()
+        return cls(
+            video_heights=tuple(sorted({height for option in options for height in option.video_heights})),
+            audio_only=any(option.audio_only for option in options),
+            hls_bundle=any(option.hls_bundle for option in options),
+            quality_choices=any(option.quality_choices for option in options),
+        )
 
 
 class RssEpisodeType(StrEnum):
@@ -505,6 +537,9 @@ class Site:
     stream_methods: frozenset[StreamMethod] = frozenset()
     """How RSS feeds can stream the Site's episodes straight from it, without downloading them
     first. A Site with none only serves downloads."""
+    stream_video_heights: tuple[int, ...] = ()
+    """The resolutions the Site streams video at, for a Site that ``streams``."""
+    downloads: DownloadOptions = DownloadOptions()
 
     @property
     def streams(self) -> bool:
@@ -563,6 +598,12 @@ class Source(ABC):
             return True
         host = link_host(url)
         return any(on_domain(host, domain) for domain in self.domains)
+
+    @property
+    def download_options(self) -> DownloadOptions:
+        """What a Local Media Profile can choose for this Source's media: what any of its Sites offers.
+        A Source that names no Sites downloads from sites that offer the defaults."""
+        return DownloadOptions.combined(site.downloads for site in self.sites)
 
     def site_for(self, url: str) -> Site | None:
         """The Site of a link, told without a network request, or None when this Source cannot tell."""

@@ -8,7 +8,7 @@ export default function VideoLocalMediaProfileForm({form}: { form: UseFormReturn
     return (
         <>
             <hr className="form-section-divider" aria-hidden="true"/>
-            <QualityField form={form}/>
+            <QualityField form={form} mode="video"/>
             <OutputTemplateEditor
                 form={form}
                 mode="video"

@@ -28,7 +28,7 @@ from backend.services.episode_filters import filters_allow_new_episode
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.download_profile_types import EpIdType, MediaDownloadArtifactStatus
 from backend.types.episode_types import EpisodeExtraType, EpisodePublishStatus
-from backend.types.local_media_profile_types import PreferredFormat
+from backend.types.local_media_profile_types import PREFERRED_FORMAT_HEIGHTS, PreferredFormat
 from backend.types.collection_types import EpisodeIdentifier, CollectionType
 from backend.types.stream_profile_types import (
     RSS_AUDIO_PRIMARY_OUTPUT_MODES,
@@ -57,15 +57,7 @@ _UNAVAILABLE_PUBLISH_STATUSES = {
     EpisodePublishStatus.NO_USABLE_MEDIA.value,
     EpisodePublishStatus.SOURCE_PROCESSING.value,
 }
-_VIDEO_HEIGHTS = {
-    PreferredFormat.FORMAT_8K.value: 4320,
-    PreferredFormat.FORMAT_4K.value: 2160,
-    PreferredFormat.FORMAT_1440P.value: 1440,
-    PreferredFormat.FORMAT_1080P.value: 1080,
-    PreferredFormat.FORMAT_720P.value: 720,
-    PreferredFormat.FORMAT_480P.value: 480,
-    PreferredFormat.FORMAT_360P.value: 360,
-}
+_VIDEO_HEIGHTS = {fmt.value: height for fmt, height in PREFERRED_FORMAT_HEIGHTS.items()}
 
 _ITUNES_NS = "http://www.itunes.com/dtds/podcast-1.0.dtd"
 _PODCAST_NS = "https://podcastindex.org/namespace/1.0"

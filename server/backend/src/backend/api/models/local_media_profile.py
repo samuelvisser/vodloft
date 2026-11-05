@@ -27,7 +27,7 @@ from backend.types.local_media_profile_types import (
     VideoContainer,
     goal_video_codecs,
 )
-from backend.services.local_media_profile_sources import sources_for_profile_type
+from backend.services.local_media_profile_sources import offers_format, profile_download_options, sources_for_profile_type
 from backend.utils.output_template_formatting import normalize_output_template_expression_spacing
 from backend.utils.helpers import slugify
 
@@ -39,6 +39,12 @@ def _language_code(value: str) -> str:
     if not _LANGUAGE_CODE.fullmatch(value):
         raise ValueError(f"'{value}' is not a language code such as 'en' or 'pt-BR'")
     return value
+
+
+_FORMAT_NAMES = {
+    PreferredFormat.FORMAT_HLS: "an HLS bundle", PreferredFormat.FORMAT_AUDIO_ONLY: "audio only",
+    PreferredFormat.FORMAT_4K: "4K", PreferredFormat.FORMAT_8K: "8K",
+}
 
 
 class VideoCodecChoiceAPI(RequestBase):
@@ -114,6 +120,13 @@ class LocalMediaProfileAPIBaseIn(RequestBase):
             self.source_keys = None
         else:
             self.source_keys = [key for key in available if key in self.source_keys]
+        return self
+
+    @model_validator(mode="after")
+    def _offered_format(self):
+        # A profile can download what any of its Sources' Sites offers; each Site gets the nearest it has.
+        if not offers_format(profile_download_options(self.type, self.source_keys), self.preferred_format):
+            raise ValueError(f"None of this profile's Sources can download {_FORMAT_NAMES.get(self.preferred_format, self.preferred_format.removeprefix("format_"))}")
         return self
 
     @model_validator(mode="after")

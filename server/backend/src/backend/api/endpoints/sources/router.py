@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.models.source import (
-    SiteOptionsAPIRead, YtdlpOptionLineAPIRead, YtdlpOptionsAPIRead, YtdlpOptionsAPIUpdate, YtdlpOptionsCheckAPIRequest,
+    DownloadOptionsAPIRead, SiteOptionsAPIRead, YtdlpOptionLineAPIRead, YtdlpOptionsAPIRead, YtdlpOptionsAPIUpdate, YtdlpOptionsCheckAPIRequest,
     ApiKeyAPIUpdate, ApiStatusAPIRead, CookiesAPIRead, EpisodeTagAPIRead, PublishStatusLabelAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultsAPIRead,
     CollectionDetailsAPIRead, SourceAPIRead, SourceSiteAPIRead, SourceSiteAPIUpdate,
 )
@@ -103,6 +103,7 @@ def site_options(source_id: str, url: str = Query(min_length=1, max_length=2048)
         auto_subtitles=source.auto_subtitles_for(url), sponsorblock=source.sponsorblock_for(url),
         upgrade_checks=source.has(Feature.UPGRADE_CHECKS), site_name=site.name,
         stream_methods=site.stream_methods,
+            stream_video_heights=site.stream_video_heights, downloads=DownloadOptionsAPIRead.model_validate(site.downloads),
     )
 
 

@@ -34,6 +34,15 @@ class SourcedResponse(ResponseBase):
         return source_features(self.source_key)
 
 
+class DownloadOptionsAPIRead(ResponseBase):
+    """What a Local Media Profile can download for a Site, or for any Site of a Source."""
+
+    video_heights: list[int]
+    audio_only: bool
+    hls_bundle: bool
+    quality_choices: bool
+
+
 class SourceAPIRead(ResponseBase):
     id: str
     name: str
@@ -45,6 +54,7 @@ class SourceAPIRead(ResponseBase):
     subscription_name: Optional[str] = None
     cookies_help: Optional[str] = None
     subscription_active: bool = False
+    download_options: DownloadOptionsAPIRead
 
     @field_validator("features", mode="before")
     @classmethod
@@ -157,6 +167,8 @@ class SiteOptionsAPIRead(ResponseBase):
     """The upgrade check can download its episodes again when a better version is out."""
     stream_methods: list[StreamMethod] = []
     """How RSS feeds can stream the collection's episodes without downloading them first; none for downloads only."""
+    stream_video_heights: list[int] = []
+    downloads: DownloadOptionsAPIRead
 
     @field_validator("stream_methods", mode="before")
     @classmethod

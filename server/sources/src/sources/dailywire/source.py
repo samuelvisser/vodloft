@@ -4,7 +4,7 @@ from types import MappingProxyType
 
 from ..contract import (
     MAIN_TAG, MIN_NEWEST_EPISODES, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
-    PublishStatusLabel, ResolvedLink, RssEpisodeType, SeasonRef, Site, Source, StreamMethod, VideoDetails,
+    DownloadOptions, PublishStatusLabel, ResolvedLink, RssEpisodeType, SeasonRef, Site, Source, StreamMethod, VideoDetails,
     publish_status_labels_with,
 )
 from .api.dw_api.client import ByShowSeason, MiddlewareClient
@@ -46,6 +46,9 @@ def _video(record: DwEpisodeRecord, season: SeasonRef | None) -> VideoDetails:
     )
 
 
+_VIDEO_HEIGHTS = (480, 720, 1080)
+
+
 class DailyWireSource(Source):
     id = "dailywire"
     name = "The Daily Wire"
@@ -53,6 +56,9 @@ class DailyWireSource(Source):
     sites = (Site(
         "dailywire", "The Daily Wire", domains, refresh_intervals="15m,30m,1h,3h,6h,24h,3d", 
         stream_methods=frozenset({StreamMethod.FILE, StreamMethod.HLS, StreamMethod.LIVE}),
+        stream_video_heights=_VIDEO_HEIGHTS,
+        # Fixed versions: an HLS stream of 480p, 720p and 1080p, and audio.
+        downloads=DownloadOptions(video_heights=_VIDEO_HEIGHTS, hls_bundle=True, quality_choices=False),
     ),)
     kind_names = MappingProxyType({LinkKind.COLLECTION: "Show"})
     features = frozenset({

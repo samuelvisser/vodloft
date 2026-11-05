@@ -13,7 +13,7 @@ from backend.api.models.rss_stream_profile import (
 from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.db.models import Collection
 from backend.db.models.stream_profile import RssStreamProfile
-from backend.types.local_media_profile_types import PreferredFormat
+from backend.types.local_media_profile_types import PREFERRED_FORMAT_HEIGHTS, PreferredFormat
 from backend.types.stream_profile_types import RSS_HLS_OUTPUT_MODES
 from backend.utils.feed_urls import build_rss_feed_url, request_base_url
 from backend.security.access import Access
@@ -47,6 +47,11 @@ def ensure_site_can_stream(
         raise HTTPException(status_code=422, detail=f"{site.name} cannot stream video as HLS; choose an MP4 video output")
     if stream_live_episodes and StreamMethod.LIVE not in site.stream_methods:
         raise HTTPException(status_code=422, detail=f"{site.name} cannot stream live episodes")
+    # A feed serves the downloaded version nearest to its format, or the Site's own stream.
+    height = PREFERRED_FORMAT_HEIGHTS.get(preferred_format)
+    heights = {*site.downloads.video_heights, *(site.stream_video_heights if use_source_stream else ())}
+    if height is not None and height not in heights:
+        raise HTTPException(status_code=422, detail=f"{site.name} has no {preferred_format.removeprefix('format_')} video")
 
 
 def _keeps_live_episode_handoff(profile: RssStreamProfile) -> bool:

@@ -4,7 +4,7 @@ import Switch from 'react-switch'
 import Select from 'react-select'
 import ReadMore from '../../utils/ReadMore'
 import {episodeTagLabel, SourceFeature, sourceHas} from '../../types/schemas/source'
-import {PreferredFormatReg} from '../../types/local_media_profile'
+import {FORMAT_HEIGHTS, PreferredFormatReg} from '../../types/local_media_profile'
 import RssStreamProfileForm from './RssStreamProfileForm'
 import StreamProfileAdvisory, {type StreamDownloadProfileDefault} from './StreamProfileAdvisory'
 import SegmentedOptions from '../SegmentedOptions/SegmentedOptions'
@@ -23,7 +23,6 @@ const StreamPreferredFormatReg = createSelectRegistry('StreamPreferredFormat', {
     format_4k: {label: PreferredFormatReg.getLabel('format_4k')},
     format_1080p: {label: PreferredFormatReg.getLabel('format_1080p')},
     format_720p: {label: PreferredFormatReg.getLabel('format_720p')},
-    // Only offered while streaming from a site whose video streams at 360p, such as YouTube.
     format_360p: {label: PreferredFormatReg.getLabel('format_360p')},
     format_audio_only: {label: PreferredFormatReg.getLabel('format_audio_only')},
 })
@@ -91,7 +90,10 @@ export default function StreamProfileForm({
 
     const useDownloads = watch('useDownloads')
     const useSourceStream = watch('useSourceStream')
-    const offers360p = streamsMp4Directly && canStreamFromSource && !!useSourceStream
+    // A feed serves the downloaded version nearest to its format, or the Site's own stream.
+    const videoHeights = site
+        ? [...site.downloads.videoHeights, ...(canStreamFromSource && useSourceStream ? site.streamVideoHeights : [])]
+        : undefined
     const preferredFormat = watch('preferredFormat')
     const videoOutputMode = watch('videoOutputMode')
     const streamLiveEpisodes = watch('streamLiveEpisodes')
@@ -368,7 +370,7 @@ export default function StreamProfileForm({
                                 inputId="sp-preferred-format"
                                 classNamePrefix="select"
                                 options={StreamPreferredFormatReg.options.filter((option) => (
-                                    option.value !== 'format_360p' || offers360p || field.value === 'format_360p'
+                                    !videoHeights || !(option.value in FORMAT_HEIGHTS) || videoHeights.includes(FORMAT_HEIGHTS[option.value])
                                 ))}
                                 value={StreamPreferredFormatReg.options.find(o => o.value === field.value) ?? null}
                                 onChange={(opt) => field.onChange((opt as any)?.value ?? null)}

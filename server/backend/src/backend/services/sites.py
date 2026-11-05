@@ -69,6 +69,10 @@ def collection_site(collection: Collection) -> SourceSite:
     return _site_of(collection.sharing_url, collection.source_key)
 
 
+def video_site(video: Video) -> SourceSite:
+    return _site_of(video.sharing_url, video.source_key)
+
+
 @lru_cache(maxsize=1024)
 def _site_of(url: str, source_key: str) -> SourceSite:
     # Telling a yt-dlp link's Site tries every extractor, and a feed asks once per episode.

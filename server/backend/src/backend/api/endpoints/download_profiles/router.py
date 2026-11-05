@@ -9,7 +9,7 @@ from backend.security.access import Area, Level
 from backend.security import deps
 from backend.security.deps import requires, requires_any
 from backend.db.models import Collection
-from backend.api.models.source import SiteOptionsAPIRead
+from backend.api.models.source import DownloadOptionsAPIRead, SiteOptionsAPIRead
 from sources import Feature, get_source
 from backend.services.sites import collection_site
 
@@ -81,6 +81,7 @@ def download_profiles_site_options(collection_id: int, request: Request):
             sponsorblock=source.sponsorblock_for(collection.sharing_url),
             upgrade_checks=source.has(Feature.UPGRADE_CHECKS),
             site_name=site.name, stream_methods=site.stream_methods,
+            stream_video_heights=site.stream_video_heights, downloads=DownloadOptionsAPIRead.model_validate(site.downloads),
         )
 
 

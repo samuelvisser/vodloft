@@ -1,14 +1,23 @@
-import {UseFormReturn} from 'react-hook-form'
+import {useMemo} from 'react'
+import {UseFormReturn, useWatch} from 'react-hook-form'
 
-import {MoviePreferredFormatReg} from '../../types/local_media_profile'
+import {useSources} from '../../lib/queries'
+import {MoviePreferredFormatReg, offersFormat, profileDownloadOptions} from '../../types/local_media_profile'
 import LocalMediaProfilePreferredFormatField from './LocalMediaProfilePreferredFormatField'
 import OutputTemplateEditor from './OutputTemplateEditor'
 
 export default function MovieLocalMediaProfileForm({form}: { form: UseFormReturn<any> }) {
+    const {data: sources} = useSources()
+    const sourceKeys = useWatch({control: form.control, name: 'sourceKeys'}) as string[] | null
+    // Only the resolutions the Sites of the profile's Sources have.
+    const formats = useMemo(() => {
+        const offered = profileDownloadOptions(sources, 'movie', sourceKeys)
+        return {options: MoviePreferredFormatReg.options.filter((option) => !offered || offersFormat(offered, option.value))}
+    }, [sources, sourceKeys])
     return (
         <>
             <hr className="form-section-divider" aria-hidden="true"/>
-            <LocalMediaProfilePreferredFormatField form={form} formatRegistry={MoviePreferredFormatReg}/>
+            <LocalMediaProfilePreferredFormatField form={form} formatRegistry={formats}/>
             <OutputTemplateEditor
                 form={form}
                 mode="movie"
