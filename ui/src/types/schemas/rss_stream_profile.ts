@@ -17,6 +17,7 @@ const RssStreamProfileBaseSchema = z.object({
     epIdTypeList: z.array(z.string()).default(['ep', 'aux']),
     videoOutputMode: z.enum(RssVideoOutputModeReg.values).nullable().default(null),
     streamLiveEpisodes: z.boolean().default(false),
+    proxySourceStream: z.boolean().default(false),
     maxItems: z.int().nonnegative().default(100),
 })
 
@@ -83,6 +84,7 @@ export const RssStreamProfileReadSchema = z.looseObject({
     epIdTypeList: z.array(z.string()),
     videoOutputMode: z.union([z.enum(RssVideoOutputModeReg.values), z.string()]).nullable(),
     streamLiveEpisodes: z.boolean(),
+    proxySourceStream: z.boolean(),
     maxItems: z.number(),
     feedUrl: z.string(),
     effectiveTitle: z.string(),

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import BinaryIO, Optional
 from urllib.parse import urljoin, urlparse
 
+from .ffmpeg import segment_as_hls
 from .errors import DownloadCanceled, DownloadError, EncryptedMediaError, MediaUnavailableError
 from .hls import is_master_playlist, is_playlist, parse_attribute_list, parse_master_playlist
 from .http import http_get, http_get_text
@@ -47,12 +48,12 @@ def missing_hls_bundle_files(master_path: str | Path) -> list[Path]:
     if not hls_asset_marker(master_path).is_file():
         return [hls_asset_marker(master_path)]
 
-    required_playlists = [
-        root / f"{height}p" / "playlist.m3u8"
-        for height in _TARGET_HEIGHTS
-    ]
+    # Every playlist the master lists: The Daily Wire's resolutions, or the ones a video had.
+    required_playlists = _listed_playlists(Path(master_path), root)
+    if not required_playlists:
+        return [Path(master_path)]
     for playlist in required_playlists:
-        if not playlist.is_file():
+        if not playlist.resolve().is_relative_to(root.resolve()) or not playlist.is_file():
             missing.append(playlist)
 
     for playlist in root.glob("*/playlist.m3u8"):
@@ -60,6 +61,31 @@ def missing_hls_bundle_files(master_path: str | Path) -> list[Path]:
             missing.extend(_missing_playlist_files(playlist, root=root))
 
     return missing
+
+
+def _listed_playlists(master_path: Path, root: Path) -> list[Path]:
+    """The asset playlists a bundle's master lists; none when it cannot be read or lists no video."""
+    try:
+        text = master_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return []
+    audio: list[str] = []
+    video: list[str] = []
+    after_variant = False
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("#EXT-X-STREAM-INF:"):
+            after_variant = True
+        elif line.startswith("#EXT-X-MEDIA:"):
+            uri = parse_attribute_list(line.split(":", 1)[1]).get("URI")
+            if uri:
+                audio.append(uri)
+        elif line and not line.startswith("#") and after_variant:
+            video.append(line)
+            after_variant = False
+    if not video:
+        return []
+    return [root / uri.removeprefix("hls/") for uri in (*audio, *video)]
 
 
 def download_hls_bundle(
@@ -88,21 +114,7 @@ def download_hls_bundle(
     staging_asset_root = Path(f"{asset_root}.part")
     part_path = Path(f"{master_path}.part")
     try:
-        shutil.rmtree(staging_asset_root, ignore_errors=True)
-        if asset_root.exists():
-            marker = asset_root / _HLS_BUNDLE_MARKER
-            if marker.is_file():
-                shutil.rmtree(asset_root)
-            else:
-                raise DownloadError(
-                    f"HLS asset destination already exists and is not owned by VODLoft: {asset_root}"
-                )
-        staging_asset_root.mkdir(parents=True, exist_ok=False)
-        (staging_asset_root / _HLS_BUNDLE_MARKER).write_text(
-            "VODLoft local HLS bundle\n",
-            encoding="utf-8",
-        )
-        Path(master_path).parent.mkdir(parents=True, exist_ok=True)
+        _start_staging(master_path)
 
         master_lines, jobs = _build_master_and_jobs(
             master_text,
@@ -165,24 +177,112 @@ def download_hls_bundle(
             segments_downloaded=segments_total,
         )
     except BaseException:
-        try:
-            part_path.unlink(missing_ok=True)
-        except OSError:
-            pass
-        shutil.rmtree(staging_asset_root, ignore_errors=True)
+        _discard_staging(master_path)
+        raise
 
-        # Direct-mode downloads reserve the final master path as a zero-byte
-        # placeholder. If publication failed after the asset directory moved,
-        # remove that owned directory as part of the failed attempt.
-        try:
-            master_published = (
-                Path(master_path).is_file()
-                and Path(master_path).stat().st_size > 0
+
+def _start_staging(master_path: str | Path) -> None:
+    """Make an empty staging directory for the bundle's assets, removing an earlier bundle of VODLoft's."""
+    asset_root = hls_asset_root(master_path)
+    staging_asset_root = Path(f"{asset_root}.part")
+    shutil.rmtree(staging_asset_root, ignore_errors=True)
+    if asset_root.exists():
+        marker = asset_root / _HLS_BUNDLE_MARKER
+        if marker.is_file():
+            shutil.rmtree(asset_root)
+        else:
+            raise DownloadError(
+                f"HLS asset destination already exists and is not owned by VODLoft: {asset_root}"
             )
-        except OSError:
-            master_published = False
-        if not master_published and (asset_root / _HLS_BUNDLE_MARKER).is_file():
-            shutil.rmtree(asset_root, ignore_errors=True)
+    staging_asset_root.mkdir(parents=True, exist_ok=False)
+    (staging_asset_root / _HLS_BUNDLE_MARKER).write_text(
+        "VODLoft local HLS bundle\n",
+        encoding="utf-8",
+    )
+    Path(master_path).parent.mkdir(parents=True, exist_ok=True)
+
+
+def _discard_staging(master_path: str | Path) -> None:
+    asset_root = hls_asset_root(master_path)
+    try:
+        Path(f"{master_path}.part").unlink(missing_ok=True)
+    except OSError:
+        pass
+    shutil.rmtree(Path(f"{asset_root}.part"), ignore_errors=True)
+
+    # Direct-mode downloads reserve the final master path as a zero-byte
+    # placeholder. If publication failed after the asset directory moved,
+    # remove that owned directory as part of the failed attempt.
+    try:
+        master_published = (
+            Path(master_path).is_file()
+            and Path(master_path).stat().st_size > 0
+        )
+    except OSError:
+        master_published = False
+    if not master_published and (asset_root / _HLS_BUNDLE_MARKER).is_file():
+        shutil.rmtree(asset_root, ignore_errors=True)
+
+
+@dataclass(frozen=True)
+class BundleTrack:
+    """A downloaded file with one video or audio track, to be kept in an HLS bundle."""
+
+    path: Path
+    codecs: str | None = None
+    """As HLS names them, such as ``avc1.640028`` or ``mp4a.40.2``."""
+    bitrate: int | None = None
+    """Bits per second, on average."""
+    width: int | None = None
+    height: int | None = None
+
+
+def write_hls_bundle(
+        master_path: str,
+        *,
+        videos: list[BundleTrack],
+        audio: BundleTrack,
+        ffmpeg_path: str = "ffmpeg",
+        should_cancel: Optional[CancelCheck] = None,
+) -> None:
+    """Keep separate video tracks, one per resolution, and their audio as an HLS bundle.
+
+    Each track is split into parts without encoding it again, as byte ranges of one file, just
+    like the bundles made from a Site's own HLS stream.
+    """
+    if not videos:
+        raise DownloadError("An HLS bundle needs video")
+    asset_root = hls_asset_root(master_path)
+    staging_asset_root = Path(f"{asset_root}.part")
+    part_path = Path(f"{master_path}.part")
+    try:
+        _start_staging(master_path)
+        directory = staging_asset_root / "audio-0"
+        directory.mkdir()
+        segment_as_hls(str(audio.path), directory, ffmpeg_path=ffmpeg_path, should_cancel=should_cancel)
+        master = [
+            "#EXTM3U", "#EXT-X-VERSION:7", "#EXT-X-INDEPENDENT-SEGMENTS",
+            '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Audio",DEFAULT=YES,AUTOSELECT=YES,'
+            'URI="hls/audio-0/playlist.m3u8"',
+        ]
+        for video in sorted(videos, key=lambda track: track.height or 0):
+            _ensure_not_canceled(should_cancel)
+            directory = staging_asset_root / f"{video.height}p"
+            directory.mkdir()
+            segment_as_hls(str(video.path), directory, ffmpeg_path=ffmpeg_path, should_cancel=should_cancel)
+            attributes = [f"BANDWIDTH={(video.bitrate or 0) + (audio.bitrate or 0) or 1}"]
+            if video.codecs and audio.codecs:
+                attributes.append(f'CODECS="{video.codecs},{audio.codecs}"')
+            if video.width and video.height:
+                attributes.append(f"RESOLUTION={video.width}x{video.height}")
+            attributes.append('AUDIO="audio"')
+            master += [f"#EXT-X-STREAM-INF:{','.join(attributes)}", f"hls/{video.height}p/playlist.m3u8"]
+        part_path.write_text("\n".join(master) + "\n", encoding="utf-8")
+        _ensure_not_canceled(should_cancel)
+        os.replace(staging_asset_root, asset_root)
+        os.replace(part_path, master_path)
+    except BaseException:
+        _discard_staging(master_path)
         raise
 
 

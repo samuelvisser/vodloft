@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -12,17 +13,21 @@ from sources import MediaStream, StreamMethod, get_source, site_for
 from sources.ytdlp.source import stream_of
 
 
-def _format(format_id, *, vcodec="none", acodec="mp4a.40.2", protocol="https", abr=None, size=None, url=None):
+def _format(format_id, *, vcodec="none", acodec="mp4a.40.2", protocol="https", abr=None, size=None, url=None, language_preference=None):
     return {
         "format_id": format_id, "vcodec": vcodec, "acodec": acodec, "protocol": protocol, "abr": abr,
+        "language_preference": language_preference,
         "filesize": size, "url": url or f"https://rr1.googlevideo.com/videoplayback?itag={format_id}&expire=1900000000",
         "http_headers": {"User-Agent": "yt-dlp"},
     }
 
 
 def test_youtube_and_the_daily_wire_stream_but_other_sites_do_not():
-    # YouTube only streams plain files; The Daily Wire also streams HLS and live episodes.
-    assert site_for("https://www.youtube.com/@channel", "ytdlp").stream_methods == {StreamMethod.FILE}
+    # YouTube and The Daily Wire stream files, HLS and live episodes.
+    youtube = site_for("https://www.youtube.com/@channel", "ytdlp")
+    assert youtube.stream_methods == {StreamMethod.FILE, StreamMethod.HLS, StreamMethod.LIVE}
+    assert youtube.stream_video_heights == (360, 720, 1080) and youtube.stream_file_height == 360
+    assert youtube.stream_proxy_choice
     dailywire = site_for("https://www.dailywire.com/show/the-ben-shapiro-show", "dailywire")
     assert dailywire.stream_methods == {StreamMethod.FILE, StreamMethod.HLS, StreamMethod.LIVE}
     for url in ("https://vimeo.com/channels/staffpicks", "https://example.org/videos"):
@@ -42,6 +47,15 @@ def test_audio_is_youtubes_m4a_when_it_is_offered():
     assert stream.headers == {"User-Agent": "yt-dlp"}
 
 
+def test_a_dubbed_video_plays_the_m4a_of_its_original_language():
+    stream = stream_of({"formats": [
+        _format("140-drc", abr=129, language_preference=10), _format("140-0", abr=129, language_preference=-1),
+        _format("140-1", abr=129, language_preference=10), _format("140-2", abr=129, language_preference=-1),
+    ]}, audio=True)
+    assert stream is not None and stream.ready
+    assert "itag=140-1" in stream.url
+
+
 def test_audio_without_m4a_is_the_best_audio_to_transcode():
     stream = stream_of({"formats": [
         _format("249", acodec="opus", abr=50), _format("251", acodec="opus", abr=160),
@@ -54,6 +68,12 @@ def test_audio_without_m4a_is_the_best_audio_to_transcode():
 def test_video_is_only_the_mp4_with_sound():
     assert "itag=18" in stream_of({"formats": [_format("137", vcodec="avc1", acodec="none"), _format("18", vcodec="avc1")]}, audio=False).url
     assert stream_of({"formats": [_format("137", vcodec="avc1", acodec="none"), _format("140")]}, audio=False) is None
+
+
+def test_a_missing_stream_is_looked_up_again_soon():
+    from backend.api.endpoints.feeds import source_stream
+
+    assert source_stream._kept_until(None) - time.time() <= 2 * 60
 
 
 def test_a_site_that_cannot_stream_is_not_looked_up():
@@ -74,17 +94,23 @@ def test_a_feed_on_a_site_that_cannot_stream_is_refused():
     ensure_site_can_stream(
         youtube, use_source_stream=True, stream_live_episodes=False, preferred_format="format_audio_only", video_output_mode=None,
     )
-    with pytest.raises(HTTPException, match="cannot stream video as HLS"):
-        ensure_site_can_stream(
-            youtube, use_source_stream=True, stream_live_episodes=False, preferred_format="format_1080p",
-            video_output_mode="audio_hls",
-        )
+    ensure_site_can_stream(
+        youtube, use_source_stream=True, stream_live_episodes=False, preferred_format="format_1080p",
+        video_output_mode="audio_hls",
+    )
+    # YouTube streams 360p, 720p and 1080p; downloads can have any resolution.
+    with pytest.raises(HTTPException, match="has no 480p video"):
+        ensure_site_can_stream(youtube, use_source_stream=True, stream_live_episodes=False, preferred_format="format_480p",
+                               video_output_mode="audio_hls")
+    ensure_site_can_stream(youtube, use_source_stream=False, stream_live_episodes=False, preferred_format="format_480p",
+                           video_output_mode="mp4")
     # Without streaming, HLS comes from downloads, so any output works.
     ensure_site_can_stream(
         youtube, use_source_stream=False, stream_live_episodes=False, preferred_format="format_1080p", video_output_mode="mp4_hls",
     )
+    ensure_site_can_stream(youtube, use_source_stream=True, stream_live_episodes=True, **mp4)
     with pytest.raises(HTTPException, match="cannot stream live episodes"):
-        ensure_site_can_stream(youtube, use_source_stream=True, stream_live_episodes=True, **mp4)
+        ensure_site_can_stream(vimeo, use_source_stream=False, stream_live_episodes=True, **mp4)
 
 
 class _Upstream:

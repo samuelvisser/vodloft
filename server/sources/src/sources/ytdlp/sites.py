@@ -14,7 +14,7 @@ import threading
 
 from dataclasses import replace
 
-from ..contract import Site, StreamMethod, UpgradeChecks, UpgradeImprovement, domain_site, link_host
+from ..contract import DownloadOptions, Site, StreamMethod, UpgradeChecks, UpgradeImprovement, domain_site, link_host
 
 # How VODLoft names the sites most people use; any other Site is named after its domain.
 _NAMES = {
@@ -27,9 +27,16 @@ _NAMES = {
 # Creators keep changing titles and thumbnails for days, and YouTube tests them for up to two weeks.
 _REFRESH_INTERVALS = {"youtube": "30m,2h,6h,24h,3d,7d,14d"}
 # How RSS feeds can stream each Site without downloading first. Each needs its streams checked against
-# podcast apps before it is added. YouTube only offers its 360p MP4 and M4A audio as plain files.
-_STREAM_METHODS = {"youtube": frozenset({StreamMethod.FILE})}
-_STREAM_VIDEO_HEIGHTS = {"youtube": (360,)}
+# podcast apps before it is added. YouTube has its 360p MP4 with sound as one file, and every other
+# resolution as separate H.264 video and M4A audio, which VODLoft lists in an HLS playlist or joins.
+# Above 1080p, YouTube only has VP9 and AV1, which podcast apps often cannot play. Its links play
+# for any address, so apps can be sent straight to them.
+_STREAM_METHODS = {"youtube": frozenset({StreamMethod.FILE, StreamMethod.HLS, StreamMethod.LIVE})}
+_STREAM_VIDEO_HEIGHTS = {"youtube": (360, 720, 1080)}
+_STREAM_FILE_HEIGHTS = {"youtube": 360}
+_STREAM_PROXY_CHOICE = {"youtube"}
+# The Sites whose separate H.264 video and M4A audio Local Media Profiles can keep as an HLS bundle.
+_HLS_DOWNLOADS = {"youtube"}
 # yt-dlp tells a video's resolutions, codecs and subtitles on every site; SponsorBlock only has YouTube's videos.
 _UPGRADE_CHECKS = UpgradeChecks(
     (UpgradeImprovement.RESOLUTION, UpgradeImprovement.SUBTITLES, UpgradeImprovement.CODEC),
@@ -71,5 +78,16 @@ def site_for(url: str) -> Site:
     key = _family(extractor)
     return Site(
         key, _NAMES.get(key, host), (host,), _REFRESH_INTERVALS.get(key), stream_methods=_STREAM_METHODS.get(key, frozenset()),
-        stream_video_heights=_STREAM_VIDEO_HEIGHTS.get(key, ()), upgrade_checks=_SITE_UPGRADE_CHECKS.get(key, _UPGRADE_CHECKS),
+        stream_video_heights=_STREAM_VIDEO_HEIGHTS.get(key, ()), stream_file_height=_STREAM_FILE_HEIGHTS.get(key),
+        stream_proxy_choice=key in _STREAM_PROXY_CHOICE,
+        downloads=_downloads(key), upgrade_checks=_SITE_UPGRADE_CHECKS.get(key, _UPGRADE_CHECKS),
     )
+
+
+def _downloads(key: str) -> DownloadOptions:
+    return DownloadOptions(hls_bundle=True) if key in _HLS_DOWNLOADS else DownloadOptions()
+
+
+def download_options() -> DownloadOptions:
+    """What any Site yt-dlp downloads from offers: the defaults, and an HLS bundle from some."""
+    return DownloadOptions.combined((DownloadOptions(), *(_downloads(key) for key in _HLS_DOWNLOADS)))

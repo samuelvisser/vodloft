@@ -19,19 +19,21 @@ def _collection_profile(preferred_format, source_keys=None):
     )
 
 
-def test_only_the_daily_wire_keeps_an_hls_bundle_and_has_fixed_versions():
+def test_the_daily_wire_and_youtube_keep_an_hls_bundle():
     dailywire = get_source("dailywire").download_options
     assert dailywire == DownloadOptions(video_heights=(480, 720, 1080), hls_bundle=True, quality_choices=False)
-    # yt-dlp names no Sites, so every site it downloads from offers the defaults.
-    assert get_source("ytdlp").download_options == DownloadOptions()
-    assert site_for("https://www.youtube.com/@channel", "ytdlp").downloads == DownloadOptions()
+    # yt-dlp offers what any of its sites offers: the defaults, and YouTube's HLS bundle.
+    assert get_source("ytdlp").download_options == DownloadOptions(hls_bundle=True)
+    assert site_for("https://www.youtube.com/@channel", "ytdlp").downloads == DownloadOptions(hls_bundle=True)
+    assert site_for("https://vimeo.com/channel", "ytdlp").downloads == DownloadOptions()
     assert DownloadOptions().video_heights == VIDEO_HEIGHTS and not DownloadOptions().hls_bundle
 
 
 def test_a_profile_offers_what_any_of_its_sources_offers():
     assert _collection_profile("format_hls").preferred_format == "format_hls"
+    assert _collection_profile("format_hls", ["ytdlp"]).preferred_format == "format_hls"
     with pytest.raises(ValidationError, match="None of this profile's Sources can download an HLS bundle"):
-        _collection_profile("format_hls", ["ytdlp"])
+        _collection_profile("format_hls", ["npo"])
     with pytest.raises(ValidationError, match="can download 4K"):
         _collection_profile("format_4k", ["dailywire"])
     assert _collection_profile("format_720p", ["dailywire"]).preferred_format == "format_720p"
@@ -43,8 +45,10 @@ def test_each_site_downloads_the_nearest_it_has():
 
     youtube = site_for("https://www.youtube.com/@channel", "ytdlp")
     dailywire = site_for("https://www.dailywire.com/show/a", "dailywire")
+    vimeo = site_for("https://vimeo.com/channel", "ytdlp")
     # The HLS bundle tops out at 1080p, so a site without one downloads that.
-    assert format_for_site(youtube, "format_hls") == "format_1080p"
+    assert format_for_site(vimeo, "format_hls") == "format_1080p"
+    assert format_for_site(youtube, "format_hls") == "format_hls"
     assert format_for_site(youtube, "format_4k") == "format_4k"
     assert format_for_site(youtube, "format_audio_only") == "format_audio_only"
     assert format_for_site(dailywire, "format_hls") == "format_hls"

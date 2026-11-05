@@ -110,6 +110,7 @@ def test_stream_profile_view_uses_relationship_aliases():
         overwrite_collection_title=None,
         video_output_mode="audio_mp4",
         stream_live_episodes=False,
+        proxy_source_stream=False,
         max_items=200,
     )
 

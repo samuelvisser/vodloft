@@ -5,7 +5,7 @@ shorter count as a different length. Download Profiles of Daily Wire collections
 before; they get it, counting a different length as the better version.
 
 Revision ID: d6346ad993ee
-Revises: 688634d39f23
+Revises: aa950d2ab545
 Create Date: 2026-11-05
 """
 from __future__ import annotations
@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "d6346ad993ee"
-down_revision = "688634d39f23"
+down_revision = "aa950d2ab545"
 branch_labels = None
 depends_on = None
 

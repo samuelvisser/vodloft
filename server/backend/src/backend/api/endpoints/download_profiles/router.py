@@ -82,7 +82,8 @@ def download_profiles_site_options(collection_id: int, request: Request):
             countdown_downloads=site.countdown_downloads,
             upgrade_checks=UpgradeChecksAPIRead.model_validate(site.upgrade_checks),
             site_name=site.name, stream_methods=site.stream_methods,
-            stream_video_heights=site.stream_video_heights, downloads=DownloadOptionsAPIRead.model_validate(site.downloads),
+            stream_video_heights=site.stream_video_heights, stream_proxy_choice=site.stream_proxy_choice,
+            downloads=DownloadOptionsAPIRead.model_validate(site.downloads),
         )
 
 
