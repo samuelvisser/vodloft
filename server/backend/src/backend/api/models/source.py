@@ -7,6 +7,7 @@ from typing import Literal, Optional
 from pydantic import Field, computed_field, field_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
+from backend.types.collection_types import CollectionType
 from sources import Feature, StreamMethod, UnknownSourceError, UpgradeImprovement, get_source
 from sources.ytdlp_options import MAX_OPTIONS_LENGTH, OptionsRefused, ytdlp_option_arguments
 
@@ -112,6 +113,7 @@ class CollectionDetailsAPIRead(ResponseBase):
     author_name: str
     author_slug: str
     thumbnail_landscape_path: Optional[str] = None
+    probable_collection_type: CollectionType
     # The collection's own seasons, oldest first; empty for a Source that has none.
     seasons: list[CollectionDetailsSeasonAPIRead] = Field(default_factory=list)
 

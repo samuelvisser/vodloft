@@ -22,3 +22,10 @@ export function presentOperationProgress(operation?: TaskOperationRead, starting
         secondary: batch ? `${batch.completed || 0}/${batch.requested || 0} complete` : undefined,
         estimated: isBatch, icon: faIcon('fass', 'spinner'), canCancel: true, canRetry: false}
 }
+
+/** A Collection's indexing: its percentage when the Source knows the total, otherwise how many episodes it found so far. */
+export function presentIndexingLabel(operation: TaskOperationRead): string {
+    if (typeof operation.progress === 'number' && operation.progress > 0) return `Indexing… ${operation.progress}%`
+    const found = operation.progressMeta?.found
+    return typeof found === 'number' ? `Indexing… ${found} episode${found === 1 ? '' : 's'} found` : 'Indexing…'
+}

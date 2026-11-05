@@ -18,7 +18,7 @@ from .hls_bundle import download_hls_bundle, hls_asset_marker, hls_asset_root, m
 from .lifecycle import DownloadTracker
 from .models import DownloadProgress, DownloadResult
 from .plan import DownloadPlan
-from .sidecars import AcquiredSidecar, SidecarDownloads
+from .sidecars import AcquiredSidecar, SidecarDownloads, as_default_subtitle, default_subtitle
 from .storage import TemporaryDownloadWorkspace, create_temporary_download_workspace, publish_temporary_download, reserve_unique_download_path
 from .storage.artifacts import remove_download_artifacts
 from .storage.copying import copy_file
@@ -234,18 +234,28 @@ def execute_download_plan(
                 )
             transfer_path.unlink(missing_ok=True)
             owned_media = inspect_artifact(media_path)
+        default = default_subtitle(
+            [asset for spec in plan.assets if spec.kind == "subtitle" for asset in assets.all(spec.id)],
+            plan.default_subtitle_languages,
+        )
+
+        def publishable(asset_id: str) -> list[AcquiredSidecar]:
+            """The files acquired for a planned asset, with the default subtitle under its own name."""
+            return [as_default_subtitle(asset) if asset is default else asset for asset in assets.all(asset_id)]
+
         if plan.metadata_tags or plan.artwork_asset_id is not None or plan.subtitle_asset_ids:
             artwork = assets.get(plan.artwork_asset_id) if plan.artwork_asset_id is not None else None
+            embedded = [asset for asset_id in plan.subtitle_asset_ids for asset in assets.all(asset_id)]
             subtitle_assets = tuple(
                 (asset.spec.language or "und", str(asset.path), asset.spec.forced, asset.spec.title)
-                for asset_id in plan.subtitle_asset_ids
-                for asset in assets.all(asset_id)
+                for asset in embedded
             )
             with _local_activity(tracker, resources, "embed"):
                 embed_media(
                     str(media_path), metadata=dict(plan.metadata_tags),
                     thumbnail_path=str(artwork.path) if artwork is not None else None,
-                    subtitles=subtitle_assets, first_subtitle_default=plan.first_subtitle_default,
+                    subtitles=subtitle_assets,
+                    default_subtitle=next((index for index, asset in enumerate(embedded) if asset is default), None),
                     audio_only=plan.source.audio_only, ffmpeg_path=plan.ffmpeg_path,
                     should_cancel=tracker.is_canceled,
                 )
@@ -253,7 +263,7 @@ def execute_download_plan(
         acquired: list[AcquiredSidecar] = []
         planned_by_asset: dict[str, str] = {}
         for spec in plan.assets:
-            found = assets.all(spec.id)
+            found = publishable(spec.id)
             for asset in found:
                 acquired.append(asset)
                 planned_by_asset[asset.spec.id] = spec.id
@@ -319,7 +329,7 @@ def execute_download_plan(
         else:
             assert journal is not None
             for spec in plan.assets:
-                files = assets.all(spec.id)
+                files = publishable(spec.id)
                 if not spec.publish or (not files and spec.source_format != "ytdlp"):
                     continue
                 activity = f"publish:{spec.id}"

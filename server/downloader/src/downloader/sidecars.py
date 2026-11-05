@@ -6,6 +6,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextvars import copy_context
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Sequence
 
 from .capacity import DownloadResources
 from .errors import DownloadCanceled, DownloadError, MediaUnavailableError
@@ -24,6 +25,26 @@ class AcquiredSidecar:
     path: Path
     target_suffix: str
     size_bytes: int
+
+
+def default_subtitle(subtitles: Sequence[AcquiredSidecar], languages: Sequence[str]) -> AcquiredSidecar | None:
+    """The subtitle players pick by default: the first one in the first of ``languages`` there is.
+
+    A forced subtitle is never the default; a regional variant, such as en-US, counts for its language.
+    """
+    for wanted in languages:
+        base = wanted.split("-", 1)[0].lower()
+        for subtitle in subtitles:
+            language = (subtitle.spec.language or "").lower()
+            if not subtitle.spec.forced and language and (language == wanted.lower() or language.split("-", 1)[0] == base):
+                return subtitle
+    return None
+
+
+def as_default_subtitle(subtitle: AcquiredSidecar) -> AcquiredSidecar:
+    """The subtitle, published as Episode.en.default.srt: Jellyfin and Emby pick it by default."""
+    stem, extension = subtitle.target_suffix.rsplit(".", 1)
+    return replace(subtitle, target_suffix=f"{stem}.default.{extension}")
 
 
 class InvalidSidecar(DownloadError):

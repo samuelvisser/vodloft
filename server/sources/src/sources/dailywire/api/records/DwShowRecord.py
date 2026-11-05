@@ -3,6 +3,7 @@ from enum import Enum
 
 from pydantic import Field, model_validator, computed_field, AliasPath
 
+from sources.contract import names_a_podcast
 from sources.dailywire.api.records.BaseRecord import BaseRecord
 from sources.dailywire.api.records.DwEpisodeRecord import DwEpisodeRecord
 from sources.dailywire.api.records.DwSeasonRecord import DwSeasonRecord
@@ -68,8 +69,8 @@ class DwShowRecord(BaseRecord):
         if seasons_list and all(isinstance(s.name, str) and len(s.name) == 4 and s.name.isdigit() and 2015 <= int(s.name) <= 2115 for s in seasons_list):
             return ProbableCollectionType.podcast
 
-        # Podcast if the slug contains the literal word "podcast"
-        if "podcast" in self.slug.lower():
+        # Podcast if the name or slug contains the word "podcast"
+        if names_a_podcast(self.title) or names_a_podcast(self.slug):
             return ProbableCollectionType.podcast
 
         # Series if it contains either 'extras' or 'all episodes' season

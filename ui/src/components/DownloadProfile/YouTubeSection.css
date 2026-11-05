@@ -149,3 +149,7 @@
     outline: 2px solid #60a5fa;
     outline-offset: -2px;
 }
+
+.youtube-section .help a {
+    color: inherit;
+}

@@ -24,6 +24,7 @@ import {
     useImportRuns,
     type UploadProgress,
 } from '../../lib/imports'
+import {presentIndexingLabel} from '../../lib/operationProgress'
 import type {
     ImportOptions,
     ImportPreview,
@@ -1054,11 +1055,7 @@ function RunView({importer, run, onRun, onBack}: {
         if (indexed) return 'Indexed; adopting files next'
         if (collectionId == null) return 'Waiting for indexing'
         const indexing = findActive('collection.index', 'collection', collectionId)
-        if (indexing?.status === 'RUNNING') {
-            if (typeof indexing.progress === 'number' && indexing.progress > 0) return `Indexing… ${indexing.progress}%`
-            const found = indexing.progressMeta?.found
-            return typeof found === 'number' ? `Indexing… ${found} episode${found === 1 ? '' : 's'} found` : 'Indexing…'
-        }
+        if (indexing?.status === 'RUNNING') return presentIndexingLabel(indexing)
         return 'Waiting for indexing'
     }
     const done = run.status === 'finished' || run.status === 'failed'

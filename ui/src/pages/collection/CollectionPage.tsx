@@ -1,9 +1,9 @@
 import {sourceControls} from '../../lib/sourceControls'
 import {addedByLabel, can} from '../../lib/access'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { useDownloadProfilesView, useEpisodePages, useCollection, useLocalMediaProfiles, useCollectionDownloads, useCollectionSeasons, useSkippedByFilter, useSourceLookup, useStreamProfilesView } from '../../lib/queries'
+import { useDownloadProfilesView, useEpisodePages, useCollection, useLocalMediaProfiles, useCollectionDownloads, useCollectionSeasons, useEpisodeTagsInCollection, useSkippedByFilter, useSourceLookup, useStreamProfilesView } from '../../lib/queries'
 import SourceBadge from '../../components/Source/SourceBadge'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'react-hot-toast'
@@ -28,6 +28,45 @@ import {siteName} from '../../lib/siteName'
 import ExistingFilesDialog from '../../components/ExistingFiles/ExistingFilesDialog'
 import ExistingFilesBanner from '../../components/ExistingFiles/ExistingFilesBanner'
 import {useExistingFilesScans} from '../../components/ExistingFiles/api'
+import EpisodeTypeFilter from '../../components/Episode/EpisodeTypeFilter'
+
+const EPISODE_TYPE_FILTER_STORAGE_PREFIX = 'collectionEpisodeTypeFilter:'
+
+/** The remembered episode type filter of one collection; empty (every type) when nothing usable is stored. */
+function loadEpisodeTypeFilter(collectionSlug: string | undefined): Set<string> {
+  if (!collectionSlug) return new Set()
+  try {
+    const raw = localStorage.getItem(EPISODE_TYPE_FILTER_STORAGE_PREFIX + collectionSlug)
+    if (raw === null) return new Set()
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return new Set()
+    return new Set(parsed.filter((value): value is string => typeof value === 'string'))
+  } catch {
+    return new Set()
+  }
+}
+
+/** The episode type filter of a collection, remembered per collection across page loads. */
+function useEpisodeTypeFilter(collectionSlug: string | undefined) {
+  const [state, setState] = useState(() => ({slug: collectionSlug, selected: loadEpisodeTypeFilter(collectionSlug)}))
+  let current = state
+  if (state.slug !== collectionSlug) {
+    current = {slug: collectionSlug, selected: loadEpisodeTypeFilter(collectionSlug)}
+    setState(current)
+  }
+  const update = useCallback((selected: Set<string>) => {
+    setState({slug: collectionSlug, selected})
+    if (!collectionSlug) return
+    try {
+      const key = EPISODE_TYPE_FILTER_STORAGE_PREFIX + collectionSlug
+      if (selected.size === 0) localStorage.removeItem(key)
+      else localStorage.setItem(key, JSON.stringify(Array.from(selected)))
+    } catch {
+      // Without storage the filter still works, it just isn't remembered.
+    }
+  }, [collectionSlug])
+  return [current.selected, update] as const
+}
 
 
 function preferredFormatLabel(value?: string | null) {
@@ -107,6 +146,20 @@ export default function CollectionPage() {
   }, [isSeasonal, seasons])
 
   const episodeSeasonId = isSeasonal ? selectedSeasonId : undefined
+
+  const {data: episodeTags} = useEpisodeTagsInCollection(id)
+  const [storedEpisodeTypes, setEpisodeTypeFilter] = useEpisodeTypeFilter(id)
+  // A remembered type can disappear from the collection. Once its types are known, only apply
+  // the ones still present, and every type while the chips are hidden, so nothing stays
+  // filtered out without a visible way to clear it.
+  const episodeTypeFilter = useMemo(() => {
+    if (episodeTags === undefined) return storedEpisodeTypes
+    if (episodeTags.length < 2) return new Set<string>()
+    const kept = episodeTags.map((tag) => tag.key).filter((key) => storedEpisodeTypes.has(key))
+    return kept.length === episodeTags.length ? new Set<string>() : new Set(kept)
+  }, [episodeTags, storedEpisodeTypes])
+  const episodeTypes = useMemo(() => [...episodeTypeFilter].sort(), [episodeTypeFilter])
+  const typeFiltered = episodeTypes.length > 0
   const {
     data: episodePagesData,
     isLoading: episodesLoading,
@@ -116,6 +169,7 @@ export default function CollectionPage() {
   } = useEpisodePages(id, {
     pageSize: PAGE_SIZE,
     seasonId: episodeSeasonId,
+    episodeTypes,
     enabled: Boolean(collection) && (!isSeasonal || selectedSeasonId !== null),
   })
 
@@ -126,12 +180,15 @@ export default function CollectionPage() {
   )
   const cachedPreviewEpisodesForView = useMemo(() => {
     if (!cachedPreviewEpisodes) return []
-    if (!isSeasonal) return cachedPreviewEpisodes
+    const ofTypes = typeFiltered
+      ? cachedPreviewEpisodes.filter((episode) => episode.episodeType !== null && episodeTypeFilter.has(episode.episodeType))
+      : cachedPreviewEpisodes
+    if (!isSeasonal) return ofTypes
     if (selectedSeasonId === null) return []
-    return cachedPreviewEpisodes
+    return ofTypes
       .filter((episode) => episode.seasonId === selectedSeasonId)
       .sort((a, b) => a.index - b.index)
-  }, [cachedPreviewEpisodes, isSeasonal, selectedSeasonId])
+  }, [cachedPreviewEpisodes, isSeasonal, selectedSeasonId, typeFiltered, episodeTypeFilter])
   const fetchedEpisodes = useMemo(
     () => episodePagesData?.pages.flatMap((page) => page.items) ?? [],
     [episodePagesData],
@@ -652,6 +709,21 @@ export default function CollectionPage() {
           </div>
         )}
 
+        {episodeTags && episodeTags.length > 1 && (
+          <div className="collection-type-filter">
+            <EpisodeTypeFilter
+              tags={episodeTags}
+              selected={episodeTypeFilter}
+              onChange={setEpisodeTypeFilter}
+            />
+            {typeFiltered && !isSeasonal && displayedTotal !== undefined && (
+              <span className="collection-type-count">
+                {displayedTotal} {displayedTotal === 1 ? 'episode' : 'episodes'}
+              </span>
+            )}
+          </div>
+        )}
+
         {isSeasonal && !seasonViewLoading && seasons.length === 0 ? (
           <div className="collection-season-empty" role="status">No seasons are available for this show.</div>
         ) : episodesViewLoading ? (
@@ -663,6 +735,10 @@ export default function CollectionPage() {
                 <div className="episode-skeleton-title episode-skeleton-title-short"/>
               </div>
             ))}
+          </div>
+        ) : typeFiltered && visibleItems.length === 0 && episodePagesData !== undefined ? (
+          <div className="collection-season-empty" role="status">
+            No episodes of the selected types{isSeasonal ? ' in this season' : ''}.
           </div>
         ) : (
           <div className="episodes-grid" role="list" aria-label={`${collection.title} episodes`}>

@@ -19,6 +19,7 @@ import {
     LocalMediaProfileUpsertOut,
     RssStreamProfileBundleIn,
     RssStreamProfileBundleOut,
+    RssStreamProfileBundleSchema,
 } from "../../types/schemas/collection_as_bundle";
 import {defaultEpisodeFilters} from "../../types/schemas/download_profile";
 import {downloadedEpisodeTypes} from "../DownloadProfile/episodeFilters";
@@ -119,12 +120,9 @@ const filterDefaultsKey = (collection?: CollectionCreatePayloadOut, seasons?: Se
 )
 
 const defaultStreamProfile = (action?: CollectionAction): Partial<RssStreamProfileBundleIn> => ({
-    enableProfile: true,
-    useDownloads: true,
+    ...getZodDefaults(RssStreamProfileBundleSchema),
     useSourceStream: action === 'stream',
     preferredFormat: 'format_1080p',
-    preferExactMatch: false,
-    epIdTypeList: ['ep', 'aux'],
 })
 
 export default function AddCollectionPage({onCancel, initialUrl}: Props) {

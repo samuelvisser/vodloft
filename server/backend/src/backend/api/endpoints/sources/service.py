@@ -11,11 +11,12 @@ from backend.api.models.source import (
 )
 from backend.db.models import Episode, Collection
 from backend.security.access import Access
+from backend.types.collection_types import CollectionType
 from backend.services.sites import preferred_sources, site_record
 from backend.services.source_requests import asking_source
 from backend.utils.helpers import slugify
 from sources import (
-    Feature, LinkKind, ResolvedLink, Site, Source, UnknownSourceError, all_sources, get_source, named_sites, sources_for,
+    Feature, LinkKind, ResolvedLink, Site, Source, UnknownSourceError, all_sources, get_source, named_sites, names_a_podcast, sources_for,
 )
 
 
@@ -59,6 +60,7 @@ def lookup_show_details(access: Access, source: Source, url: str) -> CollectionD
         author_name=author,
         author_slug=slugify(author) or details.slug,
         thumbnail_landscape_path=details.image_url,
+        probable_collection_type=CollectionType.PODCAST if names_a_podcast(details.title) else CollectionType.SERIES,
         seasons=details.seasons,
     )
 
