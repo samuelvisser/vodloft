@@ -9,7 +9,7 @@ import {faIcon} from '../../icons/faIcon'
 import NumberInput from '../common/NumberInput'
 
 
-const VIDEO_FORMATS = new Set(['format_4k', 'format_1080p', 'format_720p', 'format_hls'])
+const VIDEO_FORMATS = new Set(['format_4k', 'format_1080p', 'format_720p', 'format_360p', 'format_hls'])
 
 type Props = {
     form: UseFormReturn<any>

@@ -68,7 +68,7 @@ type CoverageRequirementProps = {
     latestFive?: boolean
 }
 
-const STANDARD_VIDEO_FORMATS = new Set(['format_4k', 'format_1080p', 'format_720p'])
+const STANDARD_VIDEO_FORMATS = new Set(['format_4k', 'format_1080p', 'format_720p', 'format_360p'])
 
 function AdvisoryCard({
     title,

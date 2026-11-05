@@ -18,11 +18,13 @@ export type {StreamDownloadProfileDefault} from './StreamProfileAdvisory'
 
 type UIOption = { value: string; label: string }
 
-const STANDARD_VIDEO_FORMATS = new Set(['format_4k', 'format_1080p', 'format_720p'])
+const STANDARD_VIDEO_FORMATS = new Set(['format_4k', 'format_1080p', 'format_720p', 'format_360p'])
 const StreamPreferredFormatReg = createSelectRegistry('StreamPreferredFormat', {
     format_4k: {label: PreferredFormatReg.getLabel('format_4k')},
     format_1080p: {label: PreferredFormatReg.getLabel('format_1080p')},
     format_720p: {label: PreferredFormatReg.getLabel('format_720p')},
+    // Only offered while streaming from a site whose video streams at 360p, such as YouTube.
+    format_360p: {label: PreferredFormatReg.getLabel('format_360p')},
     format_audio_only: {label: PreferredFormatReg.getLabel('format_audio_only')},
 })
 
@@ -87,6 +89,7 @@ export default function StreamProfileForm({
 
     const useDownloads = watch('useDownloads')
     const useSourceStream = watch('useSourceStream')
+    const offers360p = streamsMp4Directly && canStreamFromSource && !!useSourceStream
     const preferredFormat = watch('preferredFormat')
     const videoOutputMode = watch('videoOutputMode')
     const streamLiveEpisodes = watch('streamLiveEpisodes')
@@ -362,7 +365,9 @@ export default function StreamProfileForm({
                             <Select
                                 inputId="sp-preferred-format"
                                 classNamePrefix="select"
-                                options={StreamPreferredFormatReg.options}
+                                options={StreamPreferredFormatReg.options.filter((option) => (
+                                    option.value !== 'format_360p' || offers360p || field.value === 'format_360p'
+                                ))}
                                 value={StreamPreferredFormatReg.options.find(o => o.value === field.value) ?? null}
                                 onChange={(opt) => field.onChange((opt as any)?.value ?? null)}
                                 onBlur={field.onBlur}
@@ -410,11 +415,11 @@ export default function StreamProfileForm({
                         </div>
                     )}
                     <div className="help" id="sp-pref-format-help">
-                        <ReadMore summary={<span>Whether to stream video or audio from DW.</span>}>
-                            <p>VODLoft cannot control what format the video or audio that DW provides will be in. Therefore, when Use Downloads
+                        <ReadMore summary={<span>Whether to stream video or audio from {streamSourceName}.</span>}>
+                            <p>VODLoft cannot control what format the video or audio that {streamSourceName} provides will be in. Therefore, when Use Downloads
                             is disabled in streaming sources, you cannot select the exact video format you prefer.</p>
                             <p>Setting this to video will set the resolution to 1080p in the background. That wont matter much as again, VODLoft
-                                will just stream whatever video DW gives it.</p>
+                                will just stream whatever video {streamSourceName} gives it: YouTube video streams at 360p.</p>
                         </ReadMore>
                     </div>
                 </div>

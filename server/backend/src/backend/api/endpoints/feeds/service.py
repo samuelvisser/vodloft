@@ -58,9 +58,13 @@ _UNAVAILABLE_PUBLISH_STATUSES = {
     EpisodePublishStatus.SOURCE_PROCESSING.value,
 }
 _VIDEO_HEIGHTS = {
+    PreferredFormat.FORMAT_8K.value: 4320,
     PreferredFormat.FORMAT_4K.value: 2160,
+    PreferredFormat.FORMAT_1440P.value: 1440,
     PreferredFormat.FORMAT_1080P.value: 1080,
     PreferredFormat.FORMAT_720P.value: 720,
+    PreferredFormat.FORMAT_480P.value: 480,
+    PreferredFormat.FORMAT_360P.value: 360,
 }
 
 _ITUNES_NS = "http://www.itunes.com/dtds/podcast-1.0.dtd"
