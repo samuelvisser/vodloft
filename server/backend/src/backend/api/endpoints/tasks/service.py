@@ -140,21 +140,28 @@ def list_runs(
 def _task_ledger_cursor_filter(
     order_column,
     *,
-    value: datetime | None,
+    value: str | None,
     run_id: int,
     descending: bool,
 ):
+    """Rows after the cursor row, comparing timestamps as the text SQLite stores.
+
+    ``value`` is the cursor row's own stored text. Comparing a bound datetime
+    instead would put a row stored without microseconds after itself, so it
+    would repeat at the top of the next page.
+    """
     if value is None:
         return and_(
             order_column.is_(None),
             TaskRun.id < run_id if descending else TaskRun.id > run_id,
         )
 
-    value_comparison = order_column < value if descending else order_column > value
+    stored = stored_sort_text(order_column)
+    value_comparison = stored < value if descending else stored > value
     id_comparison = TaskRun.id < run_id if descending else TaskRun.id > run_id
     return or_(
         value_comparison,
-        and_(order_column == value, id_comparison),
+        and_(stored == value, id_comparison),
         order_column.is_(None),
     )
 
@@ -322,7 +329,7 @@ def query_ledger(
                         stored_sort_text(_workflow_finished_at()),
                         TaskRun.id,
                     )
-                    if workflow else (order_column,)
+                    if workflow else (stored_sort_text(order_column),)
                 )
                 anchor_stmt = select(*anchor_columns).where(TaskRun.id == cursor_id, *filters)
                 if definition_key is not None:
