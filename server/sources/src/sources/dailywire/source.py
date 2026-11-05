@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from types import MappingProxyType
+
+import requests
+
+from downloader.hls import is_master_playlist, media_playlist_segments, parse_master_playlist
 
 from ..contract import (
     MAIN_TAG, MIN_NEWEST_EPISODES, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
-    DownloadOptions, PublishStatusLabel, ResolvedLink, RssEpisodeType, SeasonRef, Site, Source, StreamMethod, VideoDetails,
-    publish_status_labels_with,
+    DownloadOptions, PublishStatusLabel, ResolvedLink, RssEpisodeType, SeasonRef, Site, Source, StreamMethod,
+    UpgradeChecks, UpgradeImprovement, UpgradeOffer, VideoDetails, publish_status_labels_with,
 )
 from .api.dw_api.client import ByShowSeason, MiddlewareClient
 from .api.dw_api.movie import MovieMiddlewareClient
@@ -13,6 +18,8 @@ from .api.records import DwEpisodeRecord
 from .auth import DeviceAuthClient
 from .links import _access_token, _first, parse_link, resolve_link
 from .playback import resolve_movie_playback
+
+_PLAYLIST_TIMEOUT_SECONDS = 15
 
 # Episode numbers .01 to .19 belong to an episode; .20 and up are the show's own extra content.
 _SHOW_EXTRA_SEGMENT = 20
@@ -59,6 +66,9 @@ class DailyWireSource(Source):
         stream_video_heights=_VIDEO_HEIGHTS,
         # Fixed versions: an HLS stream of 480p, 720p and 1080p, and audio.
         downloads=DownloadOptions(video_heights=_VIDEO_HEIGHTS, hls_bundle=True, quality_choices=False),
+        countdown_downloads=True,
+        # The Daily Wire sometimes edits an episode after it is out, such as cutting a long live stream down.
+        upgrade_checks=UpgradeChecks((UpgradeImprovement.LENGTH,), (UpgradeImprovement.LENGTH,), on_by_default=True),
     ),)
     kind_names = MappingProxyType({LinkKind.COLLECTION: "Show"})
     features = frozenset({
@@ -133,6 +143,17 @@ class DailyWireSource(Source):
         detail = client.get_episode_details(slug, require_member_exclusive=members_only)
         return EpisodeMedia(video_url=detail.video_url, audio_url=detail.audio_url)
 
+    def upgrade_offer(self, url: str, *, sponsorblock_categories: Sequence[str] = ()) -> UpgradeOffer:
+        """The length of the episode's stream as The Daily Wire serves it now. The listed runtime is
+        only a hint, so the playlist itself is measured."""
+        parsed = parse_link(url)
+        if parsed is None or parsed[0] is not LinkKind.EPISODE:
+            raise ValueError("This is not a link to an episode on The Daily Wire")
+        detail = MiddlewareClient().get_episode_details(
+            parsed[1], require_member_exclusive=DeviceAuthClient().get_token() is not None,
+        )
+        return UpgradeOffer(duration=_stream_length(detail.video_url) if detail.video_url else None)
+
     def movie_playback(
         self, *, movie_slug: str, title: str, duration: float | None,
         extra_slug: str | None = None, is_extra: bool = False, is_official_trailer: bool = False,
@@ -144,3 +165,22 @@ class DailyWireSource(Source):
             is_extra=is_extra, extra_slug=extra_slug, is_official_trailer=is_official_trailer,
         )
         return Playback(url=selection.url, metadata=selection.metadata)
+
+
+def _playlist(url: str) -> tuple[str, str]:
+    response = requests.get(url, timeout=_PLAYLIST_TIMEOUT_SECONDS)
+    response.raise_for_status()
+    return response.text, response.url
+
+
+def _stream_length(url: str) -> float | None:
+    """The length of an HLS stream in seconds: its first rendition's segments added up. Every
+    rendition of a stream is equally long."""
+    text, url = _playlist(url)
+    if is_master_playlist(text):
+        renditions = parse_master_playlist(text, url)
+        if not renditions:
+            return None
+        text, url = _playlist(renditions[0].url)
+    segments = media_playlist_segments(text, url)
+    return sum(segment.duration for segment in segments) if segments else None

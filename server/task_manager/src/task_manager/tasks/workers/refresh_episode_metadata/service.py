@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode
 from backend.services.metadata_refresh import refresh_watch_expired, sweeps_metadata
+from backend.services.sites import collection_site
+from backend.services.upgrade_check import check_changed_lengths_now
 from backend.services.custom_indexes import request_collection_custom_index_reconciliation
 from backend.services.episode_metadata_refresh import (
     episode_metadata_refresh_source_keys,
@@ -289,5 +291,6 @@ def _refresh_episode_from_dailywire(
         detail,
         previous_publish_status=old_status,
     )
+    check_changed_lengths_now(episode, collection_site(collection), datetime.now(timezone.utc))
     s.flush()
     return True

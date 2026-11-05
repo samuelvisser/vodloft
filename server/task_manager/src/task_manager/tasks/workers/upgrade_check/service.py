@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from backend.db.models import Episode
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.media_download_history import record_media_download_history
+from backend.services.sites import collection_site
 from backend.services.upgrade_check import (
     checks_profile, next_upgrade_check_at, sponsorblock_categories, upgrade_findings,
 )
@@ -67,8 +68,9 @@ def _check(s: Session, download_id: int, now: datetime) -> UpgradeResult | None:
     profile = download.download_profile
     episode = download.media
     source = get_source(episode.source_key) if isinstance(episode, Episode) else None
+    site = collection_site(episode.collection) if source is not None else None
     if (
-        profile is None or source is None or not profile.enable_profile or not checks_profile(source, profile)
+        profile is None or site is None or not profile.enable_profile or not checks_profile(site, profile)
         or download.artifact_status != MediaDownloadArtifactStatus.AVAILABLE.value
     ):
         download.upgrade_check_at = None
@@ -94,7 +96,7 @@ def _check(s: Session, download_id: int, now: datetime) -> UpgradeResult | None:
     if download is None or download.download_profile is None:
         return None
     profile = download.download_profile
-    findings = upgrade_findings(offer, download, profile, download.local_media_profile)
+    findings = upgrade_findings(offer, download, profile, download.local_media_profile, site)
     download.upgrade_checks += 1
     download.upgrade_check_at = (
         next_upgrade_check_at(profile, download.upgrade_checks, now) if findings.could_improve else None
@@ -107,6 +109,8 @@ def _check(s: Session, download_id: int, now: datetime) -> UpgradeResult | None:
             "improvements": [improvement.value for improvement in findings.improvements],
             "best_height": findings.best_height,
             "kept_height": download.video_height,
+            "offered_duration": offer.duration,
+            "kept_duration": download.duration,
         },
         occurred_at=now,
     )

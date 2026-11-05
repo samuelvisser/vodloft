@@ -16,6 +16,7 @@ from backend.db.models import Episode
 from backend.db.models.media_download import MediaDownloadAsset, MediaDownloadBase
 from backend.services.collection_cookies import note_failed_download
 from backend.services.download_plans import prepare_download_plan
+from backend.services.sites import collection_site
 from backend.services.upgrade_check import schedule_first_upgrade_check
 from backend.services.notifications.emitters import episode_downloaded
 from backend.services.media_download_history import (
@@ -25,9 +26,8 @@ from backend.services.media_download_history import (
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from config import get_settings
-from sources import get_source
 from sources.pacing import RequestCanceled, request_context
-from downloader import DownloadCanceled, EncryptedMediaError, SubscriptionRequiredError
+from downloader import DownloadCanceled, EncryptedMediaError, SubscriptionRequiredError, media_duration
 from downloader.capacity import resources
 from downloader.coordinator import DownloadExecution, execute_download_plan
 from downloader.storage.replacement import (
@@ -210,6 +210,7 @@ def run_download(
                 downloaded_publish_status=publish_status,
             )
             tracker.ensure_active()
+            duration = media_duration(execution.result.path, ffmpeg_path=plan.ffmpeg_path)
             # Stop concurrent reporting before entering the final transaction;
             # no auxiliary thread owns a Session or writes past publication.
             lifecycle = tracker.finish()
@@ -240,6 +241,7 @@ def run_download(
             download.sponsorblock_segments = None if segments is None else [segment._asdict() for segment in segments]
             video = execution.result.video
             download.video_height, download.video_codec = (video.height, video.codec) if video is not None else (None, None)
+            download.duration = duration
             download.subtitle_languages = (
                 [subtitle.language for subtitle in execution.result.subtitles if not subtitle.auto_generated]
                 if plan.source.ytdlp_command else None
@@ -248,7 +250,7 @@ def run_download(
             download.downloaded_at = finished
             if isinstance(download.media, Episode):
                 download.downloaded_publish_status = publish_status
-                schedule_first_upgrade_check(download, get_source(download.media.source_key), finished)
+                schedule_first_upgrade_check(download, collection_site(download.media.collection), finished)
                 episode_downloaded(session, download.media, path=execution.result.path, replaced=is_redownload)
             result_data = {
                 "media_download_id": media_download_id, "is_redownload": is_redownload,

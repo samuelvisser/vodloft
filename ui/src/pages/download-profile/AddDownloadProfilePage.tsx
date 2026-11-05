@@ -250,6 +250,7 @@ export default function AddDownloadProfilePage() {
                     collectionId={selectedCollection?.id}
                     seasons={seasonsData}
                     collectionRoot={false}
+                    newProfile
                 />
 
                 <div className="actions">

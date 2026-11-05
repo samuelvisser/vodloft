@@ -59,7 +59,10 @@ class DownloadProfile(Base, HasTaskResourcesMixin):
     )
     upgrade_improvements: Mapped[list[str]] = mapped_column(
         MutableList.as_mutable(JSON), default=lambda: list(DEFAULT_UPGRADE_IMPROVEMENTS), nullable=False,
-        comment="What counts as a better version: resolution, sponsorblock, subtitles or codec",
+        comment="What counts as a better version: resolution, sponsorblock, subtitles, codec or length",
+    )
+    upgrade_length_minutes: Mapped[int] = mapped_column(
+        default=5, server_default="5", comment="How many minutes longer or shorter counts as a different length",
     )
 
     created_at: Mapped[datetime] = mapped_column(

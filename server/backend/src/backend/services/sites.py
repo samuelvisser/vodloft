@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, Site, Video
 from backend.types.site_types import SiteRefreshMode
-from sources import Site as SourceSite, collection_on_site, site_for
+from sources import Site as SourceSite, collection_on_site, site_for, source_site
 
 
 class CollectionAlreadyAddedError(ValueError):
@@ -65,7 +65,7 @@ def place_collection(s: Session, collection: Collection) -> None:
 
 
 def collection_site(collection: Collection) -> SourceSite:
-    """The Site a collection is on, as the sources package tells it, with what VODLoft may do there."""
+    """The Site a collection is on, with what the collection's own Source offers there."""
     return _site_of(collection.sharing_url, collection.source_key)
 
 
@@ -76,7 +76,7 @@ def video_site(video: Video) -> SourceSite:
 @lru_cache(maxsize=1024)
 def _site_of(url: str, source_key: str) -> SourceSite:
     # Telling a yt-dlp link's Site tries every extractor, and a feed asks once per episode.
-    return site_for(url, source_key)
+    return source_site(url, source_key)
 
 
 def place_video(s: Session, video: Video) -> None:

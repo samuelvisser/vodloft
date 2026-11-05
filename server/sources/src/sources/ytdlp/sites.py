@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import threading
 
-from ..contract import Site, StreamMethod, domain_site, link_host
+from dataclasses import replace
+
+from ..contract import Site, StreamMethod, UpgradeChecks, UpgradeImprovement, domain_site, link_host
 
 # How VODLoft names the sites most people use; any other Site is named after its domain.
 _NAMES = {
@@ -28,6 +30,15 @@ _REFRESH_INTERVALS = {"youtube": "30m,2h,6h,24h,3d,7d,14d"}
 # podcast apps before it is added. YouTube only offers its 360p MP4 and M4A audio as plain files.
 _STREAM_METHODS = {"youtube": frozenset({StreamMethod.FILE})}
 _STREAM_VIDEO_HEIGHTS = {"youtube": (360,)}
+# yt-dlp tells a video's resolutions, codecs and subtitles on every site; SponsorBlock only has YouTube's videos.
+_UPGRADE_CHECKS = UpgradeChecks(
+    (UpgradeImprovement.RESOLUTION, UpgradeImprovement.SUBTITLES, UpgradeImprovement.CODEC),
+    (UpgradeImprovement.RESOLUTION,), on_by_default=True,
+)
+_SITE_UPGRADE_CHECKS = {"youtube": UpgradeChecks(
+    (UpgradeImprovement.RESOLUTION, UpgradeImprovement.SPONSORBLOCK, UpgradeImprovement.SUBTITLES, UpgradeImprovement.CODEC),
+    (UpgradeImprovement.RESOLUTION, UpgradeImprovement.SPONSORBLOCK), on_by_default=True,
+)}
 _PREFIX = "yt_dlp.extractor."
 _extractors: list | None = None
 _lock = threading.Lock()
@@ -55,10 +66,10 @@ def _family(extractor) -> str:
 def site_for(url: str) -> Site:
     extractor = next((candidate for candidate in _extractor_classes() if candidate.suitable(url)), None)
     if extractor is None or extractor.ie_key() == "Generic":
-        return domain_site(url)
+        return replace(domain_site(url), upgrade_checks=_UPGRADE_CHECKS)
     host = domain_site(url).name
     key = _family(extractor)
     return Site(
         key, _NAMES.get(key, host), (host,), _REFRESH_INTERVALS.get(key), stream_methods=_STREAM_METHODS.get(key, frozenset()),
-        stream_video_heights=_STREAM_VIDEO_HEIGHTS.get(key, ()),
+        stream_video_heights=_STREAM_VIDEO_HEIGHTS.get(key, ()), upgrade_checks=_SITE_UPGRADE_CHECKS.get(key, _UPGRADE_CHECKS),
     )

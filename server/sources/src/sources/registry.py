@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 
 from .contract import ANY_DOMAIN, Site, Source, domain_site, link_host, on_domain
 
@@ -78,6 +79,21 @@ def site_for(url: str, source_id: str | None = None) -> Site:
     if site is None and source_id is not None and source_id in _sources:
         site = _sources[source_id].site_for(url)
     return site or domain_site(url)
+
+
+def source_site(url: str, source_id: str) -> Site:
+    """What the Source that fetches a link offers on the link's Site.
+
+    Which Site the link is on is ``site_for``'s answer, shared by every Source. What the Site
+    offers, such as countdown downloads, upgrade checks or streaming, comes from the fetching
+    Source's own contract for it only: a Daily Wire link fetched with yt-dlp gets what yt-dlp
+    offers, never what The Daily Wire's own Source does. A Source with no contract for the Site
+    offers its defaults.
+    """
+    site = site_for(url, source_id)
+    source = _sources.get(source_id)
+    own = source.site_for(url) if source is not None else None
+    return replace(own or Site(site.key, site.name), key=site.key, name=site.name, domains=site.domains)
 
 
 def collection_on_site(url: str, source_id: str, source_ref: str) -> tuple[Site, str]:

@@ -1,11 +1,12 @@
+import {useEffect} from 'react'
 import {Controller, useWatch, type UseFormReturn} from 'react-hook-form'
 import Switch from 'react-switch'
 
 import ReadMore from '../../utils/ReadMore'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import SimpleSelect from '../common/SimpleSelect'
-import {useCollections, useLocalMediaProfiles, useSiteOptions, useSourceLookup} from '../../lib/queries'
-import {sourceControls} from '../../lib/sourceControls'
+import {useLocalMediaProfiles, useSiteOptions} from '../../lib/queries'
+import type {UpgradeImprovement} from '../../types/schemas/download_profile'
 import NumberInput from '../common/NumberInput'
 import './UpgradeCheckCard.css'
 
@@ -17,32 +18,47 @@ type Props = {
     sourceKey?: string
     /** The link of a collection that is not saved yet. */
     collectionUrl?: string
+    /** A profile that is not saved yet starts with the upgrade check its collection's Site suggests. */
+    newProfile?: boolean
 }
-
-type Improvement = 'resolution' | 'sponsorblock' | 'subtitles' | 'codec'
 
 const SWITCH = {onColor: '#0ea5e9', offColor: '#d1d5db', uncheckedIcon: false, checkedIcon: false} as const
 
+const CHOICES: Record<Exclude<UpgradeImprovement, 'length'>, {label: string, help: string}> = {
+    resolution: {label: 'A higher resolution', help: 'up to the Local Media Profile’s quality'},
+    sponsorblock: {label: 'New SponsorBlock segments', help: 'of the types you mark or cut out'},
+    subtitles: {label: 'New subtitles', help: 'in a language the Local Media Profile asks for'},
+    codec: {label: 'The preferred codec', help: 'the first allowed codec in the Local Media Profile'},
+}
+
 /**
- * The upgrade check: download an episode again later, and keep the new file only when it is better. It only
- * shows what can improve for the Collection's site; The Daily Wire's countdown downloads live here too.
+ * The upgrade check: download an episode again later, and keep the new file only when it is better. The
+ * Collection's Site decides what shows: whether it has countdown downloads, and what can count as better.
+ * A Site with neither has no upgrade check at all.
  */
-export default function UpgradeCheckCard({form, collectionId, sourceKey, collectionUrl}: Props) {
-    const {control, register, setValue, formState: {errors}} = form
+export default function UpgradeCheckCard({form, collectionId, sourceKey, collectionUrl, newProfile}: Props) {
+    const {control, register, setValue, getValues, formState: {errors}} = form
     const [withCountdown, upgradeCheck, afterDays, improvements, sponsorblockEnabled, localMediaProfileId] = useWatch({
         control,
         name: ['downloadWithCountdown', 'upgradeCheck', 'upgradeAfterDays', 'upgradeImprovements', 'sponsorblockEnabled', 'localMediaProfileId'],
-    }) as [boolean, boolean, number, Improvement[] | undefined, boolean, number | string | undefined]
+    }) as [boolean, boolean, number, UpgradeImprovement[] | undefined, boolean, number | string | undefined]
 
-    const {data: collections} = useCollections()
-    const collection = collections?.find((item) => item.id === collectionId)
-    const newCollectionSource = useSourceLookup().get(sourceKey)
-    const controls = sourceControls(collection ?? (newCollectionSource ? {sourceFeatures: newCollectionSource.features} : undefined))
-    const offersCountdown = controls.countdownDownloads || !!withCountdown
     const {data: site} = useSiteOptions({collectionId, sourceKey, url: collectionUrl})
-    const offersUpgrades = !!site?.upgradeChecks
+    // A profile that already downloads with the countdown keeps the switches, so it can turn them off.
+    const offersCountdown = !!site?.countdownDownloads || !!withCountdown
+    const offered = site?.upgradeChecks.improvements ?? []
+    const offersUpgrades = offered.length > 0
     const {data: mediaProfiles} = useLocalMediaProfiles()
     const mediaProfile = mediaProfiles?.find((profile) => String(profile.id) === String(localMediaProfileId))
+
+    // A new profile starts with the Site's own suggestion, unless it already checks for something the Site offers.
+    useEffect(() => {
+        if (!newProfile || !site) return
+        const current: UpgradeImprovement[] = getValues('upgradeImprovements') ?? []
+        if (current.some((improvement) => site.upgradeChecks.improvements.includes(improvement))) return
+        setValue('upgradeCheck', site.upgradeChecks.onByDefault)
+        setValue('upgradeImprovements', [...site.upgradeChecks.checked])
+    }, [newProfile, site, getValues, setValue])
 
     if (!offersCountdown && !offersUpgrades) return null
 
@@ -53,21 +69,24 @@ export default function UpgradeCheckCard({form, collectionId, sourceKey, collect
         every: {label: `Every ${days} ${days === 1 ? 'day' : 'days'}, up to 3 times`},
     })
     const chosen = new Set(improvements ?? [])
-    const toggle = (improvement: Improvement, on: boolean) => {
+    const toggle = (improvement: UpgradeImprovement, on: boolean) => {
         const next = new Set(chosen)
         if (on) next.add(improvement)
         else next.delete(improvement)
-        setValue('upgradeImprovements', (['resolution', 'sponsorblock', 'subtitles', 'codec'] as Improvement[]).filter((key) => next.has(key)), {shouldDirty: true})
+        setValue('upgradeImprovements', offered.filter((key) => next.has(key)), {shouldDirty: true})
     }
     const audioOnly = mediaProfile?.preferredFormat === 'format_audio_only'
     // A profile that is still being made in the same flow counts as storing subtitles.
     const storesSubtitles = !mediaProfile || mediaProfile.subtitleMode !== 'no_subtitles'
-    const choices: {key: Improvement, label: string, help: string, shown: boolean}[] = [
-        {key: 'resolution', label: 'A higher resolution', help: 'up to the Local Media Profile’s quality', shown: !audioOnly},
-        {key: 'sponsorblock', label: 'New SponsorBlock segments', help: 'of the types you mark or cut out', shown: !!site?.sponsorblock && sponsorblockEnabled},
-        {key: 'subtitles', label: 'New subtitles', help: 'in a language the Local Media Profile asks for', shown: storesSubtitles},
-        {key: 'codec', label: 'The preferred codec', help: 'the first allowed codec in the Local Media Profile', shown: !audioOnly},
-    ]
+    // Only what the Site offers, and of that only what the profile can use.
+    const usable: Record<UpgradeImprovement, boolean> = {
+        resolution: !audioOnly,
+        sponsorblock: sponsorblockEnabled,
+        subtitles: storesSubtitles,
+        codec: !audioOnly,
+        length: true,
+    }
+    const choices = offered.filter((key) => usable[key])
 
     return (
         <div className="form-row which-episodes upgrade-check" id="upgrade-check">
@@ -98,6 +117,8 @@ export default function UpgradeCheckCard({form, collectionId, sourceKey, collect
                     </div>
                 )}
 
+                {offersCountdown && offersUpgrades && <div className="upgrade-check-divider"/>}
+
                 {offersUpgrades && (
                     <div className="upgrade-check-row">
                         <label htmlFor="upgrade-check-on">Download again when a better version is out</label>
@@ -106,10 +127,11 @@ export default function UpgradeCheckCard({form, collectionId, sourceKey, collect
                         )}/>
                         <div className="help">
                             <ReadMore summary={<span>The new file replaces the old one only when it is better</span>}>
-                                Sites often improve a video after it is uploaded: a higher resolution can appear hours later, and
-                                SponsorBlock segments and subtitles are added over days. VODLoft first asks the site what it has now,
-                                and only downloads again when one of the improvements you check below is there. The old file stays
-                                until the new one is complete. Kept downloads are checked too.
+                                Sites often change a video after it is uploaded: a higher resolution can appear hours later,
+                                SponsorBlock segments and subtitles are added over days, and a long live stream can be cut down.
+                                VODLoft first asks the site what it has now, and only downloads again when one of the changes you
+                                check below is there. A different length is also checked as soon as the metadata refresh sees one.
+                                The old file stays until the new one is complete. Kept downloads are checked too.
                             </ReadMore>
                         </div>
                     </div>
@@ -138,13 +160,32 @@ export default function UpgradeCheckCard({form, collectionId, sourceKey, collect
                         </div>
                         <fieldset className="upgrade-check-improvements">
                             <legend>Better means</legend>
-                            {choices.filter((choice) => choice.shown).map((choice) => (
-                                <label key={choice.key} className="upgrade-check-choice">
+                            {choices.map((key) => key === 'length' ? (
+                                <div key={key} className="upgrade-check-choice upgrade-check-length">
                                     <input
-                                        type="checkbox" checked={chosen.has(choice.key)}
-                                        onChange={(event) => toggle(choice.key, event.target.checked)}
+                                        id="upgrade-length" type="checkbox" checked={chosen.has(key)}
+                                        onChange={(event) => toggle(key, event.target.checked)}
                                     />
-                                    <span>{choice.label} <span className="upgrade-check-choice-help">{choice.help}</span></span>
+                                    <label htmlFor="upgrade-length">A different length</label>
+                                    <span className="upgrade-check-choice-help">longer or shorter by more than</span>
+                                    <NumberInput
+                                        id="upgrade-length-minutes" inputMode="numeric" min={1} max={600} step={1}
+                                        wrapperClassName="upgrade-check-minutes" aria-label="Minutes" suffix="minutes"
+                                        disabled={!chosen.has(key)}
+                                        {...register('upgradeLengthMinutes', {valueAsNumber: true})}
+                                        aria-invalid={!!errors.upgradeLengthMinutes}
+                                    />
+                                    {errors.upgradeLengthMinutes && (
+                                        <div className="error" role="alert">{errors.upgradeLengthMinutes.message as string}</div>
+                                    )}
+                                </div>
+                            ) : (
+                                <label key={key} className="upgrade-check-choice">
+                                    <input
+                                        type="checkbox" checked={chosen.has(key)}
+                                        onChange={(event) => toggle(key, event.target.checked)}
+                                    />
+                                    <span>{CHOICES[key].label} <span className="upgrade-check-choice-help">{CHOICES[key].help}</span></span>
                                 </label>
                             ))}
                             <div className="help">Checks stop early once an episode can’t get any better.</div>

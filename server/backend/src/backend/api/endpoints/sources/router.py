@@ -3,10 +3,10 @@ from fastapi import APIRouter, HTTPException, Query
 from backend.api.models.source import (
     DownloadOptionsAPIRead, SiteOptionsAPIRead, YtdlpOptionLineAPIRead, YtdlpOptionsAPIRead, YtdlpOptionsAPIUpdate, YtdlpOptionsCheckAPIRequest,
     ApiKeyAPIUpdate, ApiStatusAPIRead, CookiesAPIRead, EpisodeTagAPIRead, PublishStatusLabelAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultsAPIRead,
-    CollectionDetailsAPIRead, SourceAPIRead, SourceSiteAPIRead, SourceSiteAPIUpdate,
+    CollectionDetailsAPIRead, SourceAPIRead, SourceSiteAPIRead, SourceSiteAPIUpdate, UpgradeChecksAPIRead,
 )
 from backend.app import db_session
-from sources import ApiKeyRejected, Feature, Source, UnknownSourceError, get_source, site_for
+from sources import ApiKeyRejected, Feature, Source, UnknownSourceError, get_source, source_site
 from sources.ytdlp_options import check_ytdlp_options
 from backend.services.source_options import save_ytdlp_source_options, ytdlp_source_options
 
@@ -98,12 +98,13 @@ def site_options(source_id: str, url: str = Query(min_length=1, max_length=2048)
         source = get_source(source_id)
     except UnknownSourceError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    site = site_for(url, source.id)
+    site = source_site(url, source.id)
     return SiteOptionsAPIRead(
         auto_subtitles=source.auto_subtitles_for(url), sponsorblock=source.sponsorblock_for(url),
-        upgrade_checks=source.has(Feature.UPGRADE_CHECKS), site_name=site.name,
+        countdown_downloads=site.countdown_downloads,
+        upgrade_checks=UpgradeChecksAPIRead.model_validate(site.upgrade_checks), site_name=site.name,
         stream_methods=site.stream_methods,
-            stream_video_heights=site.stream_video_heights, downloads=DownloadOptionsAPIRead.model_validate(site.downloads),
+        stream_video_heights=site.stream_video_heights, downloads=DownloadOptionsAPIRead.model_validate(site.downloads),
     )
 
 
