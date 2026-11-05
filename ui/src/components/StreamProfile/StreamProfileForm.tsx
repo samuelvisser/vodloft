@@ -246,6 +246,11 @@ export default function StreamProfileForm({
             canOpenDownloadProfiles={canOpenDownloadProfiles}
             sourceName={streamSourceName}
             canStreamFromSource={canStreamFromSource}
+            hlsDownloads={site ? site.downloads.hlsBundle : true}
+            onEnableSourceStream={() => setValue('useSourceStream', true, {
+                shouldDirty: true,
+                shouldValidate: true,
+            })}
             onEnableDownloads={() => setValue('useDownloads', true, {
                 shouldDirty: true,
                 shouldValidate: true,
@@ -521,7 +526,7 @@ export default function StreamProfileForm({
                     regeneratingToken={regeneratingToken}
                     advisory={streamProfileAdvisory}
                     liveEpisodes={canStreamLiveEpisodes}
-                    hlsVideo={!(canStreamFromSource && useSourceStream) || canStreamHls}
+                    hlsVideo={!site || canStreamHls || site.downloads.hlsBundle}
                     proxyChoice={canStreamFromSource && !!site?.streamProxyChoice}
                     siteName={streamSourceName}
                 />

@@ -19,14 +19,14 @@ type Props = {
     advisory?: ReactNode
     /** Whether the collection's Site streams live episodes. */
     liveEpisodes?: boolean
-    /** Whether HLS video outputs can be offered: not while streaming from a Site that has no HLS, such as YouTube. */
+    /** Whether HLS video outputs can be offered: only where the Site streams HLS or Download Profiles can keep it as HLS. */
     hlsVideo?: boolean
     /** Whether a feed can send podcast apps straight to the Site's video, or pass it through VODLoft. */
     proxyChoice?: boolean
     siteName?: string
 }
 
-// The MP4 output that takes the place of an HLS one on a Site that streams no HLS.
+// The MP4 output that takes the place of an HLS one on a Site that has no HLS video.
 const MP4_FOR_HLS: Record<string, string> = {audio_hls: 'audio_mp4', mp4_hls: 'mp4'}
 
 export default function RssStreamProfileForm({

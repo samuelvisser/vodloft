@@ -28,7 +28,7 @@ from .storage.replacement import (
     PreviousDownload, ReplacementJournal, ReplacementSidecar, publish_replacement,
 )
 from .speed import limiter
-from .ytdlp import download_ytdlp
+from .ytdlp import download_ytdlp, download_ytdlp_hls_bundle
 
 
 @dataclass(frozen=True)
@@ -199,7 +199,7 @@ def execute_download_plan(
                 if plan.source.ytdlp_command:
                     rate = limiter.share(resources.media.active)
                     transfer = partial(
-                        download_ytdlp,
+                        partial(download_ytdlp_hls_bundle, ffmpeg_path=plan.ffmpeg_path) if plan.source.hls_bundle else download_ytdlp,
                         command=(*plan.source.ytdlp_command, *(("--limit-rate", f"{int(rate)}") if rate else ())),
                         subtitles_dir=workspace.workspace if ytdlp_subtitles else None,
                         subtitles=plan.source.ytdlp_subtitles,

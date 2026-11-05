@@ -33,7 +33,7 @@ def ensure_site_can_stream(
         preferred_format: str, video_output_mode: Optional[str],
 ) -> None:
     """A feed only streams episodes that are not downloaded in a way the collection's Site offers:
-    as files, as HLS video, and live."""
+    as files, as HLS video, and live. HLS video also needs the Site to stream it or keep it as a download."""
     site = collection_site(collection)
     if use_source_stream and not site.streams:
         raise HTTPException(
@@ -43,8 +43,9 @@ def ensure_site_can_stream(
     hls_video = (
         preferred_format != PreferredFormat.FORMAT_AUDIO_ONLY.value and video_output_mode in RSS_HLS_OUTPUT_MODES
     )
-    if use_source_stream and hls_video and StreamMethod.HLS not in site.stream_methods:
-        raise HTTPException(status_code=422, detail=f"{site.name} cannot stream video as HLS; choose an MP4 video output")
+    # HLS video comes from the Site's stream or from downloads kept as an HLS bundle.
+    if hls_video and StreamMethod.HLS not in site.stream_methods and not site.downloads.hls_bundle:
+        raise HTTPException(status_code=422, detail=f"{site.name} has no HLS video; choose an MP4 video output")
     if stream_live_episodes and StreamMethod.LIVE not in site.stream_methods:
         raise HTTPException(status_code=422, detail=f"{site.name} cannot stream live episodes")
     # A feed serves the downloaded version nearest to its format, or the Site's own stream, which only

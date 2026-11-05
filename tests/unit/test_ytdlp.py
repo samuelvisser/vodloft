@@ -195,7 +195,7 @@ def test_profile_formats_map_to_ytdlp_options():
     assert (source.extension, source.ytdlp_command[0], source.use_hls) == ("mp4", "yt-dlp", False)
     assert resolve_ytdlp_source("https://x", command=("yt-dlp",), preferred_format="format_audio_only", audio_only=True).extension == "m4a"
     with pytest.raises(DownloadError, match="HLS"):
-        resolve_ytdlp_source("https://x", command=("yt-dlp",), preferred_format="format_hls", audio_only=False)
+        resolve_ytdlp_source("https://x", command=("yt-dlp",), preferred_format="format_hls", audio_only=True)
 
 
 def _option(options, name):

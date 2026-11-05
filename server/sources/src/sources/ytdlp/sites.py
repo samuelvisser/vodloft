@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import threading
 
-from ..contract import Site, StreamMethod, domain_site, link_host
+from ..contract import DownloadOptions, Site, StreamMethod, domain_site, link_host
 
 # How VODLoft names the sites most people use; any other Site is named after its domain.
 _NAMES = {
@@ -33,6 +33,8 @@ _STREAM_METHODS = {"youtube": frozenset({StreamMethod.FILE, StreamMethod.HLS})}
 _STREAM_VIDEO_HEIGHTS = {"youtube": (360, 720, 1080)}
 _STREAM_FILE_HEIGHTS = {"youtube": 360}
 _STREAM_PROXY_CHOICE = {"youtube"}
+# The Sites whose separate H.264 video and M4A audio Local Media Profiles can keep as an HLS bundle.
+_HLS_DOWNLOADS = {"youtube"}
 _PREFIX = "yt_dlp.extractor."
 _extractors: list | None = None
 _lock = threading.Lock()
@@ -67,4 +69,14 @@ def site_for(url: str) -> Site:
         key, _NAMES.get(key, host), (host,), _REFRESH_INTERVALS.get(key), stream_methods=_STREAM_METHODS.get(key, frozenset()),
         stream_video_heights=_STREAM_VIDEO_HEIGHTS.get(key, ()), stream_file_height=_STREAM_FILE_HEIGHTS.get(key),
         stream_proxy_choice=key in _STREAM_PROXY_CHOICE,
+        downloads=_downloads(key),
     )
+
+
+def _downloads(key: str) -> DownloadOptions:
+    return DownloadOptions(hls_bundle=True) if key in _HLS_DOWNLOADS else DownloadOptions()
+
+
+def download_options() -> DownloadOptions:
+    """What any Site yt-dlp downloads from offers: the defaults, and an HLS bundle from some."""
+    return DownloadOptions.combined((DownloadOptions(), *(_downloads(key) for key in _HLS_DOWNLOADS)))

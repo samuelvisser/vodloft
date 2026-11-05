@@ -15,7 +15,7 @@ from config import get_settings
 from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
-    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, Feature, LinkKind, LinkPreview, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
+    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, DownloadOptions, Feature, LinkKind, LinkPreview, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
     ResolvedLink, SearchResults, CollectionDetails, Site, Source, SourceProblem, SponsorBlockSegment, StreamMethod, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
 )
@@ -378,6 +378,10 @@ class YtDlpSource(Source):
         self._cache_lock = threading.Lock()
         # A channel's handle never changes its ID, so it is looked up once.
         self._channel_ids: dict[str, str] = {}
+
+    @property
+    def download_options(self) -> DownloadOptions:
+        return sites.download_options()
 
     def site_for(self, url: str) -> Site:
         """The site of the yt-dlp extractor that handles the link: one Site for all of YouTube's domains."""

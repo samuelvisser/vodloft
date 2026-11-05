@@ -36,6 +36,9 @@ type Props = {
     sourceName?: string
     /** Whether the collection's Source can stream episodes that are not downloaded. */
     canStreamFromSource?: boolean
+    /** Whether Download Profiles can keep the Site's video as HLS. Without, HLS video only comes from streaming. */
+    hlsDownloads?: boolean
+    onEnableSourceStream?: () => void
     onEnableDownloads: () => void
     onDisableDwStream: () => void
 }
@@ -313,6 +316,8 @@ export default function StreamProfileAdvisory({
     canOpenDownloadProfiles = true,
     sourceName = 'The Daily Wire',
     canStreamFromSource = true,
+    hlsDownloads = true,
+    onEnableSourceStream,
     onEnableDownloads,
     onDisableDwStream,
 }: Props) {
@@ -330,7 +335,10 @@ export default function StreamProfileAdvisory({
         && usesVideo
         && (videoOutputMode === 'audio_hls' || videoOutputMode === 'mp4_hls')
 
+    // HLS video the Site cannot download is only served while streaming; no Download Profile can cover it.
+    const hlsOnlyStreams = !hlsDownloads && usesVideo && (videoOutputMode === 'audio_hls' || videoOutputMode === 'mp4_hls')
     const requiredKinds = requiredDownloadKinds(preferredFormat, videoOutputMode)
+        .filter((kind) => kind !== 'hls' || hlsDownloads)
     const requiredCoverage = requiredKinds.map((kind) => (
         coverageForKind(downloadProfiles, selectedEpisodeTypes, kind)
     ))
@@ -373,6 +381,22 @@ export default function StreamProfileAdvisory({
         && videoOutputMode === 'mp4_hls'
         && videoCoverage.uncoveredEpisodeTypes.length > 0
     )
+
+    if (isRssProfile && !useSourceStream && hlsOnlyStreams) {
+        return (
+            <AdvisoryCard
+                title="HLS video is only supported for streaming"
+                actions={canStreamFromSource && onEnableSourceStream ? (
+                    <button type="button" className="btn btn-primary" onClick={onEnableSourceStream}>
+                        Enable {streaming}
+                    </button>
+                ) : undefined}
+            >
+                {sourceName} video cannot be downloaded as HLS, so this feed only has HLS video while {streaming} is enabled.
+                {' '}Enable it, or choose a video podcast output with MP4 video.
+            </AdvisoryCard>
+        )
+    }
 
     if (showDirectMp4StreamingWarning) {
         return (

@@ -13,7 +13,7 @@ export const PreferredFormatReg = createSelectRegistry("PreferredFormat", {
   'format_1440p': { label: "1440p", help: "Up to 1440p" },
   'format_4k':   { label: "4K",   help: "Download a 4k video" },
   'format_8k': { label: "8K", help: "Up to 8K" },
-  'format_hls': { label: "HLS (480p / 720p / 1080p)", help: "Download an adaptive HLS video package with 480p, 720p and 1080p renditions" },
+  'format_hls': { label: "HLS (up to 1080p)", help: "Download an adaptive HLS video package with every resolution up to 1080p" },
   'format_audio_only':   { label: "Audio Only",   help: "Download audio only" },
 });
 

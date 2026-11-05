@@ -115,6 +115,8 @@ YouTube streams video at 360p, 720p or 1080p. Higher resolutions only exist as v
 - **HLS** plays straight away at up to the feed's resolution, and lets the app pick a lower one on a slow connection.
 - **MP4** at 360p plays straight away too: it is YouTube's only video that comes with sound in one file. At 720p and 1080p, VODLoft first joins YouTube's separate video and audio into one file. Until that file is ready, the episode plays at 360p. VODLoft starts on the newest episodes of the feed as soon as your podcast app fetches it, so those are usually ready before you play them. The files are kept in the RSS cache.
 
+With YouTube streaming disabled, a feed serves only downloaded episodes. For an HLS output, those need a Download Profile with **HLS bundle**, which keeps YouTube's 360p, 720p and 1080p together just like the stream. Other sites downloaded with yt-dlp have no HLS video, so their feeds offer MP4 outputs only.
+
 ### Proxy video through VODLoft
 
 Normally your podcast app fetches YouTube video straight from YouTube. With **Proxy video through VODLoft** enabled, VODLoft fetches it and passes it on instead. This might make the feed more stable, but every video you watch then goes through your VODLoft server's internet connection twice: once down from YouTube and once up to your app.
