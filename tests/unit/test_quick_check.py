@@ -213,6 +213,8 @@ def test_a_quick_check_adds_only_new_videos_and_waits_for_the_next_interval(quic
     later = run_quick_check(session, now=now + timedelta(minutes=15))
 
     assert (later.checked, later.found) == (2, 2)
+    # The result names each collection it checked, so their Sync logs can show the check.
+    assert [(c.collection_id, c.episodes_found) for c in later.collections] == [(collection.id, 1), (never_indexed.id, 1)]
     assert quick.detailed == [["v3"], ["v3"]]
     episodes = session.query(Episode).filter(Episode.collection_id == collection.id).order_by(Episode.index).all()
     assert [(e.source_slug, e.episode_identifier) for e in episodes] == [("v1", "ep.1"), ("v2", "ep.2"), ("v3", "ep.3")]

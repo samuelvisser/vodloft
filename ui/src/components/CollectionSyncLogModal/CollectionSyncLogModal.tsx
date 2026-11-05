@@ -1,8 +1,6 @@
 import {useEffect, useState} from 'react'
+import {keepPreviousData, useQuery, useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {useCollection} from '../../lib/queries'
-import {useTaskLedgerInfinite} from '../../lib/taskLedger'
-import {TaskLedgerEntryRead} from '../../types/schemas/task'
 import './CollectionSyncLogModal.css'
 import {faIcon} from '../../icons/faIcon'
 
@@ -15,41 +13,28 @@ type Props = {
   onSyncNow: () => void | Promise<void>
 }
 
+/** One scan that looked at the Collection: a full scan or a quick check. */
+type CollectionScan = {
+  id: number
+  kind: 'full_scan' | 'quick_check'
+  status: 'SUCCEEDED' | 'FAILED' | 'CANCELED'
+  ranAt: string | null
+  episodesFound: number | null
+}
+
+type CollectionSyncLog = {items: CollectionScan[], total: number}
+
 const PAGE_SIZE = 10
-const TERMINAL_STATUSES = ['SUCCEEDED', 'FAILED', 'CANCELED'] as const
 
-function resultData(run: TaskLedgerEntryRead): Record<string, unknown> {
-  const result = run.result
-  if (!result || typeof result !== 'object') return {}
-  const data = result.data
-  return data && typeof data === 'object' && !Array.isArray(data)
-    ? data as Record<string, unknown>
-    : {}
+const SCAN_KIND_LABELS: Record<CollectionScan['kind'], string> = {
+  full_scan: 'Full scan',
+  quick_check: 'Quick check',
 }
 
-function collectionResult(run: TaskLedgerEntryRead, collectionId: number): Record<string, unknown> | null {
-  const data = resultData(run)
-  if (run.resourceId === collectionId) return data
-  if (run.resourceId !== null) return null
-
-  const collections = Array.isArray(data.collections) ? data.collections : []
-  const matching = collections.find((item) => {
-    if (!item || typeof item !== 'object') return false
-    return Number((item as Record<string, unknown>).collection_id) === collectionId
-  })
-  if (matching && typeof matching === 'object') return matching as Record<string, unknown>
-
-  // Global fetches are scoped to every collection that existed when they ran. The
-  // ledger query starts at this collection's creation time, so keep the row even if a
-  // failed/canceled run (or an older result shape) has no per-collection payload.
-  return {}
-}
-
-function episodeCount(run: TaskLedgerEntryRead, collectionId: number): string | number {
-  if (run.status === 'FAILED') return 'Failed'
-  if (run.status === 'CANCELED') return 'Canceled'
-  const found = collectionResult(run, collectionId)?.episodes_found
-  return typeof found === 'number' && Number.isFinite(found) ? found : '—'
+function episodeCount(scan: CollectionScan): string | number {
+  if (scan.status === 'FAILED') return 'Failed'
+  if (scan.status === 'CANCELED') return 'Canceled'
+  return scan.episodesFound ?? 0
 }
 
 function formatDate(value: string | null | undefined): string {
@@ -59,49 +44,40 @@ function formatDate(value: string | null | undefined): string {
 }
 
 export default function CollectionSyncLogModal({collectionSlug, collectionTitle, open, syncing, onClose, onSyncNow}: Props) {
-  const {data: collection} = useCollection(collectionSlug)
-  const collectionId = collection?.id
   const [page, setPage] = useState(1)
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     if (open) setPage(1)
   }, [open, collectionSlug])
 
-  // Global scans have no resource; their results list each show they scanned.
-  const ledger = useTaskLedgerInfinite({
-    definitionKey: 'fetch_new_episodes',
-    resourceType: 'collection',
-    resourceId: collectionId === undefined ? undefined : [collectionId],
-    includeUnscoped: true,
-    status: TERMINAL_STATUSES,
-    startedAfter: collection?.createdAt,
-    orderBy: 'created_at',
-    order: 'desc',
-    limit: PAGE_SIZE,
-    enabled: open && collectionId !== undefined,
+  const log = useQuery({
+    queryKey: ['collection', collectionSlug, 'syncLog', page],
+    enabled: open,
+    placeholderData: keepPreviousData,
+    queryFn: async ({signal}): Promise<CollectionSyncLog> => {
+      const params = new URLSearchParams({offset: String((page - 1) * PAGE_SIZE), limit: String(PAGE_SIZE)})
+      const r = await fetch(
+        `${(window as any).appConfig.API_URL}/collections/${encodeURIComponent(collectionSlug)}/sync-log?${params}`,
+        {signal, credentials: 'include'},
+      )
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      return r.json()
+    },
   })
 
-  const total = ledger.total
+  // A sync that just finished belongs at the top of the log.
+  useEffect(() => {
+    if (!syncing) void queryClient.invalidateQueries({queryKey: ['collection', collectionSlug, 'syncLog']})
+  }, [syncing, collectionSlug, queryClient])
+
+  const total = log.data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
-  const totalIsProvisional = ledger.isTotalProvisional
-  const pageStart = (page - 1) * PAGE_SIZE
-  const entries = ledger.items.slice(pageStart, pageStart + PAGE_SIZE)
+  const entries = log.data?.items ?? []
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages)
   }, [page, totalPages])
-
-  const showNextPage = async () => {
-    if (page >= totalPages || ledger.isFetching) return
-
-    const nextPage = page + 1
-    const requiredRows = nextPage * PAGE_SIZE
-    if (ledger.items.length < requiredRows && ledger.hasNextPage) {
-      const result = await ledger.fetchNextPage()
-      if (result.isError) return
-    }
-    setPage(nextPage)
-  }
 
   if (!open) return null
 
@@ -125,9 +101,9 @@ export default function CollectionSyncLogModal({collectionSlug, collectionTitle,
         </div>
 
         <div className="collection-sync-log-content">
-          {ledger.isLoading ? (
+          {log.isLoading ? (
             <p className="modal-text">Loading sync history...</p>
-          ) : ledger.isError ? (
+          ) : log.isError ? (
             <p className="modal-text">Could not load sync history.</p>
           ) : entries.length === 0 ? (
             <p className="modal-text">No syncs have been recorded yet.</p>
@@ -139,12 +115,15 @@ export default function CollectionSyncLogModal({collectionSlug, collectionTitle,
               </div>
               {entries.map((entry) => (
                 <div className="collection-sync-log-row" role="row" key={entry.id}>
-                  <span role="cell">{formatDate(entry.finishedAt ?? entry.startedAt)}</span>
+                  <span role="cell">
+                    <span className="collection-sync-log-ran">{formatDate(entry.ranAt)}</span>
+                    <span className="collection-sync-log-kind">{SCAN_KIND_LABELS[entry.kind]}</span>
+                  </span>
                   <span
                     role="cell"
                     className={entry.status === 'FAILED' ? 'collection-sync-log-failed' : undefined}
                   >
-                    {collectionId === undefined ? '—' : episodeCount(entry, collectionId)}
+                    {episodeCount(entry)}
                   </span>
                 </div>
               ))}
@@ -157,19 +136,19 @@ export default function CollectionSyncLogModal({collectionSlug, collectionTitle,
             <button
               type="button"
               className="btn"
-              disabled={page <= 1 || ledger.isFetching}
+              disabled={page <= 1 || log.isFetching}
               onClick={() => setPage((current) => Math.max(1, current - 1))}
             >
               Previous
             </button>
             <span className="collection-sync-log-page-label" aria-live="polite">
-              {totalIsProvisional ? `Page ${page}` : `Page ${page} of ${totalPages}`}
+              {`Page ${page} of ${totalPages}`}
             </span>
             <button
               type="button"
               className="btn"
-              disabled={page >= totalPages || ledger.isFetching}
-              onClick={() => void showNextPage()}
+              disabled={page >= totalPages || log.isFetching}
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
             >
               Next
             </button>
