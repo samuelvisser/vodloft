@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import fcntl
 from contextlib import asynccontextmanager
 from pathlib import Path
 from time import monotonic
 
+import portalocker
 from sqlalchemy import select
 
 from backend.db.models import CustomIndexState, CollectionLocalMediaProfile
@@ -35,17 +35,22 @@ async def custom_index_pair_lock(
     root = Path(get_settings().download_settings.lock_root) / "indexes"
     root.mkdir(parents=True, exist_ok=True)
     lock_file = (root / f"{collection_id}-{local_media_profile_id}.lock").open("a+b")
-    lock_mode = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
+    lock_mode = portalocker.LOCK_SH if shared else portalocker.LOCK_EX
+    acquired = False
     try:
         while True:
             try:
-                fcntl.flock(lock_file.fileno(), lock_mode | fcntl.LOCK_NB)
+                portalocker.lock(lock_file, lock_mode | portalocker.LOCK_NB)
+                acquired = True
                 break
-            except BlockingIOError:
+            except portalocker.exceptions.AlreadyLocked:
                 await asyncio.sleep(0.25)
-        yield
+        try:
+            yield
+        finally:
+            if acquired:
+                portalocker.unlock(lock_file)
     finally:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
         lock_file.close()
 
 
