@@ -1,4 +1,4 @@
-import type {EpisodeTagRead} from "./source";
+import {DownloadOptionsSchema, type EpisodeTagRead} from "./source";
 import {z} from 'zod'
 import {EpisodeIdentifierReg, EpisodeIdentifierValue} from "../collection";
 import {ApiDateTimeSchema} from "./datetime";
@@ -226,4 +226,18 @@ export const AutoSubtitlesUseSchema = z.object({
 })
 export type AutoSubtitlesUse = z.infer<typeof AutoSubtitlesUseSchema>
 
-export const SiteOptionsSchema = z.object({autoSubtitles: z.boolean(), sponsorblock: z.boolean(), upgradeChecks: z.boolean()})
+export const SiteOptionsSchema = z.object({
+    siteName: z.string(),
+    autoSubtitles: z.boolean(),
+    sponsorblock: z.boolean(),
+    upgradeChecks: z.boolean(),
+    /**
+     * How RSS feeds can stream the collection's episodes without downloading them: as M4A and MP4 files,
+     * as HLS video, and while they are live. Empty for downloads only.
+     */
+    streamMethods: z.array(z.enum(['file', 'hls', 'live'])),
+    /** The resolutions the site streams video at. */
+    streamVideoHeights: z.array(z.number().int()),
+    /** What the collection's site can download. */
+    downloads: DownloadOptionsSchema,
+})

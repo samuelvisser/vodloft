@@ -24,7 +24,9 @@ type Props = {
     preferredFormat?: string
     videoOutputMode?: string | null
     useDownloads: boolean
-    useDwStream: boolean
+    useSourceStream: boolean
+    /** The site's own MP4 is passed on as it is, as YouTube's, instead of being built from HLS first. */
+    streamsMp4Directly?: boolean
     streamLiveEpisodes?: boolean
     selectedEpisodeTypes: string[]
     downloadProfileDefaults?: StreamDownloadProfileDefault[]
@@ -66,7 +68,7 @@ type CoverageRequirementProps = {
     latestFive?: boolean
 }
 
-const STANDARD_VIDEO_FORMATS = new Set(['format_4k', 'format_1080p', 'format_720p'])
+const STANDARD_VIDEO_FORMATS = new Set(['format_4k', 'format_1080p', 'format_720p', 'format_360p'])
 
 function AdvisoryCard({
     title,
@@ -302,7 +304,8 @@ export default function StreamProfileAdvisory({
     preferredFormat,
     videoOutputMode,
     useDownloads,
-    useDwStream,
+    useSourceStream,
+    streamsMp4Directly = false,
     streamLiveEpisodes = false,
     selectedEpisodeTypes,
     downloadProfileDefaults,
@@ -345,25 +348,26 @@ export default function StreamProfileAdvisory({
 
     const showDirectMp4StreamingWarning = (
         isRssProfile
-        && useDwStream
+        && useSourceStream
+        && !streamsMp4Directly
         && usesDirectMp4Video
     )
     const showMissingDownloadProfileWarning = (
         isRssProfile
-        && !useDwStream
+        && !useSourceStream
         && downloadProfilesLoaded
         && missingRequirements.length > 0
     )
     const showEnableDownloadsWarning = (
         isRssProfile
-        && !useDwStream
+        && !useSourceStream
         && downloadProfilesLoaded
         && missingRequirements.length === 0
         && !useDownloads
     )
     const showMp4HlsDownloadRecommendation = (
         isRssProfile
-        && useDwStream
+        && useSourceStream
         && downloadProfilesLoaded
         && usesVideo
         && videoOutputMode === 'mp4_hls'

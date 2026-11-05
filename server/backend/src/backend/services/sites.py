@@ -7,6 +7,7 @@ the Site's own id for it is unique per Site.
 """
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Optional
 
 from sqlalchemy import select
@@ -61,6 +62,21 @@ def place_collection(s: Session, collection: Collection) -> None:
     if existing is not None:
         raise CollectionAlreadyAddedError(existing, record)
     collection.site_key, collection.site_ref = record.key, ref
+
+
+def collection_site(collection: Collection) -> SourceSite:
+    """The Site a collection is on, as the sources package tells it, with what VODLoft may do there."""
+    return _site_of(collection.sharing_url, collection.source_key)
+
+
+def video_site(video: Video) -> SourceSite:
+    return _site_of(video.sharing_url, video.source_key)
+
+
+@lru_cache(maxsize=1024)
+def _site_of(url: str, source_key: str) -> SourceSite:
+    # Telling a yt-dlp link's Site tries every extractor, and a feed asks once per episode.
+    return site_for(url, source_key)
 
 
 def place_video(s: Session, video: Video) -> None:

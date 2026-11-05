@@ -1,4 +1,4 @@
-import {useState} from 'react'
+import {useEffect, useMemo, useState} from 'react'
 import {useWatch, type UseFormReturn} from 'react-hook-form'
 import Select from 'react-select'
 import Switch from 'react-switch'
@@ -22,28 +22,40 @@ import {
     type QualityGoal,
 } from '../../types/quality'
 import SegmentedOptions from '../SegmentedOptions/SegmentedOptions'
+import {useSources} from '../../lib/queries'
+import {FORMAT_HEIGHTS, nearestVideoFormat, offersFormat, profileDownloadOptions} from '../../types/local_media_profile'
 import './QualityField.css'
 
 type Props = {
     form: UseFormReturn<any>
-    /** Audio only is offered for Collections and single videos, not for movies. */
-    allowAudioOnly?: boolean
-    /** The Daily Wire's HLS bundle, for Collection profiles only. */
-    allowHls?: boolean
+    mode: 'collection' | 'video'
 }
 
 const OPTIONS = {shouldDirty: true, shouldValidate: true} as const
 
 type DownloadOption = {value: string; label: string}
 
-/** Quality: what to download (video up to a resolution, audio only or HLS), a goal, and your own codec order. */
-export default function QualityField({form, allowAudioOnly = true, allowHls = false}: Props) {
+/**
+ * Quality: what to download (video up to a resolution, audio only or HLS), a goal, and your own codec order.
+ * Only what the Sites of the profile's Sources offer is shown; each Site gets the nearest it has.
+ */
+export default function QualityField({form, mode}: Props) {
     const {control, setValue, formState: {errors}} = form
-    const [preferredFormat, goal, videoCodecs, codecFallback, container, audioCodec, audioFormat, audioLanguage] = useWatch({
+    const [preferredFormat, goal, videoCodecs, codecFallback, container, audioCodec, audioFormat, audioLanguage, sourceKeys] = useWatch({
         control,
-        name: ['preferredFormat', 'qualityGoal', 'videoCodecs', 'codecFallback', 'container', 'audioCodec', 'audioFormat', 'audioLanguage'],
-    }) as [string, QualityGoal, CodecChoice[], string, string, string, string, string | null]
+        name: ['preferredFormat', 'qualityGoal', 'videoCodecs', 'codecFallback', 'container', 'audioCodec', 'audioFormat', 'audioLanguage', 'sourceKeys'],
+    }) as [string, QualityGoal, CodecChoice[], string, string, string, string, string | null, string[] | null]
     const [dragging, setDragging] = useState<number | null>(null)
+    const {data: sources} = useSources()
+    const offered = useMemo(() => profileDownloadOptions(sources, mode, sourceKeys), [sources, mode, sourceKeys])
+    const qualityChoices = offered?.qualityChoices ?? true
+
+    // Choosing fewer Sources can take away the chosen download; move to the nearest one they offer.
+    useEffect(() => {
+        if (!offered || !preferredFormat || offersFormat(offered, preferredFormat)) return
+        const nearest = nearestVideoFormat(offered, preferredFormat)
+        if (nearest) setValue('preferredFormat', nearest, OPTIONS)
+    }, [offered, preferredFormat, setValue])
     const audioOnly = preferredFormat === 'format_audio_only'
     const hls = preferredFormat === 'format_hls'
     const codecs = videoCodecs ?? []
@@ -75,12 +87,15 @@ export default function QualityField({form, allowAudioOnly = true, allowHls = fa
 
     const option = (value: string): DownloadOption => ({value, label: QualityDownloadReg.getLabelLoose(value)})
     const downloadGroups = [
-        {label: 'Video, up to', options: LADDER_STEPS.map(option)},
+        {
+            label: 'Video, up to',
+            options: LADDER_STEPS.filter((step) => !offered || offered.videoHeights.includes(FORMAT_HEIGHTS[step])).map(option),
+        },
         {
             label: 'Other',
             options: [
-                ...(allowAudioOnly ? [option('format_audio_only')] : []),
-                ...(allowHls ? [option('format_hls')] : []),
+                ...(!offered || offered.audioOnly ? [option('format_audio_only')] : []),
+                ...(offered?.hlsBundle ? [option('format_hls')] : []),
             ],
         },
     ].filter((group) => group.options.length)
@@ -117,7 +132,7 @@ export default function QualityField({form, allowAudioOnly = true, allowHls = fa
                 </div>
             </div>
 
-            {audioOnly && (
+            {audioOnly && qualityChoices && (
                 <div className="form-row">
                     <span className="quality-field__heading" id="quality-audio-format">Audio format</span>
                     <div className="quality-cards" role="radiogroup" aria-labelledby="quality-audio-format">
@@ -136,7 +151,7 @@ export default function QualityField({form, allowAudioOnly = true, allowHls = fa
                 </div>
             )}
 
-            {!audioOnly && !hls && (
+            {!audioOnly && !hls && qualityChoices && (
                 <div className="form-row">
                     <span className="quality-field__heading" id="quality-goal">Optimise for</span>
                     <div className="quality-cards" role="radiogroup" aria-labelledby="quality-goal">
@@ -253,7 +268,7 @@ export default function QualityField({form, allowAudioOnly = true, allowHls = fa
                 </div>
             )}
 
-            {!hls && (
+            {!hls && qualityChoices && (
                 <div className="form-row">
                     <label htmlFor="quality-audio-language">Audio language</label>
                     <Select

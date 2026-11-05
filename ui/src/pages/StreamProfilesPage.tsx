@@ -74,7 +74,7 @@ export default function StreamProfilesPage() {
         },
         {
             header: 'Stream from DW',
-            accessor: (p) => (p.useDwStream ? '✓' : '✕'),
+            accessor: (p) => (p.useSourceStream ? '✓' : '✕'),
             align: 'center',
         },
         {

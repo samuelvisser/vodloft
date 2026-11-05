@@ -60,7 +60,7 @@ def _profile(max_items: int):
     return SimpleNamespace(
         collection_id=1,
         use_downloads=False,
-        use_dw_stream=True,
+        use_source_stream=True,
         preferred_format="format_1080p",
         prefer_exact_match=False,
         ep_id_type_list=["ep"],

@@ -9,7 +9,6 @@ export const SourceFeature = {
     LOGIN: 'login',
     LIVE_EPISODES: 'live_episodes',
     MEMBERSHIP_LEVELS: 'membership_levels',
-    RSS_STREAMING: 'rss_streaming',
     VIDEOS: 'videos',
     EPISODE_LISTS: 'episode_lists',
     SEARCH: 'search',
@@ -43,6 +42,18 @@ export function hasSourceFeature(
     return !!item?.sourceFeatures?.includes(feature)
 }
 
+/** What a Local Media Profile can download for a Site, or for any Site of a Source. */
+export const DownloadOptionsSchema = z.object({
+    /** The resolutions worth downloading up to. */
+    videoHeights: z.array(z.number().int()),
+    audioOnly: z.boolean(),
+    /** The Site's HLS stream with every resolution in it, as The Daily Wire offers. */
+    hlsBundle: z.boolean(),
+    /** Codecs, container, quality goal, audio format and audio language pick the version that is downloaded. */
+    qualityChoices: z.boolean(),
+})
+export type DownloadOptions = z.infer<typeof DownloadOptionsSchema>
+
 export const SourceReadSchema = z.object({
     id: z.string(),
     name: z.string(),
@@ -59,6 +70,8 @@ export const SourceReadSchema = z.object({
     cookiesHelp: z.string().nullable().optional(),
     /** VODLoft is signed in with that subscription, so media that needs it can be downloaded. */
     subscriptionActive: z.boolean().optional(),
+    /** What a Local Media Profile can download for media of this Source: what any of its Sites offers. */
+    downloadOptions: DownloadOptionsSchema,
 })
 export type SourceRead = z.infer<typeof SourceReadSchema>
 

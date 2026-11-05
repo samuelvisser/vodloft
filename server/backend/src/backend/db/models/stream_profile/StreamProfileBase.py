@@ -40,7 +40,7 @@ class StreamProfileBase(Base):
     )
 
     use_downloads: Mapped[bool] = mapped_column(default=False, comment="Use local downloads for stream")
-    use_dw_stream: Mapped[bool] = mapped_column(default=False, comment="Use direct DW stream endpoints for stream")
+    use_source_stream: Mapped[bool] = mapped_column(default=False, comment="Stream episodes straight from their Source when the collection's Site can stream")
     preferred_format: Mapped[str] = mapped_column(comment="Preferred format for stream, used when choosing the correct downloaded file "
                                                           "or whether to stream audio or video from DW")
     prefer_exact_match: Mapped[bool] = mapped_column(comment="Stream from Daily Wire if the exact resolution the stream profile prefers is not available locally (even if another resolution is)")
@@ -68,4 +68,4 @@ class StreamProfileBase(Base):
 
 
     def __repr__(self) -> str:
-        return f"<StreamProfileBase(id={self.id}, enable_profile={self.enable_profile}, use_downloads={self.use_downloads}, use_dw_stream={self.use_dw_stream}, created_at={self.created_at}, updated_at={self.updated_at})>"
+        return f"<StreamProfileBase(id={self.id}, enable_profile={self.enable_profile}, use_downloads={self.use_downloads}, use_source_stream={self.use_source_stream}, created_at={self.created_at}, updated_at={self.updated_at})>"

@@ -73,11 +73,11 @@ def command(*, cookies: bool = True) -> tuple[str, ...]:
     return (*program(), *options)
 
 
-def run_json(*args: str) -> dict:
-    """Run yt-dlp with ``-J`` and return the info it prints."""
+def run_json(*args: str, cookies: bool = True) -> dict:
+    """Run yt-dlp with ``-J`` and return the info it prints; ``cookies`` False leaves the cookies file out."""
     try:
         result = subprocess.run(
-            [*command(), "--no-progress", "-J", *args], capture_output=True, text=True,
+            [*command(cookies=cookies), "--no-progress", "-J", *args], capture_output=True, text=True,
             timeout=_LOOKUP_TIMEOUT_SECONDS, check=False,
         )
     except subprocess.TimeoutExpired as exc:

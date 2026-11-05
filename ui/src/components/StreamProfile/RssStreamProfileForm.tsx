@@ -9,7 +9,7 @@ import {faIcon} from '../../icons/faIcon'
 import NumberInput from '../common/NumberInput'
 
 
-const VIDEO_FORMATS = new Set(['format_4k', 'format_1080p', 'format_720p', 'format_hls'])
+const VIDEO_FORMATS = new Set(['format_4k', 'format_1080p', 'format_720p', 'format_360p', 'format_hls'])
 
 type Props = {
     form: UseFormReturn<any>
@@ -17,9 +17,14 @@ type Props = {
     onRegenerateToken?: () => void | Promise<void>
     regeneratingToken?: boolean
     advisory?: ReactNode
-    /** Whether the collection's Source has live episodes to offer. */
+    /** Whether the collection's Site streams live episodes. */
     liveEpisodes?: boolean
+    /** Whether HLS video outputs can be offered: not while streaming from a Site that has no HLS, such as YouTube. */
+    hlsVideo?: boolean
 }
+
+// The MP4 output that takes the place of an HLS one on a Site that streams no HLS.
+const MP4_FOR_HLS: Record<string, string> = {audio_hls: 'audio_mp4', mp4_hls: 'mp4'}
 
 export default function RssStreamProfileForm({
     form,
@@ -28,12 +33,13 @@ export default function RssStreamProfileForm({
     regeneratingToken,
     advisory,
     liveEpisodes = true,
+    hlsVideo = true,
 }: Props) {
     const {control, formState: {errors}, register, setValue, watch} = form
     const [copied, setCopied] = useState(false)
 
     const feedUrl: string | undefined = watch('feedUrl')
-    const useDwStream: boolean = watch('useDwStream')
+    const useSourceStream: boolean = watch('useSourceStream')
     const preferredFormat: string | undefined = watch('preferredFormat')
     const videoOutputMode: string | null | undefined = watch('videoOutputMode')
     const streamLiveEpisodes: boolean = watch('streamLiveEpisodes')
@@ -53,12 +59,17 @@ export default function RssStreamProfileForm({
         }
 
         if (usesVideo && videoOutputMode == null) {
-            setValue('videoOutputMode', 'audio_hls', {
+            setValue('videoOutputMode', hlsVideo ? 'audio_hls' : 'audio_mp4', {
+                shouldDirty: true,
+                shouldValidate: true,
+            })
+        } else if (!hlsVideo && videoOutputMode && MP4_FOR_HLS[videoOutputMode]) {
+            setValue('videoOutputMode', MP4_FOR_HLS[videoOutputMode], {
                 shouldDirty: true,
                 shouldValidate: true,
             })
         }
-    }, [preferredFormat, setValue, usesVideo, videoOutputMode])
+    }, [hlsVideo, preferredFormat, setValue, usesVideo, videoOutputMode])
 
     useEffect(() => {
         if (!offersLiveEpisodes && streamLiveEpisodes) {
@@ -120,7 +131,7 @@ export default function RssStreamProfileForm({
                             <Select
                                 inputId="rss-video-output-mode"
                                 classNamePrefix="select"
-                                options={RssVideoOutputModeReg.options}
+                                options={RssVideoOutputModeReg.options.filter((option) => hlsVideo || !RssHlsOutputModes.has(option.value))}
                                 value={RssVideoOutputModeReg.options.find(option => option.value === field.value) ?? null}
                                 onChange={(option) => field.onChange((option as any)?.value)}
                                 onBlur={field.onBlur}
@@ -150,7 +161,7 @@ export default function RssStreamProfileForm({
                                 <strong>{RssVideoOutputModeReg.getLabel('mp4_hls')}</strong> {RssVideoOutputModeReg.getHelp('mp4_hls')}
                             </p>
                             <p>
-                                The episode URLs in the RSS never change when a local download appears. The same VODLoft URL resolves to local media when available and to The Daily Wire only when the profile permits that fallback.
+                                The episode URLs in the RSS never change when a local download appears. The same VODLoft URL resolves to local media when available, and streams from the collection's site only when the profile permits that fallback.
                             </p>
                         </ReadMore>
                     </div>
@@ -190,7 +201,7 @@ export default function RssStreamProfileForm({
                             <p>
                                 Live episodes still have to match this Stream Profile&apos;s episode-type filter in order to show up in the feed.
                             </p>
-                            {!useDwStream && (
+                            {!useSourceStream && (
                                 <>
                                     <p>
                                         Even though streaming from Daily Wire is disabled for this stream profile, streaming live episodes from DW

@@ -54,7 +54,7 @@ def _make_collection(
         slug=slug,
         title="Test Show",
         description="Description",
-        sharing_url=f"https://example.test/{slug}",
+        sharing_url=f"https://www.dailywire.com/{slug}",
         membership_level="FREE",
         type=collection_type or CollectionType.PODCAST.value,
         episode_identifier=(
@@ -118,7 +118,7 @@ def _make_episode(
         description="Description",
         duration=1800.0,
         publish_status=status,
-        sharing_url=f"https://example.test/episode-{index}",
+        sharing_url=f"https://www.dailywire.com/episode-{index}",
         published_date=when if status != "live" else None,
         went_live_date=when if status == "live" else None,
     )
@@ -180,7 +180,7 @@ def _make_rss_profile(
     mode: str = "audio_hls",
     preferred_format: str = "format_1080p",
     use_downloads: bool = True,
-    use_dw_stream: bool = False,
+    use_source_stream: bool = False,
     max_items: int = 0,
 ):
     from backend.db.models import RssStreamProfile
@@ -190,7 +190,7 @@ def _make_rss_profile(
         enable_profile=True,
         token="token",
         use_downloads=use_downloads,
-        use_dw_stream=use_dw_stream,
+        use_source_stream=use_source_stream,
         preferred_format=preferred_format,
         prefer_exact_match=False,
         ep_id_type_list=["ep"],
@@ -237,7 +237,7 @@ def test_download_only_feed_excludes_episodes_without_relevant_local_media(
         collection,
         mode="mp4",
         use_downloads=True,
-        use_dw_stream=False,
+        use_source_stream=False,
     )
 
     items = get_feed_items(db_session, profile)
@@ -259,7 +259,7 @@ def test_dailywire_enabled_feed_keeps_undownloaded_episode_with_stable_url(
         collection,
         mode="audio_hls",
         use_downloads=True,
-        use_dw_stream=True,
+        use_source_stream=True,
     )
 
     assert get_feed_items(db_session, profile) == [(episode, None)]
@@ -273,7 +273,8 @@ def test_dailywire_enabled_feed_keeps_undownloaded_episode_with_stable_url(
         "https://vodloft.test/feeds/rss/token/episodes/episode-1/video.m3u8"
         in xml
     )
-    assert "dailywire" not in xml.lower()
+    # Only VODLoft's own media URLs, never one of The Daily Wire's.
+    assert "media.dailywire" not in xml.lower() and "dailywire.com/episode-1" not in xml.lower()
 
 
 @pytest.mark.parametrize(
@@ -304,7 +305,7 @@ def test_rss_media_urls_do_not_change_when_download_appears(
         collection,
         mode=mode,
         use_downloads=True,
-        use_dw_stream=True,
+        use_source_stream=True,
     )
 
     before = render_rss_feed(db_session, _FakeRequest(), profile).decode()
@@ -405,7 +406,7 @@ def test_max_items_keeps_newest_feed_entries(db_session):
         collection,
         mode="mp4",
         use_downloads=False,
-        use_dw_stream=True,
+        use_source_stream=True,
         max_items=2,
     )
 
@@ -442,7 +443,7 @@ def test_seasonal_feed_emits_apple_and_podcasting20_numbering(db_session):
         collection,
         mode="mp4",
         use_downloads=False,
-        use_dw_stream=True,
+        use_source_stream=True,
     )
 
     xml = render_rss_feed(db_session, _FakeRequest(), profile).decode()
@@ -482,7 +483,7 @@ def test_series_feed_is_serial_even_with_seasonal_identifiers(db_session):
         collection,
         mode="mp4",
         use_downloads=False,
-        use_dw_stream=True,
+        use_source_stream=True,
     )
 
     xml = render_rss_feed(db_session, _FakeRequest(), profile).decode()
@@ -520,7 +521,7 @@ def test_seasonal_attached_extra_keeps_parent_episode_number(db_session):
         collection,
         mode="mp4",
         use_downloads=False,
-        use_dw_stream=True,
+        use_source_stream=True,
     )
     profile.ep_id_type_list = ["ep-extra"]
 
@@ -550,7 +551,7 @@ def test_numbered_episodic_feed_emits_episode_metadata(db_session):
         collection,
         mode="mp4",
         use_downloads=False,
-        use_dw_stream=True,
+        use_source_stream=True,
     )
 
     xml = render_rss_feed(db_session, _FakeRequest(), profile).decode()
@@ -580,7 +581,7 @@ def test_numbered_episodic_bonus_uses_parent_episode_number(db_session):
         collection,
         mode="mp4",
         use_downloads=False,
-        use_dw_stream=True,
+        use_source_stream=True,
     )
     profile.ep_id_type_list = ["ep-extra"]
 
@@ -614,7 +615,7 @@ def test_date_based_podcast_omits_episode_numbers(db_session):
         collection,
         mode="mp4",
         use_downloads=False,
-        use_dw_stream=True,
+        use_source_stream=True,
     )
 
     xml = render_rss_feed(db_session, _FakeRequest(), profile).decode()
@@ -640,7 +641,7 @@ def test_get_source_stream_url_selects_requested_media(
         db_session,
         collection,
         use_downloads=False,
-        use_dw_stream=True,
+        use_source_stream=True,
     )
 
     from sources import EpisodeMedia, get_source
@@ -682,7 +683,7 @@ def test_create_stream_profile_generates_plain_stable_feed_url(db_session):
         title=collection.title,
         enable_profile=True,
         use_downloads=True,
-        use_dw_stream=True,
+        use_source_stream=True,
         preferred_format="format_1080p",
         prefer_exact_match=False,
         video_output_mode="audio_hls",
@@ -739,7 +740,7 @@ def test_stream_profile_custom_title_is_persisted_used_and_can_be_cleared(db_ses
             title=custom_title,
             enable_profile=True,
             use_downloads=True,
-            use_dw_stream=True,
+            use_source_stream=True,
             preferred_format="format_1080p",
             prefer_exact_match=False,
             video_output_mode="audio_hls",
@@ -765,7 +766,7 @@ def test_stream_profile_custom_title_is_persisted_used_and_can_be_cleared(db_ses
             title=collection.title,
             enable_profile=True,
             use_downloads=True,
-            use_dw_stream=True,
+            use_source_stream=True,
             preferred_format="format_1080p",
             prefer_exact_match=False,
             video_output_mode="audio_hls",
@@ -785,7 +786,7 @@ def test_api_defaults_to_audio_hls_with_live_streaming_off():
         title="Test Show",
         enable_profile=True,
         use_downloads=True,
-        use_dw_stream=True,
+        use_source_stream=True,
         preferred_format="format_1080p",
         prefer_exact_match=False,
     )
@@ -806,7 +807,7 @@ def test_stream_profile_rejects_local_hls_as_preferred_format():
             title="Test Show",
             enable_profile=True,
             use_downloads=True,
-            use_dw_stream=True,
+            use_source_stream=True,
             preferred_format="format_hls",
             prefer_exact_match=False,
         )
@@ -823,7 +824,7 @@ def test_live_streaming_requires_hls_video_output_mode():
             title="Test Show",
             enable_profile=True,
             use_downloads=True,
-            use_dw_stream=True,
+            use_source_stream=True,
             preferred_format="format_1080p",
             prefer_exact_match=False,
             video_output_mode="audio_mp4",
@@ -875,7 +876,7 @@ def test_download_only_audio_hls_requires_both_advertised_local_sources(
         collection,
         mode="audio_hls",
         use_downloads=True,
-        use_dw_stream=False,
+        use_source_stream=False,
     )
 
     hls_profile = _make_local_media_profile(
@@ -929,7 +930,7 @@ def test_download_only_mp4_hls_requires_both_advertised_video_sources(
         collection,
         mode="mp4_hls",
         use_downloads=True,
-        use_dw_stream=False,
+        use_source_stream=False,
     )
 
     video_profile = _make_local_media_profile(

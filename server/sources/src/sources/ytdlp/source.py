@@ -9,13 +9,13 @@ import time
 import requests
 from collections.abc import Iterator, Sequence
 from datetime import datetime, timezone
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 from config import get_settings
 from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
-    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, Feature, LinkKind, LinkPreview, Playback, PlaybackKind, ProgramStatus,
+    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, Feature, LinkKind, LinkPreview, MediaStream, Playback, PlaybackKind, ProgramStatus,
     ResolvedLink, SearchResults, CollectionDetails, Site, Source, SourceProblem, SponsorBlockSegment, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
 )
@@ -224,6 +224,60 @@ def video_formats(info: dict) -> VideoFormats:
         audio_size_bytes=max(sizes) if sizes else None,
         duration=float(duration) if isinstance(duration, (int, float)) else None,
     )
+
+
+# The formats a feed can pass on as they are: YouTube's M4A audio, and its one MP4 with sound (360p).
+_READY_AUDIO_FORMAT = "140"
+_READY_VIDEO_FORMAT = "18"
+_DIRECT_PROTOCOLS = {"http", "https"}
+
+
+def _direct(entry: dict) -> bool:
+    """A format VODLoft can fetch with plain HTTP range requests: no playlist, no DRM, no storyboard."""
+    return (
+        isinstance(entry, dict) and bool(entry.get("url")) and entry.get("protocol") in _DIRECT_PROTOCOLS
+        and not entry.get("has_drm") and entry.get("format_note") != "storyboard"
+    )
+
+
+def _expires_at(url: str) -> float | None:
+    """When a googlevideo URL stops working, from its own ``expire`` parameter."""
+    values = parse_qs(urlsplit(url).query).get("expire")
+    try:
+        return float(values[0]) if values else None
+    except ValueError:
+        return None
+
+
+def _media_stream(entry: dict, *, ready: bool) -> MediaStream:
+    size = entry.get("filesize")
+    return MediaStream(
+        url=entry["url"], headers=dict(entry.get("http_headers") or {}), expires_at=_expires_at(entry["url"]),
+        size_bytes=int(size) if isinstance(size, (int, float)) and size > 0 else None, ready=ready,
+    )
+
+
+def stream_of(info: dict, *, audio: bool) -> MediaStream | None:
+    """The stream a feed plays from yt-dlp's info for a video.
+
+    Audio is YouTube's M4A when it is offered, and otherwise the best audio for VODLoft to
+    transcode. Video is only the MP4 that already has sound in it.
+    """
+    formats = [entry for entry in info.get("formats") or [] if _direct(entry)]
+    wanted = _READY_AUDIO_FORMAT if audio else _READY_VIDEO_FORMAT
+    ready = next((entry for entry in formats if str(entry.get("format_id")) == wanted), None)
+    if ready is not None:
+        return _media_stream(ready, ready=True)
+    if not audio:
+        return None
+    sound_only = [
+        entry for entry in formats
+        if (entry.get("vcodec") or "none") == "none" and (entry.get("acodec") or "none") != "none"
+    ]
+    if not sound_only:
+        return None
+    best = max(sound_only, key=lambda entry: entry.get("abr") or entry.get("tbr") or 0)
+    return _media_stream(best, ready=False)
 
 
 def _sponsorblock_segments(video_id: str, categories: Sequence[str]) -> tuple[SponsorBlockSegment, ...]:
@@ -839,6 +893,11 @@ class YtDlpSource(Source):
 
     def video_playback(self, *, slug: str, url: str, use_cookies: bool = True) -> Playback:
         return Playback(url=url, kind=PlaybackKind.YTDLP, command=runner.command(cookies=use_cookies))
+
+    def media_stream(self, url: str, *, audio: bool, use_cookies: bool = True) -> MediaStream | None:
+        if not self.site_for(url).streams:
+            raise NotImplementedError(f"{self.site_for(url).name} cannot stream episodes")
+        return stream_of(runner.run_json("--no-playlist", url, cookies=use_cookies), audio=audio)
 
     def needs_cookies(self, error: str) -> bool:
         text = error.lower()

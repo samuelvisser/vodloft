@@ -30,7 +30,7 @@ from backend.utils.season_ordering import number_initial_seasons
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.operation_factory import create_operation
 
-from ...rss_stream_profiles.service import ensure_source_can_stream
+from ...rss_stream_profiles.service import ensure_site_can_stream
 from ...collection_local_media_profiles.service import create_collection_local_media_profile, update_collection_local_media_profile
 from ..events import CollectionAdded
 from ..operations import CollectionIndexOperation
@@ -106,7 +106,12 @@ def create_collection_bundle(
         download_profile.local_media_profile = local_media_profile
 
     if payload.stream_profile is not None:
-        ensure_source_can_stream(collection, payload.stream_profile.use_dw_stream)
+        ensure_site_can_stream(
+            collection, use_source_stream=payload.stream_profile.use_source_stream,
+            stream_live_episodes=payload.stream_profile.stream_live_episodes,
+            preferred_format=payload.stream_profile.preferred_format,
+            video_output_mode=payload.stream_profile.video_output_mode,
+        )
         token = generate_stream_profile_token()
         feed_url = (payload.stream_profile.feed_url or "").strip()
         stream_profile = create_database_fields(

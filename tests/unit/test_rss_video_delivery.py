@@ -73,7 +73,8 @@ def test_rss_video_output_modes_use_stable_vodloft_urls(
     assert enclosure is not None
     assert enclosure.attrib["type"] == primary_type
     assert enclosure.attrib["url"].endswith(primary_suffix)
-    assert enclosure.attrib["length"] == "0"
+    # Audio gives its size at 128 kbit/s; the episode is half an hour long.
+    assert enclosure.attrib["length"] == ("28800000" if primary_suffix.endswith(".m4a") else "0")
 
     alternates = _children(item, "podcast:alternateEnclosure")
     if alternate_type is None:
@@ -107,7 +108,7 @@ def test_audio_only_uses_stable_m4a_without_video_alternate():
     assert enclosure is not None
     assert enclosure.attrib == {
         "url": "https://vodloft.example/feeds/rss/token/episodes/episode-1/audio.m4a",
-        "length": "0",
+        "length": "28800000",
         "type": "audio/mp4",
     }
     assert not _children(channel.find("item"), "podcast:alternateEnclosure")

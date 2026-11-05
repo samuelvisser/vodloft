@@ -58,6 +58,18 @@ class PreferredFormat(StrEnum):
     FORMAT_8K = 'format_8k'
 
 
+PREFERRED_FORMAT_HEIGHTS = {
+    PreferredFormat.FORMAT_360P: 360,
+    PreferredFormat.FORMAT_480P: 480,
+    PreferredFormat.FORMAT_720P: 720,
+    PreferredFormat.FORMAT_1080P: 1080,
+    PreferredFormat.FORMAT_1440P: 1440,
+    PreferredFormat.FORMAT_4K: 2160,
+    PreferredFormat.FORMAT_8K: 4320,
+}
+"""The resolution each video format downloads up to."""
+
+
 class QualityGoal(StrEnum):
     """What a Local Media Profile optimises for on sites yt-dlp downloads from."""
     COMPATIBILITY = "compatibility"

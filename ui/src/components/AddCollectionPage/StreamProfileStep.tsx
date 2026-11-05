@@ -77,6 +77,7 @@ export default function StreamProfileStep({
                         collectionSlug={collectionSlug}
                         collectionTitle={collectionTitle}
                         sourceKey={collection?.sourceKey}
+                        collectionUrl={collection?.sharingUrl}
                         canOpenDownloadProfiles={false}
                     />
                     <div className="actions">

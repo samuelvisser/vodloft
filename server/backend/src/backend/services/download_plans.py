@@ -8,6 +8,8 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from backend.services.collection_cookies import uses_cookies
+from backend.services.local_media_profile_sources import format_for_site
+from backend.services.sites import collection_site, video_site
 from backend.services.no_ascii_names import settle_no_ascii_name
 from backend.db.models import DownloadProfile, Episode, Movie, MovieExtra, Video
 from backend.db.models.media_download import MediaDownloadBase
@@ -56,6 +58,9 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     if profile.type != expected_type:
         raise DownloadError("The Local Media Profile does not match the media type")
     preferred = profile.preferred_format
+    if episode is not None or video is not None:
+        # The profile may be offered for Sites that cannot give what it chose, such as an HLS bundle.
+        preferred = format_for_site(collection_site(episode.collection) if episode is not None else video_site(video), preferred)
     audio_only = preferred == PreferredFormat.FORMAT_AUDIO_ONLY.value
     if movie is not None and preferred in (PreferredFormat.FORMAT_AUDIO_ONLY.value, PreferredFormat.FORMAT_HLS.value):
         raise DownloadError("Movies and extras require a normal video Local Media Profile")

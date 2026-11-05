@@ -10,6 +10,7 @@ from fastapi import HTTPException, Request
 from sqlalchemy import and_, exists, false, func, or_, select, true
 from sqlalchemy.orm import object_session, Session, joinedload
 
+from backend.services.sites import collection_site
 from backend.services.thumbnails import is_own_thumbnail
 from backend.api.models.rss_stream_profile import RssStreamProfileAPIRead
 from backend.db.datetime_types import utc_datetime
@@ -27,7 +28,7 @@ from backend.services.episode_filters import filters_allow_new_episode
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.download_profile_types import EpIdType, MediaDownloadArtifactStatus
 from backend.types.episode_types import EpisodeExtraType, EpisodePublishStatus
-from backend.types.local_media_profile_types import PreferredFormat
+from backend.types.local_media_profile_types import PREFERRED_FORMAT_HEIGHTS, PreferredFormat
 from backend.types.collection_types import EpisodeIdentifier, CollectionType
 from backend.types.stream_profile_types import (
     RSS_AUDIO_PRIMARY_OUTPUT_MODES,
@@ -35,8 +36,9 @@ from backend.types.stream_profile_types import (
     RssVideoOutputMode,
 )
 from backend.utils.feed_urls import request_base_url
+from .source_stream import estimated_audio_size
 from config.network import is_no_internet_error
-from sources import EpisodeTag, Source, UnknownSourceError, get_source
+from sources import EpisodeTag, Source, StreamMethod, UnknownSourceError, get_source
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 
@@ -48,15 +50,14 @@ _RECONCILABLE_ARTIFACT_STATUSES = (
     MediaDownloadArtifactStatus.MISSING.value,
     MediaDownloadArtifactStatus.CORRUPTED.value,
 )
+# Nothing to play yet, such as a YouTube premiere that has not started, or nothing usable.
 _UNAVAILABLE_PUBLISH_STATUSES = {
+    EpisodePublishStatus.SCHEDULED.value,
+    EpisodePublishStatus.DELAYED.value,
     EpisodePublishStatus.NO_USABLE_MEDIA.value,
     EpisodePublishStatus.SOURCE_PROCESSING.value,
 }
-_VIDEO_HEIGHTS = {
-    PreferredFormat.FORMAT_4K.value: 2160,
-    PreferredFormat.FORMAT_1080P.value: 1080,
-    PreferredFormat.FORMAT_720P.value: 720,
-}
+_VIDEO_HEIGHTS = {fmt.value: height for fmt, height in PREFERRED_FORMAT_HEIGHTS.items()}
 
 _ITUNES_NS = "http://www.itunes.com/dtds/podcast-1.0.dtd"
 _PODCAST_NS = "https://podcastindex.org/namespace/1.0"
@@ -315,6 +316,7 @@ def _profile_allows_episode(profile: RssStreamProfile, episode: Episode) -> bool
 def _profile_streams_live_hls(profile: RssStreamProfile) -> bool:
     return (
         bool(profile.stream_live_episodes)
+        and StreamMethod.LIVE in collection_site(profile.collection).stream_methods
         and profile.preferred_format != PreferredFormat.FORMAT_AUDIO_ONLY.value
         and profile.video_output_mode in RSS_HLS_OUTPUT_MODES
     )
@@ -323,7 +325,7 @@ def _profile_streams_live_hls(profile: RssStreamProfile) -> bool:
 def _profile_keeps_live_handoff(profile: RssStreamProfile) -> bool:
     return (
         _profile_streams_live_hls(profile)
-        and not profile.use_dw_stream
+        and not profile.use_source_stream
         and profile.use_downloads
     )
 
@@ -371,7 +373,7 @@ def _can_stream_live_episode(
 ) -> bool:
     if not _profile_streams_live_hls(profile):
         return False
-    if profile.use_dw_stream:
+    if profile.use_source_stream:
         return True
     # A download-only feed lists a live episode only when its Download Profiles
     # will provide every enclosure the feed needs once the episode is published.
@@ -381,12 +383,13 @@ def _can_stream_live_episode(
     )
 
 
-def can_use_dailywire_for_episode(
+def can_stream_from_source(
         profile: RssStreamProfile,
         episode: Episode,
 ) -> bool:
-    if profile.use_dw_stream:
-        return True
+    """Whether the feed may stream the episode straight from its Source, when it is not downloaded."""
+    if profile.use_source_stream:
+        return collection_site(profile.collection).streams
     if not _profile_keeps_live_handoff(profile):
         return False
     if episode.publish_status == EpisodePublishStatus.LIVE.value:
@@ -425,7 +428,7 @@ def get_feed_items(
 ) -> list[tuple[Episode, Optional[EpisodeMediaDownload]]]:
     """Return eligible episodes newest first while preserving live HLS continuity."""
     live_enabled = _profile_streams_live_hls(profile)
-    if not profile.use_downloads and not profile.use_dw_stream and not live_enabled:
+    if not profile.use_downloads and not profile.use_source_stream and not live_enabled:
         return []
 
     previous_handoffs = set(profile.live_episode_handoff_ids or [])
@@ -457,7 +460,7 @@ def get_feed_items(
     )
     non_live_delivery_candidate = (
         true()
-        if profile.use_dw_stream
+        if profile.use_source_stream
         else local_download_exists
         if profile.use_downloads
         else false()
@@ -474,7 +477,7 @@ def get_feed_items(
     )
     live_candidate = (
         Episode.publish_status == EpisodePublishStatus.LIVE.value
-        if live_enabled and (profile.use_dw_stream or profile.use_downloads)
+        if live_enabled and (profile.use_source_stream or profile.use_downloads)
         else false()
     )
 
@@ -563,7 +566,7 @@ def get_feed_items(
             mp4=mp4,
             hls=hls,
         )
-        if collect and (profile.use_dw_stream or local_delivery_complete):
+        if collect and (profile.use_source_stream or local_delivery_complete):
             items.append((episode, relevant_local))
 
     if profile.max_items > 0:
@@ -680,7 +683,7 @@ def get_episode_for_feed(
         hls=hls,
     ):
         return episode
-    if profile.use_dw_stream:
+    if profile.use_source_stream:
         return episode
 
     raise HTTPException(status_code=404, detail="No media available for this episode")
@@ -935,13 +938,15 @@ def _append_item(
     else:
         enclosure_url = mp4_url
         enclosure_type = "video/mp4"
+    # Apps show the length as the episode's size; audio is close to its estimate at 128 kbit/s.
+    estimated_size = estimated_audio_size(episode.duration) if enclosure_url == audio_url else None
 
     SubElement(
         item,
         "enclosure",
         {
             "url": enclosure_url,
-            "length": "0",
+            "length": str(estimated_size or 0),
             "type": enclosure_type,
         },
     )

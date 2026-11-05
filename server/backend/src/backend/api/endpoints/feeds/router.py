@@ -7,8 +7,9 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import FileResponse, RedirectResponse
 
 from .cached_video import get_cached_mp4_path, prepare_cached_mp4
+from .source_stream import proxy_response
 from .service import (
-    can_use_dailywire_for_episode,
+    can_stream_from_source,
     get_source_stream_url,
     get_episode_for_feed,
     get_local_download_for_episode,
@@ -24,7 +25,9 @@ from backend.types.stream_profile_types import (
     RSS_HLS_OUTPUT_MODES,
     RSS_MP4_OUTPUT_MODES,
 )
+from backend.services.sites import collection_site
 from downloader import hls_asset_root
+from sources import Feature, StreamMethod, get_source
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 
@@ -69,6 +72,12 @@ def _cached_mp4_head_response(file_path: Path | None, *, filename: str) -> Respo
         # Response adds Content-Length: 0 for the empty body; an uncached file has no known size.
         del response.headers["content-length"]
     return response
+
+
+def _not_streamed(profile, media: str) -> HTTPException:
+    site = collection_site(profile.collection)
+    reason = "this feed does not stream episodes" if site.streams else f"{site.name} cannot stream episodes"
+    return HTTPException(status_code=404, detail=f"No local {media} is available and {reason}")
 
 
 def _commit_feed_state_if_changed(s) -> None:
@@ -141,10 +150,14 @@ def rss_feed_episode_audio(token: str, episode_slug: str, request: Request):
                 headers=_NO_CACHE_HEADERS,
             )
 
-        if not can_use_dailywire_for_episode(profile, episode):
-            raise HTTPException(
-                status_code=404,
-                detail="No local audio is available and Daily Wire streaming is disabled",
+        if not can_stream_from_source(profile, episode):
+            raise _not_streamed(profile, "audio")
+
+        source = get_source(episode.source_key)
+        if source.has(Feature.EPISODE_LISTS):
+            return proxy_response(
+                source, episode, audio=True, media_type="audio/mp4", filename=f"{episode.slug}.m4a",
+                range_header=request.headers.get("range"), head_only=request.method == "HEAD",
             )
 
         return _temporary_stream_redirect(
@@ -193,10 +206,14 @@ def rss_feed_episode_video_mp4(token: str, episode_slug: str, request: Request):
                 headers=_NO_CACHE_HEADERS,
             )
 
-        if not can_use_dailywire_for_episode(profile, episode):
-            raise HTTPException(
-                status_code=404,
-                detail="No local MP4 is available and Daily Wire streaming is disabled",
+        if not can_stream_from_source(profile, episode):
+            raise _not_streamed(profile, "MP4 video")
+
+        source = get_source(episode.source_key)
+        if source.has(Feature.EPISODE_LISTS):
+            return proxy_response(
+                source, episode, audio=False, media_type="video/mp4", filename=f"{episode.slug}.mp4",
+                range_header=request.headers.get("range"), head_only=request.method == "HEAD",
             )
 
         episode_uuid = episode.uuid
@@ -263,11 +280,11 @@ def rss_feed_episode_video_hls(token: str, episode_slug: str, request: Request):
                 headers=_NO_CACHE_HEADERS,
             )
 
-        if not can_use_dailywire_for_episode(profile, episode):
-            raise HTTPException(
-                status_code=404,
-                detail="No local HLS video is available and Daily Wire streaming is disabled",
-            )
+        if not can_stream_from_source(profile, episode):
+            raise _not_streamed(profile, "HLS video")
+        site = collection_site(profile.collection)
+        if StreamMethod.HLS not in site.stream_methods:
+            raise HTTPException(status_code=404, detail=f"{site.name} cannot stream episodes as HLS")
 
         source_url = get_source_stream_url(
             profile,

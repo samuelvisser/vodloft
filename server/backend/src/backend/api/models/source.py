@@ -7,7 +7,7 @@ from typing import Literal, Optional
 from pydantic import Field, computed_field, field_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
-from sources import Feature, UnknownSourceError, get_source
+from sources import Feature, StreamMethod, UnknownSourceError, get_source
 from sources.ytdlp_options import MAX_OPTIONS_LENGTH, OptionsRefused, ytdlp_option_arguments
 
 
@@ -34,6 +34,15 @@ class SourcedResponse(ResponseBase):
         return source_features(self.source_key)
 
 
+class DownloadOptionsAPIRead(ResponseBase):
+    """What a Local Media Profile can download for a Site, or for any Site of a Source."""
+
+    video_heights: list[int]
+    audio_only: bool
+    hls_bundle: bool
+    quality_choices: bool
+
+
 class SourceAPIRead(ResponseBase):
     id: str
     name: str
@@ -45,6 +54,7 @@ class SourceAPIRead(ResponseBase):
     subscription_name: Optional[str] = None
     cookies_help: Optional[str] = None
     subscription_active: bool = False
+    download_options: DownloadOptionsAPIRead
 
     @field_validator("features", mode="before")
     @classmethod
@@ -150,10 +160,20 @@ class YtdlpOptionLineAPIRead(ResponseBase):
 class SiteOptionsAPIRead(ResponseBase):
     """What the site of one collection offers beyond its Source's usual choices."""
 
+    site_name: str
     auto_subtitles: bool
     sponsorblock: bool
     upgrade_checks: bool = False
     """The upgrade check can download its episodes again when a better version is out."""
+    stream_methods: list[StreamMethod] = []
+    """How RSS feeds can stream the collection's episodes without downloading them first; none for downloads only."""
+    stream_video_heights: list[int] = []
+    downloads: DownloadOptionsAPIRead
+
+    @field_validator("stream_methods", mode="before")
+    @classmethod
+    def _sorted_stream_methods(cls, methods: Iterable[StreamMethod]) -> list[StreamMethod]:
+        return sorted(methods)
 
 
 class EpisodeTagAPIRead(ResponseBase):

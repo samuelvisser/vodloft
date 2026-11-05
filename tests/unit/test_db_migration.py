@@ -29,7 +29,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 SITE_REFRESH_REVISION = "5b75b63e55f2"
 NEUTRAL_STATUSES_REVISION = "b9dbb772c34e"
 UPCOMING_VIDEOS_REVISION = "158c03681e52"
-HEAD_REVISION = "cbad9977fd7b"
+HEAD_REVISION = "688634d39f23"
 
 
 @pytest.fixture
@@ -705,3 +705,67 @@ def test_every_site_adds_upcoming_and_live_videos(migration_database):
 
     with engine.connect() as connection:
         assert connection.execute(text("SELECT pending_checks FROM sites WHERE key = 'youtube'")).scalar_one() == 1
+
+
+def test_the_daily_wire_profiles_move_to_its_own_resolutions_and_duplicates_merge(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "7e3b9d1a4c52")
+    template = "/downloads/{{ collection }}/{{ episode_title }}.ext"
+    with engine.begin() as connection:
+        for collection_id, source_key in ((1, "dailywire"), (2, "ytdlp")):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key) VALUES (:id, :uuid, :uuid, 'C', 'https://example.test/' || :uuid, "
+                "'free', 'series', 'numbered', 'Host', 'host', :source)"
+            ), {"id": collection_id, "uuid": f"c{collection_id}", "source": source_key})
+        profiles = (
+            # id, type, template, format, source_keys
+            (1, "movie", "/movies/{{ title }}.ext", "format_4k", None),
+            (2, "collection", template, "format_4k", '["dailywire"]'),
+            (3, "collection", template, "format_1080p", None),
+            (4, "collection", "/all/{{ title }}.ext", "format_4k", None),
+            (5, "collection", "/dw/{{ title }}.ext", "format_360p", '["dailywire"]'),
+        )
+        for profile_id, profile_type, path, preferred, source_keys in profiles:
+            connection.execute(text(
+                "INSERT INTO local_media_profiles (id, slug, name, type, output_template, preferred_format, video_codecs, source_keys) "
+                "VALUES (:id, :slug, :slug, :type, :path, :format, '[]', :keys)"
+            ), {"id": profile_id, "slug": f"p{profile_id}", "type": profile_type, "path": path, "format": preferred, "keys": source_keys})
+            connection.execute(text(f"INSERT INTO local_media_profiles_{profile_type} (id) VALUES (:id)"), {"id": profile_id})
+        for media_id in (10, 11):
+            connection.execute(text(
+                "INSERT INTO media_items (id, uuid, type, source_key) VALUES (:id, :uuid, 'episode', 'dailywire')"
+            ), {"id": media_id, "uuid": f"m{media_id}"})
+        # Both profiles hold episode 10; only the merged one holds episode 11.
+        for download_id, media_id, profile_id in ((100, 10, 2), (101, 10, 3), (102, 11, 2)):
+            connection.execute(text(
+                "INSERT INTO media_downloads (id, type, media_item_id, local_media_profile_id, file_path) "
+                "VALUES (:id, 'episode', :media, :profile, '/x')"
+            ), {"id": download_id, "media": media_id, "profile": profile_id})
+            connection.execute(text("INSERT INTO media_downloads_episode (id) VALUES (:id)"), {"id": download_id})
+        connection.execute(text(
+            "INSERT INTO download_profiles (id, collection_id, local_media_profile_id, enable_profile, sponsorblock_segments) "
+            "VALUES (7, 1, 2, 1, '{}')"
+        ))
+        for stream_id, collection_id in ((20, 1), (21, 2)):
+            connection.execute(text(
+                "INSERT INTO stream_profiles (id, type, collection_id, enable_profile, token, use_downloads, use_source_stream, "
+                "preferred_format, prefer_exact_match) VALUES (:id, 'rss', :collection, 1, :token, 1, 0, 'format_4k', 0)"
+            ), {"id": stream_id, "collection": collection_id, "token": f"t{stream_id}"})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        formats = dict(connection.execute(text("SELECT id, preferred_format FROM local_media_profiles")).all())
+        # Profile 2 merged into 3, which uses its template at 1080p; profiles also for other Sources keep theirs.
+        assert formats == {1: "format_1080p", 3: "format_1080p", 4: "format_4k", 5: "format_480p"}
+        assert connection.execute(text("SELECT id FROM local_media_profiles_collection ORDER BY id")).scalars().all() == [3, 4, 5]
+        assert dict(connection.execute(text("SELECT id, local_media_profile_id FROM media_downloads")).all()) == {101: 3, 102: 3}
+        assert connection.execute(text("SELECT id FROM media_downloads_episode ORDER BY id")).scalars().all() == [101, 102]
+        assert connection.execute(text("SELECT local_media_profile_id FROM download_profiles")).scalar_one() == 3
+        assert dict(connection.execute(text("SELECT id, preferred_format FROM stream_profiles")).all()) == {
+            20: "format_1080p", 21: "format_4k",
+        }

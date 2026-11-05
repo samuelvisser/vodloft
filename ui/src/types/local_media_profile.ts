@@ -2,7 +2,7 @@ import {createSelectRegistry, SelectRegistry} from "../utils/selectRegistry";
 import {useMemo} from "react";
 import type {LocalMediaProfileRead} from "./schemas/local_media_profile";
 import type {LocalMediaProfileSubtitleMode} from "./schemas/local_media_profile_base";
-import {SourceFeature, type SourceFeatureValue, type SourceRead, sourceHas} from "./schemas/source";
+import {type DownloadOptions, SourceFeature, type SourceFeatureValue, type SourceRead, sourceHas} from "./schemas/source";
 
 
 export const PreferredFormatReg = createSelectRegistry("PreferredFormat", {
@@ -21,6 +21,7 @@ export const MoviePreferredFormatReg = createSelectRegistry("MoviePreferredForma
   'format_4k': { label: "4k", help: "Download a 4k video" },
   'format_1080p': { label: "1080p", help: "Download a 1080p video" },
   'format_720p': { label: "720p", help: "Download a 720p video" },
+  'format_480p': { label: "480p", help: "Download a 480p video" },
 });
 
 export const VideoPreferredFormatReg = createSelectRegistry("VideoPreferredFormat", {
@@ -87,6 +88,48 @@ export function sourcesForLocalMediaProfileType(
     type: LocalMediaProfileType,
 ): SourceRead[] {
     return (sources ?? []).filter((source) => sourceHas(source, PROFILE_TYPE_SOURCE_FEATURES[type]))
+}
+
+/** The resolution each video format downloads up to. */
+export const FORMAT_HEIGHTS: Record<string, number> = {
+    format_360p: 360, format_480p: 480, format_720p: 720, format_1080p: 1080,
+    format_1440p: 1440, format_4k: 2160, format_8k: 4320,
+}
+
+/** Everything that at least one of these offers. */
+export function combinedDownloadOptions(options: readonly DownloadOptions[]): DownloadOptions {
+    return {
+        videoHeights: [...new Set(options.flatMap((option) => option.videoHeights))].sort((a, b) => a - b),
+        audioOnly: options.some((option) => option.audioOnly),
+        hlsBundle: options.some((option) => option.hlsBundle),
+        qualityChoices: options.some((option) => option.qualityChoices),
+    }
+}
+
+/** What a profile can download: everything one of the Sources it is offered for can. */
+export function profileDownloadOptions(
+    sources: readonly SourceRead[] | undefined,
+    type: LocalMediaProfileType,
+    sourceKeys: readonly string[] | null | undefined,
+): DownloadOptions | undefined {
+    if (!sources) return undefined
+    const offered = sourcesForLocalMediaProfileType(sources, type)
+        .filter((source) => sourceKeys == null || sourceKeys.includes(source.id))
+    return combinedDownloadOptions(offered.map((source) => source.downloadOptions))
+}
+
+export function offersFormat(options: DownloadOptions, format: string): boolean {
+    if (format === 'format_hls') return options.hlsBundle
+    if (format === 'format_audio_only') return options.audioOnly
+    return options.videoHeights.includes(FORMAT_HEIGHTS[format])
+}
+
+/** The offered video format nearest to this one: the highest below it, or the lowest there is. */
+export function nearestVideoFormat(options: DownloadOptions, format: string): string | undefined {
+    const wanted = format === 'format_hls' || format === 'format_audio_only' ? 1080 : FORMAT_HEIGHTS[format]
+    const fitting = options.videoHeights.filter((height) => height <= wanted)
+    const height = fitting.length ? Math.max(...fitting) : Math.min(...options.videoHeights)
+    return Object.keys(FORMAT_HEIGHTS).find((key) => FORMAT_HEIGHTS[key] === height)
 }
 
 /** A profile without a list of Sources is offered for every Source. */

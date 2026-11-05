@@ -8,7 +8,7 @@ const RssStreamProfileBaseSchema = z.object({
     title: z.string().trim().min(1),
     enableProfile: z.boolean().default(true),
     useDownloads: z.boolean().default(true),
-    useDwStream: z.boolean().default(true),
+    useSourceStream: z.boolean().default(true),
     preferredFormat: z.enum(PreferredFormatReg.values).refine(
         (value) => value !== 'format_hls',
         {message: 'HLS is a Local Media Profile download format, not a Stream Profile preferred format'},
@@ -77,7 +77,7 @@ export const RssStreamProfileReadSchema = z.looseObject({
     collectionId: z.int(),
     enableProfile: z.boolean(),
     useDownloads: z.boolean(),
-    useDwStream: z.boolean(),
+    useSourceStream: z.boolean(),
     preferredFormat: z.union([z.enum(PreferredFormatReg.values), z.string()]),
     preferExactMatch: z.boolean(),
     epIdTypeList: z.array(z.string()),

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 import sources
-from sources import Feature, UnknownSourceError, get_source, sources_for
+from sources import Feature, StreamMethod, UnknownSourceError, get_source, sources_for
 from sources.dailywire import DailyWireSource
 from sources.dailywire import source as dailywire_source
 from sources.ytdlp import YtDlpSource
@@ -15,7 +15,7 @@ def test_daily_wire_is_registered():
     source = get_source(sources.DAILYWIRE)
     assert isinstance(source, DailyWireSource)
     assert source.name == "The Daily Wire"
-    assert source.has(Feature.RSS_STREAMING)
+    assert all(site.stream_methods == {StreamMethod.FILE, StreamMethod.HLS, StreamMethod.LIVE} for site in source.sites)
     assert sources.all_sources() == [source, get_source("npo"), get_source("ytdlp")]
 
 

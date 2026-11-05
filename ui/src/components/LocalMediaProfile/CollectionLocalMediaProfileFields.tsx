@@ -6,7 +6,7 @@ export default function CollectionLocalMediaProfileFields({form}: {form: UseForm
     return (
         <>
             <hr className="form-section-divider" aria-hidden="true"/>
-            <QualityField form={form} allowHls/>
+            <QualityField form={form} mode="collection"/>
         </>
     )
 }
