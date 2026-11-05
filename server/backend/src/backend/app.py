@@ -294,6 +294,9 @@ def create_app() -> FastAPI:
 
     # Keep podcast feed endpoints outside of /api to prevent authentication
     app.include_router(feeds_router)
+    # EXPERIMENT: other ways of streaming YouTube video, to try in podcast apps. Not for merging.
+    from backend.api.endpoints.feeds.youtube_experiments import router as youtube_experiments_router
+    app.include_router(youtube_experiments_router)
     app.include_router(health_router, prefix="/api")
 
     # Protected API endpoints (shielded by middleware above)
