@@ -14,7 +14,7 @@ Video, as HLS (the enclosure says video/mp4, as apps leave HLS episodes out):
                    YouTube's current variant playlist and points every segment straight at YouTube.
   C  proxy         Like B, with every segment passed on through VODLoft.
 
-Audio, from the lowest video variant, as YouTube's live streams have no audio of their own:
+Audio, from YouTube's separate live audio, or from the lowest video variant when that has sound:
   D  audio-hls     ffmpeg writes the audio as a live audio-only HLS playlist.
   E  audio-aac     ffmpeg sends the audio as one endless AAC stream, without length or seeking.
 
@@ -124,6 +124,29 @@ def live_variants(info: dict) -> list[dict]:
     return sorted(variants, key=lambda fmt: (fmt.get("height") or 0, fmt.get("tbr") or 0), reverse=True)
 
 
+def live_audio(info: dict) -> dict | None:
+    """The live HLS audio without video, in the language the video was made in. YouTube's live
+    streams can list their audio apart from the video variants, which then have no sound."""
+    audio = [
+        fmt for fmt in info.get("formats") or []
+        if fmt.get("url") and "m3u8" in str(fmt.get("protocol", ""))
+        and (fmt.get("vcodec") or "none") == "none" and (fmt.get("acodec") or "none") != "none"
+    ]
+    return max(audio, key=lambda fmt: (fmt.get("language_preference") or 0, fmt.get("tbr") or fmt.get("abr") or 0), default=None)
+
+
+def _has_sound(fmt: dict) -> bool:
+    return (fmt.get("acodec") or "none") != "none"
+
+
+def _audio(video_id: str, *, cookies: bool, fresh: bool = False) -> dict | None:
+    """The separate live audio, when the video variants have no sound of their own."""
+    variants = _variants(video_id, cookies=cookies, fresh=fresh)
+    if all(_has_sound(fmt) for fmt in variants):
+        return None
+    return live_audio(_info(video_id, cookies=cookies, fresh=fresh))
+
+
 def _variants(video_id: str, *, cookies: bool, fresh: bool = False) -> list[dict]:
     info = _info(video_id, cookies=cookies, fresh=fresh)
     if info.get("live_status") != "is_live":
@@ -140,14 +163,25 @@ def _headers_of(fmt: dict) -> dict[str, str]:
 
 # --- Playlists -------------------------------------------------------------------------------------
 
-def master_playlist(variants: list[dict]) -> str:
+def master_playlist(variants: list[dict], audio: dict | None = None) -> str:
+    """One entry per variant; ``audio`` is the separate sound that variants without it share."""
     lines = ["#EXTM3U", "#EXT-X-VERSION:3", "#EXT-X-INDEPENDENT-SEGMENTS"]
+    if audio is not None:
+        lines.append(
+            '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Audio",DEFAULT=YES,AUTOSELECT=YES,'
+            f'URI="variant-{audio["format_id"]}.m3u8"'
+        )
     for fmt in variants:
-        attributes = [f"BANDWIDTH={int((fmt.get('tbr') or 1000) * 1000)}"]
+        separate = audio is not None and not _has_sound(fmt)
+        bitrate = (fmt.get("tbr") or 1000) + ((audio.get("tbr") or audio.get("abr") or 128) if separate else 0)
+        attributes = [f"BANDWIDTH={int(bitrate * 1000)}"]
         if fmt.get("width") and fmt.get("height"):
             attributes.append(f"RESOLUTION={fmt['width']}x{fmt['height']}")
-        if fmt.get("vcodec") and fmt.get("acodec") and fmt.get("acodec") != "none":
-            attributes.append(f'CODECS="{fmt["vcodec"]},{fmt["acodec"]}"')
+        acodec = audio.get("acodec") if separate else fmt.get("acodec")
+        if fmt.get("vcodec") and acodec and acodec != "none":
+            attributes.append(f'CODECS="{fmt["vcodec"]},{acodec}"')
+        if separate:
+            attributes.append('AUDIO="audio"')
         lines += [f"#EXT-X-STREAM-INF:{','.join(attributes)}", f"variant-{fmt['format_id']}.m3u8"]
     return "\n".join(lines) + "\n"
 
@@ -184,7 +218,9 @@ def _playlist_response(text: str, *, head_only: bool) -> Response:
 def _variant_playlist(video_id: str, format_id: str, *, cookies: bool, proxy_base: str | None) -> str:
     """YouTube's current playlist of one variant, looked up again once when YouTube refuses its link."""
     for fresh in (False, True):
-        fmt = next((fmt for fmt in _variants(video_id, cookies=cookies, fresh=fresh) if str(fmt.get("format_id")) == format_id), None)
+        audio = _audio(video_id, cookies=cookies, fresh=fresh)
+        choices = [*_variants(video_id, cookies=cookies, fresh=fresh), *([audio] if audio else [])]
+        fmt = next((fmt for fmt in choices if str(fmt.get("format_id")) == format_id), None)
         if fmt is None:
             raise HTTPException(status_code=404, detail="No such variant")
         upstream = requests.get(fmt["url"], headers=_headers_of(fmt), timeout=_TIMEOUT)
@@ -262,7 +298,7 @@ def _stop_idle() -> None:
 
 
 def _start_audio_hls(video_id: str, *, cookies: bool) -> _AudioHls:
-    """ffmpeg writing the audio of the lowest variant as a live audio-only HLS playlist; stopped when no
+    """ffmpeg writing the live audio as a live audio-only HLS playlist; stopped when no
     app asked for it for two minutes."""
     with _lock(f"audio:{video_id}"):
         with _guard:
@@ -271,7 +307,7 @@ def _start_audio_hls(video_id: str, *, cookies: bool) -> _AudioHls:
         if running is not None:
             running.used = time.time()
             return running
-        lowest = _variants(video_id, cookies=cookies)[-1]
+        lowest = _audio(video_id, cookies=cookies) or _variants(video_id, cookies=cookies)[-1]
         directory = _root() / f"audio-{video_id}"
         shutil.rmtree(directory, ignore_errors=True)
         directory.mkdir(parents=True)
@@ -313,7 +349,7 @@ def _audio_aac_response(video_id: str, *, cookies: bool, head_only: bool) -> Res
     headers = {**_NO_CACHE, "Content-Type": "audio/aac"}
     if head_only:
         return Response(status_code=200, headers=headers)
-    lowest = _variants(video_id, cookies=cookies)[-1]
+    lowest = _audio(video_id, cookies=cookies) or _variants(video_id, cookies=cookies)[-1]
     command = [
         _ffmpeg(), "-hide_banner", "-loglevel", "error", "-nostdin", *_ffmpeg_input(lowest),
         "-vn", "-map", "0:a:0", "-c:a", "copy", "-f", "adts", "pipe:1",
@@ -422,6 +458,11 @@ def live_experiments_diagnose(token: str, video_id: str):
                  "tbr": fmt.get("tbr")}
                 for fmt in live_variants(info)
             ],
+            "audio": [
+                {"id": fmt.get("format_id"), "acodec": fmt.get("acodec"), "language": fmt.get("language"), "tbr": fmt.get("tbr")}
+                for fmt in info.get("formats") or []
+                if "m3u8" in str(fmt.get("protocol", "")) and (fmt.get("vcodec") or "none") == "none"
+            ],
             "other_formats": sorted({str(fmt.get("protocol")) for fmt in info.get("formats") or []}),
         }
     return JSONResponse(report, headers=_NO_CACHE)
@@ -453,13 +494,15 @@ def live_experiments_check(token: str, video_id: str, request: Request):
     fetch("redirect", f"{base}/redirect/video.m3u8", text=True)
     for method in ("direct", "proxy"):
         master = fetch(f"{method}/video.m3u8", f"{base}/{method}/video.m3u8", text=True) or ""
+        audio = re.search(r'TYPE=AUDIO[^\n]*URI="([^"]+)"', master)
         variant = next((line for line in master.splitlines() if line and not line.startswith("#")), None)
-        if variant is None:
-            continue
-        playlist = fetch(f"{method}/{variant}", f"{base}/{method}/{variant}", text=True) or ""
-        segment = next((line for line in playlist.splitlines() if line and not line.startswith("#")), None)
-        if segment:
-            fetch(f"{method}/first segment", urljoin(f"{base}/{method}/{variant}", segment), text=False)
+        for kind, name in (("video", variant), ("audio", audio.group(1) if audio else None)):
+            if name is None:
+                continue
+            playlist = fetch(f"{method}/{name}", f"{base}/{method}/{name}", text=True) or ""
+            segment = next((line for line in playlist.splitlines() if line and not line.startswith("#")), None)
+            if segment:
+                fetch(f"{method}/first {kind} segment", urljoin(f"{base}/{method}/{name}", segment), text=False)
     fetch("audio-hls/audio.m3u8", f"{base}/audio-hls/audio.m3u8", text=True)
     started = time.time()
     try:
@@ -500,7 +543,8 @@ def live_experiments_media(token: str, video_id: str, method: str, filename: str
         return RedirectResponse(manifest, status_code=302, headers=_NO_CACHE)
     if method in ("direct", "proxy"):
         if filename == "video.m3u8":
-            return _playlist_response(master_playlist(_variants(video_id, cookies=cookies)), head_only=head_only)
+            master = master_playlist(_variants(video_id, cookies=cookies), _audio(video_id, cookies=cookies))
+            return _playlist_response(master, head_only=head_only)
         match = re.fullmatch(r"variant-([\w-]+)\.m3u8", filename)
         if match is None:
             raise HTTPException(status_code=404, detail="No such playlist")

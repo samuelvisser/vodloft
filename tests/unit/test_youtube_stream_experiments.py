@@ -33,3 +33,16 @@ def test_variant_playlists_point_at_youtube_or_through_vodloft():
     assert proxied.splitlines()[-1] == "/segment?u=https://rr1.googlevideo.com/x/sq/5/file.ts"
     assert experiments._allowed("https://rr1---sn-abc.googlevideo.com/x")
     assert not experiments._allowed("https://example.com/x")
+
+
+def test_variants_without_sound_share_the_separate_live_audio():
+    video = _fmt("301", height=1080, acodec="none", tbr=4000)
+    audio = {**_fmt("234", height=0, vcodec="none", tbr=128), "height": None, "width": None, "language_preference": 10}
+    info = {"formats": [video, audio, {**audio, "format_id": "233", "language_preference": -1}]}
+    assert experiments.live_audio(info)["format_id"] == "234"
+    master = experiments.master_playlist([video], experiments.live_audio(info))
+    assert master.splitlines()[3:] == [
+        '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Audio",DEFAULT=YES,AUTOSELECT=YES,URI="variant-234.m3u8"',
+        '#EXT-X-STREAM-INF:BANDWIDTH=4128000,RESOLUTION=1920x1080,CODECS="avc1.4D401E,mp4a.40.2",AUDIO="audio"',
+        "variant-301.m3u8",
+    ]
