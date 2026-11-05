@@ -423,7 +423,22 @@ def test_the_collection_lookup_endpoint(listed):
         body = client.get("/api/sources/listed/collection", params={"url": "https://listed.example/PL1"}).json()
         assert body["slug"] == "PL1"
         assert (body["authorName"], body["authorSlug"], body["sourceKey"]) == ("A Channel", "a-channel", "listed")
+        assert body["probableCollectionType"] == "series"
         assert client.get("/api/sources/dailywire/show", params={"url": "https://x"}).status_code == 404
+
+
+def test_the_collection_lookup_suggests_a_podcast_from_its_name(listed, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from backend.api.endpoints.sources import router as source_router_module
+
+    monkeypatch.setattr(ListedSource, "collection_details", lambda self, url: CollectionDetails(slug="UC1", url=url, title="PBD Podcasts"))
+    app = FastAPI()
+    app.include_router(source_router_module.router, prefix="/api")
+    with TestClient(app) as client:
+        body = client.get("/api/sources/listed/collection", params={"url": "https://listed.example/UC1"}).json()
+    assert body["probableCollectionType"] == "podcast"
 
 
 def test_a_collection_bundle_can_use_an_existing_profile(listed, session):
