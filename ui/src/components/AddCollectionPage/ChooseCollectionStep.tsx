@@ -84,13 +84,17 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
     useEffect(() => {
         if (!listed.data) return;
         setValue("membershipLevel", DwMembershipLevelReg.Enum.FREE, {shouldValidate: true});
-        // Suggest a series, numbered by the Source's own seasons when it has them and by date otherwise.
+        // Suggest the type the backend guessed from the name. A series is numbered by the Source's own
+        // seasons when it has them, and a podcast or a series without seasons by date.
         if (lastListedUrlRef.current === listed.data.sharingUrl) return;
         lastListedUrlRef.current = listed.data.sharingUrl;
-        setValue("type", CollectionTypeReg.Enum.series, {shouldDirty: true});
+        const type = CollectionTypeReg.normalize(listed.data.probableCollectionType) ?? CollectionTypeReg.Enum.series;
+        setValue("type", type, {shouldDirty: true});
         setValue(
             "episodeIdentifier",
-            listed.data.seasons.length ? EpisodeIdentifierReg.Enum.seasonal : EpisodeIdentifierReg.Enum.date_based,
+            type === CollectionTypeReg.Enum.series && listed.data.seasons.length
+                ? EpisodeIdentifierReg.Enum.seasonal
+                : EpisodeIdentifierReg.Enum.date_based,
             {shouldDirty: true},
         );
     }, [listed.data, setValue]);

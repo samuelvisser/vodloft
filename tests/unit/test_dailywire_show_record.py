@@ -41,3 +41,10 @@ def test_show_with_year_seasons_suggests_a_podcast():
     record = DwShowRecord.model_validate(_show_page(seasons=[{"id": "season-1", "name": "2026", "slug": "2026"}]))
 
     assert record.model_dump(mode="json")["probableCollectionType"] == "podcast"
+
+
+def test_show_named_a_podcast_suggests_a_podcast():
+    page = _show_page(seasons=[{"id": "season-1", "name": "Season 1", "slug": "season-1"}])
+    page["show"]["title"] = "The Yes or No Podcast"
+
+    assert DwShowRecord.model_validate(page).model_dump(mode="json")["probableCollectionType"] == "podcast"
