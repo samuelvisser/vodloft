@@ -393,7 +393,7 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
             {step === 2 && (
                 <CollectionActionStep
                     value={collectionAction}
-                    canStreamFromSource={!collectionSubmit || (collectionSite?.streams ?? true)}
+                    canStreamFromSource={!collectionSubmit || (collectionSite ? collectionSite.streamMethods.length > 0 : true)}
                     onChange={setCollectionAction}
                     onBack={() => setStep(1)}
                     onContinue={handleActionContinue}

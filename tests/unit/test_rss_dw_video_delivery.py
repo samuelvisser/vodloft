@@ -183,6 +183,7 @@ def test_hls_endpoint_falls_back_directly_to_dailywire_without_mp4_preparation(
     profile = SimpleNamespace(
         preferred_format="format_1080p",
         video_output_mode="audio_hls",
+        collection=SimpleNamespace(sharing_url="https://www.dailywire.com/show/a-show", source_key="dailywire"),
     )
     episode = SimpleNamespace(
         id=10,

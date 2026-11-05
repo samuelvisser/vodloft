@@ -231,8 +231,9 @@ export const SiteOptionsSchema = z.object({
     autoSubtitles: z.boolean(),
     sponsorblock: z.boolean(),
     upgradeChecks: z.boolean(),
-    /** RSS feeds can stream the collection's episodes without downloading them. */
-    streams: z.boolean(),
-    /** RSS feeds can stream the collection's episodes while they are live. */
-    streamsLive: z.boolean(),
+    /**
+     * How RSS feeds can stream the collection's episodes without downloading them: as M4A and MP4 files,
+     * as HLS video, and while they are live. Empty for downloads only.
+     */
+    streamMethods: z.array(z.enum(['file', 'hls', 'live'])),
 })

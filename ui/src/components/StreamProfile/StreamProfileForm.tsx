@@ -80,8 +80,10 @@ export default function StreamProfileForm({
         url: collection?.sharingUrl ?? collectionUrl,
     })
     const streamSourceKnown = !!site
-    const canStreamFromSource = site?.streams ?? false
-    const canStreamLiveEpisodes = site?.streamsLive ?? false
+    const streamMethods = site?.streamMethods ?? []
+    const canStreamFromSource = streamMethods.length > 0
+    const canStreamLiveEpisodes = streamMethods.includes('live')
+    const canStreamHls = streamMethods.includes('hls')
     // A Source that lists its episodes, such as yt-dlp, streams the site's own MP4; The Daily Wire's is built from HLS first.
     const streamSource = sources.get(collection?.sourceKey ?? sourceKey ?? '')
     const streamsMp4Directly = !!streamSource && sourceHas(streamSource, SourceFeature.EPISODE_LISTS)
@@ -513,6 +515,7 @@ export default function StreamProfileForm({
                     regeneratingToken={regeneratingToken}
                     advisory={streamProfileAdvisory}
                     liveEpisodes={canStreamLiveEpisodes}
+                    hlsVideo={!(canStreamFromSource && useSourceStream) || canStreamHls}
                 />
             ) : undefined}
         </>

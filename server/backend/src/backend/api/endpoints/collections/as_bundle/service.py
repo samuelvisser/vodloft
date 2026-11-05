@@ -109,6 +109,8 @@ def create_collection_bundle(
         ensure_site_can_stream(
             collection, use_source_stream=payload.stream_profile.use_source_stream,
             stream_live_episodes=payload.stream_profile.stream_live_episodes,
+            preferred_format=payload.stream_profile.preferred_format,
+            video_output_mode=payload.stream_profile.video_output_mode,
         )
         token = generate_stream_profile_token()
         feed_url = (payload.stream_profile.feed_url or "").strip()

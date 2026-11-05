@@ -8,7 +8,7 @@ import pytest
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 
-from sources import MediaStream, get_source, site_for
+from sources import MediaStream, StreamMethod, get_source, site_for
 from sources.ytdlp.source import stream_of
 
 
@@ -21,13 +21,13 @@ def _format(format_id, *, vcodec="none", acodec="mp4a.40.2", protocol="https", a
 
 
 def test_youtube_and_the_daily_wire_stream_but_other_sites_do_not():
-    youtube = site_for("https://www.youtube.com/@channel", "ytdlp")
-    assert youtube.streams and not youtube.streams_live
+    # YouTube only streams plain files; The Daily Wire also streams HLS and live episodes.
+    assert site_for("https://www.youtube.com/@channel", "ytdlp").stream_methods == {StreamMethod.FILE}
     dailywire = site_for("https://www.dailywire.com/show/the-ben-shapiro-show", "dailywire")
-    assert dailywire.streams and dailywire.streams_live
+    assert dailywire.stream_methods == {StreamMethod.FILE, StreamMethod.HLS, StreamMethod.LIVE}
     for url in ("https://vimeo.com/channels/staffpicks", "https://example.org/videos"):
         site = site_for(url, "ytdlp")
-        assert not site.streams and not site.streams_live
+        assert not site.streams and not site.stream_methods
 
 
 def test_audio_is_youtubes_m4a_when_it_is_offered():
@@ -66,12 +66,25 @@ def test_a_feed_on_a_site_that_cannot_stream_is_refused():
 
     vimeo = SimpleNamespace(sharing_url="https://vimeo.com/channels/staffpicks", source_key="ytdlp")
     youtube = SimpleNamespace(sharing_url="https://www.youtube.com/@channel-for-refusals", source_key="ytdlp")
+    mp4 = {"preferred_format": "format_1080p", "video_output_mode": "audio_mp4"}
     with pytest.raises(HTTPException) as refused:
-        ensure_site_can_stream(vimeo, use_source_stream=True, stream_live_episodes=False)
+        ensure_site_can_stream(vimeo, use_source_stream=True, stream_live_episodes=False, **mp4)
     assert refused.value.status_code == 422
-    ensure_site_can_stream(youtube, use_source_stream=True, stream_live_episodes=False)
+    ensure_site_can_stream(youtube, use_source_stream=True, stream_live_episodes=False, **mp4)
+    ensure_site_can_stream(
+        youtube, use_source_stream=True, stream_live_episodes=False, preferred_format="format_audio_only", video_output_mode=None,
+    )
+    with pytest.raises(HTTPException, match="cannot stream video as HLS"):
+        ensure_site_can_stream(
+            youtube, use_source_stream=True, stream_live_episodes=False, preferred_format="format_1080p",
+            video_output_mode="audio_hls",
+        )
+    # Without streaming, HLS comes from downloads, so any output works.
+    ensure_site_can_stream(
+        youtube, use_source_stream=False, stream_live_episodes=False, preferred_format="format_1080p", video_output_mode="mp4_hls",
+    )
     with pytest.raises(HTTPException, match="cannot stream live episodes"):
-        ensure_site_can_stream(youtube, use_source_stream=True, stream_live_episodes=True)
+        ensure_site_can_stream(youtube, use_source_stream=True, stream_live_episodes=True, **mp4)
 
 
 class _Upstream:

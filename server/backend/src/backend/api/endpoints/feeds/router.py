@@ -27,7 +27,7 @@ from backend.types.stream_profile_types import (
 )
 from backend.services.sites import collection_site
 from downloader import hls_asset_root
-from sources import Feature, get_source
+from sources import Feature, StreamMethod, get_source
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 
@@ -282,11 +282,9 @@ def rss_feed_episode_video_hls(token: str, episode_slug: str, request: Request):
 
         if not can_stream_from_source(profile, episode):
             raise _not_streamed(profile, "HLS video")
-        if get_source(episode.source_key).has(Feature.EPISODE_LISTS):
-            raise HTTPException(
-                status_code=404,
-                detail=f"{collection_site(profile.collection).name} episodes are only streamed as MP4 and M4A",
-            )
+        site = collection_site(profile.collection)
+        if StreamMethod.HLS not in site.stream_methods:
+            raise HTTPException(status_code=404, detail=f"{site.name} cannot stream episodes as HLS")
 
         source_url = get_source_stream_url(
             profile,

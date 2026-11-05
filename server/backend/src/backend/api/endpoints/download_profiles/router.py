@@ -80,7 +80,7 @@ def download_profiles_site_options(collection_id: int, request: Request):
             auto_subtitles=source.auto_subtitles_for(collection.sharing_url),
             sponsorblock=source.sponsorblock_for(collection.sharing_url),
             upgrade_checks=source.has(Feature.UPGRADE_CHECKS),
-            site_name=site.name, streams=site.streams, streams_live=site.streams_live,
+            site_name=site.name, stream_methods=site.stream_methods,
         )
 
 

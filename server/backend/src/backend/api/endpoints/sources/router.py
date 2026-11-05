@@ -101,8 +101,8 @@ def site_options(source_id: str, url: str = Query(min_length=1, max_length=2048)
     site = site_for(url, source.id)
     return SiteOptionsAPIRead(
         auto_subtitles=source.auto_subtitles_for(url), sponsorblock=source.sponsorblock_for(url),
-        upgrade_checks=source.has(Feature.UPGRADE_CHECKS), site_name=site.name, streams=site.streams,
-        streams_live=site.streams_live,
+        upgrade_checks=source.has(Feature.UPGRADE_CHECKS), site_name=site.name,
+        stream_methods=site.stream_methods,
     )
 
 

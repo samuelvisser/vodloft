@@ -17,9 +17,14 @@ type Props = {
     onRegenerateToken?: () => void | Promise<void>
     regeneratingToken?: boolean
     advisory?: ReactNode
-    /** Whether the collection's Source has live episodes to offer. */
+    /** Whether the collection's Site streams live episodes. */
     liveEpisodes?: boolean
+    /** Whether HLS video outputs can be offered: not while streaming from a Site that has no HLS, such as YouTube. */
+    hlsVideo?: boolean
 }
+
+// The MP4 output that takes the place of an HLS one on a Site that streams no HLS.
+const MP4_FOR_HLS: Record<string, string> = {audio_hls: 'audio_mp4', mp4_hls: 'mp4'}
 
 export default function RssStreamProfileForm({
     form,
@@ -28,6 +33,7 @@ export default function RssStreamProfileForm({
     regeneratingToken,
     advisory,
     liveEpisodes = true,
+    hlsVideo = true,
 }: Props) {
     const {control, formState: {errors}, register, setValue, watch} = form
     const [copied, setCopied] = useState(false)
@@ -53,12 +59,17 @@ export default function RssStreamProfileForm({
         }
 
         if (usesVideo && videoOutputMode == null) {
-            setValue('videoOutputMode', 'audio_hls', {
+            setValue('videoOutputMode', hlsVideo ? 'audio_hls' : 'audio_mp4', {
+                shouldDirty: true,
+                shouldValidate: true,
+            })
+        } else if (!hlsVideo && videoOutputMode && MP4_FOR_HLS[videoOutputMode]) {
+            setValue('videoOutputMode', MP4_FOR_HLS[videoOutputMode], {
                 shouldDirty: true,
                 shouldValidate: true,
             })
         }
-    }, [preferredFormat, setValue, usesVideo, videoOutputMode])
+    }, [hlsVideo, preferredFormat, setValue, usesVideo, videoOutputMode])
 
     useEffect(() => {
         if (!offersLiveEpisodes && streamLiveEpisodes) {
@@ -120,7 +131,7 @@ export default function RssStreamProfileForm({
                             <Select
                                 inputId="rss-video-output-mode"
                                 classNamePrefix="select"
-                                options={RssVideoOutputModeReg.options}
+                                options={RssVideoOutputModeReg.options.filter((option) => hlsVideo || !RssHlsOutputModes.has(option.value))}
                                 value={RssVideoOutputModeReg.options.find(option => option.value === field.value) ?? null}
                                 onChange={(option) => field.onChange((option as any)?.value)}
                                 onBlur={field.onBlur}

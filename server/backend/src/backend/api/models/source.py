@@ -7,7 +7,7 @@ from typing import Literal, Optional
 from pydantic import Field, computed_field, field_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
-from sources import Feature, UnknownSourceError, get_source
+from sources import Feature, StreamMethod, UnknownSourceError, get_source
 from sources.ytdlp_options import MAX_OPTIONS_LENGTH, OptionsRefused, ytdlp_option_arguments
 
 
@@ -155,10 +155,13 @@ class SiteOptionsAPIRead(ResponseBase):
     sponsorblock: bool
     upgrade_checks: bool = False
     """The upgrade check can download its episodes again when a better version is out."""
-    streams: bool = False
-    """RSS feeds can stream the collection's episodes without downloading them first."""
-    streams_live: bool = False
-    """RSS feeds can stream the collection's episodes while they are live."""
+    stream_methods: list[StreamMethod] = []
+    """How RSS feeds can stream the collection's episodes without downloading them first; none for downloads only."""
+
+    @field_validator("stream_methods", mode="before")
+    @classmethod
+    def _sorted_stream_methods(cls, methods: Iterable[StreamMethod]) -> list[StreamMethod]:
+        return sorted(methods)
 
 
 class EpisodeTagAPIRead(ResponseBase):

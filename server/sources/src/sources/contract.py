@@ -69,6 +69,17 @@ class Feature(StrEnum):
     while it is live."""
 
 
+class StreamMethod(StrEnum):
+    """A way an RSS feed can stream a Site's episodes that are not downloaded."""
+
+    FILE = "file"
+    """One M4A audio file and one MP4 video file per episode."""
+    HLS = "hls"
+    """An HLS playlist of the video."""
+    LIVE = "live"
+    """Episodes while they are live, as HLS."""
+
+
 class RssEpisodeType(StrEnum):
     """The podcast episode type an RSS feed gives an episode."""
 
@@ -491,10 +502,13 @@ class Site:
     """How long after publication VODLoft looks the Site's items up again, such as
     ``30m,2h,24h``, for a Site whose titles and pictures keep changing on a schedule of
     its own. Without it, the Site follows VODLoft's system schedule."""
-    streams: bool = False
-    """RSS feeds can stream the Site's episodes straight from it, without downloading them first."""
-    streams_live: bool = False
-    """RSS feeds can stream the Site's episodes while they are live."""
+    stream_methods: frozenset[StreamMethod] = frozenset()
+    """How RSS feeds can stream the Site's episodes straight from it, without downloading them
+    first. A Site with none only serves downloads."""
+
+    @property
+    def streams(self) -> bool:
+        return bool(self.stream_methods)
 
 
 def link_host(url: str) -> str:

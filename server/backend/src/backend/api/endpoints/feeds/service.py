@@ -38,7 +38,7 @@ from backend.types.stream_profile_types import (
 from backend.utils.feed_urls import request_base_url
 from .source_stream import estimated_audio_size
 from config.network import is_no_internet_error
-from sources import EpisodeTag, Source, UnknownSourceError, get_source
+from sources import EpisodeTag, Source, StreamMethod, UnknownSourceError, get_source
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 
@@ -324,7 +324,7 @@ def _profile_allows_episode(profile: RssStreamProfile, episode: Episode) -> bool
 def _profile_streams_live_hls(profile: RssStreamProfile) -> bool:
     return (
         bool(profile.stream_live_episodes)
-        and collection_site(profile.collection).streams_live
+        and StreamMethod.LIVE in collection_site(profile.collection).stream_methods
         and profile.preferred_format != PreferredFormat.FORMAT_AUDIO_ONLY.value
         and profile.video_output_mode in RSS_HLS_OUTPUT_MODES
     )
