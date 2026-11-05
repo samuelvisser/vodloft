@@ -172,7 +172,11 @@ export default function CollectionSyncLogModal({
               resourceId={collectionId}
               label="Sync now"
               icon={faIcon('fass', 'arrows-rotate')}
-              onClick={() => void onSyncNow()}
+              onClick={() => {
+                // The page's Scanning banner follows the sync from here.
+                onClose()
+                void onSyncNow()
+              }}
               starting={starting}
               onCancel={onCancelSync}
               cancelDisabled={cancelSyncDisabled}
