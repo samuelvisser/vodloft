@@ -401,6 +401,20 @@ export function useCollectionEpisodeTags({collectionId, collectionSlug, sourceKe
     return useEpisodeTags(collection?.sourceKey ?? sourceKey, collection?.sharingUrl ?? url)
 }
 
+/** The episode tags that a saved collection's episodes actually have, in its Source's order. */
+export function useEpisodeTagsInCollection(collectionSlug?: string) {
+    return useQuery<EpisodeTagRead[], Error, EpisodeTagRead[], readonly ['collectionEpisodeTags', string]>({
+        queryKey: ['collectionEpisodeTags', collectionSlug ?? ''] as const,
+        enabled: !!collectionSlug,
+        refetchOnMount: 'always',
+        queryFn: ({signal}) => fetchParsed(
+            `${(window as any).appConfig.API_URL}/collections/${encodeURIComponent(collectionSlug!)}/episode-tags`,
+            EpisodeTagReadSchema.array(),
+            signal,
+        ),
+    })
+}
+
 export function useSourceApi(sourceId: string, enabled = true) {
     return useQuery<ApiStatusRead, Error, ApiStatusRead, readonly ['sourceApi', string]>({
         queryKey: ['sourceApi', sourceId] as const,
@@ -660,14 +674,17 @@ export function useEpisodePages(
     opts?: {
         pageSize?: number
         seasonId?: number | null
+        /** Only episodes with these tags; empty means every episode. */
+        episodeTypes?: readonly string[]
         enabled?: boolean
     },
 ) {
     const pageSize = opts?.pageSize ?? 36
     const seasonId = opts?.seasonId
+    const episodeTypes = useMemo(() => [...(opts?.episodeTypes ?? [])].sort(), [opts?.episodeTypes])
     const result = useLazyCollection<EpisodeReadView, EpisodeReadViewPage>({
         collectionPrefix: episodeQueryKeys.forCollection(collectionSlug),
-        queryKey: ['pages', seasonId ?? null] as const,
+        queryKey: ['pages', seasonId ?? null, episodeTypes] as const,
         initialCount: pageSize,
         batchSize: pageSize,
         enabled: !!collectionSlug && seasonId !== null && (opts?.enabled ?? true),
@@ -677,21 +694,24 @@ export function useEpisodePages(
                 cursor,
                 limit,
                 seasonId: seasonId ?? undefined,
+                episodeTypes,
             },
             signal,
         ),
     })
 
     const firstPage = result.data?.pages[0]
+    // The browser preview is of the whole collection, so only an unfiltered first page may replace it.
+    const unfiltered = seasonId === undefined && episodeTypes.length === 0
     useEffect(() => {
-        if (!collectionSlug || seasonId !== undefined || firstPage === undefined) return
+        if (!collectionSlug || !unfiltered || firstPage === undefined) return
         saveEpisodePreviewToStorage(
             collectionSlug,
             firstPage.items.slice(0, COLLECTION_EPISODE_PREVIEW_SIZE),
             Date.now(),
             firstPage.collectionTotal,
         )
-    }, [firstPage, seasonId, collectionSlug])
+    }, [firstPage, unfiltered, collectionSlug])
 
     return result
 }

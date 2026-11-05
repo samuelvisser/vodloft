@@ -14,6 +14,7 @@ from task_manager.tasks.media_download_operations import (
     dispatch_queued_media_download_operations,
 )
 from backend.security.access import Area, Level
+from backend.types.download_profile_types import EpisodeTagKey
 from backend.security.deps import may_delete_files, requires
 
 router = APIRouter(prefix="/episodes", tags=["Episodes"])
@@ -79,8 +80,12 @@ def episode_views_by_collection_page(
         cursor: str | None = Query(default=None, max_length=2048),
         limit: int = Query(default=25, ge=1, le=100),
         season_id: int | None = Query(default=None, ge=1),
+        episode_type: list[EpisodeTagKey] = Query(default_factory=list, max_length=20),
 ):
-    """Return one compact episode page for a collection grid or browser cache preview."""
+    """Return one compact episode page for a collection grid or browser cache preview.
+
+    Repeat ``episode_type`` to list only episodes with those tags, such as ``short``; without it, every episode.
+    """
     with db_session() as s:
         return get_episode_views_by_collection_page(
             s,
@@ -88,6 +93,7 @@ def episode_views_by_collection_page(
             cursor=cursor,
             limit=limit,
             season_id=season_id,
+            episode_types=episode_type,
         )
 
 

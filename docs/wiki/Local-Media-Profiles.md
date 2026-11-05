@@ -46,19 +46,21 @@ Local Media Profiles can save the subtitles a video has, from The Daily Wire and
 - **Inside the media** adds them as tracks you can pick in your player, in MP4 and MKV files.
 - **Beside the media** saves SRT files next to the media, such as `Episode.en.srt`. Subtitles beside the media are always SRT.
 
-**Subtitle languages** is a list in order of preference. Drag a language or use its arrows to move it, and add one at the bottom of the list. **When several languages are available** chooses one of:
+**When several languages are available** chooses one of:
 
 - **Every language on the list**: one file per language on the list, when the site has it.
 - **Only the first one available**: one subtitle per episode: the first language on the list that the video has.
 - **Every language the site offers**: whatever the video has. On YouTube this can be dozens when auto-generated subtitles are included.
 
-The first language on the list becomes the default subtitle track in players that read it. New profiles start with English. Profiles from before VODLoft 0.7.0 keep downloading every language the site offers.
+Below it, **Subtitle languages** is a list in order of preference. Drag a language or use its arrows to move it, and add one at the bottom of the list. The first language on the list that an episode has becomes the default subtitle track in players that read it. New profiles start with English. Profiles from before VODLoft 0.7.0 keep downloading every language the site offers.
+
+With **Every language the site offers**, the list is called **Default track language**: only its first language counts, and it becomes the default track when an episode has it. The other languages are grayed out but stay on the list for when you choose something else again. Leave the list empty to mark no default track.
 
 **Auto-generated subtitles** only exist on YouTube, so that choice is on each Download Profile of a YouTube Collection (see [Download Profiles](Download-Profiles#youtube)). When a Local Media Profile is used for YouTube Collections, a folded line below says per Collection whether auto-generated subtitles are downloaded, with a link to each Download Profile.
 
 **Movies**, **Series** and Collection profiles available for **Podcasts and Series** start with subtitles beside the media. **Podcast-only** profiles and **Video** profiles start without subtitles.
 
-Forced subtitles use names such as `Movie Name.en.forced.srt`, and auto-generated ones `Episode.nl.auto.srt`. Plex and similar media servers find these files automatically. NPO Start has no subtitles yet. A video without subtitles downloads as before, and a subtitle that fails never stops the download. Audio-only downloads never embed subtitles, and an HLS bundle can only have them beside it.
+Forced subtitles use names such as `Movie Name.en.forced.srt`, and auto-generated ones `Episode.nl.auto.srt`. The default track beside the media is named like `Episode.en.default.srt`: Jellyfin and Emby pick it by default, while Plex and Kodi go by the subtitle language set in the player. Plex and similar media servers find these files automatically. NPO Start has no subtitles yet. A video without subtitles downloads as before, and a subtitle that fails never stops the download. Audio-only downloads never embed subtitles, and an HLS bundle can only have them beside it.
 
 ## Quality
 

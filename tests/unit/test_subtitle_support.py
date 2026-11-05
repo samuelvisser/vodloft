@@ -429,3 +429,72 @@ def test_ytdlp_subtitles_need_a_ytdlp_download(tmp_path):
             requested_destination=tmp_path / "a.mp4", temporary_root=tmp_path / "t",
             download_mode="temporary", assets=(asset,),
         )
+
+
+@pytest.mark.parametrize(("languages", "files", "default_index"), [
+    (("nl", "en"), ["Video.en.srt", "Video.nl.default.srt"], 1),
+    (("fr", "en-US"), ["Video.en.default.srt", "Video.nl.srt"], 0),
+    (("fr",), ["Video.en.srt", "Video.nl.srt"], None),
+    ((), ["Video.en.srt", "Video.nl.srt"], None),
+])
+def test_the_default_subtitle_is_marked_inside_and_beside_the_media(tmp_path, monkeypatch, languages, files, default_index):
+    from pathlib import Path
+
+    from downloader import coordinator
+    from downloader.capacity import DownloadResources
+    from downloader.lifecycle import DownloadTracker
+    from downloader.models import DownloadProgress, DownloadResult, WrittenSubtitle
+
+    embedding_calls = []
+    monkeypatch.setattr(coordinator, "embed_media", lambda *args, **kwargs: embedding_calls.append(kwargs))
+
+    def transfer(_url, destination, *, command, subtitles_dir, progress, should_cancel, **_options):
+        Path(destination).write_bytes(b"media")
+        written = []
+        for language in ("en", "nl"):
+            path = subtitles_dir / f"ytdlp-subtitle.{language}.srt"
+            path.write_text("1\n00:00:01,000 --> 00:00:02,000\nHello\n\n")
+            written.append(WrittenSubtitle(language, str(path)))
+        progress(DownloadProgress(5, 5))
+        return DownloadResult(destination, 5, subtitles=tuple(written))
+
+    monkeypatch.setattr(coordinator, "download_ytdlp", transfer)
+    asset = SidecarSpec(
+        "subtitles", "subtitle", url="https://www.youtube.com/watch?v=x", extension="srt",
+        source_format="ytdlp", publish=True, required=False,
+    )
+    with DownloadTracker() as tracker:
+        plan = build_download_plan(
+            source=ResolvedDownloadSource(
+                "https://www.youtube.com/watch?v=x", "up to 1080p", False, False, "mp4", False,
+                ytdlp_command=("yt-dlp",),
+            ),
+            requested_destination=tmp_path / "library" / "Video.mp4",
+            temporary_root=tmp_path / "temp", download_mode="temporary",
+            assets=(asset,), subtitle_asset_ids=("subtitles",),
+            default_subtitle_languages=languages, attempt_id=tracker.attempt_id,
+        )
+        execution = coordinator.execute_download_plan(plan, tracker=tracker, resources=DownloadResources())
+        assert sorted(path.name for path in (tmp_path / "library").iterdir()) == sorted(["Video.mp4", *files])
+        assert embedding_calls[0]["default_subtitle"] == default_index
+        execution.cleanup_workspace()
+
+
+def test_a_forced_subtitle_is_never_the_default():
+    from pathlib import Path
+
+    from downloader.sidecars import AcquiredSidecar, default_subtitle
+
+    def acquired(language, forced=False):
+        spec = SidecarSpec(f"s-{language}-{int(forced)}", "subtitle", url="https://a/s", extension="srt", language=language, forced=forced)
+        return AcquiredSidecar(spec, Path("s.srt"), f".{language}{'.forced' if forced else ''}.srt", 1)
+
+    forced, english = acquired("en", forced=True), acquired("en")
+    assert default_subtitle([forced, english], ("en",)) is english
+    assert default_subtitle([forced], ("en",)) is None
+
+
+def test_adoption_finds_the_default_subtitle_beside_the_media():
+    from backend.services.adoption import _SUBTITLE
+
+    assert _SUBTITLE.match(".en.default.srt").group("language") == "en"

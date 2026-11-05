@@ -1,5 +1,6 @@
 import {useEffect, useRef, useState} from 'react'
 import {Controller, useWatch, type UseFormReturn} from 'react-hook-form'
+import {Link} from 'react-router-dom'
 
 import {useLocalMediaProfiles, useSiteOptions} from '../../lib/queries'
 import {AutoSubtitlesReg} from '../../types/quality'
@@ -28,6 +29,8 @@ export default function YouTubeSection({form, collectionId, sourceKey, collectio
     // A profile that is still being made in the same flow counts as storing subtitles.
     const storesSubtitles = !mediaProfile || mediaProfile.subtitleMode !== 'no_subtitles'
     const autoShown = !!site?.autoSubtitles && storesSubtitles
+    // Say why the choice is missing rather than leaving it out without a word.
+    const autoWithoutSubtitles = !!site?.autoSubtitles && !storesSubtitles ? mediaProfile : undefined
     const sponsorBlockShown = !!site?.sponsorblock
 
     // The Local Media Profile links here with #youtube-subtitles: scroll to it and briefly highlight it.
@@ -39,7 +42,7 @@ export default function YouTubeSection({form, collectionId, sourceKey, collectio
         return () => window.clearTimeout(timer)
     }, [autoShown])
 
-    if (!autoShown && !sponsorBlockShown) return null
+    if (!autoShown && !autoWithoutSubtitles && !sponsorBlockShown) return null
 
     return (
         <section className="youtube-section" aria-labelledby="youtube-section-heading">
@@ -66,8 +69,17 @@ export default function YouTubeSection({form, collectionId, sourceKey, collectio
                     </div>
                 </div>
             )}
+            {autoWithoutSubtitles && (
+                <div className="form-row">
+                    <span className="youtube-section-label">Use auto-generated subtitles</span>
+                    <div className="help">
+                        Not available: the Local Media Profile{' '}
+                        <Link to={`/local-media-profile/${encodeURIComponent(autoWithoutSubtitles.slug)}`}>{autoWithoutSubtitles.name}</Link>{' '}
+                        saves no subtitles. Turn on subtitles there to use them.
+                    </div>
+                </div>
+            )}
             {sponsorBlockShown && <SponsorBlockFields form={form}/>}
-            <div className="help">Only shown for YouTube Collections.</div>
         </section>
     )
 }

@@ -149,6 +149,21 @@
     font-weight: 600;
 }
 
+.collection-type-filter {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 12px;
+    margin: 2px 0 2px;
+}
+
+.collection-type-count {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 16px;
+}
+
 .collection-season-empty {
     padding: 18px 0;
     color: var(--muted);
