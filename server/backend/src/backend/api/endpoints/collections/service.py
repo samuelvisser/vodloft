@@ -12,6 +12,7 @@ from backend.db.model_mapping import create_database_fields, update_database_fie
 from backend.services.check_frequency import check_suggestion
 from backend.services.sites import place_collection
 from backend.api.models.collection import *
+from backend.api.models.source import EpisodeTagAPIRead
 from fastapi import HTTPException
 
 from backend.db.models import Episode, Season, Collection, CollectionLocalMediaProfile
@@ -195,6 +196,22 @@ def get_collection(s: Session, collection_slug: str) -> CollectionAPIRead:
         raise HTTPException(status_code=404, detail="Collection not found")
 
     return CollectionAPIRead.model_validate(collection)
+
+
+def get_collection_episode_tags(s: Session, collection_slug: str) -> list[EpisodeTagAPIRead]:
+    """The tags of the collection's Source that at least one of its episodes has, in the Source's order."""
+    collection = s.scalar(select(Collection).where(Collection.slug == collection_slug))
+    if collection is None:
+        raise HTTPException(status_code=404, detail="Collection not found")
+
+    return [
+        EpisodeTagAPIRead.model_validate(tag)
+        for tag in get_source(collection.source_key).episode_tags_for(collection.sharing_url)
+        if s.scalar(select(exists().where(
+            Episode.collection_id == collection.id,
+            episode_identifier_type_predicate(Episode.episode_identifier, {tag.key}),
+        )))
+    ]
 
 
 def create_collection(s: Session, body: CollectionAPICreate, *, added_by_id: int | None = None) -> CollectionAPIRead:

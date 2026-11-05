@@ -7,6 +7,7 @@ from .service import (
     get_collections_list,
     create_collection,
     get_collection,
+    get_collection_episode_tags,
     update_collection,
     delete_collection,
     request_collection_sync,
@@ -35,6 +36,7 @@ from ...models.collection import (
     CollectionFileRenameAPIRequest,
     CollectionRedownloadEpisodesAPIRequest,
 )
+from ...models.source import EpisodeTagAPIRead
 from backend.app import db_session
 from backend.security.access import Access, Area, Level
 from backend.security.deps import may_delete_files, requires, signed_in
@@ -211,6 +213,13 @@ def collection_detail(collection_slug: str):
     """
     with db_session() as s:
         return get_collection(s, collection_slug)
+
+
+@router.get("/{collection_slug}/episode-tags", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[EpisodeTagAPIRead])
+def collection_episode_tags(collection_slug: str):
+    """The episode tags, such as Video, Short and Livestream, that the collection's episodes have."""
+    with db_session() as s:
+        return get_collection_episode_tags(s, collection_slug)
 
 
 @router.get(

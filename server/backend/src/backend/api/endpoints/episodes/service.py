@@ -16,6 +16,7 @@ from backend.db.models import Collection
 from backend.db.models.media_item import Episode
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.episode_types import EpisodePublishStatus
+from backend.utils.episode import episode_identifier_type_predicate
 from backend.services.episode_download_delay import episode_download_delay_ready_at
 from backend.utils.episode_publication_timing import (
     record_publication_lifecycle_observation,
@@ -73,7 +74,11 @@ def get_episodes_by_collection_list(s: Session, collection_slug: str, limit: int
     return [_episode_api_read(episode) for episode in episodes]
 
 
-def _episode_view_stmt(collection_slug: str, season_id: int | None = None):
+def _episode_view_stmt(
+        collection_slug: str,
+        season_id: int | None = None,
+        episode_types: Sequence[str] = (),
+):
     # The collection grid needs only a small subset of Episode. Selecting those columns directly avoids
     # constructing full ORM entities (and their select-in metadata relationship), then sending and
     # validating descriptions/timestamps that the grid never renders.
@@ -100,6 +105,8 @@ def _episode_view_stmt(collection_slug: str, season_id: int | None = None):
         .join(Collection, Episode.collection_id == Collection.id)
         .where(Collection.slug == collection_slug)
     )
+    if episode_types:
+        stmt = stmt.where(episode_identifier_type_predicate(Episode.episode_identifier, set(episode_types)))
     if season_id is not None:
         stmt = stmt.where(Episode.season_id == season_id)
         return stmt.order_by(Episode.index.asc(), Episode.id.asc())
@@ -129,18 +136,27 @@ def get_episode_views_by_collection_page(
         cursor: str | None,
         limit: int,
         season_id: int | None = None,
+        episode_types: Sequence[str] = (),
 ) -> EpisodeAPIReadViewPage:
-    """Return one stable cursor page of compact episodes for a collection."""
+    """Return one stable cursor page of compact episodes for a collection, optionally of some episode types only."""
+    episode_types = sorted(set(episode_types))
     collection_count_stmt = (
         select(func.count(Episode.id))
         .join(Collection, Episode.collection_id == Collection.id)
         .where(Collection.slug == collection_slug)
     )
     collection_total = int(s.scalar(collection_count_stmt) or 0)
+    view_count_stmt = collection_count_stmt
+    if season_id is not None:
+        view_count_stmt = view_count_stmt.where(Episode.season_id == season_id)
+    if episode_types:
+        view_count_stmt = view_count_stmt.where(
+            episode_identifier_type_predicate(Episode.episode_identifier, set(episode_types))
+        )
     total = (
         collection_total
-        if season_id is None
-        else int(s.scalar(collection_count_stmt.where(Episode.season_id == season_id)) or 0)
+        if view_count_stmt is collection_count_stmt
+        else int(s.scalar(view_count_stmt) or 0)
     )
     revision_stmt = (
         select(func.max(case(
@@ -159,7 +175,7 @@ def get_episode_views_by_collection_page(
         else ""
     )
 
-    stmt = _episode_view_stmt(collection_slug, season_id)
+    stmt = _episode_view_stmt(collection_slug, season_id, episode_types)
     if cursor:
         try:
             values = decode_cursor(cursor)
@@ -167,6 +183,7 @@ def get_episode_views_by_collection_page(
                 values.get("kind") != "collection-episodes"
                 or values.get("collection_slug") != collection_slug
                 or values.get("season_id") != season_id
+                or values.get("episode_types", []) != episode_types
             ):
                 raise InvalidCursorError("Cursor does not match this episode collection")
             cursor_id = values.get("id")
@@ -224,6 +241,7 @@ def get_episode_views_by_collection_page(
             "kind": "collection-episodes",
             "collection_slug": collection_slug,
             "season_id": season_id,
+            "episode_types": episode_types,
             "revision": revision,
             "id": last["id"],
         }
