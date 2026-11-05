@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import fcntl
 from contextlib import asynccontextmanager
 from pathlib import Path
 from time import monotonic
 
+import portalocker
 from sqlalchemy import select
 
 from backend.db.models import CustomIndexState, CollectionLocalMediaProfile
@@ -34,19 +34,21 @@ async def custom_index_pair_lock(
     """
     root = Path(get_settings().download_settings.lock_root) / "indexes"
     root.mkdir(parents=True, exist_ok=True)
-    lock_file = (root / f"{collection_id}-{local_media_profile_id}.lock").open("a+b")
-    lock_mode = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
-    try:
+    lock_mode = portalocker.LOCK_SH if shared else portalocker.LOCK_EX
+    # portalocker uses flock on POSIX and Windows byte-range locks elsewhere; shared locks
+    # on Windows need its win32 extra. Both lock per open file handle, so two holders in
+    # the same process exclude each other just as separate worker processes do.
+    with (root / f"{collection_id}-{local_media_profile_id}.lock").open("a+b") as lock_file:
         while True:
             try:
-                fcntl.flock(lock_file.fileno(), lock_mode | fcntl.LOCK_NB)
+                portalocker.lock(lock_file, lock_mode | portalocker.LOCK_NB)
                 break
-            except BlockingIOError:
+            except portalocker.AlreadyLocked:
                 await asyncio.sleep(0.25)
-        yield
-    finally:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
-        lock_file.close()
+        try:
+            yield
+        finally:
+            portalocker.unlock(lock_file)
 
 
 def pair_is_ready(collection_id: int, local_media_profile_id: int) -> bool:
