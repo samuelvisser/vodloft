@@ -11,8 +11,11 @@ video has no sound, so a feed plays it in one of two ways:
   is ready, the episode plays the Site's MP4 file with sound. The newest episodes of a feed are joined
   as soon as the feed is fetched, so they are usually ready before anyone plays them.
 
-The fragments and the MP4 file with sound come straight from the Site, or through VODLoft when the
-feed proxies its Site's video.
+The playlists list every fragment at a VODLoft address. When the feed proxies its Site's video,
+VODLoft passes the bytes on; otherwise it redirects the app to the Site's file, with a link it looked
+up again shortly before the old one expired. The Site's links last a few hours, and an app holds on to
+a playlist far longer, so a playlist never lists them itself. The MP4 file with sound comes the same
+way, straight from the Site or through VODLoft.
 """
 from __future__ import annotations
 
@@ -31,7 +34,7 @@ from pathlib import Path
 
 import requests
 from fastapi import HTTPException
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
 
 from config import get_settings
 from config.network import is_no_internet_error
@@ -188,17 +191,30 @@ def _first_bytes(stream: MediaStream, count: int) -> bytes:
     return bytes(data)
 
 
+def _pick_track(name: str):
+    """What picks the track an ``.mp4`` name stands for out of the episode's tracks."""
+    match = _TRACK_NAME.match(name)
+    if match is None or match.group(2) != "mp4":
+        raise HTTPException(status_code=404, detail="No such track")
+    if match.group(1):
+        height = int(match.group(1))
+        return lambda tracks: _video_track(tracks, height)
+    return lambda tracks: tracks.audio
+
+
+def track_redirect_response(source: Source, episode: EpisodeRef, name: str, *, head_only: bool) -> Response:
+    """A redirect to one of the episode's tracks on the Site, with a link that still lasts a while,
+    for a feed that lets the app fetch its Site's video itself. The app sends its range along."""
+    track = _pick_track(name)(episode_tracks(source, episode))
+    headers = {**_NO_CACHE_HEADERS, "Location": track.url}
+    return Response(status_code=302, headers=headers) if head_only else RedirectResponse(track.url, status_code=302, headers=_NO_CACHE_HEADERS)
+
+
 def track_part_response(
         source: Source, episode: EpisodeRef, name: str, *, range_header: str | None, head_only: bool,
 ) -> Response:
     """Bytes of one of the episode's tracks, passed on with the range the player asked for."""
-    match = _TRACK_NAME.match(name)
-    if match is None or match.group(2) != "mp4":
-        raise HTTPException(status_code=404, detail="No such track")
-
-    def pick(tracks: MediaTracks) -> MediaStream:
-        return _video_track(tracks, int(match.group(1))) if match.group(1) else tracks.audio
-
+    pick = _pick_track(name)
     track = pick(episode_tracks(source, episode))
     wanted = _RANGE.match((range_header or "").strip())
     start = int(wanted.group(1)) if wanted else 0
@@ -222,7 +238,7 @@ def track_part_response(
     size = int(total) if total.isdigit() else track.size_bytes
     if size is not None:
         end = size - 1 if end is None else min(end, size - 1)
-    headers = {**_NO_CACHE_HEADERS, "Accept-Ranges": "bytes", "Content-Type": "video/mp4" if match.group(1) else "audio/mp4"}
+    headers = {**_NO_CACHE_HEADERS, "Accept-Ranges": "bytes", "Content-Type": "audio/mp4" if name.startswith("audio") else "video/mp4"}
     if end is not None:
         headers["Content-Length"] = str(end - start + 1)
     if wanted and end is not None and size is not None:
@@ -362,14 +378,13 @@ def master_playlist_response(source: Source, episode: EpisodeRef, *, height: int
     return _playlist_response(master_playlist(videos, tracks.audio), head_only=head_only)
 
 
-def track_playlist_response(source: Source, episode: EpisodeRef, name: str, *, proxy: bool, head_only: bool) -> Response:
+def track_playlist_response(source: Source, episode: EpisodeRef, name: str, *, head_only: bool) -> Response:
     match = _TRACK_NAME.match(name)
     if match is None or match.group(2) != "m3u8":
         raise HTTPException(status_code=404, detail="No such track")
     tracks = episode_tracks(source, episode)
     track = _video_track(tracks, int(match.group(1))) if match.group(1) else tracks.audio
-    uri = name.removesuffix(".m3u8") + ".mp4" if proxy else track.url
-    return _playlist_response(media_playlist(uri, _segment_index(track)), head_only=head_only)
+    return _playlist_response(media_playlist(name.removesuffix(".m3u8") + ".mp4", _segment_index(track)), head_only=head_only)
 
 
 # --- Joining MP4 files -----------------------------------------------------------------------------

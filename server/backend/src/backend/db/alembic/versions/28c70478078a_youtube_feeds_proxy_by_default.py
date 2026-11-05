@@ -1,7 +1,7 @@
 """RSS feeds proxy their Site's video through VODLoft by default.
 
-YouTube's direct links stop working before an app is done with them, so feeds of YouTube now pass the
-video on through VODLoft unless the feed is set otherwise. Existing feeds of YouTube move to it too:
+Through VODLoft, YouTube video plays most reliably, as VODLoft looks a refused link up again before the
+app notices, so feeds of YouTube now pass the video on through VODLoft unless the feed is set otherwise. Existing feeds of YouTube move to it too:
 they had it off only because that was the default. Other Sites have no choice, so it changes nothing there.
 
 Revision ID: 28c70478078a
