@@ -444,23 +444,27 @@ export default function CollectionPage() {
     }
   }
 
+  const openOnName = collection.site?.name ?? (sources.get(collection.sourceKey)?.domains.includes('*') ? siteName(collection.sharingUrl) ?? sources.name(collection.sourceKey) : sources.name(collection.sourceKey))
+
   return (
     <section className="view collection-view" aria-labelledby="collection-title">
-      <div className="view-header"><h1 id="collection-title">{collection.title}</h1></div>
+      <div className="view-header collection-title-row">
+        <h1 id="collection-title">{collection.title}</h1>
+        <SourceBadge sourceKey={collection.sourceKey}/>
+      </div>
 
       <article className="collection-details" aria-label="Show details">
         <header className="collection-page-header">
           <div className="collection-page-heading">
-            <SourceBadge sourceKey={collection.sourceKey}/>
             <div className="collection-author">{collection.authorName}</div>
             <div className="collection-meta">{[`${total} episodes`, collection.years, addedByLabel(collection.addedBy)].filter(Boolean).join(' • ')}</div>
           </div>
 
           <div className="collection-page-actions">
             {collection.sharingUrl && (
-              <a className="btn" href={collection.sharingUrl} target="_blank" rel="noreferrer">
+              <a className="btn collection-open-link" href={collection.sharingUrl} target="_blank" rel="noreferrer" title={`Open on ${openOnName}`}>
                 <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')} aria-hidden="true"/>
-                <span>Open on {collection.site?.name ?? (sources.get(collection.sourceKey)?.domains.includes('*') ? siteName(collection.sharingUrl) ?? sources.name(collection.sourceKey) : sources.name(collection.sourceKey))}</span>
+                <span className="collection-open-label"><span className="collection-open-prefix">Open on </span>{openOnName}</span>
               </a>
             )}
             {can('library', 'manage') && (
