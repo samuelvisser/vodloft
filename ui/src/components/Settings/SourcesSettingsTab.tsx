@@ -16,7 +16,6 @@ const FEATURE_LABELS: Record<string, string> = {
     [SourceFeature.LOGIN]: 'Sign-in',
     [SourceFeature.LIVE_EPISODES]: 'Live episodes',
     [SourceFeature.MEMBERSHIP_LEVELS]: 'Membership levels',
-    [SourceFeature.RSS_STREAMING]: 'RSS streaming',
     [SourceFeature.VIDEOS]: 'Single videos',
     [SourceFeature.EPISODE_LISTS]: 'Episode lists',
     [SourceFeature.SEARCH]: 'Search',

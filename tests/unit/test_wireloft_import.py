@@ -208,7 +208,7 @@ def test_a_show_already_in_vodloft_is_linked_and_a_taken_feed_token_is_refused(i
     session.add(existing)
     session.flush()
     session.add(RssStreamProfile(
-        collection_id=existing.id, enable_profile=True, token="feed-token", use_downloads=True, use_dw_stream=True,
+        collection_id=existing.id, enable_profile=True, token="feed-token", use_downloads=True, use_source_stream=True,
         preferred_format="format_1080p", prefer_exact_match=False, ep_id_type_list=[], feed_url="https://x.test/feed",
         max_items=0,
     ))

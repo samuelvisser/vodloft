@@ -34,7 +34,7 @@ def _collection(session: Session):
         slug="collection",
         title="Collection",
         description="Description",
-        sharing_url="https://example.test/collection",
+        sharing_url="https://www.dailywire.com/collection",
         membership_level="FREE",
         type=CollectionType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value,
@@ -79,7 +79,7 @@ def _episode(
         description="Description",
         duration=1800.0,
         publish_status=status,
-        sharing_url=f"https://example.test/episode-{index}",
+        sharing_url=f"https://www.dailywire.com/episode-{index}",
         went_live_date=now,
         published_date=now if status != "live" else None,
     )
@@ -123,7 +123,7 @@ def _rss_profile(
     session: Session,
     collection,
     *,
-    use_dw_stream: bool,
+    use_source_stream: bool,
     mode: str = "audio_hls",
     live: bool = True,
     max_items: int = 0,
@@ -135,7 +135,7 @@ def _rss_profile(
         enable_profile=True,
         token="token",
         use_downloads=True,
-        use_dw_stream=use_dw_stream,
+        use_source_stream=use_source_stream,
         preferred_format="format_1080p",
         prefer_exact_match=False,
         ep_id_type_list=["ep"],
@@ -224,7 +224,7 @@ def test_live_hls_with_dailywire_enabled_is_included(db_session):
     collection = _collection(db_session)
     season = _season(db_session, collection)
     episode = _episode(db_session, collection, season)
-    profile = _rss_profile(db_session, collection, use_dw_stream=True)
+    profile = _rss_profile(db_session, collection, use_source_stream=True)
 
     assert get_feed_items(db_session, profile) == [(episode, None)]
 
@@ -237,7 +237,7 @@ def test_live_hls_without_normal_dailywire_requires_matching_hls_download_profil
     collection = _collection(db_session)
     season = _season(db_session, collection)
     episode = _episode(db_session, collection, season)
-    profile = _rss_profile(db_session, collection, use_dw_stream=False)
+    profile = _rss_profile(db_session, collection, use_source_stream=False)
 
     normal_video = _local_profile(
         db_session,
@@ -282,7 +282,7 @@ def test_download_only_live_episode_needs_every_enclosure_to_download(
     collection = _collection(db_session)
     season = _season(db_session, collection)
     episode = _episode(db_session, collection, season)
-    profile = _rss_profile(db_session, collection, use_dw_stream=False, mode=mode)
+    profile = _rss_profile(db_session, collection, use_source_stream=False, mode=mode)
 
     hls = _local_profile(db_session, slug="hls", preferred_format="format_hls")
     _download_profile(db_session, collection, hls)
@@ -306,7 +306,7 @@ def test_live_toggle_has_no_effect_for_non_hls_output_mode(db_session):
     profile = _rss_profile(
         db_session,
         collection,
-        use_dw_stream=True,
+        use_source_stream=True,
         mode="audio_mp4",
         live=True,
     )
@@ -319,7 +319,7 @@ def test_live_handoff_keeps_same_remote_hls_url_usable_until_final_hls_exists(
         tmp_path,
 ):
     from backend.api.endpoints.feeds.service import (
-        can_use_dailywire_for_episode,
+        can_stream_from_source,
         get_feed_items,
         remember_live_episode_handoff,
     )
@@ -339,7 +339,7 @@ def test_live_handoff_keeps_same_remote_hls_url_usable_until_final_hls_exists(
         preferred_format="format_audio_only",
     )
     audio_download_profile = _download_profile(db_session, collection, audio_profile)
-    profile = _rss_profile(db_session, collection, use_dw_stream=False)
+    profile = _rss_profile(db_session, collection, use_source_stream=False)
 
     # The HLS route records this only after a real GET has opened the live stream.
     remember_live_episode_handoff(profile, episode)
@@ -349,7 +349,7 @@ def test_live_handoff_keeps_same_remote_hls_url_usable_until_final_hls_exists(
     db_session.flush()
 
     assert get_feed_items(db_session, profile) == [(episode, None)]
-    assert can_use_dailywire_for_episode(profile, episode) is True
+    assert can_stream_from_source(profile, episode) is True
     assert profile.live_episode_handoff_ids == [episode.id]
 
     episode.publish_status = "published_final"
@@ -369,7 +369,7 @@ def test_live_handoff_keeps_same_remote_hls_url_usable_until_final_hls_exists(
 
     assert get_feed_items(db_session, profile) == [(episode, audio)]
     assert profile.live_episode_handoff_ids == []
-    assert can_use_dailywire_for_episode(profile, episode) is False
+    assert can_stream_from_source(profile, episode) is False
     assert local.artifact_status == "available"
 
 
@@ -396,7 +396,7 @@ def test_live_handoff_is_not_dropped_just_because_episode_leaves_rss_window(
     profile = _rss_profile(
         db_session,
         collection,
-        use_dw_stream=False,
+        use_source_stream=False,
         max_items=1,
     )
 

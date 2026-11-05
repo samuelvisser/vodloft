@@ -6,7 +6,7 @@ from backend.api.models.source import (
     CollectionDetailsAPIRead, SourceAPIRead, SourceSiteAPIRead, SourceSiteAPIUpdate,
 )
 from backend.app import db_session
-from sources import ApiKeyRejected, Feature, Source, UnknownSourceError, get_source
+from sources import ApiKeyRejected, Feature, Source, UnknownSourceError, get_source, site_for
 from sources.ytdlp_options import check_ytdlp_options
 from backend.services.source_options import save_ytdlp_source_options, ytdlp_source_options
 
@@ -91,16 +91,18 @@ def publish_statuses(source_id: str):
     return [PublishStatusLabelAPIRead.model_validate(label) for label in source.publish_status_labels]
 
 
-@router.get("/sources/{source_id}/site-options", dependencies=[requires_any((Area.LIBRARY, Level.VIEW), (Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW))], response_model=SiteOptionsAPIRead)
+@router.get("/sources/{source_id}/site-options", dependencies=[requires_any((Area.LIBRARY, Level.VIEW), (Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.STREAM_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW))], response_model=SiteOptionsAPIRead)
 def site_options(source_id: str, url: str = Query(min_length=1, max_length=2048)):
     """Choices only some sites of a Source offer, such as YouTube's auto-generated subtitles, for the collection at ``url``."""
     try:
         source = get_source(source_id)
     except UnknownSourceError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    site = site_for(url, source.id)
     return SiteOptionsAPIRead(
         auto_subtitles=source.auto_subtitles_for(url), sponsorblock=source.sponsorblock_for(url),
-        upgrade_checks=source.has(Feature.UPGRADE_CHECKS),
+        upgrade_checks=source.has(Feature.UPGRADE_CHECKS), site_name=site.name, streams=site.streams,
+        streams_live=site.streams_live,
     )
 
 

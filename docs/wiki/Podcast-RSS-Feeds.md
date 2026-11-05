@@ -1,6 +1,6 @@
 # Podcast RSS Feeds
 
-VODLoft can expose a managed collection as a private podcast or video RSS feed. The feed can use downloaded files, stream from Daily Wire, or combine both approaches. Feeds for YouTube, NPO Start and other yt-dlp collections use downloaded files only, because those sites' stream links expire.
+VODLoft can expose a managed collection as a private podcast or video RSS feed. The feed can use downloaded files, stream episodes straight from the collection's site, or combine both approaches. The Daily Wire and YouTube can stream; feeds for NPO Start and other yt-dlp sites use downloaded files only.
 
 > [!CAUTION]
 > **Treat the complete RSS feed URL like a password or API key.** It contains a secret token that gives access to the feed without requiring the VODLoft administrator login. Anyone who obtains the URL can use the feed access you configured.
@@ -28,15 +28,15 @@ VODLoft serves suitable completed files already stored in your local download li
 
 This is the best option when you want predictable local playback and do not want the podcast client to fetch that episode from Daily Wire again.
 
-### Use DailyWire stream
+### Use stream
 
-VODLoft obtains the episode media from Daily Wire when the podcast client requests it.
+VODLoft obtains the episode media from the collection's site, such as The Daily Wire or YouTube, when the podcast client requests it.
 
-This makes it possible to expose episodes you have not kept locally, including a much larger back catalog. This option is only offered for Daily Wire shows.
+This makes it possible to expose episodes you have not kept locally, including a much larger back catalog. The option is only offered for collections on a site that can stream: The Daily Wire and YouTube.
 
 ### Use both
 
-When both options are enabled, VODLoft prefers a suitable local download and uses Daily Wire when no acceptable local file exists.
+When both options are enabled, VODLoft prefers a suitable local download and streams from the site when no acceptable local file exists.
 
 This is a useful default for many users: keep recent episodes downloaded for fast access while still allowing older episodes to remain available through the feed.
 
@@ -106,9 +106,22 @@ These video-delivery choices only matter when VODLoft needs the Daily Wire fallb
 
 A useful video setup is to keep a small number of recent episodes downloaded while allowing older episodes to use Daily Wire.
 
+## Streaming from YouTube
+
+YouTube's media links only work for the computer that asked for them, so VODLoft fetches the episode itself and passes it on to your podcast app. That means:
+
+- your podcast app must be able to reach VODLoft, also away from home (see [[Security-and-Remote-Access]]);
+- everything you play goes through VODLoft's internet connection, about 60 MB per hour of audio;
+- the first play of an episode takes a few seconds while VODLoft looks it up;
+- audio comes as YouTube offers it; when YouTube offers no M4A audio for a video, VODLoft converts it to AAC while it plays, and seeking is then slightly less precise;
+- video streams at 360p, the only YouTube quality that comes with sound in one file. Download the episodes if you want better video;
+- the HLS delivery choices and live episodes are not available for YouTube streams.
+
 ## Live episodes
 
 A video feed that uses HLS can also list episodes while they are still live, so you can listen or watch along.
+
+Live episodes are only available for Daily Wire shows.
 
 - With Daily Wire streaming enabled, live episodes always appear.
 - Without Daily Wire streaming, the feed only shows what your downloads can provide. A live episode is then listed only when your Download Profiles will download all of its media once it is published, for example both the audio and the HLS video for **Podcasting 2.0 direct stream with audio fallback**. If only part of the media is set to download, live episodes do not appear, and the Stream Profile shows a warning.
@@ -193,7 +206,7 @@ Check:
 - selected episode types;
 - preferred format;
 - **Prefer exact match**;
-- **Use Downloads** / **Use DailyWire stream**;
+- **Use Downloads** / **Use stream**;
 - **Maximum episodes in RSS feed**.
 
 A downloads-only feed cannot serve an episode without a suitable completed local file.

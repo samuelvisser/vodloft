@@ -150,10 +150,15 @@ class YtdlpOptionLineAPIRead(ResponseBase):
 class SiteOptionsAPIRead(ResponseBase):
     """What the site of one collection offers beyond its Source's usual choices."""
 
+    site_name: str
     auto_subtitles: bool
     sponsorblock: bool
     upgrade_checks: bool = False
     """The upgrade check can download its episodes again when a better version is out."""
+    streams: bool = False
+    """RSS feeds can stream the collection's episodes without downloading them first."""
+    streams_live: bool = False
+    """RSS feeds can stream the collection's episodes while they are live."""
 
 
 class EpisodeTagAPIRead(ResponseBase):

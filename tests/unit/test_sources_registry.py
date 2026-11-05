@@ -15,7 +15,7 @@ def test_daily_wire_is_registered():
     source = get_source(sources.DAILYWIRE)
     assert isinstance(source, DailyWireSource)
     assert source.name == "The Daily Wire"
-    assert source.has(Feature.RSS_STREAMING)
+    assert all(site.streams and site.streams_live for site in source.sites)
     assert sources.all_sources() == [source, get_source("npo"), get_source("ytdlp")]
 
 

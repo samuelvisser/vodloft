@@ -26,7 +26,7 @@ class _RssStreamProfileAPIBaseIn(RequestBase):
     title: str = Field(min_length=1)
     enable_profile: bool
     use_downloads: bool
-    use_dw_stream: bool
+    use_source_stream: bool
     preferred_format: str = Field(min_length=1)
     prefer_exact_match: bool
     ep_id_type_list: list[EpisodeTagKey] = Field(default_factory=_default_episode_types)
@@ -114,7 +114,7 @@ class _RssStreamProfileAPIBaseOut(ResponseBase):
     collection_title: str = Field(validation_alias=AliasPath("collection", "title"), exclude=True)
     enable_profile: bool
     use_downloads: bool
-    use_dw_stream: bool
+    use_source_stream: bool
     preferred_format: str
     prefer_exact_match: bool
     ep_id_type_list: list[str]

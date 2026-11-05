@@ -7,7 +7,7 @@ export const StreamProfileReadSchema = z.looseObject({
     collectionId: z.int(),
     enableProfile: z.boolean(),
     useDownloads: z.boolean(),
-    useDwStream: z.boolean(),
+    useSourceStream: z.boolean(),
     preferredFormat: z.string(),
     preferExactMatch: z.boolean(),
     epIdTypeList: z.array(z.string()),

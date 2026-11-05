@@ -341,7 +341,7 @@ def test_a_listed_collection_bundle_is_seasonal_and_streams_only_downloads(liste
     }
     seasons = [{"slug": "s1", "name": "Season 1"}]
     stream = {
-        "title": "A playlist", "enableProfile": True, "useDownloads": True, "useDwStream": True,
+        "title": "A playlist", "enableProfile": True, "useDownloads": True, "useSourceStream": True,
         "preferredFormat": "format_1080p", "epIdTypeList": ["ep"], "preferExactMatch": False,
     }
     with pytest.raises(HTTPException, match="downloaded files only"):

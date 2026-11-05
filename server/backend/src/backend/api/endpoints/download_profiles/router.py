@@ -11,6 +11,7 @@ from backend.security.deps import requires, requires_any
 from backend.db.models import Collection
 from backend.api.models.source import SiteOptionsAPIRead
 from sources import Feature, get_source
+from backend.services.sites import collection_site
 
 router = APIRouter(prefix="/download-profiles", tags=["Download Profiles"])
 
@@ -74,10 +75,12 @@ def download_profiles_site_options(collection_id: int, request: Request):
         if collection is None or not deps.request_access(request).allows_source(collection.source_key):
             raise HTTPException(status_code=404, detail="Collection not found")
         source = get_source(collection.source_key)
+        site = collection_site(collection)
         return SiteOptionsAPIRead(
             auto_subtitles=source.auto_subtitles_for(collection.sharing_url),
             sponsorblock=source.sponsorblock_for(collection.sharing_url),
             upgrade_checks=source.has(Feature.UPGRADE_CHECKS),
+            site_name=site.name, streams=site.streams, streams_live=site.streams_live,
         )
 
 

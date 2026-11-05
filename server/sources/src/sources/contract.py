@@ -27,7 +27,6 @@ class Feature(StrEnum):
     LOGIN = "login"
     LIVE_EPISODES = "live_episodes"
     MEMBERSHIP_LEVELS = "membership_levels"
-    RSS_STREAMING = "rss_streaming"
     VIDEOS = "videos"
     EPISODE_LISTS = "episode_lists"
     """Collections whose episodes the Source lists with ``list_episodes``. VODLoft
@@ -160,6 +159,25 @@ class EpisodeMedia:
     video_url: str | None
     audio_url: str | None
     drm_protected: bool = False
+
+
+@dataclass(frozen=True)
+class MediaStream:
+    """One stream of an episode that VODLoft fetches itself and passes on to a feed's player.
+
+    The URL may only work for VODLoft, such as YouTube's, which only plays to the address that
+    looked it up, so VODLoft never sends a player there.
+    """
+
+    url: str
+    headers: Mapping[str, str] = field(default_factory=dict)
+    """The request headers the URL needs."""
+    expires_at: float | None = None
+    """When the URL stops working, as a Unix time, when the Source can tell."""
+    size_bytes: int | None = None
+    ready: bool = True
+    """The stream already is what the feed asked for: M4A audio, or MP4 video with sound.
+    Audio that is not ready is transcoded to AAC by VODLoft."""
 
 
 class PlaybackKind(StrEnum):
@@ -473,6 +491,10 @@ class Site:
     """How long after publication VODLoft looks the Site's items up again, such as
     ``30m,2h,24h``, for a Site whose titles and pictures keep changing on a schedule of
     its own. Without it, the Site follows VODLoft's system schedule."""
+    streams: bool = False
+    """RSS feeds can stream the Site's episodes straight from it, without downloading them first."""
+    streams_live: bool = False
+    """RSS feeds can stream the Site's episodes while they are live."""
 
 
 def link_host(url: str) -> str:
@@ -575,6 +597,12 @@ class Source(ABC):
         do not have ``Feature.EPISODE_LISTS`` implement it; the others play each
         episode with ``video_playback``."""
         raise NotImplementedError(f"{self.name} plays its episodes with video_playback")
+
+    def media_stream(self, url: str, *, audio: bool, use_cookies: bool = True) -> MediaStream | None:
+        """The audio or video stream of a listed episode, for an RSS feed that streams it. Only Sources
+        with ``Feature.EPISODE_LISTS`` whose Site ``streams`` implement it. None when the episode has no
+        such stream; ``use_cookies`` as for ``video_playback``."""
+        raise NotImplementedError(f"{self.name} cannot stream episodes")
 
     def movie_playback(
         self, *, movie_slug: str, title: str, duration: float | None,

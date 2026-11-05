@@ -3,15 +3,14 @@ import {Controller, UseFormReturn} from 'react-hook-form'
 import Switch from 'react-switch'
 import Select from 'react-select'
 import ReadMore from '../../utils/ReadMore'
-import {episodeTagLabel} from '../../types/schemas/source'
+import {episodeTagLabel, SourceFeature, sourceHas} from '../../types/schemas/source'
 import {PreferredFormatReg} from '../../types/local_media_profile'
 import RssStreamProfileForm from './RssStreamProfileForm'
 import StreamProfileAdvisory, {type StreamDownloadProfileDefault} from './StreamProfileAdvisory'
 import SegmentedOptions from '../SegmentedOptions/SegmentedOptions'
 import {MediaTypeReg} from "../../types/stream_profile";
 import {createSelectRegistry} from '../../utils/selectRegistry'
-import {useCollectionEpisodeTags, useCollections, useSourceLookup} from '../../lib/queries'
-import {sourceControls} from '../../lib/sourceControls'
+import {useCollectionEpisodeTags, useCollections, useSiteOptions, useSourceLookup} from '../../lib/queries'
 
 export type StreamProfileMode = 'rss' | 'base'
 
@@ -45,6 +44,8 @@ type Props = {
     collectionTitle?: string
     /** The Source of a collection that is not saved yet. */
     sourceKey?: string
+    /** The link of a collection that is not saved yet. */
+    collectionUrl?: string
     canOpenDownloadProfiles?: boolean
 }
 
@@ -61,24 +62,31 @@ export default function StreamProfileForm({
     collectionSlug,
     collectionTitle,
     sourceKey,
+    collectionUrl,
     canOpenDownloadProfiles = true,
 }: Props) {
     const {control, formState: {errors}, getValues, register, setValue, watch} = form
     collectionRoot ??= true
 
-    // A collection that is not saved yet takes the options of the Source it is added from.
+    // Whether a feed can stream depends on the collection's Site, such as YouTube, not on the Source that fetches it.
+    // A collection that is not saved yet is told by the link it is added from.
     const {data: collections} = useCollections()
     const sources = useSourceLookup()
     const collection = collectionSlug ? collections?.find((item) => item.slug === collectionSlug) : undefined
-    const newCollectionSource = !collection && sourceKey ? sources.get(sourceKey) : undefined
-    const controls = sourceControls(collection ?? (newCollectionSource ? {sourceFeatures: newCollectionSource.features} : undefined))
-    const canStreamFromSource = controls.rssStreaming
-    const canStreamLiveEpisodes = controls.liveEpisodes
-    const streamSourceName = collection ? sources.name(collection.sourceKey) : newCollectionSource?.name ?? 'The Daily Wire'
-    const streamSourceKnown = !!(collection || newCollectionSource)
+    const {data: site} = useSiteOptions({
+        sourceKey: collection?.sourceKey ?? sourceKey,
+        url: collection?.sharingUrl ?? collectionUrl,
+    })
+    const streamSourceKnown = !!site
+    const canStreamFromSource = site?.streams ?? false
+    const canStreamLiveEpisodes = site?.streamsLive ?? false
+    // A Source that lists its episodes, such as yt-dlp, streams the site's own MP4; The Daily Wire's is built from HLS first.
+    const streamSource = sources.get(collection?.sourceKey ?? sourceKey ?? '')
+    const streamsMp4Directly = !!streamSource && sourceHas(streamSource, SourceFeature.EPISODE_LISTS)
+    const streamSourceName = site?.siteName ?? (collection ? sources.name(collection.sourceKey) : 'its site')
 
     const useDownloads = watch('useDownloads')
-    const useDwStream = watch('useDwStream')
+    const useSourceStream = watch('useSourceStream')
     const preferredFormat = watch('preferredFormat')
     const videoOutputMode = watch('videoOutputMode')
     const streamLiveEpisodes = watch('streamLiveEpisodes')
@@ -94,14 +102,21 @@ export default function StreamProfileForm({
     // Turn it off for any other Source, and back on if the form moves to one that can stream.
     useEffect(() => {
         if (!streamSourceKnown) return
-        if (!canStreamFromSource && getValues('useDwStream')) {
-            setValue('useDwStream', false, {shouldDirty: false, shouldValidate: true})
+        if (!canStreamFromSource && getValues('useSourceStream')) {
+            setValue('useSourceStream', false, {shouldDirty: false, shouldValidate: true})
             dwStreamClearedForSource.current = true
         } else if (canStreamFromSource && dwStreamClearedForSource.current) {
-            setValue('useDwStream', true, {shouldDirty: false, shouldValidate: true})
+            setValue('useSourceStream', true, {shouldDirty: false, shouldValidate: true})
             dwStreamClearedForSource.current = false
         }
     }, [streamSourceKnown, canStreamFromSource, getValues, setValue])
+
+    // Live episodes are only offered where the Site streams them, so a profile never keeps the setting elsewhere.
+    useEffect(() => {
+        if (streamSourceKnown && !canStreamLiveEpisodes && getValues('streamLiveEpisodes')) {
+            setValue('streamLiveEpisodes', false, {shouldDirty: false, shouldValidate: true})
+        }
+    }, [streamSourceKnown, canStreamLiveEpisodes, getValues, setValue])
 
     useEffect(() => {
         if (!collectionTitle) return
@@ -119,7 +134,7 @@ export default function StreamProfileForm({
 
     const selectedSources = [
         ...(useDownloads ? ['downloads'] as const : []),
-        ...(useDwStream ? ['dw'] as const : []),
+        ...(useSourceStream ? ['dw'] as const : []),
     ]
 
     const episodeTypeSelectValue: UIOption[] = useMemo(() => (
@@ -212,7 +227,8 @@ export default function StreamProfileForm({
             preferredFormat={preferredFormat}
             videoOutputMode={videoOutputMode}
             useDownloads={!!useDownloads}
-            useDwStream={!!useDwStream}
+            useSourceStream={!!useSourceStream}
+            streamsMp4Directly={streamsMp4Directly}
             streamLiveEpisodes={!!streamLiveEpisodes}
             selectedEpisodeTypes={selectedEpisodeTypes}
             downloadProfileDefaults={downloadProfileDefaults}
@@ -224,7 +240,7 @@ export default function StreamProfileForm({
                 shouldDirty: true,
                 shouldValidate: true,
             })}
-            onDisableDwStream={() => setValue('useDwStream', false, {
+            onDisableDwStream={() => setValue('useSourceStream', false, {
                 shouldDirty: true,
                 shouldValidate: true,
             })}
@@ -286,6 +302,8 @@ export default function StreamProfileForm({
                                     </p>
                                     <p>This could come in handy if you only intend to download a few of the latest episodes,
                                     but still want to retain the ability to stream many more.</p>
+                                    <p>Some sites only stream in a lower quality: YouTube streams video at 360p, and its
+                                        audio as it is. Download the episodes for anything better.</p>
                                 </ReadMore>
                             ),
                         }] : []),
@@ -296,7 +314,7 @@ export default function StreamProfileForm({
                         const nextUseDownloads = arr.includes('downloads')
                         const nextUseDwStream = arr.includes('dw')
                         setValue('useDownloads', nextUseDownloads, {shouldDirty: true, shouldValidate: true})
-                        setValue('useDwStream', nextUseDwStream, {shouldDirty: true, shouldValidate: true})
+                        setValue('useSourceStream', nextUseDwStream, {shouldDirty: true, shouldValidate: true})
                     }}
                 />
             </div>
@@ -441,7 +459,7 @@ export default function StreamProfileForm({
                 </div>
             </div>
 
-            {useDownloads && useDwStream && STANDARD_VIDEO_FORMATS.has(preferredFormat) && (
+            {useDownloads && useSourceStream && STANDARD_VIDEO_FORMATS.has(preferredFormat) && (
                 <div className="form-row">
                     <label htmlFor="prefer-exact-match">Prefer Exact Match for Video Downloads</label>
                     <Controller

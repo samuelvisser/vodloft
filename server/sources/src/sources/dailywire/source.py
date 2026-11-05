@@ -49,7 +49,9 @@ class DailyWireSource(Source):
     id = "dailywire"
     name = "The Daily Wire"
     domains = ("dailywire.com",)
-    sites = (Site("dailywire", "The Daily Wire", domains, refresh_intervals="15m,30m,1h,3h,6h,24h,3d"),)
+    sites = (Site(
+        "dailywire", "The Daily Wire", domains, refresh_intervals="15m,30m,1h,3h,6h,24h,3d", streams=True, streams_live=True,
+    ),)
     kind_names = MappingProxyType({LinkKind.COLLECTION: "Show"})
     features = frozenset({
         Feature.COLLECTIONS,
@@ -59,7 +61,6 @@ class DailyWireSource(Source):
         Feature.LOGIN,
         Feature.LIVE_EPISODES,
         Feature.MEMBERSHIP_LEVELS,
-        Feature.RSS_STREAMING,
     })
     episode_tags = (
         EpisodeTag(MAIN_TAG, "Episode", "A normal episode of the show", main=True),

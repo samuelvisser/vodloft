@@ -226,4 +226,13 @@ export const AutoSubtitlesUseSchema = z.object({
 })
 export type AutoSubtitlesUse = z.infer<typeof AutoSubtitlesUseSchema>
 
-export const SiteOptionsSchema = z.object({autoSubtitles: z.boolean(), sponsorblock: z.boolean(), upgradeChecks: z.boolean()})
+export const SiteOptionsSchema = z.object({
+    siteName: z.string(),
+    autoSubtitles: z.boolean(),
+    sponsorblock: z.boolean(),
+    upgradeChecks: z.boolean(),
+    /** RSS feeds can stream the collection's episodes without downloading them. */
+    streams: z.boolean(),
+    /** RSS feeds can stream the collection's episodes while they are live. */
+    streamsLive: z.boolean(),
+})

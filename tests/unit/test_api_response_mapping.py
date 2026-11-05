@@ -97,7 +97,7 @@ def test_stream_profile_view_uses_relationship_aliases():
         collection_id=1,
         enable_profile=True,
         use_downloads=True,
-        use_dw_stream=False,
+        use_source_stream=False,
         preferred_format="audio",
         prefer_exact_match=False,
         ep_id_type_list=["ep"],

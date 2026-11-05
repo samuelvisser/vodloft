@@ -19,7 +19,7 @@ from backend.utils.feed_urls import build_rss_feed_url, request_base_url
 from backend.security.access import Access
 from backend.services.stream_profile_owners import check_owner, owned_by
 from backend.utils.helpers import generate_stream_profile_token
-from sources import Feature, get_source
+from backend.services.sites import collection_site
 
 
 def _title_override(title: str, collection_title: str) -> Optional[str]:
@@ -27,16 +27,17 @@ def _title_override(title: str, collection_title: str) -> Optional[str]:
     return None if normalized == collection_title else normalized
 
 
-def ensure_source_can_stream(collection: Collection, use_dw_stream: bool) -> None:
-    """Only a Source with RSS streaming can stream episodes that are not downloaded."""
-    if not use_dw_stream:
-        return
-    source = get_source(collection.source_key)
-    if not source.has(Feature.RSS_STREAMING):
+def ensure_site_can_stream(collection: Collection, *, use_source_stream: bool, stream_live_episodes: bool) -> None:
+    """Only a collection on a Site that streams can stream episodes that are not downloaded, and
+    only one on a Site that streams live episodes can stream them while they are live."""
+    site = collection_site(collection)
+    if use_source_stream and not site.streams:
         raise HTTPException(
             status_code=422,
-            detail=f"{source.name} cannot stream episodes; a feed for this collection serves downloaded files only",
+            detail=f"{site.name} cannot stream episodes; a feed for this collection serves downloaded files only",
         )
+    if stream_live_episodes and not site.streams_live:
+        raise HTTPException(status_code=422, detail=f"{site.name} cannot stream live episodes")
 
 
 def _keeps_live_episode_handoff(profile: RssStreamProfile) -> bool:
@@ -45,7 +46,7 @@ def _keeps_live_episode_handoff(profile: RssStreamProfile) -> bool:
         and profile.preferred_format != PreferredFormat.FORMAT_AUDIO_ONLY.value
         and profile.video_output_mode in RSS_HLS_OUTPUT_MODES
         and profile.use_downloads
-        and not profile.use_dw_stream
+        and not profile.use_source_stream
     )
 
 
@@ -83,7 +84,7 @@ def create_stream_profile_rss(
     collection: Optional[Collection] = s.get(Collection, body.collection_id)
     if collection is None:
         raise HTTPException(status_code=404, detail="Collection not found")
-    ensure_source_can_stream(collection, body.use_dw_stream)
+    ensure_site_can_stream(collection, use_source_stream=body.use_source_stream, stream_live_episodes=body.stream_live_episodes)
 
     token = generate_stream_profile_token()
     feed_url = (body.feed_url or "").strip() or build_rss_feed_url(
@@ -121,7 +122,7 @@ def update_stream_profile_rss(
     if item is None:
         raise HTTPException(status_code=404, detail="Stream profile not found")
     check_owner(item, access)
-    ensure_source_can_stream(item.collection, body.use_dw_stream)
+    ensure_site_can_stream(item.collection, use_source_stream=body.use_source_stream, stream_live_episodes=body.stream_live_episodes)
 
     feed_url = body.feed_url.strip()
     update_database_fields(item, body, exclude_fields={"feed_url", "title"})

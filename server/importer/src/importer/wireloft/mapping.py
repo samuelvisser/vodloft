@@ -355,6 +355,8 @@ def _stream_profiles(data: WireLoftData) -> list[RecordPlan]:
         values = {name: _json(value) for name, value in row.items() if name not in _ROW_KEYS | {"show_id", "overwrite_show_title"}}
         values["overwrite_collection_title"] = row.get("overwrite_show_title")
         values.update({name: _json(value) for name, value in extra.items() if name != "id"})
+        if "use_dw_stream" in values:
+            values["use_source_stream"] = values.pop("use_dw_stream")
         records.append(RecordPlan(
             "stream_profile", str(row["id"]), values=values,
             references={"collection_id": _ref("collection", row["show_id"])},

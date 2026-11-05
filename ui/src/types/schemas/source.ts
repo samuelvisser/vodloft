@@ -9,7 +9,6 @@ export const SourceFeature = {
     LOGIN: 'login',
     LIVE_EPISODES: 'live_episodes',
     MEMBERSHIP_LEVELS: 'membership_levels',
-    RSS_STREAMING: 'rss_streaming',
     VIDEOS: 'videos',
     EPISODE_LISTS: 'episode_lists',
     SEARCH: 'search',

@@ -189,6 +189,7 @@ def test_hls_endpoint_falls_back_directly_to_dailywire_without_mp4_preparation(
         slug="episode-1",
         uuid="episode-uuid",
         publish_status="published_final",
+        source_key="dailywire",
     )
 
     class _Session:
@@ -219,7 +220,7 @@ def test_hls_endpoint_falls_back_directly_to_dailywire_without_mp4_preparation(
     )
     monkeypatch.setattr(
         feed_router,
-        "can_use_dailywire_for_episode",
+        "can_stream_from_source",
         lambda _profile, _episode: True,
     )
     monkeypatch.setattr(

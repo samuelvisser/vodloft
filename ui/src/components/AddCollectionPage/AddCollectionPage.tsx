@@ -24,8 +24,8 @@ import {defaultEpisodeFilters} from "../../types/schemas/download_profile";
 import {downloadedEpisodeTypes} from "../DownloadProfile/episodeFilters";
 import {useQueryClient} from "@tanstack/react-query";
 import {SeasonDetachedOut} from "../../types/schemas/season";
-import {useEpisodeTags, useSourceLookup} from "../../lib/queries";
-import {EpisodeTagRead, SourceFeature, sourceHas} from "../../types/schemas/source";
+import {useEpisodeTags, useSiteOptions} from "../../lib/queries";
+import {EpisodeTagRead} from "../../types/schemas/source";
 import {CollectionExamplesContext, useCollectionExamplesQuery} from "../../lib/collectionExamples";
 
 export type Props = {
@@ -121,7 +121,7 @@ const filterDefaultsKey = (collection?: CollectionCreatePayloadOut, seasons?: Se
 const defaultStreamProfile = (action?: CollectionAction): Partial<RssStreamProfileBundleIn> => ({
     enableProfile: true,
     useDownloads: true,
-    useDwStream: action === 'stream',
+    useSourceStream: action === 'stream',
     preferredFormat: 'format_1080p',
     preferExactMatch: false,
     epIdTypeList: ['ep', 'aux'],
@@ -135,7 +135,6 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
     const clearWizardMessage = () => setGlobalMessage(null)
     const qc = useQueryClient()
     const navigate = useNavigate()
-    const sources = useSourceLookup()
 
     const [step, setStep] = useState<WizardStep>(() => persisted?.step ?? 1)
     const previousStepRef = useRef(step)
@@ -171,6 +170,8 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
 
     // The filters to start with come from the show's Source and seasons once the show is chosen.
     const {data: collectionEpisodeTags} = useEpisodeTags(collectionSubmit?.sourceKey, collectionSubmit?.sharingUrl)
+    // Streaming is offered when the collection's Site, such as YouTube, can stream.
+    const {data: collectionSite} = useSiteOptions({sourceKey: collectionSubmit?.sourceKey, url: collectionSubmit?.sharingUrl})
     const tagDefaultsAppliedFor = useRef(persisted?.downloadProfile.input ? filterDefaultsKey(persisted?.collection.submit, persisted?.seasons) : undefined)
     useEffect(() => {
         const key = filterDefaultsKey(collectionSubmit, seasonsSubmit)
@@ -327,7 +328,7 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
         if (collectionAction === 'stream' || collectionAction === 'download-stream') {
             setStreamProfileInput((current) => ({...defaultStreamProfile(collectionAction), ...current,
                 useDownloads: true,
-                useDwStream: collectionAction === 'stream',
+                useSourceStream: collectionAction === 'stream',
             }))
         }
         setStep(3)
@@ -392,7 +393,7 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
             {step === 2 && (
                 <CollectionActionStep
                     value={collectionAction}
-                    canStreamFromSource={!collectionSubmit || sourceHas(sources.get(collectionSubmit.sourceKey), SourceFeature.RSS_STREAMING)}
+                    canStreamFromSource={!collectionSubmit || (collectionSite?.streams ?? true)}
                     onChange={setCollectionAction}
                     onBack={() => setStep(1)}
                     onContinue={handleActionContinue}

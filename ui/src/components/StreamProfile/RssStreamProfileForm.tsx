@@ -33,7 +33,7 @@ export default function RssStreamProfileForm({
     const [copied, setCopied] = useState(false)
 
     const feedUrl: string | undefined = watch('feedUrl')
-    const useDwStream: boolean = watch('useDwStream')
+    const useSourceStream: boolean = watch('useSourceStream')
     const preferredFormat: string | undefined = watch('preferredFormat')
     const videoOutputMode: string | null | undefined = watch('videoOutputMode')
     const streamLiveEpisodes: boolean = watch('streamLiveEpisodes')
@@ -150,7 +150,7 @@ export default function RssStreamProfileForm({
                                 <strong>{RssVideoOutputModeReg.getLabel('mp4_hls')}</strong> {RssVideoOutputModeReg.getHelp('mp4_hls')}
                             </p>
                             <p>
-                                The episode URLs in the RSS never change when a local download appears. The same VODLoft URL resolves to local media when available and to The Daily Wire only when the profile permits that fallback.
+                                The episode URLs in the RSS never change when a local download appears. The same VODLoft URL resolves to local media when available, and streams from the collection's site only when the profile permits that fallback.
                             </p>
                         </ReadMore>
                     </div>
@@ -190,7 +190,7 @@ export default function RssStreamProfileForm({
                             <p>
                                 Live episodes still have to match this Stream Profile&apos;s episode-type filter in order to show up in the feed.
                             </p>
-                            {!useDwStream && (
+                            {!useSourceStream && (
                                 <>
                                     <p>
                                         Even though streaming from Daily Wire is disabled for this stream profile, streaming live episodes from DW
