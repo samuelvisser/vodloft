@@ -31,10 +31,25 @@ _last_checked: dict[int, datetime] = {}
 
 
 @dataclass(frozen=True)
+class QuickCheckedCollection:
+    collection_id: int
+    episodes_found: int | None
+    """None when the check failed."""
+
+    def as_dict(self) -> dict[str, int | bool | None]:
+        return {
+            "collection_id": self.collection_id,
+            "episodes_found": self.episodes_found,
+            **({"failed": True} if self.episodes_found is None else {}),
+        }
+
+
+@dataclass(frozen=True)
 class QuickCheckResult:
     checked: int
     found: int
     failed: tuple[str, ...]
+    collections: tuple[QuickCheckedCollection, ...]
 
     def summary(self) -> str:
         if not self.checked:
@@ -89,20 +104,24 @@ def _check_collection(s: Session, *, collection: Collection, source: Source) -> 
 def run_quick_check(s: Session, *, now: datetime | None = None) -> QuickCheckResult:
     now = now or datetime.now(timezone.utc)
     due = _due_collections(s, now)
-    found, failed = 0, []
+    found, failed, checked = 0, [], []
     for collection, source, count in due:
         _last_checked[collection.id] = now
-        title = collection.title
+        collection_id, title = collection.id, collection.title
         try:
             if count == 0:
                 # A collection that was never indexed gets its full first index, so its numbering follows upload order.
-                found += _index_listed_collection(s, collection=collection, source=source, dry_run=False).episodes_found
+                added = _index_listed_collection(s, collection=collection, source=source, dry_run=False).episodes_found
             else:
-                found += _check_collection(s, collection=collection, source=source)
+                added = _check_collection(s, collection=collection, source=source)
         except Exception as exc:
             s.rollback()
             if is_no_internet_error(exc):
                 raise
             logger.warning("Could not check %s for new videos: %s", title, exc)
             failed.append(title)
-    return QuickCheckResult(checked=len(due), found=found, failed=tuple(failed))
+            checked.append(QuickCheckedCollection(collection_id=collection_id, episodes_found=None))
+            continue
+        found += added
+        checked.append(QuickCheckedCollection(collection_id=collection_id, episodes_found=added))
+    return QuickCheckResult(checked=len(due), found=found, failed=tuple(failed), collections=tuple(checked))

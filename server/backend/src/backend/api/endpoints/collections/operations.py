@@ -3,11 +3,13 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from backend.db.models import Episode, Collection
+from sources import Feature, get_source
 from task_manager.scheduler.operation_factory import OperationDefinition
 from task_manager.scheduler.operations import OperationTargetSpec
 
 
 _FETCH_EPISODES_TASK_KEY = "fetch_new_episodes"
+_RESCAN_QUICK_CHECKED_TASK_KEY = "rescan_quick_checked_collections"
 _REFRESH_METADATA_TASK_KEY = "refresh_episode_metadata"
 _RENAME_FILE_TASK_KEY = "rename_collection_profile_files"
 _DELETE_DOWNLOADS_TASK_KEY = "delete_collection_downloads_worker"
@@ -33,8 +35,17 @@ class CollectionIndexOperation(_CollectionOperation):
 
 
 class CollectionSyncOperation(_CollectionOperation):
+    """Sync now: the scan the regular checks give this collection, run for it alone."""
+
     kind = "collection.sync"
-    task = _FETCH_EPISODES_TASK_KEY
+
+    @property
+    def task(self) -> str:  # type: ignore[override]
+        # Collections with quick checks are only listed in full by their daily re-scan, which also refreshes their
+        # episodes' titles and thumbnails; the others by the regular search for new episodes.
+        if get_source(self.resource.source_key).has(Feature.QUICK_CHECK):
+            return _RESCAN_QUICK_CHECKED_TASK_KEY
+        return _FETCH_EPISODES_TASK_KEY
 
 
 class CollectionDownloadAllOperation(_CollectionOperation):

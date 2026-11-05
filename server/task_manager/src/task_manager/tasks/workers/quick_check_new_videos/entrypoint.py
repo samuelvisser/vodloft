@@ -37,7 +37,13 @@ async def quick_check_new_videos(*, resource_id: int | None = None, progress=Non
         result = run_quick_check(s)
     return TaskResult(
         summary=result.summary(),
-        data={"checked": result.checked, "found": result.found, "failed": list(result.failed)},
+        data={
+            "checked": result.checked,
+            "found": result.found,
+            "failed": list(result.failed),
+            # Each collection this check looked at, so its Sync log can list the check.
+            "collections": [collection.as_dict() for collection in result.collections],
+        },
     )
 
 

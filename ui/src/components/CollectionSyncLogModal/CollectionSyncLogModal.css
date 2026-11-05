@@ -125,3 +125,14 @@
     color: #fecaca;
   }
 }
+
+.collection-sync-log-ran,
+.collection-sync-log-kind {
+  display: block;
+}
+
+.collection-sync-log-kind {
+  margin-top: 2px;
+  color: var(--text-muted, #9ca3af);
+  font-size: 0.8rem;
+}

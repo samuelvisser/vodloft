@@ -594,6 +594,47 @@ def test_collection_settings_come_over_and_a_change_in_vodloft_is_kept(installat
     assert veritasium.cookies_mode == "never" and veritasium.check_frequency == "own"
 
 
+def test_a_fast_indexed_source_keeps_the_regular_checks(tmp_path):
+    database = _with_0_7_settings(_pinchflat_db(tmp_path / "pinchflat.db"))
+    connection = sqlite3.connect(database)
+    connection.execute("ALTER TABLE sources ADD COLUMN fast_index INTEGER")
+    connection.execute("UPDATE sources SET fast_index = 1")
+    connection.commit()
+    connection.close()
+    veritasium, lofi = plan_import(read_pinchflat(database), option_directory=None).collections
+    # Fast indexing overrides Veritasium's weekly index frequency.
+    assert veritasium.settings["check_frequency"] == "default" and "check_cron" not in veritasium.settings
+    assert "check_frequency" not in lofi.settings
+
+
+def test_running_the_import_again_takes_back_a_schedule_fast_indexing_overrides(installation, tmp_path):
+    from backend.db.models import Collection
+    from backend.services import import_uploads, imports
+
+    session, _applied = installation
+    database = _with_0_7_settings(_pinchflat_db(tmp_path / "pinchflat-0-7.db"))
+
+    def upload_and_run():
+        import_uploads.begin_upload(pinchflat.IMPORTER, [("db/pinchflat.db", database.stat().st_size)],
+                                    include_secrets=False)
+        import_uploads.write_chunk(pinchflat.IMPORTER, "db/pinchflat.db", 0, database.read_bytes())
+        import_uploads.finish_upload(pinchflat.IMPORTER)
+        _run(session, imports.ImportOptions())
+
+    upload_and_run()
+    veritasium = session.scalars(select(Collection).where(Collection.title == "Veritasium")).one()
+    assert (veritasium.check_frequency, veritasium.check_cron) == ("own", "0 4 */7 * *")
+
+    connection = sqlite3.connect(database)
+    connection.execute("ALTER TABLE sources ADD COLUMN fast_index INTEGER")
+    connection.execute("UPDATE sources SET fast_index = 1 WHERE id = 1")
+    connection.commit()
+    connection.close()
+    upload_and_run()
+    session.refresh(veritasium)
+    assert (veritasium.check_frequency, veritasium.check_cron) == ("default", None)
+
+
 def test_the_apprise_server_becomes_a_destination_on_the_default_rules():
     from backend.db.models import NotificationDestination, NotificationRule
     from backend.services import imports

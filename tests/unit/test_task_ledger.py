@@ -666,3 +666,26 @@ def test_task_ledger_workflow_order_puts_running_then_waiting_before_history():
         assert seen == expected
 
     engine.dispose()
+
+
+def test_task_ledger_pages_do_not_repeat_rows_stored_without_microseconds():
+    """Server defaults store ``2026-11-05 10:00:00``; the cursor row must not open the next page."""
+    from backend.api.endpoints.tasks.service import query_ledger
+
+    session, engine, runs, _base = _revision_task_fixture()
+    try:
+        seen = []
+        cursor = None
+        while True:
+            page = query_ledger(
+                session, definition_key="cursor_revision_worker",
+                order_by="created_at", order="desc", cursor=cursor, limit=1,
+            )
+            seen.extend(item.id for item in page.items)
+            cursor = page.next_cursor
+            if cursor is None:
+                break
+        assert seen == sorted((run.id for run in runs), reverse=True)
+    finally:
+        session.close()
+        engine.dispose()

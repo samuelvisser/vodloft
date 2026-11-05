@@ -199,3 +199,18 @@ class CollectionAPIReadView(CollectionAPIRead):
 
     episode_count: int = Field(default=0)
     years: str = Field(default="")
+
+
+class CollectionSyncLogEntryAPIRead(ResponseBase):
+    """One scan that looked at the Collection."""
+
+    id: int
+    kind: Literal["full_scan", "quick_check"]
+    status: str
+    ran_at: Optional[datetime]
+    episodes_found: Optional[int]
+
+
+class CollectionSyncLogAPIRead(ResponseBase):
+    items: list[CollectionSyncLogEntryAPIRead]
+    total: int

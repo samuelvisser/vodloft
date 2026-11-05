@@ -1,8 +1,9 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
 
 from .as_bundle import collection_as_bundle_router
 from .as_view import collection_view_router
 from .existing_files.router import router as existing_files_router
+from .sync_log import collection_scans
 from .service import (
     get_collections_list,
     create_collection,
@@ -31,6 +32,7 @@ from ...models.collection import (
     CollectionAPICreate,
     CollectionAPIUpdate,
     CollectionCheckSuggestionAPIRead,
+    CollectionSyncLogAPIRead,
     CollectionDeleteDownloadsAPIRequest,
     CollectionDownloadAllAPIRequest,
     CollectionFileRenameAPIRequest,
@@ -231,6 +233,22 @@ def collection_check_suggestion_detail(collection_slug: str):
     """How often to check the Collection, from how often it posted lately."""
     with db_session() as s:
         return CollectionCheckSuggestionAPIRead(suggestion=collection_check_suggestion(s, collection_slug))
+
+
+@router.get(
+    "/{collection_slug}/sync-log",
+    dependencies=[requires(Area.LIBRARY, Level.VIEW)],
+    response_model=CollectionSyncLogAPIRead,
+)
+def collection_sync_log(
+    collection_slug: str,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=100),
+):
+    """The scans that looked at this Collection for new episodes, newest first."""
+    with db_session() as s:
+        scans, total = collection_scans(s, collection_slug, offset=offset, limit=limit)
+        return CollectionSyncLogAPIRead(items=scans, total=total)
 
 
 @router.patch("/{collection_slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=CollectionAPIRead)

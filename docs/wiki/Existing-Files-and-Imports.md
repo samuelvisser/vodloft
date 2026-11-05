@@ -116,8 +116,10 @@ A media profile's redownload delay becomes the upgrade check on its Download Pro
 after downloading; unlike Pinchflat, VODLoft only replaces the file when the new one is better (see
 [[Download-Profiles]]). A source's cookie behaviour becomes the Collection's **Use the cookies file** choice: *Disabled*
 is Never, *When needed* is Only when needed, *All operations* is Always. A source Pinchflat indexed less often than
-once a day gets that as the Collection's own schedule; one indexed daily or more often keeps VODLoft's checks, which
-look more often (see [[Collections-and-Library#checking-and-cookies-per-collection]]).
+once a day gets that as the Collection's own schedule; one indexed daily or more often, or with *Use Fast Indexing*
+on, keeps VODLoft's checks, which look more often (see [[Collections-and-Library#checking-and-cookies-per-collection]]).
+Importing again takes back a schedule an earlier import set for a source that now uses fast indexing, unless you
+changed it in VODLoft.
 
 Pinchflat's download speed limit becomes a custom speed limit under **Settings → Downloads** (see
 [[Settings#speed]]). Its Apprise server becomes a destination called *Pinchflat* under **Settings → Messages and

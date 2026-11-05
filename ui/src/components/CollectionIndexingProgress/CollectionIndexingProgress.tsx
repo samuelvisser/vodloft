@@ -3,7 +3,7 @@ import {faIcon} from '../../icons/faIcon'
 
 import {useActiveOperation} from '../OperationNotifier/OperationNotifier'
 import ProgressBar from '../common/ProgressBar'
-import {presentIndexingLabel} from '../../lib/operationProgress'
+import {presentIndexingLabel, presentScanningLabel} from '../../lib/operationProgress'
 import './CollectionIndexingProgress.css'
 
 type Props = {
@@ -15,11 +15,14 @@ type Props = {
 
 export default function CollectionIndexingProgress({collectionId, className}: Props) {
     const indexingOperation = useActiveOperation('collection.index', 'collection', collectionId)
+    // Sync now scans the Collection again; it gets the same banner while it runs.
+    const scanningOperation = useActiveOperation('collection.sync', 'collection', collectionId)
+    const operation = indexingOperation ?? scanningOperation
 
-    if (!indexingOperation) return null
+    if (!operation) return null
 
-    const progress = typeof indexingOperation.progress === 'number' && indexingOperation.progress > 0
-        ? indexingOperation.progress
+    const progress = typeof operation.progress === 'number' && operation.progress > 0
+        ? operation.progress
         : null
     const classes = ['collection-indexing-progress', className].filter(Boolean).join(' ')
 
@@ -27,11 +30,11 @@ export default function CollectionIndexingProgress({collectionId, className}: Pr
         <div className={classes} aria-live="polite">
             <div className="collection-indexing-label">
                 <span>
-                    {presentIndexingLabel(indexingOperation)}
+                    {indexingOperation ? presentIndexingLabel(indexingOperation) : presentScanningLabel(operation)}
                 </span>
                 {progress == null && <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>}
             </div>
-            {progress != null && <ProgressBar value={progress} ariaLabel="Indexing progress"/>}
+            {progress != null && <ProgressBar value={progress} ariaLabel={indexingOperation ? 'Indexing progress' : 'Scanning progress'}/>}
         </div>
     )
 }

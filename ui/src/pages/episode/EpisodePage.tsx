@@ -11,6 +11,7 @@ import {isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableF
 import {EpisodePublishStatus, PUBLISH_STATUS_LABELS} from '../../types/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
+import {siteName} from '../../lib/siteName'
 import {EpisodeDownloadRow} from '../../components/Episode/EpisodeDownloadRow'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
@@ -296,6 +297,15 @@ export default function EpisodePage() {
                                     <FontAwesomeIcon icon={faIcon('fass', 'circle-down')} aria-hidden="true"/>
                                     <span>Downloaded {formatDate(latestDownloadedAt)}</span>
                                 </span>
+                            </>
+                        )}
+                        {episode.sharingUrl && (
+                            <>
+                                <span className="episode-summary-separator" aria-hidden="true"/>
+                                <a className="episode-summary-item" href={episode.sharingUrl} target="_blank" rel="noreferrer">
+                                    <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')} aria-hidden="true"/>
+                                    <span>Open on {collection.site?.name ?? siteName(episode.sharingUrl) ?? sourceName}</span>
+                                </a>
                             </>
                         )}
                     </div>
