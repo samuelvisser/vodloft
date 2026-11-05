@@ -1,45 +1,60 @@
-"""EXPERIMENT: the YouTube video streaming methods pick the right formats and rewrite HLS playlists."""
+"""EXPERIMENT: the YouTube video streaming methods pick the right formats and write valid HLS playlists."""
 from __future__ import annotations
 
 from backend.api.endpoints.feeds import youtube_experiments as experiments
 
 
-def _fmt(format_id, *, vcodec="none", acodec="none", protocol="https", ext="mp4", height=None, tbr=None):
+def _fmt(format_id, *, vcodec="none", acodec="none", protocol="https", ext="mp4", height=None, tbr=None, **extra):
     return {
         "format_id": format_id, "vcodec": vcodec, "acodec": acodec, "protocol": protocol, "ext": ext,
-        "height": height, "tbr": tbr, "url": f"https://rr1.googlevideo.com/videoplayback?itag={format_id}",
+        "height": height, "tbr": tbr, "url": f"https://rr1.googlevideo.com/videoplayback?itag={format_id}", **extra,
     }
 
 
 INFO = {"formats": [
     _fmt("18", vcodec="avc1.42001E", acodec="mp4a.40.2", height=360),
-    _fmt("22", vcodec="avc1.64001F", acodec="mp4a.40.2", height=720),
-    _fmt("137", vcodec="avc1.640028", height=1080),
+    _fmt("137", vcodec="avc1.640028", height=1080, width=1920, tbr=4000),
     _fmt("136", vcodec="avc1.4d401f", height=720),
-    _fmt("247", vcodec="vp9", ext="webm", height=720),
-    _fmt("140", acodec="mp4a.40.2", ext="m4a"),
-    _fmt("95", vcodec="avc1.4d401f", acodec="mp4a.40.2", protocol="m3u8_native", height=720),
-    _fmt("96", vcodec="avc1.640028", acodec="mp4a.40.2", protocol="m3u8_native", height=1080),
+    _fmt("248", vcodec="vp9", ext="webm", height=1080),
+    _fmt("299", vcodec="avc1.64002a", height=1080, protocol="m3u8_native"),
+    _fmt("140-0", acodec="mp4a.40.2", ext="m4a", language_preference=-1),
+    _fmt("140-1", acodec="mp4a.40.2", ext="m4a", language_preference=10),
+    _fmt("140-drc", acodec="mp4a.40.2", ext="m4a", language_preference=10),
 ]}
 
 
-def test_each_method_picks_its_format():
-    assert experiments._pick(INFO, "proxy")["format_id"] == "18"
-    assert experiments._pick(INFO, "client-tv")["format_id"] == "18"
-    assert experiments._pick(INFO, "muxed")["format_id"] == "22"
-    assert experiments._pick(INFO, "hls-proxy")["format_id"] == "95"
-    assert experiments._video_for_remux(INFO)["format_id"] == "136"
-    assert experiments._audio_m4a(INFO)["format_id"] == "140"
+def _box(kind: bytes, body: bytes) -> bytes:
+    return (8 + len(body)).to_bytes(4, "big") + kind + body
 
 
-def test_hls_playlists_point_at_youtube_or_through_vodloft():
-    playlist = '#EXTM3U\n#EXT-X-MAP:URI="init.mp4"\n#EXTINF:5,\nseg/1.ts\n'
-    base = "https://rr1.googlevideo.com/hls/playlist/index.m3u8"
-    assert experiments._rewrite_playlist(playlist, base, None).splitlines() == [
-        "#EXTM3U", '#EXT-X-MAP:URI="https://rr1.googlevideo.com/hls/playlist/init.mp4"', "#EXTINF:5,",
-        "https://rr1.googlevideo.com/hls/playlist/seg/1.ts",
-    ]
-    proxied = experiments._rewrite_playlist(playlist, base, lambda url: f"/segment?u={url}")
-    assert proxied.splitlines()[-1] == "/segment?u=https://rr1.googlevideo.com/hls/playlist/seg/1.ts"
-    assert experiments._allowed("https://rr1---sn-abc.googlevideo.com/x")
-    assert not experiments._allowed("https://example.com/x")
+def _sidx(fragments: list[tuple[int, int]], timescale: int = 1000) -> bytes:
+    body = bytes(4) + (1).to_bytes(4, "big") + timescale.to_bytes(4, "big") + bytes(4) + bytes(4)
+    body += bytes(2) + len(fragments).to_bytes(2, "big")
+    for size, duration in fragments:
+        body += size.to_bytes(4, "big") + duration.to_bytes(4, "big") + (0x90000000).to_bytes(4, "big")
+    return _box(b"sidx", body)
+
+
+def test_the_1080p_methods_join_h264_video_with_the_original_audio():
+    assert experiments._format_18(INFO)["format_id"] == "18"
+    assert experiments._video_1080(INFO)["format_id"] == "137"
+    assert experiments._audio_m4a(INFO)["format_id"] == "140-1"
+
+
+def test_the_segment_index_of_a_youtube_file_gives_every_part():
+    head = _box(b"ftyp", b"dash" + bytes(4)) + _box(b"moov", bytes(20))
+    data = head + _sidx([(1000, 5000), (2000, 4500)]) + _box(b"moof", bytes(8))
+    init_size, fragments = experiments.parse_index(data)
+    assert init_size == len(head)
+    first = len(head) + len(_sidx([(0, 0), (0, 0)]))
+    assert fragments == [(first, 1000, 5.0), (first + 1000, 2000, 4.5)]
+    assert experiments.parse_index(data[:len(head) + 10]) is None
+
+
+def test_hls_playlists_list_every_part_as_a_byte_range():
+    playlist = experiments.media_playlist("part/137", 785, [(1065, 100, 5.0), (1165, 200, 4.5)]).splitlines()
+    assert playlist[5] == '#EXT-X-MAP:URI="part/137",BYTERANGE="785@0"'
+    assert playlist[6:9] == ["#EXTINF:5.000,", "#EXT-X-BYTERANGE:100@1065", "part/137"]
+    assert playlist[-1] == "#EXT-X-ENDLIST"
+    master = experiments.master_playlist(experiments._video_1080(INFO), experiments._audio_m4a(INFO))
+    assert 'CODECS="avc1.640028,mp4a.40.2",RESOLUTION=1920x1080,AUDIO="audio"' in master
