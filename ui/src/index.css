@@ -1142,8 +1142,9 @@ th[aria-sort="descending"] .th-sort-icon { opacity: 1; }
   cursor: pointer;
 }
 a.icon-btn { display: inline-block; text-decoration: none; }
-/* Links styled as buttons use the browser's button text size, so they match the buttons beside them. */
-:where(a.btn, a.icon-btn) { font-size: 13.3333px; }
+/* Buttons and links styled as buttons share one text size. Browsers give buttons their own size, which on iOS
+   Safari is not the desktop 13.33px, so set it for both instead of only matching links to it. */
+:where(.btn, .icon-btn) { font-size: 13.3333px; }
 .icon-btn:hover { background: rgba(0,0,0,0.05); }
 @media (prefers-color-scheme: dark) {
   .icon-btn:hover { background: rgba(255,255,255,0.06); }
