@@ -65,6 +65,12 @@ def test_download_filesystem_recovery_cleans_expired_rss_cache(monkeypatch, tmp_
         lambda: calls.append("rss-cache") or 3,
     )
 
+    monkeypatch.setattr(
+        backend_app,
+        "retire_changed_folders",
+        lambda _settings: calls.append("retired-folders") or 0,
+    )
+
     pause = SimpleNamespace(release=lambda: calls.append("release"))
     download_settings = SimpleNamespace(
         download_root=tmp_path / "downloads",
@@ -74,7 +80,7 @@ def test_download_filesystem_recovery_cleans_expired_rss_cache(monkeypatch, tmp_
 
     backend_app._recover_download_filesystem(download_settings, pause)
 
-    assert calls == ["replacements", "reservations", "temporary", "rss-cache", "release"]
+    assert calls == ["retired-folders", "replacements", "reservations", "temporary", "rss-cache", "release"]
 
 
 def test_app_factory_is_side_effect_free_and_lifespan_owns_controller(monkeypatch):
