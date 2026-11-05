@@ -101,6 +101,18 @@
     gap: 7px;
 }
 
+/* The Open on <site> link reads like the rest of the line until it is pointed at. */
+.episode-view a.episode-summary-item {
+    color: inherit;
+    text-decoration: none;
+}
+
+.episode-view a.episode-summary-item:hover,
+.episode-view a.episode-summary-item:focus-visible {
+    color: var(--text);
+    text-decoration: underline;
+}
+
 .episode-view .episode-status.is-live {
     color: var(--error, #d64545);
     font-weight: 600;
