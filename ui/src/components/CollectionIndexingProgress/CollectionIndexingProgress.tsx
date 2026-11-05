@@ -3,6 +3,7 @@ import {faIcon} from '../../icons/faIcon'
 
 import {useActiveOperation} from '../OperationNotifier/OperationNotifier'
 import ProgressBar from '../common/ProgressBar'
+import {presentIndexingLabel} from '../../lib/operationProgress'
 import './CollectionIndexingProgress.css'
 
 type Props = {
@@ -17,7 +18,7 @@ export default function CollectionIndexingProgress({collectionId, className}: Pr
 
     if (!indexingOperation) return null
 
-    const progress = typeof indexingOperation.progress === 'number'
+    const progress = typeof indexingOperation.progress === 'number' && indexingOperation.progress > 0
         ? indexingOperation.progress
         : null
     const classes = ['collection-indexing-progress', className].filter(Boolean).join(' ')
@@ -26,7 +27,7 @@ export default function CollectionIndexingProgress({collectionId, className}: Pr
         <div className={classes} aria-live="polite">
             <div className="collection-indexing-label">
                 <span>
-                    {progress == null ? 'Indexing…' : `Indexing… ${progress}%`}
+                    {presentIndexingLabel(indexingOperation)}
                 </span>
                 {progress == null && <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>}
             </div>
