@@ -52,7 +52,7 @@ export default function ReadMore({
                 aria-controls={detailsId}
                 style={{background: 'none', border: 'none', padding: 0, color: 'inherit', textDecoration: 'underline', cursor: 'pointer'}}
             >
-        {expanded ? 'Collection less' : 'Read more'}
+        {expanded ? 'Show less' : 'Read more'}
       </button>
             {expanded && (
                 <div id={detailsId} className={'read-more-content'} style={{marginTop: 4}}>

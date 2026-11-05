@@ -12,7 +12,7 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 
 from config.config import PROJECT_ROOT
 from config.security.passwords import derive_admin_password_client_value, hash_password_scrypt
-from config.settings.base import SubmodelBase
+from config.settings.base import SubmodelBase, get_config_path
 
 
 _METADATA_REFRESH_INTERVAL_PATTERN = re.compile(r"^(?P<amount>[1-9]\d*)(?P<unit>[smhd])$", re.IGNORECASE)
@@ -488,9 +488,15 @@ class DownloadSettings(SubmodelBase):
                     "Inside the download root by default, so ready files survive a container update",
     )
     thumbnail_root: Path = Field(
-        default_factory=lambda data: data["download_root"] / ".vodloft-thumbnails",
+        default_factory=lambda: get_config_path().parent / "thumbnails",
         description="Directory where VODLoft keeps the thumbnails it makes itself, such as a video's first frame "
-                    "when the video has no thumbnail of its own",
+                    "when the video has no thumbnail of its own. Next to the config file by default",
+    )
+    lock_root: Path = Field(
+        default_factory=lambda: get_config_path().parent / "locks",
+        description="Directory where VODLoft keeps the lock files that stop two tasks from changing the same "
+                    "collection artwork or episode numbering at once. Next to the config file by default, "
+                    "so the lock files stay out of the download library",
     )
     rss_cache_retention_seconds: int = Field(
         default=7 * 24 * 60 * 60,
@@ -540,6 +546,9 @@ class DownloadSettings(SubmodelBase):
     )(_validate_non_empty_path)
     _validate_thumbnail_root = field_validator(
         "thumbnail_root", mode="before"
+    )(_validate_non_empty_path)
+    _validate_lock_root = field_validator(
+        "lock_root", mode="before"
     )(_validate_non_empty_path)
 
 

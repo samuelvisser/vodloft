@@ -310,16 +310,25 @@ export default function StreamProfileForm({
                             label: `Use ${streamSourceName} stream`,
                             description: (
                                 <ReadMore summary={<span>Stream episodes straight from {streamSourceName}.</span>}>
-                                    <p>If enabled, VODLoft can stream episodes straight from {streamSourceName},
-                                        without downloading them first.</p>
-                                    <p>If Use Downloads is enabled too, VODLoft will prefer downloaded media,
+                                    <p>
+                                        If enabled, VODLoft can stream episodes straight from {streamSourceName},
+                                        without downloading them first.
+                                    </p>
+                                    <p>
+                                        If Use Downloads is enabled too, VODLoft will prefer downloaded media,
                                         but stream directly when no downloaded media exists.
                                     </p>
-                                    <p>This could come in handy if you only intend to download a few of the latest episodes,
-                                    but still want to retain the ability to stream many more.</p>
-                                    <p>Some sites only stream in a lower quality: YouTube streams video at up to 1080p. As an
-                                        MP4, it plays at 360p until VODLoft has prepared the higher quality, which it starts for the
-                                        newest episodes as soon as your podcast app fetches the feed.</p>
+                                    <p>
+                                        This could come in handy if you only intend to download a few of the latest episodes,
+                                    but still want to retain the ability to stream many more.
+                                    </p>
+                                    {streamSourceName == 'YouTube' ? (
+                                        <p>
+                                            YouTube streams video at up to 1080p. As an MP4, it plays at 360p until VODLoft has
+                                            prepared the higher quality, which it starts for the newest episodes as soon as your
+                                            podcast app fetches the feed.
+                                        </p>
+                                    ) : null}
                                 </ReadMore>
                             ),
                         }] : []),

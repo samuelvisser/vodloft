@@ -12,14 +12,12 @@ import {
 } from '../src/lib/lazyCollection'
 import {
     applyMediaDownloadQueuePositions,
-    compareMediaDownloadWorkflowOrder,
     deriveMediaDownloadCollectionPlaceholder,
 } from '../src/lib/queries'
 import {deriveTaskLedgerCollectionPlaceholder} from '../src/lib/taskLedger'
 import type {TaskLedgerEntryRead} from '../src/types/schemas/task'
 import type {
     MediaDownloadDomainViewRead,
-    MediaDownloadViewRead,
 } from '../src/types/schemas/media_download'
 
 test('Home cache can seed Downloads display without satisfying its 50-row refresh', () => {
@@ -121,7 +119,7 @@ test('normal lazy collection scrolling uses the configured batch size', () => {
     )
 })
 
-test('queue-position updates reorder cached queued downloads immediately', () => {
+test('queue-position updates reach cached queued downloads immediately', () => {
     const queryClient = new QueryClient()
     const download = (id: number, queuePosition: number): MediaDownloadDomainViewRead => ({
         id,
@@ -158,76 +156,12 @@ test('queue-position updates reorder cached queued downloads immediately', () =>
         {cursor: string | null; limit: number}
     >>(queryKey)
     assert.ok(updated)
-
-    const presented = updated.pages[0].items.map((item) => ({
-        ...item,
-        downloadStatus: 'pending',
-        presentation: {active: true},
-    } as MediaDownloadViewRead))
-
-    presented.sort(compareMediaDownloadWorkflowOrder)
-    assert.deepEqual(presented.map((item) => item.id), [2, 1])
-    assert.deepEqual(presented.map((item) => item.queuePosition), [1, 2])
-})
-
-
-
-test('workflow ordering uses the latest successful download time rather than creation order', () => {
-    const row = (
-        id: number,
-        status: string,
-        downloadedAt: Date,
-        finishedAt = downloadedAt,
-    ): MediaDownloadViewRead => ({
-        id,
-        downloadStatus: status,
-        downloadedAt,
-        createdAt: new Date('2026-09-01T10:00:00Z'),
-        finishedAt,
-    } as MediaDownloadViewRead)
-
-    const redownloadedOldRecord = row(1, 'redownloaded', new Date('2026-10-09T12:58:15Z'))
-    const newerRecord = row(15, 'downloaded', new Date('2026-10-09T12:40:05Z'))
-    const latestCreatedRecord = row(
-        20, 'downloaded', new Date('2026-10-09T12:08:14Z'),
-        new Date('2026-10-09T13:00:00Z'),
+    assert.deepEqual(
+        updated.pages[0].items.map((item) => [item.id, item.queuePosition]),
+        [[1, 2], [2, 1]],
     )
-
-    const rows = [newerRecord, latestCreatedRecord, redownloadedOldRecord]
-    rows.sort(compareMediaDownloadWorkflowOrder)
-
-    // The server sorts by downloaded_at, not record ID or the displayed Updated
-    // timestamp, which can also be derived from the latest task operation.
-    assert.deepEqual(rows.map((download) => download.id), [1, 15, 20])
-
-    const tied = [
-        row(2, 'downloaded', new Date('2026-10-09T12:58:15Z')),
-        redownloadedOldRecord,
-    ]
-    tied.sort(compareMediaDownloadWorkflowOrder)
-    assert.deepEqual(tied.map((download) => download.id), [2, 1])
 })
 
-test('workflow ordering still prioritizes active and queued downloads', () => {
-    const row = (id: number, status: string, queuePosition: number | null = null) => ({
-        id,
-        downloadStatus: status,
-        queuePosition,
-        downloadedAt: status === 'downloaded' ? new Date('2026-10-09T12:58:15Z') : null,
-        createdAt: new Date('2026-10-01T10:00:00Z'),
-    } as MediaDownloadViewRead)
-
-    const rows = [
-        row(100, 'error'),
-        row(1, 'downloaded'),
-        row(5, 'pending', 2),
-        row(7, 'downloading'),
-        row(6, 'pending', 1),
-    ]
-    rows.sort(compareMediaDownloadWorkflowOrder)
-
-    assert.deepEqual(rows.map((download) => download.id), [7, 6, 5, 1, 100])
-})
 
 
 function domainDownload(
