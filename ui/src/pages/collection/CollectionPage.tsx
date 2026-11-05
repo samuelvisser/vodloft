@@ -330,13 +330,6 @@ export default function CollectionPage() {
   const hasMore = Boolean(hasNextPage)
   const episodesViewLoading = episodesInitialLoading || seasonViewLoading
 
-  const syncDisabledReason = syncStarting
-    ? 'This task is starting...'
-    : syncOperation
-      ? syncOperation.status === 'WAITING'
-        ? syncOperation.message || OPERATION_WAITING_MESSAGE
-        : `A sync is running for ${collection.title}.`
-      : undefined
   const metadataRefreshDisabledReason = metadataRefreshOperation
     ? metadataRefreshOperation.status === 'WAITING'
       ? metadataRefreshOperation.message || OPERATION_WAITING_MESSAGE
@@ -475,15 +468,6 @@ export default function CollectionPage() {
             </Link>
             <ActionMenu
               items={[
-                {
-                  label: 'Sync now',
-                  icon: faIcon('fass', 'arrows-rotate'),
-                  disabled: syncBusy,
-                  disabledReason: syncDisabledReason,
-                  operation: syncOperation,
-                  controls: operationControls(syncOperation?.id, 'sync'),
-                  onSelect: () => void syncNow(),
-                },
                 {
                   label: 'Sync log',
                   icon: faIcon('fass', 'clock-rotate-left'),
