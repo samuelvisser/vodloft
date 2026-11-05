@@ -75,22 +75,41 @@
 }
 
 /* The available table width can become much smaller than the viewport when
-   VODLoft's sidebar (or a browser side panel) is present. React to the table
-   container itself rather than a viewport breakpoint: Size is the least
-   important live-download column, so hide it before Format/Status become
-   unreadable. At extremely narrow desktop widths, Updated yields next. */
+   VODLoft's sidebar (or a browser side panel) is present, so react to the
+   table container itself rather than a viewport breakpoint.
+
+   Status takes whatever width the other columns leave over. It needs about
+   11rem (padding, icon, a label such as "Processing queue..." and the info
+   button) to stay readable. With every column shown it gets
+   0.42 x table width - 15.75rem, which drops below 11rem under 64rem, so
+   Format and Size (the least important columns while a download is live)
+   are hidden together there, and Media and Profile take part of the freed
+   space. Status then gets 0.42 x table width - 8.25rem, which drops below
+   11rem under 46rem, so Updated yields next. Keep these numbers in step with
+   the column widths in DownloadsPage.tsx and the Format and Actions widths
+   above. */
 .downloads-table-wrapper {
     container-type: inline-size;
 }
 
-@container (max-width: 41.25rem) {
+@container (max-width: 64rem) {
+    .downloads-table th:nth-child(3),
+    .downloads-table td:nth-child(3),
     .downloads-table th:nth-child(5),
     .downloads-table td:nth-child(5) {
         display: none;
     }
+
+    .downloads-table th:nth-child(1) {
+        width: 24% !important;
+    }
+
+    .downloads-table th:nth-child(2) {
+        width: 18% !important;
+    }
 }
 
-@container (max-width: 32.5rem) {
+@container (max-width: 46rem) {
     .downloads-table th:nth-child(6),
     .downloads-table td:nth-child(6) {
         display: none;
