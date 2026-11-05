@@ -184,3 +184,14 @@
     background: var(--sf-accent-soft);
     color: var(--sf-accent);
 }
+
+/* With every language the site offers, only the first one counts: it picks the default track. */
+.subtitle-language.is-ignored .subtitle-language__number,
+.subtitle-language.is-ignored .subtitle-language__name {
+    opacity: 0.45;
+}
+
+.subtitle-language.is-ignored .subtitle-language__number {
+    background: var(--sf-badge);
+    color: var(--muted);
+}

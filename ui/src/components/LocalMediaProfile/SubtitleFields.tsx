@@ -37,10 +37,14 @@ function joinAnd(items: string[], joiner = 'and'): string {
     return items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} ${joiner} ${items[items.length - 1]}`
 }
 
-function modeHelp(mode: string, codes: string[]): string | undefined {
+function modeHelp(mode: string, codes: string[], sidecars: boolean): string | undefined {
     if (mode === 'site') return SubtitleLanguageModeReg.getHelp('site')
     if (!codes.length) return undefined
-    if (mode === 'listed') return `${joinAnd(codes.map((code) => `Episode.${code}.srt`))}, when the site has them.`
+    if (mode === 'listed') {
+        // Jellyfin and Emby pick the file marked .default.
+        const files = codes.map((code, index) => `Episode.${code}${sidecars && index === 0 ? '.default' : ''}.srt`)
+        return `${joinAnd(files)}, when the site has them.`
+    }
     const names = codes.map(languageName)
     return `One subtitle file per episode: ${names.map((name, i) => i === 0 ? `${name} if there is one` : `otherwise ${name}`).join(', ')}.`
 }
@@ -60,6 +64,8 @@ export default function SubtitleFields({form, onSubtitleModeChange}: Props) {
     const [usesOpen, setUsesOpen] = useState(false)
     const [dragging, setDragging] = useState<number | null>(null)
     const stores = subtitleMode && subtitleMode !== 'no_subtitles'
+    const everyLanguage = languageMode === 'site'
+    const help = modeHelp(languageMode, list, subtitleMode === 'sidecar' || subtitleMode === 'embed_and_sidecar')
     const whereHelp = WhereReg.values.includes(subtitleMode as any) ? WhereReg.getHelp(subtitleMode as any) : undefined
     const {data: uses} = useAutoSubtitleUses(stores ? profileId : undefined)
 
@@ -109,12 +115,25 @@ export default function SubtitleFields({form, onSubtitleModeChange}: Props) {
 
             {stores && (
                 <div className="form-row">
-                    <label htmlFor="subtitle-language-add" id="subtitle-languages-label">Subtitle languages</label>
+                    <label htmlFor="subtitle-language-mode">When several languages are available</label>
+                    <SimpleSelect
+                        inputId="subtitle-language-mode"
+                        registry={SubtitleLanguageModeReg}
+                        value={languageMode}
+                        onChange={(value) => setValue('subtitleLanguageMode', value, OPTIONS)}
+                    />
+                    {help && <div className="help">{help}</div>}
+                </div>
+            )}
+
+            {stores && (
+                <div className="form-row">
+                    <label htmlFor="subtitle-language-add" id="subtitle-languages-label">{everyLanguage ? 'Default track language' : 'Subtitle languages'}</label>
                     <ol className="subtitle-languages" aria-labelledby="subtitle-languages-label">
                         {list.map((code, index) => (
                             <li
                                 key={code}
-                                className={`subtitle-language${dragging === index ? ' is-dragging' : ''}`}
+                                className={`subtitle-language${dragging === index ? ' is-dragging' : ''}${everyLanguage && index > 0 ? ' is-ignored' : ''}`}
                                 draggable
                                 onDragStart={(event) => {
                                     setDragging(index)
@@ -166,20 +185,11 @@ export default function SubtitleFields({form, onSubtitleModeChange}: Props) {
                             {String((errors.subtitleLanguages as any).message ?? 'Check the languages')}
                         </div>
                     )}
-                    <div className="help">In order of preference. The first becomes the default track. Drag or use the arrows to reorder.</div>
-                </div>
-            )}
-
-            {stores && (
-                <div className="form-row">
-                    <label htmlFor="subtitle-language-mode">When several languages are available</label>
-                    <SimpleSelect
-                        inputId="subtitle-language-mode"
-                        registry={SubtitleLanguageModeReg}
-                        value={languageMode}
-                        onChange={(value) => setValue('subtitleLanguageMode', value, OPTIONS)}
-                    />
-                    {modeHelp(languageMode, list) && <div className="help">{modeHelp(languageMode, list)}</div>}
+                    <div className="help">
+                        {everyLanguage
+                            ? 'Every language is downloaded. The first one here becomes the default track when an episode has it, or leave the list empty for no default. The grayed-out languages are kept for the other choices.'
+                            : 'In order of preference. The first becomes the default track. Drag or use the arrows to reorder.'}
+                    </div>
                 </div>
             )}
 

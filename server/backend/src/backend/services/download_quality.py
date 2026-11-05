@@ -77,6 +77,11 @@ def chosen_subtitle_tracks(subtitles: YtdlpSubtitles, tracks: Sequence[Track]) -
     return chosen
 
 
-def first_subtitle_is_default(profile: LocalMediaProfileBase) -> bool:
-    """The first language on the profile's list is the subtitle track players pick by default."""
-    return profile.subtitle_language_mode != SubtitleLanguageMode.SITE.value
+def default_subtitle_languages(profile: LocalMediaProfileBase) -> tuple[str, ...]:
+    """The languages whose subtitle players pick by default, the first one there is.
+
+    With every language the site offers, only the first language on the list counts.
+    """
+    if profile.subtitle_language_mode == SubtitleLanguageMode.SITE.value:
+        return tuple(profile.subtitle_languages[:1])
+    return tuple(profile.subtitle_languages)

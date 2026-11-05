@@ -40,7 +40,7 @@ from downloader.storage.identity import inspect_artifact
 
 DOWNLOADS_PREFIX = "/downloads/"
 _THUMBNAIL_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
-_SUBTITLE = re.compile(r"^\.(?:(?P<language>[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*)\.)?(?P<forced>forced\.)?(?:srt|vtt)$")
+_SUBTITLE = re.compile(r"^\.(?:(?P<language>[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*)\.)?(?P<forced>forced\.)?(?:default\.)?(?:srt|vtt)$")
 
 
 class AdoptionError(ValueError):
