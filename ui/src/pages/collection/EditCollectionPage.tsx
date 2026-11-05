@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {Link, useNavigate, useParams} from 'react-router-dom'
 import CollectionForm, { CollectionFormValue, defaultCollectionFormValue } from '../../components/CollectionForm'
 import CustomMetadataEditor from '../../components/CustomMetadataEditor/CustomMetadataEditor'
@@ -37,7 +37,6 @@ type RouteParams = { id?: string }
 
 type FormState = CollectionFormValue & {
   url: string
-  localMediaProfileId: string
   ytdlpOptions: string
   checkFrequency: CheckFrequency
   checkCron: string
@@ -57,26 +56,12 @@ export default function EditCollectionPage() {
 
   const [form, setForm] = useState<FormState>(() => ({
     url: id ? `https://www.dailywire.com/show/${id}` : '',
-    localMediaProfileId: 'p1',
     ytdlpOptions: '',
     checkFrequency: 'default',
     checkCron: '0 */6 * * *',
     cookiesMode: 'automatic',
     ...defaultCollectionFormValue,
   }))
-
-  type LocalMediaProfileName = { id: string; name: string }
-  const [profiles, setProfiles] = useState<LocalMediaProfileName[] | null>(null)
-  const [profilesError, setProfilesError] = useState<string | null>(null)
-  const profileReg = useMemo(() => {
-    const spec: Record<string, {label: string}> = {}
-    const values: string[] = []
-    for (const profile of profiles ?? []) {
-      spec[profile.id] = {label: profile.name}
-      values.push(profile.id)
-    }
-    return createSelectRegistry('EditCollectionLocalMediaProfile', spec, values)
-  }, [profiles])
 
   useEffect(() => {
     if (!id || !collection || collection.slug !== id || initializedCollectionId.current === id) return
@@ -93,32 +78,6 @@ export default function EditCollectionPage() {
       cookiesMode: collection.cookiesMode,
     }))
   }, [id, collection])
-
-  useEffect(() => {
-    const controller = new AbortController()
-    fetch(`${(window as any).appConfig.API_URL}/collection-local-media-profiles`, { signal: controller.signal, credentials: 'include' })
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        const data = await r.json()
-        const items = (data as any[]).map((p) => ({ id: p.slug, name: p.name }))
-        setProfiles(items)
-        // Ensure selected value is valid
-        setForm((prev) => {
-          if (!prev.localMediaProfileId || !items.some((x) => x.id === prev.localMediaProfileId)) {
-            return { ...prev, localMediaProfileId: items[0]?.id ?? '' }
-          }
-          return prev
-        })
-      })
-      .catch((e: any) => {
-        if (e.name !== 'AbortError') {
-          console.error('Failed to load media profiles', e)
-          setProfilesError('Failed to load media profiles')
-          setProfiles([])
-        }
-      })
-    return () => controller.abort()
-  }, [])
 
   const usesYtdlp = hasSourceFeature(collection, SourceFeature.YTDLP_DOWNLOADS)
   const optionalCookies = hasSourceFeature(collection, SourceFeature.OPTIONAL_COOKIES)
@@ -302,18 +261,6 @@ export default function EditCollectionPage() {
               </button>
             </div>
           </div>
-        </div>
-
-        <div className="form-row">
-          <label htmlFor="media-profile">Media Profile</label>
-          <SimpleSelect
-            inputId="media-profile"
-            registry={profileReg}
-            value={form.localMediaProfileId}
-            onChange={(value) => setForm({ ...form, localMediaProfileId: value })}
-            isDisabled
-            placeholder={profiles === null ? 'Loading profiles...' : profilesError ?? 'No profiles found'}
-          />
         </div>
 
         <CollectionForm
