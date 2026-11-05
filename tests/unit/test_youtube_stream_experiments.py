@@ -37,7 +37,8 @@ def test_variant_playlists_point_at_youtube_or_through_vodloft():
 
 def test_variants_without_sound_share_the_separate_live_audio():
     video = _fmt("301", height=1080, acodec="none", tbr=4000)
-    audio = {**_fmt("234", height=0, vcodec="none", tbr=128), "height": None, "width": None, "language_preference": 10}
+    # As yt-dlp lists YouTube's live audio: no codec, no bitrate.
+    audio = {**_fmt("234", height=0, vcodec="none", acodec=None, tbr=None), "height": None, "width": None, "language_preference": 10}
     info = {"formats": [video, audio, {**audio, "format_id": "233", "language_preference": -1}]}
     assert experiments.live_audio(info)["format_id"] == "234"
     master = experiments.master_playlist([video], experiments.live_audio(info))

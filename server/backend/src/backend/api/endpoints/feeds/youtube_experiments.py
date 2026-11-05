@@ -130,9 +130,12 @@ def live_audio(info: dict) -> dict | None:
     audio = [
         fmt for fmt in info.get("formats") or []
         if fmt.get("url") and "m3u8" in str(fmt.get("protocol", ""))
-        and (fmt.get("vcodec") or "none") == "none" and (fmt.get("acodec") or "none") != "none"
+        and fmt.get("vcodec") == "none" and fmt.get("acodec") != "none"
     ]
-    return max(audio, key=lambda fmt: (fmt.get("language_preference") or 0, fmt.get("tbr") or fmt.get("abr") or 0), default=None)
+    # Without a bitrate, the higher number is the better one: 234 (128 kbps) over 233 (48 kbps).
+    return max(audio, key=lambda fmt: (
+        fmt.get("language_preference") or 0, fmt.get("tbr") or fmt.get("abr") or 0, str(fmt.get("format_id")),
+    ), default=None)
 
 
 def _has_sound(fmt: dict) -> bool:
@@ -177,7 +180,8 @@ def master_playlist(variants: list[dict], audio: dict | None = None) -> str:
         attributes = [f"BANDWIDTH={int(bitrate * 1000)}"]
         if fmt.get("width") and fmt.get("height"):
             attributes.append(f"RESOLUTION={fmt['width']}x{fmt['height']}")
-        acodec = audio.get("acodec") if separate else fmt.get("acodec")
+        # yt-dlp leaves the codec of YouTube's live audio (233 and 234) out; it is AAC.
+        acodec = (audio.get("acodec") or "mp4a.40.2") if separate else fmt.get("acodec")
         if fmt.get("vcodec") and acodec and acodec != "none":
             attributes.append(f'CODECS="{fmt["vcodec"]},{acodec}"')
         if separate:
