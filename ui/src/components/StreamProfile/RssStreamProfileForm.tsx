@@ -19,11 +19,14 @@ type Props = {
     advisory?: ReactNode
     /** Whether the collection's Site streams live episodes. */
     liveEpisodes?: boolean
-    /** Whether HLS video outputs can be offered: not while streaming from a Site that has no HLS, such as YouTube. */
+    /** Whether HLS video outputs can be offered: only where the Site streams HLS or Download Profiles can keep it as HLS. */
     hlsVideo?: boolean
+    /** Whether a feed can send podcast apps straight to the Site's video, or pass it through VODLoft. */
+    proxyChoice?: boolean
+    siteName?: string
 }
 
-// The MP4 output that takes the place of an HLS one on a Site that streams no HLS.
+// The MP4 output that takes the place of an HLS one on a Site that has no HLS video.
 const MP4_FOR_HLS: Record<string, string> = {audio_hls: 'audio_mp4', mp4_hls: 'mp4'}
 
 export default function RssStreamProfileForm({
@@ -34,6 +37,8 @@ export default function RssStreamProfileForm({
     advisory,
     liveEpisodes = true,
     hlsVideo = true,
+    proxyChoice = false,
+    siteName = 'its site',
 }: Props) {
     const {control, formState: {errors}, register, setValue, watch} = form
     const [copied, setCopied] = useState(false)
@@ -168,6 +173,46 @@ export default function RssStreamProfileForm({
                 </div>
             )}
 
+            {usesVideo && proxyChoice && useSourceStream && (
+                <div className="form-row">
+                    <label htmlFor="rss-proxy-source-stream">Proxy video through VODLoft</label>
+                    <Controller
+                        control={control}
+                        name="proxySourceStream"
+                        render={({field}) => (
+                            <Switch
+                                id="rss-proxy-source-stream"
+                                checked={!!field.value}
+                                onChange={(checked) => field.onChange(checked)}
+                                onColor="#0ea5e9"
+                                offColor="#d1d5db"
+                                uncheckedIcon={false}
+                                checkedIcon={false}
+                                aria-invalid={!!errors.proxySourceStream}
+                                aria-describedby={errors.proxySourceStream ? 'rss-proxy-source-stream-error' : 'rss-proxy-source-stream-help'}
+                            />
+                        )}
+                    />
+                    {errors.proxySourceStream && (
+                        <div id="rss-proxy-source-stream-error" className="error" role="alert" aria-live="polite">
+                            {String(errors.proxySourceStream.message)}
+                        </div>
+                    )}
+                    <div className="help" id="rss-proxy-source-stream-help">
+                        <ReadMore summary={<span>Pass video from {siteName} through VODLoft, instead of letting your podcast app fetch it straight from {siteName}.</span>}>
+                            <p>
+                                Passing video through VODLoft might make the feed more stable, for example when {siteName} stops
+                                accepting your podcast app. It does add bandwidth overhead: every video you watch is downloaded by
+                                your VODLoft server and uploaded again to your podcast app.
+                            </p>
+                            <p>
+                                This only applies to video streamed from {siteName}. Downloaded video always comes from VODLoft.
+                            </p>
+                        </ReadMore>
+                    </div>
+                </div>
+            )}
+
             {offersLiveEpisodes && (
                 <div className="form-row">
                     <label htmlFor="rss-stream-live-episodes">Stream live episodes</label>
@@ -196,7 +241,7 @@ export default function RssStreamProfileForm({
                     <div className="help" id="rss-stream-live-episodes-help">
                         <ReadMore summary={<span>Include matching episodes while they are live.</span>}>
                             <p>
-                                With this setting enabled, you can view even episodes that are currently live at DW straight in your podcast player!
+                                With this setting enabled, you can view even episodes that are currently live at {siteName} straight in your podcast player!
                             </p>
                             <p>
                                 Live episodes still have to match this Stream Profile&apos;s episode-type filter in order to show up in the feed.
@@ -204,7 +249,7 @@ export default function RssStreamProfileForm({
                             {!useSourceStream && (
                                 <>
                                     <p>
-                                        Even though streaming from Daily Wire is disabled for this stream profile, streaming live episodes from DW
+                                        Even though streaming from {siteName} is disabled for this stream profile, streaming live episodes from {siteName}
                                         still works. VODLoft even provides a clean handoff to the downloaded HLS file after the episode is no longer
                                         live: it waits for the download to finish first, and only then switches to streaming from your local file.
                                         Your podcasting app should not even notice this switch!
@@ -218,6 +263,7 @@ export default function RssStreamProfileForm({
                             )}
                             <p>
                                 <strong>Note:</strong> live video only works if your podcast player supports playing HLS video.
+                                A live episode has no length yet, so your podcast player may show its progress oddly.
                             </p>
                         </ReadMore>
                     </div>

@@ -256,7 +256,7 @@ def build_download_plan(
         raise ValueError("Embedded artwork must reference a planned asset")
     if source.hls_bundle and (metadata_tags or artwork_asset_id or subtitle_asset_ids):
         raise DownloadError("HLS bundles support sidecars, not container embedding")
-    if source.ytdlp_command and (source.use_hls or source.hls_bundle or source.remux_to_mp4 or source.convert_video_to_m4a):
+    if source.ytdlp_command and (source.use_hls or source.remux_to_mp4 or source.convert_video_to_m4a):
         raise DownloadError("yt-dlp downloads produce their final format themselves")
     if any(asset.source_format == "ytdlp" for asset in assets) and not source.ytdlp_command:
         raise ValueError("Only a yt-dlp download writes yt-dlp subtitles")

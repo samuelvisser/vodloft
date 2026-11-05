@@ -29,7 +29,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 SITE_REFRESH_REVISION = "5b75b63e55f2"
 NEUTRAL_STATUSES_REVISION = "b9dbb772c34e"
 UPCOMING_VIDEOS_REVISION = "158c03681e52"
-HEAD_REVISION = "688634d39f23"
+HEAD_REVISION = "aa950d2ab545"
 
 
 @pytest.fixture
@@ -768,4 +768,72 @@ def test_the_daily_wire_profiles_move_to_its_own_resolutions_and_duplicates_merg
         assert connection.execute(text("SELECT local_media_profile_id FROM download_profiles")).scalar_one() == 3
         assert dict(connection.execute(text("SELECT id, preferred_format FROM stream_profiles")).all()) == {
             20: "format_1080p", 21: "format_4k",
+        }
+
+
+def test_youtube_feeds_stream_at_its_own_resolutions_and_do_not_proxy(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "688634d39f23")
+    with engine.begin() as connection:
+        for collection_id, url in ((1, "https://www.youtube.com/@host"), (2, "https://vimeo.com/host")):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key) VALUES (:id, :uuid, :uuid, 'C', :url, "
+                "'free', 'series', 'numbered', 'Host', 'host', 'ytdlp')"
+            ), {"id": collection_id, "uuid": f"c{collection_id}", "url": url})
+        for stream_id, collection_id, streams, preferred in (
+                (20, 1, 1, "format_480p"), (21, 1, 1, "format_4k"), (22, 1, 0, "format_4k"), (23, 2, 1, "format_4k")):
+            connection.execute(text(
+                "INSERT INTO stream_profiles (id, type, collection_id, enable_profile, token, use_downloads, use_source_stream, "
+                "preferred_format, prefer_exact_match) VALUES (:id, 'rss', :collection, 1, :token, 1, :streams, :format, 0)"
+            ), {"id": stream_id, "collection": collection_id, "token": f"t{stream_id}", "streams": streams, "format": preferred})
+            connection.execute(text(
+                "INSERT INTO stream_profiles_rss (id, feed_url, max_items) VALUES (:id, :url, 0)"
+            ), {"id": stream_id, "url": f"https://example.test/{stream_id}"})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        # Only feeds that stream from YouTube move; feeds of downloads keep any resolution.
+        assert dict(connection.execute(text("SELECT id, preferred_format FROM stream_profiles")).all()) == {
+            20: "format_720p", 21: "format_1080p", 22: "format_4k", 23: "format_4k",
+        }
+        assert connection.execute(text("SELECT DISTINCT proxy_source_stream FROM stream_profiles_rss")).scalars().all() == [0]
+
+
+def test_feeds_of_sites_without_hls_video_move_to_mp4(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "53adf1f1b502")
+    with engine.begin() as connection:
+        for collection_id, source, url in (
+                (1, "ytdlp", "https://www.youtube.com/@host"), (2, "ytdlp", "https://vimeo.com/host"),
+                (3, "dailywire", "https://www.dailywire.com/show/host"), (4, "npo", "https://npo.nl/start/serie/host")):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key) VALUES (:id, :uuid, :uuid, 'C', :url, "
+                "'free', 'series', 'numbered', 'Host', 'host', :source)"
+            ), {"id": collection_id, "uuid": f"c{collection_id}", "url": url, "source": source})
+        for stream_id, collection_id, mode in (
+                (20, 1, "audio_hls"), (21, 2, "audio_hls"), (22, 2, "mp4_hls"), (23, 3, "mp4_hls"), (24, 4, "audio_hls"),
+                (25, 4, "mp4")):
+            connection.execute(text(
+                "INSERT INTO stream_profiles (id, type, collection_id, enable_profile, token, use_downloads, use_source_stream, "
+                "preferred_format, prefer_exact_match) VALUES (:id, 'rss', :collection, 1, :token, 1, 0, 'format_1080p', 0)"
+            ), {"id": stream_id, "collection": collection_id, "token": f"t{stream_id}"})
+            connection.execute(text(
+                "INSERT INTO stream_profiles_rss (id, feed_url, max_items, video_output_mode) VALUES (:id, :url, 0, :mode)"
+            ), {"id": stream_id, "url": f"https://example.test/{stream_id}", "mode": mode})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        # YouTube and The Daily Wire have HLS video; Vimeo and NPO Start do not.
+        assert dict(connection.execute(text("SELECT id, video_output_mode FROM stream_profiles_rss")).all()) == {
+            20: "audio_hls", 21: "audio_mp4", 22: "mp4", 23: "mp4_hls", 24: "audio_mp4", 25: "mp4",
         }

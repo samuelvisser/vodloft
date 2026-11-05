@@ -8,6 +8,7 @@ import time
 
 import requests
 from collections.abc import Iterator, Sequence
+from dataclasses import replace
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
@@ -15,8 +16,8 @@ from config import get_settings
 from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
-    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, Feature, LinkKind, LinkPreview, MediaStream, Playback, PlaybackKind, ProgramStatus,
-    ResolvedLink, SearchResults, CollectionDetails, Site, Source, SourceProblem, SponsorBlockSegment, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
+    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, DownloadOptions, Feature, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
+    ResolvedLink, SearchResults, CollectionDetails, Site, Source, SourceProblem, SponsorBlockSegment, StreamMethod, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
 )
 from .. import pacing, ytdlp_runner as runner
@@ -228,6 +229,8 @@ def video_formats(info: dict) -> VideoFormats:
 
 # The formats a feed can pass on as they are: YouTube's M4A audio, and its one MP4 with sound (360p).
 _READY_AUDIO_FORMAT = "140"
+# The sound of YouTube's live streams is AAC, which yt-dlp does not say.
+_LIVE_AUDIO_CODECS = "mp4a.40.2"
 _READY_VIDEO_FORMAT = "18"
 _DIRECT_PROTOCOLS = {"http", "https"}
 
@@ -251,10 +254,21 @@ def _expires_at(url: str) -> float | None:
 
 def _media_stream(entry: dict, *, ready: bool) -> MediaStream:
     size = entry.get("filesize")
+    codecs = [entry.get(kind) for kind in ("vcodec", "acodec") if (entry.get(kind) or "none") != "none"]
+    bitrate = entry.get("tbr") or entry.get("abr")
     return MediaStream(
         url=entry["url"], headers=dict(entry.get("http_headers") or {}), expires_at=_expires_at(entry["url"]),
         size_bytes=int(size) if isinstance(size, (int, float)) and size > 0 else None, ready=ready,
+        codecs=",".join(codecs) or None, bitrate=int(bitrate * 1000) if bitrate else None,
+        width=entry.get("width"), height=entry.get("height"),
     )
+
+
+def _original_language(entries: list[dict]) -> dict | None:
+    """A video with dubbed audio lists each format once per language, as 140-0, 140-1 and so on, and
+    also as 140-drc with its loudness evened out. Take the original language as it was made."""
+    versions = [entry for entry in entries if not str(entry.get("format_id")).endswith("-drc")]
+    return max(versions, key=lambda entry: entry.get("language_preference") or 0, default=None)
 
 
 def stream_of(info: dict, *, audio: bool) -> MediaStream | None:
@@ -265,7 +279,7 @@ def stream_of(info: dict, *, audio: bool) -> MediaStream | None:
     """
     formats = [entry for entry in info.get("formats") or [] if _direct(entry)]
     wanted = _READY_AUDIO_FORMAT if audio else _READY_VIDEO_FORMAT
-    ready = next((entry for entry in formats if str(entry.get("format_id")) == wanted), None)
+    ready = _original_language([entry for entry in formats if str(entry.get("format_id")).split("-")[0] == wanted])
     if ready is not None:
         return _media_stream(ready, ready=True)
     if not audio:
@@ -273,11 +287,72 @@ def stream_of(info: dict, *, audio: bool) -> MediaStream | None:
     sound_only = [
         entry for entry in formats
         if (entry.get("vcodec") or "none") == "none" and (entry.get("acodec") or "none") != "none"
+        and not str(entry.get("format_id")).endswith("-drc")
     ]
     if not sound_only:
         return None
-    best = max(sound_only, key=lambda entry: entry.get("abr") or entry.get("tbr") or 0)
+    best = max(sound_only, key=lambda entry: (entry.get("language_preference") or 0, entry.get("abr") or entry.get("tbr") or 0))
     return _media_stream(best, ready=False)
+
+
+def tracks_of(info: dict, heights: Sequence[int]) -> MediaTracks | None:
+    """The H.264 video without sound at each of ``heights`` that YouTube has, and the M4A audio, from
+    yt-dlp's info for a video. None without audio or video."""
+    formats = [entry for entry in info.get("formats") or [] if _direct(entry)]
+    audio = _original_language([
+        entry for entry in formats if str(entry.get("format_id")).split("-")[0] == _READY_AUDIO_FORMAT
+    ])
+    video = []
+    for height in sorted(heights, reverse=True):
+        candidates = [
+            entry for entry in formats
+            if entry.get("height") == height and entry.get("ext") == "mp4" and (entry.get("acodec") or "none") == "none"
+            and str(entry.get("vcodec") or "").startswith("avc1")
+        ]
+        best = max(candidates, key=lambda entry: entry.get("tbr") or 0, default=None)
+        if best is not None:
+            video.append(_media_stream(best, ready=False))
+    if audio is None or not video:
+        return None
+    return MediaTracks(video=tuple(video), audio=_media_stream(audio, ready=True))
+
+
+def _live_playlist(entry: dict) -> bool:
+    return isinstance(entry, dict) and bool(entry.get("url")) and "m3u8" in str(entry.get("protocol") or "") and not entry.get("has_drm")
+
+
+def live_of(info: dict, heights: Sequence[int]) -> LiveStream | None:
+    """The HLS playlists of a video while it is live, from yt-dlp's info: one per resolution up to the
+    highest of ``heights``, and the sound when YouTube lists it apart from the video. None when the
+    video is not live."""
+    if info.get("live_status") != "is_live":
+        return None
+    playlists = [entry for entry in info.get("formats") or [] if _live_playlist(entry)]
+    best: dict[int, dict] = {}
+    for entry in playlists:
+        height = entry.get("height") or 0
+        if (entry.get("vcodec") or "none") == "none" or not height or height > max(heights):
+            continue
+        if height not in best or (entry.get("tbr") or 0) > (best[height].get("tbr") or 0):
+            best[height] = entry
+    video = [_media_stream(best[height], ready=True) for height in sorted(best, reverse=True)]
+    if not video:
+        return None
+    if all((best[height].get("acodec") or "none") != "none" for height in best):
+        return LiveStream(video=tuple(video))
+    # YouTube lists the sound of most live streams apart, as 233 and 234 without a codec or bitrate:
+    # the higher number is the better one.
+    sound = max(
+        (entry for entry in playlists if entry.get("vcodec") == "none" and entry.get("acodec") != "none"),
+        key=lambda entry: (entry.get("language_preference") or 0, entry.get("tbr") or entry.get("abr") or 0, str(entry.get("format_id"))),
+        default=None,
+    )
+    if sound is None:
+        return None
+    audio = _media_stream(sound, ready=True)
+    if audio.codecs is None:
+        audio = replace(audio, codecs=_LIVE_AUDIO_CODECS)
+    return LiveStream(video=tuple(video), audio=audio)
 
 
 def _sponsorblock_segments(video_id: str, categories: Sequence[str]) -> tuple[SponsorBlockSegment, ...]:
@@ -344,6 +419,10 @@ class YtDlpSource(Source):
         self._cache_lock = threading.Lock()
         # A channel's handle never changes its ID, so it is looked up once.
         self._channel_ids: dict[str, str] = {}
+
+    @property
+    def download_options(self) -> DownloadOptions:
+        return sites.download_options()
 
     def site_for(self, url: str) -> Site:
         """The site of the yt-dlp extractor that handles the link: one Site for all of YouTube's domains."""
@@ -898,6 +977,18 @@ class YtDlpSource(Source):
         if not self.site_for(url).streams:
             raise NotImplementedError(f"{self.site_for(url).name} cannot stream episodes")
         return stream_of(runner.run_json("--no-playlist", url, cookies=use_cookies), audio=audio)
+
+    def live_stream(self, url: str, *, use_cookies: bool = True) -> LiveStream | None:
+        site = self.site_for(url)
+        if StreamMethod.LIVE not in site.stream_methods:
+            raise NotImplementedError(f"{site.name} cannot stream live episodes")
+        return live_of(runner.run_json("--no-playlist", url, cookies=use_cookies), site.stream_video_heights)
+
+    def media_tracks(self, url: str, *, use_cookies: bool = True) -> MediaTracks | None:
+        site = self.site_for(url)
+        if StreamMethod.HLS not in site.stream_methods:
+            raise NotImplementedError(f"{site.name} cannot stream episodes as tracks")
+        return tracks_of(runner.run_json("--no-playlist", url, cookies=use_cookies), site.stream_video_heights)
 
     def needs_cookies(self, error: str) -> bool:
         text = error.lower()

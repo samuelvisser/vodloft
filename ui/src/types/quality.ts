@@ -16,7 +16,7 @@ export const QualityDownloadReg = createSelectRegistry('QualityDownload', {
     format_4k: {label: '4K'},
     format_8k: {label: '8K'},
     format_audio_only: {label: 'Audio only', help: 'No video, for podcasts'},
-    format_hls: {label: 'HLS bundle', help: 'The Daily Wire only'},
+    format_hls: {label: 'HLS bundle', help: 'Every resolution together, for podcast feeds'},
 })
 
 export const QualityGoalReg = createSelectRegistry('QualityGoal', {

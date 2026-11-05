@@ -170,6 +170,8 @@ class SiteOptionsAPIRead(ResponseBase):
     stream_methods: list[StreamMethod] = []
     """How RSS feeds can stream the collection's episodes without downloading them first; none for downloads only."""
     stream_video_heights: list[int] = []
+    stream_proxy_choice: bool = False
+    """A feed can send podcast apps straight to the Site's video, or pass it through VODLoft."""
     downloads: DownloadOptionsAPIRead
 
     @field_validator("stream_methods", mode="before")

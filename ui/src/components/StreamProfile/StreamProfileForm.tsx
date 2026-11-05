@@ -90,9 +90,12 @@ export default function StreamProfileForm({
 
     const useDownloads = watch('useDownloads')
     const useSourceStream = watch('useSourceStream')
-    // A feed serves the downloaded version nearest to its format, or the Site's own stream.
+    // A feed serves the downloaded version nearest to its format, or the Site's own stream, which only
+    // comes in the resolutions the Site streams.
     const videoHeights = site
-        ? [...site.downloads.videoHeights, ...(canStreamFromSource && useSourceStream ? site.streamVideoHeights : [])]
+        ? (canStreamFromSource && useSourceStream && site.streamVideoHeights.length > 0
+            ? site.streamVideoHeights
+            : site.downloads.videoHeights)
         : undefined
     const preferredFormat = watch('preferredFormat')
     const videoOutputMode = watch('videoOutputMode')
@@ -243,6 +246,11 @@ export default function StreamProfileForm({
             canOpenDownloadProfiles={canOpenDownloadProfiles}
             sourceName={streamSourceName}
             canStreamFromSource={canStreamFromSource}
+            hlsDownloads={site ? site.downloads.hlsBundle : true}
+            onEnableSourceStream={() => setValue('useSourceStream', true, {
+                shouldDirty: true,
+                shouldValidate: true,
+            })}
             onEnableDownloads={() => setValue('useDownloads', true, {
                 shouldDirty: true,
                 shouldValidate: true,
@@ -316,8 +324,9 @@ export default function StreamProfileForm({
                                     </p>
                                     {streamSourceName == 'YouTube' ? (
                                         <p>
-                                            Some sites only stream in a lower quality: YouTube streams video at 360p, and its
-                                            audio as it is. Download the episodes for anything better.
+                                            YouTube streams video at up to 1080p. As an MP4, it plays at 360p until VODLoft has
+                                            prepared the higher quality, which it starts for the newest episodes as soon as your
+                                            podcast app fetches the feed.
                                         </p>
                                     ) : null}
                                 </ReadMore>
@@ -431,8 +440,8 @@ export default function StreamProfileForm({
                         <ReadMore summary={<span>Whether to stream video or audio from {streamSourceName}.</span>}>
                             <p>VODLoft cannot control what format the video or audio that {streamSourceName} provides will be in. Therefore, when Use Downloads
                             is disabled in streaming sources, you cannot select the exact video format you prefer.</p>
-                            <p>Setting this to video will set the resolution to 1080p in the background. That wont matter much as again, VODLoft
-                                will just stream whatever video {streamSourceName} gives it: YouTube video streams at 360p.</p>
+                            <p>Setting this to video will set the resolution to 1080p in the background. VODLoft streams the best video
+                                {streamSourceName} gives it up to that: YouTube video streams at up to 1080p.</p>
                         </ReadMore>
                     </div>
                 </div>
@@ -526,7 +535,9 @@ export default function StreamProfileForm({
                     regeneratingToken={regeneratingToken}
                     advisory={streamProfileAdvisory}
                     liveEpisodes={canStreamLiveEpisodes}
-                    hlsVideo={!(canStreamFromSource && useSourceStream) || canStreamHls}
+                    hlsVideo={!site || canStreamHls || site.downloads.hlsBundle}
+                    proxyChoice={canStreamFromSource && !!site?.streamProxyChoice}
+                    siteName={streamSourceName}
                 />
             ) : undefined}
         </>

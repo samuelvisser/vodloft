@@ -144,7 +144,9 @@ def test_hls_cleanup_removes_owned_companion_assets(tmp_path):
     )
 
     master = tmp_path / "episode.m3u8"
-    master.write_text("#EXTM3U\n")
+    master.write_text("#EXTM3U\n" + "".join(
+        f"#EXT-X-STREAM-INF:BANDWIDTH={height}\nhls/{height}p/playlist.m3u8\n" for height in (480, 720, 1080)
+    ))
     assets = hls_asset_root(master)
     assets.mkdir()
     hls_asset_marker(master).write_text("owned")
@@ -253,7 +255,9 @@ def test_file_watcher_rejects_incomplete_hls_bundle(tmp_path):
     from task_manager.tasks.workers.file_watcher.service import _size_problem
 
     master = tmp_path / "episode.m3u8"
-    master.write_text("#EXTM3U\n")
+    master.write_text("#EXTM3U\n" + "".join(
+        f"#EXT-X-STREAM-INF:BANDWIDTH={height}\nhls/{height}p/playlist.m3u8\n" for height in (480, 720, 1080)
+    ))
     assets = hls_asset_root(master)
     assets.mkdir()
     hls_asset_marker(master).write_text("owned")

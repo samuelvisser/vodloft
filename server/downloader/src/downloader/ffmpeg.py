@@ -117,6 +117,34 @@ def remux_to_mp4(
         raise
 
 
+def segment_as_hls(
+        src_path: str,
+        directory: Path,
+        *,
+        ffmpeg_path: str = "ffmpeg",
+        should_cancel: Optional[CancelCheck] = None,
+) -> None:
+    """Write one track as ``media.mp4`` in ``directory`` and an HLS ``playlist.m3u8`` that lists its
+    parts as byte ranges of that file. Nothing is encoded again: the parts start at the video's
+    keyframes."""
+    if not ffmpeg_available(ffmpeg_path):
+        raise FfmpegNotFoundError(f"ffmpeg binary '{ffmpeg_path}' not found on PATH; ffmpeg is required for HLS downloads")
+    command = [
+        ffmpeg_path, "-y", "-i", src_path, "-map", "0", "-c", "copy",
+        "-f", "hls", "-hls_time", "6", "-hls_playlist_type", "vod",
+        "-hls_segment_type", "fmp4", "-hls_flags", "single_file",
+        "-hls_segment_filename", str(directory / "media.mp4"), str(directory / "playlist.m3u8"),
+    ]
+    result = (
+        _run_cancellable(command, should_cancel)
+        if should_cancel is not None
+        else subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
+    )
+    if result.returncode != 0:
+        logger.error("ffmpeg could not write HLS for '%s' (exit %s):\n%s", src_path, result.returncode, result.stdout)
+        raise DownloadError(f"ffmpeg could not write HLS (exit {result.returncode}): {_tail_lines(result.stdout)}")
+
+
 def convert_video_to_m4a(
         src_path: str,
         dest_path: str,
