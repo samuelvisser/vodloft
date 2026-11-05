@@ -126,6 +126,10 @@ function refineOneLinePerDate(filters: readonly {field: string}[], ctx: z.Refine
 }
 
 
+/** What the upgrade check can count as a better version; each Site offers some of these. */
+export const UpgradeImprovementSchema = z.enum(['resolution', 'sponsorblock', 'subtitles', 'codec', 'length'])
+export type UpgradeImprovement = z.infer<typeof UpgradeImprovementSchema>
+
 // ---------- Strict request (create/update) ----------
 export const DownloadProfileSchemaRequest = z.object({
     enableProfile: z.boolean().default(true),
@@ -139,7 +143,8 @@ export const DownloadProfileSchemaRequest = z.object({
     upgradeCheck: z.boolean().default(true),
     upgradeAfterDays: z.int('Enter a number of days').min(1, 'Check after at least 1 day').max(365, 'Check within a year').default(7),
     upgradeRepeat: z.enum(['once', 'twice', 'every']).default('once'),
-    upgradeImprovements: z.array(z.enum(['resolution', 'sponsorblock', 'subtitles', 'codec'])).default(() => ['resolution' as const, 'sponsorblock' as const]),
+    upgradeImprovements: z.array(UpgradeImprovementSchema).default(() => ['resolution' as const, 'sponsorblock' as const]),
+    upgradeLengthMinutes: z.int('Enter a number of minutes').min(1, 'At least 1 minute').max(600, 'At most 600 minutes').default(5),
     filters: z.array(EpisodeFilterSchema).max(50).superRefine(refineOneLinePerDate).default([]),
 })
 
@@ -172,7 +177,8 @@ export const DownloadProfileReadSchema = z.looseObject({
     upgradeCheck: z.boolean(),
     upgradeAfterDays: z.int(),
     upgradeRepeat: z.enum(['once', 'twice', 'every']),
-    upgradeImprovements: z.array(z.enum(['resolution', 'sponsorblock', 'subtitles', 'codec'])),
+    upgradeImprovements: z.array(UpgradeImprovementSchema),
+    upgradeLengthMinutes: z.int().default(5),
     filters: z.array(z.looseObject({
         id: z.int(),
         action: z.enum(EpisodeFilterActionReg.values),
@@ -230,7 +236,15 @@ export const SiteOptionsSchema = z.object({
     siteName: z.string(),
     autoSubtitles: z.boolean(),
     sponsorblock: z.boolean(),
-    upgradeChecks: z.boolean(),
+    /** Downloading live episodes with their countdown, and again as the final version. */
+    countdownDownloads: z.boolean(),
+    /** What the upgrade check can find on the site; no improvements means no upgrade check. */
+    upgradeChecks: z.object({
+        improvements: z.array(UpgradeImprovementSchema),
+        /** The improvements a new Download Profile starts with. */
+        checked: z.array(UpgradeImprovementSchema),
+        onByDefault: z.boolean(),
+    }),
     /**
      * How RSS feeds can stream the collection's episodes without downloading them: as M4A and MP4 files,
      * as HLS video, and while they are live. Empty for downloads only.

@@ -1,24 +1,29 @@
 """The upgrade check: an episode is downloaded again later, and only when something you care about improved.
 
 A YouTube video can get a higher resolution hours after upload, SponsorBlock segments come in over days, and
-subtitles get added later. The check asks the Source what the video is offered as now, compares it with what the
-download kept, and only then downloads it again through the usual redownload path, which keeps the old file until
-the new one is complete.
+subtitles get added later. The Daily Wire sometimes edits an episode after it is out, such as cutting a long live
+stream down. The check asks the Source what the video is offered as now, compares it with what the download kept,
+and only then downloads it again through the usual redownload path, which keeps the old file until the new one is
+complete. What can count as better is the Site's: its contract lists the improvements it offers.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from datetime import datetime, timedelta
 from typing import Sequence
 
-from backend.db.models import DownloadProfile
+from backend.db.datetime_types import utc_datetime
+from backend.db.models import DownloadProfile, Episode
 from backend.db.models.local_media_profile import LocalMediaProfileBase
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.download_quality import ytdlp_quality, ytdlp_subtitles
-from backend.types.download_profile_types import AutoSubtitles, SponsorBlockAction, UpgradeImprovement, UpgradeRepeat
+from backend.types.download_profile_types import (
+    AutoSubtitles, MediaDownloadArtifactStatus, SponsorBlockAction, UpgradeImprovement, UpgradeRepeat,
+)
 from backend.types.local_media_profile_types import LocalMediaProfileSubtitleMode, PreferredFormat
 from downloader.source import FORMAT_HEIGHTS
-from sources import Feature, Source, UpgradeOffer
+from sources import Site, UpgradeOffer
 
 SECOND_CHECK_DAYS = 30
 """Twice checks once more this many days after the first check."""
@@ -27,12 +32,24 @@ _SEGMENT_TOLERANCE_SECONDS = 1.0
 """SponsorBlock moves a segment's edges a little as people vote; a move this small is the same segment."""
 
 
-def checks_profile(source: Source, profile: DownloadProfile) -> bool:
+def checked_improvements(site: Site, profile: DownloadProfile) -> frozenset[str]:
+    """What the profile counts as a better version, of what its collection's Site offers."""
+    return frozenset(profile.upgrade_improvements) & {improvement.value for improvement in site.upgrade_checks.improvements}
+
+
+def checks_profile(site: Site, profile: DownloadProfile) -> bool:
     """Whether the profile's downloads get upgrade checks."""
-    return profile.upgrade_check and source.has(Feature.UPGRADE_CHECKS)
+    return profile.upgrade_check and bool(checked_improvements(site, profile))
 
 
-def schedule_first_upgrade_check(download: EpisodeMediaDownload, source: Source, now: datetime) -> None:
+def length_changed(kept: float | None, offered: float | None, profile: DownloadProfile) -> bool:
+    """Whether a length differs from the downloaded file's by more than the profile's minutes. An unknown length never does."""
+    if not kept or not offered:
+        return False
+    return abs(offered - kept) > profile.upgrade_length_minutes * 60
+
+
+def schedule_first_upgrade_check(download: EpisodeMediaDownload, site: Site, now: datetime) -> None:
     """Plan the first check of a download that just completed.
 
     A download the upgrade check itself started keeps the schedule the check gave it.
@@ -40,10 +57,60 @@ def schedule_first_upgrade_check(download: EpisodeMediaDownload, source: Source,
     if download.upgrade_checks:
         return
     profile = download.download_profile
-    if profile is None or not checks_profile(source, profile):
+    if profile is None or not checks_profile(site, profile):
         download.upgrade_check_at = None
         return
     download.upgrade_check_at = now + timedelta(days=profile.upgrade_after_days)
+
+
+class RefreshedChange(StrEnum):
+    """What a metadata refresh can tell about one improvement: it changed, it did not, or the refresh cannot tell."""
+
+    YES = "yes"
+    NO = "no"
+    UNKNOWN = "unknown"
+
+
+def refreshed_change(
+    improvement: str, download: EpisodeMediaDownload, episode: Episode, profile: DownloadProfile,
+) -> RefreshedChange:
+    """Whether the episode's refreshed metadata shows that an improvement changed since the download.
+
+    Only the length is in the metadata a refresh gets; for anything else a refresh cannot tell.
+    """
+    if improvement == UpgradeImprovement.LENGTH.value:
+        if not download.duration or not episode.duration:
+            return RefreshedChange.UNKNOWN
+        return RefreshedChange.YES if length_changed(download.duration, episode.duration, profile) else RefreshedChange.NO
+    return RefreshedChange.UNKNOWN
+
+
+def check_refreshed_changes_now(episode: Episode, site: Site, now: datetime) -> bool:
+    """Check an episode's downloads right away when its refreshed metadata shows that something the profile
+    counts as better changed. The check itself asks the Source again before anything is downloaded again.
+
+    Returns whether a check became due now, so the refresh can start the upgrade check.
+    """
+    made_due = False
+    for download in episode.downloads:
+        if not isinstance(download, EpisodeMediaDownload):
+            continue
+        profile = download.download_profile
+        if (
+            profile is None or not profile.enable_profile or not profile.upgrade_check
+            or download.artifact_status != MediaDownloadArtifactStatus.AVAILABLE.value or download.redownload_when_final
+        ):
+            continue
+        due = download.upgrade_check_at
+        if due is not None and utc_datetime(due) <= now:
+            continue
+        if any(
+            refreshed_change(improvement, download, episode, profile) == RefreshedChange.YES
+            for improvement in checked_improvements(site, profile)
+        ):
+            download.upgrade_check_at = now
+            made_due = True
+    return made_due
 
 
 def next_upgrade_check_at(profile: DownloadProfile, checks_done: int, now: datetime) -> datetime | None:
@@ -77,9 +144,10 @@ def upgrade_findings(
     download: EpisodeMediaDownload,
     profile: DownloadProfile,
     local_media_profile: LocalMediaProfileBase,
+    site: Site,
 ) -> UpgradeFindings:
     """Compare what the video is offered as now with what the download kept."""
-    wanted = set(profile.upgrade_improvements)
+    wanted = checked_improvements(site, profile)
     found: list[UpgradeImprovement] = []
     could_improve = False
     best_height: int | None = None
@@ -124,6 +192,12 @@ def upgrade_findings(
         kept = [segment for segment in download.sponsorblock_segments or () if isinstance(segment, dict)]
         if any(not _has_segment(kept, segment.category, segment.start, segment.end) for segment in offer.sponsorblock):
             found.append(UpgradeImprovement.SPONSORBLOCK)
+
+    if UpgradeImprovement.LENGTH.value in wanted:
+        # The site can edit an episode at any time. A countdown download is replaced by the final version anyway.
+        could_improve = True
+        if not download.redownload_when_final and length_changed(download.duration, offer.duration, profile):
+            found.append(UpgradeImprovement.LENGTH)
 
     return UpgradeFindings(tuple(found), could_improve or bool(found), best_height)
 

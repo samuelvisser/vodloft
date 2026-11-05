@@ -9,8 +9,8 @@ from backend.security.access import Area, Level
 from backend.security import deps
 from backend.security.deps import requires, requires_any
 from backend.db.models import Collection
-from backend.api.models.source import DownloadOptionsAPIRead, SiteOptionsAPIRead
-from sources import Feature, get_source
+from backend.api.models.source import DownloadOptionsAPIRead, SiteOptionsAPIRead, UpgradeChecksAPIRead
+from sources import get_source
 from backend.services.sites import collection_site
 
 router = APIRouter(prefix="/download-profiles", tags=["Download Profiles"])
@@ -79,7 +79,8 @@ def download_profiles_site_options(collection_id: int, request: Request):
         return SiteOptionsAPIRead(
             auto_subtitles=source.auto_subtitles_for(collection.sharing_url),
             sponsorblock=source.sponsorblock_for(collection.sharing_url),
-            upgrade_checks=source.has(Feature.UPGRADE_CHECKS),
+            countdown_downloads=site.countdown_downloads,
+            upgrade_checks=UpgradeChecksAPIRead.model_validate(site.upgrade_checks),
             site_name=site.name, stream_methods=site.stream_methods,
             stream_video_heights=site.stream_video_heights, stream_proxy_choice=site.stream_proxy_choice,
             downloads=DownloadOptionsAPIRead.model_validate(site.downloads),

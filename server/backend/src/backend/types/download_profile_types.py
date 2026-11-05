@@ -3,6 +3,8 @@ from typing import Annotated
 
 from pydantic import Field
 
+from sources import UpgradeImprovement
+
 
 class MediaDownloadArtifactStatus(StrEnum):
     """Persistent state of the file represented by a MediaDownload.
@@ -87,14 +89,6 @@ class UpgradeRepeat(StrEnum):
     """Once more, 30 days after the first check."""
     EVERY = "every"
     """Every "check after" days, up to three times."""
-
-
-class UpgradeImprovement(StrEnum):
-    """What the upgrade check counts as a better version."""
-    RESOLUTION = "resolution"
-    SPONSORBLOCK = "sponsorblock"
-    SUBTITLES = "subtitles"
-    CODEC = "codec"
 
 
 class UpgradeResult(StrEnum):

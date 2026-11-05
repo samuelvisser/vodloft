@@ -62,3 +62,25 @@
         grid-template-columns: 1fr;
     }
 }
+
+.upgrade-check-divider {
+    border-top: 1px solid var(--border, rgba(100, 116, 139, 0.25));
+}
+
+.upgrade-check-length {
+    flex-wrap: wrap;
+    align-items: center;
+    cursor: default;
+}
+
+.upgrade-check-length > label {
+    cursor: pointer;
+}
+
+.upgrade-check-length .upgrade-check-minutes {
+    width: 9rem;
+}
+
+.upgrade-check-length .error {
+    flex-basis: 100%;
+}

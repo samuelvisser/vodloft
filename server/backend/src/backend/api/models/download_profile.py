@@ -111,6 +111,7 @@ class DownloadProfileAPIBaseIn(RequestBase):
     upgrade_improvements: list[UpgradeImprovement] = Field(
         default_factory=lambda: list(DEFAULT_UPGRADE_IMPROVEMENTS), max_length=len(UpgradeImprovement),
     )
+    upgrade_length_minutes: int = Field(default=5, ge=1, le=600)
 
     filters: list[DownloadProfileFilterAPIIn] = Field(default_factory=list, max_length=50)
 
@@ -166,6 +167,7 @@ class DownloadProfileAPIBaseOut(ResponseBase):
     upgrade_after_days: int
     upgrade_repeat: UpgradeRepeat
     upgrade_improvements: list[UpgradeImprovement]
+    upgrade_length_minutes: int
 
     filters: list[DownloadProfileFilterAPIRead]
 

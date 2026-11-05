@@ -29,7 +29,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 SITE_REFRESH_REVISION = "5b75b63e55f2"
 NEUTRAL_STATUSES_REVISION = "b9dbb772c34e"
 UPCOMING_VIDEOS_REVISION = "158c03681e52"
-HEAD_REVISION = "aa950d2ab545"
+HEAD_REVISION = "d6346ad993ee"
 
 
 @pytest.fixture
@@ -837,3 +837,40 @@ def test_feeds_of_sites_without_hls_video_move_to_mp4(migration_database):
         assert dict(connection.execute(text("SELECT id, video_output_mode FROM stream_profiles_rss")).all()) == {
             20: "audio_hls", 21: "audio_mp4", 22: "mp4", 23: "mp4_hls", 24: "audio_mp4", 25: "mp4",
         }
+
+
+def test_daily_wire_profiles_get_the_upgrade_check_for_a_different_length(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "aa950d2ab545")
+    with engine.begin() as connection:
+        for collection_id, source_key in ((1, "dailywire"), (2, "ytdlp")):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key) VALUES (:id, :uuid, :uuid, 'C', 'https://example.test/' || :uuid, "
+                "'free', 'series', 'numbered', 'Host', 'host', :source)"
+            ), {"id": collection_id, "uuid": f"c{collection_id}", "source": source_key})
+        connection.execute(text(
+            "INSERT INTO local_media_profiles (id, slug, name, type, output_template, preferred_format, video_codecs) "
+            "VALUES (1, 'p1', 'p1', 'collection', '/x/{{ title }}.ext', 'format_1080p', '[]')"
+        ))
+        connection.execute(text("INSERT INTO local_media_profiles_collection (id) VALUES (1)"))
+        for profile_id, collection_id in ((7, 1), (8, 2)):
+            connection.execute(text(
+                "INSERT INTO download_profiles (id, collection_id, local_media_profile_id, enable_profile, sponsorblock_segments, "
+                "upgrade_check, upgrade_improvements) VALUES (:id, :collection, 1, 1, '{}', 0, '[\"resolution\"]')"
+            ), {"id": profile_id, "collection": collection_id})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        rows = connection.execute(text(
+            "SELECT id, upgrade_check, upgrade_improvements, upgrade_length_minutes FROM download_profiles ORDER BY id"
+        )).all()
+        assert [(row[0], row[1], json.loads(row[2]), row[3]) for row in rows] == [
+            (7, 1, ["length"], 5),
+            (8, 0, ["resolution"], 5),
+        ]
+        assert connection.execute(text("SELECT duration FROM media_downloads")).all() == []

@@ -8,7 +8,7 @@ from pydantic import Field, computed_field, field_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.types.collection_types import CollectionType
-from sources import Feature, StreamMethod, UnknownSourceError, get_source
+from sources import Feature, StreamMethod, UnknownSourceError, UpgradeImprovement, get_source
 from sources.ytdlp_options import MAX_OPTIONS_LENGTH, OptionsRefused, ytdlp_option_arguments
 
 
@@ -42,6 +42,15 @@ class DownloadOptionsAPIRead(ResponseBase):
     audio_only: bool
     hls_bundle: bool
     quality_choices: bool
+
+
+class UpgradeChecksAPIRead(ResponseBase):
+    """What the upgrade check can find on a Site; nothing to find means no upgrade check."""
+
+    improvements: list[UpgradeImprovement]
+    checked: list[UpgradeImprovement]
+    """The improvements a new Download Profile starts with."""
+    on_by_default: bool
 
 
 class SourceAPIRead(ResponseBase):
@@ -165,8 +174,9 @@ class SiteOptionsAPIRead(ResponseBase):
     site_name: str
     auto_subtitles: bool
     sponsorblock: bool
-    upgrade_checks: bool = False
-    """The upgrade check can download its episodes again when a better version is out."""
+    countdown_downloads: bool
+    """A Download Profile can download live episodes with their countdown, and again as the final version."""
+    upgrade_checks: UpgradeChecksAPIRead
     stream_methods: list[StreamMethod] = []
     """How RSS feeds can stream the collection's episodes without downloading them first; none for downloads only."""
     stream_video_heights: list[int] = []

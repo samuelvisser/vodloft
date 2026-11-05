@@ -11,7 +11,6 @@ export function sourceControls(item: SourcedItem) {
     const has = (feature: Parameters<typeof hasSourceFeature>[1]) => item === undefined || hasSourceFeature(item, feature)
     return {
         membershipLevels: has(SourceFeature.MEMBERSHIP_LEVELS),
-        countdownDownloads: has(SourceFeature.LIVE_EPISODES),
         movieExtras: has(SourceFeature.MOVIE_EXTRAS),
         // Listed episodes are not refreshed from their Source after they are indexed.
         metadataRefresh: item === undefined || !hasSourceFeature(item, SourceFeature.EPISODE_LISTS),

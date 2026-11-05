@@ -137,8 +137,11 @@ def _presentation(entry: MediaDownloadHistory) -> tuple[str, str, str | None]:
 
     if action == MediaDownloadHistoryAction.UPGRADE_CHECKED:
         best, kept = metadata.get("best_height"), metadata.get("kept_height")
+        offered_length, kept_length = metadata.get("offered_duration"), metadata.get("kept_duration")
         found = [
             f"Higher resolution ({kept}p → {best}p)" if value == "resolution" and best and kept
+            else f"Different length ({_length(kept_length)} → {_length(offered_length)})"
+            if value == "length" and offered_length and kept_length
             else _IMPROVEMENTS.get(str(value), str(value))
             for value in metadata.get("improvements") or ()
         ]
@@ -154,7 +157,14 @@ _IMPROVEMENTS = {
     "sponsorblock": "New SponsorBlock segments",
     "subtitles": "New subtitles",
     "codec": "Preferred codec",
+    "length": "Different length",
 }
+
+
+def _length(seconds: float) -> str:
+    """A length to the minute, such as 7h 12m."""
+    hours, minutes = divmod(round(seconds / 60), 60)
+    return f"{hours}h {minutes:02d}m" if hours else f"{minutes}m"
 
 
 @dataclass(frozen=True)

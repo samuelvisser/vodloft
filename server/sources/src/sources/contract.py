@@ -57,9 +57,6 @@ class Feature(StrEnum):
     METADATA_REFRESH = "metadata_refresh"
     """Looking published items up again for a while, with ``refresh_metadata``, so a
     title or picture changed after publication reaches VODLoft."""
-    UPGRADE_CHECKS = "upgrade_checks"
-    """Telling what a downloaded episode is offered as now, with ``upgrade_offer``, so the upgrade check
-    only downloads it again when something improved."""
     CATALOGUE_REFRESH = "catalogue_refresh"
     """Refreshing the titles, descriptions and thumbnails of a listed collection's
     episodes, and telling which ones the Source no longer has, with ``refresh_items``."""
@@ -82,6 +79,29 @@ class StreamMethod(StrEnum):
 
 VIDEO_HEIGHTS = (360, 480, 720, 1080, 1440, 2160, 4320)
 """Every video resolution a Local Media Profile can download up to."""
+
+
+class UpgradeImprovement(StrEnum):
+    """What the upgrade check can count as a better version of a download."""
+
+    RESOLUTION = "resolution"
+    SPONSORBLOCK = "sponsorblock"
+    SUBTITLES = "subtitles"
+    CODEC = "codec"
+    LENGTH = "length"
+    """The episode got longer or shorter, such as a live stream cut down after it ended."""
+
+
+@dataclass(frozen=True)
+class UpgradeChecks:
+    """What the upgrade check can find on a Site. A Site that offers no improvements has no upgrade check."""
+
+    improvements: tuple[UpgradeImprovement, ...] = ()
+    """What can count as a better version, in the order a Download Profile shows them."""
+    checked: tuple[UpgradeImprovement, ...] = ()
+    """The improvements a new Download Profile starts with."""
+    on_by_default: bool = False
+    """A new Download Profile starts with the upgrade check on."""
 
 
 @dataclass(frozen=True)
@@ -395,6 +415,9 @@ class UpgradeOffer:
     """The languages of the site's own subtitles, without auto-generated ones."""
     sponsorblock: tuple[SponsorBlockSegment, ...] | None = None
     """The SponsorBlock segments of the asked types, or None when SponsorBlock was not asked."""
+    duration: float | None = None
+    """The length of the stream the Site serves now, in seconds, for a Site that offers
+    ``UpgradeImprovement.LENGTH``; None when it could not be told."""
 
 
 @dataclass(frozen=True)
@@ -572,6 +595,10 @@ class Site:
     """The Site's streams play for any address, so a feed can send podcast apps straight to them
     instead of passing them through VODLoft."""
     downloads: DownloadOptions = DownloadOptions()
+    countdown_downloads: bool = False
+    """The Site publishes live episodes with a countdown in the recording at first, so a Download
+    Profile can download them with the countdown and again once the final version is out."""
+    upgrade_checks: UpgradeChecks = UpgradeChecks()
 
     @property
     def streams(self) -> bool:
@@ -612,8 +639,10 @@ class Source(ABC):
     cookies_help: ClassVar[str | None] = None
     """What a cookies file does for this Source, for a Source with ``Feature.COOKIES``."""
     sites: ClassVar[tuple[Site, ...]] = ()
-    """The Sites this Source is made for, such as The Daily Wire. A Source that serves many
-    sites, as yt-dlp does, names none and tells them apart in ``site_for``."""
+    """The Sites this Source is made for, such as The Daily Wire, with what this Source offers on
+    each. A Source that serves many sites, as yt-dlp does, names none and tells them apart in
+    ``site_for``. Another Source never uses these: on a Site it has no contract for, a Source
+    offers a Site's defaults."""
     sites_label: ClassVar[str | None] = None
     """What the Source downloads from, in a few words, when its name does not say so, such as
     "YouTube, and many more" for yt-dlp."""
@@ -643,7 +672,8 @@ class Source(ABC):
         return DownloadOptions.combined(site.downloads for site in self.sites)
 
     def site_for(self, url: str) -> Site | None:
-        """The Site of a link, told without a network request, or None when this Source cannot tell."""
+        """This Source's own contract for the Site of a link, told without a network request, or None
+        when this Source has none for it."""
         host = link_host(url)
         return next((site for site in self.sites if any(on_domain(host, domain) for domain in site.domains)), None)
 
@@ -725,7 +755,7 @@ class Source(ABC):
 
     def upgrade_offer(self, url: str, *, sponsorblock_categories: Sequence[str] = ()) -> UpgradeOffer:
         """What a video is offered as now, asking SponsorBlock for the given segment types.
-        Only Sources with ``Feature.UPGRADE_CHECKS`` implement it."""
+        Only Sources whose Sites offer ``upgrade_checks`` implement it."""
         raise NotImplementedError(f"{self.name} has no upgrade checks")
 
     def video_playback(self, *, slug: str, url: str, use_cookies: bool = True) -> Playback:

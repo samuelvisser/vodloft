@@ -31,6 +31,7 @@ from ...helpers.episodes.metadata import episode_refresh_offsets, update_episode
 from ...helpers.episodes.no_show import is_no_show_today_slug
 from ...helpers.episodes.same_episode import PENDING_EPISODE_PUBLISH_STATUSES
 from ...helpers.episodes.status import observe_episode_detail, resolve_episode_status
+from ...helpers.refreshed_metadata import check_upgrades_after_refresh
 from ...helpers.episodes.unusable_media import NoUsableMediaReason, mark_episode_no_usable_media
 from ..monitor_pending_episode.scheduling import MONITOR_REQUESTED_EVENT
 from .scheduling import remove_episode_metadata_jobs, schedule_remaining_metadata_checks
@@ -289,5 +290,6 @@ def _refresh_episode_from_dailywire(
         detail,
         previous_publish_status=old_status,
     )
+    check_upgrades_after_refresh(s, episode)
     s.flush()
     return True

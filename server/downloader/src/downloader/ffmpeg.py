@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -42,6 +43,30 @@ _FFMPEG_BANNER_PREFIXES = (
 def ffmpeg_available(ffmpeg_path: str = "ffmpeg") -> bool:
     """Whether the given ffmpeg binary can be found on PATH (or is an existing file)."""
     return shutil.which(ffmpeg_path) is not None
+
+
+_DURATION = re.compile(r"Duration:\s*(\d+):(\d{2}):(\d{2}(?:\.\d+)?)")
+_DURATION_TIMEOUT_SECONDS = 60
+
+
+def media_duration(media_path: str, *, ffmpeg_path: str = "ffmpeg") -> float | None:
+    """The length of a media file, or of a local HLS playlist, in seconds; None when ffmpeg cannot tell."""
+    if not ffmpeg_available(ffmpeg_path):
+        return None
+    try:
+        # Without an output, ffmpeg only describes its input, and exits with an error for the missing output.
+        result = subprocess.run(
+            [ffmpeg_path, "-hide_banner", "-nostdin", "-i", media_path],
+            capture_output=True, text=True, errors="replace", timeout=_DURATION_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        logger.warning("Could not tell the length of %s", media_path, exc_info=True)
+        return None
+    found = _DURATION.search(result.stderr)
+    if found is None:
+        return None
+    hours, minutes, seconds = found.groups()
+    return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
 
 
 def remux_to_mp4(

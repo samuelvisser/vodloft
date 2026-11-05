@@ -20,9 +20,11 @@ type Props = {
     sourceKey?: string
     /** The link of a collection that is not saved yet, which decides the tags its episodes can get. */
     collectionUrl?: string
+    /** The profile is not saved yet, so it starts with what its collection's Site suggests. */
+    newProfile?: boolean
 }
 
-export default function DownloadProfileForm({form, episodeIdentifier, seasons, collectionRoot, collectionId, sourceKey, collectionUrl}: Props) {
+export default function DownloadProfileForm({form, episodeIdentifier, seasons, collectionRoot, collectionId, sourceKey, collectionUrl, newProfile}: Props) {
     const {control, formState: {errors}} = form
     collectionRoot ??= true
 
@@ -76,7 +78,7 @@ export default function DownloadProfileForm({form, episodeIdentifier, seasons, c
                 seasons={seasons ?? []}
                 collectionId={collectionId}
             />
-            <UpgradeCheckCard form={form} collectionId={collectionId} sourceKey={sourceKey} collectionUrl={collectionUrl}/>
+            <UpgradeCheckCard form={form} collectionId={collectionId} sourceKey={sourceKey} collectionUrl={collectionUrl} newProfile={newProfile}/>
             <YouTubeSection form={form} collectionId={collectionId} sourceKey={sourceKey} collectionUrl={collectionUrl}/>
         </>
     )

@@ -405,7 +405,7 @@ class YtDlpSource(Source):
     features = frozenset({
         Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.OPTIONAL_COOKIES, Feature.API_KEY,
         Feature.QUICK_CHECK, Feature.CATALOGUE_REFRESH, Feature.SEARCH, Feature.COSTLY_SEARCH,
-        Feature.FORMAT_CHOICES, Feature.YTDLP_DOWNLOADS, Feature.UPGRADE_CHECKS, Feature.METADATA_REFRESH,
+        Feature.FORMAT_CHOICES, Feature.YTDLP_DOWNLOADS, Feature.METADATA_REFRESH,
         Feature.PENDING_CHECKS,
     })
     episode_tags = _YOUTUBE_TAGS

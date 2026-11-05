@@ -100,6 +100,9 @@ class MediaDownloadBase(HasMetadataMixin, HasTaskResourcesMixin, Base):
     subtitle_languages: Mapped[Optional[list[str]]] = mapped_column(
         JSON, nullable=True, comment="The languages of the site's own subtitles the download kept",
     )
+    duration: Mapped[Optional[float]] = mapped_column(
+        comment="The length of the downloaded file in seconds; the media item's duration is the length the site lists",
+    )
     downloaded_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()

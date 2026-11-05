@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from sources import collection_on_site, site_for, sources_for
+from sources import StreamMethod, UpgradeImprovement, collection_on_site, site_for, source_site, sources_for
 
 
 @pytest.mark.parametrize(("url", "source", "key", "name"), [
@@ -47,6 +47,49 @@ def test_the_preferred_source_follows_the_site_not_the_domain():
     ordered = [source.id for source in sources_for("https://www.dailywire.com/show/a-show", {"dailywire": "ytdlp"})]
     assert ordered == ["ytdlp", "dailywire"]
     assert [source.id for source in sources_for("https://www.dailywire.com/show/a-show")] == ["dailywire", "ytdlp"]
+
+
+def test_what_a_site_offers_comes_from_the_source_that_fetches_it():
+    url = "https://www.dailywire.com/show/the-ben-shapiro-show"
+    by_dailywire, by_ytdlp = source_site(url, "dailywire"), source_site(url, "ytdlp")
+    # Both are The Daily Wire, so a user's settings for the Site apply to both.
+    assert (by_dailywire.key, by_dailywire.name) == (by_ytdlp.key, by_ytdlp.name) == ("dailywire", "The Daily Wire")
+
+    assert by_dailywire.countdown_downloads
+    assert by_dailywire.upgrade_checks.improvements == (UpgradeImprovement.LENGTH,)
+    assert by_dailywire.upgrade_checks.on_by_default
+    assert StreamMethod.HLS in by_dailywire.stream_methods
+
+    # yt-dlp has no contract for The Daily Wire, so it offers what it offers any site.
+    assert not by_ytdlp.countdown_downloads
+    assert UpgradeImprovement.LENGTH not in by_ytdlp.upgrade_checks.improvements
+    assert not by_ytdlp.streams
+    assert by_ytdlp.upgrade_checks == source_site("https://www.example.com/clip.mp4", "ytdlp").upgrade_checks
+
+
+def test_only_youtube_offers_sponsorblock_as_a_better_version():
+    youtube = source_site("https://www.youtube.com/@channel", "ytdlp").upgrade_checks
+    assert youtube.improvements == (
+        UpgradeImprovement.RESOLUTION, UpgradeImprovement.SPONSORBLOCK, UpgradeImprovement.SUBTITLES, UpgradeImprovement.CODEC,
+    )
+    assert youtube.checked == (UpgradeImprovement.RESOLUTION, UpgradeImprovement.SPONSORBLOCK)
+    assert UpgradeImprovement.SPONSORBLOCK not in source_site("https://rumble.com/c/someone", "ytdlp").upgrade_checks.improvements
+    assert not source_site("https://npo.nl/start/serie/a-series", "npo").upgrade_checks.improvements
+
+
+def test_the_daily_wire_measures_the_stream_it_serves(monkeypatch):
+    from sources.dailywire import source as dailywire
+
+    playlists = {
+        "https://cdn.test/master.m3u8": (
+            "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=1280x720\n720/index.m3u8\n"
+            "#EXT-X-STREAM-INF:BANDWIDTH=400000,RESOLUTION=854x480\n480/index.m3u8\n"
+        ),
+        "https://cdn.test/720/index.m3u8": "#EXTM3U\n#EXTINF:6.0,\na.ts\n#EXTINF:6.0,\nb.ts\n#EXTINF:2.5,\nc.ts\n#EXT-X-ENDLIST\n",
+    }
+    monkeypatch.setattr(dailywire, "_playlist", lambda url: (playlists[url], url))
+    assert dailywire._stream_length("https://cdn.test/master.m3u8") == 14.5
+    assert dailywire._stream_length("https://cdn.test/720/index.m3u8") == 14.5
 
 
 @pytest.fixture

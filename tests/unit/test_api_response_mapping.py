@@ -71,6 +71,7 @@ def test_download_profile_view_uses_relationship_aliases():
         upgrade_after_days=7,
         upgrade_repeat="once",
         upgrade_improvements=["resolution"],
+        upgrade_length_minutes=5,
         filters=[SimpleNamespace(
             id=7, action="only", field="published", pattern=None, duration_operator=None, duration_seconds=None,
             episode_types=None, season_slugs=None, include_upcoming=False, days=None, count=25, starting_from=None,

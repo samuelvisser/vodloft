@@ -116,27 +116,38 @@ again to let the date filter delete it as usual. Kept downloads are still listed
 ## Upgrade check
 
 A download isn't always the best version of an episode. YouTube adds higher resolutions hours after an upload,
-SponsorBlock segments come in over the days after it, and subtitles get added later. The **Upgrade check** card, under
-Which episodes, downloads an episode again after a while, but only when something you care about improved.
+SponsorBlock segments come in over the days after it, and subtitles get added later. The Daily Wire sometimes edits an
+episode after it is out, such as cutting a long live stream down to its highlights. The **Upgrade check** card, under
+Which episodes, downloads an episode again after a while, but only when something you care about changed.
 
-It only shows what can improve for the Collection's site: SponsorBlock only for YouTube, subtitles only when the Local
-Media Profile stores them, and the final version only for The Daily Wire.
+What the card shows depends on the Collection's site, and on the Source that downloads it. The Daily Wire has countdown
+downloads and checks for a different length; YouTube checks for a higher resolution, SponsorBlock segments, subtitles
+and the preferred codec; other sites yt-dlp downloads check for all of those except SponsorBlock. A Daily Wire show
+added through yt-dlp gets what yt-dlp offers any site. A site with nothing to check has no Upgrade check card at all.
+Subtitles only show when the Local Media Profile stores them.
 
-- **Download again when a better version is out** turns the check on. New profiles have it on; profiles made before
-  VODLoft had the check start with it off.
+- **Download again when a better version is out** turns the check on. New profiles have it on.
 - **Check after … days**: how long after downloading the first check happens. 7 days by default.
 - **How often**: **Once, then stop**; **Twice, again after 30 days**; or **Every … days, up to 3 times**, which with
   7 days checks on day 7, 14 and 21. Every choice stops early once an episode can't get any better.
 - **Better means**: a higher resolution (up to the Local Media Profile's quality), new SponsorBlock segments of the types
   you mark or cut out, new subtitles in a language the Local Media Profile asks for, or the preferred codec (the first
   allowed codec in the Local Media Profile). A higher resolution and new SponsorBlock segments are on by default.
+  For The Daily Wire it is **a different length**: longer or shorter by more than the minutes you set, 5 by default.
 
 The check first asks the site what it has now, and only downloads when one of your improvements is there. The old
 file stays until the new one is complete. Kept downloads are checked too: Keep protects a download from being deleted,
 not from a better copy. Downloads made after the check is turned on are the ones that get checked.
 
+When a metadata refresh shows that one of your improvements changed, the check runs right away instead of waiting
+for its schedule. This includes a refresh you start yourself. Today a refresh can only tell a different length, such as
+The Daily Wire listing a new length for an episode; for anything else the check keeps its own schedule. Before downloading again, VODLoft measures the stream The Daily Wire actually
+serves, so a wrong length on the site does not cause a download. A countdown download waits for its final version
+first. Each download remembers how long its file is; VODLoft reads this from the files you already had when you
+updated, and checks Daily Wire downloads of the last 30 days right away.
+
 The episode's download history shows each check and what it found, such as **Better version found: Higher resolution
-(720p → 1080p)**. On the Collection page, an episode says when it will be checked, or that it was upgraded or checked.
+(720p → 1080p)** or **Different length (7h 12m → 3h 31m)**. On the Collection page, an episode says when it will be checked, or that it was upgraded or checked.
 
 ### Countdown and final versions
 
