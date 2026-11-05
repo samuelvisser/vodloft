@@ -72,7 +72,7 @@ def test_the_default_lock_folder_goes_when_locks_move(tmp_path, config_dir):
 def test_thumbnails_move_to_the_new_folder(tmp_path, config_dir):
     old = tmp_path / "downloads" / ".vodloft-thumbnails"
     new = tmp_path / "thumbs"
-    retired_folders.retire_changed_folders(_settings(tmp_path))
+    retired_folders.retire_changed_folders(_settings(tmp_path, thumbnail_root=old))
     old.mkdir()
     (old / "frame.jpg").write_bytes(b"jpg")
 

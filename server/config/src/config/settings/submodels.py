@@ -488,9 +488,9 @@ class DownloadSettings(SubmodelBase):
                     "Inside the download root by default, so ready files survive a container update",
     )
     thumbnail_root: Path = Field(
-        default_factory=lambda data: data["download_root"] / ".vodloft-thumbnails",
+        default_factory=lambda: get_config_path().parent / "thumbnails",
         description="Directory where VODLoft keeps the thumbnails it makes itself, such as a video's first frame "
-                    "when the video has no thumbnail of its own",
+                    "when the video has no thumbnail of its own. Next to the config file by default",
     )
     lock_root: Path = Field(
         default_factory=lambda: get_config_path().parent / "locks",
