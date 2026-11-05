@@ -45,7 +45,7 @@ from sources import MAIN_TAG, Feature, ItemRef, Source, VideoDetails, get_source
 from .episodes.events import queue_episode_status_events
 from .general import datetime_to_string
 from .progress import update_progress
-from .refreshed_metadata import apply_refreshed_details
+from .refreshed_metadata import apply_refreshed_details, check_upgrades_after_refresh
 
 logger = logging.getLogger(__name__)
 
@@ -319,6 +319,7 @@ def refresh_listed_collection(s: Session, *, collection_id: int, source: Source)
             returned += 1
         changed = apply_refreshed_details(episode, details)
         updated += changed
+        check_upgrades_after_refresh(s, episode)
     s.commit()
     if removed or returned:
         logger.info("'%s': %d episodes no longer at the Source, %d back", collection.title, removed, returned)

@@ -139,8 +139,9 @@ The check first asks the site what it has now, and only downloads when one of yo
 file stays until the new one is complete. Kept downloads are checked too: Keep protects a download from being deleted,
 not from a better copy. Downloads made after the check is turned on are the ones that get checked.
 
-A different length is also checked as soon as the metadata refresh sees The Daily Wire list a new length, in the first
-days after an episode is published. Before downloading again, VODLoft measures the stream The Daily Wire actually
+When a metadata refresh shows that one of your improvements changed, the check runs right away instead of waiting
+for its schedule. This includes a refresh you start yourself. Today a refresh can only tell a different length, such as
+The Daily Wire listing a new length for an episode; for anything else the check keeps its own schedule. Before downloading again, VODLoft measures the stream The Daily Wire actually
 serves, so a wrong length on the site does not cause a download. A countdown download waits for its final version
 first. Each download remembers how long its file is; VODLoft reads this from the files you already had when you
 updated, and checks Daily Wire downloads of the last 30 days right away.

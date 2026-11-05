@@ -31,7 +31,7 @@ from backend.services.metadata_refresh import refresh_watch_expired, site_refres
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode_publication_timing import best_effort_published_date
 from sources import ItemRef, VideoDetails, all_sources, get_source
-from ...helpers.refreshed_metadata import apply_refreshed_details
+from ...helpers.refreshed_metadata import apply_refreshed_details, check_upgrades_after_refresh
 
 logger = logging.getLogger(__name__)
 
@@ -178,6 +178,8 @@ def run_metadata_refresh(s: Session, *, now: Optional[datetime] = None) -> Sweep
         elif (details := answer.details.get(item.ref.slug)) is not None:
             row.removed_from_source = False
             counts.updated += apply_refreshed_details(row, details)
+            if isinstance(row, Episode):
+                check_upgrades_after_refresh(s, row)
         else:
             counts.failed += 1
         if refresh_watch_expired(item.published, item.offsets, now=now):

@@ -22,7 +22,7 @@ from backend.db.core import get_session
 from backend.db.datetime_types import utc_datetime
 from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
 from backend.services.sites import collection_site
-from backend.services.upgrade_check import check_changed_lengths_now, checked_improvements
+from backend.services.upgrade_check import check_refreshed_changes_now, checked_improvements
 from backend.types.download_profile_types import MediaDownloadArtifactStatus, UpgradeImprovement
 from config import get_settings
 from downloader import media_duration
@@ -62,7 +62,7 @@ def _apply(lengths: dict[int, float]) -> None:
             if isinstance(download, EpisodeMediaDownload):
                 episode = download.media
                 site = collection_site(episode.collection)
-                check_changed_lengths_now(episode, site, now)
+                check_refreshed_changes_now(episode, site, now)
                 profile = download.download_profile
                 if (
                     profile is not None and profile.upgrade_check and download.upgrade_check_at is None

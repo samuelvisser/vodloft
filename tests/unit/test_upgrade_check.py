@@ -239,7 +239,7 @@ def test_a_countdown_download_waits_for_the_final_version(db_session):
 
 
 def test_the_metadata_refresh_checks_a_changed_length_right_away(db_session):
-    from backend.services.upgrade_check import check_changed_lengths_now
+    from backend.services.upgrade_check import check_refreshed_changes_now
 
     download = _download(db_session, profile_values={"upgrade_improvements": ["length"]}, download_values={
         "duration": 7 * 3600, "upgrade_check_at": NOW + timedelta(days=7),
@@ -247,19 +247,60 @@ def test_the_metadata_refresh_checks_a_changed_length_right_away(db_session):
     episode = download.media
 
     episode.duration = 7 * 3600 + 120
-    check_changed_lengths_now(episode, DAILY_WIRE, NOW)
+    assert not check_refreshed_changes_now(episode, DAILY_WIRE, NOW)
     assert download.upgrade_check_at == NOW + timedelta(days=7)
 
     episode.duration = 3 * 3600
-    check_changed_lengths_now(episode, YOUTUBE, NOW)
+    assert not check_refreshed_changes_now(episode, YOUTUBE, NOW)
     assert download.upgrade_check_at == NOW + timedelta(days=7)
-    check_changed_lengths_now(episode, DAILY_WIRE, NOW)
+    assert check_refreshed_changes_now(episode, DAILY_WIRE, NOW)
     assert download.upgrade_check_at == NOW
+    # A check that is already due is not started again.
+    assert not check_refreshed_changes_now(episode, DAILY_WIRE, NOW)
 
     # The checks of a download that has had all of them come back too.
     download.upgrade_check_at = None
-    check_changed_lengths_now(episode, DAILY_WIRE, NOW)
+    assert check_refreshed_changes_now(episode, DAILY_WIRE, NOW)
     assert download.upgrade_check_at == NOW
+
+
+def test_a_refresh_answers_yes_no_or_unknown_per_improvement(db_session):
+    from backend.services.upgrade_check import RefreshedChange, refreshed_change
+
+    download = _download(db_session, profile_values={"upgrade_improvements": ["length", "resolution"]}, download_values={
+        "duration": 3600,
+    })
+    episode, profile = download.media, download.download_profile
+
+    episode.duration = 3600
+    assert refreshed_change("length", download, episode, profile) == RefreshedChange.NO
+    episode.duration = 2 * 3600
+    assert refreshed_change("length", download, episode, profile) == RefreshedChange.YES
+    # What a refresh does not get, it cannot tell, and neither can a length nobody knows.
+    for improvement in ("resolution", "sponsorblock", "subtitles", "codec"):
+        assert refreshed_change(improvement, download, episode, profile) == RefreshedChange.UNKNOWN
+    episode.duration = None
+    assert refreshed_change("length", download, episode, profile) == RefreshedChange.UNKNOWN
+
+
+def test_a_refresh_that_finds_a_change_starts_the_upgrade_check(db_session, monkeypatch):
+    from task_manager.tasks.helpers import refreshed_metadata
+
+    queued = []
+    monkeypatch.setattr(refreshed_metadata, "collection_site", lambda collection: DAILY_WIRE)
+    monkeypatch.setattr(refreshed_metadata, "queue_task_after_commit", lambda s, **kwargs: queued.append(kwargs))
+    download = _download(db_session, profile_values={"upgrade_improvements": ["length"]}, download_values={
+        "duration": 7 * 3600, "upgrade_check_at": NOW + timedelta(days=7),
+    })
+    episode = download.media
+
+    episode.duration = 7 * 3600
+    refreshed_metadata.check_upgrades_after_refresh(db_session, episode)
+    assert queued == []
+
+    episode.duration = 3 * 3600
+    refreshed_metadata.check_upgrades_after_refresh(db_session, episode)
+    assert queued == [{"def_key": "upgrade_check", "resource_type": "system", "resource_id": 0}]
 
 
 def test_history_says_what_improved():

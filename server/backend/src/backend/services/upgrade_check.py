@@ -9,6 +9,7 @@ complete. What can count as better is the Site's: its contract lists the improve
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from datetime import datetime, timedelta
 from typing import Sequence
 
@@ -62,22 +63,54 @@ def schedule_first_upgrade_check(download: EpisodeMediaDownload, site: Site, now
     download.upgrade_check_at = now + timedelta(days=profile.upgrade_after_days)
 
 
-def check_changed_lengths_now(episode: Episode, site: Site, now: datetime) -> None:
-    """Check an episode's downloads right away when the metadata refresh sees a length that differs from
-    their file's. The check itself measures the stream before anything is downloaded again."""
+class RefreshedChange(StrEnum):
+    """What a metadata refresh can tell about one improvement: it changed, it did not, or the refresh cannot tell."""
+
+    YES = "yes"
+    NO = "no"
+    UNKNOWN = "unknown"
+
+
+def refreshed_change(
+    improvement: str, download: EpisodeMediaDownload, episode: Episode, profile: DownloadProfile,
+) -> RefreshedChange:
+    """Whether the episode's refreshed metadata shows that an improvement changed since the download.
+
+    Only the length is in the metadata a refresh gets; for anything else a refresh cannot tell.
+    """
+    if improvement == UpgradeImprovement.LENGTH.value:
+        if not download.duration or not episode.duration:
+            return RefreshedChange.UNKNOWN
+        return RefreshedChange.YES if length_changed(download.duration, episode.duration, profile) else RefreshedChange.NO
+    return RefreshedChange.UNKNOWN
+
+
+def check_refreshed_changes_now(episode: Episode, site: Site, now: datetime) -> bool:
+    """Check an episode's downloads right away when its refreshed metadata shows that something the profile
+    counts as better changed. The check itself asks the Source again before anything is downloaded again.
+
+    Returns whether a check became due now, so the refresh can start the upgrade check.
+    """
+    made_due = False
     for download in episode.downloads:
         if not isinstance(download, EpisodeMediaDownload):
             continue
         profile = download.download_profile
         if (
             profile is None or not profile.enable_profile or not profile.upgrade_check
-            or UpgradeImprovement.LENGTH.value not in checked_improvements(site, profile)
             or download.artifact_status != MediaDownloadArtifactStatus.AVAILABLE.value or download.redownload_when_final
         ):
             continue
         due = download.upgrade_check_at
-        if length_changed(download.duration, episode.duration, profile) and (due is None or utc_datetime(due) > now):
+        if due is not None and utc_datetime(due) <= now:
+            continue
+        if any(
+            refreshed_change(improvement, download, episode, profile) == RefreshedChange.YES
+            for improvement in checked_improvements(site, profile)
+        ):
             download.upgrade_check_at = now
+            made_due = True
+    return made_due
 
 
 def next_upgrade_check_at(profile: DownloadProfile, checks_done: int, now: datetime) -> datetime | None:
