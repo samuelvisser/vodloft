@@ -39,7 +39,17 @@ export default function Sidebar() {
         <aside className="sidebar" aria-label="Sidebar">
             <header className="sidebar-header" style={{display: 'flex', justifyContent: 'center', paddingTop: 6}}>
                 <NavLink to="/" className="brand" style={{display: 'flex', alignItems: 'center', gap: 2}}>
-                    <img src="/logo-wide-vodloft.png" alt="VODLoft logo" width={150} style={{borderRadius: 2}} />
+                    {/* Safari on iPhone and iPad sometimes left this logo blank: it decodes large images in the
+                        background and then does not always repaint the sticky sidebar. The file is sized for the
+                        sidebar and decoded with the page, so there is nothing to repaint afterwards. */}
+                    <img
+                        src="/logo-wide-vodloft.png"
+                        alt="VODLoft logo"
+                        width={150}
+                        height={78}
+                        decoding="sync"
+                        style={{borderRadius: 2, height: 'auto'}}
+                    />
                 </NavLink>
             </header>
 
