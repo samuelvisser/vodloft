@@ -302,15 +302,24 @@ export default function StreamProfileForm({
                             label: `Use ${streamSourceName} stream`,
                             description: (
                                 <ReadMore summary={<span>Stream episodes straight from {streamSourceName}.</span>}>
-                                    <p>If enabled, VODLoft can stream episodes straight from {streamSourceName},
-                                        without downloading them first.</p>
-                                    <p>If Use Downloads is enabled too, VODLoft will prefer downloaded media,
+                                    <p>
+                                        If enabled, VODLoft can stream episodes straight from {streamSourceName},
+                                        without downloading them first.
+                                    </p>
+                                    <p>
+                                        If Use Downloads is enabled too, VODLoft will prefer downloaded media,
                                         but stream directly when no downloaded media exists.
                                     </p>
-                                    <p>This could come in handy if you only intend to download a few of the latest episodes,
-                                    but still want to retain the ability to stream many more.</p>
-                                    <p>Some sites only stream in a lower quality: YouTube streams video at 360p, and its
-                                        audio as it is. Download the episodes for anything better.</p>
+                                    <p>
+                                        This could come in handy if you only intend to download a few of the latest episodes,
+                                    but still want to retain the ability to stream many more.
+                                    </p>
+                                    {streamSourceName == 'YouTube' ? (
+                                        <p>
+                                            Some sites only stream in a lower quality: YouTube streams video at 360p, and its
+                                            audio as it is. Download the episodes for anything better.
+                                        </p>
+                                    ) : null}
                                 </ReadMore>
                             ),
                         }] : []),
