@@ -29,3 +29,10 @@ export function presentIndexingLabel(operation: TaskOperationRead): string {
     const found = operation.progressMeta?.found
     return typeof found === 'number' ? `Indexing… ${found} episode${found === 1 ? '' : 's'} found` : 'Indexing…'
 }
+
+/** A Collection's Sync now scan: its percentage when the Source knows the total, otherwise the new episodes it found so far. */
+export function presentScanningLabel(operation: TaskOperationRead): string {
+    if (typeof operation.progress === 'number' && operation.progress > 0) return `Scanning… ${operation.progress}%`
+    const found = operation.progressMeta?.found
+    return typeof found === 'number' ? `Scanning… ${found} new episode${found === 1 ? '' : 's'} found` : 'Scanning…'
+}

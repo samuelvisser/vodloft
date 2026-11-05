@@ -1,16 +1,23 @@
 import {useEffect, useState} from 'react'
 import {keepPreviousData, useQuery, useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
+import ProgressButton from '../common/ProgressButton'
+import {useActiveOperation} from '../OperationNotifier/OperationNotifier'
+import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import './CollectionSyncLogModal.css'
 import {faIcon} from '../../icons/faIcon'
 
 type Props = {
+  collectionId: number
   collectionSlug: string
   collectionTitle: string
   open: boolean
-  syncing: boolean
+  /** While Sync now is asking the backend to start its scan, before the scan's operation is known. */
+  starting: boolean
   onClose: () => void
   onSyncNow: () => void | Promise<void>
+  onCancelSync?: () => void
+  cancelSyncDisabled?: boolean
 }
 
 /** One scan that looked at the Collection: a full scan or a quick check. */
@@ -43,9 +50,13 @@ function formatDate(value: string | null | undefined): string {
   return new Date(normalized).toLocaleString()
 }
 
-export default function CollectionSyncLogModal({collectionSlug, collectionTitle, open, syncing, onClose, onSyncNow}: Props) {
+export default function CollectionSyncLogModal({
+  collectionId, collectionSlug, collectionTitle, open, starting, onClose, onSyncNow, onCancelSync, cancelSyncDisabled,
+}: Props) {
   const [page, setPage] = useState(1)
   const queryClient = useQueryClient()
+  const scanOperation = useActiveOperation('collection.sync', 'collection', collectionId)
+  const scanning = starting || scanOperation !== undefined
 
   useEffect(() => {
     if (open) setPage(1)
@@ -68,8 +79,8 @@ export default function CollectionSyncLogModal({collectionSlug, collectionTitle,
 
   // A sync that just finished belongs at the top of the log.
   useEffect(() => {
-    if (!syncing) void queryClient.invalidateQueries({queryKey: ['collection', collectionSlug, 'syncLog']})
-  }, [syncing, collectionSlug, queryClient])
+    if (!scanning) void queryClient.invalidateQueries({queryKey: ['collection', collectionSlug, 'syncLog']})
+  }, [scanning, collectionSlug, queryClient])
 
   const total = log.data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -156,10 +167,17 @@ export default function CollectionSyncLogModal({collectionSlug, collectionTitle,
 
           <div className="modal-actions collection-sync-log-actions">
             <button type="button" className="btn" onClick={onClose}>Close</button>
-            <button type="button" className="btn btn-primary" onClick={() => void onSyncNow()} disabled={syncing}>
-              <FontAwesomeIcon icon={faIcon('fass', syncing ? 'spinner' : 'arrows-rotate')} spin={syncing} aria-hidden="true" />
-              <span>{syncing ? 'Syncing...' : 'Sync now'}</span>
-            </button>
+            <ProgressButton
+              definition={frontendOperationDefinitions['collection.sync']}
+              resourceId={collectionId}
+              label="Sync now"
+              icon={faIcon('fass', 'arrows-rotate')}
+              onClick={() => void onSyncNow()}
+              starting={starting}
+              onCancel={onCancelSync}
+              cancelDisabled={cancelSyncDisabled}
+              cancelLabel="Cancel sync"
+            />
           </div>
         </div>
       </div>

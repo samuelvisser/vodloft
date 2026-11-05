@@ -692,12 +692,15 @@ export default function CollectionPage() {
       </article>
 
       <CollectionSyncLogModal
+        collectionId={collection.id}
         collectionSlug={id}
         collectionTitle={collection.title}
         open={syncLogOpen}
-        syncing={syncBusy}
+        starting={syncStarting}
         onClose={() => setSyncLogOpen(false)}
         onSyncNow={syncNow}
+        onCancelSync={syncOperation ? () => void controlTaskOperation(syncOperation.id, 'cancel', 'Sync') : undefined}
+        cancelSyncDisabled={operationControlBusy !== null}
       />
 
       {existingFilesProfileId !== null && can('library', 'manage') && (
