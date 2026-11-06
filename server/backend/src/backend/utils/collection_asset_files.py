@@ -9,12 +9,11 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
-import time
 from typing import Callable
 
 import requests
 
-from config import get_settings
+from backend.utils.file_locks import file_lock, lock_file_path
 
 MAX_ASSET_BYTES = 20 * 1024 * 1024
 _NATIVE_FORMATS = {"jpg", "png"}
@@ -59,46 +58,9 @@ def asset_file_hash(path: Path) -> str | None:
 def asset_file_lock(download_root: Path, target: Path):
     """Serialize cooperating workers/processes without stale crash-time leases."""
     target = safe_asset_path(download_root, target)
-    directory = Path(get_settings().download_settings.lock_root) / "assets"
-    lock_path = directory / (hashlib.sha256(str(target).encode()).hexdigest() + ".lock")
-    directory.mkdir(parents=True, exist_ok=True)
-    with lock_path.open("a+b") as lock:
-        if os.name == "nt":
-            import msvcrt
-            if lock.tell() == 0:
-                lock.write(b"\0")
-                lock.flush()
-
-            def acquire():
-                lock.seek(0)
-                msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
-
-            def release():
-                lock.seek(0)
-                msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
-        else:
-            import fcntl
-
-            def acquire():
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-            def release():
-                fcntl.flock(lock, fcntl.LOCK_UN)
-
-        deadline = time.monotonic() + 30
-        while True:
-            try:
-                acquire()
-                break
-            except (BlockingIOError, OSError):
-                if time.monotonic() >= deadline:
-                    raise TimeoutError("Timed out waiting for the collection artwork writer")
-                time.sleep(0.05)
-        try:
-            yield target
-        finally:
-            release()
-    # Do not unlink lock files: another process can still have their inode open.
+    lock_path = lock_file_path("assets", hashlib.sha256(str(target).encode()).hexdigest())
+    with file_lock(lock_path, timeout_seconds=30, holder="the collection artwork writer"):
+        yield target
 
 
 def _source_image_format(path: Path) -> str:

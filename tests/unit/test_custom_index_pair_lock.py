@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from backend.utils import file_locks
 from task_manager.tasks.helpers import custom_index_readiness
 
 pytestmark = pytest.mark.enable_socket
@@ -20,9 +21,10 @@ def _hold_pair_lock_in_process(
     acquired,
     release,
 ) -> None:
+    from backend.utils import file_locks
     from task_manager.tasks.helpers import custom_index_readiness as lock_helper
 
-    lock_helper.get_settings = lambda: SimpleNamespace(
+    file_locks.get_settings = lambda: SimpleNamespace(
         download_settings=SimpleNamespace(lock_root=lock_root)
     )
 
@@ -37,7 +39,7 @@ def _hold_pair_lock_in_process(
 
 def _use_lock_root(monkeypatch, lock_root: Path) -> None:
     monkeypatch.setattr(
-        custom_index_readiness,
+        file_locks,
         "get_settings",
         lambda: SimpleNamespace(download_settings=SimpleNamespace(lock_root=lock_root)),
     )
