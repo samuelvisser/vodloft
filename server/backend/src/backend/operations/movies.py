@@ -23,6 +23,7 @@ class MovieExtrasRefreshOperation(OperationDefinition[Movie]):
 
 class MovieRedownloadOperation(OperationDefinition[Movie]):
     kind = "movie.redownload_media"
+    request_priority = "bulk"
     resource_type = "movie"
 
     def __init__(self, movie: Movie, *, media_download_ids: Sequence[int]) -> None:

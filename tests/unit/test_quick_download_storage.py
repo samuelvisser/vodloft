@@ -185,7 +185,7 @@ def test_free_space_check(tmp_path, monkeypatch):
 def test_startup_recovery_and_the_scheduled_sweep_use_the_quick_folder(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
-    import backend.api.endpoints.feeds.cached_video as cached_video
+    import backend.services.video_cache as cached_video
     import backend.services.download_recovery as download_recovery
     from backend.services.quick_downloads import sweep_quick_downloads
     from config import get_settings

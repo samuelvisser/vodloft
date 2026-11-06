@@ -37,7 +37,7 @@ from backend.types.stream_profile_types import (
     RssVideoOutputMode,
 )
 from backend.utils.feed_urls import request_base_url
-from .cached_video import get_cached_mp4_size
+from backend.services.video_cache import get_cached_mp4_size
 from .source_stream import estimated_audio_size
 from .source_tracks import NEWEST_EPISODES_JOINED_AHEAD, EpisodeRef, join_in_background, joined_key, joins_mp4, stream_height
 from backend.services.collection_cookies import uses_cookies
@@ -1027,7 +1027,7 @@ def _join_newest_ahead(
         source = get_source(profile.collection.source_key)
     except UnknownSourceError:
         return
-    if not source.has(Feature.EPISODE_LISTS):
+    if not source.has(Feature.PAGE_STREAMS):
         return
     use_cookies = uses_cookies(profile.collection)
     waiting = [

@@ -212,7 +212,6 @@ def test_downloading_one_extra_survives_another_movies_shared_clip(
             name="Movies",
             output_template="/downloads/movies/{{ movie_title }}/{{ title }}.ext",
             preferred_format="format_1080p",
-            append_media_type_to_filename=False,
         )
         session.add(profile)
         session.flush()
@@ -300,7 +299,6 @@ def test_shared_clip_downloads_remain_scoped_to_parent_movie_and_profile(
             name="Movies",
             output_template="/downloads/movies/{{ movie_title }}/{{ slug }}.ext",
             preferred_format="format_1080p",
-            append_media_type_to_filename=False,
         )
         session.add(profile)
         session.flush()

@@ -48,7 +48,6 @@ def test_pending_movie_gets_one_lookup_after_tmdb_is_configured(tmp_path, monkey
             name=f"Movies {index}",
             output_template=f"/downloads/profile-{index}/{{{{ title }}}}.ext",
             preferred_format="format_1080p",
-            append_media_type_to_filename=True,
         )
         for index in range(3)
     ]

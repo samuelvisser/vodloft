@@ -11,6 +11,7 @@ import {
   type TaskLedgerPageRead,
 } from '../types/schemas/task'
 import {usePageActive} from './pageActivity'
+import {apiUrl} from './api'
 
 export type TaskLedgerCollectionQuery = {
   definitionKey?: string
@@ -315,7 +316,7 @@ export function useTaskLedgerInfinite({
       if (startedAfterValue) params.set('started_after', startedAfterValue)
 
       const response = await fetch(
-        `${(window as any).appConfig.API_URL}/tasks/ledger?${params}`,
+        `${apiUrl()}/tasks/ledger?${params}`,
         {signal, credentials: 'include'},
       )
       if (!response.ok) throw new Error(`HTTP ${response.status}`)

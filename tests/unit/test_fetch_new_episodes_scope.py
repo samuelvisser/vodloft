@@ -85,6 +85,9 @@ def test_global_scan_processes_every_collection(monkeypatch, collections):
     monkeypatch.setattr(service, "MiddlewareClient", Mock())
     fetch_collection = AsyncMock(side_effect=[2, 1])
     monkeypatch.setattr(service, "_fetch_collection", fetch_collection)
+    finished = Mock()
+    monkeypatch.setattr(service, "finish_index", finished)
+    monkeypatch.setattr(service, "newest_media_item_id", lambda _session: 0)
 
     # Exercise the real selector and service with the global scope;
     # remote episode retrieval is intentionally isolated from this scope test.
@@ -94,6 +97,8 @@ def test_global_scan_processes_every_collection(monkeypatch, collections):
     assert result.episodes_found == 3
     assert [collection.collection_id for collection in result.collections] == [1, 17]
     assert fetch_collection.await_count == 2
+    # Every collection is finished the same way, whichever Source found its episodes.
+    assert [call.kwargs["found"] for call in finished.call_args_list] == [2, 1]
     assert [call.kwargs["collection"].id for call in fetch_collection.await_args_list] == [1, 17]
     assert result.as_data()["collections"] == [
         {"collection_id": 1, "collection_slug": "first-collection", "collection_title": "First Show", "episodes_found": 2},

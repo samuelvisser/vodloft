@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 
 import requests
@@ -16,6 +16,7 @@ from .api.dw_api.client import ByShowSeason, MiddlewareClient
 from .api.dw_api.movie import MovieMiddlewareClient
 from .api.records import DwEpisodeRecord
 from .auth import DeviceAuthClient
+from .auth.storage import TokenStore
 from .links import _access_token, _first, parse_link, resolve_link
 from .playback import resolve_movie_playback
 
@@ -79,6 +80,8 @@ class DailyWireSource(Source):
         Feature.LOGIN,
         Feature.LIVE_EPISODES,
         Feature.MEMBERSHIP_LEVELS,
+        Feature.EPISODE_LOOKUPS,
+        Feature.OWN_STUDIO,
     })
     episode_tags = (
         EpisodeTag(MAIN_TAG, "Episode", "A normal episode of the show", "episode", "episodes", main=True),
@@ -165,6 +168,11 @@ class DailyWireSource(Source):
             is_extra=is_extra, extra_slug=extra_slug, is_official_trailer=is_official_trailer,
         )
         return Playback(url=selection.url, metadata=selection.metadata)
+
+    def import_sign_in(self, records: Mapping[str, str]) -> None:
+        store = TokenStore()
+        for store_key, record in records.items():
+            store.store_record(store_key, str(record))
 
 
 def _playlist(url: str) -> tuple[str, str]:

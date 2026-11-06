@@ -1,4 +1,4 @@
-from enum import Enum, StrEnum
+from enum import StrEnum
 from typing import Annotated
 
 from pydantic import Field
@@ -16,24 +16,6 @@ class MediaDownloadArtifactStatus(StrEnum):
 
     ABSENT = "absent"
     AVAILABLE = "available"
-    MISSING = "missing"
-    CORRUPTED = "corrupted"
-
-
-class MediaDownloadStatus(Enum):
-    """Legacy wire values kept for migration/test compatibility only.
-
-    Runtime code must use TaskRun/TaskOperation for execution state and
-    MediaDownloadArtifactStatus for persistent file state.
-    """
-
-    PENDING = "pending"
-    DOWNLOADED = "downloaded"
-    DOWNLOADING = "downloading"
-    REDOWNLOADED = "redownloaded"
-    LOCAL_PROCESSING = "local_processing"
-    CANCELED = "canceled"
-    ERROR = "error"
     MISSING = "missing"
     CORRUPTED = "corrupted"
 

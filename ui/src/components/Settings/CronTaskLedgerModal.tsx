@@ -1,12 +1,10 @@
-import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {faIcon} from '../../icons/faIcon'
+import LedgerModal, {formatLedgerDate} from '../common/LedgerModal'
 
 import ProgressButton from '../common/ProgressButton'
 import type {FrontendOperationDefinition} from '../../lib/operationDefinitions'
 import {useTaskLedgerInfinite, type TaskLedgerCollectionQuery} from '../../lib/taskLedger'
 import type {TaskLedgerEntryRead} from '../../types/schemas/task'
-import {useLoadMoreOnScroll} from '../../lib/useLoadMoreOnScroll'
-import './CronTaskLedgerModal.css'
 
 type Props = {
     open: boolean
@@ -21,12 +19,6 @@ type Props = {
 }
 
 const PAGE_SIZE = 25
-
-function formatDate(value: string | null | undefined): string {
-    if (!value) return '—'
-    const normalized = /(?:Z|[+-]\d\d:\d\d)$/i.test(value) ? value : `${value}Z`
-    return new Date(normalized).toLocaleString()
-}
 
 function formatDuration(value: number | null | undefined): string {
     if (value == null || !Number.isFinite(value)) return '—'
@@ -98,102 +90,47 @@ export default function CronTaskLedgerModal({
         enabled: open,
     })
 
-    const entries = ledger.items
-    const loadingMore = ledger.isFetchingNextPage
-    const moreFailed = ledger.isFetchNextPageError
-    const {rootRef, endRef} = useLoadMoreOnScroll<HTMLDivElement, HTMLDivElement>(
-        open && ledger.hasNextPage && !loadingMore && !moreFailed,
-        () => void ledger.fetchNextPage(),
-    )
-
-    if (!open) return null
-
     return (
-        <div className="modal-overlay" role="presentation" onClick={onClose}>
-            <div
-                className="modal cron-task-ledger-modal"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="cron-task-ledger-title"
-                onClick={(event) => event.stopPropagation()}
-            >
-                <div className="modal-header cron-task-ledger-header">
-                    <div className="modal-icon" aria-hidden>
-                        <FontAwesomeIcon icon={faIcon('fass', 'file-lines')}/>
-                    </div>
-                    <div>
-                        <h2 id="cron-task-ledger-title" className="modal-title">{title} log</h2>
-                        <div className="cron-task-ledger-subtitle">Task ledger</div>
-                    </div>
-                </div>
-
-                <div className="cron-task-ledger-content" ref={rootRef}>
-                    {ledger.isLoading ? (
-                        <p className="modal-text">Loading task history...</p>
-                    ) : ledger.isError && entries.length === 0 ? (
-                        <p className="modal-text">Could not load task history.</p>
-                    ) : entries.length === 0 ? (
-                        <p className="modal-text">No runs have been recorded yet.</p>
-                    ) : (
-                        <div className="cron-task-ledger-table" role="table" aria-label={`${title} task history`}>
-                            <div className="cron-task-ledger-row cron-task-ledger-row-header" role="row">
-                                <span role="columnheader">Ran</span>
-                                <span role="columnheader">Result</span>
-                                <span role="columnheader">Duration</span>
-                            </div>
-                            {entries.map((entry) => {
-                                const target = targetLabel(entry, query)
-                                const detail = statusDetail(entry)
-                                return (
-                                    <div className="cron-task-ledger-row" role="row" key={entry.id}>
-                                        <span role="cell">{formatDate(entry.startedAt ?? entry.finishedAt)}</span>
-                                        <span
-                                            role="cell"
-                                            className="cron-task-ledger-result"
-                                            title={detail ?? undefined}
-                                        >
-                                            <span className={`cron-task-ledger-status is-${entry.status.toLowerCase()}`}>
-                                                {statusLabel(entry.status)}
-                                            </span>
-                                            {target ? <small>{target}</small> : null}
-                                        </span>
-                                        <span role="cell">{formatDuration(entry.runtimeMs)}</span>
-                                    </div>
-                                )
-                            })}
-                        </div>
-                    )}
-                    {entries.length > 0 && (
-                        <div className="cron-task-ledger-more" ref={endRef} aria-live="polite">
-                            {moreFailed ? (
-                                <>
-                                    Could not load more runs.
-                                    <button type="button" className="btn" onClick={() => void ledger.fetchNextPage()}>
-                                        Try again
-                                    </button>
-                                </>
-                            ) : loadingMore ? 'Loading more runs…' : null}
-                        </div>
-                    )}
-                </div>
-
-                <div className="cron-task-ledger-footer">
-                    <div className="modal-actions cron-task-ledger-actions">
-                        <button type="button" className="btn" onClick={onClose}>Close</button>
-                        <ProgressButton
-                            definition={definition}
-                            resourceId={0}
-                            label="Run now"
-                            icon={faIcon('fass', 'play')}
-                            onClick={() => void onRunNow()}
-                            starting={starting}
-                            onCancel={() => void onCancel()}
-                            cancelDisabled={canceling}
-                            cancelLabel={`Cancel ${definition.label}`}
-                        />
-                    </div>
-                </div>
-            </div>
-        </div>
+        <LedgerModal<TaskLedgerEntryRead>
+            open={open}
+            title={`${title} log`}
+            subtitle="Task ledger"
+            icon={faIcon('fass', 'file-lines')}
+            noun="runs"
+            tableLabel={`${title} task history`}
+            pages={ledger}
+            gridColumns="minmax(0, 1fr) 160px 82px"
+            rowKey={(entry) => entry.id}
+            columns={[
+                {header: 'Ran', cell: (entry) => formatLedgerDate(entry.startedAt ?? entry.finishedAt)},
+                {
+                    header: 'Result',
+                    cell: (entry) => {
+                        const target = targetLabel(entry, query)
+                        return (
+                            <span className="ledger-modal__detail" title={statusDetail(entry) ?? undefined}>
+                                <span className={`is-${entry.status.toLowerCase()}`}>{statusLabel(entry.status)}</span>
+                                {target ? <small>{target}</small> : null}
+                            </span>
+                        )
+                    },
+                },
+                {header: 'Duration', cell: (entry) => formatDuration(entry.runtimeMs), wideOnly: true},
+            ]}
+            onClose={onClose}
+            actions={
+                <ProgressButton
+                    definition={definition}
+                    resourceId={0}
+                    label="Run now"
+                    icon={faIcon('fass', 'play')}
+                    onClick={() => void onRunNow()}
+                    starting={starting}
+                    onCancel={() => void onCancel()}
+                    cancelDisabled={canceling}
+                    cancelLabel={`Cancel ${definition.label}`}
+                />
+            }
+        />
     )
 }

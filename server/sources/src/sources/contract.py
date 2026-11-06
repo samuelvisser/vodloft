@@ -51,7 +51,7 @@ class Feature(StrEnum):
     container and codec, and "Best" is whatever the Source's program picks on
     its own. Without it, "Best" is MP4 video at the highest resolution and the
     other choices are not offered."""
-    YTDLP_DOWNLOADS = "ytdlp_downloads"
+    YTDLP_OPTIONS = "ytdlp_options"
     """Your own yt-dlp options apply to this Source's downloads. Only the yt-dlp Source has it: NPO Start
     also downloads with yt-dlp, but as a Source of its own it takes no yt-dlp options."""
     METADATA_REFRESH = "metadata_refresh"
@@ -60,6 +60,18 @@ class Feature(StrEnum):
     CATALOGUE_REFRESH = "catalogue_refresh"
     """Refreshing the titles, descriptions and thumbnails of a listed collection's
     episodes, and telling which ones the Source no longer has, with ``refresh_items``."""
+    EPISODE_LOOKUPS = "episode_lookups"
+    """VODLoft walks the Source's shows itself and looks each episode up on its own: to index a show,
+    to follow an upcoming or live episode until it is out, and to refresh its details after
+    publication. Sources with ``EPISODE_LISTS`` list and check their episodes in batches instead."""
+    PAGE_STREAMS = "page_streams"
+    """A feed streams an episode from the streams of its video page (``media_stream``,
+    ``media_tracks``, ``live_stream``), which VODLoft can pass on, and MP4 video comes straight from
+    the page. Without it a feed is sent to the links ``episode_media`` gives, and MP4 video is
+    joined from the HLS stream first."""
+    OWN_STUDIO = "own_studio"
+    """The service makes its own shows and movies, so VODLoft names it as the studio of what it
+    downloads. Without it the studio is left to the media itself."""
     PENDING_CHECKS = "pending_checks"
     """Listing upcoming and live videos with their publish status, and looking them up again
     with ``check_pending`` until they are published. VODLoft shows them, but never records one
@@ -680,6 +692,11 @@ class Source(ABC):
         host = link_host(url)
         return next((site for site in self.sites if any(on_domain(host, domain) for domain in site.domains)), None)
 
+    def refresh_intervals_of(self, site_key: str) -> str | None:
+        """The refresh schedule this Source knows for the Site with the key, as its ``refresh_intervals``
+        say, or None when it knows none. A Source that tells its Sites apart in ``site_for`` implements it."""
+        return next((site.refresh_intervals for site in self.sites if site.key == site_key), None)
+
     def collection_ref(self, url: str) -> str | None:
         """The id one of this Source's ``sites`` gives the collection at the link, told from the
         link alone, or None when it is not a collection's link. A Source that names Sites implements it."""
@@ -718,26 +735,25 @@ class Source(ABC):
     def episode_media(
         self, *, slug: str, members_only: bool, interactive: bool = False,
     ) -> EpisodeMedia:
-        """Look up the current media URLs of an episode. Only Sources whose collections
-        do not have ``Feature.EPISODE_LISTS`` implement it; the others play each
-        episode with ``video_playback``."""
+        """Look up the current media URLs of an episode. Only Sources without
+        ``Feature.PAGE_STREAMS`` implement it; the others play each episode with ``video_playback``."""
         raise NotImplementedError(f"{self.name} plays its episodes with video_playback")
 
     def media_stream(self, url: str, *, audio: bool, use_cookies: bool = True) -> MediaStream | None:
         """The audio or video stream of a listed episode, for an RSS feed that streams it. Only Sources
-        with ``Feature.EPISODE_LISTS`` whose Site ``streams`` implement it. None when the episode has no
+        with ``Feature.PAGE_STREAMS`` whose Site ``streams`` implement it. None when the episode has no
         such stream; ``use_cookies`` as for ``video_playback``."""
         raise NotImplementedError(f"{self.name} cannot stream episodes")
 
     def media_tracks(self, url: str, *, use_cookies: bool = True) -> MediaTracks | None:
         """The video and audio tracks of a listed episode, for an RSS feed that streams it as HLS or joins
-        its MP4. Only Sources with ``Feature.EPISODE_LISTS`` whose Site streams ``StreamMethod.HLS``
+        its MP4. Only Sources with ``Feature.PAGE_STREAMS`` whose Site streams ``StreamMethod.HLS``
         implement it. None when the episode has no such tracks."""
         raise NotImplementedError(f"{self.name} cannot stream episodes as tracks")
 
     def live_stream(self, url: str, *, use_cookies: bool = True) -> LiveStream | None:
         """A listed episode's HLS playlists while it is live, for an RSS feed. Only Sources with
-        ``Feature.EPISODE_LISTS`` whose Site streams ``StreamMethod.LIVE`` implement it. None when the
+        ``Feature.PAGE_STREAMS`` whose Site streams ``StreamMethod.LIVE`` implement it. None when the
         episode is not live."""
         raise NotImplementedError(f"{self.name} cannot stream live episodes")
 
@@ -832,6 +848,11 @@ class Source(ABC):
     def update_program(self) -> ProgramStatus:
         """Fetch the latest version of the program and use it from now on."""
         raise NotImplementedError(f"{self.name} has no program to update")
+
+    def import_sign_in(self, records: Mapping[str, str]) -> None:
+        """Take over the sign-in another program kept, such as WireLoft's, for a Source with
+        ``Feature.LOGIN``: each record in this Source's own stored form, by its store key."""
+        raise NotImplementedError(f"{self.name} has no sign-in to take over")
 
     def needs_cookies(self, error: str) -> bool:
         """True when a failed download says signing in would help, for a Source with ``Feature.OPTIONAL_COOKIES``."""

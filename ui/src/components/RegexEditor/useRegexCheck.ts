@@ -2,6 +2,7 @@ import {useEffect, useState} from 'react'
 
 import type {ExampleCollection} from '../../lib/collectionExamples'
 import {RegexCheckSchema, type RegexCheck} from '../../types/schemas/regex'
+import {apiUrl} from '../../lib/api'
 
 export type RegexCheckRequest = {
     pattern: string
@@ -29,7 +30,7 @@ export function useRegexCheck(request: RegexCheckRequest): RegexCheckState {
         setState((current) => ({...current, loading: true}))
         const timer = window.setTimeout(async () => {
             try {
-                const response = await fetch(`${(window as any).appConfig.API_URL}/regex/check`, {
+                const response = await fetch(`${apiUrl()}/regex/check`, {
                     method: 'POST',
                     credentials: 'include',
                     headers: {'Content-Type': 'application/json'},

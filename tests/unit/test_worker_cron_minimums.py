@@ -66,22 +66,22 @@ def test_worker_cron_registry_resolves_settings_and_enable_fields():
         "find_episodes_cron_enabled",
     )
 
-    assert len(specs) == 7
+    assert len(specs) == 6
 
 
 def test_runtime_settings_no_longer_repeat_worker_policy_validation():
     values = _settings_document()
-    values["new_episode_schedule"]["monitor_pending_episode_cron"] = "* * * * *"
+    values["new_episode_schedule"]["monitor_no_usable_media_episode_cron"] = "* * * * *"
 
     settings = AppSettings.model_validate(values)
 
-    assert settings.new_episode_schedule.monitor_pending_episode_cron == "* * * * *"
+    assert settings.new_episode_schedule.monitor_no_usable_media_episode_cron == "* * * * *"
 
 
 def test_startup_worker_validation_reports_too_fast_cron():
     settings = AppSettings(timezone="UTC")
     values = settings.model_dump(mode="python")
-    values["new_episode_schedule"]["monitor_pending_episode_cron"] = "* * * * *"
+    values["new_episode_schedule"]["monitor_no_usable_media_episode_cron"] = "* * * * *"
     settings = AppSettings.model_validate(values)
 
     errors = worker_cron_validation_errors(settings)
@@ -89,7 +89,7 @@ def test_startup_worker_validation_reports_too_fast_cron():
     matching = [
         error
         for error in errors
-        if error.field_path == ("new_episode_schedule", "monitor_pending_episode_cron")
+        if error.field_path == ("new_episode_schedule", "monitor_no_usable_media_episode_cron")
     ]
     assert len(matching) == 1
     assert "requires at least 120 seconds" in str(matching[0])
@@ -132,12 +132,12 @@ def test_settings_api_rejects_too_fast_worker_cron_on_the_cron_field():
         by_alias=True,
         mode="json",
     )
-    values["newEpisodeSchedule"]["monitorPendingEpisodeCron"] = "* * * * *"
+    values["newEpisodeSchedule"]["monitorNoUsableMediaEpisodeCron"] = "* * * * *"
 
     with pytest.raises(ValidationError, match="requires at least 120 seconds") as exc_info:
         SettingsAPIUpdate.model_validate({
             "values": values,
-            "changedFields": ["newEpisodeSchedule.monitorPendingEpisodeCron"],
+            "changedFields": ["newEpisodeSchedule.monitorNoUsableMediaEpisodeCron"],
         })
 
     matching_errors = [
@@ -146,7 +146,7 @@ def test_settings_api_rejects_too_fast_worker_cron_on_the_cron_field():
         if error["loc"] == (
             "values",
             "newEpisodeSchedule",
-            "monitorPendingEpisodeCron",
+            "monitorNoUsableMediaEpisodeCron",
         )
     ]
     assert len(matching_errors) == 1
@@ -202,7 +202,7 @@ def test_existing_startup_cron_issue_does_not_block_unrelated_save():
 
     settings = AppSettings(timezone="UTC")
     values = settings.model_dump(mode="python")
-    values["new_episode_schedule"]["monitor_pending_episode_cron"] = "* * * * *"
+    values["new_episode_schedule"]["monitor_no_usable_media_episode_cron"] = "* * * * *"
     settings = AppSettings.model_validate(values)
 
     api_values = SettingsValues.from_app_settings(settings).model_dump(

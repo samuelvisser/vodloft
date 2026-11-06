@@ -29,7 +29,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 SITE_REFRESH_REVISION = "5b75b63e55f2"
 NEUTRAL_STATUSES_REVISION = "b9dbb772c34e"
 UPCOMING_VIDEOS_REVISION = "158c03681e52"
-HEAD_REVISION = "db11a36f288f"
+HEAD_REVISION = "2c7e4a9f1b38"
 
 
 @pytest.fixture
@@ -705,6 +705,25 @@ def test_every_site_adds_upcoming_and_live_videos(migration_database):
 
     with engine.connect() as connection:
         assert connection.execute(text("SELECT pending_checks FROM sites WHERE key = 'youtube'")).scalar_one() == 1
+
+
+def test_site_scheduling_leaves_the_sites_table(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "9d1f3b6a2c84")
+    with engine.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO sites (key, name, domains, refresh_mode, pending_checks) VALUES ('own', 'Own', '[]', 'off', 0)"
+        ))
+
+    command.upgrade(config, "2c7e4a9f1b38")
+
+    with engine.connect() as connection:
+        columns = {row.name for row in connection.execute(text("PRAGMA table_info(sites)"))}
+        assert columns == {"key", "name", "domains", "preferred_source_key"}
+        assert connection.execute(text("SELECT key FROM sites")).scalar_one() == "own"
 
 
 def test_the_daily_wire_profiles_move_to_its_own_resolutions_and_duplicates_merge(migration_database):

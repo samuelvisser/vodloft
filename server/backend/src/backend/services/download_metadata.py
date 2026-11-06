@@ -14,8 +14,7 @@ def _studios(source_key: str) -> tuple[str, ...]:
         source = get_source(source_key)
     except UnknownSourceError:
         return ()
-    # A Source that lists other people's videos, such as yt-dlp, is not their studio.
-    return () if source.has(Feature.EPISODE_LISTS) else (source.name,)
+    return (source.name,) if source.has(Feature.OWN_STUDIO) else ()
 
 
 def build_episode_metadata(episode: Episode, collection) -> MediaServerMetadata:

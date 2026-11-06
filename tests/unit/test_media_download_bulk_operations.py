@@ -6,7 +6,7 @@ import pytest
 
 
 def test_bulk_retry_media_download_operation_attaches_retries_in_one_target():
-    from backend.api.endpoints.media_downloads.operations import BulkRetryMediaDownloadsOperation
+    from backend.operations.media_downloads import BulkRetryMediaDownloadsOperation
 
     definition = BulkRetryMediaDownloadsOperation([8, 3, 8])
 
@@ -17,13 +17,13 @@ def test_bulk_retry_media_download_operation_attaches_retries_in_one_target():
     assert definition.context() == {"downloads_requested": 2}
     assert definition.media_download_ids == (8, 3)
     [target] = definition.targets()
-    assert target.task_key == "media_download_bulk_action_worker"
+    assert target.task_key == "media_download_attach_retries"
     assert target.slot_key == "attach_retries"
-    assert target.task_kwargs == {"media_download_ids": [8, 3], "action": "attach_retries"}
+    assert target.task_kwargs == {"media_download_ids": [8, 3]}
 
 
 def test_bulk_cancel_media_download_operation_keeps_per_download_targets():
-    from backend.api.endpoints.media_downloads.operations import BulkCancelMediaDownloadsOperation
+    from backend.operations.media_downloads import BulkCancelMediaDownloadsOperation
 
     definition = BulkCancelMediaDownloadsOperation([8, 3, 8])
     targets = definition.targets()
@@ -43,7 +43,7 @@ def test_bulk_cancel_media_download_operation_keeps_per_download_targets():
 
 
 def test_bulk_delete_unavailable_media_download_operation_keeps_per_download_targets():
-    from backend.api.endpoints.media_downloads.operations import (
+    from backend.operations.media_downloads import (
         BulkDeleteUnavailableMediaDownloadsOperation,
     )
 
@@ -76,7 +76,7 @@ def test_scoped_redownload_operations_have_no_coordinator_target(
     operation_type: str,
 ):
     if operation_type == "local_media_profile":
-        from backend.api.endpoints.local_media_profiles.operations import (
+        from backend.operations.local_media_profiles import (
             LocalMediaProfileRedownloadOperation,
         )
 
@@ -86,7 +86,7 @@ def test_scoped_redownload_operations_have_no_coordinator_target(
             media_download_ids=[4, 5, 4],
         )
     else:
-        from backend.api.endpoints.movies.operations import MovieRedownloadOperation
+        from backend.operations.movies import MovieRedownloadOperation
 
         resource = SimpleNamespace(id=12, slug="movie", title="Movie")
         definition = MovieRedownloadOperation(

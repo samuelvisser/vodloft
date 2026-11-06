@@ -40,7 +40,6 @@ def test_failed_lookup_uses_conditional_path_and_creates_download(tmp_path, monk
             "{{ title }}.ext"
         ),
         preferred_format="format_1080p",
-        append_media_type_to_filename=False,
     )
     session.add(profile)
     session.commit()

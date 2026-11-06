@@ -7,7 +7,7 @@ from backend.api.models.collection_local_media_profile import (
     CollectionLocalMediaProfileAPIUpdate,
 )
 from backend.app import db_session
-from backend.api.endpoints.local_media_profiles.file_rename import (
+from backend.services.profile_file_renames import (
     request_collection_local_media_profile_file_rename,
 )
 

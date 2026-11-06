@@ -11,6 +11,7 @@ import {usePageActive} from '../lib/pageActivity'
 import {ApplicationLogPageReadSchema, type ApplicationLogEntryRead} from '../types/schemas/log'
 import {createSelectRegistry} from '../utils/selectRegistry'
 import './LogsPage.css'
+import {apiUrl} from '../lib/api'
 
 const LogLevelReg = createSelectRegistry('LogLevelFilter', {
     '': {label: 'All'},
@@ -50,7 +51,7 @@ export default function LogsPage() {
         queryKey: ['applicationLogs', level, search.trim()],
         queryFn: async ({signal}) => {
             const response = await fetch(
-                `${(window as any).appConfig.API_URL}/logs?${params}`,
+                `${apiUrl()}/logs?${params}`,
                 {signal, credentials: 'include'},
             )
             if (!response.ok) throw new Error(`HTTP ${response.status}`)

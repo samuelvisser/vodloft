@@ -9,6 +9,7 @@ import CustomMetadataEditor from '../../components/CustomMetadataEditor/CustomMe
 import {useMovies} from '../../lib/queries'
 import {MovieUpdateSchema} from '../../types/schemas/movie'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
+import {apiUrl} from '../../lib/api'
 
 const MovieEditSchema = z.object({
     title: z.string().trim().min(1, 'Movie name is required'),
@@ -58,7 +59,7 @@ export default function EditMoviePage() {
                 authorName: values.producer || null,
             })
 
-            return fetch(`${(window as any).appConfig.API_URL}/movies/${encodeURIComponent(slug)}`, {
+            return fetch(`${apiUrl()}/movies/${encodeURIComponent(slug)}`, {
                 method: 'PATCH',
                 headers: {'Content-Type': 'application/json'},
                 credentials: 'include',

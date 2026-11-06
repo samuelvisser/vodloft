@@ -6,6 +6,7 @@ from pydantic import AliasChoices, AliasGenerator, AliasPath, BaseModel, ConfigD
 from pydantic.alias_generators import to_camel, to_snake
 
 from backend.api.datetime import api_datetime
+from backend.types.input_model import InputModel
 
 
 def response_model_config(*, nested_source: str | None = None) -> ConfigDict:
@@ -37,16 +38,5 @@ class ResponseBase(BaseModel):
     model_config = response_model_config()
 
 
-class RequestBase(BaseModel):
+class RequestBase(InputModel):
     """Base class for API request models with camelCase input and snake_case serialization."""
-
-    model_config = ConfigDict(
-        alias_generator=AliasGenerator(
-            serialization_alias=to_snake,
-            validation_alias=to_camel,
-        ),
-        populate_by_name=True,
-        from_attributes=True,
-        extra='ignore',
-        use_enum_values=True
-    )

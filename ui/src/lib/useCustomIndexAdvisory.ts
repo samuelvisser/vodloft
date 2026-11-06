@@ -4,6 +4,7 @@ import {
     CustomIndexAdvisoryResultSchema,
     type CustomIndexAdvisoryResult,
 } from '../types/schemas/output_template_advisory'
+import {apiUrl} from './api'
 
 type Snapshot = {
     request: string
@@ -19,7 +20,7 @@ export function useCustomIndexAdvisory(request: string | null) {
         const timer = window.setTimeout(async () => {
             try {
                 const response = await fetch(
-                    `${(window as any).appConfig.API_URL}/local-media-profiles/advisory/custom-index`,
+                    `${apiUrl()}/local-media-profiles/advisory/custom-index`,
                     {
                         method: 'POST',
                         credentials: 'include',

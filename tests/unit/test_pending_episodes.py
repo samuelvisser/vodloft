@@ -119,23 +119,39 @@ def ref(slug: str):
 
 
 def test_an_upcoming_episode_is_checked_hourly_then_often_from_15_minutes_before():
-    from task_manager.tasks.workers.monitor_pending_episode.pending_checks import HOURLY, OFTEN, WHILE_LIVE, interval, is_due
+    from task_manager.tasks.workers.monitor_pending_episode.pending_checks import Rhythm, interval, is_due
 
+    usual = Rhythm(timedelta(hours=1), timedelta(minutes=2), timedelta(minutes=5))
     starts = NOW + timedelta(hours=2)
-    assert interval("scheduled", starts, NOW) == HOURLY
-    assert interval("scheduled", starts, starts - timedelta(minutes=10)) == OFTEN
-    assert interval("delayed", starts, starts + timedelta(minutes=30)) == OFTEN
+    assert interval("scheduled", starts, NOW, usual) == usual.upcoming == timedelta(hours=1)
+    assert interval("scheduled", starts, starts - timedelta(minutes=10), usual) == usual.starting == timedelta(minutes=2)
+    assert interval("delayed", starts, starts + timedelta(minutes=30), usual) == usual.starting
     # A stream more than an hour late may wait for days.
-    assert interval("delayed", starts, starts + timedelta(hours=2)) == HOURLY
-    assert interval("live", None, NOW) == WHILE_LIVE
+    assert interval("delayed", starts, starts + timedelta(hours=2), usual) == usual.upcoming
+    # One without a known start may start any moment.
+    assert interval("scheduled", None, NOW, usual) == usual.starting
+    assert interval("live", None, NOW, usual) == usual.live == timedelta(minutes=5)
+    assert interval("published_preliminary", None, NOW, usual) == usual.live
+    assert interval("no_usable_media", None, NOW, usual) == usual.upcoming
 
-    assert is_due("scheduled", starts, None, NOW)
-    assert not is_due("scheduled", starts, NOW, NOW + timedelta(minutes=30))
-    assert is_due("scheduled", starts, NOW, NOW + timedelta(hours=1))
+    assert is_due("scheduled", starts, None, NOW, usual)
+    assert not is_due("scheduled", starts, NOW, NOW + timedelta(minutes=30), usual)
+    assert is_due("scheduled", starts, NOW, NOW + timedelta(hours=1), usual)
     # Checked 50 minutes before the start, it is checked again right when the last 15 minutes begin.
-    assert is_due("scheduled", starts, starts - timedelta(minutes=50), starts - timedelta(minutes=15))
-    assert not is_due("scheduled", starts, starts - timedelta(minutes=14), starts - timedelta(minutes=13))
-    assert is_due("scheduled", starts, starts - timedelta(minutes=14), starts - timedelta(minutes=12))
+    assert is_due("scheduled", starts, starts - timedelta(minutes=50), starts - timedelta(minutes=15), usual)
+    assert not is_due("scheduled", starts, starts - timedelta(minutes=14), starts - timedelta(minutes=13), usual)
+    assert is_due("scheduled", starts, starts - timedelta(minutes=14), starts - timedelta(minutes=12), usual)
+
+
+def test_a_site_sets_its_own_rhythm():
+    from task_manager.tasks.workers.monitor_pending_episode.pending_checks import Rhythm, is_due
+
+    relaxed = Rhythm(upcoming=timedelta(hours=6), starting=timedelta(minutes=10), live=timedelta(minutes=30))
+    starts = NOW + timedelta(hours=12)
+    assert not is_due("scheduled", starts, NOW, NOW + timedelta(hours=2), relaxed)
+    assert is_due("scheduled", starts, NOW, NOW + timedelta(hours=6), relaxed)
+    assert not is_due("live", None, NOW, NOW + timedelta(minutes=20), relaxed)
+    assert is_due("live", None, NOW, NOW + timedelta(minutes=30), relaxed)
 
 
 # --- Adding and following episodes ---------------------------------------------------------------
@@ -184,10 +200,27 @@ def _upcoming(slug: str, starts: datetime, status=EpisodePublishStatus.SCHEDULED
     )
 
 
-def _pending_collection(session, *, identifier="date_based", site_checks=True):
+@pytest.fixture
+def site_schedules():
+    """Give Sites their own scheduling, as under siteSchedules in config.yml."""
+    from config.registry import get_settings, replace_settings
+    from config.settings.submodels import SiteSchedule
+
+    original = get_settings()
+
+    def apply(**schedules: dict):
+        replace_settings(original.model_copy(update={
+            "site_schedules": {key: SiteSchedule(**own) for key, own in schedules.items()},
+        }))
+
+    yield apply
+    replace_settings(original)
+
+
+def _pending_collection(session, *, identifier="date_based"):
     from backend.db.models import Site
 
-    session.add(Site(key="tube", name="Tube", domains=["pending.example"], pending_checks=site_checks))
+    session.add(Site(key="tube", name="Tube", domains=["pending.example"]))
     collection = _collection(session, "UC1", source_key="pending")
     collection.site_key = "tube"
     collection.episode_identifier = identifier
@@ -224,8 +257,9 @@ def test_an_upcoming_video_is_added_with_its_status_and_not_downloaded(pending, 
     assert not [name for name, _ in events if name.startswith("download_profile")]
 
 
-def test_a_site_can_leave_upcoming_videos_out_until_they_are_published(pending, session):
-    collection = _pending_collection(session, site_checks=False)
+def test_a_site_can_leave_upcoming_videos_out_until_they_are_published(pending, session, site_schedules):
+    site_schedules(tube={"upcoming_and_live": False})
+    collection = _pending_collection(session)
 
     assert _add(session, collection, _upcoming("soon", NOW + timedelta(hours=3))) == 0
     assert _episode(session, "soon") is None
@@ -303,3 +337,128 @@ def test_a_stream_that_comes_back_is_followed_again(pending, session):
     episode = _episode(session, "back")
     assert result.recovered == 1
     assert (episode.publish_status, episode.episode_identifier) == ("scheduled", identifier)
+
+
+# --- The Daily Wire's pending episodes -----------------------------------------------------------
+
+
+@pytest.fixture
+def monitored(monkeypatch):
+    """The Daily Wire's own monitor, answering from a table instead of The Daily Wire."""
+    from types import SimpleNamespace
+
+    from backend.db.models import Episode
+    from task_manager.tasks.workers.monitor_pending_episode import pending_checks
+
+    monkeypatch.setattr(pending_checks, "_last_checked", {})
+    answers: dict[int, EpisodePublishStatus | Exception] = {}
+    checked: list[int] = []
+
+    def monitor(s, *, episode_id):
+        checked.append(episode_id)
+        answer = answers.get(episode_id, EpisodePublishStatus.LIVE)
+        if isinstance(answer, Exception):
+            raise answer
+        s.get(Episode, episode_id).publish_status = answer.value
+        s.commit()
+        return answer
+
+    monkeypatch.setattr(pending_checks, "run_monitor_pending_episode", monitor)
+    return SimpleNamespace(answers=answers, checked=checked)
+
+
+def _dailywire_episode(session, slug: str, status: str = "live", site=None) -> int:
+    from backend.db.models import Episode, Season
+
+    collection = _collection(session, f"show-{slug}", source_key="dailywire")
+    collection.site_key = site
+    season = Season(collection=collection, index=1, slug="season-1", name="One")
+    episode = Episode(
+        uuid=f"uuid-{slug}", type="episode", source_key="dailywire", collection=collection, season=season, index=1,
+        episode_identifier=f"ep.{slug}", slug=slug, title=slug, publish_status=status, metadata_is_final=False,
+        sharing_url=f"https://example.test/{slug}",
+    )
+    session.add(episode)
+    session.commit()
+    return episode.id
+
+
+def _sweep(session, now):
+    from task_manager.tasks.workers.monitor_pending_episode.pending_checks import run_pending_checks
+
+    return run_pending_checks(session, now=now)
+
+
+def test_a_live_daily_wire_episode_follows_the_same_rhythm_one_by_one(monitored, session):
+    live = _dailywire_episode(session, "live")
+    _dailywire_episode(session, "done", status="published_final")
+
+    # Every pending episode is looked up once, also right after a restart.
+    assert _sweep(session, NOW).checked == 1
+    assert monitored.checked == [live]
+    # A live one again after five minutes.
+    assert _sweep(session, NOW + timedelta(minutes=4)).checked == 0
+    assert _sweep(session, NOW + timedelta(minutes=5)).checked == 1
+
+    monitored.answers[live] = EpisodePublishStatus.PUBLISHED_FINAL
+    result = _sweep(session, NOW + timedelta(minutes=10))
+    assert (result.checked, result.changed, result.published) == (1, 1, 1)
+    # A published episode is no longer followed.
+    assert _sweep(session, NOW + timedelta(minutes=30)).checked == 0
+
+
+def test_a_failed_daily_wire_lookup_is_tried_again_on_the_next_round(monitored, session):
+    flaky = _dailywire_episode(session, "flaky")
+    gone = _dailywire_episode(session, "gone", status="scheduled")
+    monitored.answers[flaky] = RuntimeError("HTTP error 503")
+    monitored.answers[gone] = EpisodePublishStatus.NO_USABLE_MEDIA
+
+    result = _sweep(session, NOW)
+    assert (result.checked, result.failed, result.gone) == (2, 1, 1)
+
+    del monitored.answers[flaky]
+    # The episode without usable media is left to the no-usable-media checks.
+    assert _sweep(session, NOW + timedelta(minutes=5)).checked == 1
+    assert monitored.checked == [flaky, gone, flaky]
+
+
+def test_a_daily_wire_episode_follows_the_rhythm_of_its_site(monitored, session, site_schedules):
+    from backend.db.models import Site
+
+    site_schedules(dailywire={"pending_upcoming_minutes": 60, "pending_starting_minutes": 2, "pending_live_minutes": 20})
+    session.add(Site(key="dailywire", name="The Daily Wire", domains=["dailywire.com"]))
+    session.commit()
+    _dailywire_episode(session, "live", site="dailywire")
+
+    assert _sweep(session, NOW).checked == 1
+    assert _sweep(session, NOW + timedelta(minutes=10)).checked == 0
+    assert _sweep(session, NOW + timedelta(minutes=20)).checked == 1
+
+
+def test_a_site_with_upcoming_and_live_off_is_not_followed(monitored, session, site_schedules):
+    from backend.db.models import Site
+
+    site_schedules(dailywire={"upcoming_and_live": False})
+    session.add(Site(key="dailywire", name="The Daily Wire", domains=["dailywire.com"]))
+    session.commit()
+    _dailywire_episode(session, "live", site="dailywire")
+
+    assert _sweep(session, NOW).checked == 0
+    assert monitored.checked == []
+
+
+def test_a_site_follows_the_system_setting_unless_it_has_its_own(site_schedules):
+    from config import get_settings
+    from backend.services import pending_episodes
+
+    site_schedules(b={"upcoming_and_live": False}, c={
+        "pending_upcoming_minutes": 90, "pending_starting_minutes": 3, "pending_live_minutes": 10,
+    })
+    system = get_settings().new_episode_schedule
+
+    assert pending_episodes.site_follows_pending("a") == system.upcoming_and_live
+    assert not pending_episodes.site_follows_pending("b")
+    assert pending_episodes.site_pending_minutes(None) == pending_episodes.PendingMinutes(
+        system.pending_upcoming_minutes, system.pending_starting_minutes, system.pending_live_minutes,
+    )
+    assert pending_episodes.site_pending_minutes("c") == pending_episodes.PendingMinutes(90, 3, 10)

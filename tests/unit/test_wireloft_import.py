@@ -13,6 +13,26 @@ from importer.wireloft.migrations import RELEASES
 from wireloft_fixture import MEDIA, wireloft_installation
 
 
+def _view(model, value):
+    """What the API sends for ``value``, as a dict with the field names."""
+    return model.model_validate(value).model_dump()
+
+
+def _preview(session, importer, options):
+    from backend.api.models.imports import ImportPreviewAPIRead
+    from backend.services import imports
+
+    return _view(ImportPreviewAPIRead, imports.preview(session, importer, options))
+
+
+def _run_view(session, run):
+    from backend.api.models.imports import ImportRunAPIRead
+    from backend.services import imports
+
+    return _view(ImportRunAPIRead, imports.run_view(session, run))
+
+
+
 def _session() -> Session:
     import backend.api.endpoints.collections.router  # noqa: F401  (loads every model first)
     import task_manager.scheduler.db  # noqa: F401
@@ -108,7 +128,7 @@ def test_preview_counts_what_the_import_brings(installation):
     from backend.services import imports
 
     session, _applied = installation
-    view = imports.preview(session, wireloft.IMPORTER, imports.ImportOptions())
+    view = _preview(session, wireloft.IMPORTER, imports.ImportOptions())
 
     assert view["records"]["collections"] == [{
         "external_id": "1", "title": "Morning Show", "url": "https://www.dailywire.com/show/morning-show", "becomes": "new",

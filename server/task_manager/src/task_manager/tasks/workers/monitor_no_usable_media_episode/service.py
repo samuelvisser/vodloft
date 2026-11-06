@@ -14,14 +14,12 @@ from config.network import NoInternetConnectionError, is_no_internet_error
 from sources import Feature, all_sources
 from sources.dailywire.api.dw_api.client import MiddlewareAPIError, MiddlewareClient
 from sources.dailywire.auth import DeviceAuthClient
-from task_manager.events.transactional import queue_event
 from task_manager.scheduler.results import TaskResult
-from ...helpers.episodes.events import episode_event_payload, queue_episode_status_events
+from ...helpers.episodes.events import queue_episode_status_events
 from ...helpers.episodes.identifier_reconciliation import reconcile_episode_identifier
-from ...helpers.episodes.metadata import METADATA_REFRESH_REQUESTED_EVENT, update_episode_from_dailywire
+from ...helpers.episodes.metadata import update_episode_from_dailywire
 from ...helpers.episodes.no_show import is_no_show_today_slug
 from ...helpers.episodes.quarantine import PREVIOUS_IDENTIFIER_META_KEY, restore_quarantined_identifier
-from ...helpers.episodes.same_episode import PENDING_EPISODE_PUBLISH_STATUSES
 from ...helpers.episodes.status import observe_episode_detail, resolve_episode_status
 from ...helpers.episodes.unusable_media import (
     NoUsableMediaReason,
@@ -31,7 +29,6 @@ from ...helpers.episodes.unusable_media import (
     no_usable_media_incident_expired,
 )
 from ...helpers.progress import update_progress
-from ..monitor_pending_episode.scheduling import MONITOR_REQUESTED_EVENT
 
 
 logger = logging.getLogger(__name__)
@@ -120,18 +117,7 @@ def _recover_episode(
         new_status=resolved.status,
         was_created=False,
     )
-    if resolved.status in PENDING_EPISODE_PUBLISH_STATUSES:
-        queue_event(
-            s,
-            MONITOR_REQUESTED_EVENT,
-            episode_event_payload(episode=episode, collection=episode.collection, old_status=old_status),
-        )
-    elif resolved.status is EpisodePublishStatus.PUBLISHED_FINAL:
-        queue_event(
-            s,
-            METADATA_REFRESH_REQUESTED_EVENT,
-            episode_event_payload(episode=episode, collection=episode.collection, old_status=old_status),
-        )
+    # From here the pending check sweep or the metadata refresh sweep follows it.
     s.commit()
     return True
 

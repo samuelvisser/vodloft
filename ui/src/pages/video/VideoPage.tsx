@@ -20,6 +20,7 @@ import {siteName} from '../../lib/siteName'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
 import {SubscriptionBadge, SubscriptionNotice, useSubscriptionLocked} from '../../components/common/NeedsSubscription'
 import {isLocalMediaProfileAvailableForSource} from '../../types/local_media_profile'
+import {apiUrl} from '../../lib/api'
 
 function formatDuration(seconds: number) {
     if (!seconds) return null
@@ -75,7 +76,7 @@ export default function VideoPage() {
         if (refreshing) return
         setRefreshing(true)
         try {
-            const response = await fetch(`${(window as any).appConfig.API_URL}/videos/${video.id}/refresh`, {
+            const response = await fetch(`${apiUrl()}/videos/${video.id}/refresh`, {
                 method: 'POST',
                 credentials: 'include',
             })
@@ -98,7 +99,7 @@ export default function VideoPage() {
         if (deleting) return
         setDeleting(true)
         try {
-            const response = await fetch(`${(window as any).appConfig.API_URL}/videos/${video.id}`, {
+            const response = await fetch(`${apiUrl()}/videos/${video.id}`, {
                 method: 'DELETE',
                 credentials: 'include',
             })

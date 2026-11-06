@@ -4,6 +4,7 @@ import {useQuery} from '@tanstack/react-query'
 import type {CollectionCreatePayloadOut} from '../types/schemas/collection'
 import type {SeasonDetachedOut} from '../types/schemas/season'
 import type {LocalMediaProfileTemplateSource} from './localMediaProfileTemplateSources'
+import {apiUrl} from './api'
 
 /** A collection the Add collection form describes before it is saved. */
 export type ExampleCollection = {
@@ -59,7 +60,7 @@ export function useCollectionExamplesQuery(
         enabled: example !== null,
         queryFn: async ({signal}) => {
             const response = await fetch(
-                `${(window as any).appConfig.API_URL}/local-media-profiles/template/sources/examples`,
+                `${apiUrl()}/local-media-profiles/template/sources/examples`,
                 {
                     method: 'POST',
                     credentials: 'include',

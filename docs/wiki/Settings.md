@@ -180,15 +180,37 @@ These settings are available under **Settings → Automation**.
 | `newEpisodeSchedule.quickCheckCron` | `VL_NEW_EPISODE_SCHEDULE__QUICK_CHECK_CRON` | `*/5 * * * *` | Wakes the quick check. Each collection is checked as often as the YouTube API quota allows, and never more often than `youtubeApi.minCheckIntervalMinutes`. |
 | `newEpisodeSchedule.fullRescanCronEnabled` | `VL_NEW_EPISODE_SCHEDULE__FULL_RESCAN_CRON_ENABLED` | `true` | Enables the full re-scan of collections with quick checks. |
 | `newEpisodeSchedule.fullRescanCron` | `VL_NEW_EPISODE_SCHEDULE__FULL_RESCAN_CRON` | `0 4 * * *` | Lists collections with quick checks in full once a day, to catch anything a quick check missed, and refreshes their episodes (see [[Collections-and-Library#renamed-and-removed-videos]]). |
-| `newEpisodeSchedule.monitorPendingEpisodeCronEnabled` | `VL_NEW_EPISODE_SCHEDULE__MONITOR_PENDING_EPISODE_CRON_ENABLED` | `true` | Enables recurring monitoring for episodes that are not final yet. |
-| `newEpisodeSchedule.monitorPendingEpisodeCron` | `VL_NEW_EPISODE_SCHEDULE__MONITOR_PENDING_EPISODE_CRON` | `*/2 * * * *` | Rechecks known episodes that are scheduled, live, processing, or otherwise not final. |
 | `newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled` | `VL_NEW_EPISODE_SCHEDULE__MONITOR_NO_USABLE_MEDIA_EPISODE_CRON_ENABLED` | `true` | Enables recurring checks for episodes without usable media. |
 | `newEpisodeSchedule.monitorNoUsableMediaEpisodeCron` | `VL_NEW_EPISODE_SCHEDULE__MONITOR_NO_USABLE_MEDIA_EPISODE_CRON` | `*/20 * * * *` | Rechecks episodes that temporarily have no usable Daily Wire media. |
-| `newEpisodeSchedule.metadataRefreshIntervals` | `VL_NEW_EPISODE_SCHEDULE__METADATA_REFRESH_INTERVALS` | `1h,6h,24h,3d` | The system schedule: follow-up metadata refreshes after publication for Sites that follow it. Each Site can also have a schedule of its own, or none, on the Automation tab. |
+| `newEpisodeSchedule.metadataRefreshIntervals` | `VL_NEW_EPISODE_SCHEDULE__METADATA_REFRESH_INTERVALS` | `1h,6h,24h,3d` | The system schedule: follow-up metadata refreshes after publication, for every Site without a schedule of its own. |
+| `newEpisodeSchedule.upcomingAndLive` | `VL_NEW_EPISODE_SCHEDULE__UPCOMING_AND_LIVE` | `true` | Adds streams and premieres as soon as they are announced, and follows them until they are published. |
+| `newEpisodeSchedule.pendingUpcomingMinutes` | `VL_NEW_EPISODE_SCHEDULE__PENDING_UPCOMING_MINUTES` | `60` | How often an upcoming episode is looked up, until 15 minutes before it starts. |
+| `newEpisodeSchedule.pendingStartingMinutes` | `VL_NEW_EPISODE_SCHEDULE__PENDING_STARTING_MINUTES` | `2` | How often an episode is looked up from 15 minutes before its start until an hour after. |
+| `newEpisodeSchedule.pendingLiveMinutes` | `VL_NEW_EPISODE_SCHEDULE__PENDING_LIVE_MINUTES` | `5` | How often an episode is looked up while it is live, and while the site is still finishing it. |
 
 A quick check looks only at a collection's newest videos and looks up the ones VODLoft does not have yet. For YouTube it reads the first page of the channel's uploads through the YouTube Data API (1 unit). Without a key, or once the quota is used up, it reads the channel's RSS feed, and if that fails, lists the newest videos with yt-dlp. A collection that was never indexed gets its full first index instead.
 
 Metadata intervals accept positive values using `s`, `m`, `h`, or `d`, separated by commas and ordered from shortest to longest.
+
+### Per-Site scheduling
+
+Each Site follows the settings above unless you give it settings of its own under **Settings → Automation → Per-Site
+scheduling**. VODLoft keeps those under `siteSchedules` in `config.yml`, by the Site's key, and only writes the settings a
+Site changes:
+
+```yaml
+siteSchedules:
+  youtube:
+    metadataRefresh: 30m,2h,24h   # or off
+  dailywire:
+    upcomingAndLive: false
+    pendingUpcomingMinutes: 30    # the three lookup times always come together
+    pendingStartingMinutes: 2
+    pendingLiveMinutes: 5
+```
+
+Some Sites have a refresh schedule of their own by default: The Daily Wire's is `15m,30m,1h,3h,6h,24h,3d`, and
+YouTube's is `30m,2h,6h,24h,3d,7d,14d`, because creators keep testing titles and thumbnails there for up to two weeks.
 
 ### Episode lifecycle safeguards
 
@@ -358,7 +380,6 @@ scheduler:
 
 newEpisodeSchedule:
   findEpisodesCron: "*/30 * * * *"
-  monitorPendingEpisodeCron: "*/2 * * * *"
 
 fileWatcher:
   enabled: true

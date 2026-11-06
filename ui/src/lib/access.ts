@@ -6,6 +6,7 @@
  * something here is only a convenience: the API refuses it anyway.
  */
 import { z } from 'zod'
+import {apiUrl} from './api'
 
 export const AREAS = [
   'library',
@@ -58,7 +59,7 @@ let checked = false
 
 /** Ask the API who is signed in. ``null`` when nobody is (401). */
 export async function loadAccess(): Promise<AuthMe | null> {
-  const base = (window as any).appConfig?.API_URL || '/api'
+  const base = apiUrl()
   const response = await fetch(`${base}/auth/me`, { credentials: 'include' })
   if (response.status === 401) {
     current = null

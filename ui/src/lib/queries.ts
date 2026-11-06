@@ -19,7 +19,7 @@ import {
     useLazyCollection,
 } from './lazyCollection'
 import {useFrontendPuller} from './puller'
-import {SiteRefreshReadSchema, type SiteRefreshFormValues, type SiteRefreshRead} from '../types/schemas/siteRefresh'
+import {SiteRefreshReadSchema, type SiteRefreshRead} from '../types/schemas/siteRefresh'
 import {downloadStatusesForApi} from './downloadStatusFilters'
 import {
     episodeQueryKeys,
@@ -74,6 +74,7 @@ import {
     DailywireMovieRead,
     DailywireMovieReadSchema,
 } from "../types/schemas/dailywire_catalog";
+import {apiUrl, responseError} from './api'
 
 async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
     const r = await fetch(url, {signal, credentials: 'include'})
@@ -99,7 +100,7 @@ export function useLocalMediaProfiles() {
         queryKey: ['localMediaProfiles'] as const,
         enabled: profileListsReadable('local_media_profiles'),
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/local-media-profiles`,
+            `${apiUrl()}/local-media-profiles`,
             LocalMediaProfileReadSchema.array(),
             signal,
         ),
@@ -116,7 +117,7 @@ export function useLocalMediaProfilesView() {
         queryKey: ['localMediaProfilesView'] as const,
         enabled: profileListsReadable('local_media_profiles'),
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/local-media-profiles/as-view`,
+            `${apiUrl()}/local-media-profiles/as-view`,
             LocalMediaProfileViewReadSchema.array(),
             signal,
         ),
@@ -129,7 +130,7 @@ export function useLocalMediaProfileView(slug?: string) {
         queryKey: ['localMediaProfileView', slug] as const,
         enabled: !!slug,
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/local-media-profiles/${encodeURIComponent(slug!)}/view`,
+            `${apiUrl()}/local-media-profiles/${encodeURIComponent(slug!)}/view`,
             LocalMediaProfileViewReadSchema,
             signal,
         ),
@@ -142,7 +143,7 @@ export function useDownloadProfilesView() {
         queryKey: ['downloadProfilesView'] as const,
         enabled: profileListsReadable('download_profiles'),
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/download-profiles/as-view`,
+            `${apiUrl()}/download-profiles/as-view`,
             DownloadProfileReadViewSchema.array(),
             signal,
         ),
@@ -155,7 +156,7 @@ export function useRssStreamProfiles() {
         queryKey: ['rssStreamProfiles'] as const,
         enabled: can('stream_profiles') || can('library', 'manage'),
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/rss-stream-profiles`,
+            `${apiUrl()}/rss-stream-profiles`,
             RssStreamProfileReadSchema.array(),
             signal,
         ),
@@ -168,7 +169,7 @@ export function useStreamProfilesView() {
         queryKey: ['streamProfilesView'] as const,
         enabled: can('stream_profiles') || can('library', 'manage'),
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/stream-profiles/as-view`,
+            `${apiUrl()}/stream-profiles/as-view`,
             StreamProfileReadViewSchema.array(),
             signal,
         ),
@@ -189,7 +190,7 @@ export function useCollectionsView() {
         queryKey: ['collectionsView'] as const,
         enabled: can('library'),
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/collections/as-view`,
+            `${apiUrl()}/collections/as-view`,
             CollectionReadViewSchema.array(),
             signal,
         ),
@@ -202,7 +203,7 @@ export function useMovies() {
         queryKey: ['movies'] as const,
         enabled: can('library'),
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/movies`,
+            `${apiUrl()}/movies`,
             MovieReadSchema.array(),
             signal,
         ),
@@ -215,7 +216,7 @@ export function useVideos() {
         queryKey: ['videos'] as const,
         enabled: can('library'),
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/videos`,
+            `${apiUrl()}/videos`,
             VideoReadSchema.array(),
             signal,
         ),
@@ -228,7 +229,7 @@ export function useVideo(id?: number) {
         queryKey: ['video', id] as const,
         enabled: id !== undefined && Number.isFinite(id),
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/videos/${id}`,
+            `${apiUrl()}/videos/${id}`,
             VideoReadSchema,
             signal,
         ),
@@ -236,20 +237,9 @@ export function useVideo(id?: number) {
     })
 }
 
-async function responseError(response: Response): Promise<Error> {
-    let detail = `HTTP ${response.status}`
-    try {
-        const body = await response.json()
-        if (typeof body?.detail === 'string') detail = body.detail
-    } catch {
-        // Keep the status text when the body is not JSON.
-    }
-    return new Error(detail)
-}
-
 /** Add a single video by its link, at the Source that recognised the link. */
 export async function addVideo(url: string, sourceKey: string): Promise<VideoRead> {
-    const response = await fetch(`${(window as any).appConfig.API_URL}/videos`, {
+    const response = await fetch(`${apiUrl()}/videos`, {
         method: 'POST',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
@@ -263,7 +253,7 @@ export function useSources() {
     return useQuery<SourceRead[], Error, SourceRead[], readonly ['sources']>({
         queryKey: ['sources'] as const,
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/sources`,
+            `${apiUrl()}/sources`,
             SourceReadSchema.array(),
             signal,
         ),
@@ -289,7 +279,7 @@ export function useSourceProgram(sourceId: string, enabled = true) {
         queryKey: ['sourceProgram', sourceId] as const,
         enabled,
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceId)}/program`,
+            `${apiUrl()}/sources/${encodeURIComponent(sourceId)}/program`,
             ProgramStatusReadSchema,
             signal,
         ),
@@ -298,7 +288,7 @@ export function useSourceProgram(sourceId: string, enabled = true) {
 
 /** Fetch the latest version of the program a Source runs. */
 export async function updateSourceProgram(sourceId: string): Promise<ProgramStatusRead> {
-    const response = await fetch(`${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceId)}/program/update`, {
+    const response = await fetch(`${apiUrl()}/sources/${encodeURIComponent(sourceId)}/program/update`, {
         method: 'POST',
         credentials: 'include',
     })
@@ -311,7 +301,7 @@ export function useSourceCookies(sourceId: string, enabled = true) {
         queryKey: ['sourceCookies', sourceId] as const,
         enabled,
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceId)}/cookies`,
+            `${apiUrl()}/sources/${encodeURIComponent(sourceId)}/cookies`,
             CookiesReadSchema,
             signal,
         ),
@@ -324,7 +314,7 @@ export function useSourceYtdlpOptions(sourceId: string) {
     return useQuery<string, Error, string, readonly ['sourceYtdlpOptions', string]>({
         queryKey: ['sourceYtdlpOptions', sourceId] as const,
         queryFn: async ({signal}) => (await fetchParsed(
-            `${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceId)}/ytdlp-options`,
+            `${apiUrl()}/sources/${encodeURIComponent(sourceId)}/ytdlp-options`,
             YtdlpOptionsReadSchema,
             signal,
         )).text,
@@ -333,7 +323,7 @@ export function useSourceYtdlpOptions(sourceId: string) {
 
 /** Store the yt-dlp options a Source gives every download. A refused line comes back as the error. */
 export async function saveSourceYtdlpOptions(sourceId: string, text: string): Promise<string> {
-    const response = await fetch(`${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceId)}/ytdlp-options`, {
+    const response = await fetch(`${apiUrl()}/sources/${encodeURIComponent(sourceId)}/ytdlp-options`, {
         method: 'PUT',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
@@ -350,7 +340,7 @@ export async function saveSourceYtdlpOptions(sourceId: string, text: string): Pr
 
 /** Store a cookies.txt file for a Source, or remove it with null. */
 export async function saveSourceCookies(sourceId: string, content: string | null): Promise<CookiesRead> {
-    const response = await fetch(`${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceId)}/cookies`, {
+    const response = await fetch(`${apiUrl()}/sources/${encodeURIComponent(sourceId)}/cookies`, {
         method: content === null ? 'DELETE' : 'PUT',
         credentials: 'include',
         headers: content === null ? undefined : {'Content-Type': 'application/json'},
@@ -367,7 +357,7 @@ export function useEpisodeTags(sourceKey?: string | null, url?: string | null) {
         enabled: !!sourceKey,
         staleTime: Infinity,
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceKey ?? '')}/episode-tags`
+            `${apiUrl()}/sources/${encodeURIComponent(sourceKey ?? '')}/episode-tags`
             + (url ? `?url=${encodeURIComponent(url)}` : ''),
             EpisodeTagReadSchema.array(),
             signal,
@@ -382,7 +372,7 @@ export function usePublishStatusLabels(sourceKey?: string | null) {
         enabled: !!sourceKey,
         staleTime: Infinity,
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceKey ?? '')}/publish-statuses`,
+            `${apiUrl()}/sources/${encodeURIComponent(sourceKey ?? '')}/publish-statuses`,
             PublishStatusLabelReadSchema.array(),
             signal,
         ),
@@ -408,7 +398,7 @@ export function useEpisodeTagsInCollection(collectionSlug?: string) {
         enabled: !!collectionSlug,
         refetchOnMount: 'always',
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/collections/${encodeURIComponent(collectionSlug!)}/episode-tags`,
+            `${apiUrl()}/collections/${encodeURIComponent(collectionSlug!)}/episode-tags`,
             EpisodeTagReadSchema.array(),
             signal,
         ),
@@ -420,7 +410,7 @@ export function useSourceApi(sourceId: string, enabled = true) {
         queryKey: ['sourceApi', sourceId] as const,
         enabled,
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceId)}/api`,
+            `${apiUrl()}/sources/${encodeURIComponent(sourceId)}/api`,
             ApiStatusReadSchema,
             signal,
         ),
@@ -439,7 +429,7 @@ export class ApiKeyRejectedError extends Error {
 export async function changeSourceApiKey(
     sourceId: string, action: 'save' | 'test' | 'remove', key?: string,
 ): Promise<ApiStatusRead> {
-    const base = `${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceId)}/api/key`
+    const base = `${apiUrl()}/sources/${encodeURIComponent(sourceId)}/api/key`
     const response = await fetch(action === 'test' ? `${base}/test` : base, {
         method: {save: 'PUT', test: 'POST', remove: 'DELETE'}[action],
         credentials: 'include',
@@ -461,7 +451,7 @@ export function useSourceProblems() {
         queryKey: ['sourceProblems'] as const,
         enabled: can('sources', 'manage'),
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/sources/problems`,
+            `${apiUrl()}/sources/problems`,
             SourceProblemReadSchema.array(),
             signal,
         ),
@@ -474,40 +464,26 @@ export function useSourceSites() {
     return useQuery<SourceSiteRead[], Error, SourceSiteRead[], readonly ['sourceSites']>({
         queryKey: ['sourceSites'] as const,
         queryFn: async ({signal}) => {
-            const value = await fetchJSON<unknown>(`${(window as any).appConfig.API_URL}/sources/sites`, signal)
+            const value = await fetchJSON<unknown>(`${apiUrl()}/sources/sites`, signal)
             return SourceSiteReadSchema.array().parse(value)
         },
     })
 }
 
-/** The metadata refresh schedule of every Site VODLoft has seen. */
+/** Every Site VODLoft has seen, and which of its settings apply to it. */
 export function useSiteRefresh() {
     return useQuery<SiteRefreshRead[], Error, SiteRefreshRead[], readonly ['siteRefresh']>({
         queryKey: ['siteRefresh'] as const,
         queryFn: async ({signal}) => {
-            const value = await fetchJSON<unknown>(`${(window as any).appConfig.API_URL}/settings/site-refresh`, signal)
+            const value = await fetchJSON<unknown>(`${apiUrl()}/settings/site-refresh`, signal)
             return SiteRefreshReadSchema.array().parse(value)
         },
     })
 }
 
-/** Choose the schedule a Site's items follow; the form reads the response for field errors. */
-export function saveSiteRefresh(key: string, values: SiteRefreshFormValues): Promise<Response> {
-    return fetch(`${(window as any).appConfig.API_URL}/settings/site-refresh/${encodeURIComponent(key)}`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            refreshMode: values.refreshMode,
-            refreshIntervals: values.refreshIntervals.trim() || null,
-            pendingChecks: values.pendingChecks,
-        }),
-    })
-}
-
 /** Choose the Source to ask first for a Site's links; ``null`` goes back to the default. */
 export async function saveSourceSite(key: string, preferredSourceKey: string | null): Promise<SourceSiteRead> {
-    const response = await fetch(`${(window as any).appConfig.API_URL}/sources/sites/${encodeURIComponent(key)}`, {
+    const response = await fetch(`${apiUrl()}/sources/sites/${encodeURIComponent(key)}`, {
         method: 'PUT',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
@@ -525,7 +501,7 @@ export function useSourceSearch(sourceId: string | undefined, query: string) {
         queryFn: async ({signal}) => {
             const params = new URLSearchParams({q: query})
             const response = await fetch(
-                `${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceId!)}/search?${params}`,
+                `${apiUrl()}/sources/${encodeURIComponent(sourceId!)}/search?${params}`,
                 {signal, credentials: 'include'},
             )
             if (!response.ok) throw await responseError(response)
@@ -555,7 +531,7 @@ export function useListedCollectionDetails(sourceId: string | undefined, url: st
         queryFn: async ({signal}) => {
             const params = new URLSearchParams({url: url!})
             const response = await fetch(
-                `${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceId!)}/collection?${params}`,
+                `${apiUrl()}/sources/${encodeURIComponent(sourceId!)}/collection?${params}`,
                 {signal, credentials: 'include'},
             )
             if (!response.ok) throw await responseError(response)
@@ -568,7 +544,7 @@ export function useListedCollectionDetails(sourceId: string | undefined, url: st
 
 /** Ask the backend which Source recognises a link, and what it points to. ``sourceKey`` asks only that Source. */
 export async function resolveLink(url: string, signal?: AbortSignal, sourceKey?: string): Promise<ResolvedLinkRead> {
-    const response = await fetch(`${(window as any).appConfig.API_URL}/resolve`, {
+    const response = await fetch(`${apiUrl()}/resolve`, {
         method: 'POST',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
@@ -583,7 +559,7 @@ export function useDailywireCatalog() {
     return useQuery<any, Error, DailywireCatalogRead, readonly ['dailywireCatalog']>({
         queryKey: ['dailywireCatalog'] as const,
         queryFn: async ({signal}) => {
-            const value = await fetchJSON<any>(`${(window as any).appConfig.API_URL}/dailywire/catalog`, signal)
+            const value = await fetchJSON<any>(`${apiUrl()}/dailywire/catalog`, signal)
             return DailywireCatalogReadSchema.parse(value)
         },
         staleTime: 5 * 60 * 1000,
@@ -606,7 +582,7 @@ export function useDailywireShowCatalog(search: string, grouping: 'host' | 'alph
             })
             if (search) params.set('search', search)
             const value = await fetchJSON<any>(
-                `${(window as any).appConfig.API_URL}/dailywire/catalog/shows?${params}`,
+                `${apiUrl()}/dailywire/catalog/shows?${params}`,
                 signal,
             )
             return DailywireCatalogShowPageReadSchema.parse(value)
@@ -632,7 +608,7 @@ export function useDailywireMovieCatalog(search: string, enabled = true) {
             })
             if (search) params.set('search', search)
             const value = await fetchJSON<any>(
-                `${(window as any).appConfig.API_URL}/dailywire/catalog/movies?${params}`,
+                `${apiUrl()}/dailywire/catalog/movies?${params}`,
                 signal,
             )
             return DailywireCatalogMoviePageReadSchema.parse(value)
@@ -652,7 +628,7 @@ export function useDailywireMovie(slug?: string) {
         enabled: !!slug,
         queryFn: async ({signal}) => {
             const value = await fetchJSON<any>(
-                `${(window as any).appConfig.API_URL}/dailywire/movies/${encodeURIComponent(slug!)}`,
+                `${apiUrl()}/dailywire/movies/${encodeURIComponent(slug!)}`,
                 signal,
             )
             return DailywireMovieReadSchema.parse(value)
@@ -721,7 +697,7 @@ export function useEpisode(episodeId?: string) {
         queryKey: ['episode', episodeId] as const,
         enabled: !!episodeId,
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/episodes/${episodeId}`,
+            `${apiUrl()}/episodes/${episodeId}`,
             EpisodeReadSchema,
             signal,
         ),
@@ -738,7 +714,7 @@ export function useRecentlyIndexedEpisodes(limit = 7) {
         queryKey: ['recentlyIndexedEpisodes', limit] as const,
         enabled: can('library'),
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/episodes/as-view/recently-indexed?limit=${limit}`,
+            `${apiUrl()}/episodes/as-view/recently-indexed?limit=${limit}`,
             EpisodeIndexedActivityReadSchema.array(),
             signal,
         ),
@@ -753,7 +729,7 @@ export function useDailywireShow(slug?: string, membershipPlan?: string) {
         queryKey: ['dwCollection', slug, membershipPlan] as const,
         enabled: !!slug,
         queryFn: async ({signal}) => {
-            const urlBase = (window as any).appConfig.API_URL
+            const urlBase = apiUrl()
             const params = membershipPlan ? `?membership_plan=${encodeURIComponent(membershipPlan)}` : ''
             const url = `${urlBase}/dailywire/shows/${encodeURIComponent(slug!)}` + params
             const r = await fetch(url, {signal, credentials: 'include'})
@@ -781,7 +757,7 @@ export function useDailywireUserInfo() {
     return useQuery<any, any & { status?: number }, DailywireUserInfoRead, readonly ['dwUserInfo']>({
         queryKey: ['dwUserInfo'] as const,
         queryFn: async ({signal}) => {
-            const base = (window as any).appConfig?.API_URL?.replace(/\/+$/, '')
+            const base = apiUrl()
             const r = await fetch(`${base}/dailywire/user-info`, { signal, credentials: 'include' })
             if (!r.ok) {
                 const err: any = new Error(`HTTP ${r.status}`)
@@ -813,7 +789,7 @@ export function useSkippedByFilter(collectionId?: number) {
         queryKey: ['skippedByFilter', collectionId] as const,
         enabled: collectionId !== undefined,
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/download-profiles/skipped-by-filter/${collectionId}`,
+            `${apiUrl()}/download-profiles/skipped-by-filter/${collectionId}`,
             SkippedByFilterSchema.array(),
             signal,
         ),
@@ -825,7 +801,7 @@ export function useAutoSubtitleUses(localMediaProfileId?: number) {
         queryKey: ['autoSubtitleUses', localMediaProfileId] as const,
         enabled: localMediaProfileId !== undefined,
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/download-profiles/auto-subtitles/${localMediaProfileId}`,
+            `${apiUrl()}/download-profiles/auto-subtitles/${localMediaProfileId}`,
             AutoSubtitlesUseSchema.array(),
             signal,
         ),
@@ -839,8 +815,8 @@ export function useSiteOptions({collectionId, sourceKey, url}: {collectionId?: n
         enabled: collectionId !== undefined || (!!sourceKey && !!url),
         queryFn: ({signal}) => fetchParsed(
             collectionId !== undefined
-                ? `${(window as any).appConfig.API_URL}/download-profiles/site-options/${collectionId}`
-                : `${(window as any).appConfig.API_URL}/sources/${encodeURIComponent(sourceKey ?? '')}/site-options?url=${encodeURIComponent(url ?? '')}`,
+                ? `${apiUrl()}/download-profiles/site-options/${collectionId}`
+                : `${apiUrl()}/sources/${encodeURIComponent(sourceKey ?? '')}/site-options?url=${encodeURIComponent(url ?? '')}`,
             SiteOptionsSchema,
             signal,
         ),
@@ -853,7 +829,7 @@ export function useDownloadProfilesByCollectionSlug(collectionSlug?: string) {
         queryKey: ['downloadProfilesByCollectionSlug', collectionSlug] as const,
         enabled: !!collectionSlug,
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/download-profiles/by-collection-slug/${collectionSlug}`,
+            `${apiUrl()}/download-profiles/by-collection-slug/${collectionSlug}`,
             DownloadProfileReadSchema.array(),
             signal,
         ),
@@ -866,7 +842,7 @@ export function useStreamProfilesByCollectionSlug(collectionSlug?: string) {
         queryKey: ['streamProfilesByCollectionSlug', collectionSlug] as const,
         enabled: !!collectionSlug,
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/stream-profiles/by-collection-slug/${collectionSlug}`,
+            `${apiUrl()}/stream-profiles/by-collection-slug/${collectionSlug}`,
             StreamProfileReadSchema.array(),
             signal,
         ),
@@ -1018,7 +994,7 @@ function mediaDownloadScopeKey(scope: MediaDownloadScope) {
 }
 
 function mediaDownloadScopeUrl(scope: MediaDownloadScope) {
-    const base = `${(window as any).appConfig.API_URL}/media-downloads/as-view`
+    const base = `${apiUrl()}/media-downloads/as-view`
     if (scope.kind === 'all') return base
 
     const params = new URLSearchParams()
@@ -1350,7 +1326,7 @@ export function useMediaDownloadsCollection({
             if (cursor) params.set('cursor', cursor)
             for (const status of normalizedStatuses ?? []) params.append('status', status)
             return MediaDownloadPageReadSchema.parse(await fetchJSON<unknown>(
-                `${(window as any).appConfig.API_URL}/media-downloads/as-view/page?${params}`,
+                `${apiUrl()}/media-downloads/as-view/page?${params}`,
                 signal,
             ))
         },
@@ -1406,7 +1382,7 @@ export function prefetchCoreData(qc: QueryClient) {
     if (library) void qc.prefetchQuery({
         queryKey: ['movies'],
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/movies`,
+            `${apiUrl()}/movies`,
             MovieReadSchema.array(),
             signal,
         ),
@@ -1415,7 +1391,7 @@ export function prefetchCoreData(qc: QueryClient) {
         .prefetchQuery({
             queryKey: ['localMediaProfiles'],
             queryFn: ({signal}) => fetchParsed(
-                `${(window as any).appConfig.API_URL}/local-media-profiles`,
+                `${apiUrl()}/local-media-profiles`,
                 LocalMediaProfileReadSchema.array(),
                 signal,
             ),
@@ -1427,7 +1403,7 @@ export function prefetchCoreData(qc: QueryClient) {
     if (profileListsReadable('download_profiles')) void qc.prefetchQuery({
         queryKey: ['downloadProfilesView'],
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/download-profiles/as-view`,
+            `${apiUrl()}/download-profiles/as-view`,
             DownloadProfileReadViewSchema.array(),
             signal,
         ),
@@ -1436,7 +1412,7 @@ export function prefetchCoreData(qc: QueryClient) {
     if (streamProfiles) void qc.prefetchQuery({
         queryKey: ['rssStreamProfiles'],
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/rss-stream-profiles`,
+            `${apiUrl()}/rss-stream-profiles`,
             RssStreamProfileReadSchema.array(),
             signal,
         ),
@@ -1444,7 +1420,7 @@ export function prefetchCoreData(qc: QueryClient) {
     if (streamProfiles) void qc.prefetchQuery({
         queryKey: ['streamProfilesView'],
         queryFn: ({signal}) => fetchParsed(
-            `${(window as any).appConfig.API_URL}/stream-profiles/as-view`,
+            `${apiUrl()}/stream-profiles/as-view`,
             StreamProfileReadViewSchema.array(),
             signal,
         ),

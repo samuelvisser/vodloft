@@ -328,3 +328,35 @@ def test_first_frame_thumbnails_migration_finishes_without_videos(monkeypatch):
         migration=migration, migration_index=1, migration_total=1, progress=Progress(),
     )
     asyncio.run(module.migrate(context))
+
+
+@pytest.mark.parametrize(("configured", "written"), [("2h,1d", True), ("1h,6h,24h,3d", False)])
+def test_the_daily_wire_keeps_a_refresh_schedule_the_user_set(tmp_path, monkeypatch, configured, written):
+    from types import SimpleNamespace
+
+    import yaml
+
+    from importlib import import_module
+
+    migration = import_module("backend.db.background_migrations.versions.5df6a8811f86_daily_wire_keeps_its_refresh_schedule")
+
+    path = tmp_path / "config.yml"
+    path.write_text(f"newEpisodeSchedule:\n  metadataRefreshIntervals: {configured}\n", encoding="utf-8")
+    monkeypatch.setattr(migration, "get_config_path", lambda: path)
+    monkeypatch.setattr(migration, "reload_settings", lambda: None)
+    schedule = SimpleNamespace(metadata_refresh_intervals=configured)
+    monkeypatch.setattr(migration, "get_settings", lambda: SimpleNamespace(new_episode_schedule=schedule))
+
+    class Context:
+        def raise_if_canceled(self):
+            pass
+
+        def update_progress(self, *args):
+            pass
+
+    asyncio.run(migration.migrate(Context()))
+
+    document = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert ("siteSchedules" in document) is written
+    if written:
+        assert document["siteSchedules"] == {"dailywire": {"metadataRefresh": "2h,1d"}}

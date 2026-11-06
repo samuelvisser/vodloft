@@ -3,10 +3,7 @@ import {queryOptions, type QueryClient} from '@tanstack/react-query'
 import {EpisodeReadViewPageSchema} from '../types/schemas/episode'
 import {SeasonReadSchema} from '../types/schemas/season'
 import {CollectionRead, CollectionReadSchema} from '../types/schemas/collection'
-
-function apiBase() {
-  return ((window as any).appConfig?.API_URL || '/api').replace(/\/+$/, '')
-}
+import {apiUrl} from './api'
 
 async function fetchParsed<T>(
   url: string,
@@ -22,7 +19,7 @@ export function collectionsQueryOptions() {
   return queryOptions({
     queryKey: ['collections'] as const,
     queryFn: ({signal}) => fetchParsed(
-      `${apiBase()}/collections`,
+      `${apiUrl()}/collections`,
       CollectionReadSchema.array(),
       signal,
     ),
@@ -34,7 +31,7 @@ export function collectionQueryOptions(id: string | undefined, queryClient: Quer
   return queryOptions({
     queryKey: ['collection', id] as const,
     queryFn: ({signal}) => fetchParsed(
-      `${apiBase()}/collections/${encodeURIComponent(id!)}`,
+      `${apiUrl()}/collections/${encodeURIComponent(id!)}`,
       CollectionReadSchema,
       signal,
     ),
@@ -51,7 +48,7 @@ export function seasonsQueryOptions(collectionSlug: string | undefined) {
   return queryOptions({
     queryKey: ['seasons', collectionSlug] as const,
     queryFn: ({signal}) => fetchParsed(
-      `${apiBase()}/collections/${encodeURIComponent(collectionSlug!)}/seasons`,
+      `${apiUrl()}/collections/${encodeURIComponent(collectionSlug!)}/seasons`,
       SeasonReadSchema.array(),
       signal,
     ),
@@ -85,7 +82,7 @@ export async function fetchEpisodePage(
   }
   for (const episodeType of params.episodeTypes ?? []) query.append('episode_type', episodeType)
   return fetchParsed(
-    `${apiBase()}/episodes/as-view/by-collection-slug/${encodeURIComponent(collectionSlug)}/page?${query}`,
+    `${apiUrl()}/episodes/as-view/by-collection-slug/${encodeURIComponent(collectionSlug)}/page?${query}`,
     EpisodeReadViewPageSchema,
     signal,
   )

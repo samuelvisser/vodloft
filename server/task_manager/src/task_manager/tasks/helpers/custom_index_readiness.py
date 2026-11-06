@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-from pathlib import Path
 from time import monotonic
 
-import portalocker
 from sqlalchemy import select
 
 from backend.db.models import CustomIndexState, CollectionLocalMediaProfile
@@ -13,8 +11,8 @@ from backend.services.custom_indexes import (
     profile_uses_custom_indexes, request_custom_index_reconciliation,
 )
 from backend.utils.custom_index import CustomIndexNotReadyError
+from backend.utils.file_locks import async_file_lock, lock_file_path
 from controller.db_utils import db_session
-from config import get_settings
 
 
 @asynccontextmanager
@@ -32,23 +30,8 @@ async def custom_index_pair_lock(
     That keeps maintenance out while still allowing separate downloads for the
     same Collection/Profile pair to use the configured global concurrency.
     """
-    root = Path(get_settings().download_settings.lock_root) / "indexes"
-    root.mkdir(parents=True, exist_ok=True)
-    lock_mode = portalocker.LOCK_SH if shared else portalocker.LOCK_EX
-    # portalocker uses flock on POSIX and Windows byte-range locks elsewhere; shared locks
-    # on Windows need its win32 extra. Both lock per open file handle, so two holders in
-    # the same process exclude each other just as separate worker processes do.
-    with (root / f"{collection_id}-{local_media_profile_id}.lock").open("a+b") as lock_file:
-        while True:
-            try:
-                portalocker.lock(lock_file, lock_mode | portalocker.LOCK_NB)
-                break
-            except portalocker.AlreadyLocked:
-                await asyncio.sleep(0.25)
-        try:
-            yield
-        finally:
-            portalocker.unlock(lock_file)
+    async with async_file_lock(lock_file_path("indexes", f"{collection_id}-{local_media_profile_id}"), shared=shared):
+        yield
 
 
 def pair_is_ready(collection_id: int, local_media_profile_id: int) -> bool:

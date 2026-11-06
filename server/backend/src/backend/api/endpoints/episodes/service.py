@@ -4,7 +4,7 @@ from typing import Optional, Sequence
 
 from sqlalchemy.orm import Session
 from backend.services.custom_indexes import request_collection_custom_index_reconciliation
-from backend.services.episode_metadata_refresh import refreshes_episode_metadata
+from backend.services.metadata_refresh import refreshes_metadata
 from sqlalchemy import and_, case, func, or_, select
 
 from fastapi import HTTPException
@@ -37,7 +37,6 @@ class _EpisodeAPIReadSource:
     download_delay_ready_at: datetime | None
 
 
-METADATA_REFRESH_REQUESTED_EVENT = "episode.metadata_refresh_requested"
 _METADATA_REFRESH_TASK_KEY = "refresh_episode_metadata"
 _EARLY_DELETE_TASK_KEY = "monitor_no_usable_media_episode"
 
@@ -334,21 +333,6 @@ def get_episode(s: Session, episode_slug: str) -> EpisodeAPIRead:
     return _episode_api_read(episode)
 
 
-def queue_episode_metadata_refresh(
-        s: Session,
-        episode: Episode,
-) -> None:
-    """Persist unfinished metadata state and queue the normal refresh worker."""
-    episode.metadata_is_final = False
-    queue_event(s, METADATA_REFRESH_REQUESTED_EVENT, {
-        "resource_id": episode.id,
-        "id": episode.id,
-        "slug": episode.slug,
-        "collection_id": episode.collection_id,
-        "refresh": True,
-    })
-
-
 def request_episode_metadata_refresh(
         s: Session,
         episode_slug: str,
@@ -360,7 +344,7 @@ def request_episode_metadata_refresh(
     )
     if episode is None:
         raise HTTPException(status_code=404, detail="Episode not found")
-    if not refreshes_episode_metadata(episode.source_key):
+    if not refreshes_metadata(episode.source_key):
         raise HTTPException(
             status_code=409,
             detail="This episode is kept up to date by the daily catalogue refresh",
@@ -370,7 +354,6 @@ def request_episode_metadata_refresh(
         task_key=_METADATA_REFRESH_TASK_KEY,
         resource_type="episode",
         resource_id=episode.id,
-        task_kwargs={"refresh": True},
     )
     collection = episode.collection
     operation = create_operation(

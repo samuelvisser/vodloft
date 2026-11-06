@@ -34,6 +34,7 @@ import {formatBytes} from '../utils/formatting'
 import {getErrorMessageFromResponse} from '../utils/helpers'
 import {movieExtraTypeLabel} from '../utils/movieExtras'
 import './DownloadsPage.css'
+import {apiUrl} from '../lib/api'
 
 type BulkAction = 'retry' | 'cancel' | 'delete-unavailable'
 
@@ -209,7 +210,7 @@ export default function DownloadsPage() {
 
     const prioritize = async (row: MediaDownloadViewRead) => {
         try {
-            const base = (window as any).appConfig.API_URL
+            const base = apiUrl()
             const r = await fetch(`${base}/media-downloads/${row.id}/prioritize`, {
                 method: 'POST',
                 credentials: 'include',
@@ -235,7 +236,7 @@ export default function DownloadsPage() {
 
     const retryRequest = async (row: MediaDownloadViewRead): Promise<string | null> => {
         try {
-            const base = (window as any).appConfig.API_URL
+            const base = apiUrl()
             const r = await fetch(`${base}/media-downloads/${row.id}/retry`, {
                 method: 'POST',
                 credentials: 'include',
@@ -263,7 +264,7 @@ export default function DownloadsPage() {
 
     const cancel = async (row: MediaDownloadViewRead) => {
         try {
-            const base = (window as any).appConfig.API_URL
+            const base = apiUrl()
             const r = await fetch(`${base}/media-downloads/${row.id}/cancel`, {method: 'POST', credentials: 'include'})
             if (!r.ok) {
                 const {error: message} = await getErrorMessageFromResponse(r)
@@ -284,7 +285,7 @@ export default function DownloadsPage() {
         if (!deleteRow || deleteBusy) return
         setDeleteBusy(true)
         try {
-            const base = (window as any).appConfig.API_URL
+            const base = apiUrl()
             const r = await fetch(`${base}/media-downloads/${deleteRow.id}`, {
                 method: 'DELETE',
                 credentials: 'include',
@@ -321,7 +322,7 @@ export default function DownloadsPage() {
         bulkStartRef.current = start
         setBulkActionStarting(action)
         try {
-            const base = (window as any).appConfig?.API_URL || '/api'
+            const base = apiUrl()
             const params = new URLSearchParams({action})
             for (const status of selectedStatuses ?? []) params.append('status', status)
             const idsResponse = await fetch(

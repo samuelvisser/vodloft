@@ -1,4 +1,4 @@
-.cron-task-ledger-modal {
+.ledger-modal {
     width: min(640px, calc(100vw - 32px));
     max-width: 640px;
     max-height: calc(100dvh - 48px);
@@ -8,20 +8,20 @@
     padding: 0;
 }
 
-.cron-task-ledger-header {
+.ledger-modal__header {
     flex: 0 0 auto;
     align-items: flex-start;
     margin-bottom: 0;
     padding: 20px 20px 0;
 }
 
-.cron-task-ledger-subtitle {
+.ledger-modal__subtitle {
     margin-top: 2px;
     color: var(--text-muted, #9ca3af);
     font-size: 0.9rem;
 }
 
-.cron-task-ledger-content {
+.ledger-modal__content {
     flex: 1 1 auto;
     min-height: 0;
     margin-top: 18px;
@@ -31,7 +31,7 @@
     scrollbar-gutter: stable;
 }
 
-.cron-task-ledger-table {
+.ledger-modal__table {
     display: grid;
     gap: 0;
     overflow: hidden;
@@ -39,30 +39,30 @@
     border-radius: 10px;
 }
 
-.cron-task-ledger-row {
+.ledger-modal__row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 160px 82px;
+    grid-template-columns: var(--ledger-columns);
     gap: 20px;
     align-items: center;
     padding: 11px 14px;
     border-top: 1px solid var(--border-color, rgba(15, 23, 42, 0.12));
 }
 
-.cron-task-ledger-row:first-child {
+.ledger-modal__row:first-child {
     border-top: 0;
 }
 
-.cron-task-ledger-row > :first-child {
+.ledger-modal__row > :first-child {
     min-width: 0;
 }
 
-.cron-task-ledger-row > :last-child {
+.ledger-modal__row > :last-child {
     justify-self: end;
     text-align: right;
     font-variant-numeric: tabular-nums;
 }
 
-.cron-task-ledger-row-header {
+.ledger-modal__row--header {
     color: var(--text-muted, #9ca3af);
     font-size: 0.82rem;
     font-weight: 600;
@@ -70,33 +70,7 @@
     letter-spacing: 0.04em;
 }
 
-.cron-task-ledger-result {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 2px;
-    text-align: left;
-}
-
-.cron-task-ledger-result small {
-    max-width: 100%;
-    overflow: hidden;
-    color: var(--text-muted, #64748b);
-    font-size: 0.75rem;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.cron-task-ledger-status.is-failed {
-    color: #b91c1c;
-}
-
-.cron-task-ledger-status.is-canceled {
-    color: var(--text-muted, #64748b);
-}
-
-.cron-task-ledger-footer {
+.ledger-modal__footer {
     position: sticky;
     bottom: 0;
     z-index: 2;
@@ -110,7 +84,7 @@
     background: #fff;
 }
 
-.cron-task-ledger-more {
+.ledger-modal__more {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -121,38 +95,63 @@
     font-size: 0.86rem;
 }
 
-.cron-task-ledger-actions {
+.ledger-modal__actions {
     flex: 0 0 auto;
     justify-content: flex-end;
 }
 
+.ledger-modal .is-failed {
+    color: #b91c1c;
+}
+
+.ledger-modal .is-canceled {
+    color: var(--text-muted, #64748b);
+}
+
+.ledger-modal__detail {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    text-align: left;
+}
+
+.ledger-modal__detail small {
+    max-width: 100%;
+    overflow: hidden;
+    color: var(--text-muted, #9ca3af);
+    font-size: 0.78rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 @media (max-width: 640px) {
-    .cron-task-ledger-modal {
+    .ledger-modal {
         max-height: calc(100dvh - 24px);
     }
 
-    .cron-task-ledger-row {
+    .ledger-modal__row {
         grid-template-columns: minmax(0, 1fr) minmax(120px, 160px);
     }
 
-    .cron-task-ledger-row > :last-child,
-    .cron-task-ledger-row-header > :last-child {
+    .ledger-modal__row .is-wide-only {
         display: none;
     }
 }
 
 @media (prefers-color-scheme: dark) {
-    .cron-task-ledger-footer {
+    .ledger-modal__footer {
         background: #0b1220;
         border-top-color: rgba(255, 255, 255, 0.14);
     }
 
-    .cron-task-ledger-table,
-    .cron-task-ledger-row {
+    .ledger-modal__table,
+    .ledger-modal__row {
         border-color: rgba(255, 255, 255, 0.14);
     }
 
-    .cron-task-ledger-status.is-failed {
+    .ledger-modal .is-failed {
         color: #fecaca;
     }
 }

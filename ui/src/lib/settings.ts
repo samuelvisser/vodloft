@@ -10,10 +10,11 @@ import {
     SettingsUpdateSchema,
     SettingsValues,
 } from '../types/schemas/settings'
+import {apiUrl} from './api'
 
 
 function settingsUrl() {
-    const base = (window as any).appConfig?.API_URL?.replace(/\/+$/, '')
+    const base = apiUrl()
     return `${base}/settings`
 }
 

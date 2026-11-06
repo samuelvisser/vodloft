@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 def test_settings_cron_operations_target_the_scheduled_workers():
-    from backend.api.endpoints.settings.operations import (
+    from backend.operations.settings import (
         FileWatcherCronOperation,
         FindEpisodesCronOperation,
         FullRescanCronOperation,
@@ -29,30 +29,12 @@ def test_settings_cron_operations_target_the_scheduled_workers():
         assert target.resource_id == resource_id
 
 
-def test_pending_episode_cron_operation_targets_each_pending_episode():
-    from backend.api.endpoints.settings.operations import MonitorPendingEpisodesCronOperation
-
-    operation = MonitorPendingEpisodesCronOperation((9, 4, 9))
-
-    assert operation.resource_type == "system"
-    assert operation.resource_id == 0
-    assert operation.context() == {"episodes_requested": 2}
-    assert [
-        (target.task_key, target.resource_type, target.resource_id, target.slot_key)
-        for target in operation.targets()
-    ] == [
-        ("monitor_pending_episode", "episode", 9, "episode:9"),
-        ("monitor_pending_episode", "episode", 4, "episode:4"),
-    ]
-
-
 def test_settings_cron_operations_have_distinct_system_kinds():
-    from backend.api.endpoints.settings.operations import (
+    from backend.operations.settings import (
         FileWatcherCronOperation,
         FindEpisodesCronOperation,
         FullRescanCronOperation,
         MonitorNoUsableMediaCronOperation,
-        MonitorPendingEpisodesCronOperation,
         QuickCheckCronOperation,
         VerifyDownloadsCronOperation,
     )
@@ -61,7 +43,6 @@ def test_settings_cron_operations_have_distinct_system_kinds():
         FindEpisodesCronOperation(),
         QuickCheckCronOperation(),
         FullRescanCronOperation(),
-        MonitorPendingEpisodesCronOperation(()),
         MonitorNoUsableMediaCronOperation(),
         VerifyDownloadsCronOperation(),
         FileWatcherCronOperation(),
@@ -71,7 +52,6 @@ def test_settings_cron_operations_have_distinct_system_kinds():
         "system.cron.find_episodes",
         "system.cron.quick_check",
         "system.cron.full_rescan",
-        "system.cron.monitor_pending_episodes",
         "system.cron.monitor_no_usable_media",
         "system.cron.verify_downloads",
         "system.cron.file_watcher",

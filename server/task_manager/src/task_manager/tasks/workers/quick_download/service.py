@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import logging
-import threading
 from contextlib import contextmanager
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Iterator
 
+from backend.utils.keyed_locks import KeyedLocks
 from backend.services.quick_downloads import (
     QuickDownloadRefused,
     QuickDownloadRequest,
@@ -30,25 +30,18 @@ from task_manager.tasks.quick_download_operations import mark_quick_download_sta
 
 logger = logging.getLogger(__name__)
 
-_FOLDER_LOCKS: dict[str, threading.Lock] = {}
-_FOLDER_LOCKS_GUARD = threading.Lock()
+_FOLDERS: KeyedLocks[str] = KeyedLocks()
 
 
 @contextmanager
 def _own_folder(quick_id: str, tracker: DownloadTracker) -> Iterator[Path]:
     """One attempt at a time per quick download: a restarted attempt waits for the
     canceled one to stop, then starts from an empty folder."""
-    with _FOLDER_LOCKS_GUARD:
-        lock = _FOLDER_LOCKS.setdefault(quick_id, threading.Lock())
-    while not lock.acquire(timeout=0.1):
-        tracker.ensure_active()
-    try:
+    with _FOLDERS.hold(quick_id, while_waiting=tracker.ensure_active):
         folder = quick_folder(quick_id)
         remove_quick_folder(folder)
         reserve_quick_folder(get_settings().download_settings.quick_download_root, quick_id)
         yield folder
-    finally:
-        lock.release()
 
 
 def _refused(request: QuickDownloadRequest, summary: str, reason: str) -> TaskResult:

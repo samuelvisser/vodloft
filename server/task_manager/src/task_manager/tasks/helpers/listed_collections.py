@@ -37,6 +37,7 @@ from sqlalchemy.orm import Session
 from backend.db.models import Episode, Season, Collection
 from backend.services.seasons import create_season_record
 from backend.services.metadata_refresh import new_item_metadata_is_final
+from backend.services.pending_episodes import site_follows_pending
 from backend.types.episode_types import PENDING_EPISODE_PUBLISH_STATUSES, EpisodePublishStatus
 from backend.types.media_types import MediaType
 from backend.types.collection_types import EpisodeIdentifier
@@ -138,8 +139,7 @@ def _episode_slug(s: Session, collection: Collection, source_slug: str) -> str:
 
 def adds_pending(collection: Collection) -> bool:
     """Whether upcoming and live videos of the collection are added before they are published."""
-    site = collection.site
-    return get_source(collection.source_key).has(Feature.PENDING_CHECKS) and (site is None or site.pending_checks)
+    return get_source(collection.source_key).has(Feature.PENDING_CHECKS) and site_follows_pending(collection.site_key)
 
 
 def date_based_identifier(s: Session, episode: Episode, published_at: datetime) -> str | None:
@@ -249,7 +249,7 @@ def add_listed_episodes(s: Session, *, collection_id: int, found: list[VideoDeta
             publish_status=details.publish_status.value,
             # The metadata refresh sweep follows a new upload for a while, from when it is published; an older one is done.
             metadata_is_final=details.publish_status not in PENDING_EPISODE_PUBLISH_STATUSES and new_item_metadata_is_final(
-                s, source_key=collection.source_key, site_key=collection.site_key, published_at=details.published_at,
+                source_key=collection.source_key, site_key=collection.site_key, published_at=details.published_at,
             ),
             scheduled_date=details.scheduled_at,
             sharing_url=details.url,

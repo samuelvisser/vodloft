@@ -2,6 +2,7 @@ import {useCallback, useEffect, useRef, useState} from 'react'
 
 import type {ExampleCollection} from '../../lib/collectionExamples'
 import {WhichEpisodesSchema, type EpisodeFilter, type WhichEpisodes} from '../../types/schemas/download_profile'
+import {apiUrl} from '../../lib/api'
 
 export type WhichEpisodesRequest = {
     /** The saved Collection, or the newest episodes of the one that is being added. */
@@ -30,7 +31,7 @@ type State = {
 }
 
 async function fetchPage(body: string, offset: number, limit: number, signal: AbortSignal): Promise<WhichEpisodes | null> {
-    const response = await fetch(`${(window as any).appConfig.API_URL}/download-profiles/which-episodes`, {
+    const response = await fetch(`${apiUrl()}/download-profiles/which-episodes`, {
         method: 'POST',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},

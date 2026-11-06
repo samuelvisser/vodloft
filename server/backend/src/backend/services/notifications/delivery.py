@@ -313,9 +313,13 @@ def _record(session: Session, batch: _Batch, outcome: Outcome | str, now: dateti
 
 
 def deliver_pending(session: Session, *, now: datetime | None = None) -> int:
-    """Send everything that is due. Returns how many batches went out."""
-    now = now or _now()
-    batches = _batches(session, now)
+    """Send everything that is due. Returns how many batches went out.
+
+    ``now`` fixes the clock for the whole pass. Without it, each outcome is recorded at the moment its send
+    finished, so a slow destination does not shorten the wait before the next try.
+    """
+    clock = _now if now is None else (lambda: now)
+    batches = _batches(session, clock())
     session.commit()
     sent = 0
     for batch in batches:
@@ -332,7 +336,7 @@ def deliver_pending(session: Session, *, now: datetime | None = None) -> int:
             logger.exception("Sending a notification failed")
             # An exception is a fault in VODLoft or a library, not a busy service: retrying gives the same result.
             outcome = Outcome(False, f"Sending failed ({type(error).__name__})", retry=False)
-        _record(session, batch, outcome, _now())
+        _record(session, batch, outcome, clock())
         session.commit()
         sent += 1
     return sent

@@ -15,6 +15,7 @@ import {
 } from '../types/schemas/puller'
 import {usePageActive} from './pageActivity'
 import {VODLOFT_VERSION as FRONTEND_APP_VERSION} from 'virtual:vodloft-version'
+import {apiUrl} from './api'
 
 
 export const FRONTEND_PULLER_QUERY_KEY = ['frontendPuller'] as const
@@ -67,7 +68,7 @@ function reloadIfFrontendIsOutdated(backendAppVersion: string) {
 }
 
 async function fetchFrontendPuller(signal?: AbortSignal): Promise<FrontendPullRead> {
-  const base = (window as any).appConfig?.API_URL || '/api'
+  const base = apiUrl()
   const response = await fetch(base + '/pull', {credentials: 'include', signal})
   if (!response.ok) throw new FrontendPullError(response.status)
 

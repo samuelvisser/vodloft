@@ -11,6 +11,7 @@ import {faIcon} from '../../icons/faIcon'
 import DownloadProgressStatus from '../DownloadProgress/DownloadProgressStatus'
 import ProgressExplanation from '../common/ProgressExplanation'
 import DownloadLogDialog from './DownloadLogDialog'
+import {apiUrl} from '../../lib/api'
 
 /**
  * Send a download action for one row, then refresh the row's downloads and the download lists.
@@ -24,7 +25,7 @@ export function useDownloadRowRequest(downloadsQueryKey: QueryKey) {
         setBusy(true)
         try {
             const response = await fetch(
-                `${(window as any).appConfig.API_URL}${path}`,
+                `${apiUrl()}${path}`,
                 {credentials: 'include', ...init},
             )
             if (!response.ok) {

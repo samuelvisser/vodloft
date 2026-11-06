@@ -158,10 +158,6 @@ WORKER_CRON_DEFINITIONS: tuple[WorkerCronDefinition, ...] = (
         field_path=("new_episode_schedule", "full_rescan_cron"),
     ),
     WorkerCronDefinition(
-        setting_name="Monitor pending episodes",
-        field_path=("new_episode_schedule", "monitor_pending_episode_cron"),
-    ),
-    WorkerCronDefinition(
         setting_name="Monitor no-usable-media episodes",
         field_path=("new_episode_schedule", "monitor_no_usable_media_episode_cron"),
     ),

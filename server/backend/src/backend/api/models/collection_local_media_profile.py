@@ -2,66 +2,25 @@ from __future__ import annotations
 
 from typing import Literal, Union
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field
 
 from backend.api.models.local_media_profile import (
-    LocalMediaProfileAPIBaseIn,
     LocalMediaProfileAPIBaseOut,
 )
+from backend.api.models.base import RequestBase
 from backend.api.models.custom_metadata import IndexingValueDefinitionAPI
+from backend.services.local_media_profile_inputs import CollectionLocalMediaProfileInput, NewCollectionLocalMediaProfile
 from backend.types.local_media_profile_types import (
-    LocalMediaProfileSubtitleMode,
     LocalMediaProfileType,
     CollectionLocalMediaProfileScope,
 )
-from backend.utils.output_template import (
-    COLLECTION_OUTPUT_TEMPLATE_FIELDS,
-    COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
-    validate_output_template_path_requirements,
-)
 
 
-class _CollectionLocalMediaProfileAPIBaseIn(LocalMediaProfileAPIBaseIn):
-    type: Literal["collection"] = LocalMediaProfileType.COLLECTION.value
-    collection_scope: CollectionLocalMediaProfileScope = CollectionLocalMediaProfileScope.BOTH
-    download_collection_assets: bool | None = None
-    indexing_values: list[IndexingValueDefinitionAPI] = Field(default_factory=list, max_length=100)
-
-    @model_validator(mode="after")
-    def _unique_index_keys(self):
-        keys = [item.key for item in self.indexing_values]
-        if len(keys) != len(set(keys)):
-            raise ValueError("Indexing Value keys must be unique")
-        return self
-
-    @field_validator("output_template")
-    @classmethod
-    def _validate_output_template(cls, value: str) -> str:
-        validate_output_template_path_requirements(
-            value,
-            allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
-            allowed_metadata_scopes=COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
-        )
-        return value
-
-
-class CollectionLocalMediaProfileAPICreate(_CollectionLocalMediaProfileAPIBaseIn):
+class CollectionLocalMediaProfileAPICreate(RequestBase, NewCollectionLocalMediaProfile):
     """Create a Collection Local Media Profile."""
 
-    @model_validator(mode="after")
-    def _default_subtitles_for_scope(self):
-        # Scope-dependent defaults apply only when a profile is first created.
-        # Updates must never infer a new subtitle mode from changed scope.
-        if "subtitle_mode" not in self.model_fields_set:
-            self.subtitle_mode = (
-                LocalMediaProfileSubtitleMode.NO_SUBTITLES
-                if self.collection_scope == CollectionLocalMediaProfileScope.PODCAST
-                else LocalMediaProfileSubtitleMode.SIDECAR
-            )
-        return self
 
-
-class CollectionLocalMediaProfileAPIUpdate(_CollectionLocalMediaProfileAPIBaseIn):
+class CollectionLocalMediaProfileAPIUpdate(RequestBase, CollectionLocalMediaProfileInput):
     """Update a Collection Local Media Profile."""
 
 

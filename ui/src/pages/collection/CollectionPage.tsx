@@ -26,6 +26,7 @@ import ExistingFilesDialog from '../../components/ExistingFiles/ExistingFilesDia
 import ExistingFilesBanner from '../../components/ExistingFiles/ExistingFilesBanner'
 import {useExistingFilesScans} from '../../components/ExistingFiles/api'
 import EpisodeTypeFilter from '../../components/Episode/EpisodeTypeFilter'
+import {apiUrl} from '../../lib/api'
 
 const EPISODE_TYPE_FILTER_STORAGE_PREFIX = 'collectionEpisodeTypeFilter:'
 
@@ -422,7 +423,7 @@ export default function CollectionPage() {
     }
     setSyncStarting(true)
     try {
-      const base = (window as any).appConfig?.API_URL || '/api'
+      const base = apiUrl()
       await startOperation(`${base}/collections/${encodeURIComponent(id)}/sync`, {method: 'POST'})
       toast.success(`Sync started for ${collection.title}`)
     } catch {

@@ -33,6 +33,7 @@ import {
     saveLocalMediaProfileDraft,
 } from '../../components/LocalMediaProfile/localMediaProfileDraft'
 import './EditLocalMediaProfilePage.css'
+import {apiUrl} from '../../lib/api'
 
 function canonicalProfileValues(profile: LocalMediaProfileRead): LocalMediaProfileUpdateIn {
     if (profile.type === 'movie') return MovieLocalMediaProfileUpdateSchema.parse(profile)
@@ -55,7 +56,7 @@ export default function EditLocalMediaProfilePage() {
         enabled: !!slug,
         refetchOnMount: 'always',
         queryFn: async ({signal}) => {
-            const res = await fetch(`${(window as any).appConfig.API_URL}/local-media-profiles/${slug}`, {signal, credentials: 'include'})
+            const res = await fetch(`${apiUrl()}/local-media-profiles/${slug}`, {signal, credentials: 'include'})
             if (!res.ok) throw new Error(`Failed to load profile (${res.status})`)
             return await res.json() as Promise<LocalMediaProfileRead>
         },
@@ -156,7 +157,7 @@ export default function EditLocalMediaProfilePage() {
         try {
             const endpoint = localMediaProfileEndpoint(profile.type)
             const renameQuery = renameDecisionRef.current ? '?rename_files=true' : ''
-            const response = await fetch(`${(window as any).appConfig.API_URL}/${endpoint}/${data.slug}${renameQuery}`, {
+            const response = await fetch(`${apiUrl()}/${endpoint}/${data.slug}${renameQuery}`, {
                 method: 'PATCH',
                 headers: {'Content-Type': 'application/json'},
                 credentials: 'include',

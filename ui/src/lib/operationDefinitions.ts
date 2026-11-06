@@ -4,6 +4,7 @@ import {PUBLISH_STATUS_LABELS} from '../types/episode'
 import {type TaskOperationRead} from '../types/schemas/operation'
 import {removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from './cache'
 import {episodeQueryKeys} from './collectionQueryOptions'
+import {apiUrl} from './api'
 
 export type OperationMessageResolver = (operation: TaskOperationRead) => string
 
@@ -286,7 +287,7 @@ function invalidateQuickDownloads(
 function quickDownloadFile(operation: TaskOperationRead): OperationNotificationAction | undefined {
   const quickId = resultString(operation, 'quick_download_id') ?? contextString(operation, 'quick_download_id')
   if (!quickId) return undefined
-  const base = ((window as any).appConfig?.API_URL || '/api').replace(/\/+$/, '')
+  const base = (apiUrl()).replace(/\/+$/, '')
   return {
     label: 'Download',
     href: `${base}/quick-downloads/${encodeURIComponent(quickId)}/file`,
@@ -383,15 +384,6 @@ function invalidateFullRescanCron(
   invalidateTaskLedgerDefinition(queryClient, 'rescan_quick_checked_collections', invalidations)
 }
 
-function invalidatePendingEpisodeCron(
-  queryClient: QueryClient,
-  operation: TaskOperationRead,
-  invalidations: InvalidationCollector,
-) {
-  invalidateEpisodeAndDownloadCronJob(queryClient, operation, invalidations)
-  invalidateTaskLedgerDefinition(queryClient, 'monitor_pending_episode', invalidations)
-}
-
 function invalidateNoUsableMediaCron(
   queryClient: QueryClient,
   operation: TaskOperationRead,
@@ -437,12 +429,6 @@ export const frontendOperationDefinitions = {
     resourceType: 'system',
     label: 'Re-scan collections with quick checks',
     invalidate: invalidateFullRescanCron,
-  },
-  'system.cron.monitor_pending_episodes': {
-    kind: 'system.cron.monitor_pending_episodes',
-    resourceType: 'system',
-    label: 'Monitor pending episodes',
-    invalidate: invalidatePendingEpisodeCron,
   },
   'system.cron.monitor_no_usable_media': {
     kind: 'system.cron.monitor_no_usable_media',

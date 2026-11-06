@@ -128,8 +128,6 @@ class AppSettings(SettingsBase):
         quick_check_cron="*/5 * * * *",
         full_rescan_cron_enabled=True,
         full_rescan_cron="0 4 * * *",
-        monitor_pending_episode_cron_enabled=True,
-        monitor_pending_episode_cron="*/2 * * * *",
         monitor_no_usable_media_episode_cron_enabled=True,
         monitor_no_usable_media_episode_cron="*/20 * * * *",
         metadata_refresh_intervals="1h,6h,24h,3d",
@@ -139,6 +137,10 @@ class AppSettings(SettingsBase):
         dw_processing_max_minutes=60,
         no_usable_media_delete_after_minutes=4 * 60,
     ))
+    site_schedules: dict[str, SiteSchedule] = Field(
+        default_factory=dict,
+        description="Per Site key, the scheduling settings the Site has of its own",
+    )
     download_settings: DownloadSettings = Field(default_factory=DownloadSettings)
     quick_download: QuickDownloadSettings = Field(default_factory=QuickDownloadSettings)
     youtube_api: YouTubeApiSettings = Field(default_factory=YouTubeApiSettings)

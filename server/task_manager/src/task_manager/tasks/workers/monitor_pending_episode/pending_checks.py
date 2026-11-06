@@ -1,20 +1,25 @@
-"""Following upcoming and live episodes of Sources with ``Feature.PENDING_CHECKS``, such as yt-dlp.
+"""Following upcoming and live episodes until they are published.
 
-The Daily Wire's episodes get a monitor job each. These episodes are swept
-instead, like the metadata refresh does: the sweep runs every couple of minutes
-and looks up the episodes that are due, through ``Source.check_pending``.
+One sweep runs every couple of minutes and looks up the episodes that are due.
+Every Source follows the same rhythm, which each Site can change:
 
 - An upcoming episode is looked up every hour, and often from 15 minutes before
   it is due to start until it goes live. One that is more than an hour late is
   back to every hour, because some channels keep a stream waiting for days.
 - A live episode, and one the site is still processing, is looked up every few minutes.
 - Once it is published it is downloaded like any other episode, and the metadata
-  refresh follows it from then on. In a date-based collection it moves to the
-  date it was actually published.
-- One the Source no longer has, such as a cancelled stream, has no usable media,
-  like a Daily Wire episode that is gone. It is looked up every hour in case it
-  comes back, and deleted after the same grace period. A lookup that fails for
-  another reason is just tried again later.
+  refresh follows it from then on.
+
+Episodes of Sources with ``Feature.PENDING_CHECKS``, such as yt-dlp, are looked up
+together through ``Source.check_pending``. In a date-based collection a published
+one moves to the date it was actually published. One the Source no longer has,
+such as a cancelled stream, has no usable media, like a Daily Wire episode that is
+gone. It is looked up every hour in case it comes back, and deleted after the same
+grace period. A lookup that fails for another reason is just tried again later.
+
+Episodes of a Source that has live episodes but no pending checks, which is The
+Daily Wire, are looked up one by one by its own monitor, which also hands an
+episode over to the metadata refresh or to the no-usable-media checks.
 
 Nothing is stored per episode: the sweep remembers when it last looked each one
 up, so after a restart every one of them is looked up once.
@@ -26,14 +31,17 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from backend.db.datetime_types import utc_datetime
-from backend.db.models import Episode
+from backend.db.models import Collection, Episode
+from backend.services.pending_episodes import (
+    PendingMinutes, checks_pending, monitors_pending, site_follows_pending, site_pending_minutes,
+)
 from backend.types.episode_types import PENDING_EPISODE_PUBLISH_STATUSES, EpisodePublishStatus
 from config import get_settings
-from sources import Feature, ItemRef, VideoDetails, all_sources, get_source
+from sources import ItemRef, VideoDetails, all_sources, get_source
 from ...helpers.episodes.events import queue_episode_status_events
 from ...helpers.episodes.quarantine import restore_quarantined_identifier
 from ...helpers.episodes.trusted_publication_timing import track_monitor_publication_timing
@@ -46,36 +54,56 @@ from ...helpers.episodes.unusable_media import (
 )
 from ...helpers.listed_collections import date_based_identifier
 from ...helpers.refreshed_metadata import apply_refreshed_details
+from .service import run_monitor_pending_episode
 
 logger = logging.getLogger(__name__)
 
-HOURLY = timedelta(hours=1)
-OFTEN = timedelta(minutes=2)
-WHILE_LIVE = timedelta(minutes=5)
 SOON = timedelta(minutes=15)
 LATE = timedelta(hours=1)
 
-_FOLLOWED = [status.value for status in PENDING_EPISODE_PUBLISH_STATUSES] + [EpisodePublishStatus.NO_USABLE_MEDIA.value]
+_PENDING = [status.value for status in PENDING_EPISODE_PUBLISH_STATUSES]
+_FOLLOWED = _PENDING + [EpisodePublishStatus.NO_USABLE_MEDIA.value]
+_WHILE_LIVE = {
+    EpisodePublishStatus.LIVE.value,
+    EpisodePublishStatus.SOURCE_PROCESSING.value,
+    EpisodePublishStatus.PUBLISHED_PRELIMINARY.value,
+}
 _last_checked: dict[int, datetime] = {}
 
 
-def interval(status: str, scheduled: Optional[datetime], now: datetime) -> timedelta:
+@dataclass(frozen=True)
+class Rhythm:
+    """How often a Site's pending episodes are looked up."""
+
+    upcoming: timedelta
+    starting: timedelta
+    live: timedelta
+
+    @classmethod
+    def of(cls, minutes: PendingMinutes) -> Rhythm:
+        return cls(timedelta(minutes=minutes.upcoming), timedelta(minutes=minutes.starting), timedelta(minutes=minutes.live))
+
+
+def interval(status: str, starts: Optional[datetime], now: datetime, rhythm: Rhythm) -> timedelta:
     """How long an episode waits between lookups."""
-    if status in {EpisodePublishStatus.LIVE.value, EpisodePublishStatus.SOURCE_PROCESSING.value}:
-        return WHILE_LIVE
-    if status in {EpisodePublishStatus.SCHEDULED.value, EpisodePublishStatus.DELAYED.value} and scheduled is not None:
-        if scheduled - SOON <= now <= scheduled + LATE:
-            return OFTEN
-    return HOURLY
+    if status in _WHILE_LIVE:
+        return rhythm.live
+    if status in {EpisodePublishStatus.SCHEDULED.value, EpisodePublishStatus.DELAYED.value}:
+        # Without a known start, it may start any moment.
+        if starts is None or starts - SOON <= now <= starts + LATE:
+            return rhythm.starting
+    return rhythm.upcoming
 
 
-def is_due(status: str, scheduled: Optional[datetime], last: Optional[datetime], now: datetime) -> bool:
+def is_due(
+    status: str, starts: Optional[datetime], last: Optional[datetime], now: datetime, rhythm: Rhythm,
+) -> bool:
     """Due after its interval, and also right when an upcoming episode is about to start."""
     if last is None:
         return True
-    if scheduled is not None and last < scheduled - SOON <= now:
+    if starts is not None and last < starts - SOON <= now:
         return True
-    return now - last >= interval(status, scheduled, now)
+    return now - last >= interval(status, starts, now, rhythm)
 
 
 @dataclass(frozen=True)
@@ -83,6 +111,7 @@ class _Pending:
     id: int
     source_key: str
     ref: ItemRef
+    monitored: bool
 
 
 @dataclass
@@ -113,21 +142,31 @@ class PendingCheckResult:
         return vars(self)
 
 
-def _due(s: Session, source_keys: list[str], now: datetime) -> list[_Pending]:
+def _due(s: Session, now: datetime) -> list[_Pending]:
+    checked = [source.id for source in all_sources() if checks_pending(source)]
+    monitored = [source.id for source in all_sources() if monitors_pending(source)]
     rows = s.execute(
         select(Episode.id, Episode.source_key, Episode.source_slug, Episode.sharing_url, Episode.publish_status,
-               Episode.scheduled_date)
-        .where(Episode.source_key.in_(source_keys), Episode.publish_status.in_(_FOLLOWED))
+               Episode.scheduled_date, Collection.site_key)
+        .join(Collection, Episode.collection_id == Collection.id)
+        .where(or_(
+            and_(Episode.source_key.in_(checked), Episode.publish_status.in_(_FOLLOWED)),
+            # The Daily Wire's no-usable-media checks follow those episodes.
+            and_(Episode.source_key.in_(monitored), Episode.publish_status.in_(_PENDING)),
+        ))
         .order_by(Episode.id)
     ).all()
+    # A Site with upcoming and live videos off is not followed.
+    rows = [row for row in rows if site_follows_pending(row[-1])]
+    followed = {row[0] for row in rows}
     # A published or deleted episode is no longer followed.
-    for episode_id in set(_last_checked) - {row[0] for row in rows}:
+    for episode_id in set(_last_checked) - followed:
         del _last_checked[episode_id]
     due = []
-    for episode_id, source_key, slug, url, status, scheduled in rows:
-        scheduled = utc_datetime(scheduled) if scheduled is not None else None
-        if is_due(status, scheduled, _last_checked.get(episode_id), now):
-            due.append(_Pending(episode_id, source_key, ItemRef(slug, url)))
+    for episode_id, source_key, slug, url, status, scheduled, site_key in rows:
+        starts = utc_datetime(scheduled) if scheduled is not None else None
+        if is_due(status, starts, _last_checked.get(episode_id), now, Rhythm.of(site_pending_minutes(site_key))):
+            due.append(_Pending(episode_id, source_key, ItemRef(slug, url), source_key in monitored))
     return due
 
 
@@ -198,21 +237,44 @@ def _gone(s: Session, episode: Episode, result: PendingCheckResult, now: datetim
             result.deleted += 1
 
 
+def _monitor(s: Session, item: _Pending, result: PendingCheckResult) -> None:
+    episode = s.get(Episode, item.id)
+    if episode is None:
+        return
+    old_status = episode.publish_status
+    try:
+        new_status = run_monitor_pending_episode(s, episode_id=item.id)
+    except Exception:
+        s.rollback()
+        logger.warning("Could not check pending episode %s", item.id, exc_info=True)
+        result.failed += 1
+        return
+    if new_status.value != old_status:
+        result.changed += 1
+    if new_status is EpisodePublishStatus.NO_USABLE_MEDIA:
+        result.gone += 1
+    elif new_status not in PENDING_EPISODE_PUBLISH_STATUSES:
+        result.published += 1
+
+
 def run_pending_checks(s: Session, *, now: Optional[datetime] = None) -> PendingCheckResult:
     now = utc_datetime(now or datetime.now(timezone.utc))
-    source_keys = [source.id for source in all_sources() if source.has(Feature.PENDING_CHECKS)]
-    due = _due(s, source_keys, now)
+    due = _due(s, now)
     # No transaction stays open while the Sources look episodes up.
     s.rollback()
+    batched = [item for item in due if not item.monitored]
     answers = {
-        source_key: _check(source_key, [item.ref for item in due if item.source_key == source_key])
-        for source_key in dict.fromkeys(item.source_key for item in due)
+        source_key: _check(source_key, [item.ref for item in batched if item.source_key == source_key])
+        for source_key in dict.fromkeys(item.source_key for item in batched)
     }
 
     result = PendingCheckResult()
     for item in due:
         _last_checked[item.id] = now
         result.checked += 1
+        if item.monitored:
+            _monitor(s, item, result)
+            continue
         answer = answers[item.source_key]
         episode = s.get(Episode, item.id)
         if episode is None:

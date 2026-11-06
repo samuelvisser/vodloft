@@ -53,7 +53,7 @@ from backend.services.notifications.rules import (
     update_rule,
 )
 from backend.services.notifications.senders import test_destination, webhook_payload
-from backend.services.users import UserError
+from backend.services.errors import ServiceError
 
 _HISTORY_LIMIT = 200
 _PERSONAL_HISTORY = timedelta(days=30)
@@ -69,7 +69,7 @@ def _config(destination: DestinationInput) -> dict[str, Any]:
         try:
             url = build_url(apprise.service, apprise.values) if apprise.mode == "fields" else apprise.url
         except InvalidDestination as error:
-            raise UserError(str(error), field="destination") from None
+            raise ServiceError(str(error), field="destination") from None
         return {"url": url}
     part = {
         Kind.WEBHOOK: destination.webhook, Kind.SCRIPT: destination.script,
@@ -81,7 +81,7 @@ def _checked(call):
     try:
         return call()
     except InvalidDestination as error:
-        raise UserError(str(error), field="destination") from None
+        raise ServiceError(str(error), field="destination") from None
 
 
 @dataclass(frozen=True)
@@ -119,7 +119,7 @@ def _shown(destination: NotificationDestination) -> DestinationSource:
 def _name_free(s: Session, name: str, *, except_id: int | None = None) -> None:
     existing = s.scalar(select(NotificationDestination.id).where(NotificationDestination.name == name.strip()))
     if existing is not None and existing != except_id:
-        raise UserError("Another destination already has this name", field="name")
+        raise ServiceError("Another destination already has this name", field="name")
 
 
 def destinations(s: Session) -> list[DestinationSource]:
@@ -145,7 +145,7 @@ def _found(call):
     try:
         return call()
     except (DestinationNotFound, RuleNotFound):
-        raise UserError("It no longer exists", status_code=404) from None
+        raise ServiceError("It no longer exists", status_code=404) from None
 
 
 def change_destination(s: Session, destination_id: int, body: DestinationUpdate) -> DestinationSource:
@@ -153,7 +153,7 @@ def change_destination(s: Session, destination_id: int, body: DestinationUpdate)
     if body.name is not None:
         _name_free(s, body.name, except_id=destination_id)
     if body.destination is not None and str(body.destination.kind) != current.kind:
-        raise UserError("A destination keeps its kind. Add a new one instead", field="destination")
+        raise ServiceError("A destination keeps its kind. Add a new one instead", field="destination")
     config = _config(body.destination) if body.destination is not None else None
     destination = _checked(lambda: update_destination(
         s, destination_id, name=body.name, enabled=body.enabled, config=config,
@@ -190,7 +190,7 @@ def test_saved(s: Session, destination_id: int) -> dict[str, Any]:
     destination = _found(lambda: get_destination(s, destination_id))
     config = config_of(destination)
     if config is None:
-        raise UserError("VODLoft cannot read this destination's settings. Enter them again", field="destination")
+        raise ServiceError("VODLoft cannot read this destination's settings. Enter them again", field="destination")
     result = _timed_test(Kind(destination.kind), config, _sample(s))
     record_attempt(destination, delivered=result["delivered"], error=result["error"])
     s.commit()
@@ -215,22 +215,22 @@ def webhook_example(s: Session) -> dict[str, Any]:
 def _values(s: Session, body: RuleInput, *, personal: bool) -> RuleValues:
     definition = DEFINITIONS[Event(body.event)]
     if personal and not definition.personal:
-        raise UserError("You cannot choose this on your own page", field="event")
+        raise ServiceError("You cannot choose this on your own page", field="event")
     if body.collection_scope == "added" and not personal:
-        raise UserError("Collections you added only works on your own page", field="collectionScope")
+        raise ServiceError("Collections you added only works on your own page", field="collectionScope")
     if not definition.collections and body.collection_scope != "any":
-        raise UserError("This does not belong to a Collection", field="collectionScope")
+        raise ServiceError("This does not belong to a Collection", field="collectionScope")
     destination_ids: list[int] = []
     if not personal:
         known = {destination.id: destination for destination in list_destinations(s)}
         missing = [value for value in body.destination_ids if value not in known]
         if missing:
-            raise UserError("A chosen destination no longer exists", field="destinationIds")
+            raise ServiceError("A chosen destination no longer exists", field="destinationIds")
         if not definition.actions and any(purpose(known[value].kind) == "action" for value in body.destination_ids):
-            raise UserError("Actions only run on downloads", field="destinationIds")
+            raise ServiceError("Actions only run on downloads", field="destinationIds")
         destination_ids = body.destination_ids
     if not body.push and not destination_ids and body.enabled:
-        raise UserError("Choose where it goes", field="destinationIds" if not personal else "push")
+        raise ServiceError("Choose where it goes", field="destinationIds" if not personal else "push")
     return RuleValues(
         enabled=body.enabled, event=Event(body.event), collection_scope=body.collection_scope,
         collection_ids=body.collection_ids, push=body.push if not personal else True, destination_ids=destination_ids,
@@ -320,7 +320,7 @@ def personal(s: Session, user_id: int | None) -> dict[str, Any]:
 def remove_device(s: Session, device_id: int, user_id: int | None) -> None:
     device = s.get(PushSubscription, device_id)
     if device is None or device.user_id != user_id:
-        raise UserError("This device is no longer registered", status_code=404)
+        raise ServiceError("This device is no longer registered", status_code=404)
     s.delete(device)
     s.commit()
 
@@ -339,7 +339,7 @@ def subscribe(s: Session, body: PushSubscriptionInput, user_id: int | None) -> P
             device_name=body.device_name,
         )
     except PushRejected as error:
-        raise UserError(str(error), field="endpoint") from None
+        raise ServiceError(str(error), field="endpoint") from None
     s.commit()
     return device
 
@@ -362,7 +362,7 @@ def push_test(s: Session, endpoint: str, user_id: int | None) -> None:
     """Send a test push to this device through the normal queue."""
     device = find_subscription(s, endpoint)
     if device is None or device.user_id != user_id:
-        raise UserError("Turn on notifications on this device first", field="endpoint")
+        raise ServiceError("Turn on notifications on this device first", field="endpoint")
     event = NotificationEvent(
         event="test", occurred_at=datetime.now(timezone.utc), user_id=user_id, title="VODLoft test notification",
         body="Notifications work on this device.", url="/account/notifications", data={},

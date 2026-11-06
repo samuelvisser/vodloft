@@ -38,6 +38,10 @@ class TokenStore:
         except Exception as e:
             raise RuntimeError("Failed to write to OS keyring.") from e
 
+    def store_record(self, key: str, record: str) -> None:
+        """Store a record that is already in this store's JSON form, such as one another program kept."""
+        self._set(key, record)
+
     def _delete(self, key: str) -> None:
         try:
             keyring.delete_password(self.service_name, key)

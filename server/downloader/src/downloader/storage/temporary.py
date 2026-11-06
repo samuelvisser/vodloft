@@ -28,7 +28,6 @@ from .helpers import (
     _numbered_candidate,
     _path_exists,
     _path_is_within,
-    _same_file_identity,
     _unlink_if_identity,
     _write_all,
 )
@@ -44,7 +43,6 @@ _STAGING_DIRECTORY_NAME = ".vodloft-staging"
 _STAGING_WORKSPACE_PREFIX = "attempt-"
 _QUICK_WORKSPACE_PREFIX = "quick-"
 _STAGING_PUBLICATION_MARKER = ".vodloft-publication"
-_STAGING_PUBLICATION_MAGIC_V1 = b"VODLOFT_STAGED_DOWNLOAD_PUBLICATION_V1\0"
 _STAGING_PUBLICATION_MAGIC_V2 = b"VODLOFT_STAGED_DOWNLOAD_PUBLICATION_V2\0"
 _AT_FDCWD = -100
 _RENAME_NOREPLACE = 1
@@ -226,35 +224,6 @@ def _decode_portable_publication_record(payload: bytes) -> _PortablePublicationR
         size_bytes=size_bytes,
         fingerprint=fingerprint,
     )
-
-
-def _decode_legacy_staging_publication_marker(
-    workspace: Path,
-    payload: bytes,
-) -> tuple[Path, Path, tuple[int, int]] | None:
-    if not payload.startswith(_STAGING_PUBLICATION_MAGIC_V1):
-        return None
-
-    encoded = payload[len(_STAGING_PUBLICATION_MAGIC_V1):]
-    parts = encoded.split(b"\0")
-    if len(parts) != 3 or not all(parts):
-        return None
-
-    staged_name = os.fsdecode(parts[0])
-    if Path(staged_name).name != staged_name or staged_name in {"", ".", ".."}:
-        return None
-
-    candidate = Path(os.fsdecode(parts[1]))
-    if not candidate.is_absolute():
-        return None
-
-    try:
-        stat_dev_text, stat_ino_text = parts[2].decode("ascii").split(":", 1)
-        identity = (int(stat_dev_text), int(stat_ino_text))
-    except (UnicodeDecodeError, ValueError):
-        return None
-
-    return workspace / staged_name, candidate, identity
 
 
 def _claim_publication_lock(candidate: Path) -> _PublicationLock | None:
@@ -714,52 +683,6 @@ def cleanup_abandoned_temporary_downloads(
                         continue
                 except OSError:
                     continue
-
-            if _remove_workspace(workspace):
-                removed += 1
-            continue
-
-        legacy = _decode_legacy_staging_publication_marker(workspace, payload)
-        if legacy is not None:
-            staged, candidate, identity = legacy
-            stat_dev, stat_ino = identity
-            if not _path_is_within(candidate, download_root_path):
-                logger.warning(
-                    "Legacy temporary publication marker '%s' points outside the download root; preserving workspace for safety",
-                    marker,
-                )
-                continue
-
-            staged_identity = _same_file_identity(staged, stat_dev=stat_dev, stat_ino=stat_ino)
-            candidate_identity = _same_file_identity(candidate, stat_dev=stat_dev, stat_ino=stat_ino)
-            if candidate_identity is not None:
-                if staged_identity is None:
-                    logger.warning(
-                        "Could not prove ownership of legacy published file '%s'; preserving workspace for safety",
-                        candidate,
-                    )
-                    continue
-                try:
-                    artifact_identity = inspect_artifact(candidate)
-                    committed = is_committed(candidate, artifact_identity)
-                except Exception:
-                    logger.warning(
-                        "Could not verify whether legacy staged download '%s' was committed; preserving workspace for safety",
-                        candidate,
-                        exc_info=True,
-                    )
-                    continue
-                if not committed and not _unlink_if_identity(
-                    candidate,
-                    stat_dev=stat_dev,
-                    stat_ino=stat_ino,
-                ):
-                    if _same_file_identity(
-                        candidate,
-                        stat_dev=stat_dev,
-                        stat_ino=stat_ino,
-                    ) is not None:
-                        continue
 
             if _remove_workspace(workspace):
                 removed += 1

@@ -2,15 +2,12 @@ import {z} from 'zod'
 
 import {PushDeviceStatusReadSchema} from '../types/schemas/notifications'
 import {errorMessage} from './users'
+import {apiUrl} from './api'
 
 const PushPublicKeySchema = z.object({publicKey: z.string()})
 
-function apiBase(): string {
-    return ((window as any).appConfig?.API_URL || '/api').replace(/\/+$/, '')
-}
-
 async function pushFetch(path: string, method = 'GET', body?: unknown): Promise<unknown> {
-    const response = await fetch(`${apiBase()}/push${path}`, {
+    const response = await fetch(`${apiUrl()}/push${path}`, {
         method,
         credentials: 'include',
         cache: 'no-store',

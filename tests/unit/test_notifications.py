@@ -261,15 +261,15 @@ def test_a_script_gets_the_download_in_its_environment(db, tmp_path, monkeypatch
 def test_rules_api_refuses_sentences_that_cannot_work(db):
     from backend.api.endpoints.notifications import service
     from backend.api.models.notifications import RuleInput
-    from backend.services.users import UserError
+    from backend.services.errors import ServiceError
 
-    with pytest.raises(UserError) as added:
+    with pytest.raises(ServiceError) as added:
         service.add_rule(db, RuleInput(event="episode_downloaded", collection_scope="added", push=True))
     assert added.value.field == "collectionScope"
-    with pytest.raises(UserError) as nowhere:
+    with pytest.raises(ServiceError) as nowhere:
         service.add_rule(db, RuleInput(event="download_failed"))
     assert nowhere.value.field == "destinationIds"
-    with pytest.raises(UserError) as private:
+    with pytest.raises(ServiceError) as private:
         service.add_rule(db, RuleInput(event="disk_almost_full", push=True), personal=True, user_id=None)
     assert private.value.field == "event"
     with pytest.raises(ValueError):

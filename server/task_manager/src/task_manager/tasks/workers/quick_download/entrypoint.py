@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from task_manager.scheduler.lanes import TaskLane
 from task_manager.scheduler.registry import task
 from task_manager.tasks.media_download_operations import on_media_download_task_terminal
 from task_manager.tasks.quick_download_operations import QUICK_DOWNLOAD_TASK_KEY, recover_quick_downloads
@@ -16,7 +17,7 @@ from .service import run_quick_download
     allowed_resource_types=("quick_download",),
     default_max_retries=1,
     tracks_progress=True,
-    executor_alias="downloads",
+    executor_alias=TaskLane.DOWNLOADS,
     terminal_callback=on_media_download_task_terminal,
     recovery_dispatcher=recover_quick_downloads,
 )

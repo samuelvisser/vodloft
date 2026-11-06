@@ -30,6 +30,7 @@ import {formatBytes} from '../../utils/formatting'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
 import {localMediaProfileEndpoint} from '../../types/local_media_profile'
 import './LocalMediaProfilePage.css'
+import {apiUrl} from '../../lib/api'
 
 const OPERATION_WAITING_MESSAGE = 'Operation is waiting, it should resume soon.'
 
@@ -157,7 +158,7 @@ export default function LocalMediaProfilePage() {
         setDeletingProfile(true)
         try {
             const endpoint = localMediaProfileEndpoint(profile.type)
-            const base = (window as any).appConfig?.API_URL || '/api'
+            const base = apiUrl()
             const response = await fetch(
                 `${base}/${endpoint}/${encodeURIComponent(profile.slug)}`,
                 {method: 'DELETE', credentials: 'include'},

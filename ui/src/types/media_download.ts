@@ -1,17 +1,5 @@
 import {createSelectRegistry} from '../utils/selectRegistry';
 
-export enum MediaDownloadStatus {
-    notDownloaded = 'Not downloaded',
-    downloaded = 'Downloaded',
-    downloading = 'Downloading...',
-    redownloaded = 'Redownloaded',
-    localProcessing = 'Processing locally...',
-    canceled = 'Canceled',
-    error = 'Download error',
-    missing = 'File missing',
-    corrupted = 'File corrupted',
-}
-
 /** Presentation values of a media download's downloadStatus field. */
 export const MediaDownloadStatusReg = createSelectRegistry('MediaDownloadStatus', {
     'not_downloaded': {label: 'Not downloaded', help: 'No file exists and no download is currently queued'},

@@ -15,6 +15,7 @@ from typing import Mapping, Optional
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from backend.services.errors import ServiceError
 from backend.db.models import Settings, User, UserAccess, UserSourceAccess
 from backend.security.access import (
     ADMINISTRATOR_TEMPLATE,
@@ -37,13 +38,8 @@ USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{1,63}$")
 _UNKNOWN_USER_HASH = hash_password_scrypt("vodloft-unknown-user")
 
 
-class UserError(ValueError):
+class UserError(ServiceError):
     """A request about users that VODLoft refuses, with the field it is about."""
-
-    def __init__(self, message: str, *, field: Optional[str] = None, status_code: int = 422):
-        super().__init__(message)
-        self.field = field
-        self.status_code = status_code
 
 
 class LastAdministratorError(UserError):

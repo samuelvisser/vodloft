@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { buildServerAwareSubmit } from '../../utils/buildServerAwareSubmit'
 import { hashPasswordForAdminAuth } from '../../utils/security/adminAuth'
+import {apiUrl} from '../../lib/api'
 
 const ChangePasswordSchema = z
   .object({
@@ -37,7 +38,7 @@ export default function ChangePasswordForm({ submitLabel = 'Change password' }: 
   const onSubmit = buildServerAwareSubmit<ChangePasswordValues>(
     form,
     async (data) => {
-      const base = (window as any).appConfig?.API_URL || '/api'
+      const base = apiUrl()
       return await fetch(`${base}/auth/password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

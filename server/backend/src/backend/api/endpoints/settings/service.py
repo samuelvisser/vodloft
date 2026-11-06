@@ -13,7 +13,6 @@ from typing import Any, cast
 
 import yaml
 from pydantic.alias_generators import to_camel, to_snake
-from sqlalchemy import select
 from yaml.nodes import MappingNode, ScalarNode
 
 from backend.api.models.settings import (
@@ -26,7 +25,6 @@ from backend.api.models.settings import (
     SettingsValues,
     UI_SETTING_PATHS,
 )
-from backend.db.models import Episode
 from config import get_settings, replace_settings
 from config.settings.base import (
     get_config_path,
@@ -36,6 +34,7 @@ from config.settings.cron_validation import (
     WorkerCronExpressionError,
     worker_cron_validation_errors,
 )
+from config.settings.submodels import SiteSchedule
 from config.settings.settings import (
     AppSettings,
     TIMEZONE_ENVIRONMENT_VARIABLE,
@@ -43,15 +42,13 @@ from config.settings.settings import (
 )
 from downloader.storage import inspect_filesystem
 from task_manager.scheduler.operation_factory import create_operation
-from task_manager.scheduler.operations import complete_operation, queue_operation_target_dispatch
-from task_manager.tasks.helpers.episodes.same_episode import PENDING_EPISODE_PUBLISH_STATUSES
-from .operations import (
+from task_manager.scheduler.operations import queue_operation_target_dispatch
+from backend.operations.settings import (
     FileWatcherCronOperation,
     FullRescanCronOperation,
     QuickCheckCronOperation,
     FindEpisodesCronOperation,
     MonitorNoUsableMediaCronOperation,
-    MonitorPendingEpisodesCronOperation,
     VerifyDownloadsCronOperation,
 )
 
@@ -275,7 +272,12 @@ def _effective_settings_from_sources(
         mode="python",
         by_alias=True,
     )
-    return AppSettings.model_validate(merged)
+    settings = AppSettings.model_validate(merged)
+    # Reading its sources merges a mapping with the one still in config.yml; the saved one replaces it.
+    schedules = merged.get("siteSchedules", {})
+    return settings.model_copy(update={
+        "site_schedules": {key: SiteSchedule.model_validate(own) for key, own in schedules.items()},
+    })
 
 
 def _atomic_write(path: Path, content: bytes) -> None:
@@ -314,9 +316,12 @@ def _find_mapping_value(node: MappingNode, segment: str):
     return None
 
 
-def _serialize_yaml_scalar(value: Any) -> str:
-    """Serialize a UI value as a single YAML-safe scalar."""
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+def _yaml_value(value: Any, indent: int) -> str:
+    """A UI value as it follows a key's colon: a block of lines for a mapping, otherwise one YAML-safe scalar."""
+    if isinstance(value, dict) and value:
+        block = yaml.safe_dump(value, default_flow_style=False, sort_keys=False, allow_unicode=True)
+        return "\n" + "".join(" " * indent + line for line in block.splitlines(keepends=True)).rstrip("\n")
+    return " " + json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
 def _append_text(text: str, addition: str) -> str:
@@ -332,8 +337,20 @@ class _TextEdit:
     replacement: str
 
 
+def _value_edit(text: str, key_node: ScalarNode, value_node, rendered: str) -> _TextEdit:
+    """Replace a key's value, whatever its shape, keeping the blank lines and comments after it."""
+    start, end = key_node.end_mark.index, value_node.end_mark.index
+    replaced = text[start:end].splitlines(keepends=True)
+    kept: list[str] = []
+    while len(replaced) > 1 and (not replaced[-1].strip() or replaced[-1].lstrip().startswith("#")):
+        kept.insert(0, replaced.pop())
+    end -= sum(len(line) for line in kept)
+    newline = "\n" if text[start:end].endswith("\n") else ""
+    return _TextEdit(start, end, ":" + rendered + newline)
+
+
 def _patch_config_scalars(text: str, changes: dict[str, Any]) -> str:
-    """Apply all UI scalar changes after parsing the YAML syntax tree once."""
+    """Apply all UI changes after parsing the YAML syntax tree once."""
     try:
         root = yaml.compose(text) if text.strip() else None
     except yaml.YAMLError as exc:
@@ -348,36 +365,29 @@ def _patch_config_scalars(text: str, changes: dict[str, Any]) -> str:
     missing_sections: dict[str, list[str]] = {}
 
     for path, value in changes.items():
-        serialized = _serialize_yaml_scalar(value)
         segments = path.split(".")
         if len(segments) not in {1, 2}:
             raise SettingsPersistenceError(f"Unsupported settings path: {path}")
 
         if len(segments) == 1:
+            rendered = _yaml_value(value, 2)
             existing = _find_mapping_value(root, segments[0]) if isinstance(root, MappingNode) else None
             if existing is None:
-                root_additions.append(f"{segments[0]}: {serialized}\n")
+                root_additions.append(f"{segments[0]}:{rendered}\n")
                 continue
-
-            _key_node, value_node = existing
-            if not isinstance(value_node, ScalarNode):
-                raise SettingsPersistenceError(f"{path} must be a scalar setting in config.yml.")
-            edits.append(_TextEdit(value_node.start_mark.index, value_node.end_mark.index, serialized))
+            edits.append(_value_edit(text, *existing, rendered))
             continue
 
         section_name, field_name = segments
+        rendered = _yaml_value(value, 4)
         section_entry = _find_mapping_value(root, section_name) if isinstance(root, MappingNode) else None
         if section_entry is None:
-            missing_sections.setdefault(section_name, []).append(
-                f"  {field_name}: {serialized}\n"
-            )
+            missing_sections.setdefault(section_name, []).append(f"  {field_name}:{rendered}\n")
             continue
 
         _section_key, section_value = section_entry
         if isinstance(section_value, ScalarNode) and section_value.value in {"", "null", "~"}:
-            section_insertions.setdefault(section_value.end_mark.index, []).append(
-                f"  {field_name}: {serialized}\n"
-            )
+            section_insertions.setdefault(section_value.end_mark.index, []).append(f"  {field_name}:{rendered}\n")
             continue
         if not isinstance(section_value, MappingNode):
             raise SettingsPersistenceError(f"{section_name} must be a mapping in config.yml.")
@@ -388,15 +398,10 @@ def _patch_config_scalars(text: str, changes: dict[str, Any]) -> str:
 
         field_entry = _find_mapping_value(section_value, field_name)
         if field_entry is not None:
-            _field_key, field_value = field_entry
-            if not isinstance(field_value, ScalarNode):
-                raise SettingsPersistenceError(f"{path} must be a scalar setting in config.yml.")
-            edits.append(_TextEdit(field_value.start_mark.index, field_value.end_mark.index, serialized))
+            edits.append(_value_edit(text, *field_entry, rendered))
             continue
 
-        section_insertions.setdefault(section_value.end_mark.index, []).append(
-            f"  {field_name}: {serialized}\n"
-        )
+        section_insertions.setdefault(section_value.end_mark.index, []).append(f"  {field_name}:{rendered}\n")
 
     for index, additions in section_insertions.items():
         prefix = "" if index == 0 or text[index - 1] == "\n" else "\n"
@@ -657,29 +662,10 @@ _CRON_OPERATION_FACTORIES = {
 
 def run_cron_job_now(session, job: str) -> dict[str, bool | str]:
     """Run one Settings cron job immediately as a durable UI TaskOperation."""
-    if job == "monitor-pending-episodes":
-        episode_ids = tuple(
-            session.scalars(
-                select(Episode.id).where(Episode.publish_status.in_(PENDING_EPISODE_PUBLISH_STATUSES))
-            )
-        )
-        operation = create_operation(
-            session,
-            MonitorPendingEpisodesCronOperation(episode_ids),
-        )
-        if not episode_ids:
-            complete_operation(
-                session,
-                operation.id,
-                summary="No pending episodes to monitor",
-                data={"episodes_requested": 0},
-            )
-            return {"queued": False, "operation_id": operation.id}
-    else:
-        factory = _CRON_OPERATION_FACTORIES.get(job)
-        if factory is None:
-            raise ValueError(f"Unknown cron job: {job}")
-        operation = create_operation(session, factory())
+    factory = _CRON_OPERATION_FACTORIES.get(job)
+    if factory is None:
+        raise ValueError(f"Unknown cron job: {job}")
+    operation = create_operation(session, factory())
 
     for target in operation.targets:
         queue_operation_target_dispatch(session, operation.id, target.slot_key)

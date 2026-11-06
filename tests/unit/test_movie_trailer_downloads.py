@@ -80,7 +80,6 @@ def test_movie_extra_output_uses_parent_movie_and_actual_media_fields(tmp_path: 
         "/downloads/movies/{{ movie_title }}/{{ title }}-{{ slug }}-{{ media_type }}.ext",
         movie=movie,
         media_item=trailer,
-        append_media_type_to_filename=False,
         extension="mp4",
     )
 
@@ -121,10 +120,9 @@ def test_movie_extra_type_suffix_is_added_before_extension(tmp_path: Path, monke
     )
 
     result = resolve_movie_output_path(
-        "/downloads/movies/{{ movie_title }}/{{ title }}.ext",
+        "/downloads/movies/{{ movie_title }}/{{ title }}{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext",
         movie=movie,
         media_item=interview,
-        append_media_type_to_filename=True,
         extension="mp4",
     )
 
@@ -156,7 +154,6 @@ def test_download_view_uses_movie_extra_as_media_identity_and_movie_as_parent() 
             name="Movies",
             output_template="/downloads/movies/{{ movie_title }}/{{ title }}.ext",
             preferred_format="format_1080p",
-            append_media_type_to_filename=True,
         )
         movie = Movie(
             source_key="dailywire",

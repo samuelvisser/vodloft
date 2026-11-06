@@ -77,7 +77,6 @@ class CollectionMetadataRefreshOperation(_CollectionOperation):
                 task_key=_REFRESH_METADATA_TASK_KEY,
                 resource_type="episode",
                 resource_id=episode.id,
-                task_kwargs={"refresh": True},
                 slot_key=f"episode:{episode.id}",
             )
             for episode in self.episodes
@@ -184,6 +183,7 @@ class CollectionDeleteDownloadsOperation(_CollectionDownloadMaintenanceOperation
 
 class CollectionRedownloadOperation(_CollectionDownloadMaintenanceOperation):
     kind = "collection.redownload_episodes"
+    request_priority = "bulk"
 
     def __init__(
         self,

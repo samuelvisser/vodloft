@@ -199,7 +199,7 @@ class DownloadFilesystemRecovery:
 
 def recover_download_filesystem(download_settings) -> DownloadFilesystemRecovery:
     """Clean up what an unclean shutdown left in the download folders. Run it while no download runs."""
-    from backend.api.endpoints.feeds.cached_video import cleanup_expired_rss_cache
+    from backend.services.video_cache import cleanup_expired_rss_cache
     from backend.services.quick_downloads import sweep_quick_downloads
 
     # Unfinished quick downloads cannot resume, so their folders go; ready

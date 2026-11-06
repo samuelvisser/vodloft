@@ -1,174 +1,65 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from typing import Optional
 
-from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Episode
-from backend.services.metadata_refresh import refresh_watch_expired, sweeps_metadata
 from backend.services.custom_indexes import request_collection_custom_index_reconciliation
-from backend.services.episode_metadata_refresh import (
-    episode_metadata_refresh_source_keys,
-    refreshes_episode_metadata,
-)
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode_publication_timing import (
-    best_effort_published_date,
     invalidate_safe_publication_timing,
 )
 from sources.dailywire.api.dw_api.client import MiddlewareAPIError, MiddlewareClient
 from sources.dailywire.api.records import DwEpisodeDetailRecord
-from task_manager.events.transactional import queue_event
-from task_manager.scheduler.db import TaskOperation, TaskOperationTarget
-from task_manager.scheduler.executor import trigger_now
-from task_manager.scheduler.types import OperationStatus
-from ...helpers.episodes.events import episode_event_payload, queue_episode_status_events
+from ...helpers.episodes.events import queue_episode_status_events
 from ...helpers.episodes.identifier_reconciliation import reconcile_episode_identifier
-from ...helpers.episodes.metadata import episode_refresh_offsets, update_episode_from_dailywire
+from ...helpers.episodes.metadata import update_episode_from_dailywire
 from ...helpers.episodes.no_show import is_no_show_today_slug
 from ...helpers.episodes.same_episode import PENDING_EPISODE_PUBLISH_STATUSES
 from ...helpers.episodes.status import observe_episode_detail, resolve_episode_status
 from ...helpers.refreshed_metadata import check_upgrades_after_refresh
 from ...helpers.episodes.unusable_media import NoUsableMediaReason, mark_episode_no_usable_media
-from ..monitor_pending_episode.scheduling import MONITOR_REQUESTED_EVENT
-from .scheduling import remove_episode_metadata_jobs, schedule_remaining_metadata_checks
 
 
 logger = logging.getLogger(__name__)
-_TASK_KEY = "refresh_episode_metadata"
-_ACTIVE_OPERATION_STATUSES = (OperationStatus.QUEUED.value, OperationStatus.RUNNING.value)
 
 
-async def run_refresh_episode_metadata(
-    s: Session,
-    *,
-    episode_id: int | None,
-    refresh: bool = False,
-    scheduled_offset_seconds: int | None = None,
-) -> bool:
-    if episode_id is None:
-        _queue_startup_recovery(s)
-        return False
+def refresh_dailywire_episode(s: Session, episode_id: int) -> Optional[bool]:
+    """Look one published Daily Wire episode up again, as the metadata refresh sweep asks.
 
+    True when it was updated as usual, False when it changed hands because it is
+    pending again or has no usable media, and None when it was no longer there or
+    no longer published by the time The Daily Wire answered. A failed lookup raises.
+    """
     episode = s.get(Episode, episode_id)
-    if episode is None:
-        return False
-    if not refreshes_episode_metadata(episode.source_key):
-        # The daily catalogue refresh keeps listed episodes up to date, and the
-        # metadata refresh sweep follows new ones of a Source that has it.
-        if not episode.metadata_is_final and not sweeps_metadata(episode.source_key):
-            episode.metadata_is_final = True
-            s.commit()
-        remove_episode_metadata_jobs(episode.id)
-        return False
-    if episode.metadata_is_final:
-        remove_episode_metadata_jobs(episode.id)
-        return False
-    if episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value:
-        return False
+    if episode is None or episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value:
+        return None
+    episode_slug = episode.slug
+    require_member_exclusive = episode.collection.membership_level not in {
+        DwMembershipLevel.FREE.value,
+        DwMembershipLevel.HIGHEST_ALLOWED.value,
+    }
 
-    configured_offsets = episode_refresh_offsets(episode)
-    if not configured_offsets:
-        # The episode's Site has its refresh turned off.
-        episode.metadata_is_final = True
-        s.commit()
-        remove_episode_metadata_jobs(episode.id)
-        return False
-    if refresh and scheduled_offset_seconds is not None and scheduled_offset_seconds not in configured_offsets:
-        refresh = False
-
-    did_refresh = False
-    if refresh:
-        did_refresh = True
-        episode_slug = episode.slug
-        require_member_exclusive = episode.collection.membership_level not in {
-            DwMembershipLevel.FREE.value,
-            DwMembershipLevel.HIGHEST_ALLOWED.value,
-        }
-
-        # Before calling The Daily Wire API, release the db transaction so others can use it
-        s.rollback()
-        detail = _fetch_episode_from_dailywire(
-            episode_slug=episode_slug,
-            require_member_exclusive=require_member_exclusive,
-        )
-
-        # In case the episode changed during the API call, reload it here
-        episode = s.get(Episode, episode_id)
-        if episode is None:
-            return False
-        if episode.metadata_is_final:
-            remove_episode_metadata_jobs(episode.id)
-            return False
-        if episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value:
-            return False
-
-        custom_index_collection_id = episode.collection_id
-        refreshed_normally = _refresh_episode_from_dailywire(s, episode, detail)
-        request_collection_custom_index_reconciliation(s, custom_index_collection_id)
-        if not refreshed_normally:
-            episode.metadata_is_final = False
-            s.commit()
-            remove_episode_metadata_jobs(episode.id)
-            return True
-
-    now = datetime.now(timezone.utc)
-    metadata_publication_time = best_effort_published_date(episode)
-
-    offsets = episode_refresh_offsets(episode)
-    if refresh and refresh_watch_expired(metadata_publication_time, offsets, now=now):
-        episode.metadata_is_final = True
-        s.commit()
-        remove_episode_metadata_jobs(episode.id)
-        return did_refresh
-
-    pending_jobs = schedule_remaining_metadata_checks(
-        episode_id=episode.id,
-        publication_time=metadata_publication_time,
-        offsets=offsets,
-        now=now,
+    # No transaction stays open while The Daily Wire is looked up.
+    s.rollback()
+    detail = _fetch_episode_from_dailywire(
+        episode_slug=episode_slug,
+        require_member_exclusive=require_member_exclusive,
     )
-    if refresh:
-        s.commit()
-    if not pending_jobs and refresh_watch_expired(metadata_publication_time, offsets, now=now):
-        trigger_now(
-            def_key=_TASK_KEY,
-            resource_type="episode",
-            resource_id=episode.id,
-            refresh=True,
-        )
-    return did_refresh
 
-
-def _queue_startup_recovery(s: Session) -> None:
-    active_target = exists(
-        select(TaskOperationTarget.id)
-        .join(TaskOperation, TaskOperation.id == TaskOperationTarget.operation_id)
-        .where(
-            TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES),
-            TaskOperationTarget.task_key == _TASK_KEY,
-            TaskOperationTarget.resource_type == "episode",
-            TaskOperationTarget.resource_id == Episode.id,
-        )
-    )
-    episode_ids = s.scalars(
-        select(Episode.id).where(
-            Episode.metadata_is_final.is_(False),
-            Episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value,
-            Episode.source_key.in_(episode_metadata_refresh_source_keys()),
-            ~active_target,
-        )
-    )
-    for episode_id in episode_ids:
-        trigger_now(
-            def_key=_TASK_KEY,
-            resource_type="episode",
-            resource_id=int(episode_id),
-            refresh=True,
-        )
+    # The episode may have changed during the lookup.
+    episode = s.get(Episode, episode_id)
+    if episode is None or episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value:
+        return None
+    refreshed_normally = _refresh_episode_from_dailywire(s, episode, detail)
+    request_collection_custom_index_reconciliation(s, episode.collection_id)
+    if not refreshed_normally:
+        episode.metadata_is_final = False
+    s.commit()
+    return refreshed_normally
 
 
 def _no_usable_reason(detail, observed_status: EpisodePublishStatus) -> NoUsableMediaReason:
@@ -273,11 +164,7 @@ def _refresh_episode_from_dailywire(
             new_status=new_status,
             was_created=False,
         )
-        queue_event(
-            s,
-            MONITOR_REQUESTED_EVENT,
-            episode_event_payload(episode=episode, collection=collection, old_status=old_status),
-        )
+        # The pending check sweep follows it again from here.
         s.flush()
         return False
 

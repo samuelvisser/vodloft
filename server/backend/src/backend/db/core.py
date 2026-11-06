@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TypeVar
 import importlib
 import logging
 import os
 import pkgutil
+import time
 
 from sqlalchemy import MetaData, create_engine, event, text
 from sqlalchemy.engine import URL, Engine, make_url
@@ -21,6 +23,7 @@ from .text_types import create_case_insensitive_collation
 
 
 logger = logging.getLogger(__name__)
+T = TypeVar("T")
 
 _SQLITE_BUSY_TIMEOUT_SECONDS = 30
 _SQLITE_BUSY_TIMEOUT_MS = _SQLITE_BUSY_TIMEOUT_SECONDS * 1_000
@@ -179,7 +182,7 @@ def get_session() -> Session:
     return _SessionLocal()
 
 
-def begin_write_transaction(session: Session) -> None:
+def begin_write_transaction(session: Session, *, concurrent: bool = False) -> None:
     """Begin a write-intent transaction before any reads.
 
     These transactions read a row and then write it based on what they read,
@@ -195,7 +198,10 @@ def begin_write_transaction(session: Session) -> None:
     PostgreSQL lets every other transaction write at the same time. These ones
     queue on one transaction-level advisory lock instead, and as each statement
     reads the rows committed before it (READ COMMITTED), every transaction sees
-    what the one before it wrote.
+    what the one before it wrote. A ``concurrent`` transaction only writes what
+    it was given, such as a new row or a value the user chose, so it may run
+    beside the others and takes no lock there. On SQLite it still reserves the
+    one writer slot, as every write does.
     """
     if session.in_transaction():
         raise RuntimeError("Write transaction must begin before the session is used")
@@ -203,10 +209,66 @@ def begin_write_transaction(session: Session) -> None:
     bind = session.get_bind()
     if bind.dialect.name == "sqlite":
         session.execute(text("BEGIN IMMEDIATE"))
-    elif bind.dialect.name == "postgresql":
+    elif bind.dialect.name == "postgresql" and not concurrent:
         session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": _POSTGRESQL_WRITE_LOCK_KEY})
     else:
         session.begin()
+
+
+_WRITE_ATTEMPTS = 3
+_WRITE_RETRY_DELAY_SECONDS = 0.1
+# PostgreSQL error codes that mean "try the transaction again": a deadlock, or a
+# transaction that could not be serialized against another one.
+_POSTGRESQL_RETRY_CODES = {"40P01", "40001"}
+
+
+def is_lock_conflict(error: BaseException) -> bool:
+    """Whether a database error only means another transaction was in the way."""
+    if not isinstance(error, OperationalError):
+        return False
+    code = getattr(error.orig, "sqlstate", None) or getattr(error.orig, "pgcode", None)
+    if code in _POSTGRESQL_RETRY_CODES:
+        return True
+    message = str(error.orig).lower()
+    return "database is locked" in message or "database is busy" in message
+
+
+def run_write_transaction(
+    work: Callable[[Session], T], *, concurrent: bool = False, attempts: int = _WRITE_ATTEMPTS,
+) -> T:
+    """Run ``work`` in a write transaction of its own and commit it.
+
+    The transaction starts with ``begin_write_transaction``, so it reads what
+    the previous writer committed. When another transaction is in the way
+    (a locked SQLite database, a PostgreSQL deadlock), the whole of ``work``
+    runs again in a new transaction, a few times, before the error is raised.
+    ``work`` may end the transaction early with ``session.rollback()``; any
+    exception it raises rolls the transaction back and is raised as it is.
+
+    ``work`` must be short: SQLite has one writer at a time, so every other
+    write waits while it runs, and a retry runs it again. Look Sites up, read
+    files and do other slow work before, and side effects such as webhooks
+    after. ``concurrent`` lets the transaction run beside other writers where
+    the database allows it; see ``begin_write_transaction``.
+    """
+    for attempt in range(attempts):
+        session = get_session()
+        try:
+            begin_write_transaction(session, concurrent=concurrent)
+            result = work(session)
+            session.commit()
+            return result
+        except OperationalError as error:
+            session.rollback()
+            if attempt + 1 >= attempts or not is_lock_conflict(error):
+                raise
+        except BaseException:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+        time.sleep(_WRITE_RETRY_DELAY_SECONDS * (2 ** attempt))
+    raise AssertionError("unreachable")
 
 
 def get_database_url() -> URL:

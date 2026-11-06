@@ -84,6 +84,10 @@ def site_for(url: str) -> Site:
     )
 
 
+def refresh_intervals_of(site_key: str) -> str | None:
+    return _REFRESH_INTERVALS.get(site_key)
+
+
 def _downloads(key: str) -> DownloadOptions:
     return DownloadOptions(hls_bundle=True) if key in _HLS_DOWNLOADS else DownloadOptions()
 

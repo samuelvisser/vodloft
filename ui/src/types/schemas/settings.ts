@@ -54,11 +54,13 @@ const TrackNewEpisodeScheduleSchema = z.object({
     quickCheckCron: z.string(),
     fullRescanCronEnabled: z.boolean(),
     fullRescanCron: z.string(),
-    monitorPendingEpisodeCronEnabled: z.boolean(),
-    monitorPendingEpisodeCron: z.string(),
     monitorNoUsableMediaEpisodeCronEnabled: z.boolean(),
     monitorNoUsableMediaEpisodeCron: z.string(),
     metadataRefreshIntervals: z.string(),
+    upcomingAndLive: z.boolean(),
+    pendingUpcomingMinutes: z.number(),
+    pendingStartingMinutes: z.number(),
+    pendingLiveMinutes: z.number(),
 })
 
 const EpisodeStatusTimingSchema = z.object({
@@ -169,6 +171,18 @@ export const QuickDownloadSettingsSchema = z.object({
 })
 export type QuickDownloadSettings = z.infer<typeof QuickDownloadSettingsSchema>
 
+/** One Site's own scheduling under siteSchedules in config.yml; null follows the Site's default. */
+const SiteScheduleSchema = z.object({
+    metadataRefresh: z.string().nullable(),
+    upcomingAndLive: z.boolean().nullable(),
+    pendingUpcomingMinutes: z.number().nullable(),
+    pendingStartingMinutes: z.number().nullable(),
+    pendingLiveMinutes: z.number().nullable(),
+})
+export type SiteSchedule = z.infer<typeof SiteScheduleSchema>
+/** The metadata refresh a Site gives itself: none at all. */
+export const SITE_REFRESH_OFF = 'off'
+
 export const SettingsValuesSchema = z.object({
     logLevel: z.enum(['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']),
     timezone: z.string(),
@@ -180,6 +194,7 @@ export const SettingsValuesSchema = z.object({
     dwTimeout: TimeoutSettingsSchema,
     scheduler: SchedulerSettingsSchema,
     newEpisodeSchedule: TrackNewEpisodeScheduleSchema,
+    siteSchedules: z.record(z.string(), SiteScheduleSchema),
     episodeStatusTiming: EpisodeStatusTimingSchema,
     downloadSettings: DownloadSettingsSchema,
     youtubeApi: YouTubeApiSettingsSchema,
@@ -189,6 +204,11 @@ export const SettingsValuesSchema = z.object({
 export type SettingsValues = z.infer<typeof SettingsValuesSchema>
 
 const requiredNumber = () => z.number({error: 'A value is required.'})
+/** Minutes between lookups of an upcoming or live episode. The sweep runs every two minutes, so none is shorter. */
+export const pendingMinutes = (max: number) => requiredNumber()
+    .int('Use whole minutes.')
+    .min(2, 'Must be at least 2 minutes.')
+    .max(max, `Must be at most ${max} minutes.`)
 const cronExpression = z.string().refine((value) => {
     const fields = value.trim().split(/\s+/)
     return fields.length === 5 && fields.every((field) => field.length > 0 && !field.includes('_'))
@@ -215,6 +235,16 @@ export const metadataRefreshIntervals = z.string().refine((value) => {
     return true
 }, 'Use unique, increasing comma-separated offsets such as 5m,15m,30m,1h,3h,6h,24h.')
 
+const SiteScheduleFormSchema = SiteScheduleSchema.extend({
+    metadataRefresh: z.string().nullable().refine(
+        (value) => value === null || value === SITE_REFRESH_OFF || metadataRefreshIntervals.safeParse(value).success,
+        'Use unique, increasing comma-separated offsets such as 30m,2h,24h.',
+    ),
+    pendingUpcomingMinutes: pendingMinutes(24 * 60).nullable(),
+    pendingStartingMinutes: pendingMinutes(60).nullable(),
+    pendingLiveMinutes: pendingMinutes(60).nullable(),
+})
+
 export const SettingsFormSchema = SettingsValuesSchema.extend({
     loginSession: SessionSettingsSchema.extend({
         ttlSeconds: requiredNumber().int().min(60, 'Must be at least 60 seconds.'),
@@ -238,10 +268,13 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
         findEpisodesCron: cronExpression,
         quickCheckCron: cronExpression,
         fullRescanCron: cronExpression,
-        monitorPendingEpisodeCron: cronExpression,
         monitorNoUsableMediaEpisodeCron: cronExpression,
         metadataRefreshIntervals,
+        pendingUpcomingMinutes: pendingMinutes(24 * 60),
+        pendingStartingMinutes: pendingMinutes(60),
+        pendingLiveMinutes: pendingMinutes(60),
     }),
+    siteSchedules: z.record(z.string(), SiteScheduleFormSchema),
     episodeStatusTiming: EpisodeStatusTimingSchema.extend({
         publishedFinalAfterMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
         dwProcessingMaxMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
@@ -298,7 +331,6 @@ export const SettingsServerErrors = createServerErrorMapper({
     'values.newEpisodeSchedule.findEpisodesCron': CRON_SERVER_ERRORS,
     'values.newEpisodeSchedule.quickCheckCron': CRON_SERVER_ERRORS,
     'values.newEpisodeSchedule.fullRescanCron': CRON_SERVER_ERRORS,
-    'values.newEpisodeSchedule.monitorPendingEpisodeCron': CRON_SERVER_ERRORS,
     'values.newEpisodeSchedule.monitorNoUsableMediaEpisodeCron': CRON_SERVER_ERRORS,
     'values.downloadSettings.verifyDownloadsCron': CRON_SERVER_ERRORS,
     'values.fileWatcher.scanCron': CRON_SERVER_ERRORS,
@@ -335,11 +367,14 @@ export const SETTINGS_FIELD_PATHS = [
     'newEpisodeSchedule.quickCheckCron',
     'newEpisodeSchedule.fullRescanCronEnabled',
     'newEpisodeSchedule.fullRescanCron',
-    'newEpisodeSchedule.monitorPendingEpisodeCronEnabled',
-    'newEpisodeSchedule.monitorPendingEpisodeCron',
     'newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled',
     'newEpisodeSchedule.monitorNoUsableMediaEpisodeCron',
     'newEpisodeSchedule.metadataRefreshIntervals',
+    'newEpisodeSchedule.upcomingAndLive',
+    'newEpisodeSchedule.pendingUpcomingMinutes',
+    'newEpisodeSchedule.pendingStartingMinutes',
+    'newEpisodeSchedule.pendingLiveMinutes',
+    'siteSchedules',
     'episodeStatusTiming.publishedFinalAfterMinutes',
     'episodeStatusTiming.dwProcessingMaxMinutes',
     'episodeStatusTiming.noUsableMediaDeleteAfterMinutes',

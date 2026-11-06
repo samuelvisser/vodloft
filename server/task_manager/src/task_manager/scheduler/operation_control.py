@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Iterable
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, selectinload
 
-from backend.db.core import begin_write_transaction, get_session
+from backend.db.core import get_session, run_write_transaction
 from task_manager.scheduler.db import (
     TaskDefinition,
     TaskOperation,
@@ -185,13 +185,10 @@ def cancel_operation(
     cancellation (for example the stalled-work watchdog) leaves the notification
     unseen so OperationNotifier can explain why the work stopped.
     """
-    session = get_session()
-    cancelable_run_ids: set[int] = set()
-    released_run_ids: set[int] = set()
-    released_definition_ids: set[int] = set()
-    terminal_callbacks: set = set()
-    try:
-        begin_write_transaction(session)
+    def work(session):
+        cancelable_run_ids: set[int] = set()
+        released_run_ids: set[int] = set()
+        released_definition_ids: set[int] = set()
         operation = _load_operation(session, operation_id)
         if operation is None:
             return None
@@ -245,7 +242,6 @@ def cancel_operation(
 
         runs = [link.task_run for target in operation.targets for link in target.run_links if link.task_run is not None]
         if operation.kind == "media.download" and runs and all(_task_status(run.status) == TaskStatus.SUCCEEDED for run in runs):
-            session.rollback()
             raise ValueError("The download has already been published")
         cleaning_up = operation.kind == "media.download" and any(
             run.id in cancelable_run_ids and _task_status(run.status) == TaskStatus.RUNNING for run in runs
@@ -274,9 +270,12 @@ def cancel_operation(
             session,
             released_definition_ids,
         )
-        session.commit()
-    finally:
-        session.close()
+        return cancelable_run_ids, released_run_ids, terminal_callbacks, dependent_children_to_cancel
+
+    outcome = run_write_transaction(work)
+    if outcome is None:
+        return None
+    cancelable_run_ids, released_run_ids, terminal_callbacks, dependent_children_to_cancel = outcome
 
     from task_manager.scheduler.scheduler import (
         cancel_pending_operation_jobs,
@@ -335,17 +334,14 @@ def cancel_task_run(run_id: int, *, reason: str) -> bool:
     cooperative cancellation request. Its next progress checkpoint and executor
     finalization both honor that request and cannot resurrect the run.
     """
-    session = get_session()
-    callbacks: set = set()
-    was_running = False
-    try:
-        begin_write_transaction(session)
+    from task_manager.scheduler.operations import refresh_operations_for_run
+
+    def work(session) -> tuple[bool, set] | None:
         run = session.get(TaskRun, run_id)
         if run is None or _task_status(run.status) not in _ACTIVE_TASK_STATUSES:
-            return False
+            return None
 
-        previous_status = _task_status(run.status)
-        was_running = previous_status == TaskStatus.RUNNING
+        was_running = _task_status(run.status) == TaskStatus.RUNNING
         definition_id = run.definition_id
 
         meta = dict(run.meta or {})
@@ -359,17 +355,15 @@ def cancel_task_run(run_id: int, *, reason: str) -> bool:
         ).execution_options(synchronize_session=False))
         if changed.rowcount != 1:
             session.rollback()
-            return False
-        session.commit()
+            return None
+        refresh_operations_for_run(session, run_id)
+        callbacks = set() if was_running else _terminal_callbacks_for_definition_ids(session, {definition_id})
+        return was_running, callbacks
 
-        from task_manager.scheduler.operations import refresh_operations_for_run
-
-        refresh_operations_for_run(session, run.id)
-        session.commit()
-        if not was_running:
-            callbacks = _terminal_callbacks_for_definition_ids(session, {definition_id})
-    finally:
-        session.close()
+    outcome = run_write_transaction(work)
+    if outcome is None:
+        return False
+    was_running, callbacks = outcome
 
     from task_manager.scheduler.scheduler import (
         cancel_pending_task_run_jobs,
@@ -394,12 +388,10 @@ def restart_operation(operation_id: str) -> OperationSnapshot | None:
     """
     from task_manager.scheduler.registry import get_task, task_tracks_progress
 
-    session = get_session()
-    cancelable_run_ids: set[int] = set()
-    released_run_ids: set[int] = set()
-    queue_dispatchers: set = set()
-    try:
-        begin_write_transaction(session)
+    def work(session):
+        cancelable_run_ids: set[int] = set()
+        released_run_ids: set[int] = set()
+        queue_dispatchers: set = set()
         operation = _load_operation(session, operation_id)
         if operation is None:
             return None
@@ -492,9 +484,12 @@ def restart_operation(operation_id: str) -> OperationSnapshot | None:
                 **dict(target.task_kwargs or {}),
             )
 
-        session.commit()
-    finally:
-        session.close()
+        return released_run_ids, queue_dispatchers
+
+    outcome = run_write_transaction(work)
+    if outcome is None:
+        return None
+    released_run_ids, queue_dispatchers = outcome
 
     # queue_task_after_commit dispatches replacement workers before commit()
     # returns. Release old critical-task pause leases only after that handoff so

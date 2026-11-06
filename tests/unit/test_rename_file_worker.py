@@ -244,7 +244,7 @@ def test_collection_file_rename_operation_targets_selected_local_media_profile(t
 
 
 def test_local_media_profile_rename_operation_targets_affected_episodes(tmp_path):
-    from backend.api.endpoints.local_media_profiles import file_rename
+    from backend.services import profile_file_renames as file_rename
     from task_manager.scheduler.db import TaskOperationTarget
 
     session, engine = _session()

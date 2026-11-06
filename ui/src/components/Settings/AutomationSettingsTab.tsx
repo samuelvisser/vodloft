@@ -13,6 +13,15 @@ import ReadMore from "../../utils/ReadMore";
 import {formatDurationMinutes} from "../../utils/formatting";
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 
+const PENDING_SYSTEM_FIELDS = [
+    {path: 'pendingUpcomingMinutes', label: 'Look upcoming episodes up every', max: 24 * 60,
+        help: 'Until 15 minutes before they start.'},
+    {path: 'pendingStartingMinutes', label: 'Look starting episodes up every', max: 60,
+        help: 'From 15 minutes before the start until an hour after, and when the start is not known.'},
+    {path: 'pendingLiveMinutes', label: 'Look live episodes up every', max: 60,
+        help: 'While live, and while the site is still finishing them.'},
+] as const
+
 export default function AutomationSettingsTab({draft, updateDraft, environmentVariableFor, errorFor}: SettingsTabProps) {
 
     return (
@@ -173,42 +182,6 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     }
                 />
                 <CronEditor
-                    id="settings-monitor-pending-episode-cron"
-                    label="Monitor pending episodes"
-                    runNow={{
-                        definition: frontendOperationDefinitions['system.cron.monitor_pending_episodes'],
-                        job: 'monitor-pending-episodes',
-                        ledger: {definitionKey: 'monitor_pending_episode', resourceType: 'episode'},
-                    }}
-                    value={draft.newEpisodeSchedule.monitorPendingEpisodeCron}
-                    enabled={draft.newEpisodeSchedule.monitorPendingEpisodeCronEnabled}
-                    error={errorFor('newEpisodeSchedule.monitorPendingEpisodeCron')}
-                    environmentVariable={environmentVariableFor('newEpisodeSchedule.monitorPendingEpisodeCron')}
-                    enabledEnvironmentVariable={environmentVariableFor('newEpisodeSchedule.monitorPendingEpisodeCronEnabled')}
-                    onChange={(value) => updateDraft((next) => {
-                        next.newEpisodeSchedule.monitorPendingEpisodeCron = value
-                    })}
-                    onEnabledChange={(enabled) => updateDraft((next) => {
-                        next.newEpisodeSchedule.monitorPendingEpisodeCronEnabled = enabled
-                    })}
-                    help={
-                        <ReadMore summary={<span>Monitors scheduled, delayed, live, processing and countdown episodes.</span>}>
-                            <p>
-                                This cron schedule determines how often VODLoft monitors an episode after the <code>Find new episodes</code> worker
-                                found it.
-                            </p>
-                            <p>
-                                This worker is expected to run quite frequently. Make sure to not set it to run more often than once every two
-                                minutes.
-                            </p>
-                            <p>
-                                Once an episode becomes final, <code>Metadata refresh</code> takes over. If it enters <code>no_usable_media</code>,
-                                the dedicated <code>No-usable-media monitor</code> takes over instead.
-                            </p>
-                        </ReadMore>
-                    }
-                />
-                <CronEditor
                     id="settings-monitor-no-usable-media-episode-cron"
                     label="Monitor episodes without usable media"
                     runNow={{
@@ -242,9 +215,19 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                         </ReadMore>
                     }
                 />
+            </SettingsSection>
+
+            <SettingsSection
+                title="Per-Site scheduling"
+                description="How each Site's new uploads are looked up again, and how its upcoming and live videos are followed."
+            >
+                <div className="settings-field settings-field--wide site-refresh-system">
+                    <label>System settings</label>
+                    <div className="settings-field__help">Used by every Site that follows the system setting, and by Sites VODLoft has not seen yet.</div>
+                </div>
                 <TextField
                     id="settings-metadata-refresh-intervals"
-                    label="Metadata refresh: system schedule"
+                    label="Metadata refresh"
                     value={draft.newEpisodeSchedule.metadataRefreshIntervals}
                     error={errorFor('newEpisodeSchedule.metadataRefreshIntervals')}
                     environmentVariable={environmentVariableFor('newEpisodeSchedule.metadataRefreshIntervals')}
@@ -252,12 +235,12 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                         next.newEpisodeSchedule.metadataRefreshIntervals = value
                     })}
                     help={
-                        <ReadMore summary={<span>When VODLoft looks new uploads up again, for Sites that follow the system schedule.</span>}>
+                        <ReadMore summary={<span>When VODLoft looks new uploads up again.</span>}>
                             <p>
                                 Creators often change a title, description or thumbnail after publishing. VODLoft looks each
                                 new episode and video up again at these offsets after publication, and after the last one its
-                                metadata is final. The Daily Wire and YouTube have schedules of their own, which you can change
-                                per Site below.
+                                metadata is final. Only what VODLoft shows and serves in its feeds changes: downloaded files keep their
+                                names and metadata.
                             </p>
                             <p>
                                 Value is a list of comma-separated offsets after publication. Use s, m, h or d, for example: 120s,30m,3h,2d
@@ -265,7 +248,42 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                         </ReadMore>
                     }
                 />
-                <SiteRefreshCard/>
+                <ToggleField
+                    id="settings-upcoming-and-live"
+                    label="Upcoming and live videos"
+                    checked={draft.newEpisodeSchedule.upcomingAndLive}
+                    environmentVariable={environmentVariableFor('newEpisodeSchedule.upcomingAndLive')}
+                    onChange={(checked) => updateDraft((next) => {
+                        next.newEpisodeSchedule.upcomingAndLive = checked
+                    })}
+                    help={
+                        <ReadMore summary={<span>Follow streams and premieres from when they are announced.</span>}>
+                            <p>
+                                VODLoft adds a stream or premiere as soon as it is announced and follows it until it is
+                                published, then downloads it. It never records a stream while it is live. Turned off, upcoming
+                                episodes only change when their collection is scanned again.
+                            </p>
+                        </ReadMore>
+                    }
+                />
+                {PENDING_SYSTEM_FIELDS.map(({path, label, max, help}) => (
+                    <NumberField
+                        key={path}
+                        id={`settings-${path}`}
+                        label={label}
+                        unit="min"
+                        min={2}
+                        max={max}
+                        value={draft.newEpisodeSchedule[path]}
+                        error={errorFor(`newEpisodeSchedule.${path}`)}
+                        environmentVariable={environmentVariableFor(`newEpisodeSchedule.${path}`)}
+                        onChange={(value) => updateDraft((next) => {
+                            next.newEpisodeSchedule[path] = value
+                        })}
+                        help={help}
+                    />
+                ))}
+                <SiteRefreshCard draft={draft} updateDraft={updateDraft} errorFor={errorFor}/>
             </SettingsSection>
 
             <SettingsDisclosure
