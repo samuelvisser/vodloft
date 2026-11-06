@@ -499,3 +499,51 @@ def test_settings_get_uses_cached_runtime_state(tmp_path, monkeypatch):
 
     assert second.values == first.values
     assert second.configured_fields == first.configured_fields
+
+
+def test_site_schedules_are_saved_as_a_block_with_only_what_each_site_sets(tmp_path, monkeypatch):
+    from backend.api.endpoints.settings.service import get_ui_settings, save_ui_settings
+    from backend.api.models.settings import SettingsAPIUpdate, SiteScheduleValue
+
+    config_path = tmp_path / "config.yml"
+    config_path.write_text(
+        "siteSchedules:\n"
+        "  youtube:\n"
+        "    metadataRefresh: 1h\n"
+        "# Kept below the Sites.\n"
+        "logLevel: INFO\n",
+        encoding="utf-8",
+    )
+    _point_settings_at(config_path, monkeypatch)
+
+    values = get_ui_settings().values.model_copy(deep=True)
+    assert values.site_schedules["youtube"].metadata_refresh == "1h"
+    values.site_schedules = {
+        "youtube": SiteScheduleValue(),
+        "dailywire": SiteScheduleValue(metadata_refresh="OFF", upcoming_and_live=False),
+        "generic:vimeo.com": SiteScheduleValue(
+            pending_upcoming_minutes=90, pending_starting_minutes=3, pending_live_minutes=10,
+        ),
+    }
+    result = save_ui_settings(SettingsAPIUpdate(values=values, changed_fields=["siteSchedules"]))
+
+    text = config_path.read_text(encoding="utf-8")
+    assert "# Kept below the Sites.\nlogLevel: INFO" in text
+    assert yaml.safe_load(text)["siteSchedules"] == {
+        "dailywire": {"metadataRefresh": "off", "upcomingAndLive": False},
+        "generic:vimeo.com": {"pendingUpcomingMinutes": 90, "pendingStartingMinutes": 3, "pendingLiveMinutes": 10},
+    }
+    assert set(result.values.site_schedules) == {"dailywire", "generic:vimeo.com"}
+
+    values.site_schedules = {}
+    save_ui_settings(SettingsAPIUpdate(values=values, changed_fields=["siteSchedules"]))
+    assert yaml.safe_load(config_path.read_text(encoding="utf-8"))["siteSchedules"] == {}
+
+
+def test_a_site_gives_all_three_lookup_times_or_none():
+    from backend.api.models.settings import SiteScheduleValue
+
+    with pytest.raises(ValidationError):
+        SiteScheduleValue(pending_live_minutes=10)
+    with pytest.raises(ValidationError):
+        SiteScheduleValue(metadata_refresh="2h,1h")

@@ -137,6 +137,10 @@ class AppSettings(SettingsBase):
         dw_processing_max_minutes=60,
         no_usable_media_delete_after_minutes=4 * 60,
     ))
+    site_schedules: dict[str, SiteSchedule] = Field(
+        default_factory=dict,
+        description="Per Site key, the scheduling settings the Site has of its own",
+    )
     download_settings: DownloadSettings = Field(default_factory=DownloadSettings)
     quick_download: QuickDownloadSettings = Field(default_factory=QuickDownloadSettings)
     youtube_api: YouTubeApiSettings = Field(default_factory=YouTubeApiSettings)

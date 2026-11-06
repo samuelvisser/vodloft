@@ -34,6 +34,7 @@ from config.settings.submodels import (
     QuickDownloadQuality,
     CollectionArtworkFallbackFormat,
     ThumbnailMode,
+    SITE_REFRESH_OFF,
     normalize_metadata_refresh_intervals,
 )
 
@@ -76,6 +77,7 @@ SettingFieldPath = Literal[
     "newEpisodeSchedule.pendingUpcomingMinutes",
     "newEpisodeSchedule.pendingStartingMinutes",
     "newEpisodeSchedule.pendingLiveMinutes",
+    "siteSchedules",
     "episodeStatusTiming.publishedFinalAfterMinutes",
     "episodeStatusTiming.dwProcessingMaxMinutes",
     "episodeStatusTiming.noUsableMediaDeleteAfterMinutes",
@@ -177,6 +179,7 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "newEpisodeSchedule.pendingUpcomingMinutes",
     "newEpisodeSchedule.pendingStartingMinutes",
     "newEpisodeSchedule.pendingLiveMinutes",
+    "siteSchedules",
     "episodeStatusTiming.publishedFinalAfterMinutes",
     "episodeStatusTiming.dwProcessingMaxMinutes",
     "episodeStatusTiming.noUsableMediaDeleteAfterMinutes",
@@ -355,6 +358,30 @@ class TrackNewEpisodeScheduleValue(_SettingsValueModel):
     )(normalize_metadata_refresh_intervals)
 
 
+class SiteScheduleValue(_SettingsValueModel):
+    """One Site's own scheduling; a setting that is None follows the Site's default, then the system setting."""
+
+    metadata_refresh: str | None = None
+    upcoming_and_live: bool | None = None
+    pending_upcoming_minutes: int | None = Field(default=None, ge=PENDING_MINIMUM_MINUTES, le=24 * 60)
+    pending_starting_minutes: int | None = Field(default=None, ge=PENDING_MINIMUM_MINUTES, le=60)
+    pending_live_minutes: int | None = Field(default=None, ge=PENDING_MINIMUM_MINUTES, le=60)
+
+    @field_validator("metadata_refresh")
+    @classmethod
+    def _validate_metadata_refresh(cls, value: str | None) -> str | None:
+        if value is None or value.lower() == SITE_REFRESH_OFF:
+            return None if value is None else SITE_REFRESH_OFF
+        return normalize_metadata_refresh_intervals(value)
+
+    @model_validator(mode="after")
+    def _minutes_come_together(self) -> "SiteScheduleValue":
+        minutes = (self.pending_upcoming_minutes, self.pending_starting_minutes, self.pending_live_minutes)
+        if any(value is None for value in minutes) and any(value is not None for value in minutes):
+            raise ValueError("Fill in all three lookup times, or follow the system setting")
+        return self
+
+
 class EpisodeStatusTimingValue(_SettingsValueModel):
     published_final_after_minutes: int = Field(ge=0)
     dw_processing_max_minutes: int = Field(ge=0)
@@ -497,6 +524,7 @@ class SettingsValues(_SettingsValueModel):
     dw_timeout: TimeoutSettingsValue
     scheduler: SchedulerSettingsValue
     new_episode_schedule: TrackNewEpisodeScheduleValue
+    site_schedules: dict[str, SiteScheduleValue]
     episode_status_timing: EpisodeStatusTimingValue
     download_settings: DownloadSettingsValue
     youtube_api: YouTubeApiSettingsValue
@@ -540,6 +568,7 @@ class SettingsValues(_SettingsValueModel):
             dw_timeout=TimeoutSettingsValue.model_validate(settings.dw_timeout),
             scheduler=SchedulerSettingsValue.model_validate(settings.scheduler),
             new_episode_schedule=TrackNewEpisodeScheduleValue.model_validate(settings.new_episode_schedule),
+            site_schedules={key: SiteScheduleValue.model_validate(own) for key, own in settings.site_schedules.items()},
             episode_status_timing=EpisodeStatusTimingValue.model_validate(settings.episode_status_timing),
             download_settings=DownloadSettingsValue.model_validate(settings.download_settings),
             youtube_api=YouTubeApiSettingsValue.model_validate(settings.youtube_api),
@@ -548,7 +577,14 @@ class SettingsValues(_SettingsValueModel):
         )
 
     def to_config_document(self) -> dict[str, Any]:
-        return self.model_dump(mode="json", by_alias=True)
+        document = self.model_dump(mode="json", by_alias=True, exclude={"site_schedules"})
+        # config.yml holds only what a Site sets itself.
+        document["siteSchedules"] = {
+            key: own
+            for key, schedule in self.site_schedules.items()
+            if (own := schedule.model_dump(mode="json", by_alias=True, exclude_none=True))
+        }
+        return document
 
 
 class SettingsAPIUpdate(RequestBase):

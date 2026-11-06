@@ -109,7 +109,7 @@ def _watched_episode(episode: Episode) -> _Watched:
     site = episode.collection.site
     return _Watched(
         Episode, episode.id, episode.source_key, _site_name(site), ItemRef(episode.source_slug, episode.sharing_url),
-        best_effort_published_date(episode), site_refresh_offsets(site), refreshes_one_by_one(episode.source_key),
+        best_effort_published_date(episode), site_refresh_offsets(episode.collection.site_key), refreshes_one_by_one(episode.source_key),
     )
 
 
@@ -129,7 +129,7 @@ def _watched(s: Session, source_keys: list[str]) -> Iterator[_Watched]:
     for video in videos:
         yield _Watched(
             Video, video.id, video.source_key, _site_name(video.site), ItemRef(video.slug, video.sharing_url),
-            video.published_at, site_refresh_offsets(video.site), False,
+            video.published_at, site_refresh_offsets(video.site_key), False,
         )
 
 

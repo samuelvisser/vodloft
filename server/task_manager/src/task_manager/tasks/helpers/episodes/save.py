@@ -72,7 +72,7 @@ def upsert_episode(
                 "metadata_is_final": metadata_is_final_for_new_episode(
                     ep.publish_status,
                     ep.published_date,
-                    site_refresh_offsets(collection.site),
+                    site_refresh_offsets(collection.site_key),
                 ),
             }
         })
@@ -93,7 +93,7 @@ def upsert_episode(
         episode.metadata_is_final = metadata_is_final_for_new_episode(
             ep.publish_status,
             ep.published_date,
-            site_refresh_offsets(collection.site),
+            site_refresh_offsets(collection.site_key),
         )
     s.flush()
     # The metadata refresh sweep follows a published episode whose metadata is not final.

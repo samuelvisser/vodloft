@@ -200,10 +200,27 @@ def _upcoming(slug: str, starts: datetime, status=EpisodePublishStatus.SCHEDULED
     )
 
 
-def _pending_collection(session, *, identifier="date_based", site_checks=True):
+@pytest.fixture
+def site_schedules():
+    """Give Sites their own scheduling, as under siteSchedules in config.yml."""
+    from config.registry import get_settings, replace_settings
+    from config.settings.submodels import SiteSchedule
+
+    original = get_settings()
+
+    def apply(**schedules: dict):
+        replace_settings(original.model_copy(update={
+            "site_schedules": {key: SiteSchedule(**own) for key, own in schedules.items()},
+        }))
+
+    yield apply
+    replace_settings(original)
+
+
+def _pending_collection(session, *, identifier="date_based"):
     from backend.db.models import Site
 
-    session.add(Site(key="tube", name="Tube", domains=["pending.example"], pending_checks=site_checks))
+    session.add(Site(key="tube", name="Tube", domains=["pending.example"]))
     collection = _collection(session, "UC1", source_key="pending")
     collection.site_key = "tube"
     collection.episode_identifier = identifier
@@ -240,8 +257,9 @@ def test_an_upcoming_video_is_added_with_its_status_and_not_downloaded(pending, 
     assert not [name for name, _ in events if name.startswith("download_profile")]
 
 
-def test_a_site_can_leave_upcoming_videos_out_until_they_are_published(pending, session):
-    collection = _pending_collection(session, site_checks=False)
+def test_a_site_can_leave_upcoming_videos_out_until_they_are_published(pending, session, site_schedules):
+    site_schedules(tube={"upcoming_and_live": False})
+    collection = _pending_collection(session)
 
     assert _add(session, collection, _upcoming("soon", NOW + timedelta(hours=3))) == 0
     assert _episode(session, "soon") is None
@@ -404,11 +422,11 @@ def test_a_failed_daily_wire_lookup_is_tried_again_on_the_next_round(monitored, 
     assert monitored.checked == [flaky, gone, flaky]
 
 
-def test_a_daily_wire_episode_follows_the_rhythm_of_its_site(monitored, session):
+def test_a_daily_wire_episode_follows_the_rhythm_of_its_site(monitored, session, site_schedules):
     from backend.db.models import Site
 
-    session.add(Site(key="dailywire", name="The Daily Wire", domains=["dailywire.com"],
-                     pending_upcoming_minutes=60, pending_starting_minutes=2, pending_live_minutes=20))
+    site_schedules(dailywire={"pending_upcoming_minutes": 60, "pending_starting_minutes": 2, "pending_live_minutes": 20})
+    session.add(Site(key="dailywire", name="The Daily Wire", domains=["dailywire.com"]))
     session.commit()
     _dailywire_episode(session, "live", site="dailywire")
 
@@ -417,10 +435,11 @@ def test_a_daily_wire_episode_follows_the_rhythm_of_its_site(monitored, session)
     assert _sweep(session, NOW + timedelta(minutes=20)).checked == 1
 
 
-def test_a_site_with_upcoming_and_live_off_is_not_followed(monitored, session):
+def test_a_site_with_upcoming_and_live_off_is_not_followed(monitored, session, site_schedules):
     from backend.db.models import Site
 
-    session.add(Site(key="dailywire", name="The Daily Wire", domains=["dailywire.com"], pending_checks=False))
+    site_schedules(dailywire={"upcoming_and_live": False})
+    session.add(Site(key="dailywire", name="The Daily Wire", domains=["dailywire.com"]))
     session.commit()
     _dailywire_episode(session, "live", site="dailywire")
 
@@ -428,19 +447,18 @@ def test_a_site_with_upcoming_and_live_off_is_not_followed(monitored, session):
     assert monitored.checked == []
 
 
-def test_a_site_follows_the_system_setting_unless_it_has_its_own(monkeypatch):
-    from types import SimpleNamespace
-
-    from backend.db.models import Site
+def test_a_site_follows_the_system_setting_unless_it_has_its_own(site_schedules):
+    from config import get_settings
     from backend.services import pending_episodes
 
-    schedule = SimpleNamespace(
-        upcoming_and_live=False, pending_upcoming_minutes=30, pending_starting_minutes=4, pending_live_minutes=6,
-    )
-    monkeypatch.setattr(pending_episodes, "get_settings", lambda: SimpleNamespace(new_episode_schedule=schedule))
+    site_schedules(b={"upcoming_and_live": False}, c={
+        "pending_upcoming_minutes": 90, "pending_starting_minutes": 3, "pending_live_minutes": 10,
+    })
+    system = get_settings().new_episode_schedule
 
-    assert not pending_episodes.site_follows_pending(Site(key="a", name="A"))
-    assert pending_episodes.site_follows_pending(Site(key="b", name="B", pending_checks=True))
-    assert pending_episodes.site_pending_minutes(None) == pending_episodes.PendingMinutes(30, 4, 6)
-    own = Site(key="c", name="C", pending_upcoming_minutes=90, pending_starting_minutes=3, pending_live_minutes=10)
-    assert pending_episodes.site_pending_minutes(own) == pending_episodes.PendingMinutes(90, 3, 10)
+    assert pending_episodes.site_follows_pending("a") == system.upcoming_and_live
+    assert not pending_episodes.site_follows_pending("b")
+    assert pending_episodes.site_pending_minutes(None) == pending_episodes.PendingMinutes(
+        system.pending_upcoming_minutes, system.pending_starting_minutes, system.pending_live_minutes,
+    )
+    assert pending_episodes.site_pending_minutes("c") == pending_episodes.PendingMinutes(90, 3, 10)

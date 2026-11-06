@@ -59,6 +59,13 @@ def named_sites() -> list[Site]:
     return sorted(found.values(), key=lambda site: site.key)
 
 
+def site_refresh_intervals(site_key: str) -> str | None:
+    """The refresh schedule a Source knows for the Site with the key, such as YouTube's, or None."""
+    return next(
+        (intervals for source in _sources.values() if (intervals := source.refresh_intervals_of(site_key))), None,
+    )
+
+
 def named_site_for(url: str) -> Site | None:
     """The Site a Source is made for that the link is on, by the most specific domain."""
     host = link_host(url)

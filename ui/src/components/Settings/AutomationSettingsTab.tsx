@@ -283,7 +283,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                         help={help}
                     />
                 ))}
-                <SiteRefreshCard system={draft.newEpisodeSchedule}/>
+                <SiteRefreshCard draft={draft} updateDraft={updateDraft} errorFor={errorFor}/>
             </SettingsSection>
 
             <SettingsDisclosure

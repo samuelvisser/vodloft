@@ -364,6 +364,39 @@ class TrackNewEpisodeSchedule(SubmodelBase):
         return normalize_metadata_refresh_intervals(value)
 
 
+SITE_REFRESH_OFF = "off"
+"""A Site's ``metadata_refresh`` when its items are not looked up again after publication."""
+
+
+class SiteSchedule(SubmodelBase):
+    """One Site's own scheduling. A setting left out follows the Site's default, then the system setting."""
+
+    metadata_refresh: Optional[str] = Field(
+        default=None,
+        description="Offsets after publication for refreshing the metadata of the Site's items, or off",
+    )
+    upcoming_and_live: Optional[bool] = Field(
+        default=None, description="Add upcoming and live videos and follow them until they are published",
+    )
+    pending_upcoming_minutes: Optional[int] = Field(default=None, ge=2, le=24 * 60)
+    pending_starting_minutes: Optional[int] = Field(default=None, ge=2, le=60)
+    pending_live_minutes: Optional[int] = Field(default=None, ge=2, le=60)
+
+    @field_validator("metadata_refresh")
+    @classmethod
+    def _validate_metadata_refresh(cls, value: Optional[str]) -> Optional[str]:
+        if value is None or value.strip().lower() == SITE_REFRESH_OFF:
+            return None if value is None else SITE_REFRESH_OFF
+        return normalize_metadata_refresh_intervals(value)
+
+    @model_validator(mode="after")
+    def _minutes_come_together(self) -> "SiteSchedule":
+        minutes = (self.pending_upcoming_minutes, self.pending_starting_minutes, self.pending_live_minutes)
+        if any(value is None for value in minutes) and any(value is not None for value in minutes):
+            raise ValueError("Give all three lookup times of a Site, or none to follow the system setting")
+        return self
+
+
 class EpisodeStatusTiming(SubmodelBase):
     published_final_after_minutes: int = Field(
         ...,

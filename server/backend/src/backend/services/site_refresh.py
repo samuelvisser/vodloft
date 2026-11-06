@@ -1,4 +1,6 @@
-"""The metadata refresh setting of each Site, as the Automation settings show and change it."""
+"""Each Site VODLoft knows, as the Automation settings list it to schedule it.
+
+What a Site's own scheduling is lives in config.yml, under ``siteSchedules``."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -8,13 +10,9 @@ from sqlalchemy import select, union
 from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, Site, Video
+from backend.services.pending_episodes import follows_pending
 from backend.services.metadata_refresh import refreshes_metadata
-from backend.services.pending_episodes import PendingMinutes, follows_pending
-from backend.types.site_types import SiteRefreshMode
-
-
-class UnknownSiteError(LookupError):
-    pass
+from sources import site_refresh_intervals
 
 
 @dataclass(frozen=True)
@@ -22,8 +20,9 @@ class SiteRefresh:
     site: Site
     refreshes: bool
     follows_pending: bool
-    """Whether a Source the Site's collections come through follows upcoming and live episodes, which
-    the Site's ``pending_checks`` turns on and off."""
+    """Whether a Source the Site's collections come through follows upcoming and live episodes."""
+    default_refresh_intervals: Optional[str]
+    """The schedule the sources package knows for the Site, which it follows unless config.yml sets one."""
 
 
 def _site_refreshes(s: Session) -> dict[str, tuple[bool, bool]]:
@@ -40,35 +39,9 @@ def _site_refreshes(s: Session) -> dict[str, tuple[bool, bool]]:
     return found
 
 
-def _site_refresh(site: Site, found: dict[str, tuple[bool, bool]]) -> SiteRefresh:
-    # A Site without collections or videos yet shows every setting.
-    return SiteRefresh(site, *found.get(site.key, (True, True)))
-
-
 def list_site_refresh(s: Session) -> list[SiteRefresh]:
     found = _site_refreshes(s)
     sites = s.scalars(select(Site).order_by(Site.name)).all()
-    return [_site_refresh(site, found) for site in sites]
+    # A Site without collections or videos yet shows every setting.
+    return [SiteRefresh(site, *found.get(site.key, (True, True)), site_refresh_intervals(site.key)) for site in sites]
 
-
-def set_site_refresh(
-    s: Session,
-    key: str,
-    mode: SiteRefreshMode,
-    intervals: Optional[str],
-    pending_checks: Optional[bool],
-    pending_minutes: Optional[PendingMinutes],
-) -> SiteRefresh:
-    """Change a Site's settings. ``pending_checks`` and ``pending_minutes`` None follow the system setting."""
-    site = s.get(Site, key)
-    if site is None:
-        raise UnknownSiteError(f"VODLoft has no Site '{key}'")
-    site.refresh_mode = SiteRefreshMode(mode).value
-    if intervals is not None:
-        site.refresh_intervals = intervals
-    site.pending_checks = pending_checks
-    site.pending_upcoming_minutes = pending_minutes.upcoming if pending_minutes else None
-    site.pending_starting_minutes = pending_minutes.starting if pending_minutes else None
-    site.pending_live_minutes = pending_minutes.live if pending_minutes else None
-    s.flush()
-    return _site_refresh(site, _site_refreshes(s))

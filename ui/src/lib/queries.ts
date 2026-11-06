@@ -19,7 +19,7 @@ import {
     useLazyCollection,
 } from './lazyCollection'
 import {useFrontendPuller} from './puller'
-import {SiteRefreshReadSchema, type SiteRefreshFormValues, type SiteRefreshRead} from '../types/schemas/siteRefresh'
+import {SiteRefreshReadSchema, type SiteRefreshRead} from '../types/schemas/siteRefresh'
 import {downloadStatusesForApi} from './downloadStatusFilters'
 import {
     episodeQueryKeys,
@@ -470,7 +470,7 @@ export function useSourceSites() {
     })
 }
 
-/** The metadata refresh schedule of every Site VODLoft has seen. */
+/** Every Site VODLoft has seen, and which of its settings apply to it. */
 export function useSiteRefresh() {
     return useQuery<SiteRefreshRead[], Error, SiteRefreshRead[], readonly ['siteRefresh']>({
         queryKey: ['siteRefresh'] as const,
@@ -478,26 +478,6 @@ export function useSiteRefresh() {
             const value = await fetchJSON<unknown>(`${apiUrl()}/settings/site-refresh`, signal)
             return SiteRefreshReadSchema.array().parse(value)
         },
-    })
-}
-
-/** Choose the schedule a Site's items follow; the form reads the response for field errors. */
-export function saveSiteRefresh(key: string, values: SiteRefreshFormValues): Promise<Response> {
-    return fetch(`${apiUrl()}/settings/site-refresh/${encodeURIComponent(key)}`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            refreshMode: values.refreshMode,
-            refreshIntervals: values.refreshIntervals.trim() || null,
-            // null follows the system setting.
-            pendingChecks: values.pendingChecks === 'system' ? null : values.pendingChecks === 'on',
-            ...(values.pendingRhythm === 'own' ? {
-                pendingUpcomingMinutes: values.pendingUpcomingMinutes,
-                pendingStartingMinutes: values.pendingStartingMinutes,
-                pendingLiveMinutes: values.pendingLiveMinutes,
-            } : {pendingUpcomingMinutes: null, pendingStartingMinutes: null, pendingLiveMinutes: null}),
-        }),
     })
 }
 

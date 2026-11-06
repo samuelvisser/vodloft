@@ -35,7 +35,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from backend.db.datetime_types import utc_datetime
-from backend.db.models import Collection, Episode, Site
+from backend.db.models import Collection, Episode
 from backend.services.pending_episodes import (
     PendingMinutes, checks_pending, monitors_pending, site_follows_pending, site_pending_minutes,
 )
@@ -147,9 +147,8 @@ def _due(s: Session, now: datetime) -> list[_Pending]:
     monitored = [source.id for source in all_sources() if monitors_pending(source)]
     rows = s.execute(
         select(Episode.id, Episode.source_key, Episode.source_slug, Episode.sharing_url, Episode.publish_status,
-               Episode.scheduled_date, Site)
+               Episode.scheduled_date, Collection.site_key)
         .join(Collection, Episode.collection_id == Collection.id)
-        .outerjoin(Site, Site.key == Collection.site_key)
         .where(or_(
             and_(Episode.source_key.in_(checked), Episode.publish_status.in_(_FOLLOWED)),
             # The Daily Wire's no-usable-media checks follow those episodes.
@@ -164,9 +163,9 @@ def _due(s: Session, now: datetime) -> list[_Pending]:
     for episode_id in set(_last_checked) - followed:
         del _last_checked[episode_id]
     due = []
-    for episode_id, source_key, slug, url, status, scheduled, site in rows:
+    for episode_id, source_key, slug, url, status, scheduled, site_key in rows:
         starts = utc_datetime(scheduled) if scheduled is not None else None
-        if is_due(status, starts, _last_checked.get(episode_id), now, Rhythm.of(site_pending_minutes(site))):
+        if is_due(status, starts, _last_checked.get(episode_id), now, Rhythm.of(site_pending_minutes(site_key))):
             due.append(_Pending(episode_id, source_key, ItemRef(slug, url), source_key in monitored))
     return due
 

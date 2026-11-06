@@ -692,6 +692,11 @@ class Source(ABC):
         host = link_host(url)
         return next((site for site in self.sites if any(on_domain(host, domain) for domain in site.domains)), None)
 
+    def refresh_intervals_of(self, site_key: str) -> str | None:
+        """The refresh schedule this Source knows for the Site with the key, as its ``refresh_intervals``
+        say, or None when it knows none. A Source that tells its Sites apart in ``site_for`` implements it."""
+        return next((site.refresh_intervals for site in self.sites if site.key == site_key), None)
+
     def collection_ref(self, url: str) -> str | None:
         """The id one of this Source's ``sites`` gives the collection at the link, told from the
         link alone, or None when it is not a collection's link. A Source that names Sites implements it."""

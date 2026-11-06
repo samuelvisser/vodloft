@@ -429,6 +429,9 @@ class YtDlpSource(Source):
         """The site of the yt-dlp extractor that handles the link: one Site for all of YouTube's domains."""
         return sites.site_for(url)
 
+    def refresh_intervals_of(self, site_key: str) -> str | None:
+        return sites.refresh_intervals_of(site_key)
+
     def episode_tags_for(self, url: str | None) -> tuple[EpisodeTag, ...]:
         """Shorts and livestreams are YouTube's; other sites only have videos."""
         return _YOUTUBE_TAGS if url is None or _is_youtube(url) else (_VIDEO_TAG,)

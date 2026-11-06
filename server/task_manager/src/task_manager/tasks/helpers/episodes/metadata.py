@@ -23,7 +23,7 @@ def ensure_utc(value: datetime) -> datetime:
 def episode_refresh_offsets(episode: Episode) -> tuple[int, ...]:
     """The refresh schedule of the episode's Site, in seconds after publication."""
     collection = episode.collection
-    return site_refresh_offsets(collection.site if collection is not None else None)
+    return site_refresh_offsets(collection.site_key if collection is not None else None)
 
 
 def metadata_is_final_for_new_episode(
