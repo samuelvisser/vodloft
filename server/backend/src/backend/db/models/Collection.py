@@ -8,12 +8,17 @@ from backend.db.datetime_types import UTCDateTime
 from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.db.mixins.CreatedByMixin import CreatedByMixin
+from backend.types.collection_types import EpisodeOrder
 
 if TYPE_CHECKING:
     from backend.db.models.media_item import Episode
     from backend.db.models.stream_profile import StreamProfileBase
     from backend.db.models import Season, DownloadProfile, Site
     from backend.db.models import CustomIndexState
+
+
+def _default_episode_order(context) -> str:
+    return EpisodeOrder.default_for(context.get_current_parameters()["episode_identifier"]).value
 
 
 class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
@@ -53,6 +58,10 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     membership_level: Mapped[str]
     type: Mapped[str]
     episode_identifier: Mapped[str]
+    episode_order: Mapped[str] = mapped_column(
+        default=_default_episode_order,
+        comment="Which way the episodes are listed, within each season for a seasonal Collection: newest_first or oldest_first",
+    )
     added_by_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), comment="Who added the Collection, for their own notifications",
     )

@@ -18,6 +18,7 @@ def test_collection_view_maps_nested_orm_source_through_aliases():
         membership_level="FREE",
         type="podcast",
         episode_identifier="numbered",
+        episode_order="newest_first",
         author_slug="host",
         title="Collection",
         description="Description",

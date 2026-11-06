@@ -29,7 +29,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 SITE_REFRESH_REVISION = "5b75b63e55f2"
 NEUTRAL_STATUSES_REVISION = "b9dbb772c34e"
 UPCOMING_VIDEOS_REVISION = "158c03681e52"
-HEAD_REVISION = "28c70478078a"
+HEAD_REVISION = "db11a36f288f"
 
 
 @pytest.fixture
@@ -905,3 +905,25 @@ def test_feeds_proxy_their_sites_video_by_default(migration_database):
         ))
         connection.execute(text("INSERT INTO stream_profiles_rss (id, feed_url, max_items) VALUES (21, 'https://example.test/21', 0)"))
         assert connection.execute(text("SELECT proxy_source_stream FROM stream_profiles_rss WHERE id = 21")).scalar_one() == 1
+
+
+def test_collections_keep_the_episode_order_their_identification_gave_them(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "28c70478078a")
+    with engine.begin() as connection:
+        for collection_id, identifier in ((1, "date_based"), (2, "numbered"), (3, "seasonal")):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key) VALUES (:id, :uuid, :uuid, 'C', 'https://example.test/' || :uuid, "
+                "'free', 'series', :identifier, 'Host', 'host', 'dailywire')"
+            ), {"id": collection_id, "uuid": f"c{collection_id}", "identifier": identifier})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT id, episode_order FROM collections ORDER BY id")).all() == [
+            (1, "newest_first"), (2, "newest_first"), (3, "oldest_first"),
+        ]

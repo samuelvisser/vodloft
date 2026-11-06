@@ -11,6 +11,20 @@ class EpisodeIdentifier(Enum):
     SEASONAL = "seasonal"
 
 
+class EpisodeOrder(StrEnum):
+    """Which way a Collection lists its episodes; a seasonal Collection orders each season."""
+
+    NEWEST_FIRST = "newest_first"
+    OLDEST_FIRST = "oldest_first"
+
+    @classmethod
+    def default_for(cls, episode_identifier: EpisodeIdentifier | str) -> "EpisodeOrder":
+        """A seasonal Collection starts each season at its first episode; any other lists its newest first."""
+        if EpisodeIdentifier(episode_identifier) == EpisodeIdentifier.SEASONAL:
+            return cls.OLDEST_FIRST
+        return cls.NEWEST_FIRST
+
+
 class CookiesMode(StrEnum):
     """When a Collection's downloads use the Source's cookies file."""
 
