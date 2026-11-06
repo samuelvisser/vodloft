@@ -17,6 +17,7 @@ import MessagesActionsSettingsTab from '../components/Notifications/MessagesActi
 import ImportSettingsTab from '../components/Import/ImportSettingsTab'
 import {SettingsLoading} from '../components/Settings/SettingsControls'
 import {saveSettingsRequest, useSettings} from '../lib/settings'
+import {SettingsDraftsContext, useSettingsDraftRegister} from '../components/Settings/settingsDrafts'
 import {
     SETTINGS_FIELD_PATHS,
     SettingsFormSchema,
@@ -82,6 +83,14 @@ function errorAtPath(errors: FieldErrors<SettingsValues>, path: SettingsFieldPat
     return typeof message === 'string' ? message : undefined
 }
 
+const settingsCount = (count: number) => `${count} ${count === 1 ? 'setting' : 'settings'}`
+
+function unsavedChangesText(configChanges: number, otherChanges: number): string {
+    if (!otherChanges) return `${settingsCount(configChanges)} will be written to config.yml.`
+    if (!configChanges) return `${settingsCount(otherChanges)} will be saved.`
+    return `${settingsCount(configChanges)} will be written to config.yml, and ${otherChanges} more saved.`
+}
+
 export default function SettingsPage() {
     const settingsQuery = useSettings()
     const queryClient = useQueryClient()
@@ -139,7 +148,11 @@ export default function SettingsPage() {
             (path) => !Object.is(valueAtPath(draft, path), valueAtPath(baseline, path)),
         )
     }, [draft, baseline])
-    const isDirty = dirtyFields.length > 0
+    const {drafts, setDraft} = useSettingsDraftRegister()
+    const draftsContext = useMemo(() => ({setDraft}), [setDraft])
+    const otherChanges = Object.values(drafts).reduce((total, item) => total + item.count, 0)
+    const [savingOthers, setSavingOthers] = useState(false)
+    const isDirty = dirtyFields.length + otherChanges > 0
 
     useEffect(() => {
         if (!isDirty) return
@@ -190,7 +203,22 @@ export default function SettingsPage() {
 
     const discardChanges = () => {
         if (baseline) reset(cloneSettings(baseline))
+        Object.values(drafts).forEach((item) => item.discard())
     }
+
+    // config.yml and the settings kept in the database, such as each Site's, save together.
+    const saveChanges = async () => {
+        if (dirtyFields.length) await submit()
+        const others = Object.values(drafts)
+        if (!others.length) return
+        setSavingOthers(true)
+        try {
+            for (const item of others) await item.save()
+        } finally {
+            setSavingOthers(false)
+        }
+    }
+    const saving = isSubmitting || savingOthers
 
     if (settingsQuery.isError) {
         return (
@@ -288,6 +316,7 @@ export default function SettingsPage() {
                     role="tabpanel"
                     aria-labelledby={`settings-tab-${activeTab}`}
                 >
+                    <SettingsDraftsContext.Provider value={draftsContext}>
                     {activeTab === 'general' ? <GeneralSettingsTab {...tabProps} /> : null}
                     {activeTab === 'downloads' ? <DownloadsSettingsTab {...tabProps} /> : null}
                     {activeTab === 'quick-download' ? <QuickDownloadSettingsTab {...tabProps} /> : null}
@@ -297,6 +326,7 @@ export default function SettingsPage() {
                     {activeTab === 'users' ? <UsersSettingsTab /> : null}
                     {activeTab === 'import' ? <ImportSettingsTab /> : null}
                     {activeTab === 'advanced' ? <AdvancedSettingsTab {...tabProps} /> : null}
+                    </SettingsDraftsContext.Provider>
                 </div>
 
                 {isDirty ? (
@@ -304,14 +334,14 @@ export default function SettingsPage() {
                         <div>
                             <strong>Unsaved changes</strong>
                             <span>
-                                {dirtyFields.length} {dirtyFields.length === 1 ? 'setting' : 'settings'} will be written to config.yml.
+                                {unsavedChangesText(dirtyFields.length, otherChanges)}
                             </span>
                         </div>
                         <div className="settings-actions__buttons">
                             <button
                                 className="btn"
                                 type="button"
-                                disabled={isSubmitting}
+                                disabled={saving}
                                 onClick={discardChanges}
                             >
                                 Discard
@@ -319,10 +349,10 @@ export default function SettingsPage() {
                             <button
                                 className="btn btn-primary"
                                 type="button"
-                                disabled={isSubmitting}
-                                onClick={() => void submit()}
+                                disabled={saving}
+                                onClick={() => void saveChanges()}
                             >
-                                {isSubmitting ? 'Saving…' : 'Save settings'}
+                                {saving ? 'Saving…' : 'Save settings'}
                             </button>
                         </div>
                     </div>

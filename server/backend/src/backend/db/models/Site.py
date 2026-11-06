@@ -4,12 +4,7 @@ from sqlalchemy import JSON, Boolean, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.db import Base
-from backend.types.site_types import (
-    PENDING_LIVE_MINUTES,
-    PENDING_STARTING_MINUTES,
-    PENDING_UPCOMING_MINUTES,
-    SiteRefreshMode,
-)
+from backend.types.site_types import SiteRefreshMode
 
 
 class Site(Base):
@@ -30,19 +25,18 @@ class Site(Base):
     refresh_intervals: Mapped[Optional[str]] = mapped_column(
         comment="The Site's own refresh schedule, such as 30m,2h,24h, used when refresh_mode is own",
     )
-    pending_checks: Mapped[bool] = mapped_column(
-        Boolean, default=True, server_default="1",
-        comment="Whether upcoming and live videos are added and followed until they are published",
+    pending_checks: Mapped[Optional[bool]] = mapped_column(
+        Boolean,
+        comment="Whether upcoming and live videos are added and followed until they are published; null follows the system setting",
     )
-    pending_upcoming_minutes: Mapped[int] = mapped_column(
-        Integer, default=PENDING_UPCOMING_MINUTES, server_default=str(PENDING_UPCOMING_MINUTES),
-        comment="Minutes between lookups of an upcoming episode",
+    pending_upcoming_minutes: Mapped[Optional[int]] = mapped_column(
+        Integer, comment="Minutes between lookups of an upcoming episode; null follows the system setting",
     )
-    pending_starting_minutes: Mapped[int] = mapped_column(
-        Integer, default=PENDING_STARTING_MINUTES, server_default=str(PENDING_STARTING_MINUTES),
-        comment="Minutes between lookups from 15 minutes before an episode starts until an hour after",
+    pending_starting_minutes: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        comment="Minutes between lookups from 15 minutes before an episode starts until an hour after; null follows the system setting",
     )
-    pending_live_minutes: Mapped[int] = mapped_column(
-        Integer, default=PENDING_LIVE_MINUTES, server_default=str(PENDING_LIVE_MINUTES),
-        comment="Minutes between lookups while an episode is live or still being finished",
+    pending_live_minutes: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        comment="Minutes between lookups while an episode is live or still being finished; null follows the system setting",
     )

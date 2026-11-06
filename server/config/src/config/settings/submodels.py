@@ -341,6 +341,22 @@ class TrackNewEpisodeSchedule(SubmodelBase):
         min_length=1,
         description="The system schedule: comma-separated offsets after publication for refreshing the metadata of Sites that follow it",
     )
+    upcoming_and_live: bool = Field(
+        default=True,
+        description="Add upcoming and live videos and follow them until they are published, for Sites that follow the system setting",
+    )
+    pending_upcoming_minutes: int = Field(
+        default=60, ge=2, le=24 * 60,
+        description="Minutes between lookups of an upcoming episode, for Sites that follow the system setting",
+    )
+    pending_starting_minutes: int = Field(
+        default=2, ge=2, le=60,
+        description="Minutes between lookups from 15 minutes before an episode starts until an hour after, for Sites that follow the system setting",
+    )
+    pending_live_minutes: int = Field(
+        default=5, ge=2, le=60,
+        description="Minutes between lookups while an episode is live or still being finished, for Sites that follow the system setting",
+    )
 
     @field_validator("metadata_refresh_intervals")
     @classmethod

@@ -500,10 +500,13 @@ export function saveSiteRefresh(key: string, values: SiteRefreshFormValues): Pro
         body: JSON.stringify({
             refreshMode: values.refreshMode,
             refreshIntervals: values.refreshIntervals.trim() || null,
-            pendingChecks: values.pendingChecks,
-            pendingUpcomingMinutes: values.pendingUpcomingMinutes,
-            pendingStartingMinutes: values.pendingStartingMinutes,
-            pendingLiveMinutes: values.pendingLiveMinutes,
+            // null follows the system setting.
+            pendingChecks: values.pendingChecks === 'system' ? null : values.pendingChecks === 'on',
+            ...(values.pendingRhythm === 'own' ? {
+                pendingUpcomingMinutes: values.pendingUpcomingMinutes,
+                pendingStartingMinutes: values.pendingStartingMinutes,
+                pendingLiveMinutes: values.pendingLiveMinutes,
+            } : {pendingUpcomingMinutes: null, pendingStartingMinutes: null, pendingLiveMinutes: null}),
         }),
     })
 }

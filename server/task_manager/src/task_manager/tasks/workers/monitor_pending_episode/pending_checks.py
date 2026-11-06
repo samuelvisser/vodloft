@@ -36,8 +36,9 @@ from sqlalchemy.orm import Session
 
 from backend.db.datetime_types import utc_datetime
 from backend.db.models import Collection, Episode, Site
-from backend.services.pending_episodes import checks_pending, monitors_pending
-from backend.types.site_types import PENDING_LIVE_MINUTES, PENDING_STARTING_MINUTES, PENDING_UPCOMING_MINUTES
+from backend.services.pending_episodes import (
+    PendingMinutes, checks_pending, monitors_pending, site_follows_pending, site_pending_minutes,
+)
 from backend.types.episode_types import PENDING_EPISODE_PUBLISH_STATUSES, EpisodePublishStatus
 from config import get_settings
 from sources import ItemRef, VideoDetails, all_sources, get_source
@@ -74,19 +75,16 @@ _last_checked: dict[int, datetime] = {}
 class Rhythm:
     """How often a Site's pending episodes are looked up."""
 
-    upcoming: timedelta = timedelta(minutes=PENDING_UPCOMING_MINUTES)
-    starting: timedelta = timedelta(minutes=PENDING_STARTING_MINUTES)
-    live: timedelta = timedelta(minutes=PENDING_LIVE_MINUTES)
+    upcoming: timedelta
+    starting: timedelta
+    live: timedelta
+
+    @classmethod
+    def of(cls, minutes: PendingMinutes) -> Rhythm:
+        return cls(timedelta(minutes=minutes.upcoming), timedelta(minutes=minutes.starting), timedelta(minutes=minutes.live))
 
 
-def _rhythm(upcoming: Optional[int], starting: Optional[int], live: Optional[int]) -> Rhythm:
-    # An episode without a Site follows the usual rhythm.
-    if upcoming is None or starting is None or live is None:
-        return Rhythm()
-    return Rhythm(timedelta(minutes=upcoming), timedelta(minutes=starting), timedelta(minutes=live))
-
-
-def interval(status: str, starts: Optional[datetime], now: datetime, rhythm: Rhythm = Rhythm()) -> timedelta:
+def interval(status: str, starts: Optional[datetime], now: datetime, rhythm: Rhythm) -> timedelta:
     """How long an episode waits between lookups."""
     if status in _WHILE_LIVE:
         return rhythm.live
@@ -98,7 +96,7 @@ def interval(status: str, starts: Optional[datetime], now: datetime, rhythm: Rhy
 
 
 def is_due(
-    status: str, starts: Optional[datetime], last: Optional[datetime], now: datetime, rhythm: Rhythm = Rhythm(),
+    status: str, starts: Optional[datetime], last: Optional[datetime], now: datetime, rhythm: Rhythm,
 ) -> bool:
     """Due after its interval, and also right when an upcoming episode is about to start."""
     if last is None:
@@ -149,8 +147,7 @@ def _due(s: Session, now: datetime) -> list[_Pending]:
     monitored = [source.id for source in all_sources() if monitors_pending(source)]
     rows = s.execute(
         select(Episode.id, Episode.source_key, Episode.source_slug, Episode.sharing_url, Episode.publish_status,
-               Episode.scheduled_date,
-               Site.pending_upcoming_minutes, Site.pending_starting_minutes, Site.pending_live_minutes)
+               Episode.scheduled_date, Site)
         .join(Collection, Episode.collection_id == Collection.id)
         .outerjoin(Site, Site.key == Collection.site_key)
         .where(or_(
@@ -160,14 +157,16 @@ def _due(s: Session, now: datetime) -> list[_Pending]:
         ))
         .order_by(Episode.id)
     ).all()
+    # A Site with upcoming and live videos off is not followed.
+    rows = [row for row in rows if site_follows_pending(row[-1])]
     followed = {row[0] for row in rows}
     # A published or deleted episode is no longer followed.
     for episode_id in set(_last_checked) - followed:
         del _last_checked[episode_id]
     due = []
-    for episode_id, source_key, slug, url, status, scheduled, *minutes in rows:
+    for episode_id, source_key, slug, url, status, scheduled, site in rows:
         starts = utc_datetime(scheduled) if scheduled is not None else None
-        if is_due(status, starts, _last_checked.get(episode_id), now, _rhythm(*minutes)):
+        if is_due(status, starts, _last_checked.get(episode_id), now, Rhythm.of(site_pending_minutes(site))):
             due.append(_Pending(episode_id, source_key, ItemRef(slug, url), source_key in monitored))
     return due
 

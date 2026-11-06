@@ -57,6 +57,10 @@ const TrackNewEpisodeScheduleSchema = z.object({
     monitorNoUsableMediaEpisodeCronEnabled: z.boolean(),
     monitorNoUsableMediaEpisodeCron: z.string(),
     metadataRefreshIntervals: z.string(),
+    upcomingAndLive: z.boolean(),
+    pendingUpcomingMinutes: z.number(),
+    pendingStartingMinutes: z.number(),
+    pendingLiveMinutes: z.number(),
 })
 
 const EpisodeStatusTimingSchema = z.object({
@@ -187,6 +191,11 @@ export const SettingsValuesSchema = z.object({
 export type SettingsValues = z.infer<typeof SettingsValuesSchema>
 
 const requiredNumber = () => z.number({error: 'A value is required.'})
+/** Minutes between lookups of an upcoming or live episode. The sweep runs every two minutes, so none is shorter. */
+export const pendingMinutes = (max: number) => requiredNumber()
+    .int('Use whole minutes.')
+    .min(2, 'Must be at least 2 minutes.')
+    .max(max, `Must be at most ${max} minutes.`)
 const cronExpression = z.string().refine((value) => {
     const fields = value.trim().split(/\s+/)
     return fields.length === 5 && fields.every((field) => field.length > 0 && !field.includes('_'))
@@ -238,6 +247,9 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
         fullRescanCron: cronExpression,
         monitorNoUsableMediaEpisodeCron: cronExpression,
         metadataRefreshIntervals,
+        pendingUpcomingMinutes: pendingMinutes(24 * 60),
+        pendingStartingMinutes: pendingMinutes(60),
+        pendingLiveMinutes: pendingMinutes(60),
     }),
     episodeStatusTiming: EpisodeStatusTimingSchema.extend({
         publishedFinalAfterMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
@@ -334,6 +346,10 @@ export const SETTINGS_FIELD_PATHS = [
     'newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled',
     'newEpisodeSchedule.monitorNoUsableMediaEpisodeCron',
     'newEpisodeSchedule.metadataRefreshIntervals',
+    'newEpisodeSchedule.upcomingAndLive',
+    'newEpisodeSchedule.pendingUpcomingMinutes',
+    'newEpisodeSchedule.pendingStartingMinutes',
+    'newEpisodeSchedule.pendingLiveMinutes',
     'episodeStatusTiming.publishedFinalAfterMinutes',
     'episodeStatusTiming.dwProcessingMaxMinutes',
     'episodeStatusTiming.noUsableMediaDeleteAfterMinutes',

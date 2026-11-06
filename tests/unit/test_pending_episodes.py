@@ -121,26 +121,26 @@ def ref(slug: str):
 def test_an_upcoming_episode_is_checked_hourly_then_often_from_15_minutes_before():
     from task_manager.tasks.workers.monitor_pending_episode.pending_checks import Rhythm, interval, is_due
 
-    usual = Rhythm()
+    usual = Rhythm(timedelta(hours=1), timedelta(minutes=2), timedelta(minutes=5))
     starts = NOW + timedelta(hours=2)
-    assert interval("scheduled", starts, NOW) == usual.upcoming == timedelta(hours=1)
-    assert interval("scheduled", starts, starts - timedelta(minutes=10)) == usual.starting == timedelta(minutes=2)
-    assert interval("delayed", starts, starts + timedelta(minutes=30)) == usual.starting
+    assert interval("scheduled", starts, NOW, usual) == usual.upcoming == timedelta(hours=1)
+    assert interval("scheduled", starts, starts - timedelta(minutes=10), usual) == usual.starting == timedelta(minutes=2)
+    assert interval("delayed", starts, starts + timedelta(minutes=30), usual) == usual.starting
     # A stream more than an hour late may wait for days.
-    assert interval("delayed", starts, starts + timedelta(hours=2)) == usual.upcoming
+    assert interval("delayed", starts, starts + timedelta(hours=2), usual) == usual.upcoming
     # One without a known start may start any moment.
-    assert interval("scheduled", None, NOW) == usual.starting
-    assert interval("live", None, NOW) == usual.live == timedelta(minutes=5)
-    assert interval("published_preliminary", None, NOW) == usual.live
-    assert interval("no_usable_media", None, NOW) == usual.upcoming
+    assert interval("scheduled", None, NOW, usual) == usual.starting
+    assert interval("live", None, NOW, usual) == usual.live == timedelta(minutes=5)
+    assert interval("published_preliminary", None, NOW, usual) == usual.live
+    assert interval("no_usable_media", None, NOW, usual) == usual.upcoming
 
-    assert is_due("scheduled", starts, None, NOW)
-    assert not is_due("scheduled", starts, NOW, NOW + timedelta(minutes=30))
-    assert is_due("scheduled", starts, NOW, NOW + timedelta(hours=1))
+    assert is_due("scheduled", starts, None, NOW, usual)
+    assert not is_due("scheduled", starts, NOW, NOW + timedelta(minutes=30), usual)
+    assert is_due("scheduled", starts, NOW, NOW + timedelta(hours=1), usual)
     # Checked 50 minutes before the start, it is checked again right when the last 15 minutes begin.
-    assert is_due("scheduled", starts, starts - timedelta(minutes=50), starts - timedelta(minutes=15))
-    assert not is_due("scheduled", starts, starts - timedelta(minutes=14), starts - timedelta(minutes=13))
-    assert is_due("scheduled", starts, starts - timedelta(minutes=14), starts - timedelta(minutes=12))
+    assert is_due("scheduled", starts, starts - timedelta(minutes=50), starts - timedelta(minutes=15), usual)
+    assert not is_due("scheduled", starts, starts - timedelta(minutes=14), starts - timedelta(minutes=13), usual)
+    assert is_due("scheduled", starts, starts - timedelta(minutes=14), starts - timedelta(minutes=12), usual)
 
 
 def test_a_site_sets_its_own_rhythm():
@@ -407,10 +407,40 @@ def test_a_failed_daily_wire_lookup_is_tried_again_on_the_next_round(monitored, 
 def test_a_daily_wire_episode_follows_the_rhythm_of_its_site(monitored, session):
     from backend.db.models import Site
 
-    session.add(Site(key="dailywire", name="The Daily Wire", domains=["dailywire.com"], pending_live_minutes=20))
+    session.add(Site(key="dailywire", name="The Daily Wire", domains=["dailywire.com"],
+                     pending_upcoming_minutes=60, pending_starting_minutes=2, pending_live_minutes=20))
     session.commit()
     _dailywire_episode(session, "live", site="dailywire")
 
     assert _sweep(session, NOW).checked == 1
     assert _sweep(session, NOW + timedelta(minutes=10)).checked == 0
     assert _sweep(session, NOW + timedelta(minutes=20)).checked == 1
+
+
+def test_a_site_with_upcoming_and_live_off_is_not_followed(monitored, session):
+    from backend.db.models import Site
+
+    session.add(Site(key="dailywire", name="The Daily Wire", domains=["dailywire.com"], pending_checks=False))
+    session.commit()
+    _dailywire_episode(session, "live", site="dailywire")
+
+    assert _sweep(session, NOW).checked == 0
+    assert monitored.checked == []
+
+
+def test_a_site_follows_the_system_setting_unless_it_has_its_own(monkeypatch):
+    from types import SimpleNamespace
+
+    from backend.db.models import Site
+    from backend.services import pending_episodes
+
+    schedule = SimpleNamespace(
+        upcoming_and_live=False, pending_upcoming_minutes=30, pending_starting_minutes=4, pending_live_minutes=6,
+    )
+    monkeypatch.setattr(pending_episodes, "get_settings", lambda: SimpleNamespace(new_episode_schedule=schedule))
+
+    assert not pending_episodes.site_follows_pending(Site(key="a", name="A"))
+    assert pending_episodes.site_follows_pending(Site(key="b", name="B", pending_checks=True))
+    assert pending_episodes.site_pending_minutes(None) == pending_episodes.PendingMinutes(30, 4, 6)
+    own = Site(key="c", name="C", pending_upcoming_minutes=90, pending_starting_minutes=3, pending_live_minutes=10)
+    assert pending_episodes.site_pending_minutes(own) == pending_episodes.PendingMinutes(90, 3, 10)

@@ -208,9 +208,9 @@ def test_a_sites_schedule_is_chosen_in_the_settings(client, session):
     [row] = client.get("/api/settings/site-refresh").json()
     assert row == {
         "key": "youtube", "name": "YouTube", "domains": ["youtube.com"],
-        "refreshMode": "own", "refreshIntervals": "30m,2h", "pendingChecks": True, "refreshes": True,
-        "checksPending": True, "followsPending": True,
-        "pendingUpcomingMinutes": 60, "pendingStartingMinutes": 2, "pendingLiveMinutes": 5,
+        "refreshMode": "own", "refreshIntervals": "30m,2h", "pendingChecks": None, "refreshes": True,
+        "followsPending": True,
+        "pendingUpcomingMinutes": None, "pendingStartingMinutes": None, "pendingLiveMinutes": None,
     }
 
     saved = client.put("/api/settings/site-refresh/youtube", json={"refreshMode": "system", "refreshIntervals": None}).json()
@@ -235,6 +235,12 @@ def test_a_site_chooses_how_often_its_upcoming_and_live_episodes_are_looked_up(c
     # The sweep runs every two minutes, so nothing is looked up more often.
     too_often = {**minutes, "pendingLiveMinutes": 1}
     assert client.put("/api/settings/site-refresh/youtube", json={"refreshMode": "system", **too_often}).status_code == 422
+    # The three come together, or the Site follows the system setting.
+    assert client.put("/api/settings/site-refresh/youtube", json={
+        "refreshMode": "system", "pendingLiveMinutes": 10,
+    }).status_code == 422
+    system = client.put("/api/settings/site-refresh/youtube", json={"refreshMode": "system", "pendingChecks": False}).json()
+    assert (system["pendingChecks"], system["pendingUpcomingMinutes"]) == (False, None)
 
 
 # --- The Daily Wire's episodes ------------------------------------------------------------------

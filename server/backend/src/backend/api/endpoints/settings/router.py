@@ -6,7 +6,8 @@ from backend.api.models.settings import (
 )
 from backend.api.models.site_refresh import SiteRefreshAPIRead, SiteRefreshAPIUpdate
 from backend.services import speed_limit
-from backend.services.site_refresh import PendingMinutes, UnknownSiteError, list_site_refresh, set_site_refresh
+from backend.services.pending_episodes import PendingMinutes
+from backend.services.site_refresh import UnknownSiteError, list_site_refresh, set_site_refresh
 from config import get_settings
 from backend.app import db_session
 from backend.services.collection_assets import request_collection_asset_reconciliation
@@ -68,7 +69,7 @@ def site_refresh_update(key: str, body: SiteRefreshAPIUpdate):
             minutes = (body.pending_upcoming_minutes, body.pending_starting_minutes, body.pending_live_minutes)
             result = set_site_refresh(
                 s, key, body.refresh_mode, body.refresh_intervals, body.pending_checks,
-                PendingMinutes(*minutes) if None not in minutes else None,
+                None if body.pending_upcoming_minutes is None else PendingMinutes(*minutes),
             )
         except UnknownSiteError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc

@@ -29,7 +29,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 SITE_REFRESH_REVISION = "5b75b63e55f2"
 NEUTRAL_STATUSES_REVISION = "b9dbb772c34e"
 UPCOMING_VIDEOS_REVISION = "158c03681e52"
-HEAD_REVISION = "4b9e2d7c1a63"
+HEAD_REVISION = "9d1f3b6a2c84"
 
 
 @pytest.fixture
@@ -705,6 +705,28 @@ def test_every_site_adds_upcoming_and_live_videos(migration_database):
 
     with engine.connect() as connection:
         assert connection.execute(text("SELECT pending_checks FROM sites WHERE key = 'youtube'")).scalar_one() == 1
+
+
+def test_a_site_that_kept_the_usual_upcoming_settings_follows_the_system(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "4b9e2d7c1a63")
+    with engine.begin() as connection:
+        connection.execute(text("INSERT INTO sites (key, name, domains) VALUES ('usual', 'Usual', '[]')"))
+        connection.execute(text(
+            "INSERT INTO sites (key, name, domains, pending_checks, pending_live_minutes) "
+            "VALUES ('own', 'Own', '[]', 0, 20)"
+        ))
+
+    command.upgrade(config, "9d1f3b6a2c84")
+
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT key, pending_checks, pending_upcoming_minutes, pending_starting_minutes, pending_live_minutes "
+            "FROM sites ORDER BY key"
+        )).all() == [("own", 0, 60, 2, 20), ("usual", None, None, None, None)]
 
 
 def test_the_daily_wire_profiles_move_to_its_own_resolutions_and_duplicates_merge(migration_database):

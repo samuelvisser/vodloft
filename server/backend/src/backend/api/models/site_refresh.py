@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import Field, ValidationInfo, field_validator
+from pydantic import Field, ValidationInfo, field_validator, model_validator
 
 from backend.api.models.base import RequestBase, ResponseBase, response_model_config
 from backend.types.site_types import PENDING_MINIMUM_MINUTES, SiteRefreshMode
@@ -19,23 +19,22 @@ class SiteRefreshAPIRead(ResponseBase):
     domains: list[str]
     refresh_mode: SiteRefreshMode
     refresh_intervals: Optional[str] = None
-    pending_checks: bool
-    pending_upcoming_minutes: int
-    pending_starting_minutes: int
-    pending_live_minutes: int
+    # None follows the system setting.
+    pending_checks: Optional[bool] = None
+    pending_upcoming_minutes: Optional[int] = None
+    pending_starting_minutes: Optional[int] = None
+    pending_live_minutes: Optional[int] = None
     # Whether a Source the Site's collections and videos come through looks items up again.
     refreshes: bool
-    # Whether a Source the Site's collections come through can add upcoming and live videos.
-    checks_pending: bool
     # Whether a Source the Site's collections come through follows upcoming and live episodes.
     follows_pending: bool
 
 
 class SiteRefreshAPIUpdate(RequestBase):
     refresh_mode: SiteRefreshMode
-    # Left out, the Site keeps its choice.
+    # None follows the system setting.
     pending_checks: Optional[bool] = None
-    # Left out, the Site keeps how often its upcoming and live episodes are looked up.
+    # How often the Site's upcoming and live episodes are looked up: all three, or None to follow the system setting.
     pending_upcoming_minutes: Optional[int] = Field(default=None, ge=PENDING_MINIMUM_MINUTES, le=24 * 60)
     pending_starting_minutes: Optional[int] = Field(default=None, ge=PENDING_MINIMUM_MINUTES, le=60)
     pending_live_minutes: Optional[int] = Field(default=None, ge=PENDING_MINIMUM_MINUTES, le=60)
@@ -50,3 +49,10 @@ class SiteRefreshAPIUpdate(RequestBase):
         if info.data.get("refresh_mode") == SiteRefreshMode.OWN.value:
             raise ValueError("A Site with its own schedule needs refresh intervals")
         return None
+
+    @model_validator(mode="after")
+    def _minutes_come_together(self) -> SiteRefreshAPIUpdate:
+        minutes = (self.pending_upcoming_minutes, self.pending_starting_minutes, self.pending_live_minutes)
+        if any(value is None for value in minutes) and any(value is not None for value in minutes):
+            raise ValueError("Fill in all three lookup times, or follow the system setting")
+        return self

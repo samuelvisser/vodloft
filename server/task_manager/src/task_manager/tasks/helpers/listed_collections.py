@@ -37,6 +37,7 @@ from sqlalchemy.orm import Session
 from backend.db.models import Episode, Season, Collection
 from backend.services.seasons import create_season_record
 from backend.services.metadata_refresh import new_item_metadata_is_final
+from backend.services.pending_episodes import site_follows_pending
 from backend.types.episode_types import PENDING_EPISODE_PUBLISH_STATUSES, EpisodePublishStatus
 from backend.types.media_types import MediaType
 from backend.types.collection_types import EpisodeIdentifier
@@ -138,8 +139,7 @@ def _episode_slug(s: Session, collection: Collection, source_slug: str) -> str:
 
 def adds_pending(collection: Collection) -> bool:
     """Whether upcoming and live videos of the collection are added before they are published."""
-    site = collection.site
-    return get_source(collection.source_key).has(Feature.PENDING_CHECKS) and (site is None or site.pending_checks)
+    return get_source(collection.source_key).has(Feature.PENDING_CHECKS) and site_follows_pending(collection.site)
 
 
 def date_based_identifier(s: Session, episode: Episode, published_at: datetime) -> str | None:

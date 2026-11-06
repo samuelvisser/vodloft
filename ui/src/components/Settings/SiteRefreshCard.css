@@ -1,0 +1,212 @@
+.site-refresh-sites {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 6px;
+}
+
+.site-refresh-site {
+    border: 1px solid rgba(100, 116, 139, 0.24);
+    border-radius: 12px;
+    background: rgba(148, 163, 184, 0.06);
+}
+
+.site-refresh-site > summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    padding: 12px 16px;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+
+.site-refresh-site > summary::-webkit-details-marker {
+    display: none;
+}
+
+.site-refresh-site > summary::before {
+    content: '›';
+    width: 12px;
+    color: var(--muted);
+    font-size: 20px;
+    line-height: 1;
+    transition: transform 140ms ease;
+}
+
+.site-refresh-site[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+.site-refresh-site[open] > summary {
+    border-bottom: 1px solid rgba(100, 116, 139, 0.2);
+}
+
+.site-refresh-site__name {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+}
+
+.site-refresh-site__name strong {
+    color: var(--text);
+    font-size: 15px;
+}
+
+.site-refresh-site__name span {
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.site-refresh-site__badges {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-left: auto;
+}
+
+.site-refresh-badge {
+    padding: 3px 10px;
+    border: 1px solid rgba(100, 116, 139, 0.32);
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.12);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.site-refresh-badge--schedule {
+    border-color: rgba(59, 130, 246, 0.4);
+    background: rgba(59, 130, 246, 0.12);
+    color: #1d4ed8;
+}
+
+.site-refresh-badge--on {
+    border-color: rgba(34, 197, 94, 0.4);
+    background: rgba(34, 197, 94, 0.12);
+    color: #15803d;
+}
+
+.site-refresh-site__body {
+    padding: 4px 16px 8px;
+}
+
+.site-refresh-setting {
+    display: grid;
+    grid-template-columns: 180px minmax(0, 1fr);
+    align-items: center;
+    gap: 8px 16px;
+    padding: 10px 0;
+}
+
+.site-refresh-setting + .site-refresh-setting {
+    border-top: 1px solid rgba(100, 116, 139, 0.16);
+}
+
+.site-refresh-setting__label {
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.site-refresh-setting__control {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.site-refresh-setting__control .settings-field__help {
+    margin: 0;
+}
+
+.site-refresh-setting__line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+}
+
+.site-refresh-choice {
+    width: 190px;
+    max-width: 100%;
+}
+
+.site-refresh-inherited {
+    color: var(--muted);
+    font-size: 14px;
+}
+
+.site-refresh-system {
+    margin-bottom: -6px;
+}
+
+.site-refresh-intervals.settings-input {
+    flex: 1 1 220px;
+    max-width: 360px;
+}
+
+.site-refresh-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text);
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.site-refresh-rhythm {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 18px;
+}
+
+.site-refresh-rhythm__field {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.site-refresh-rhythm__field input {
+    width: 4.5em;
+    text-align: right;
+}
+
+@media (prefers-color-scheme: dark) {
+    .site-refresh-site {
+        border-color: rgba(148, 163, 184, 0.2);
+        background: rgba(15, 23, 42, 0.5);
+    }
+
+    .site-refresh-badge--schedule {
+        color: #93c5fd;
+    }
+
+    .site-refresh-badge--on {
+        color: #86efac;
+    }
+}
+
+@media (max-width: 640px) {
+    .site-refresh-site__badges {
+        flex-basis: 100%;
+        margin-left: 20px;
+    }
+
+    .site-refresh-setting {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .site-refresh-choice,
+    .site-refresh-intervals.settings-input {
+        width: 100%;
+        max-width: none;
+    }
+}

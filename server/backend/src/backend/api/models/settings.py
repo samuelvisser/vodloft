@@ -11,6 +11,7 @@ from pydantic.alias_generators import to_camel
 from pydantic_core import PydanticCustomError
 
 from backend.api.models.base import RequestBase, ResponseBase
+from backend.types.site_types import PENDING_MINIMUM_MINUTES
 from downloader.storage import FilesystemStorageKind
 from config.settings.cron_validation import (
     CronExpressionError,
@@ -68,11 +69,13 @@ SettingFieldPath = Literal[
     "newEpisodeSchedule.quickCheckCron",
     "newEpisodeSchedule.fullRescanCronEnabled",
     "newEpisodeSchedule.fullRescanCron",
-    "newEpisodeSchedule.monitorPendingEpisodeCronEnabled",
-    "newEpisodeSchedule.monitorPendingEpisodeCron",
     "newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled",
     "newEpisodeSchedule.monitorNoUsableMediaEpisodeCron",
     "newEpisodeSchedule.metadataRefreshIntervals",
+    "newEpisodeSchedule.upcomingAndLive",
+    "newEpisodeSchedule.pendingUpcomingMinutes",
+    "newEpisodeSchedule.pendingStartingMinutes",
+    "newEpisodeSchedule.pendingLiveMinutes",
     "episodeStatusTiming.publishedFinalAfterMinutes",
     "episodeStatusTiming.dwProcessingMaxMinutes",
     "episodeStatusTiming.noUsableMediaDeleteAfterMinutes",
@@ -167,11 +170,13 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "newEpisodeSchedule.quickCheckCron",
     "newEpisodeSchedule.fullRescanCronEnabled",
     "newEpisodeSchedule.fullRescanCron",
-    "newEpisodeSchedule.monitorPendingEpisodeCronEnabled",
-    "newEpisodeSchedule.monitorPendingEpisodeCron",
     "newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled",
     "newEpisodeSchedule.monitorNoUsableMediaEpisodeCron",
     "newEpisodeSchedule.metadataRefreshIntervals",
+    "newEpisodeSchedule.upcomingAndLive",
+    "newEpisodeSchedule.pendingUpcomingMinutes",
+    "newEpisodeSchedule.pendingStartingMinutes",
+    "newEpisodeSchedule.pendingLiveMinutes",
     "episodeStatusTiming.publishedFinalAfterMinutes",
     "episodeStatusTiming.dwProcessingMaxMinutes",
     "episodeStatusTiming.noUsableMediaDeleteAfterMinutes",
@@ -340,6 +345,10 @@ class TrackNewEpisodeScheduleValue(_SettingsValueModel):
     monitor_no_usable_media_episode_cron_enabled: bool
     monitor_no_usable_media_episode_cron: str = Field(min_length=1)
     metadata_refresh_intervals: str = Field(min_length=1)
+    upcoming_and_live: bool
+    pending_upcoming_minutes: int = Field(ge=PENDING_MINIMUM_MINUTES, le=24 * 60)
+    pending_starting_minutes: int = Field(ge=PENDING_MINIMUM_MINUTES, le=60)
+    pending_live_minutes: int = Field(ge=PENDING_MINIMUM_MINUTES, le=60)
 
     _validate_metadata_refresh_intervals = field_validator(
         "metadata_refresh_intervals"

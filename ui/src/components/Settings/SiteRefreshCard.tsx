@@ -1,46 +1,97 @@
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useQueryClient} from '@tanstack/react-query'
-import {Controller, useForm} from 'react-hook-form'
-import toast from 'react-hot-toast'
+import {useRef, useState} from 'react'
+import {Controller, useForm, type Control} from 'react-hook-form'
 
 import {saveSiteRefresh, useSiteRefresh} from '../../lib/queries'
 import {
     SiteRefreshFormSchema,
     SiteRefreshModeReg,
     SiteRefreshReadSchema,
+    SiteRhythmReg,
+    SiteUpcomingReg,
     type SiteRefreshFormIn,
     type SiteRefreshFormValues,
     type SiteRefreshRead,
 } from '../../types/schemas/siteRefresh'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
+import type {SelectRegistry} from '../../utils/selectRegistry'
 import NumberInput from '../common/NumberInput'
 import SimpleSelect from '../common/SimpleSelect'
+import {useSettingsDraft} from './settingsDrafts'
+import './SiteRefreshCard.css'
 
-const PENDING_FIELDS = [
-    {name: 'pendingUpcomingMinutes', label: 'Upcoming', help: 'every … minutes until 15 minutes before the start'},
-    {name: 'pendingStartingMinutes', label: 'Starting', help: 'every … minutes around the start'},
-    {name: 'pendingLiveMinutes', label: 'Live', help: 'every … minutes while live or being finished'},
+/** The system settings a Site follows unless it has its own, as the page's draft has them. */
+export type SiteSystemSettings = {
+    metadataRefreshIntervals: string
+    upcomingAndLive: boolean
+    pendingUpcomingMinutes: number
+    pendingStartingMinutes: number
+    pendingLiveMinutes: number
+}
+
+export const PENDING_FIELDS = [
+    {name: 'pendingUpcomingMinutes', label: 'Upcoming', max: 24 * 60},
+    {name: 'pendingStartingMinutes', label: 'Starting', max: 60},
+    {name: 'pendingLiveMinutes', label: 'Live', max: 60},
 ] as const
 
-function formValues(site: SiteRefreshRead): SiteRefreshFormIn {
+const spaced = (intervals: string) => intervals.split(',').map((part) => part.trim()).join(', ')
+
+function formValues(site: SiteRefreshRead, system: SiteSystemSettings): SiteRefreshFormIn {
+    // A Site without its own lookup times starts from the system's, should it get its own.
+    const own = site.pendingUpcomingMinutes !== null
     return {
         refreshMode: site.refreshMode,
         refreshIntervals: site.refreshIntervals ?? '',
-        pendingChecks: site.pendingChecks,
-        pendingUpcomingMinutes: site.pendingUpcomingMinutes,
-        pendingStartingMinutes: site.pendingStartingMinutes,
-        pendingLiveMinutes: site.pendingLiveMinutes,
+        pendingChecks: site.pendingChecks === null ? 'system' : site.pendingChecks ? 'on' : 'off',
+        pendingRhythm: own ? 'own' : 'system',
+        pendingUpcomingMinutes: site.pendingUpcomingMinutes ?? system.pendingUpcomingMinutes,
+        pendingStartingMinutes: site.pendingStartingMinutes ?? system.pendingStartingMinutes,
+        pendingLiveMinutes: site.pendingLiveMinutes ?? system.pendingLiveMinutes,
     }
 }
 
-function SiteRefreshRow({site}: {site: SiteRefreshRead}) {
+type BadgeTone = 'schedule' | 'on' | 'off'
+
+function Badge({tone, children}: {tone: BadgeTone; children: string}) {
+    return <span className={`site-refresh-badge site-refresh-badge--${tone}`}>{children}</span>
+}
+
+function SettingSelect<TName extends 'refreshMode' | 'pendingChecks' | 'pendingRhythm'>({control, name, registry, label}: {
+    control: Control<SiteRefreshFormIn, unknown, SiteRefreshFormValues>
+    name: TName
+    registry: SelectRegistry
+    label: string
+}) {
+    return (
+        <div className="site-refresh-choice">
+            <Controller control={control} name={name} render={({field}) => (
+                <SimpleSelect
+                    aria-label={label}
+                    registry={registry}
+                    value={field.value}
+                    menuPlacement="auto"
+                    onChange={field.onChange}
+                />
+            )}/>
+        </div>
+    )
+}
+
+function SiteRefreshRow({site, system}: {site: SiteRefreshRead; system: SiteSystemSettings}) {
     const queryClient = useQueryClient()
+    const [open, setOpen] = useState(false)
+    const saved = useRef(false)
     const form = useForm<SiteRefreshFormIn, unknown, SiteRefreshFormValues>({
         resolver: zodResolver(SiteRefreshFormSchema),
-        defaultValues: formValues(site),
+        defaultValues: formValues(site, system),
     })
-    const {control, register, watch, formState: {errors, isDirty, isSubmitting}} = form
+    const {control, register, reset, watch, formState: {errors, dirtyFields}} = form
     const mode = watch('refreshMode')
+    const upcoming = watch('pendingChecks')
+    const rhythm = watch('pendingRhythm')
+    const follows = upcoming === 'system' ? system.upcomingAndLive : upcoming === 'on'
 
     const submit = buildServerAwareSubmit<SiteRefreshFormIn, SiteRefreshFormValues>(
         form,
@@ -50,108 +101,141 @@ function SiteRefreshRow({site}: {site: SiteRefreshRead}) {
             genericMessage: `Could not save the settings of ${site.name}`,
             rootOnFieldErrors: false,
             onSuccess: (result, {resetForm}) => {
-                const saved = SiteRefreshReadSchema.parse(result)
+                const savedSite = SiteRefreshReadSchema.parse(result)
                 queryClient.setQueryData<SiteRefreshRead[]>(['siteRefresh'], (current) =>
-                    current?.map((item) => (item.key === saved.key ? saved : item)))
-                resetForm(formValues(saved))
-                toast.success(`Saved the settings of ${site.name}`)
+                    current?.map((item) => (item.key === savedSite.key ? savedSite : item)))
+                resetForm(formValues(savedSite, system))
+                saved.current = true
             },
         },
     )
 
-    const pendingError = PENDING_FIELDS.map(({name}) => errors[name]?.message).find(Boolean)
-    const error = errors.refreshIntervals?.message ?? pendingError ?? errors.root?.message
+    useSettingsDraft(
+        `site-refresh:${site.key}`,
+        Object.keys(dirtyFields).length,
+        async () => {
+            saved.current = false
+            await submit()
+            if (!saved.current) setOpen(true)
+            return saved.current
+        },
+        () => reset(formValues(site, system)),
+    )
+
+    const rhythmError = PENDING_FIELDS.map(({name}) => errors[name]?.message).find(Boolean)
+    const scheduleError = errors.refreshIntervals?.message ?? errors.root?.message
+    const systemMinutes = `${system.pendingUpcomingMinutes}, ${system.pendingStartingMinutes} and ${system.pendingLiveMinutes} minutes`
+
     return (
-        <tr>
-            <td>
-                {site.name}
-                {site.domains.length ? <span className="source-site-domains"> · {site.domains.join(', ')}</span> : null}
-            </td>
-            {site.refreshes || site.checksPending || site.followsPending ? (
-                <td>
-                    <form className="site-refresh-form" onSubmit={submit} noValidate>
-                        {site.refreshes ? (
-                            <Controller control={control} name="refreshMode" render={({field}) => (
-                                <SimpleSelect
-                                    aria-label={`Metadata refresh of ${site.name}`}
-                                    registry={SiteRefreshModeReg}
-                                    value={field.value}
-                                    menuPlacement="auto"
-                                    onChange={field.onChange}
-                                />
-                            )}/>
-                        ) : null}
-                        {site.checksPending ? (
-                            <label className="site-refresh-pending">
-                                <input type="checkbox" {...register('pendingChecks')}/>
-                                <span>Upcoming and live videos</span>
-                            </label>
-                        ) : null}
-                        {site.refreshes && mode === 'own' ? (
-                            <input
-                                className="input settings-input"
-                                aria-label={`Refresh intervals of ${site.name}`}
-                                placeholder="30m,2h,24h"
-                                aria-invalid={Boolean(errors.refreshIntervals)}
-                                {...register('refreshIntervals')}
-                            />
-                        ) : null}
-                        {site.followsPending ? (
-                            <fieldset className="site-refresh-rhythm">
-                                <legend>Look upcoming and live episodes up</legend>
-                                {PENDING_FIELDS.map(({name, label, help}) => (
-                                    <label key={name} className="site-refresh-rhythm__field" title={help}>
-                                        <span>{label}</span>
-                                        <NumberInput
-                                            inputMode="numeric" min={2} max={name === 'pendingUpcomingMinutes' ? 1440 : 60} step={1}
-                                            aria-label={`${label}: ${help}, ${site.name}`}
-                                            aria-invalid={Boolean(errors[name])}
-                                            {...register(name, {valueAsNumber: true})}
-                                        />
-                                        <span>min</span>
-                                    </label>
-                                ))}
-                            </fieldset>
-                        ) : null}
-                        <button type="submit" className="btn" disabled={!isDirty || isSubmitting}>
-                            Save
-                        </button>
-                    </form>
-                    {error ? <div className="error" role="alert">{error}</div> : null}
-                </td>
-            ) : (
-                <td className="site-refresh-unsupported">Not supported by the Source of its collections and videos</td>
-            )}
-        </tr>
+        <details className="site-refresh-site" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
+            <summary>
+                <span className="site-refresh-site__name">
+                    <strong>{site.name}</strong>
+                    {site.domains.length ? <span>{site.domains.join(', ')}</span> : null}
+                </span>
+                <span className="site-refresh-site__badges">
+                    {site.refreshes ? (
+                        mode === 'own' ? <Badge tone="schedule">Own schedule</Badge>
+                            : mode === 'system' ? <Badge tone="off">System schedule</Badge>
+                                : <Badge tone="off">No metadata refresh</Badge>
+                    ) : null}
+                    {site.followsPending ? (
+                        follows ? <Badge tone="on">Upcoming and live</Badge> : <Badge tone="off">No upcoming</Badge>
+                    ) : null}
+                    {!site.refreshes && !site.followsPending ? <Badge tone="off">Nothing to set</Badge> : null}
+                </span>
+            </summary>
+            <div className="site-refresh-site__body">
+                {site.refreshes ? (
+                    <div className="site-refresh-setting">
+                        <span className="site-refresh-setting__label">Metadata refresh</span>
+                        <div className="site-refresh-setting__control">
+                            <div className="site-refresh-setting__line">
+                                <SettingSelect control={control} name="refreshMode" registry={SiteRefreshModeReg}
+                                               label={`Metadata refresh of ${site.name}`}/>
+                                {mode === 'own' ? (
+                                    <input
+                                        className="input settings-input site-refresh-intervals"
+                                        aria-label={`Refresh intervals of ${site.name}`}
+                                        placeholder="30m, 2h, 24h"
+                                        aria-invalid={Boolean(errors.refreshIntervals)}
+                                        {...register('refreshIntervals')}
+                                    />
+                                ) : null}
+                                {mode === 'system' ? <span className="site-refresh-inherited">{spaced(system.metadataRefreshIntervals)}</span> : null}
+                            </div>
+                            {scheduleError ? <div className="error" role="alert">{scheduleError}</div> : null}
+                        </div>
+                    </div>
+                ) : null}
+                {site.followsPending ? (
+                    <div className="site-refresh-setting">
+                        <span className="site-refresh-setting__label">Upcoming and live</span>
+                        <div className="site-refresh-setting__control">
+                            <div className="site-refresh-setting__line">
+                                <SettingSelect control={control} name="pendingChecks" registry={SiteUpcomingReg}
+                                               label={`Upcoming and live videos of ${site.name}`}/>
+                                {upcoming === 'system' ? (
+                                    <span className="site-refresh-inherited">{system.upcomingAndLive ? 'On' : 'Off'}</span>
+                                ) : null}
+                            </div>
+                        </div>
+                    </div>
+                ) : null}
+                {site.followsPending && follows ? (
+                    <div className="site-refresh-setting">
+                        <span className="site-refresh-setting__label">Look them up every</span>
+                        <div className="site-refresh-setting__control">
+                            <div className="site-refresh-setting__line">
+                                <SettingSelect control={control} name="pendingRhythm" registry={SiteRhythmReg}
+                                               label={`Lookup times of ${site.name}`}/>
+                                {rhythm === 'system' ? <span className="site-refresh-inherited">{systemMinutes}</span> : null}
+                            </div>
+                            {rhythm === 'own' ? (
+                                <div className="site-refresh-rhythm">
+                                    {PENDING_FIELDS.map(({name, label, max}) => (
+                                        <label key={name} className="site-refresh-rhythm__field">
+                                            <span>{label}</span>
+                                            <NumberInput
+                                                inputMode="numeric" min={2} max={max} step={1}
+                                                aria-label={`${label}, minutes between lookups, ${site.name}`}
+                                                aria-invalid={Boolean(errors[name])}
+                                                {...register(name, {valueAsNumber: true})}
+                                            />
+                                            <span>min</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            ) : null}
+                            {rhythmError ? <div className="error" role="alert">{rhythmError}</div> : null}
+                        </div>
+                    </div>
+                ) : null}
+                {!site.refreshes && !site.followsPending ? (
+                    <p className="settings-field__help">The Sources of this Site's collections and videos have nothing to set here.</p>
+                ) : null}
+            </div>
+        </details>
     )
 }
 
-/** Which schedule each Site's new uploads follow while VODLoft looks them up again. */
-export default function SiteRefreshCard() {
+/** Each Site VODLoft knows, following the system settings or its own. */
+export default function SiteRefreshCard({system}: {system: SiteSystemSettings}) {
     const {data: sites, error} = useSiteRefresh()
     return (
-        <div className="settings-field settings-field--wide">
-            <label>Metadata refresh and upcoming videos per Site</label>
+        <div className="settings-field settings-field--wide site-refresh">
+            <label>Sites</label>
+            <div className="settings-field__help">
+                Every Site follows the system settings above unless you give it its own. Some Sites start with a
+                schedule of their own, such as The Daily Wire and YouTube.
+            </div>
             {error ? <p className="error" role="alert">Could not load the Sites: {error.message}</p> : null}
             {sites?.length ? (
-                <table className="source-site-table site-refresh-table">
-                    <thead>
-                        <tr><th scope="col">Site</th><th scope="col">Settings</th></tr>
-                    </thead>
-                    <tbody>
-                        {sites.map((site) => <SiteRefreshRow key={site.key} site={site}/>)}
-                    </tbody>
-                </table>
+                <div className="site-refresh-sites">
+                    {sites.map((site) => <SiteRefreshRow key={site.key} site={site} system={system}/>)}
+                </div>
             ) : null}
             {sites && !sites.length ? <p className="settings-field__help">Sites show up here once you add a collection or video.</p> : null}
-            <div className="settings-field__help">
-                Each Site follows the system schedule above, a schedule of its own, or none. Only what VODLoft shows and
-                serves in its feeds changes: downloaded files keep their names and metadata. With upcoming and live
-                videos on, VODLoft adds a stream or premiere as soon as it is announced and follows it until it is
-                published, then downloads it. It never records a stream while it is live. An upcoming episode is
-                looked up every so many minutes, more often from 15 minutes before it starts until an hour after,
-                and while it is live. An episode without a known start is looked up as if it were about to start.
-            </div>
         </div>
     )
 }
