@@ -71,14 +71,10 @@
     text-align: left;
   }
 
+  /* Show the whole path. Each folder takes at most one line, so its height stays bounded without a
+     line limit (which also put an ellipsis after a path that was shown in full). */
   .local-media-profile-output-template .cm-line {
-    display: -webkit-box;
-    overflow: hidden;
-    text-overflow: ellipsis;
     white-space: normal;
-    overflow-wrap: anywhere;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 5;
   }
 }
 
