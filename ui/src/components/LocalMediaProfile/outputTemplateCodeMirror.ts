@@ -1,5 +1,6 @@
 import {HighlightStyle, syntaxHighlighting} from '@codemirror/language'
-import {Decoration, EditorView, MatchDecorator, ViewPlugin, type DecorationSet, type ViewUpdate} from '@codemirror/view'
+import {Prec} from '@codemirror/state'
+import {Decoration, EditorView, MatchDecorator, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate} from '@codemirror/view'
 import {jinja} from '@codemirror/lang-jinja'
 import {tags} from '@lezer/highlight'
 
@@ -31,11 +32,13 @@ export const outputTemplateSyntaxExtensions = [
 // Marks each `{{ … }}` so a wrapped read-only template never splits a variable across lines. The spaces
 // stay ordinary spaces, because the Jinja highlighter does not read a non-breaking space as whitespace.
 const expressionMatcher = new MatchDecorator({
-    regexp: /\{\{.*?\}\}/g,
+    // A slash right before a variable stays with it, so a path never ends a line on a bare slash.
+    regexp: /\/?\{\{.*?\}\}/g,
     decoration: Decoration.mark({class: 'cm-jinja-expression'}),
 })
 
-export const keepExpressionsTogether = ViewPlugin.fromClass(class {
+// Lowest precedence, so this mark wraps the slash mark instead of being split by it.
+export const keepExpressionsTogether = Prec.lowest(ViewPlugin.fromClass(class {
     decorations: DecorationSet
 
     constructor(view: EditorView) {
@@ -45,14 +48,29 @@ export const keepExpressionsTogether = ViewPlugin.fromClass(class {
     update(update: ViewUpdate) {
         this.decorations = expressionMatcher.updateDeco(update, this.decorations)
     }
-}, {decorations: (plugin) => plugin.decorations})
+}, {decorations: (plugin) => plugin.decorations}))
 
 // Marks the slashes between path parts, outside any `{{ … }}`, so a path view can make its folders stand out.
+// A wrapped path may break right before each slash, between folders, rather than at a space inside
+// a folder name such as "Season 01".
+class PathBreakWidget extends WidgetType {
+    eq() {
+        return true
+    }
+
+    toDOM() {
+        return document.createElement('wbr')
+    }
+}
+
+const pathBreak = Decoration.widget({widget: new PathBreakWidget(), side: -1})
 const pathSlashMark = Decoration.mark({class: 'cm-path-slash'})
 const pathSlashMatcher = new MatchDecorator({
     regexp: /\{\{.*?\}\}|\//g,
     decorate: (add, from, to, match) => {
-        if (match[0] === '/') add(from, to, pathSlashMark)
+        if (match[0] !== '/') return
+        add(from, from, pathBreak)
+        add(from, to, pathSlashMark)
     },
 })
 
