@@ -33,7 +33,7 @@ from .output_template import (
     get_random_collection_template_source,
     get_output_template_variables,
 )
-from .file_rename import request_local_media_profile_file_rename
+from backend.services.profile_file_renames import request_local_media_profile_file_rename
 from .maintenance import (
     request_local_media_profile_download_delete,
     request_local_media_profile_redownload,

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.services.errors import NotFoundError, ServiceError
 from backend.db.models import (
     Episode,
     LocalMediaProfileBase,
@@ -38,7 +38,7 @@ def request_collection_local_media_profile_file_rename(
         .one_or_none()
     )
     if local_media_profile is None:
-        raise HTTPException(status_code=404, detail="Media profile not found")
+        raise NotFoundError("Media profile")
 
     episode_ids = tuple(s.scalars(
         select(Episode.id)
@@ -158,7 +158,7 @@ def request_local_media_profile_file_rename(
         .one_or_none()
     )
     if profile is None:
-        raise HTTPException(status_code=404, detail="Media profile not found")
+        raise NotFoundError("Media profile")
 
     if profile.type == LocalMediaProfileType.COLLECTION.value:
         return request_collection_local_media_profile_file_rename(
@@ -168,15 +168,12 @@ def request_local_media_profile_file_rename(
     if profile.type == LocalMediaProfileType.MOVIE.value:
         movie_profile = s.get(MovieLocalMediaProfile, profile.id)
         if movie_profile is None:
-            raise HTTPException(status_code=404, detail="Media profile not found")
+            raise NotFoundError("Media profile")
         return request_movie_local_media_profile_file_rename(s, movie_profile)
     if profile.type == LocalMediaProfileType.VIDEO.value:
         video_profile = s.get(VideoLocalMediaProfile, profile.id)
         if video_profile is None:
-            raise HTTPException(status_code=404, detail="Media profile not found")
+            raise NotFoundError("Media profile")
         return request_movie_local_media_profile_file_rename(s, video_profile)
 
-    raise HTTPException(
-        status_code=422,
-        detail="This Local Media Profile type does not support file renaming",
-    )
+    raise ServiceError("This Local Media Profile type does not support file renaming")

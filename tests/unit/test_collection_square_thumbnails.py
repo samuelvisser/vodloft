@@ -206,7 +206,7 @@ def test_initial_index_queries_watch_page_only_when_normalized_square_is_missing
 
 
 def test_collection_added_marks_episode_scan_as_initial_index():
-    from backend.api.endpoints.collections.events import CollectionAdded
+    from backend.services.collections import CollectionAdded
 
     event = CollectionAdded(
         SimpleNamespace(

@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 
 from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.services.check_frequency import check_suggestion
-from backend.services.sites import place_collection
 from backend.api.models.collection import *
 from backend.api.models.source import EpisodeTagAPIRead
 from fastapi import HTTPException
@@ -41,12 +40,11 @@ from task_manager.tasks.helpers.download_profiles import (
 from task_manager.tasks.media_download_operations import attach_redownload_dependencies
 from task_manager.scheduler.types import OperationSource
 
-from .events import CollectionAdded
+from backend.services.collections import add_collection, index_new_collection
 from backend.operations.collections import (
     CollectionDeleteDownloadsOperation,
     CollectionDownloadAllOperation,
     CollectionFileRenameOperation,
-    CollectionIndexOperation,
     CollectionMetadataRefreshOperation,
     CollectionRedownloadOperation,
     CollectionSyncOperation,
@@ -216,13 +214,8 @@ def get_collection_episode_tags(s: Session, collection_slug: str) -> list[Episod
 
 def create_collection(s: Session, body: CollectionAPICreate, *, added_by_id: int | None = None) -> CollectionAPIRead:
     collection = create_database_fields(Collection, body)
-    collection.added_by_id = added_by_id
-    place_collection(s, collection)
-    s.add(collection)
-    s.flush()
-
-    create_operation(s, CollectionIndexOperation(collection))
-    queue_event(s, "collection.added", CollectionAdded(collection))
+    add_collection(s, collection, added_by_id=added_by_id)
+    index_new_collection(s, collection)
 
     return CollectionAPIRead.model_validate(collection)
 

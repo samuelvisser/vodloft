@@ -51,6 +51,12 @@ from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.adoption import AdoptionError, adopt, download_root, real_path
 from backend.services.episode_filters import set_profile_filters
 from backend.services.import_filters import filters_from_plan
+from backend.services.local_media_profile_changes import (
+    create_collection_local_media_profile, create_movie_local_media_profile, update_collection_local_media_profile,
+)
+from backend.services.local_media_profile_inputs import (
+    CollectionLocalMediaProfileInput, MovieLocalMediaProfileInput, NewCollectionLocalMediaProfile,
+)
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.custom_index import (
     INDEX_ASSIGNMENT_PREFIX, get_indexing_value_definitions, remove_episode_index_assignments,
@@ -870,15 +876,6 @@ def _unique_name(session: Session, name: str) -> str:
 
 
 def _upsert_profile(session: Session, plan: ProfilePlan, links, run: ImportRun, report: _Report) -> CollectionLocalMediaProfile | None:
-    from fastapi import HTTPException
-
-    from backend.api.endpoints.collection_local_media_profiles.service import (
-        create_collection_local_media_profile, update_collection_local_media_profile,
-    )
-    from backend.api.models.collection_local_media_profile import (
-        CollectionLocalMediaProfileAPICreate, CollectionLocalMediaProfileAPIUpdate,
-    )
-
     if plan.output_template is None:
         report.add("failed", plan.name, "The output template could not be converted; its sources were not imported",
                    warnings=[_warning(warning) for warning in plan.warnings])
@@ -896,13 +893,10 @@ def _upsert_profile(session: Session, plan: ProfilePlan, links, run: ImportRun, 
                           {name: _hash(value) for name, value in _profile_values(reused).items()}, unsupported, run.id)
                 report.add("reused", plan.name, f"Uses the Local Media Profile {reused.name}, which names files the same way")
                 return reused
-            body = CollectionLocalMediaProfileAPICreate.model_validate({
+            profile = create_collection_local_media_profile(session, NewCollectionLocalMediaProfile.model_validate({
                 **{name: value for name, value in wanted.items() if value is not None},
                 "name": _unique_name(session, plan.name),
-                "type": "collection",
-            })
-            created = create_collection_local_media_profile(session, body)
-            profile = session.get(CollectionLocalMediaProfile, created.id)
+            }))
             _write, hashes, _changes = _merge_fields(_profile_values(profile), wanted, None, unsupported)
             _remember(session, links, run.importer, "profile", plan.external_id, profile.id, hashes, unsupported, run.id)
             report.add("created", plan.name, f"Local Media Profile {profile.name}", support=plan.support,
@@ -912,19 +906,15 @@ def _upsert_profile(session: Session, plan: ProfilePlan, links, run: ImportRun, 
         write, hashes, changes = _merge_fields(_profile_values(existing), wanted, link, unsupported)
         if write:
             values = {**_profile_values(existing), **write}
-            body = CollectionLocalMediaProfileAPIUpdate.model_validate({
+            update_collection_local_media_profile(session, existing.slug, CollectionLocalMediaProfileInput.model_validate({
                 **{name: value for name, value in values.items() if value is not None},
-                "name": existing.name, "type": "collection",
-            })
-            update_collection_local_media_profile(session, existing.slug, body)
+                "name": existing.name,
+            }))
         _remember(session, links, run.importer, "profile", plan.external_id, existing.id, hashes, unsupported, run.id)
         _report_changes(report, existing.name, changes)
         return existing
-    except HTTPException as exc:
-        detail = exc.detail[0]["msg"] if isinstance(exc.detail, list) and exc.detail else str(exc.detail)
-        report.add("failed", plan.name, f"{detail}; its sources were not imported")
-        return None
     except ValueError as exc:
+        # A ServiceError the profile service refused with, or the input's ValidationError.
         report.add("failed", plan.name, f"{exc}; its sources were not imported")
         return None
 
@@ -1011,27 +1001,25 @@ def _settle_field_keys(session: Session, plan: ImportPlan, links, library: Mappi
 
 def _create_collection(session: Session, plan: CollectionPlan) -> Collection:
     """A new yt-dlp Collection for the plan, looked up the way Add Collection does."""
-    from backend.api.endpoints.collections.as_bundle.service import create_collection_bundle
-    from backend.api.models.collection_as_bundle import CollectionAPICreateBundle
-    from backend.utils.helpers import slugify
+    from backend.services.collections import add_collection, index_new_collection
+    from backend.types.collection_types import CollectionType, EpisodeIdentifier
+    from backend.utils.helpers import generate_uuid, slugify
     from sources import get_source
 
     source = get_source("ytdlp")
     details = source.collection_details(plan.url)
     author = details.author_name or details.title
-    payload = CollectionAPICreateBundle.model_validate({
-        "collection": {
-            "slug": details.slug, "sourceKey": source.id, "title": plan.title or details.title,
-            "description": details.description, "sharingUrl": details.url,
-            "membershipLevel": "FREE", "type": plan.settings.get("type", "series"),
-            "episodeIdentifier": plan.settings.get("episode_identifier", "date_based"),
-            "authorName": author, "authorSlug": slugify(author) or details.slug,
-            "thumbnailLandscapePath": details.image_url,
-        },
-        "seasons": [],
-    })
-    created = create_collection_bundle(session, None, payload)
-    return session.get(Collection, created.id)
+    collection = Collection(
+        uuid=generate_uuid(), slug=details.slug, source_key=source.id, title=plan.title or details.title,
+        description=details.description, sharing_url=details.url,
+        membership_level="FREE", type=CollectionType(plan.settings.get("type", "series")).value,
+        episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")).value,
+        author_name=author, author_slug=slugify(author) or details.slug,
+        thumbnail_landscape_path=details.image_url,
+    )
+    add_collection(session, collection)
+    index_new_collection(session, collection)
+    return collection
 
 
 def _upsert_collection(session: Session, plan: CollectionPlan, library, links, run: ImportRun, report: _Report) -> tuple[Collection | None, bool]:
@@ -1228,11 +1216,6 @@ def apply_run(session: Session, run_id: int) -> dict[str, int]:
 
 def _upsert_movie_profile(session: Session, plan: ProfilePlan, links, run: ImportRun, report: _Report) -> LocalMediaProfileBase | None:
     """A movie Local Media Profile: one that names files the same way is used instead of a copy."""
-    from fastapi import HTTPException
-
-    from backend.api.endpoints.movie_local_media_profiles.service import create_movie_local_media_profile
-    from backend.api.models.movie_local_media_profile import MovieLocalMediaProfileAPICreate
-
     link = links.get(("profile", plan.external_id))
     existing = session.get(MovieLocalMediaProfile, link.entity_id) if link and link.entity_id else None
     if existing is not None:
@@ -1248,15 +1231,13 @@ def _upsert_movie_profile(session: Session, plan: ProfilePlan, links, run: Impor
     fields = ("preferred_format", "download_mode", "thumbnail_mode", "metadata_mode", "subtitle_mode",
               "append_media_type_to_filename")
     try:
-        created = create_movie_local_media_profile(session, MovieLocalMediaProfileAPICreate.model_validate({
+        profile = create_movie_local_media_profile(session, MovieLocalMediaProfileInput.model_validate({
             **{name: plan.settings[name] for name in fields if plan.settings.get(name) is not None},
-            "name": _unique_name(session, plan.name), "output_template": plan.output_template, "type": "movie",
+            "name": _unique_name(session, plan.name), "output_template": plan.output_template,
         }))
-    except (HTTPException, ValueError) as exc:
-        detail = getattr(exc, "detail", exc)
-        report.add("failed", plan.name, f"{detail}; its movies' downloads were not imported")
+    except ValueError as exc:
+        report.add("failed", plan.name, f"{exc}; its movies' downloads were not imported")
         return None
-    profile = session.get(MovieLocalMediaProfile, created.id)
     _remember(session, links, run.importer, "profile", plan.external_id, profile.id, {}, [], run.id)
     report.add("created", plan.name, f"Local Media Profile {profile.name}")
     report.counts["profiles_created"] += 1

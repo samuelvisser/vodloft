@@ -1,0 +1,262 @@
+"""Validated input for creating and changing Local Media Profiles.
+
+The API's request models and the importer both hand these to the profile
+services, so a profile is checked the same way wherever it comes from.
+"""
+from __future__ import annotations
+
+import re
+from typing import Literal
+
+from pydantic import Field, computed_field, field_validator, model_validator
+
+from backend.services.local_media_profile_sources import offers_format, profile_download_options, sources_for_profile_type
+from backend.types.input_model import InputModel
+from backend.types.local_media_profile_types import (
+    GOAL_PRESETS,
+    AudioCodec,
+    AudioFormat,
+    CodecFallback,
+    CollectionLocalMediaProfileScope,
+    LocalMediaProfileMetadataMode,
+    LocalMediaProfileStorageMode,
+    LocalMediaProfileSubtitleMode,
+    LocalMediaProfileThumbnailMode,
+    LocalMediaProfileType,
+    PreferredFormat,
+    QualityGoal,
+    SubtitleLanguageMode,
+    VideoCodec,
+    VideoContainer,
+    goal_video_codecs,
+)
+from backend.utils.custom_index import INDEXING_VALUE_KEY_MAX_LENGTH, is_valid_custom_index_key
+from backend.utils.helpers import slugify
+from backend.utils.output_template import (
+    COLLECTION_OUTPUT_TEMPLATE_FIELDS,
+    COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
+    MOVIE_OUTPUT_TEMPLATE_FIELDS,
+    MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
+    movie_template_has_media_item_field,
+    output_template_custom_index_keys,
+    validate_output_template_path_requirements,
+)
+from backend.utils.output_template_formatting import normalize_output_template_expression_spacing
+
+
+_LANGUAGE_CODE = re.compile(r"[a-z]{2,3}(-[A-Za-z0-9]{2,8})*")
+
+
+def _language_code(value: str) -> str:
+    if not _LANGUAGE_CODE.fullmatch(value):
+        raise ValueError(f"'{value}' is not a language code such as 'en' or 'pt-BR'")
+    return value
+
+
+_FORMAT_NAMES = {
+    PreferredFormat.FORMAT_HLS: "an HLS bundle", PreferredFormat.FORMAT_AUDIO_ONLY: "audio only",
+    PreferredFormat.FORMAT_4K: "4K", PreferredFormat.FORMAT_8K: "8K",
+}
+
+class VideoCodecChoice(InputModel):
+    """One codec in a Local Media Profile's order, and whether it may be used at all."""
+
+    codec: VideoCodec
+    allowed: bool
+
+class IndexingValueDefinition(InputModel):
+    key: str = Field(min_length=1, max_length=INDEXING_VALUE_KEY_MAX_LENGTH)
+    name: str = Field(min_length=1, max_length=120)
+    # Numbers already given out stay; new episodes take the next free number.
+    keep_numbers: bool = False
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _normalize_name(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("key")
+    @classmethod
+    def _validate_key(cls, value: str) -> str:
+        if not is_valid_custom_index_key(value):
+            raise ValueError(
+                "Indexing Value keys must use lowercase letters, numbers, underscores, and dashes, "
+                "and start with a letter or underscore"
+            )
+        return value
+
+class LocalMediaProfileInput(InputModel):
+    """What every kind of Local Media Profile is made of, validated."""
+
+    name: str = Field(min_length=1)
+    preferred_format: PreferredFormat
+    download_mode: LocalMediaProfileStorageMode = LocalMediaProfileStorageMode.SYSTEM
+    thumbnail_mode: LocalMediaProfileThumbnailMode = LocalMediaProfileThumbnailMode.SYSTEM
+    metadata_mode: LocalMediaProfileMetadataMode = LocalMediaProfileMetadataMode.SYSTEM
+    subtitle_mode: LocalMediaProfileSubtitleMode = LocalMediaProfileSubtitleMode.SIDECAR
+    subtitle_languages: list[str] = Field(default_factory=lambda: ["en"], max_length=20)
+    subtitle_language_mode: SubtitleLanguageMode = SubtitleLanguageMode.LISTED
+    quality_goal: QualityGoal = QualityGoal.COMPATIBILITY
+    video_codecs: list[VideoCodecChoice] = Field(
+        default_factory=lambda: [VideoCodecChoice.model_validate(item) for item in goal_video_codecs(QualityGoal.COMPATIBILITY)],
+    )
+    codec_fallback: CodecFallback = CodecFallback.BEST
+    container: VideoContainer = VideoContainer.MP4
+    audio_codec: AudioCodec = AudioCodec.AAC
+    audio_format: AudioFormat = AudioFormat.M4A
+    audio_language: str | None = Field(default=None, max_length=16)
+    output_template: str = Field(min_length=16, max_length=4096)
+    source_keys: list[str] | None = Field(default=None, max_length=50)
+    """The Sources the profile is offered for; None offers it for every Source."""
+
+    @field_validator("subtitle_languages")
+    @classmethod
+    def _validate_subtitle_languages(cls, value: list[str]) -> list[str]:
+        value = [_language_code(language.strip()) for language in value]
+        if len(set(value)) != len(value):
+            raise ValueError("Each language can be on the list once")
+        return value
+
+    @field_validator("audio_language")
+    @classmethod
+    def _validate_audio_language(cls, value: str | None) -> str | None:
+        return _language_code(value.strip()) if value else None
+
+    @field_validator("video_codecs")
+    @classmethod
+    def _validate_video_codecs(cls, value: list[VideoCodecChoice]) -> list[VideoCodecChoice]:
+        if sorted(choice.codec for choice in value) != sorted(codec.value for codec in VideoCodec):
+            raise ValueError("The codec order lists every codec once")
+        if not any(choice.allowed for choice in value):
+            raise ValueError("Allow at least one video codec")
+        return value
+
+    @model_validator(mode="after")
+    def _known_sources(self):
+        if self.source_keys is None:
+            return self
+        available = [source.id for source in sources_for_profile_type(self.type)]
+        if not self.source_keys:
+            raise ValueError("Choose at least one Source")
+        unknown = [key for key in self.source_keys if key not in available]
+        if unknown:
+            raise ValueError(f"This profile cannot be offered for {', '.join(unknown)}")
+        # Every Source chosen means every Source, so Sources added later are offered the profile too.
+        if set(self.source_keys) >= set(available):
+            self.source_keys = None
+        else:
+            self.source_keys = [key for key in available if key in self.source_keys]
+        return self
+
+    @model_validator(mode="after")
+    def _offered_format(self):
+        # A profile can download what any of its Sources' Sites offers; each Site gets the nearest it has.
+        if not offers_format(profile_download_options(self.type, self.source_keys), self.preferred_format):
+            raise ValueError(f"None of this profile's Sources can download {_FORMAT_NAMES.get(self.preferred_format, self.preferred_format.removeprefix("format_"))}")
+        return self
+
+    @model_validator(mode="after")
+    def _goal_sets_codecs(self):
+        if self.subtitle_language_mode != SubtitleLanguageMode.SITE and not self.subtitle_languages:
+            raise ValueError("Add at least one subtitle language, or download every language the site offers")
+        # A goal stands for its codec order, container and audio codec.
+        if "quality_goal" in self.model_fields_set and self.quality_goal != QualityGoal.CUSTOM:
+            preset = GOAL_PRESETS[QualityGoal(self.quality_goal)]
+            self.video_codecs = [VideoCodecChoice.model_validate(item) for item in goal_video_codecs(QualityGoal(self.quality_goal))]
+            self.container = preset.container.value
+            self.audio_codec = preset.audio_codec.value
+        return self
+
+    @computed_field(return_type=str)
+    @property
+    def slug(self) -> str:
+        return slugify(self.name)
+
+    @field_validator("output_template", mode="before")
+    @classmethod
+    def _normalize_output_template(cls, value: object) -> object:
+        if isinstance(value, str):
+            return normalize_output_template_expression_spacing(value)
+        return value
+
+    def fields_kept_on_update(self) -> set[str]:
+        """Choices an update leaves as they are when it does not send them, rather than resetting them to defaults."""
+        return _KEPT_WHEN_UNSET - self.model_fields_set
+
+
+_KEPT_WHEN_UNSET = {
+    "source_keys", "subtitle_mode", "subtitle_languages", "subtitle_language_mode", "quality_goal", "video_codecs",
+    "codec_fallback", "container", "audio_codec", "audio_format", "audio_language",
+}
+
+class CollectionLocalMediaProfileInput(LocalMediaProfileInput):
+    """A Collection Local Media Profile's fields; an update leaves the kept fields it does not send."""
+
+    type: Literal["collection"] = LocalMediaProfileType.COLLECTION.value
+    collection_scope: CollectionLocalMediaProfileScope = CollectionLocalMediaProfileScope.BOTH
+    download_collection_assets: bool | None = None
+    indexing_values: list[IndexingValueDefinition] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode="after")
+    def _unique_index_keys(self):
+        keys = [item.key for item in self.indexing_values]
+        if len(keys) != len(set(keys)):
+            raise ValueError("Indexing Value keys must be unique")
+        return self
+
+    @field_validator("output_template")
+    @classmethod
+    def _validate_output_template(cls, value: str) -> str:
+        validate_output_template_path_requirements(
+            value,
+            allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
+            allowed_metadata_scopes=COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
+        )
+        return value
+
+
+class NewCollectionLocalMediaProfile(CollectionLocalMediaProfileInput):
+    """A Collection Local Media Profile to create: defaults follow its scope."""
+
+    @model_validator(mode="after")
+    def _default_subtitles_for_scope(self):
+        # Scope-dependent defaults apply only when a profile is first created.
+        # Updates must never infer a new subtitle mode from changed scope.
+        if "subtitle_mode" not in self.model_fields_set:
+            self.subtitle_mode = (
+                LocalMediaProfileSubtitleMode.NO_SUBTITLES
+                if self.collection_scope == CollectionLocalMediaProfileScope.PODCAST
+                else LocalMediaProfileSubtitleMode.SIDECAR
+            )
+        return self
+
+_MOVIE_EXTRA_COLLISION_MESSAGE = (
+    "Movie and movie-extra downloads could resolve to the same file. Include at least "
+    "one variable that describes the downloaded item, such as {{ title }}, {{ slug }}, "
+    "{{ duration_seconds }}, or {{ media_type }}."
+)
+
+class MovieLocalMediaProfileInput(LocalMediaProfileInput):
+    type: Literal["movie"] = LocalMediaProfileType.MOVIE.value
+    subtitle_mode: LocalMediaProfileSubtitleMode = LocalMediaProfileSubtitleMode.SIDECAR
+
+    @field_validator("preferred_format")
+    @classmethod
+    def _require_video_format(cls, value: PreferredFormat) -> PreferredFormat:
+        if value in {PreferredFormat.FORMAT_AUDIO_ONLY, PreferredFormat.FORMAT_HLS}:
+            raise ValueError("Movie Local Media Profiles require a normal video format")
+        return value
+
+    @field_validator("output_template")
+    @classmethod
+    def _validate_output_template(cls, value: str) -> str:
+        validate_output_template_path_requirements(
+            value,
+            allowed_fields=MOVIE_OUTPUT_TEMPLATE_FIELDS,
+            allowed_metadata_scopes=MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
+        )
+        if output_template_custom_index_keys(value):
+            raise ValueError("custom_index is only available to Collection Local Media Profiles")
+        if not movie_template_has_media_item_field(value):
+            raise ValueError(_MOVIE_EXTRA_COLLISION_MESSAGE)
+        return value

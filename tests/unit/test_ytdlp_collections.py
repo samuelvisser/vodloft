@@ -331,6 +331,8 @@ def test_a_listed_episode_whose_playback_is_protected_is_not_downloaded(listed, 
 def test_a_listed_collection_bundle_is_seasonal_and_streams_only_downloads(listed, session):
     from fastapi import HTTPException
 
+    from backend.services.errors import ServiceError
+
     from backend.api.endpoints.collections.as_bundle.service import create_collection_bundle
     from backend.api.models.collection_as_bundle import CollectionAPICreateBundle
 
@@ -353,7 +355,7 @@ def test_a_listed_collection_bundle_is_seasonal_and_streams_only_downloads(liste
     assert (created.source_key, created.episode_identifier, created.membership_level) == ("listed", "numbered", "FREE")
     assert created.model_dump(by_alias=True).get("seasons") in (None, [])
 
-    with pytest.raises(HTTPException, match="Unknown|No Source"):
+    with pytest.raises(ServiceError, match="Unknown|No Source"):
         create_collection_bundle(session, None, CollectionAPICreateBundle.model_validate({"collection": {**collection, "slug": "x", "sourceKey": "nope"}, "seasons": []}))
 
 

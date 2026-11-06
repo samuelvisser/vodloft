@@ -7,7 +7,6 @@ from fastapi import HTTPException, Request
 
 from backend.db.model_mapping import create_database_fields
 from backend.services.episode_filters import set_profile_filters
-from backend.services.sites import place_collection
 from backend.api.models.collection import CollectionAPIRead
 from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPICreate, CollectionLocalMediaProfileAPIUpdate
 from backend.api.models.collection_as_bundle import (
@@ -24,16 +23,11 @@ from backend.services.existing_files import ExistingFilesError, request_scan
 from backend.utils.feed_urls import build_rss_feed_url, request_base_url
 from backend.utils.helpers import generate_stream_profile_token
 from task_manager.scheduler.requester import current_requester
-from backend.types.dailywire_user_info import DwMembershipLevel
-from sources import Feature, UnknownSourceError, get_source
 from backend.utils.season_ordering import number_initial_seasons
-from task_manager.events.transactional import queue_event
-from task_manager.scheduler.operation_factory import create_operation
 
 from ...rss_stream_profiles.service import ensure_site_can_stream
 from ...collection_local_media_profiles.service import create_collection_local_media_profile, update_collection_local_media_profile
-from ..events import CollectionAdded
-from backend.operations.collections import CollectionIndexOperation
+from backend.services.collections import add_collection, index_new_collection
 
 
 def upsert_collection_local_media_profile(
@@ -56,21 +50,8 @@ def upsert_collection_local_media_profile(
 def create_collection_bundle(
     s: Session, request: Request, payload: CollectionAPICreateBundle, *, added_by_id: int | None = None,
 ) -> CollectionAPIRead:
-    try:
-        collection_source = get_source(payload.collection.source_key)
-    except UnknownSourceError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    if not collection_source.has(Feature.COLLECTIONS):
-        raise HTTPException(status_code=422, detail=f"{collection_source.name} has no shows")
     collection = create_database_fields(Collection, payload.collection)
-    collection.added_by_id = added_by_id
-    if collection_source.has(Feature.EPISODE_LISTS):
-        # Indexing puts the episodes in the Source's own seasons, or in a season per
-        # upload year. Seasons given here are the Source's, picked for a Download
-        # Profile; indexing matches them by slug and numbers them.
-        collection.membership_level = DwMembershipLevel.FREE.value
-    place_collection(s, collection)
-    s.add(collection)
+    add_collection(s, collection, added_by_id=added_by_id)
 
     # The Add Show flow supplies seasons as part of the initial bundle, before the
     # fetch-new-episodes worker runs. Normalize them here so their persistent
@@ -144,6 +125,5 @@ def create_collection_bundle(
             )
         except (ExistingFilesError, AdoptionError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-    create_operation(s, CollectionIndexOperation(collection))
-    queue_event(s, "collection.added", CollectionAdded(collection))
+    index_new_collection(s, collection)
     return CollectionAPIRead.model_validate(collection)

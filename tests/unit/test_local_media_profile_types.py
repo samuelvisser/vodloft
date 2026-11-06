@@ -9,6 +9,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from backend.services.errors import ServiceError
+
 
 def _new_session() -> tuple[Session, object]:
     import backend.db.models  # noqa: F401
@@ -159,7 +161,7 @@ def test_local_media_profile_service_rejects_duplicate_and_colliding_outputs() -
 
     # Exact uniqueness remains type + output template + preferred format. A
     # different Local Media Profile storage override does not make it unique.
-    with pytest.raises(HTTPException) as exact_error:
+    with pytest.raises(ServiceError) as exact_error:
         create_collection_local_media_profile(
             session,
             CollectionLocalMediaProfileAPICreate(
@@ -170,14 +172,14 @@ def test_local_media_profile_service_rejects_duplicate_and_colliding_outputs() -
             ),
         )
     assert exact_error.value.status_code == 409
-    assert "output path template and preferred format" in exact_error.value.detail[0]["msg"]
+    assert "output path template and preferred format" in str(exact_error.value)
 
     # A different Jinja string that renders to the same path is also a conflict.
     equivalent_template = (
         "{% set media_title = title %}"
         "/downloads/library/{{ media_title }}.ext"
     )
-    with pytest.raises(HTTPException) as semantic_error:
+    with pytest.raises(ServiceError) as semantic_error:
         create_collection_local_media_profile(
             session,
             CollectionLocalMediaProfileAPICreate(
@@ -188,12 +190,12 @@ def test_local_media_profile_service_rejects_duplicate_and_colliding_outputs() -
             ),
         )
     assert semantic_error.value.status_code == 409
-    assert semantic_error.value.detail[0]["type"] == "output_path_collision"
-    assert "same file as Local Media Profile 'Collection'" in semantic_error.value.detail[0]["msg"]
+    assert semantic_error.value.kind == "output_path_collision"
+    assert "same file as Local Media Profile 'Collection'" in str(semantic_error.value)
 
     # Video qualities still resolve to the same concrete .mp4 path, so they may
     # not share an effective output even though preferred_format differs.
-    with pytest.raises(HTTPException) as video_quality_error:
+    with pytest.raises(ServiceError) as video_quality_error:
         create_collection_local_media_profile(
             session,
             CollectionLocalMediaProfileAPICreate(
@@ -204,7 +206,7 @@ def test_local_media_profile_service_rejects_duplicate_and_colliding_outputs() -
             ),
         )
     assert video_quality_error.value.status_code == 409
-    assert video_quality_error.value.detail[0]["type"] == "output_path_collision"
+    assert video_quality_error.value.kind == "output_path_collision"
 
     # Audio and video may safely use the same template because their concrete
     # output extensions differ.
@@ -236,7 +238,7 @@ def test_local_media_profile_service_rejects_duplicate_and_colliding_outputs() -
             preferred_format="format_1080p",
         ),
     )
-    with pytest.raises(HTTPException) as update_error:
+    with pytest.raises(ServiceError) as update_error:
         update_collection_local_media_profile(
             session,
             distinct.slug,
@@ -248,7 +250,7 @@ def test_local_media_profile_service_rejects_duplicate_and_colliding_outputs() -
             ),
         )
     assert update_error.value.status_code == 409
-    assert update_error.value.detail[0]["type"] == "output_path_collision"
+    assert update_error.value.kind == "output_path_collision"
 
     session.close()
     engine.dispose()
