@@ -767,9 +767,9 @@ def _apply_setting(key: str, value: object, session: Session | None = None) -> N
         ))
         return
     if key == "dailywire.sign_in":
-        from backend.api.endpoints.dailywire.auth.imported_sign_in import save_imported_sign_in
+        from sources import get_source
 
-        save_imported_sign_in(dict(value))  # type: ignore[call-overload]
+        get_source("dailywire").import_sign_in(dict(value))  # type: ignore[call-overload]
         return
     if key == "downloads.filename_restriction_mode":
         from backend.api.endpoints.settings.service import save_ui_settings

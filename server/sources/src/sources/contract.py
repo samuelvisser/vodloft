@@ -833,6 +833,11 @@ class Source(ABC):
         """Fetch the latest version of the program and use it from now on."""
         raise NotImplementedError(f"{self.name} has no program to update")
 
+    def import_sign_in(self, records: Mapping[str, str]) -> None:
+        """Take over the sign-in another program kept, such as WireLoft's, for a Source with
+        ``Feature.LOGIN``: each record in this Source's own stored form, by its store key."""
+        raise NotImplementedError(f"{self.name} has no sign-in to take over")
+
     def needs_cookies(self, error: str) -> bool:
         """True when a failed download says signing in would help, for a Source with ``Feature.OPTIONAL_COOKIES``."""
         return False
