@@ -14,21 +14,18 @@ import logging
 import re
 import secrets
 import subprocess
-import time
 from collections.abc import Iterator
-from dataclasses import dataclass
 from urllib.parse import quote, urljoin
 
 import requests
 from fastapi import HTTPException
 from fastapi.responses import Response, StreamingResponse
 
-from backend.utils.keyed_locks import KeyedLocks
 from config import get_settings
-from config.network import is_no_internet_error
 from sources import LiveStream, MediaStream, Source
 
 from .source_tracks import HLS_MIME_TYPE, EpisodeRef
+from .upstream import NO_CACHE_HEADERS, LinkCache, look_up_at_site
 
 
 logger = logging.getLogger(__name__)
@@ -38,48 +35,27 @@ _MISSING_SECONDS = 60
 _TIMEOUT_SECONDS = 30
 _READ_BYTES = 64 * 1024
 _PLAYLIST_NAME = re.compile(r"^(?:video-(\d+)|audio)\.m3u8$")
-_NO_CACHE_HEADERS = {
-    "Cache-Control": "no-store, no-cache, must-revalidate",
-    "Pragma": "no-cache",
-    "Expires": "0",
-}
 # Signs the Site's part links that a proxied playlist hands out, so the part route only passes on what
 # VODLoft itself listed. A restart makes new keys; apps fetch a live playlist again every few seconds.
 _PART_KEY = secrets.token_bytes(32)
 
 
-@dataclass(frozen=True)
-class _Kept:
-    until: float
-    live: LiveStream | None
-
-
-_kept: dict[str, _Kept] = {}
-_locks: KeyedLocks[str] = KeyedLocks()
-
+_kept: LinkCache[str, LiveStream | None] = LinkCache(lambda live: _KEEP_SECONDS if live else _MISSING_SECONDS)
 
 
 def episode_live(source: Source, episode: EpisodeRef, *, fresh: bool = False) -> LiveStream:
     """The episode's live playlists, looked up once and kept for a while: the Site's links to them
     last for hours, and each one lists the newest parts whenever it is fetched."""
-    with _locks.hold(episode.uuid):
-        kept = _kept.get(episode.uuid)
-        if kept is None or fresh or kept.until <= time.time():
-            try:
-                live = source.live_stream(episode.url, use_cookies=episode.use_cookies)
-            except Exception as exc:
-                if is_no_internet_error(exc):
-                    raise
-                logger.warning("Could not look up the live stream of %s: %s", episode.url, exc)
-                raise HTTPException(status_code=502, detail=f"{source.name} live stream is currently unavailable") from exc
-            kept = _Kept(time.time() + (_KEEP_SECONDS if live else _MISSING_SECONDS), live)
-            _kept[episode.uuid] = kept
-            now = time.time()
-            for other in [other for other, value in _kept.items() if value.until <= now]:
-                _kept.pop(other, None)
-    if kept.live is None:
+    live = _kept.get(
+        episode.uuid,
+        lambda: look_up_at_site(
+            source, "live stream", episode.url, lambda: source.live_stream(episode.url, use_cookies=episode.use_cookies),
+        ),
+        fresh=fresh,
+    )
+    if live is None:
         raise HTTPException(status_code=404, detail=f"This episode is not live on {source.name}")
-    return kept.live
+    return live
 
 
 def live_master_playlist(live: LiveStream, height: int) -> str:
@@ -104,7 +80,7 @@ def live_master_playlist(live: LiveStream, height: int) -> str:
 
 def _playlist_response(text: str, *, head_only: bool) -> Response:
     content = text.encode()
-    headers = {**_NO_CACHE_HEADERS, "Content-Type": HLS_MIME_TYPE, "Content-Length": str(len(content))}
+    headers = {**NO_CACHE_HEADERS, "Content-Type": HLS_MIME_TYPE, "Content-Length": str(len(content))}
     return Response(content=b"" if head_only else content, headers=headers)
 
 
@@ -174,7 +150,7 @@ def live_part_response(url: str, signature: str, *, range_header: str | None, he
         upstream.close()
         raise HTTPException(status_code=502, detail=f"The site answered {upstream.status_code} for a live part")
     passed = {name: upstream.headers[name] for name in ("Content-Length", "Content-Range") if name in upstream.headers}
-    headers = {**_NO_CACHE_HEADERS, "Content-Type": upstream.headers.get("Content-Type", "video/mp2t"), **passed}
+    headers = {**NO_CACHE_HEADERS, "Content-Type": upstream.headers.get("Content-Type", "video/mp2t"), **passed}
     if head_only:
         upstream.close()
         return Response(status_code=upstream.status_code, headers=headers)
@@ -201,7 +177,7 @@ def _ffmpeg_input(stream: MediaStream) -> list[str]:
 
 def live_audio_response(source: Source, episode: EpisodeRef, *, head_only: bool) -> Response:
     """The sound of the live episode as one endless AAC stream, without a length or seeking."""
-    headers = {**_NO_CACHE_HEADERS, "Content-Type": "audio/aac"}
+    headers = {**NO_CACHE_HEADERS, "Content-Type": "audio/aac"}
     live = episode_live(source, episode)
     if head_only:
         return Response(status_code=200, headers=headers)

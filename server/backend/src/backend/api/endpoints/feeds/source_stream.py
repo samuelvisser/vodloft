@@ -14,42 +14,27 @@ from __future__ import annotations
 import logging
 import re
 import subprocess
-import time
 from collections.abc import Iterator
-from dataclasses import dataclass
 
-import requests
 from fastapi import HTTPException
 from fastapi.responses import Response, StreamingResponse
 
 from backend.services.collection_cookies import uses_cookies
-from backend.utils.keyed_locks import KeyedLocks
 from config import get_settings
-from config.network import is_no_internet_error
 from sources import MediaStream, Source
+
+from .upstream import (
+    NO_CACHE_HEADERS, READ_BYTES, LinkCache, look_up_at_site, ranged_get, seconds_until_expiry, total_size,
+)
 
 
 logger = logging.getLogger(__name__)
 
 AAC_BITRATE = 128_000
 """The bitrate of transcoded audio, the same as YouTube's M4A."""
-# Ask for big ranges, as yt-dlp does: YouTube slows down a single request for a whole file.
-_UPSTREAM_CHUNK_BYTES = 10 * 1024 * 1024
-_READ_BYTES = 64 * 1024
-_UPSTREAM_TIMEOUT_SECONDS = 30
-# Look a stream up again this long before its URL expires, so a long episode keeps playing.
-_EXPIRY_MARGIN_SECONDS = 30 * 60
-# How long a stream is kept when its Source does not say when it expires.
-_UNKNOWN_EXPIRY_SECONDS = 60 * 60
 # How long an episode without a stream is believed: the site may well offer one at the next look.
 _MISSING_SECONDS = 2 * 60
 _RANGE = re.compile(r"^bytes=(\d*)-(\d*)$")
-
-_NO_CACHE_HEADERS = {
-    "Cache-Control": "no-store, no-cache, must-revalidate",
-    "Pragma": "no-cache",
-    "Expires": "0",
-}
 
 
 def estimated_audio_size(duration: float | None) -> int | None:
@@ -59,34 +44,11 @@ def estimated_audio_size(duration: float | None) -> int | None:
     return int(duration * AAC_BITRATE / 8)
 
 
-@dataclass
-class _Kept:
-    stream: MediaStream | None
-    until: float
+def _kept_for(stream: MediaStream | None) -> float:
+    return _MISSING_SECONDS if stream is None else seconds_until_expiry([stream.expires_at])
 
 
-_streams: dict[tuple[str, bool], _Kept] = {}
-_locks: KeyedLocks[tuple[str, bool]] = KeyedLocks()
-
-
-
-def _kept_until(stream: MediaStream | None) -> float:
-    now = time.time()
-    if stream is None:
-        return now + _MISSING_SECONDS
-    if stream.expires_at is None:
-        return now + _UNKNOWN_EXPIRY_SECONDS
-    return max(now, stream.expires_at - _EXPIRY_MARGIN_SECONDS)
-
-
-def _look_up(source: Source, episode, *, audio: bool) -> MediaStream | None:
-    try:
-        return source.media_stream(episode.sharing_url, audio=audio, use_cookies=uses_cookies(episode.collection))
-    except Exception as exc:
-        if is_no_internet_error(exc):
-            raise
-        logger.warning("Could not look up the %s stream of %s: %s", source.name, episode.sharing_url, exc)
-        raise HTTPException(status_code=502, detail=f"{source.name} stream is currently unavailable") from exc
+_streams: LinkCache[tuple[str, bool], MediaStream | None] = LinkCache(_kept_for)
 
 
 def episode_stream(source: Source, episode, *, audio: bool, fresh: bool = False) -> MediaStream | None:
@@ -94,18 +56,12 @@ def episode_stream(source: Source, episode, *, audio: bool, fresh: bool = False)
 
     ``fresh`` looks it up again, for a URL the site stopped accepting.
     """
-    key = (episode.uuid, audio)
-    with _locks.hold(key):
-        kept = _streams.get(key)
-        if kept is not None and not fresh and kept.until > time.time():
-            return kept.stream
-        stream = _look_up(source, episode, audio=audio)
-        _streams[key] = _Kept(stream, _kept_until(stream))
-        # Drop what expired, so the cache does not grow with every episode ever played.
-        now = time.time()
-        for other in [other for other, value in _streams.items() if value.until <= now]:
-            _streams.pop(other, None)
-        return stream
+    url, use_cookies = episode.sharing_url, uses_cookies(episode.collection)
+    return _streams.get(
+        (episode.uuid, audio),
+        lambda: look_up_at_site(source, "stream", url, lambda: source.media_stream(url, audio=audio, use_cookies=use_cookies)),
+        fresh=fresh,
+    )
 
 
 def _requested_range(header: str | None, size: int | None) -> tuple[int, int | None] | None:
@@ -132,24 +88,9 @@ def _requested_range(header: str | None, size: int | None) -> tuple[int, int | N
     return start, end
 
 
-def _upstream(stream: MediaStream, start: int, end: int | None) -> requests.Response:
-    last = start + _UPSTREAM_CHUNK_BYTES - 1
-    if end is not None:
-        last = min(last, end)
-    return requests.get(
-        stream.url, headers={**stream.headers, "Range": f"bytes={start}-{last}"},
-        stream=True, timeout=_UPSTREAM_TIMEOUT_SECONDS,
-    )
-
-
-def _total_size(response: requests.Response) -> int | None:
-    total = response.headers.get("Content-Range", "").rpartition("/")[2]
-    return int(total) if total.isdigit() else None
-
-
 def _media_headers(*, media_type: str, filename: str, length: int | None, content_range: str | None) -> dict[str, str]:
     headers = {
-        **_NO_CACHE_HEADERS,
+        **NO_CACHE_HEADERS,
         "Accept-Ranges": "bytes",
         "Content-Disposition": f'inline; filename="{filename}"',
         "Content-Type": media_type,
@@ -185,14 +126,14 @@ def proxy_response(
             content_range=f"bytes {start}-{last}/{size}" if wanted else None,
         ))
 
-    first = _upstream(stream, start, end)
+    first = ranged_get(stream, start, end)
     if first.status_code == 403:
         # The URL expired early or no longer plays to this address: look it up once more.
         first.close()
         stream = episode_stream(source, episode, audio=audio, fresh=True)
         if stream is None:
             raise HTTPException(status_code=404, detail=f"No {source.name} stream for this episode")
-        first = _upstream(stream, start, end)
+        first = ranged_get(stream, start, end)
     if first.status_code == 416:
         first.close()
         raise HTTPException(status_code=416, detail="Range not satisfiable")
@@ -201,7 +142,7 @@ def proxy_response(
         logger.warning("%s answered %s for a stream of %s", source.name, first.status_code, page_url)
         raise HTTPException(status_code=502, detail=f"{source.name} stream is currently unavailable")
 
-    size = _total_size(first) or stream.size_bytes
+    size = total_size(first) or stream.size_bytes
     last = end if end is not None else (size - 1 if size is not None else None)
     length = last - start + 1 if last is not None else None
     headers = _media_headers(
@@ -217,7 +158,7 @@ def proxy_response(
         position = start
         try:
             while True:
-                for chunk in response.iter_content(_READ_BYTES):
+                for chunk in response.iter_content(READ_BYTES):
                     if last is not None and position + len(chunk) > last + 1:
                         chunk = chunk[:last + 1 - position]
                     position += len(chunk)
@@ -230,7 +171,7 @@ def proxy_response(
                     return  # The site sent the whole stream at once.
                 if (last is not None and position > last) or (size is not None and position >= size):
                     return
-                response = _upstream(stream, position, last)
+                response = ranged_get(stream, position, last)
                 if response.status_code not in (200, 206):
                     logger.warning("%s stopped a stream of %s with %s", source.name, page_url, response.status_code)
                     return
@@ -285,7 +226,7 @@ def transcode_response(
         sent = 0
         try:
             while length is None or sent < length:
-                chunk = process.stdout.read(_READ_BYTES)
+                chunk = process.stdout.read(READ_BYTES)
                 if not chunk:
                     break
                 if length is not None:
@@ -294,7 +235,7 @@ def transcode_response(
                 yield chunk
             # The estimate was a little high: fill up to the size the player was told, which a decoder skips.
             while length is not None and sent < length:
-                filler = b"\0" * min(_READ_BYTES, length - sent)
+                filler = b"\0" * min(READ_BYTES, length - sent)
                 sent += len(filler)
                 yield filler
         finally:

@@ -32,26 +32,19 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-import requests
 from fastapi import HTTPException
 from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
 
-from backend.utils.keyed_locks import KeyedLocks
 from config import get_settings
-from config.network import is_no_internet_error
 from sources import MediaStream, MediaTracks, Site, Source
 
 from backend.services.video_cache import get_cached_mp4_path, mp4_cache_path
+from .upstream import NO_CACHE_HEADERS, LinkCache, look_up_at_site, ranged_get, seconds_until_expiry, stream_bytes
 
 
 logger = logging.getLogger(__name__)
 
 HLS_MIME_TYPE = "application/x-mpegURL"
-_UPSTREAM_CHUNK_BYTES = 10 * 1024 * 1024
-_READ_BYTES = 64 * 1024
-_UPSTREAM_TIMEOUT_SECONDS = 30
-_EXPIRY_MARGIN_SECONDS = 30 * 60
-_UNKNOWN_EXPIRY_SECONDS = 60 * 60
 _MISSING_SECONDS = 2 * 60
 _INDEX_FIRST_BYTES = 256 * 1024
 _INDEX_MOST_BYTES = 16 * 1024 * 1024
@@ -62,11 +55,6 @@ _JOIN_TIMEOUT_SECONDS = 3 * 60 * 60
 NEWEST_EPISODES_JOINED_AHEAD = 3
 _TRACK_NAME = re.compile(r"^(?:video-(\d+)|audio)\.(m3u8|mp4)$")
 _RANGE = re.compile(r"^bytes=(\d+)-(\d*)$")
-_NO_CACHE_HEADERS = {
-    "Cache-Control": "no-store, no-cache, must-revalidate",
-    "Pragma": "no-cache",
-    "Expires": "0",
-}
 
 
 @dataclass(frozen=True)
@@ -95,48 +83,28 @@ def joins_mp4(site: Site, height: int | None) -> bool:
 
 # --- Looking tracks up -----------------------------------------------------------------------------
 
-@dataclass
-class _Kept:
-    tracks: MediaTracks | None
-    until: float
-
-
-_tracks: dict[str, _Kept] = {}
-_locks: KeyedLocks[str] = KeyedLocks()
-_guard = threading.Lock()
-
-
-
-def _kept_until(tracks: MediaTracks | None) -> float:
-    now = time.time()
+def _kept_for(tracks: MediaTracks | None) -> float:
     if tracks is None:
-        return now + _MISSING_SECONDS
-    expiries = [stream.expires_at for stream in (*tracks.video, tracks.audio) if stream.expires_at is not None]
-    if not expiries:
-        return now + _UNKNOWN_EXPIRY_SECONDS
-    return max(now, min(expiries) - _EXPIRY_MARGIN_SECONDS)
+        return _MISSING_SECONDS
+    return seconds_until_expiry(stream.expires_at for stream in (*tracks.video, tracks.audio))
+
+
+_tracks: LinkCache[str, MediaTracks | None] = LinkCache(_kept_for)
+_guard = threading.Lock()
 
 
 def episode_tracks(source: Source, episode: EpisodeRef, *, fresh: bool = False) -> MediaTracks:
     """The episode's tracks, looked up once and kept until shortly before their links expire."""
-    with _locks.hold(episode.uuid):
-        kept = _tracks.get(episode.uuid)
-        if kept is None or fresh or kept.until <= time.time():
-            try:
-                found = source.media_tracks(episode.url, use_cookies=episode.use_cookies)
-            except Exception as exc:
-                if is_no_internet_error(exc):
-                    raise
-                logger.warning("Could not look up the %s tracks of %s: %s", source.name, episode.url, exc)
-                raise HTTPException(status_code=502, detail=f"{source.name} stream is currently unavailable") from exc
-            kept = _Kept(found, _kept_until(found))
-            _tracks[episode.uuid] = kept
-            now = time.time()
-            for other in [other for other, value in _tracks.items() if value.until <= now]:
-                _tracks.pop(other, None)
-    if kept.tracks is None:
+    tracks = _tracks.get(
+        episode.uuid,
+        lambda: look_up_at_site(
+            source, "stream", episode.url, lambda: source.media_tracks(episode.url, use_cookies=episode.use_cookies),
+        ),
+        fresh=fresh,
+    )
+    if tracks is None:
         raise HTTPException(status_code=404, detail=f"No {source.name} video tracks for this episode")
-    return kept.tracks
+    return tracks
 
 
 def _video_track(tracks: MediaTracks, height: int) -> MediaStream:
@@ -148,42 +116,9 @@ def _video_track(tracks: MediaTracks, height: int) -> MediaStream:
 
 # --- Passing bytes on ------------------------------------------------------------------------------
 
-def _get(stream: MediaStream, start: int, last: int) -> requests.Response:
-    return requests.get(
-        stream.url, headers={**stream.headers, "Range": f"bytes={start}-{last}"}, stream=True,
-        timeout=_UPSTREAM_TIMEOUT_SECONDS,
-    )
-
-
-def _bytes_of(stream: MediaStream, start: int, end: int | None) -> Iterator[bytes]:
-    """The stream's bytes from ``start`` to ``end``, asked of the Site 10 MB at a time, as it limits
-    a single request for a whole file."""
-    position = start
-    while end is None or position <= end:
-        last = position + _UPSTREAM_CHUNK_BYTES - 1
-        if end is not None:
-            last = min(last, end)
-        response = _get(stream, position, last)
-        try:
-            if response.status_code not in (200, 206):
-                if response.status_code != 416:
-                    logger.warning("A track stopped with %s at byte %s", response.status_code, position)
-                return
-            received = 0
-            for chunk in response.iter_content(_READ_BYTES):
-                received += len(chunk)
-                yield chunk
-            position += received
-            # A short answer is the end of the file.
-            if received < last - (position - received) + 1 or response.status_code == 200:
-                return
-        finally:
-            response.close()
-
-
 def _first_bytes(stream: MediaStream, count: int) -> bytes:
     data = bytearray()
-    for chunk in _bytes_of(stream, 0, count - 1):
+    for chunk in stream_bytes(stream, 0, count - 1):
         data += chunk
     return bytes(data)
 
@@ -203,8 +138,8 @@ def track_redirect_response(source: Source, episode: EpisodeRef, name: str, *, h
     """A redirect to one of the episode's tracks on the Site, with a link that still lasts a while,
     for a feed that lets the app fetch its Site's video itself. The app sends its range along."""
     track = _pick_track(name)(episode_tracks(source, episode))
-    headers = {**_NO_CACHE_HEADERS, "Location": track.url}
-    return Response(status_code=302, headers=headers) if head_only else RedirectResponse(track.url, status_code=302, headers=_NO_CACHE_HEADERS)
+    headers = {**NO_CACHE_HEADERS, "Location": track.url}
+    return Response(status_code=302, headers=headers) if head_only else RedirectResponse(track.url, status_code=302, headers=NO_CACHE_HEADERS)
 
 
 def track_part_response(
@@ -219,12 +154,12 @@ def track_part_response(
     if end is None and track.size_bytes:
         end = track.size_bytes - 1
     # One byte first, for the size and to tell whether the link still works.
-    probe = _get(track, start, start)
+    probe = ranged_get(track, start, start)
     if probe.status_code == 403:
         # The link expired early: look the tracks up once more.
         probe.close()
         track = pick(episode_tracks(source, episode, fresh=True))
-        probe = _get(track, start, start)
+        probe = ranged_get(track, start, start)
     status = probe.status_code
     total = probe.headers.get("Content-Range", "").rpartition("/")[2]
     probe.close()
@@ -235,7 +170,7 @@ def track_part_response(
     size = int(total) if total.isdigit() else track.size_bytes
     if size is not None:
         end = size - 1 if end is None else min(end, size - 1)
-    headers = {**_NO_CACHE_HEADERS, "Accept-Ranges": "bytes", "Content-Type": "audio/mp4" if name.startswith("audio") else "video/mp4"}
+    headers = {**NO_CACHE_HEADERS, "Accept-Ranges": "bytes", "Content-Type": "audio/mp4" if name.startswith("audio") else "video/mp4"}
     if end is not None:
         headers["Content-Length"] = str(end - start + 1)
     if wanted and end is not None and size is not None:
@@ -243,7 +178,7 @@ def track_part_response(
     status_code = 206 if wanted else 200
     if head_only:
         return Response(status_code=status_code, headers=headers)
-    return StreamingResponse(_bytes_of(track, start, end), status_code=status_code, headers=headers)
+    return StreamingResponse(stream_bytes(track, start, end), status_code=status_code, headers=headers)
 
 
 # --- HLS -------------------------------------------------------------------------------------------
@@ -256,7 +191,6 @@ class SegmentIndex:
     """Offset, size and seconds of every fragment."""
 
 
-_indexes: dict[str, tuple[float, SegmentIndex]] = {}
 
 
 def _boxes(data: bytes) -> Iterator[tuple[int, int, bytes, int]]:
@@ -309,26 +243,25 @@ def parse_segment_index(data: bytes) -> SegmentIndex | None:
     return None
 
 
-def _segment_index(track: MediaStream) -> SegmentIndex:
-    with _locks.hold(f"index:{track.url}"):
-        kept = _indexes.get(track.url)
-        if kept is not None and kept[0] > time.time():
-            return kept[1]
-        count = _INDEX_FIRST_BYTES
-        while count <= _INDEX_MOST_BYTES:
-            data = _first_bytes(track, count)
-            index = parse_segment_index(data)
-            if index is not None:
-                until = (track.expires_at or time.time() + _UNKNOWN_EXPIRY_SECONDS)
-                now = time.time()
-                for other in [other for other, value in _indexes.items() if value[0] <= now]:
-                    _indexes.pop(other, None)
-                _indexes[track.url] = (until, index)
-                return index
-            if len(data) < count:
-                break
-            count *= 4
+def _read_segment_index(track: MediaStream) -> tuple[float | None, SegmentIndex]:
+    count = _INDEX_FIRST_BYTES
+    while count <= _INDEX_MOST_BYTES:
+        data = _first_bytes(track, count)
+        index = parse_segment_index(data)
+        if index is not None:
+            return track.expires_at, index
+        if len(data) < count:
+            break
+        count *= 4
     raise HTTPException(status_code=502, detail="The video track's segment index could not be read")
+
+
+# A track's index stays the same for as long as its link works.
+_indexes: LinkCache[str, tuple[float | None, SegmentIndex]] = LinkCache(lambda kept: seconds_until_expiry([kept[0]]))
+
+
+def _segment_index(track: MediaStream) -> SegmentIndex:
+    return _indexes.get(track.url, lambda: _read_segment_index(track))[1]
 
 
 def media_playlist(uri: str, index: SegmentIndex) -> str:
@@ -365,7 +298,7 @@ def master_playlist(videos: list[MediaStream], audio: MediaStream) -> str:
 
 def _playlist_response(text: str, *, head_only: bool) -> Response:
     content = text.encode()
-    headers = {**_NO_CACHE_HEADERS, "Content-Type": HLS_MIME_TYPE, "Content-Length": str(len(content))}
+    headers = {**NO_CACHE_HEADERS, "Content-Type": HLS_MIME_TYPE, "Content-Length": str(len(content))}
     return Response(content=b"" if head_only else content, headers=headers)
 
 
@@ -426,7 +359,7 @@ def _feed_pipe(track: MediaStream, pipe: Path, process: subprocess.Popen) -> Non
     os.set_blocking(descriptor, True)
     try:
         with os.fdopen(descriptor, "wb") as out:
-            for chunk in _bytes_of(track, 0, None):
+            for chunk in stream_bytes(track, 0, None):
                 out.write(chunk)
     except OSError:
         pass  # ffmpeg stopped reading.
@@ -496,5 +429,5 @@ def joined_mp4_response(path: Path, *, filename: str) -> FileResponse:
     except OSError:
         pass
     return FileResponse(
-        path, filename=filename, content_disposition_type="inline", media_type="video/mp4", headers=_NO_CACHE_HEADERS,
+        path, filename=filename, content_disposition_type="inline", media_type="video/mp4", headers=NO_CACHE_HEADERS,
     )
