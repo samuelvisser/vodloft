@@ -1,7 +1,7 @@
 import CodeMirror from '@uiw/react-codemirror'
 import {EditorView} from '@codemirror/view'
 
-import {outputTemplateSyntaxExtensions} from './outputTemplateCodeMirror'
+import {keepExpressionsTogether, markPathSlashes, outputTemplateSyntaxExtensions} from './outputTemplateCodeMirror'
 import {
     parseOutputTemplate,
     renderCompactOutputTemplate,
@@ -26,6 +26,12 @@ export type ReadOnlyOutputTemplateCodeProps = {
 const readOnlyCodeExtensions = [
     ...outputTemplateSyntaxExtensions,
     EditorView.lineWrapping,
+    keepExpressionsTogether,
+]
+
+const pathCodeExtensions = [
+    ...readOnlyCodeExtensions,
+    markPathSlashes,
 ]
 
 export default function ReadOnlyOutputTemplateCode({
@@ -44,10 +50,10 @@ export default function ReadOnlyOutputTemplateCode({
 
     return (
         <CodeMirror
-            className={`output-template-code-editor read-only-output-template-code-editor${className ? ` ${className}` : ''}`}
+            className={`output-template-code-editor read-only-output-template-code-editor${renderMode === 'path' ? ' is-path' : ''}${className ? ` ${className}` : ''}`}
             value={value}
             editable={false}
-            extensions={readOnlyCodeExtensions}
+            extensions={renderMode === 'path' ? pathCodeExtensions : readOnlyCodeExtensions}
             basicSetup={{
                 lineNumbers: false,
                 foldGutter: false,

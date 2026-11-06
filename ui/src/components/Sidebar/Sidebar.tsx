@@ -1,3 +1,4 @@
+import {useLayoutEffect, useRef, useState} from 'react'
 import {NavLink} from 'react-router-dom'
 import Footer from './Footer'
 import Navbar from './Navbar'
@@ -33,16 +34,64 @@ const items: NavItem[] = [
     },
 ]
 
+// How far the desktop sidebar shrinks its footer to fit the window height, in order: the full footer;
+// the footer links side by side; the footer icons and version on one row; and no footer, with its icons
+// next to the logo. The navigation only scrolls when even the last one is too tall. The logo size follows
+// the window height alone (index.css), so opening a submenu never moves the items above it.
+const FITS = ['roomy', 'compact', 'icons', 'header'] as const
+type SidebarFit = typeof FITS[number]
+
+function useSidebarFit() {
+    const sidebarRef = useRef<HTMLElement>(null)
+    const innerRef = useRef<HTMLDivElement>(null)
+    const navRef = useRef<HTMLElement>(null)
+    const [fit, setFit] = useState<SidebarFit>('roomy')
+
+    useLayoutEffect(() => {
+        const sidebar = sidebarRef.current
+        const inner = innerRef.current
+        const nav = navRef.current
+        if (!sidebar || !inner || !nav) return
+
+        // Try each fit from roomy to the last and keep the first one where the navigation does not overflow.
+        // It measures the navigation itself, so it keeps working when items are added or removed.
+        // Setting the attribute directly lets every try be measured before the browser paints.
+        const update = () => {
+            let chosen: SidebarFit = FITS[FITS.length - 1]
+            for (const candidate of FITS) {
+                sidebar.dataset.fit = candidate
+                if (inner.scrollHeight <= inner.clientHeight) {
+                    chosen = candidate
+                    break
+                }
+            }
+            sidebar.dataset.fit = chosen
+            setFit(chosen)
+        }
+
+        update()
+        // The window height changes the room; opening a submenu changes what has to fit.
+        const observer = new ResizeObserver(update)
+        observer.observe(sidebar)
+        observer.observe(nav)
+        return () => observer.disconnect()
+    }, [])
+
+    return {sidebarRef, innerRef, navRef, fit}
+}
+
 export default function Sidebar() {
+    const {sidebarRef, innerRef, navRef, fit} = useSidebarFit()
 
     return (
-        <aside className="sidebar" aria-label="Sidebar">
+        <aside className="sidebar" aria-label="Sidebar" ref={sidebarRef} data-fit={fit}>
             <header className="sidebar-header" style={{display: 'flex', justifyContent: 'center', paddingTop: 6}}>
                 <NavLink to="/" className="brand" style={{display: 'flex', alignItems: 'center', gap: 2}}>
                     {/* Safari on iPhone and iPad sometimes left this logo blank: it decodes large images in the
                         background and then does not always repaint the sticky sidebar. The file is sized for the
                         sidebar and decoded with the page, so there is nothing to repaint afterwards. */}
                     <img
+                        className="sidebar-logo"
                         src="/logo-wide-vodloft.png"
                         alt="VODLoft logo"
                         width={150}
@@ -51,10 +100,12 @@ export default function Sidebar() {
                         style={{borderRadius: 2, height: 'auto'}}
                     />
                 </NavLink>
+                {/* The footer links, shown here only when the footer itself is left out to make room. */}
+                <Footer wrapperClass="sidebar-header-links" />
             </header>
 
-            <div className="sidebar-inner">
-                <nav className="nav" aria-label="Primary">
+            <div className="sidebar-inner" ref={innerRef}>
+                <nav className="nav" aria-label="Primary" ref={navRef}>
                     <Navbar items={visibleNavItems(items)} />
                 </nav>
             </div>

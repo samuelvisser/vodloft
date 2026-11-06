@@ -13,7 +13,6 @@ import {isLocalMediaProfileAvailableForSource, useLocalMediaProfileSelectRegistr
 import {DownloadProfileReadView} from "../../types/schemas/download_profile_view";
 import {useQuery, useQueryClient} from "@tanstack/react-query";
 import ReadMore from "../../utils/ReadMore";
-import {EpisodeIdentifierReg} from "../../types/collection";
 
 type RouteParams = { id?: string }
 
@@ -139,11 +138,6 @@ export default function EditDownloadProfilePage() {
                         <div style={{padding: '6px 0'}}>
                             <Link className="quiet-link" to={`/collection/${downloadProfile?.collectionSlug}`}>{collectionTitle}</Link>
                         </div>
-                    </div>
-
-                    <div className="form-row">
-                        <label>Episode identification</label>
-                        <div style={{padding: '6px 0'}}>{EpisodeIdentifierReg.getLabelLoose(episodeIdentifier ?? '')}</div>
                     </div>
 
                     <div className="form-row">

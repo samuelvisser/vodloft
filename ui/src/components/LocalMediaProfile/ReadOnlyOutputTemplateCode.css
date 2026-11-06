@@ -35,3 +35,70 @@
 .read-only-output-template-code-editor .cm-line {
     padding: 0 10px;
 }
+
+/* A wrapped template breaks between variables, never inside one. */
+.read-only-output-template-code-editor .cm-jinja-expression {
+    white-space: nowrap;
+}
+
+/* A path view is about the folders: accent the slashes between them and fade the variable braces. */
+.read-only-output-template-code-editor.is-path .cm-path-slash {
+    margin: 0 0.1em;
+    color: #ea580c;
+    font-weight: 700;
+}
+
+.read-only-output-template-code-editor.is-path .cm-jinja-brace {
+    opacity: 0.45;
+}
+
+/* The wrapped phone view has room for a little more air around each slash than a one-line table cell. */
+@media (max-width: 640px) {
+    .read-only-output-template-code-editor.is-path .cm-path-slash {
+        margin: 0 0.18em;
+    }
+}
+
+@media (prefers-color-scheme: dark) {
+    .read-only-output-template-code-editor.is-path .cm-path-slash {
+        color: #fb923c;
+    }
+}
+
+/* A wrapped path only breaks before a slash. Each section (a slash up to the next one) stays on one
+   line, and one too long for a line is cut off there. Several sections share a line when they fit. */
+.read-only-output-template-code-editor.is-path .cm-path-section {
+    white-space: nowrap;
+}
+
+/* A cut-off section can still be scrolled sideways to read the rest, without a visible scroll bar. */
+@media (max-width: 640px) {
+    .read-only-output-template-code-editor.is-path .cm-path-section {
+        display: inline-block;
+        max-width: 100%;
+        overflow-x: auto;
+        overflow-y: hidden;
+        vertical-align: bottom;
+        scrollbar-width: none;
+        overscroll-behavior-x: contain;
+    }
+
+    .read-only-output-template-code-editor.is-path .cm-path-section::-webkit-scrollbar {
+        display: none;
+    }
+}
+
+/* In the one-line desktop cell the slashes sit close together, so give each a faint tint behind it. */
+@media (min-width: 641px) {
+    .read-only-output-template-code-editor.is-path .cm-path-slash {
+        padding: 0 0.12em;
+        border-radius: 3px;
+        background: rgba(234, 88, 12, 0.08);
+    }
+}
+
+@media (min-width: 641px) and (prefers-color-scheme: dark) {
+    .read-only-output-template-code-editor.is-path .cm-path-slash {
+        background: rgba(251, 146, 60, 0.13);
+    }
+}

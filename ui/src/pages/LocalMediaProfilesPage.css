@@ -65,13 +65,62 @@
 }
 
 @media (max-width: 640px) {
+  /* Mobile detail values are right-aligned; a path reads better from the left. */
+  .local-media-profile-output-template,
   .local-media-profile-output-template .cm-line {
-    display: -webkit-box;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    text-align: left;
+  }
+
+  /* Show the whole path. Each folder takes at most one line, so its height stays bounded without a
+     line limit (which also put an ellipsis after a path that was shown in full). */
+  .local-media-profile-output-template .cm-line {
     white-space: normal;
-    overflow-wrap: anywhere;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 5;
+  }
+}
+
+/* The Output Path Template column takes whatever width the other columns
+   leave over. Keep at least 12rem of it, so a template stays recognisable.
+   The other columns size to their content, so react to the table container
+   rather than the viewport: when it gets too narrow, Available for goes
+   first, then Type, then Storage Used. The thresholds are the table widths
+   at which the template would drop below 12rem with typical profile names
+   and labels. Below 40rem nothing else can go, so the template may shrink
+   further rather than push the Actions column out of view. */
+@media (min-width: 641px) {
+  .local-media-profiles-table-wrapper {
+    container-type: inline-size;
+  }
+
+  .local-media-profiles-table th:nth-child(2),
+  .local-media-profiles-table td:nth-child(2) {
+    min-width: 12rem;
+  }
+}
+
+@container (max-width: 64rem) {
+  .local-media-profiles-table th:nth-child(4),
+  .local-media-profiles-table td:nth-child(4) {
+    display: none;
+  }
+}
+
+@container (max-width: 54rem) {
+  .local-media-profiles-table th:nth-child(3),
+  .local-media-profiles-table td:nth-child(3) {
+    display: none;
+  }
+}
+
+@container (max-width: 48rem) {
+  .local-media-profiles-table th:nth-child(5),
+  .local-media-profiles-table td:nth-child(5) {
+    display: none;
+  }
+}
+
+@container (max-width: 40rem) {
+  .local-media-profiles-table th:nth-child(2),
+  .local-media-profiles-table td:nth-child(2) {
+    min-width: 0;
   }
 }

@@ -10,7 +10,6 @@ import DataTable, {Column} from '../components/DataTable/DataTable'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
 import PageSubtitle from "../components/common/PageSubtitle";
 import ProfileEnabledSwitch from '../components/common/ProfileEnabledSwitch'
-import {EpisodeIdentifierReg} from "../types/collection";
 import {DownloadProfileUpdateSchema} from '../types/schemas/download_profile'
 import {faIcon} from '../icons/faIcon'
 import {formatBytes} from '../utils/formatting'
@@ -67,10 +66,6 @@ export default function DownloadProfilesPage() {
             accessor: (p) => PreferredFormatReg.getLabelLoose(p.localMediaProfilePreferredFormat),
         },
         {
-            header: 'Episode identification',
-            accessor: (p) => EpisodeIdentifierReg.getLabelLoose(p.collectionEpisodeIdentifier),
-        },
-        {
             header: 'Storage Used',
             accessor: (p) => formatBytes(p.storageSizeBytes) || '0 KiB',
             width: '1%',
@@ -120,8 +115,6 @@ export default function DownloadProfilesPage() {
                                 <span>{p.localMediaProfileName}</span>
                                 <span aria-hidden="true">•</span>
                                 <span>{PreferredFormatReg.getLabelLoose(p.localMediaProfilePreferredFormat)}</span>
-                                <span aria-hidden="true">•</span>
-                                <span>{EpisodeIdentifierReg.getLabelLoose(p.collectionEpisodeIdentifier)}</span>
                                 <span aria-hidden="true">•</span>
                                 <span>{formatBytes(p.storageSizeBytes) || '0 KiB'}</span>
                                 <span className={`mobile-summary-status ${p.enableProfile ? 'is-success' : ''}`}>
