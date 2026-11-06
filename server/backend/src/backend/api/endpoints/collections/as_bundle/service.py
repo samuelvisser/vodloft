@@ -33,7 +33,7 @@ from task_manager.scheduler.operation_factory import create_operation
 from ...rss_stream_profiles.service import ensure_site_can_stream
 from ...collection_local_media_profiles.service import create_collection_local_media_profile, update_collection_local_media_profile
 from ..events import CollectionAdded
-from ..operations import CollectionIndexOperation
+from backend.operations.collections import CollectionIndexOperation
 
 
 def upsert_collection_local_media_profile(

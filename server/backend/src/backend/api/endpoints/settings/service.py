@@ -45,7 +45,7 @@ from downloader.storage import inspect_filesystem
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import complete_operation, queue_operation_target_dispatch
 from task_manager.tasks.helpers.episodes.same_episode import PENDING_EPISODE_PUBLISH_STATUSES
-from .operations import (
+from backend.operations.settings import (
     FileWatcherCronOperation,
     FullRescanCronOperation,
     QuickCheckCronOperation,

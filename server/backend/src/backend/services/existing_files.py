@@ -198,7 +198,7 @@ def queue_scan(session: Session, collection: Collection, local_media_profile: Lo
     from task_manager.scheduler.operation_factory import create_operation
     from task_manager.scheduler.operations import queue_operation_target_dispatch
 
-    from backend.api.endpoints.collections.operations import CollectionExistingFilesScanOperation
+    from backend.operations.collections import CollectionExistingFilesScanOperation
 
     operation = create_operation(session, CollectionExistingFilesScanOperation(
         collection, local_media_profile_id=local_media_profile.id,

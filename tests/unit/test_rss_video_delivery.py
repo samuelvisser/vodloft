@@ -125,7 +125,7 @@ def test_feed_url_does_not_encode_video_delivery_mode():
 
 
 def test_cached_mp4_path_uses_configured_rss_cache_root(monkeypatch, tmp_path):
-    import backend.api.endpoints.feeds.cached_video as cached_video
+    import backend.services.video_cache as cached_video
 
     monkeypatch.setattr(
         cached_video,
@@ -142,7 +142,7 @@ def test_cached_mp4_path_uses_configured_rss_cache_root(monkeypatch, tmp_path):
 
 
 def test_rss_cache_cleanup_uses_configured_sliding_retention(monkeypatch, tmp_path):
-    import backend.api.endpoints.feeds.cached_video as cached_video
+    import backend.services.video_cache as cached_video
 
     video_root = tmp_path / "video"
     video_root.mkdir()
@@ -170,7 +170,7 @@ def test_rss_cache_cleanup_uses_configured_sliding_retention(monkeypatch, tmp_pa
 
 
 def test_cached_mp4_is_prepared_once_and_reused(monkeypatch, tmp_path):
-    import backend.api.endpoints.feeds.cached_video as cached_video
+    import backend.services.video_cache as cached_video
 
     target = tmp_path / "episode.mp4"
     calls = []

@@ -18,7 +18,7 @@ from backend.types.media_types import MediaType
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import complete_operation, queue_operation_target_dispatch
 
-from .operations import LocalMediaProfileFileRenameOperation
+from backend.operations.local_media_profiles import LocalMediaProfileFileRenameOperation
 
 
 _PHYSICAL_ARTIFACT_STATUSES = (

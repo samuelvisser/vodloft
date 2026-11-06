@@ -17,7 +17,7 @@ from backend.services.import_uploads import (
     write_chunk,
 )
 from backend.services.imports import (
-    ImportOptions, ImportServiceError, enable_run_download_profiles, get_importer, preview, run_summary, run_view,
+    ImportOptions, ImportServiceError, enable_run_download_profiles, get_importer, last_run, preview, run_view,
     start_run,
 )
 from backend.utils.feed_urls import request_base_url
@@ -59,13 +59,11 @@ def importers_list():
     with db_session() as s:
         out = []
         for importer in all_importers():
-            last = s.scalar(select(ImportRun).where(ImportRun.importer == importer.key)
-                            .order_by(ImportRun.id.desc()).limit(1))
             out.append(ImporterAPIRead.model_validate({
                 "key": importer.key, "name": importer.name, "upload": upload_status(importer),
                 "files": [rule.pattern for rule in importer.upload_files if not rule.secret],
                 "secret_files": [rule.pattern for rule in importer.upload_files if rule.secret],
-                "last_run": run_summary(last) if last else None,
+                "last_run": last_run(s, importer),
             }))
         return out
 
@@ -149,7 +147,7 @@ def import_run(importer_key: str, body: ImportOptionsAPIRequest, request: Reques
         except ImportServiceError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         s.commit()
-        return ImportRunSummaryAPIRead.model_validate(run_summary(run))
+        return ImportRunSummaryAPIRead.model_validate(run)
 
 
 @router.get("/{importer_key}/runs", dependencies=_ADMIN, response_model=list[ImportRunSummaryAPIRead])
@@ -157,7 +155,7 @@ def import_runs(importer_key: str):
     importer = _importer(importer_key)
     with db_session() as s:
         runs = s.scalars(select(ImportRun).where(ImportRun.importer == importer.key).order_by(ImportRun.id.desc()))
-        return [ImportRunSummaryAPIRead.model_validate(run_summary(run)) for run in runs]
+        return [ImportRunSummaryAPIRead.model_validate(run) for run in runs]
 
 
 @router.get("/{importer_key}/runs/{run_id}", dependencies=_ADMIN, response_model=ImportRunAPIRead)

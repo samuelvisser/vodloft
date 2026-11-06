@@ -25,7 +25,7 @@ from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import complete_operation, queue_operation_target_dispatch
 from task_manager.tasks.media_download_operations import attach_redownload_dependencies
 
-from .operations import MovieExtrasRefreshOperation, MovieRedownloadOperation
+from backend.operations.movies import MovieExtrasRefreshOperation, MovieRedownloadOperation
 
 
 def get_movies_list(s: Session) -> list[MovieAPIRead]:

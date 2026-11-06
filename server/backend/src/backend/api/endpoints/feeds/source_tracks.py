@@ -40,7 +40,7 @@ from config import get_settings
 from config.network import is_no_internet_error
 from sources import MediaStream, MediaTracks, Site, Source
 
-from .cached_video import get_cached_mp4_path, mp4_cache_path
+from backend.services.video_cache import get_cached_mp4_path, mp4_cache_path
 
 
 logger = logging.getLogger(__name__)

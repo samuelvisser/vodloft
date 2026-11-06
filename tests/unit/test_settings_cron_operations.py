@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 def test_settings_cron_operations_target_the_scheduled_workers():
-    from backend.api.endpoints.settings.operations import (
+    from backend.operations.settings import (
         FileWatcherCronOperation,
         FindEpisodesCronOperation,
         FullRescanCronOperation,
@@ -30,7 +30,7 @@ def test_settings_cron_operations_target_the_scheduled_workers():
 
 
 def test_pending_episode_cron_operation_targets_each_pending_episode():
-    from backend.api.endpoints.settings.operations import MonitorPendingEpisodesCronOperation
+    from backend.operations.settings import MonitorPendingEpisodesCronOperation
 
     operation = MonitorPendingEpisodesCronOperation((9, 4, 9))
 
@@ -47,7 +47,7 @@ def test_pending_episode_cron_operation_targets_each_pending_episode():
 
 
 def test_settings_cron_operations_have_distinct_system_kinds():
-    from backend.api.endpoints.settings.operations import (
+    from backend.operations.settings import (
         FileWatcherCronOperation,
         FindEpisodesCronOperation,
         FullRescanCronOperation,

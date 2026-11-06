@@ -22,6 +22,26 @@ CHANNEL_TEMPLATE = "/YouTube/{{ source_custom_name }}/{{ season_episode_index_fr
 PLAYLIST_TEMPLATE = "/Lists/{{ source_custom_name }}/{{ media_playlist_index }} {{ title }}.{{ ext }}"
 
 
+def _view(model, value):
+    """What the API sends for ``value``, as a dict with the field names."""
+    return model.model_validate(value).model_dump()
+
+
+def _preview(session, importer, options):
+    from backend.api.models.imports import ImportPreviewAPIRead
+    from backend.services import imports
+
+    return _view(ImportPreviewAPIRead, imports.preview(session, importer, options))
+
+
+def _run_view(session, run):
+    from backend.api.models.imports import ImportRunAPIRead
+    from backend.services import imports
+
+    return _view(ImportRunAPIRead, imports.run_view(session, run))
+
+
+
 def _pinchflat_db(path: Path, *, version: int = NEWEST_KNOWN_VERSION, items=None) -> Path:
     connection = sqlite3.connect(path)
     connection.executescript("""
@@ -335,7 +355,14 @@ def installation(tmp_path, monkeypatch):
             return CollectionDetails(slug=slug, url=url, title="From YouTube", author_name="Derek")
 
     monkeypatch.setattr(registry, "_sources", {**registry._sources, "ytdlp": FakeYtDlp()})
-    return _session(), applied
+    session = _session()
+    # Adopting files writes through transactions of its own, on the same database.
+    from sqlalchemy.orm import sessionmaker
+    from backend.db import core
+
+    monkeypatch.setattr(core, "_engine", session.get_bind())
+    monkeypatch.setattr(core, "_SessionLocal", sessionmaker(bind=session.get_bind()))
+    return session, applied
 
 
 def _index(session, collection, site_ids):
@@ -368,8 +395,11 @@ def _adopt_waiting(session):
     from backend.db.models import ImportStep
     from backend.services import imports
 
-    for step in list(session.scalars(select(ImportStep).where(ImportStep.status == "waiting"))):
-        imports.run_step(session, step.id)
+    step_ids = list(session.scalars(select(ImportStep.id).where(ImportStep.status == "waiting")))
+    session.commit()
+    for step_id in step_ids:
+        imports.run_step(step_id)
+    session.expire_all()
 
 
 def test_preview_finds_the_folder_and_writes_nothing(installation):
@@ -377,7 +407,7 @@ def test_preview_finds_the_folder_and_writes_nothing(installation):
     from backend.services import imports
 
     session, _applied = installation
-    view = imports.preview(session, pinchflat.IMPORTER, imports.ImportOptions())
+    view = _preview(session, pinchflat.IMPORTER, imports.ImportOptions())
 
     assert (view["path_map"]["source"], view["path_map"]["target"]) == ("/downloads", "/downloads/pinchflat")
     assert view["path_map"]["found"] == view["path_map"]["sampled"] == 3
@@ -460,7 +490,7 @@ def test_a_change_made_in_vodloft_is_kept_and_a_newly_mapped_setting_comes_over(
 
     # This VODLoft maps 1440p.
     monkeypatch.setitem(mapping._RESOLUTIONS, "1440p", ("format_1440p", "exact", None))
-    view = imports.preview(session, pinchflat.IMPORTER, imports.ImportOptions())
+    view = _preview(session, pinchflat.IMPORTER, imports.ImportOptions())
     changes = {profile["name"]: profile["changes"] for profile in view["profiles"]}
     assert changes["Lists"]["updated"] == ["preferred_format"]
     assert changes["Lists"]["newly_mapped"] == ["preferred_resolution"]
@@ -698,7 +728,7 @@ def test_match_existing_files_after_an_import_skips_its_files_and_holds_the_down
     assert [(item["path"].rsplit("/", 1)[-1], item["confidence"]) for item in scan.results if item["confidence"]] == [
         ("Old name [vid-ccccccc].mp4", "certain"),
     ]
-    step = next(step for step in imports.run_view(session, session.get(ImportRun, run.id))["steps"]
+    step = next(step for step in _run_view(session, session.get(ImportRun, run.id))["steps"]
                 if step["collection_title"] == "Veritasium")
     assert step["matching"] == {"status": "ready", "found": 1} and not step["download_profile_on"]
 
@@ -785,7 +815,7 @@ def test_sources_whose_templates_differ_only_by_a_folder_share_one_profile_with_
     monkeypatch.setattr(type(registry._sources["ytdlp"]), "collection_details", lambda self, url: CollectionDetails(
         slug=url.rsplit("=", 1)[-1], url=url, title="From YouTube", author_name="Derek"))
 
-    view = imports.preview(session, pinchflat.IMPORTER, imports.ImportOptions())
+    view = _preview(session, pinchflat.IMPORTER, imports.ImportOptions())
     assert view["merge_profiles"]
     shared = next(profile for profile in view["profiles"] if profile["merged_from"])
     assert shared["fields"] == ["folder"] and shared["name"] == "Lists (folder per collection)"
@@ -873,12 +903,14 @@ def test_a_step_that_fails_shows_as_failed_and_the_import_finishes(installation)
     session, _applied = installation
     run = _run(session, imports.ImportOptions())
     steps = list(session.scalars(select(ImportStep).where(ImportStep.run_id == run.id)))
-    waiting = imports.run_view(session, session.get(ImportRun, run.id))
+    waiting = _run_view(session, session.get(ImportRun, run.id))
     assert [step["indexed"] for step in waiting["steps"]] == [False] * len(steps)
+    session.commit()
     for step in steps:
-        imports.fail_step(session, step.id, "database is locked")
+        imports.fail_step(step.id, "database is locked")
+    session.expire_all()
 
-    view = imports.run_view(session, session.get(ImportRun, run.id))
+    view = _run_view(session, session.get(ImportRun, run.id))
     assert [step["status"] for step in view["steps"]] == ["failed"] * len(steps)
     assert view["steps"][0]["problems"] == [{"path": None, "error": "database is locked"}]
     assert view["status"] == "finished"
@@ -897,10 +929,10 @@ def test_a_finished_import_turns_on_the_download_profiles_that_were_on_in_pinchf
     run = session.get(ImportRun, run.id)
     assert run.status == "finished"
     # Lofi's source is off in Pinchflat, so the button leaves it off.
-    assert imports.run_view(session, run)["download_profiles"] == {"total": 1, "on": 0}
+    assert _run_view(session, run)["download_profiles"] == {"total": 1, "on": 0}
 
     assert imports.enable_run_download_profiles(session, run) == 1
     session.commit()
-    assert imports.run_view(session, run)["download_profiles"] == {"total": 1, "on": 1}
+    assert _run_view(session, run)["download_profiles"] == {"total": 1, "on": 1}
     enabled = {profile.collection.title: profile.enable_profile for profile in session.scalars(select(DownloadProfile))}
     assert enabled == {"Veritasium": True, "Lofi": False}

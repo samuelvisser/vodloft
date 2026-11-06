@@ -42,7 +42,7 @@ from task_manager.tasks.media_download_operations import attach_redownload_depen
 from task_manager.scheduler.types import OperationSource
 
 from .events import CollectionAdded
-from .operations import (
+from backend.operations.collections import (
     CollectionDeleteDownloadsOperation,
     CollectionDownloadAllOperation,
     CollectionFileRenameOperation,

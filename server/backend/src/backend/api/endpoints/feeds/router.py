@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import FileResponse, RedirectResponse
 
-from .cached_video import get_cached_mp4_path, prepare_cached_mp4
+from backend.services.video_cache import VideoCacheError, get_cached_mp4_path, prepare_cached_mp4
 from .source_stream import episode_stream, proxy_response
 from .source_live import live_audio_response, live_master_response, live_part_response, live_playlist_response
 from .source_tracks import (
@@ -276,10 +276,10 @@ def rss_feed_episode_video_mp4(token: str, episode_slug: str, request: Request):
             )
 
     if cached_file is None:
-        cached_file = prepare_cached_mp4(
-            source_url,
-            episode_uuid=episode_uuid,
-        )
+        try:
+            cached_file = prepare_cached_mp4(source_url, episode_uuid=episode_uuid)
+        except VideoCacheError as error:
+            raise HTTPException(status_code=error.status_code, detail=error.detail) from error
     else:
         try:
             cached_file.touch()

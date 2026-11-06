@@ -220,7 +220,7 @@ def test_collection_added_marks_episode_scan_as_initial_index():
 
 
 def test_collection_index_operation_persists_initial_index_worker_input():
-    from backend.api.endpoints.collections.operations import CollectionIndexOperation
+    from backend.operations.collections import CollectionIndexOperation
 
     operation = CollectionIndexOperation(
         SimpleNamespace(
