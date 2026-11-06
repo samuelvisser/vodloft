@@ -35,8 +35,8 @@ const items: NavItem[] = [
 ]
 
 // How far the desktop sidebar shrinks its logo and footer to fit the window height, in order:
-// the full sidebar; a smaller logo with the footer links side by side; the smallest logo with footer
-// icons only; just the house from the logo with the icons and version on one row; and no footer, with
+// the full sidebar; a smaller logo with the footer links side by side; the smallest logo with the footer
+// icons and version on one row; just the house from the logo with that same footer; and no footer, with
 // its icons next to a small logo. The navigation only scrolls when even the last one is too tall.
 const FITS = ['roomy', 'compact', 'icons', 'house', 'header'] as const
 type SidebarFit = typeof FITS[number]

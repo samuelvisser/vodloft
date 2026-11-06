@@ -180,7 +180,7 @@ body {
     padding: 6px 10px;
     font-size: 13px;
   }
-  .sidebar:is([data-fit="compact"], [data-fit="icons"]) .version { font-size: 12px; }
+  .sidebar[data-fit="compact"] .version { font-size: 12px; }
 
   /* Footer icons only; the label stays for screen readers. */
   .sidebar:is([data-fit="icons"], [data-fit="house"], [data-fit="header"]) .footer-link > span:not(.icon) {
@@ -192,15 +192,15 @@ body {
     white-space: nowrap;
   }
 
-  /* House: icons and version on one row. */
-  .sidebar[data-fit="house"] .sidebar-footer {
+  /* Icons and house: icons and version on one row. */
+  .sidebar:is([data-fit="icons"], [data-fit="house"]) .sidebar-footer {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
   }
-  .sidebar[data-fit="house"] .footer-links { margin: 0; }
-  .sidebar[data-fit="house"] .version { font-size: 12px; }
+  .sidebar:is([data-fit="icons"], [data-fit="house"]) .footer-links { margin: 0; }
+  .sidebar:is([data-fit="icons"], [data-fit="house"]) .version { font-size: 12px; }
 
   /* Header: no footer; its icons sit next to the logo. */
   .sidebar[data-fit="header"] .sidebar-footer { display: none; }
