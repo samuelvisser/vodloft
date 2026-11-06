@@ -13,7 +13,7 @@ import {useActiveOperation} from '../../components/OperationNotifier/OperationNo
 import CollectionIndexingProgress from '../../components/CollectionIndexingProgress/CollectionIndexingProgress'
 import CollectionSyncLogModal from '../../components/CollectionSyncLogModal/CollectionSyncLogModal'
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
-import {OperationControlError, type OperationControlAction, useControlOperation, useStartOperation} from '../../lib/operations'
+import {OperationControlError, type OperationControlAction, useControlOperation, useStartOperation, useStartingOperations} from '../../lib/operations'
 import {PreferredFormatReg} from '../../types/local_media_profile'
 import {getEpisodePreviewTotal, loadEpisodePreviewFromStorage} from '../../lib/cache'
 import SimpleSelect from '../../components/common/SimpleSelect'
@@ -79,6 +79,7 @@ export default function CollectionPage() {
   const { id } = useParams()
   const startOperation = useStartOperation()
   const controlOperation = useControlOperation()
+  const {isStarting, onStartingChange} = useStartingOperations()
   const PAGE_SIZE = 36
 
   const { data: collection, isLoading, error } = useCollection(id)
@@ -484,6 +485,7 @@ export default function CollectionPage() {
                   disabled: downloadAllBusy,
                   disabledReason: downloadAllBusy ? `A bulk download is running for ${collection.title}.` : undefined,
                   operation: downloadAllOperation,
+                  starting: isStarting('collection.download_all'),
                   controls: operationControls(downloadAllOperation?.id, 'bulk download'),
                   onSelect: () => setDownloadAllConfirm(true),
                 },
@@ -493,6 +495,7 @@ export default function CollectionPage() {
                   disabled: metadataRefreshBusy,
                   disabledReason: metadataRefreshDisabledReason,
                   operation: metadataRefreshOperation,
+                  starting: isStarting('collection.refresh_metadata'),
                   controls: operationControls(metadataRefreshOperation?.id, 'metadata refresh'),
                   onSelect: () => setMetadataRefreshConfirm(true),
                 }] : []),
@@ -502,6 +505,7 @@ export default function CollectionPage() {
                   disabled: fileRenameDisabledReason !== undefined,
                   disabledReason: fileRenameDisabledReason,
                   operation: fileRenameOperation,
+                  starting: isStarting('collection.rename_files'),
                   controls: operationControls(fileRenameOperation?.id, 'File Rename'),
                   onSelect: () => setFileRenameConfirm(true),
                 },
@@ -519,6 +523,7 @@ export default function CollectionPage() {
                   disabled: deleteDownloadsDisabledReason !== undefined,
                   disabledReason: deleteDownloadsDisabledReason,
                   operation: deleteDownloadsOperation,
+                  starting: isStarting('collection.delete_downloads'),
                   controls: operationControls(deleteDownloadsOperation?.id, 'bulk delete downloads'),
                   onSelect: () => setDeleteDownloadsConfirm(true),
                 },
@@ -529,6 +534,7 @@ export default function CollectionPage() {
                   disabled: redownloadDisabledReason !== undefined,
                   disabledReason: redownloadDisabledReason,
                   operation: redownloadOperation,
+                  starting: isStarting('collection.redownload_episodes'),
                   controls: operationControls(redownloadOperation?.id, 'bulk delete and re-download', false),
                   onSelect: () => setRedownloadConfirm(true),
                 },
@@ -732,12 +738,14 @@ export default function CollectionPage() {
           seasons={seasons}
           localMediaProfiles={localMediaProfiles ?? []}
           onDismiss={() => setDownloadAllConfirm(false)}
+          onStartingChange={onStartingChange('collection.download_all')}
         />
       )}
 
       <ActionConfirmDialogue
         open={metadataRefreshConfirm}
         operationDefinition={frontendOperationDefinitions['collection.refresh_metadata']}
+        onStartingChange={onStartingChange('collection.refresh_metadata')}
         requestPath={`/collections/${encodeURIComponent(id)}/refresh-metadata`}
         resourceLabel={collection.title}
         title="Refresh all metadata"
@@ -752,6 +760,7 @@ export default function CollectionPage() {
       <ActionConfirmDialogue
         open={fileRenameConfirm}
         operationDefinition={frontendOperationDefinitions['collection.rename_files']}
+        onStartingChange={onStartingChange('collection.rename_files')}
         requestPath={`/collections/${encodeURIComponent(id)}/rename-files`}
         resourceLabel={collection.title}
         title="Rename existing episode files"
@@ -771,6 +780,7 @@ export default function CollectionPage() {
       <ActionConfirmDialogue
         open={deleteDownloadsConfirm}
         operationDefinition={frontendOperationDefinitions['collection.delete_downloads']}
+        onStartingChange={onStartingChange('collection.delete_downloads')}
         requestPath={`/collections/${encodeURIComponent(id)}/delete-downloads`}
         resourceLabel={collection.title}
         title="Bulk delete downloads"
@@ -795,6 +805,7 @@ export default function CollectionPage() {
       <ActionConfirmDialogue
         open={redownloadConfirm}
         operationDefinition={frontendOperationDefinitions['collection.redownload_episodes']}
+        onStartingChange={onStartingChange('collection.redownload_episodes')}
         requestPath={`/collections/${encodeURIComponent(id)}/redownload-episodes`}
         resourceLabel={collection.title}
         title="Bulk delete and re-download"

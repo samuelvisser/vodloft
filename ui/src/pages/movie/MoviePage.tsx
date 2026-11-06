@@ -26,6 +26,7 @@ import {
     OperationStartError,
     useControlOperation,
     useStartOperation,
+    useStartingOperations,
 } from '../../lib/operations'
 import {MovieExtraType} from '../../types/schemas/dailywire_catalog'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
@@ -103,6 +104,7 @@ export default function MoviePage() {
     const queryClient = useQueryClient()
     const startOperation = useStartOperation()
     const controlOperation = useControlOperation()
+    const {isStarting, onStartingChange} = useStartingOperations()
     const {data: localMovies, error: localMoviesError} = useMovies()
     const localMovie = useMemo(
         () => localMovies?.find((item) => item.slug === slug),
@@ -546,6 +548,7 @@ export default function MoviePage() {
                                         ? 'This movie has no previously downloaded media.'
                                         : undefined,
                                 operation: redownloadOperation,
+                                starting: isStarting('movie.redownload_media'),
                                 controls: operationControls(redownloadOperation?.id, 're-download', false),
                                 onSelect: () => setRedownloadConfirm(true),
                             },
@@ -706,6 +709,7 @@ export default function MoviePage() {
             <ActionConfirmDialogue
                 open={redownloadConfirm && Boolean(localMovie)}
                 operationDefinition={frontendOperationDefinitions['movie.redownload_media']}
+                onStartingChange={onStartingChange('movie.redownload_media')}
                 requestPath={`/movies/${encodeURIComponent(slug || '')}/redownload-media`}
                 resourceLabel={movie.title}
                 title="Delete and re-download all media"

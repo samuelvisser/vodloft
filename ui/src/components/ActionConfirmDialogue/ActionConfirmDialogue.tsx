@@ -52,6 +52,8 @@ type ActionConfirmDialogueProps = {
     title: ReactNode
     children: ReactNode
     onDismiss: () => void
+    /** The dialogue closes as soon as the action starts; the page shows the starting state instead. */
+    onStartingChange?: (starting: boolean) => void
     icon?: IconProp
     iconTone?: 'default' | 'danger'
     confirmLabel?: ReactNode
@@ -73,6 +75,7 @@ export default function ActionConfirmDialogue({
     title,
     children,
     onDismiss,
+    onStartingChange,
     icon,
     iconTone = 'default',
     confirmLabel,
@@ -145,6 +148,8 @@ export default function ActionConfirmDialogue({
         }
 
         setStarting(true)
+        onStartingChange?.(true)
+        onDismiss()
         try {
             const base = (window as any).appConfig?.API_URL || '/api'
             const request: RequestInit = {method}
@@ -171,7 +176,6 @@ export default function ActionConfirmDialogue({
             }
 
             await startOperation(`${base}${requestPath}`, request)
-            onDismiss()
             toast.success(`${operationDefinition.label} started for ${resourceLabel}`)
         } catch (error) {
             const detail = error instanceof OperationStartError ? error.message : undefined
@@ -180,6 +184,7 @@ export default function ActionConfirmDialogue({
             )
         } finally {
             setStarting(false)
+            onStartingChange?.(false)
         }
     }
 

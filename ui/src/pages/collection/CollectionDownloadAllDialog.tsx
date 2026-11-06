@@ -43,6 +43,8 @@ type Props = {
   seasons: readonly SeasonRead[]
   localMediaProfiles: readonly LocalMediaProfileRead[]
   onDismiss: () => void
+  /** The dialog closes as soon as the download starts; the page shows the starting state instead. */
+  onStartingChange?: (starting: boolean) => void
 }
 
 export default function CollectionDownloadAllDialog({
@@ -53,6 +55,7 @@ export default function CollectionDownloadAllDialog({
   seasons,
   localMediaProfiles,
   onDismiss,
+  onStartingChange,
 }: Props) {
   const selectId = useId()
   const startOperation = useStartOperation()
@@ -153,6 +156,8 @@ export default function CollectionDownloadAllDialog({
   const submit = handleSubmit(async (values) => {
     if (starting) return
     setStarting(true)
+    onStartingChange?.(true)
+    onDismiss()
     try {
       const base = (window as any).appConfig?.API_URL || '/api'
       const result = await startOperation<{
@@ -171,7 +176,6 @@ export default function CollectionDownloadAllDialog({
           downloadStartingFrom: collectionType === 'podcast' && values.limitBy === 'none' ? values.downloadStartingFrom : null,
         }),
       })
-      onDismiss()
       toast.success(result.queued
         ? `Queued ${result.episodesQueued} episode downloads for ${collectionTitle}`
         : `No new episodes to download for ${collectionTitle}`)
@@ -180,6 +184,7 @@ export default function CollectionDownloadAllDialog({
       toast.error(detail || `Could not queue downloads for ${collectionTitle}`)
     } finally {
       setStarting(false)
+      onStartingChange?.(false)
     }
   })
 

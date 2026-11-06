@@ -25,6 +25,8 @@ export type ActionMenuItem = {
     disabledReason?: string
     progress?: number
     operation?: TaskOperationRead
+    /** The action's request is on its way and its operation does not exist yet. */
+    starting?: boolean
     presentation?: ProgressPresentation
     controls?: ActionMenuControl[]
     tone?: 'default' | 'danger'
@@ -75,7 +77,7 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
     }, [open])
 
     const selectItem = (item: ActionMenuItem) => {
-        if (item.disabled) return
+        if (item.disabled || item.starting) return
         setOpen(false)
         item.onSelect?.()
     }
@@ -139,7 +141,7 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
                     <div id={menuId} className="action-menu-popover" role="menu" aria-label={label}>
                         {items.map((item, index) => {
                             const progress = normalizedProgress(item.progress)
-                            const presentation = item.presentation ?? presentOperationProgress(item.operation)
+                            const presentation = item.presentation ?? presentOperationProgress(item.operation, item.starting)
                             const tooltipId = item.disabled && item.disabledReason
                                 ? `${menuId}-disabled-reason-${index}`
                                 : undefined
