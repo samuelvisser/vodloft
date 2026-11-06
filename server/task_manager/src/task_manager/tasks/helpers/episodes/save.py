@@ -15,9 +15,8 @@ from backend.utils.helpers import generate_uuid
 from backend.types.media_types import MediaType
 from sources.dailywire.api.dw_api.client import MiddlewareAPIError, MiddlewareClient
 from sources.dailywire.api.records import DwEpisodeRecord
-from task_manager.events.transactional import queue_event
 from .identifier import EpisodeWithIdentifier
-from .metadata import METADATA_REFRESH_REQUESTED_EVENT, metadata_is_final_for_new_episode
+from .metadata import metadata_is_final_for_new_episode
 from .no_show import is_no_show_today_slug
 from .status import is_published_final, observe_episode_detail, resolve_episode_status
 from .unusable_media import (
@@ -97,14 +96,7 @@ def upsert_episode(
             site_refresh_offsets(collection.site),
         )
     s.flush()
-
-    if (
-        was_created
-        and episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value
-        and not episode.metadata_is_final
-    ):
-        queue_event(s, METADATA_REFRESH_REQUESTED_EVENT, {"resource_id": episode.id, "id": episode.id})
-
+    # The metadata refresh sweep follows a published episode whose metadata is not final.
     return episode
 
 

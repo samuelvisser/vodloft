@@ -2,9 +2,13 @@
 
 Each Site follows the system schedule, a schedule of its own, or none. A schedule
 is a list of offsets after publication; once the last one has passed and the item
-was looked up, its metadata is final. Episodes of The Daily Wire go through their
-own refresh worker, which follows the same schedule; items of a Source with
-``Feature.METADATA_REFRESH`` go through the metadata refresh sweep.
+was looked up, its metadata is final. The metadata refresh sweep follows every
+item: those of a Source with ``Feature.METADATA_REFRESH`` are looked up in batches
+through the Source, and The Daily Wire's episodes one by one by its own refresh.
+A Source that lists its episodes (``Feature.EPISODE_LISTS``) and has no metadata
+refresh keeps them up to date with its daily catalogue refresh instead: The Daily
+Wire's refresh must never touch those, because its "not found" would mark them as
+having no usable media.
 """
 from __future__ import annotations
 
@@ -55,11 +59,25 @@ def refresh_watch_expired(
 
 
 def sweeps_metadata(source_key: str) -> bool:
-    """Whether the metadata refresh sweep looks this Source's items up again."""
+    """Whether the metadata refresh sweep looks this Source's items up again in batches, through the Source."""
     try:
         return get_source(source_key).has(Feature.METADATA_REFRESH)
     except UnknownSourceError:
         return False
+
+
+def refreshes_one_by_one(source_key: str) -> bool:
+    """Whether The Daily Wire's own refresh looks this Source's episodes up again, one by one."""
+    try:
+        source = get_source(source_key)
+    except UnknownSourceError:
+        return False
+    return not source.has(Feature.EPISODE_LISTS) and not source.has(Feature.METADATA_REFRESH)
+
+
+def refreshes_metadata(source_key: str) -> bool:
+    """Whether VODLoft looks this Source's items up again after they are published."""
+    return sweeps_metadata(source_key) or refreshes_one_by_one(source_key)
 
 
 def new_item_metadata_is_final(

@@ -9,7 +9,6 @@ from backend.services.metadata_refresh import refresh_watch_expired, site_refres
 from sources.dailywire.api.records import DwEpisodeDetailRecord
 
 
-METADATA_REFRESH_REQUESTED_EVENT = "episode.metadata_refresh_requested"
 
 
 def ensure_utc(value: datetime) -> datetime:

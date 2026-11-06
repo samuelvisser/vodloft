@@ -8,7 +8,6 @@ from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode_publication_timing import best_effort_published_date
 from sources.dailywire.api.dw_api.client import ByShowSeason, MiddlewareAPIError, MiddlewareClient
-from task_manager.events.transactional import queue_event
 
 from ._helpers import save_status_metadata
 from backend.services.metadata_refresh import refresh_watch_expired
@@ -17,7 +16,6 @@ from ...helpers.episodes.events import queue_episode_status_events
 from ...helpers.episodes.identifier_reconciliation import reconcile_episode_identifier
 from ...helpers.episodes.mapper import fetch_all_episodes_paginated
 from ...helpers.episodes.metadata import (
-    METADATA_REFRESH_REQUESTED_EVENT,
     episode_refresh_offsets,
     update_episode_from_dailywire,
 )
@@ -295,15 +293,7 @@ def run_monitor_pending_episode(s: Session, *, episode_id: int) -> EpisodePublis
             dw_episode=detail,
             status=new_status,
         )
-    elif (
-        new_status is EpisodePublishStatus.PUBLISHED_FINAL
-        and not episode.metadata_is_final
-    ):
-        queue_event(
-            s,
-            METADATA_REFRESH_REQUESTED_EVENT,
-            {"resource_id": episode.id, "id": episode.id},
-        )
+    # Once published, the metadata refresh sweep follows it until its metadata is final.
 
     track_monitor_publication_timing(
         episode,

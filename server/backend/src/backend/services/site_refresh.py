@@ -8,8 +8,7 @@ from sqlalchemy import select, union
 from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, Site, Video
-from backend.services.episode_metadata_refresh import refreshes_episode_metadata
-from backend.services.metadata_refresh import sweeps_metadata
+from backend.services.metadata_refresh import refreshes_metadata
 from backend.services.pending_episodes import checks_pending, follows_pending
 from backend.types.site_types import SiteRefreshMode
 from sources import UnknownSourceError, get_source
@@ -56,7 +55,7 @@ def _site_refreshes(s: Session) -> dict[str, tuple[bool, bool, bool]]:
     for site_key, source_key in rows:
         refreshes, checks, follows = found.get(site_key, (False, False, False))
         found[site_key] = (
-            refreshes or sweeps_metadata(source_key) or refreshes_episode_metadata(source_key),
+            refreshes or refreshes_metadata(source_key),
             checks or _checks_pending(source_key),
             follows or follows_pending(source_key),
         )

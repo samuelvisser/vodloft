@@ -93,7 +93,6 @@ def test_monitor_reconciles_identifier_while_episode_stays_pending(monkeypatch):
             return detail
 
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
-    monkeypatch.setattr(service, "queue_event", Mock())
     monkeypatch.setattr(episode_events, "queue_event", Mock())
 
     result = service.run_monitor_pending_episode(session, episode_id=episode.id)

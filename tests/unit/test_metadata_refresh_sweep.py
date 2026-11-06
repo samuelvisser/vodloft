@@ -235,3 +235,82 @@ def test_a_site_chooses_how_often_its_upcoming_and_live_episodes_are_looked_up(c
     # The sweep runs every two minutes, so nothing is looked up more often.
     too_often = {**minutes, "pendingLiveMinutes": 1}
     assert client.put("/api/settings/site-refresh/youtube", json={"refreshMode": "system", **too_often}).status_code == 422
+
+
+# --- The Daily Wire's episodes ------------------------------------------------------------------
+
+
+def _dailywire_episode(session, slug: str, published: datetime):
+    from backend.db.models import Episode, Season, Site
+
+    session.add(Site(key="dailywire", name="The Daily Wire", domains=["dailywire.com"], refresh_mode="own",
+                     refresh_intervals="1h,1d"))
+    collection = _collection(session, f"show-{slug}", source_key="dailywire")
+    collection.site_key = "dailywire"
+    season = Season(collection=collection, index=1, slug="season-1", name="One")
+    episode = Episode(
+        uuid=f"uuid-{slug}", type="episode", source_key="dailywire", collection=collection, season=season, index=1,
+        episode_identifier=f"ep.{slug}", slug=slug, title=slug, publish_status="published_final",
+        metadata_is_final=False, sharing_url=f"https://example.test/{slug}", published_date=published,
+    )
+    session.add(episode)
+    session.commit()
+    return episode.id
+
+
+@pytest.fixture
+def daily_wire(monkeypatch):
+    """The Daily Wire's own refresh, answering from a list instead of The Daily Wire."""
+    from task_manager.tasks.workers.refresh_metadata import service
+
+    monkeypatch.setattr(service, "_last_sweep", None)
+    answers: list[bool | None | Exception] = []
+    asked: list[int] = []
+
+    def refresh(_session, episode_id):
+        asked.append(episode_id)
+        answer = answers.pop(0) if answers else True
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setattr(service, "refresh_dailywire_episode", refresh)
+    return answers, asked
+
+
+def test_a_daily_wire_episode_is_refreshed_one_by_one_on_its_sites_schedule(daily_wire, session):
+    from task_manager.tasks.workers.refresh_metadata.service import refresh_episode_now, run_metadata_refresh
+
+    answers, asked = daily_wire
+    now = datetime.now(timezone.utc)
+    episode_id = _dailywire_episode(session, "show", now - timedelta(minutes=30))
+
+    assert "The Daily Wire: looked up 1, 1 changed" in run_metadata_refresh(session, now=now).summary()
+    assert run_metadata_refresh(session, now=now + timedelta(minutes=10)).summary() == "No metadata refresh is due"
+    # A lookup that fails is tried again within the sweep.
+    answers.extend([RuntimeError("HTTP error 503"), True])
+    run_metadata_refresh(session, now=now + timedelta(minutes=40))
+    assert asked == [episode_id] * 3
+
+    run_metadata_refresh(session, now=now + timedelta(days=1))
+    session.expire_all()
+    assert _episode(session, "show").metadata_is_final
+
+    # Refresh now looks it up again, and the sweep follows it as long as its schedule says.
+    refresh_episode_now(session, episode_id, now=now + timedelta(days=2))
+    session.expire_all()
+    assert len(asked) == 5 and _episode(session, "show").metadata_is_final
+
+
+def test_a_daily_wire_episode_that_changed_hands_is_not_made_final(daily_wire, session):
+    from task_manager.tasks.workers.refresh_metadata.service import run_metadata_refresh
+
+    answers, _ = daily_wire
+    now = datetime.now(timezone.utc)
+    _dailywire_episode(session, "show", now - timedelta(days=2))
+
+    # Live again: the pending checks follow it from here.
+    answers.append(False)
+    run_metadata_refresh(session, now=now)
+    session.expire_all()
+    assert not _episode(session, "show").metadata_is_final
