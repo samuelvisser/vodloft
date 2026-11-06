@@ -5,6 +5,7 @@ from ...models.season import *
 from backend.app import db_session
 from backend.security.access import Area, Level
 from backend.security.deps import requires
+from backend.db.core import run_write_transaction
 
 router = APIRouter(prefix="/collections/{collection_slug}/seasons", tags=["Seasons"])
 
@@ -27,14 +28,10 @@ def season_create(body: SeasonAPICreate):
     Creates a new season with the provided metadata and associates it with a collection.
     Returns the created season with a generated slug identifier.
     """
-    with db_session() as s:
-        try:
-            result = create_season(s, body)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return create_season(s, body)
+
+    return run_write_transaction(work)
 
 
 @router.get("/{season_slug}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=SeasonAPIRead)
@@ -56,14 +53,10 @@ def season_update(collection_slug: str, season_slug: str, body: SeasonAPIUpdate)
     Partially updates season information with the provided fields.
     Only specified fields will be modified; omitted fields remain unchanged.
     """
-    with db_session() as s:
-        try:
-            result = update_season(s, collection_slug, season_slug, body)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return update_season(s, collection_slug, season_slug, body)
+
+    return run_write_transaction(work)
 
 
 @router.delete("/{season_slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=SeasonAPIRead)
@@ -74,11 +67,7 @@ def season_delete(collection_slug: str, season_slug: str):
     Permanently removes the specified season and its associated data.
     Returns the deleted season's information for confirmation.
     """
-    with db_session() as s:
-        try:
-            result = delete_season(s, collection_slug, season_slug)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return delete_season(s, collection_slug, season_slug)
+
+    return run_write_transaction(work)

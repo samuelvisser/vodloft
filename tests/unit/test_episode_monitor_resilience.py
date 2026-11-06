@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
+from conftest import use_database
 from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import Session
 
 
@@ -25,8 +27,9 @@ def _monitor_fixture():
     from backend.types.episode_types import EpisodePublishStatus
     from backend.types.collection_types import EpisodeIdentifier, CollectionType
     from task_manager.tasks.helpers.episodes.save import upsert_episode
-    engine = create_engine("sqlite+pysqlite:///:memory:")
+    engine = create_engine("sqlite+pysqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
+    use_database(engine)
     session = Session(engine)
     collection = Collection(
         source_key="dailywire",

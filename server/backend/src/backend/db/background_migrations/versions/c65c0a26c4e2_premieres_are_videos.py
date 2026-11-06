@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 
 from backend.db.core import get_session
+from backend.db.core import run_write_transaction
 from backend.db.models import Collection
 from backend.db.models.media_item import Episode
 from backend.types.collection_types import EpisodeIdentifier
@@ -124,8 +125,7 @@ def _new_identifiers(collection: Collection, episodes: list[Episode], videos: li
 def _apply(collection_id: int, video_slugs: frozenset[str]) -> int:
     from task_manager.tasks.helpers.episodes.events import queue_episode_identifier_changed_event
 
-    session = get_session()
-    try:
+    def work(session):
         collection = session.get(Collection, collection_id)
         if collection is None:
             return 0
@@ -148,17 +148,13 @@ def _apply(collection_id: int, video_slugs: frozenset[str]) -> int:
         session.flush()
         for episode_id, identifier in old.items():
             queue_episode_identifier_changed_event(session, episode=by_id[episode_id], old_episode_identifier=identifier)
-        session.commit()
         logger.info(
             "Turned %d livestreams of collection %s into videos; %d identifiers changed",
             len(videos), collection_id, len(identifiers),
         )
         return len(videos)
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
+
+    return run_write_transaction(work)
 
 
 async def migrate(context) -> None:

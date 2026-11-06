@@ -18,7 +18,7 @@ from backend.api.models.tasks import (
     TaskTriggerRead,
 )
 
-from backend.db.core import get_session
+from backend.db.core import get_session, run_write_transaction
 from backend.services.media_download_collection import stored_sort_text
 from task_manager.scheduler.db import TaskDefinition, TaskRun, TaskSchedule
 from task_manager.scheduler.executor import trigger_now as exec_trigger_now
@@ -44,51 +44,46 @@ def list_definitions() -> list[TaskDefinitionRead]:
 
 
 def create_schedule(body: TaskScheduleCreate) -> TaskScheduleRead:
-    s = get_session()
-    try:
-        definition = s.scalar(
-            select(TaskDefinition).where(TaskDefinition.key == body.definition_key)
-        )
-        if definition is None:
-            raise ValueError(f"Unknown task definition {body.definition_key!r}")
+    return run_write_transaction(lambda s: _create_schedule(s, body))
 
-        schedule = TaskSchedule(
-            definition=definition,
-            resource_type=body.resource_type,
-            resource_id=body.resource_id,
-            trigger=body.trigger,
-            trigger_args=body.trigger_args,
-            active=True,
-            max_retries=body.max_retries,
-        )
-        s.add(schedule)
-        s.flush()
-        schedule.scheduler_job_id = schedule_job(
-            schedule_id=schedule.id,
-            def_key=definition.key,
-            resource_type=body.resource_type,
-            resource_id=body.resource_id,
-            trigger=body.trigger,
-            trigger_args=body.trigger_args,
-        )
-        payload = TaskScheduleRead.model_validate(schedule)
-        s.commit()
-        return payload
-    finally:
-        s.close()
+
+def _create_schedule(s: Session, body: TaskScheduleCreate) -> TaskScheduleRead:
+    definition = s.scalar(
+        select(TaskDefinition).where(TaskDefinition.key == body.definition_key)
+    )
+    if definition is None:
+        raise ValueError(f"Unknown task definition {body.definition_key!r}")
+
+    schedule = TaskSchedule(
+        definition=definition,
+        resource_type=body.resource_type,
+        resource_id=body.resource_id,
+        trigger=body.trigger,
+        trigger_args=body.trigger_args,
+        active=True,
+        max_retries=body.max_retries,
+    )
+    s.add(schedule)
+    s.flush()
+    schedule.scheduler_job_id = schedule_job(
+        schedule_id=schedule.id,
+        def_key=definition.key,
+        resource_type=body.resource_type,
+        resource_id=body.resource_id,
+        trigger=body.trigger,
+        trigger_args=body.trigger_args,
+    )
+    return TaskScheduleRead.model_validate(schedule)
 
 
 def delete_schedule(schedule_id: int) -> None:
-    s = get_session()
-    try:
+    def work(s: Session) -> None:
         schedule = s.get(TaskSchedule, schedule_id)
-        if schedule is None:
-            return
-        remove_job(schedule_id)
-        s.delete(schedule)
-        s.commit()
-    finally:
-        s.close()
+        if schedule is not None:
+            s.delete(schedule)
+
+    run_write_transaction(work)
+    remove_job(schedule_id)
 
 
 def list_schedules(

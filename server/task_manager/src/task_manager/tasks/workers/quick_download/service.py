@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from backend.utils.keyed_locks import KeyedLocks
+from backend.db.core import run_write_transaction
 from backend.services.quick_downloads import (
     QuickDownloadRefused,
     QuickDownloadRequest,
@@ -117,15 +118,12 @@ def run_quick_download(request_input: dict[str, Any], *, progress=None) -> TaskR
 
 def _tell_owner(request) -> None:
     """Messages and actions: the person who asked for it may want to know it is ready."""
-    from backend.db import get_session
     from backend.services.notifications.emitters import quick_download_finished
 
-    session = get_session()
-    try:
+    def work(session):
         quick_download_finished(session, owner=request.owner, title=request.title)
-        session.commit()
+
+    try:
+        run_write_transaction(work)
     except Exception:
-        session.rollback()
         logger.exception("Could not record that quick download %s finished", request.id)
-    finally:
-        session.close()

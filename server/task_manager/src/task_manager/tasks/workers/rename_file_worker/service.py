@@ -127,11 +127,11 @@ async def run_rename_file_worker(
                 unchanged += 1
             elif resolved_source is not None:
                 move = plan_download_relocation(download, source, destination)
-                relocate_downloads(s, [move])
+                relocate_downloads([move])
                 renamed += 1
             elif destination.exists():
                 move = plan_download_relocation(download, source, destination)
-                relocate_downloads(s, [move])
+                relocate_downloads([move])
                 recovered += 1
             else:
                 raise FileNotFoundError(

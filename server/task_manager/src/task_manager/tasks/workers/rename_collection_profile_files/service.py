@@ -6,6 +6,7 @@ from backend.services.no_ascii_names import settle_no_ascii_name
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
+from backend.db.core import run_write_transaction
 from backend.db.models import Episode, Collection, CollectionLocalMediaProfile
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.custom_indexes import ensure_episode_custom_indexes_ready
@@ -28,7 +29,6 @@ _PHYSICAL_STATUSES = (
 
 
 def run_rename_collection_profile_files(
-    session: Session,
     *,
     collection_id: int,
     local_media_profile_id: int,
@@ -36,6 +36,37 @@ def run_rename_collection_profile_files(
     expected_sources: dict[str, str] | None = None,
     progress=None,
 ) -> TaskResult:
+    """Plan the renames in a short write transaction, then move the files outside it."""
+    update_progress(progress, 0, "Planning file renames")
+    planned = run_write_transaction(lambda session: _plan_renames(
+        session, collection_id=collection_id, local_media_profile_id=local_media_profile_id,
+        episode_ids=episode_ids, expected_sources=expected_sources,
+    ))
+    if isinstance(planned, TaskResult):
+        update_progress(progress, 100, planned.summary)
+        return planned
+    moves, considered, unchanged = planned
+    renamed, skipped = relocate_downloads(moves, progress=progress, skip_existing=True)
+    summary = f"Renamed {renamed} file(s)" + (f"; skipped {skipped} existing destination(s)" if skipped else "")
+    update_progress(progress, 100, summary)
+    return TaskResult(summary=summary, data={
+        "files_considered": considered, "files_renamed": renamed,
+        "files_unchanged": unchanged, "files_skipped_existing": skipped,
+    })
+
+
+def _plan_renames(
+    session: Session,
+    *,
+    collection_id: int,
+    local_media_profile_id: int,
+    episode_ids,
+    expected_sources: dict[str, str] | None,
+) -> TaskResult | tuple[list[DownloadRelocation], int, int]:
+    """The moves to make, the number of files considered and unchanged; or the result when there is nothing to move.
+
+    Finding where the files are now can update their records, so this runs in a write transaction.
+    """
     profile = session.get(CollectionLocalMediaProfile, local_media_profile_id)
     if profile is None:
         return TaskResult(summary="Local Media Profile no longer exists")
@@ -63,7 +94,6 @@ def run_rename_collection_profile_files(
 
     downloads = list(session.scalars(stmt).unique())
     if not downloads:
-        update_progress(progress, 100, "No existing files need renaming")
         return TaskResult(
             summary="No existing files need renaming",
             data={"files_considered": 0, "files_renamed": 0, "files_unchanged": 0},
@@ -71,7 +101,7 @@ def run_rename_collection_profile_files(
 
     moves: list[DownloadRelocation] = []
     unchanged = 0
-    for index, download in enumerate(downloads, start=1):
+    for download in downloads:
         source = resolve_media_download_file(session, download)
         if source is None:
             raise FileNotFoundError(
@@ -100,10 +130,8 @@ def run_rename_collection_profile_files(
             unchanged += 1
             continue
         moves.append(plan_download_relocation(download, source, destination))
-        update_progress(progress, min(20, round(index / len(downloads) * 20)), "Planning file renames")
 
     if not moves:
-        update_progress(progress, 100, "Files already have the expected names")
         return TaskResult(
             summary="Files already have the expected names",
             data={
@@ -113,10 +141,4 @@ def run_rename_collection_profile_files(
             },
         )
 
-    renamed, skipped = relocate_downloads(session, moves, progress=progress, skip_existing=True)
-    summary = f"Renamed {renamed} file(s)" + (f"; skipped {skipped} existing destination(s)" if skipped else "")
-    update_progress(progress, 100, summary)
-    return TaskResult(summary=summary, data={
-        "files_considered": len(downloads), "files_renamed": renamed,
-        "files_unchanged": unchanged, "files_skipped_existing": skipped,
-    })
+    return moves, len(downloads), unchanged

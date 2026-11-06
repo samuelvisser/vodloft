@@ -356,6 +356,10 @@ def installation(tmp_path, monkeypatch):
 
     monkeypatch.setattr(registry, "_sources", {**registry._sources, "ytdlp": FakeYtDlp()})
     session = _session()
+    from task_manager.scheduler import scheduler
+
+    # The tasks an import queues are run by the tests themselves, not in the background on this database.
+    monkeypatch.setattr(scheduler, "trigger_now", lambda **_kwargs: None)
     # Adopting files writes through transactions of its own, on the same database.
     from sqlalchemy.orm import sessionmaker
     from backend.db import core
@@ -387,7 +391,8 @@ def _run(session, options):
 
     run = imports.start_run(session, pinchflat.IMPORTER, options)
     session.commit()
-    imports.apply_run(session, run.id)
+    imports.apply_run(run.id)
+    session.expire_all()
     return session.get(type(run), run.id)
 
 
@@ -693,7 +698,8 @@ def test_starting_an_import_and_its_waiting_steps_queues_their_tasks(installatio
     session.commit()
     assert triggered == [("import_run", "system", 0)]
 
-    imports.apply_run(session, run.id)
+    imports.apply_run(run.id)
+    session.expire_all()
     collection = session.scalars(select(Collection).where(Collection.title == "Lofi")).one()
     _index(session, collection, ["vid-eeeeeee"])
     triggered.clear()
@@ -723,7 +729,8 @@ def test_match_existing_files_after_an_import_skips_its_files_and_holds_the_down
     scan = session.scalars(select(ExistingFileScan).where(ExistingFileScan.collection_id == veritasium.id)).one()
     assert scan.status == "scanning" and scan.held_download_profile_ids == [held.id]
 
-    existing_files.run_scan(session, collection_id=veritasium.id, local_media_profile_id=scan.local_media_profile_id)
+    existing_files.run_scan(collection_id=veritasium.id, local_media_profile_id=scan.local_media_profile_id)
+    session.expire_all()
     scan = session.get(ExistingFileScan, scan.id)
     assert [(item["path"].rsplit("/", 1)[-1], item["confidence"]) for item in scan.results if item["confidence"]] == [
         ("Old name [vid-ccccccc].mp4", "certain"),
@@ -772,7 +779,8 @@ def test_with_matching_the_rename_waits_until_the_matches_are_done(installation)
     assert _renames(session) == []
 
     scan = session.scalars(select(ExistingFileScan).where(ExistingFileScan.collection_id == veritasium.id)).one()
-    existing_files.run_scan(session, collection_id=veritasium.id, local_media_profile_id=scan.local_media_profile_id)
+    existing_files.run_scan(collection_id=veritasium.id, local_media_profile_id=scan.local_media_profile_id)
+    session.expire_all()
     existing_files.finish_scan(session, session.get(ExistingFileScan, scan.id))
     existing_files.finish_scan(session, session.get(ExistingFileScan, scan.id))
     assert _renames(session) == [veritasium.id]

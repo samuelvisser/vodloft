@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
+from conftest import use_database
 
 from importer.existing_files import (
     EpisodeFacts,
@@ -202,6 +203,7 @@ def library(tmp_path, monkeypatch):
     settings = get_settings()
     monkeypatch.setattr(settings.download_settings, "download_root", tmp_path)
     session = _session()
+    use_database(session.get_bind())
     collection = Collection(
         source_key="ytdlp", uuid="c", slug="veritasium", title="Veritasium", description="",
         sharing_url="https://www.youtube.com/@veritasium", membership_level="FREE", type=CollectionType.SERIES.value,
@@ -261,7 +263,8 @@ def test_scan_matches_adopts_and_releases_the_download_profile(library, monkeypa
                  template="/downloads/YouTube/{{ collection_title }}/{{ date }} {{ title }}.ext")
     assert (scan.status, download_profile.enable_profile, len(queued)) == ("scanning", False, 1)
 
-    counts = existing_files.run_scan(session, collection_id=collection.id, local_media_profile_id=profile.id)
+    counts = existing_files.run_scan(collection_id=collection.id, local_media_profile_id=profile.id)
+    session.expire_all()
     assert counts == {"files": 4, "certain": 1, "likely": 1, "review": 1}
 
     view = existing_files.scan_view(session, scan)
@@ -361,7 +364,8 @@ def test_a_collection_review_only_shows_its_own_folder_and_the_profile_review_sh
     for owner, holds in ((collection, download_profile), (other, other_download_profile)):
         existing_files.request_scan(session, owner, profile, folder="/downloads/YouTube", hold=[holds])
         session.commit()
-        existing_files.run_scan(session, collection_id=owner.id, local_media_profile_id=profile.id)
+        existing_files.run_scan(collection_id=owner.id, local_media_profile_id=profile.id)
+        session.expire_all()
     scans = {scan.collection_id: scan for scan in session.scalars(select(existing_files.ExistingFileScan))}
 
     # A Collection looks in its own folder, the one its show artwork goes in.

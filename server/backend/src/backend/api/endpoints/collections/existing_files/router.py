@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app import db_session
-from backend.db.models import Collection, CollectionLocalMediaProfile, DownloadProfile, ExistingFileScan
+from backend.db.models import Collection, CollectionLocalMediaProfile, ExistingFileScan
 from backend.security.access import Area, Level
 from backend.security.deps import requires
 from backend.services.adoption import AdoptionError
@@ -22,6 +22,7 @@ from backend.services.existing_files import (
     scan_view,
 )
 
+from backend.db.core import run_write_transaction
 from ....models.existing_files import (
     ExistingFilesAdoptAPIRequest,
     ExistingFilesAdoptAPIResult,
@@ -116,15 +117,11 @@ def existing_files_profile(local_media_profile_id: int):
 )
 def existing_files_profile_scan(local_media_profile_id: int):
     """Look for existing files for every Collection that uses this Local Media Profile."""
-    with db_session() as s:
-        profile = _profile(s, local_media_profile_id)
-        try:
-            count = scan_profile(s, profile)
-            s.commit()
-        except (ExistingFilesError, AdoptionError) as exc:
-            s.rollback()
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        return ExistingFilesProfileScanAPIResult(collections=count)
+    try:
+        count = run_write_transaction(lambda s: scan_profile(s, _profile(s, local_media_profile_id)))
+    except (ExistingFilesError, AdoptionError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return ExistingFilesProfileScanAPIResult(collections=count)
 
 
 @router.get("/{collection_slug}/existing-files/scans", dependencies=_MANAGE, response_model=list[ExistingFilesScanSummaryAPIRead])
@@ -155,39 +152,42 @@ def existing_files_read(collection_slug: str, local_media_profile_id: int = Quer
 @router.post("/{collection_slug}/existing-files/scan", dependencies=_MANAGE, response_model=ExistingFilesScanAPIRead)
 def existing_files_scan(collection_slug: str, body: ExistingFilesScanAPIRequest):
     """Scan a folder for this Collection's files. A new scan replaces the last one."""
-    with db_session() as s:
+    def work(s):
         collection = _collection(s, collection_slug)
         profile = _profile(s, body.local_media_profile_id)
-        try:
-            request_scan(s, collection, profile, folder=body.folder, template=body.template)
-            s.commit()
-        except (ExistingFilesError, AdoptionError) as exc:
-            s.rollback()
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        request_scan(s, collection, profile, folder=body.folder, template=body.template)
+        s.flush()
         return _read(s, collection, profile)
+
+    try:
+        return run_write_transaction(work)
+    except (ExistingFilesError, AdoptionError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/{collection_slug}/existing-files/adopt", dependencies=_MANAGE, response_model=ExistingFilesAdoptAPIResult)
 def existing_files_adopt(collection_slug: str, body: ExistingFilesAdoptAPIRequest):
     """Adopt matched files: VODLoft records them as downloaded and won't download those episodes again."""
-    with db_session() as s:
+    def work(s):
         collection = _collection(s, collection_slug)
         scan = _scan(s, collection, body.local_media_profile_id)
         if scan is None or scan.status not in ("ready", "finished"):
             raise HTTPException(status_code=409, detail="There are no matches to adopt yet")
         result = adopt_matches(s, scan, [(match.path, match.episode_id) for match in body.matches])
-        s.commit()
         return ExistingFilesAdoptAPIResult.model_validate(result)
+
+    return run_write_transaction(work)
 
 
 @router.post("/{collection_slug}/existing-files/finish", dependencies=_MANAGE, response_model=ExistingFilesFinishAPIResult)
 def existing_files_finish(collection_slug: str, body: ExistingFilesFinishAPIRequest):
     """Done matching: switch the Download Profiles that waited for it back on."""
-    with db_session() as s:
+    def work(s):
         collection = _collection(s, collection_slug)
         scan = _scan(s, collection, body.local_media_profile_id)
         if scan is None:
             raise HTTPException(status_code=404, detail="No scan for this profile")
         enabled = finish_scan(s, scan)
-        s.commit()
         return ExistingFilesFinishAPIResult(download_profiles_enabled=enabled)
+
+    return run_write_transaction(work)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from controller.db_utils import db_session
 from backend.db.models import CustomIndexState
+from backend.db.core import run_write_transaction
 from backend.services.custom_indexes import dispatch_custom_index_reconciliation
 from sqlalchemy import select
 from task_manager.scheduler.db import TaskRun
@@ -18,7 +19,7 @@ def _dispatch_newer_generation_on_completion(
 ) -> None:
     if resource_type != "collection" or resource_id is None:
         return
-    with db_session() as session:
+    def work(session):
         run = session.get(TaskRun, task_run_id)
         if run is None or run.status != TaskStatus.SUCCEEDED:
             return
@@ -34,7 +35,8 @@ def _dispatch_newer_generation_on_completion(
             dispatch_custom_index_reconciliation(
                 session, collection_id=resource_id, local_media_profile_id=profile_id,
             )
-            session.commit()
+
+    return run_write_transaction(work)
 
 
 @task(

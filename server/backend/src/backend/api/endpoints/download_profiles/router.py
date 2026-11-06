@@ -12,6 +12,7 @@ from backend.db.models import Collection
 from backend.api.models.source import DownloadOptionsAPIRead, SiteOptionsAPIRead, UpgradeChecksAPIRead
 from sources import get_source
 from backend.services.sites import collection_site
+from backend.db.core import run_write_transaction
 
 router = APIRouter(prefix="/download-profiles", tags=["Download Profiles"])
 
@@ -111,14 +112,10 @@ def download_profiles_create(body: DownloadProfileAPICreate):
     Creates a profile defining which episodes of a collection to download automatically.
     Returns the created profile with tracking information.
     """
-    with db_session() as s:
-        try:
-            result = create_download_profile(s, body)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return create_download_profile(s, body)
+
+    return run_write_transaction(work)
 
 
 @router.patch("/{download_profile_id}", dependencies=[requires(Area.DOWNLOAD_PROFILES, Level.MANAGE)], response_model=DownloadProfileAPIRead)
@@ -126,14 +123,10 @@ def download_profiles_update(download_profile_id: int, body: DownloadProfileAPIU
     """
     Update an existing download profile.
     """
-    with db_session() as s:
-        try:
-            result = update_download_profile(s, download_profile_id, body)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return update_download_profile(s, download_profile_id, body)
+
+    return run_write_transaction(work)
 
 
 @router.delete("/{download_profile_id}", dependencies=[requires(Area.DOWNLOAD_PROFILES, Level.MANAGE)], response_model=DownloadProfileAPIRead)
@@ -144,11 +137,7 @@ def download_profiles_delete(download_profile_id: int):
     Permanently removes the specified profile configuration.
     Returns the deleted profile's information for confirmation.
     """
-    with db_session() as s:
-        try:
-            result = delete_download_profile(s, download_profile_id)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return delete_download_profile(s, download_profile_id)
+
+    return run_write_transaction(work)

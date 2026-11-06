@@ -16,6 +16,7 @@ import asyncio
 from sqlalchemy import select
 
 from backend.db.core import get_session
+from backend.db.core import run_write_transaction
 from backend.db.models import Collection
 from sources.ytdlp.thumbnails import widest_still
 
@@ -42,18 +43,13 @@ def _collection_artwork() -> list[tuple[int, dict[str, str | None]]]:
 
 
 def _apply(collection_id: int, changes: dict[str, str]) -> None:
-    session = get_session()
-    try:
+    def work(session):
         collection = session.get(Collection, collection_id)
         if collection is not None:
             for field, value in changes.items():
                 setattr(collection, field, value)
-            session.commit()
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
+
+    run_write_transaction(work)
 
 
 async def migrate(context) -> None:

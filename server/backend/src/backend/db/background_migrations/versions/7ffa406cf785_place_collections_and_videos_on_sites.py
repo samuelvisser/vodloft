@@ -19,7 +19,7 @@ import logging
 
 from sqlalchemy import select
 
-from backend.db.core import get_session
+from backend.db.core import get_session, run_write_transaction
 from backend.db.models import Collection, Video
 from backend.services.sites import CollectionAlreadyAddedError, place_collection, place_video
 
@@ -31,28 +31,40 @@ title = "Find the Site of collections and videos"
 logger = logging.getLogger(__name__)
 
 
-async def migrate(context) -> None:
+def _unplaced(model) -> list[int]:
     session = get_session()
     try:
-        collections = list(session.scalars(select(Collection).where(Collection.site_key.is_(None)).order_by(Collection.id)))
-        videos = list(session.scalars(select(Video).where(Video.site_key.is_(None)).order_by(Video.id)))
-        total = len(collections) + len(videos)
-        # Each one is saved on its own, so VODLoft is never locked out of the database for the whole run, and a
-        # run that stops halfway goes on where it was: only what has no Site yet is looked up again.
-        for done, collection in enumerate(collections):
-            context.update_progress(done, total, "Finding the Site of collections")
-            try:
-                place_collection(session, collection)
-            except CollectionAlreadyAddedError as exc:
-                logger.warning("'%s' is the same collection as '%s', so it keeps no Site", collection.title, exc.existing.title)
-            session.commit()
-        for done, video in enumerate(videos, start=len(collections)):
-            context.update_progress(done, total, "Finding the Site of videos")
-            place_video(session, video)
-            session.commit()
-        context.update_progress(total, total, "Finding the Site of collections and videos")
-    except Exception:
-        session.rollback()
-        raise
+        return list(session.scalars(select(model.id).where(model.site_key.is_(None)).order_by(model.id)))
     finally:
         session.close()
+
+
+def _place_collection(session, collection_id: int) -> None:
+    collection = session.get(Collection, collection_id)
+    if collection is None:
+        return
+    try:
+        place_collection(session, collection)
+    except CollectionAlreadyAddedError as exc:
+        logger.warning("'%s' is the same collection as '%s', so it keeps no Site", collection.title, exc.existing.title)
+
+
+def _place_video(session, video_id: int) -> None:
+    video = session.get(Video, video_id)
+    if video is not None:
+        place_video(session, video)
+
+
+async def migrate(context) -> None:
+    collections = _unplaced(Collection)
+    videos = _unplaced(Video)
+    total = len(collections) + len(videos)
+    # Each one is saved on its own, so VODLoft is never locked out of the database for the whole run, and a
+    # run that stops halfway goes on where it was: only what has no Site yet is looked up again.
+    for done, collection_id in enumerate(collections):
+        context.update_progress(done, total, "Finding the Site of collections")
+        run_write_transaction(lambda session: _place_collection(session, collection_id))
+    for done, video_id in enumerate(videos, start=len(collections)):
+        context.update_progress(done, total, "Finding the Site of videos")
+        run_write_transaction(lambda session: _place_video(session, video_id))
+    context.update_progress(total, total, "Finding the Site of collections and videos")

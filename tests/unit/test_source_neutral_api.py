@@ -15,6 +15,7 @@ from sqlalchemy.pool import StaticPool
 from backend.api.errors import source_request_error_handler
 from backend.services.source_requests import SourceRequestError
 from sources import ANY_DOMAIN, LinkKind, ResolvedLink, SearchNotice, SearchResults, Site, Source, registry
+from conftest import use_database
 
 
 class StubSource(Source):
@@ -68,6 +69,7 @@ def session():
         "sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool,
     )
     Base.metadata.create_all(engine)
+    use_database(engine)
     s = sessionmaker(bind=engine)()
     yield s
     s.close()

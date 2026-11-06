@@ -10,6 +10,7 @@ from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.db.core import get_session
+from backend.db.core import run_write_transaction
 from task_manager.scheduler.db import (
     TaskDefinition,
     TaskOperation,
@@ -953,8 +954,7 @@ def recover_pending_operations() -> int:
     Candidate selection stays in SQL: terminal targets, non-recoverable targets,
     and operations with an authoritative cancellation marker are never hydrated.
     """
-    session = get_session()
-    try:
+    def work(session):
         cancel_requested = func.coalesce(
             TaskOperation.context[
                 OPERATION_CANCEL_REQUESTED_CONTEXT_KEY
@@ -1004,9 +1004,9 @@ def recover_pending_operations() -> int:
             operation.status = OperationStatus.QUEUED.value
             operation.message = "Queued for recovery"
             operation.finished_at = None
-        session.commit()
-    finally:
-        session.close()
+        return recoveries
+
+    recoveries = run_write_transaction(work)
 
     if not recoveries:
         return 0
@@ -1111,8 +1111,7 @@ def _read_snapshot(operation: TaskOperation) -> OperationSnapshot:
 
 
 def mark_operation_seen(operation_id: str) -> OperationSnapshot | None:
-    session = get_session()
-    try:
+    def work(session):
         operation = _load_operation_with_runs(session, operation_id)
         if operation is None:
             return None
@@ -1120,10 +1119,9 @@ def mark_operation_seen(operation_id: str) -> OperationSnapshot | None:
         operation.notification_seen_at = datetime.now(timezone.utc)
         session.flush()
         payload = _operation_snapshot(operation)
-        session.commit()
         return payload
-    finally:
-        session.close()
+
+    return run_write_transaction(work)
 
 
 def _operation_progress_meta(

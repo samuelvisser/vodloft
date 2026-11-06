@@ -12,6 +12,7 @@ from sqlalchemy import exists, select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.db.core import get_session
+from backend.db.core import run_write_transaction
 from backend.services.quick_downloads import QuickDownloadRequest
 from task_manager.scheduler.db import TaskDefinition, TaskOperation, TaskOperationRun, TaskOperationTarget, TaskRun
 from task_manager.scheduler.operation_context import current_operation_ids
@@ -75,8 +76,7 @@ def record_quick_download_delivered(quick_id: str, fallback_title: str) -> None:
     an operation that is complete at once. The frontend puller picks it up and
     refreshes the quick download lists, like any other finished operation.
     """
-    session = get_session()
-    try:
+    def work(session):
         download = quick_download_operation(session, quick_id)
         operation = create_operation(
             session,
@@ -89,12 +89,11 @@ def record_quick_download_delivered(quick_id: str, fallback_title: str) -> None:
             context={"quick_download_id": quick_id},
         )
         complete_operation(session, operation.id, summary="Downloaded", data={"quick_download_id": quick_id})
-        session.commit()
+
+    try:
+        run_write_transaction(work)
     except Exception:
-        session.rollback()
         logger.warning("Could not record the delivery of quick download %s", quick_id, exc_info=True)
-    finally:
-        session.close()
 
 
 def active_quick_download_operations(session: Session) -> list[TaskOperation]:
@@ -195,13 +194,11 @@ def mark_quick_download_started() -> None:
     operation_ids = current_operation_ids()
     if not operation_ids:
         return
-    session = get_session()
-    try:
+    def work(session):
         for operation in session.scalars(select(TaskOperation).where(TaskOperation.id.in_(operation_ids))):
             operation.context = {**(operation.context or {}), _STARTED_CONTEXT_KEY: True}
-        session.commit()
-    finally:
-        session.close()
+
+    run_write_transaction(work)
 
 
 def recover_quick_downloads() -> None:

@@ -40,6 +40,7 @@ from backend.services.quick_downloads import (
     ready_quick_download,
 )
 from backend.api.models.settings import QuickDownloadPreferencesValue, QuickDownloadSettingsForUser
+from backend.db.core import get_session, run_write_transaction
 from backend.db.models import User
 from backend.security.access import Access, Area, Level
 from backend.services import quick_download_history as history
@@ -62,9 +63,17 @@ _RANGE = re.compile(r"^bytes=(\d*)-(\d*)$")
 logger = logging.getLogger(__name__)
 
 
-def start_quick_download(s: Session, access: Access, body: QuickDownloadAPICreate) -> dict:
-    """Look up the link, refuse what cannot be downloaded or what the rules do not allow, and queue it."""
-    link = resolve_link(s, access, body.url, body.source_key)
+def start_quick_download(access: Access, body: QuickDownloadAPICreate) -> dict:
+    """Look up the link, refuse what cannot be downloaded or what the rules do not allow, and queue it.
+
+    The Source is asked before the short write transaction that queues the download.
+    """
+    s = get_session()
+    try:
+        link = resolve_link(s, access, body.url, body.source_key)
+    finally:
+        s.rollback()
+        s.close()
     source = get_source(link.source.id)
     kind = LinkKind(link.kind)
     try:
@@ -100,10 +109,14 @@ def start_quick_download(s: Session, access: Access, body: QuickDownloadAPICreat
         source, choice, rules, size_bytes=estimate.size_bytes if estimate else None, duration=duration,
         codecs=estimate.codecs if estimate else None,
     )
-    operation = create_quick_download_operation(s, request)
-    history.record_started(request, source_name=source.name, session=s)
-    dispatch_queued_media_download_operations(s)
-    return {"queued": True, "operation_id": operation.id, "quick_download_id": request.id}
+
+    def queue(s: Session) -> dict:
+        operation = create_quick_download_operation(s, request)
+        history.record_started(request, source_name=source.name, session=s)
+        dispatch_queued_media_download_operations(s)
+        return {"queued": True, "operation_id": operation.id, "quick_download_id": request.id}
+
+    return run_write_transaction(queue)
 
 
 def _request(access: Access, link: ResolvedLinkAPIRead, quick_id: str, choice: QuickChoice) -> QuickDownloadRequest:
@@ -342,9 +355,7 @@ def quick_download_history(s: Session, access: Access) -> list[QuickDownloadHist
 
 
 def clear_quick_download_history(s: Session, access: Access) -> int:
-    removed = history.clear_history(s, owner=owner_of(access), everyone=sees_everyones(access))
-    s.commit()
-    return removed
+    return history.clear_history(s, owner=owner_of(access), everyone=sees_everyones(access))
 
 
 # Each user's own defaults -----------------------------------------------------

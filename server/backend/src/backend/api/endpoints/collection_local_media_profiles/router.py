@@ -20,6 +20,7 @@ from .service import (
 )
 from backend.security.access import Area, Level
 from backend.security.deps import requires, requires_any
+from backend.db.core import run_write_transaction
 
 
 router = APIRouter(
@@ -41,14 +42,10 @@ def collection_local_media_profiles_list():
     status_code=status.HTTP_201_CREATED,
 )
 def collection_local_media_profiles_create(body: CollectionLocalMediaProfileAPICreate):
-    with db_session() as s:
-        try:
-            result = create_collection_local_media_profile(s, body)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return create_collection_local_media_profile(s, body)
+
+    return run_write_transaction(work)
 
 
 @router.post(
@@ -58,14 +55,10 @@ def collection_local_media_profiles_create(body: CollectionLocalMediaProfileAPIC
     status_code=status.HTTP_202_ACCEPTED,
 )
 def collection_local_media_profile_rename_files(local_media_profile_slug: str):
-    with db_session() as s:
-        try:
-            result = request_collection_local_media_profile_file_rename(s, local_media_profile_slug)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return request_collection_local_media_profile_file_rename(s, local_media_profile_slug)
+
+    return run_write_transaction(work)
 
 
 @router.get(
@@ -88,19 +81,16 @@ def collection_local_media_profiles_update(
     body: CollectionLocalMediaProfileAPIUpdate,
     rename_files: bool = False,
 ):
-    with db_session() as s:
-        try:
-            result = update_collection_local_media_profile(
-                s,
-                local_media_profile_slug,
-                body,
-                rename_files=rename_files,
-            )
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        result = update_collection_local_media_profile(
+            s,
+            local_media_profile_slug,
+            body,
+            rename_files=rename_files,
+        )
+        return result
+
+    return run_write_transaction(work)
 
 
 @router.delete(
@@ -109,11 +99,7 @@ def collection_local_media_profiles_update(
     response_model=CollectionLocalMediaProfileAPIRead,
 )
 def collection_local_media_profiles_delete(local_media_profile_slug: str):
-    with db_session() as s:
-        try:
-            result = delete_collection_local_media_profile(s, local_media_profile_slug)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return delete_collection_local_media_profile(s, local_media_profile_slug)
+
+    return run_write_transaction(work)

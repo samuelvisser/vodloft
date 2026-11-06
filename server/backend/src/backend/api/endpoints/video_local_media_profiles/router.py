@@ -16,6 +16,7 @@ from .service import (
 )
 from backend.security.access import Area, Level
 from backend.security.deps import requires, requires_any
+from backend.db.core import run_write_transaction
 
 
 router = APIRouter(
@@ -37,14 +38,10 @@ def video_local_media_profiles_list():
     status_code=status.HTTP_201_CREATED,
 )
 def video_local_media_profiles_create(body: VideoLocalMediaProfileAPICreate):
-    with db_session() as s:
-        try:
-            result = create_video_local_media_profile(s, body)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return create_video_local_media_profile(s, body)
+
+    return run_write_transaction(work)
 
 
 @router.get(
@@ -66,18 +63,15 @@ def video_local_media_profiles_update(
     local_media_profile_slug: str,
     body: VideoLocalMediaProfileAPIUpdate,
 ):
-    with db_session() as s:
-        try:
-            result = update_video_local_media_profile(
-                s,
-                local_media_profile_slug,
-                body,
-            )
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        result = update_video_local_media_profile(
+            s,
+            local_media_profile_slug,
+            body,
+        )
+        return result
+
+    return run_write_transaction(work)
 
 
 @router.delete(
@@ -86,11 +80,7 @@ def video_local_media_profiles_update(
     response_model=VideoLocalMediaProfileAPIRead,
 )
 def video_local_media_profiles_delete(local_media_profile_slug: str):
-    with db_session() as s:
-        try:
-            result = delete_video_local_media_profile(s, local_media_profile_slug)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return delete_video_local_media_profile(s, local_media_profile_slug)
+
+    return run_write_transaction(work)

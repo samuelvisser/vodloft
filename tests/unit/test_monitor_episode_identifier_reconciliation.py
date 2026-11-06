@@ -4,7 +4,10 @@ from datetime import datetime, timezone
 from unittest.mock import Mock
 
 from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import Session
+
+from conftest import use_database
 
 
 def test_monitor_reconciles_identifier_while_episode_stays_pending(monkeypatch):
@@ -18,8 +21,9 @@ def test_monitor_reconciles_identifier_while_episode_stays_pending(monkeypatch):
     from task_manager.tasks.helpers.episodes import events as episode_events
     from task_manager.tasks.workers.monitor_pending_episode import service
 
-    engine = create_engine("sqlite+pysqlite:///:memory:")
+    engine = create_engine("sqlite+pysqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
+    use_database(engine)
     session = Session(engine)
 
     collection = Collection(

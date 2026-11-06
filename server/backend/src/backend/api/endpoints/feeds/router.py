@@ -5,6 +5,8 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import FileResponse, RedirectResponse
+from sqlalchemy import inspect
+from sqlalchemy.orm.attributes import set_committed_value
 
 from backend.services.video_cache import VideoCacheError, get_cached_mp4_path, prepare_cached_mp4
 from .source_stream import episode_stream, proxy_response
@@ -32,6 +34,7 @@ from .service import (
     render_rss_feed,
 )
 from backend.app import db_session
+from backend.db.core import run_write_transaction
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.local_media_profile_types import PREFERRED_FORMAT_HEIGHTS, PreferredFormat
 from backend.types.stream_profile_types import (
@@ -127,9 +130,31 @@ def _not_streamed(profile, media: str) -> HTTPException:
     return HTTPException(status_code=404, detail=f"No local {media} is available and {reason}")
 
 
-def _commit_feed_state_if_changed(s) -> None:
-    if s.dirty:
-        s.commit()
+def _save_feed_state(s) -> None:
+    """Store what reading a feed changed, such as the live episodes it hands off, in a short write of its own.
+
+    The request keeps reading with ``s``, which stays a read session.
+    """
+    changes = []
+    for item in list(s.dirty):
+        state = inspect(item)
+        values = {attr.key: attr.value for attr in state.attrs if attr.history.has_changes()}
+        if not values:
+            continue
+        changes.append((type(item), state.identity, values))
+        for key, value in values.items():
+            set_committed_value(item, key, value)
+    if not changes:
+        return
+
+    def work(w) -> None:
+        for model, identity, values in changes:
+            stored = w.get(model, identity)
+            if stored is not None:
+                for key, value in values.items():
+                    setattr(stored, key, value)
+
+    run_write_transaction(work, concurrent=True)
 
 
 def _resolved_download_path(s, download) -> Path | None:
@@ -147,7 +172,7 @@ def rss_feed(token: str, collection_slug: str, request: Request):
     with db_session() as s:
         profile = get_rss_stream_profile_by_token(s, token)
         xml = render_rss_feed(s, request, profile)
-        _commit_feed_state_if_changed(s)
+        _save_feed_state(s)
     return _rss_response(xml, head_only=request.method == "HEAD")
 
 
@@ -157,7 +182,7 @@ def rss_feed_episode_media(token: str, episode_slug: str, request: Request):
     with db_session() as s:
         profile = get_rss_stream_profile_by_token(s, token)
         get_episode_for_feed(s, profile, episode_slug)
-        _commit_feed_state_if_changed(s)
+        _save_feed_state(s)
         audio_primary = (
             profile.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value
             or profile.video_output_mode in RSS_AUDIO_PRIMARY_OUTPUT_MODES
@@ -179,7 +204,7 @@ def rss_feed_episode_audio(token: str, episode_slug: str, request: Request):
     with db_session() as s:
         profile = get_rss_stream_profile_by_token(s, token)
         episode = get_episode_for_feed(s, profile, episode_slug)
-        _commit_feed_state_if_changed(s)
+        _save_feed_state(s)
 
         download = get_local_download_for_episode(
             s,
@@ -233,7 +258,7 @@ def rss_feed_episode_video_mp4(token: str, episode_slug: str, request: Request):
             raise HTTPException(status_code=404, detail="MP4 video is not enabled for this feed")
 
         episode = get_episode_for_feed(s, profile, episode_slug)
-        _commit_feed_state_if_changed(s)
+        _save_feed_state(s)
         if episode.publish_status == EpisodePublishStatus.LIVE.value:
             raise HTTPException(
                 status_code=404,
@@ -309,7 +334,7 @@ def rss_feed_episode_video_hls(token: str, episode_slug: str, request: Request):
             raise HTTPException(status_code=404, detail="HLS video is not enabled for this feed")
 
         episode = get_episode_for_feed(s, profile, episode_slug)
-        _commit_feed_state_if_changed(s)
+        _save_feed_state(s)
         download = get_local_download_for_episode(
             s,
             profile,
@@ -335,7 +360,7 @@ def rss_feed_episode_video_hls(token: str, episode_slug: str, request: Request):
         if source.has(Feature.PAGE_STREAMS) and episode.publish_status == EpisodePublishStatus.LIVE.value:
             if request.method != "HEAD":
                 remember_live_episode_handoff(profile, episode)
-                _commit_feed_state_if_changed(s)
+                _save_feed_state(s)
             return live_master_response(
                 source, _episode_ref(episode), height=_profile_stream_height(profile, site) or 0,
                 head_only=request.method == "HEAD",
@@ -353,7 +378,7 @@ def rss_feed_episode_video_hls(token: str, episode_slug: str, request: Request):
         )
         if request.method != "HEAD":
             remember_live_episode_handoff(profile, episode)
-            _commit_feed_state_if_changed(s)
+            _save_feed_state(s)
 
     return _temporary_stream_redirect(
         source_url,
@@ -376,7 +401,7 @@ def rss_feed_episode_live(token: str, episode_slug: str, name: str, request: Req
         ):
             raise HTTPException(status_code=404, detail="HLS video is not enabled for this feed")
         episode = get_episode_for_feed(session, profile, episode_slug)
-        _commit_feed_state_if_changed(session)
+        _save_feed_state(session)
         if not can_stream_from_source(profile, episode):
             raise _not_streamed(profile, "live video")
         source = get_source(episode.source_key)
@@ -410,7 +435,7 @@ def rss_feed_episode_track(token: str, episode_slug: str, name: str, request: Re
         ):
             raise HTTPException(status_code=404, detail="HLS video is not enabled for this feed")
         episode = get_episode_for_feed(s, profile, episode_slug)
-        _commit_feed_state_if_changed(s)
+        _save_feed_state(s)
         if not can_stream_from_source(profile, episode):
             raise _not_streamed(profile, "HLS video")
         source = get_source(episode.source_key)
@@ -443,7 +468,7 @@ def rss_feed_episode_hls_asset(
             raise HTTPException(status_code=404, detail="HLS video is not enabled for this feed")
 
         episode = get_episode_for_feed(s, profile, episode_slug)
-        _commit_feed_state_if_changed(s)
+        _save_feed_state(s)
         download = get_local_download_for_episode(
             s,
             profile,

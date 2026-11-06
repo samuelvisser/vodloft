@@ -23,6 +23,7 @@ from .service import (
 )
 from backend.security.access import Access, Area, Level
 from backend.security.deps import requires, signed_in
+from backend.db.core import run_write_transaction
 
 router = APIRouter(prefix="/videos", tags=["Videos"])
 
@@ -39,15 +40,9 @@ def video_create(body: VideoAPICreate, access: Access = signed_in()):
     source = video_source(body.source_key)
     access.check_link(source, body.url)
     details = fetch_video_details(source, body.url)
+    video_id = run_write_transaction(lambda s: index_video(s, source.id, details)[0].id)
+    take_first_frames([video_id])
     with db_session() as s:
-        try:
-            video, _ = index_video(s, source.id, details)
-            video_id = video.id
-            s.commit()
-        except Exception:
-            s.rollback()
-            raise
-        take_first_frames(s, [video_id])
         return VideoAPIRead.model_validate(get_video_record(s, video_id))
 
 
@@ -64,15 +59,9 @@ def video_refresh(video_id: int):
         video = get_video_record(s, video_id)
         source_key, url = video.source_key, video.sharing_url
     details = fetch_video_details(video_source(source_key), url)
+    run_write_transaction(lambda s: apply_video_details(get_video_record(s, video_id), details))
+    take_first_frames([video_id])
     with db_session() as s:
-        try:
-            video = get_video_record(s, video_id)
-            apply_video_details(video, details)
-            s.commit()
-        except Exception:
-            s.rollback()
-            raise
-        take_first_frames(s, [video_id])
         return VideoAPIRead.model_validate(get_video_record(s, video_id))
 
 
@@ -84,30 +73,23 @@ def video_refresh(video_id: int):
 )
 def video_download_create(video_id: int, body: MediaDownloadAPICreate):
     """Persist a video artifact target and start it as a generic UI operation."""
-    with db_session() as s:
-        try:
-            download = create_video_download(s, get_video_record(s, video_id), body)
-            operation = create_media_download_operation(s, download, source=OperationSource.UI)
-            dispatch_queued_media_download_operations(s)
-            result = {
-                "queued": True,
-                "operation_id": operation.id,
-                "media_download_id": download.id,
-            }
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        download = create_video_download(s, get_video_record(s, video_id), body)
+        operation = create_media_download_operation(s, download, source=OperationSource.UI)
+        dispatch_queued_media_download_operations(s)
+        result = {
+            "queued": True,
+            "operation_id": operation.id,
+            "media_download_id": download.id,
+        }
+        return result
+
+    return run_write_transaction(work)
 
 
 @router.delete("/{video_id}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=VideoAPIRead)
 def video_delete(video_id: int):
-    with db_session() as s:
-        try:
-            result = delete_video(s, video_id)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return delete_video(s, video_id)
+
+    return run_write_transaction(work)

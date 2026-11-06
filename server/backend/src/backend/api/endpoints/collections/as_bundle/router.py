@@ -3,9 +3,9 @@ from fastapi import APIRouter, HTTPException, Request, status
 from .service import *
 from ....models.collection import CollectionAPIRead
 from ....models.collection_as_bundle import CollectionAPICreateBundle
-from backend.app import db_session
 from backend.security.access import Access, Area, Level
 from backend.security.deps import requires, signed_in
+from backend.db.core import run_write_transaction
 
 router = APIRouter(prefix = "/as-bundle")
 
@@ -18,11 +18,7 @@ def collection_create_as_bundle(body: CollectionAPICreateBundle, request: Reques
     access.check_link_at(body.collection.source_key, body.collection.sharing_url)
     if body.stream_profile is not None and not access.allows(Area.STREAM_PROFILES):
         raise HTTPException(status_code=403, detail="You may not create Stream Profiles.")
-    with db_session() as s:
-        try:
-            result = create_collection_bundle(s, request, body, added_by_id=access.user_id)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return create_collection_bundle(s, request, body, added_by_id=access.user_id)
+
+    return run_write_transaction(work)

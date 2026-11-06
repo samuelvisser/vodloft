@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
-from backend.db.core import get_session
+from backend.db.core import run_write_transaction
 from sqlalchemy import select
 
 from task_manager.scheduler.db import TaskDefinition
@@ -225,8 +225,7 @@ def run_recovery_dispatchers() -> int:
 
 def sync_registry_to_db() -> None:
     """Insert new task definitions and refresh metadata for existing ones."""
-    session = get_session()
-    try:
+    def work(session):
         existing = {
             definition.key: definition
             for definition in session.execute(select(TaskDefinition)).scalars()
@@ -248,6 +247,5 @@ def sync_registry_to_db() -> None:
             definition.description = meta.description
             definition.allowed_resource_types = list(meta.allowed_resource_types)
             definition.default_max_retries = meta.default_max_retries
-        session.commit()
-    finally:
-        session.close()
+
+    run_write_transaction(work)

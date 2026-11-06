@@ -365,6 +365,8 @@ def _handle_users_command(args: argparse.Namespace) -> None:
     from getpass import getpass
 
     from backend.db import get_session
+    from backend.db.core import run_write_transaction
+    from backend.db.models import User
     from backend.security.access import TEMPLATES, ADMINISTRATOR_TEMPLATE
     from backend.services import users
     from config.security.passwords import derive_admin_password_client_value
@@ -389,6 +391,8 @@ def _handle_users_command(args: argparse.Namespace) -> None:
             if user is None:
                 print(f"No user named {args.username!r}.", file=sys.stderr)
                 sys.exit(1)
+            user_id = user.id
+            session.rollback()
             password = getpass("New password: ")
             if len(password) < 7:
                 print("Use at least 7 characters.", file=sys.stderr)
@@ -396,13 +400,18 @@ def _handle_users_command(args: argparse.Namespace) -> None:
             if getpass("Again: ") != password:
                 print("The passwords differ.", file=sys.stderr)
                 sys.exit(1)
-            users.reset_password(user, derive_admin_password_client_value(password), must_change=False)
-            if args.administrator:
-                users.update_user(session, user, access=users.AccessList.from_template(ADMINISTRATOR_TEMPLATE))
-            users.update_user(session, user, enabled=True)
-            session.commit()
-            role = TEMPLATES[ADMINISTRATOR_TEMPLATE].name.lower() if users.is_administrator(user) else "user"
-            print(f"{user.username} ({role}) can sign in with the new password. Their other sessions are signed out.")
+
+            def reset(w) -> tuple[str, str]:
+                user = w.get(User, user_id)
+                users.reset_password(user, derive_admin_password_client_value(password), must_change=False)
+                if args.administrator:
+                    users.update_user(w, user, access=users.AccessList.from_template(ADMINISTRATOR_TEMPLATE))
+                users.update_user(w, user, enabled=True)
+                role = TEMPLATES[ADMINISTRATOR_TEMPLATE].name.lower() if users.is_administrator(user) else "user"
+                return user.username, role
+
+            username, role = run_write_transaction(reset)
+            print(f"{username} ({role}) can sign in with the new password. Their other sessions are signed out.")
             return
 
     raise RuntimeError(f"Unsupported users command: {args.users_command}")

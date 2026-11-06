@@ -5,7 +5,10 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import Session
+
+from conftest import use_database
 
 
 def _episode_record(
@@ -296,8 +299,9 @@ def test_metadata_refresh_repairs_wrong_main_episode_identifier(monkeypatch):
     import backend.db.models  # noqa: F401
     from backend.db import Base
     from task_manager.tasks.workers.refresh_episode_metadata import service
-    engine = create_engine("sqlite+pysqlite:///:memory:")
+    engine = create_engine("sqlite+pysqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
+    use_database(engine)
     session = Session(engine)
     collection, episode = _make_collection_and_episode(session, identifier="ep-extra.other.2500.1")
     detail = _episode_detail(slug=episode.slug, episode_number="2500.00", publish_status="PUBLISHED")
@@ -324,8 +328,9 @@ def test_identifier_reconciliation_can_fix_extra_ordinal_after_collision_is_gone
     import backend.db.models  # noqa: F401
     from backend.db import Base
     from task_manager.tasks.helpers.episodes.identifier import reconcile_episode_identifier_from_dailywire
-    engine = create_engine("sqlite+pysqlite:///:memory:")
+    engine = create_engine("sqlite+pysqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
+    use_database(engine)
     session = Session(engine)
     collection, episode = _make_collection_and_episode(session, identifier="ep-extra.other.2500.2")
     detail = _episode_detail(slug=episode.slug, episode_number="2500.01")
@@ -341,8 +346,9 @@ def test_identifier_reconciliation_uses_dailywire_segment_10_directly():
     import backend.db.models  # noqa: F401
     from backend.db import Base
     from task_manager.tasks.helpers.episodes.identifier import reconcile_episode_identifier_from_dailywire
-    engine = create_engine("sqlite+pysqlite:///:memory:")
+    engine = create_engine("sqlite+pysqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
+    use_database(engine)
     session = Session(engine)
     _collection, episode = _make_collection_and_episode(session, identifier="ep-extra.other.2500.1")
     detail = _episode_detail(slug=episode.slug, episode_number="2500.10")

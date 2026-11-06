@@ -16,6 +16,7 @@ from sources import ytdlp_runner as runner
 from sources.ytdlp import YtDlpSource
 
 from test_ytdlp_collections import ListedSource
+from conftest import use_database
 
 
 def _video(slug: str, day: int, tag: str = MAIN_TAG) -> VideoDetails:
@@ -38,6 +39,7 @@ def session():
 
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
+    use_database(engine)
     s = sessionmaker(bind=engine)()
     yield s
     s.close()

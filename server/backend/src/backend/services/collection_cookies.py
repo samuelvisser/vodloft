@@ -55,6 +55,5 @@ def note_failed_download(session: Session, media_download_id: int, error: str) -
     ):
         return False
     collection.cookies_needed_until = datetime.now(timezone.utc) + AUTOMATIC_COOKIES_FOR
-    session.commit()
     logger.info("%s needs signing in; '%s' uses the cookies file for a week", source.name, collection.title)
     return True

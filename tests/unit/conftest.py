@@ -365,3 +365,29 @@ def folder_snapshot(folder):
         digest = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
         snapshot[str(path.relative_to(folder))] = (stat.st_size if path.is_file() else None, stat.st_mtime_ns, digest)
     return snapshot
+
+
+
+@pytest.fixture(autouse=True)
+def restore_database():
+    """Undo ``use_database`` after each test, and stop what a test left running on its database."""
+    from backend.db import core
+
+    saved = core._engine, core._SessionLocal
+    yield
+    # A task a test started in the background must not run on the next test's database.
+    from task_manager.scheduler import scheduler
+
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+    if any(isinstance(started, AsyncIOScheduler) for started in scheduler._started_task_schedulers()):
+        scheduler.shutdown_scheduler(wait=False)
+    core._engine, core._SessionLocal = saved
+
+
+def use_database(engine) -> None:
+    """Point VODLoft's own sessions, such as the ones ``run_write_transaction`` opens, at a test's engine."""
+    from backend.db import core
+
+    core._engine = engine
+    core._SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

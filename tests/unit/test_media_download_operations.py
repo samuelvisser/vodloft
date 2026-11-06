@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from conftest import mark_artifact_available
+from conftest import mark_artifact_available, use_database
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
 
 
 def _make_download(session: Session, *, slug: str = "episode-1"):
@@ -74,8 +75,9 @@ def _session(*, autoflush: bool = True):
     from backend.db import Base
     from task_manager.scheduler.db import TaskDefinition
 
-    engine = create_engine("sqlite+pysqlite:///:memory:")
+    engine = create_engine("sqlite+pysqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
+    use_database(engine)
     session = Session(engine, autoflush=autoflush)
     session.add(TaskDefinition(
         key="download_episode",
@@ -1460,6 +1462,7 @@ def test_delete_media_download_action_removes_owned_files_and_history(tmp_path, 
         monkeypatch.setattr(download_actions, "db_session", test_db_session)
 
         assert download_actions.delete_media_download_action(download_id)
+        session.expire_all()
         # A Download Profile may download it again.
         assert not episode.download_dismissed(profile_id)
         assert not media.exists()
@@ -1501,6 +1504,7 @@ def test_delete_media_download_action_removes_unfinished_parts(tmp_path, monkeyp
         monkeypatch.setattr(download_actions, "db_session", test_db_session)
 
         assert download_actions.delete_media_download_action(download_id)
+        session.expire_all()
         assert not part.exists()
         assert session.get(MediaDownloadBase, download_id) is None
     finally:

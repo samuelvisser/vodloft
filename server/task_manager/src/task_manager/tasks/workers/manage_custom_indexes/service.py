@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.models import CustomIndexState, Episode, Collection, CollectionLocalMediaProfile
+from backend.db.core import run_write_transaction
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.custom_indexes import (
     profile_collection_scope_filter, reconcile_collection_profile_custom_indexes,
@@ -85,19 +86,21 @@ def run_manage_custom_indexes(
     session: Session, *, collection_id: int, local_media_profile_id: int, progress=None,
 ) -> TaskResult:
     update_progress(progress, 5, "Calculating Episode index ranks")
-    while True:
+    session.rollback()
+
+    def reconcile(w: Session):
         result = reconcile_collection_profile_custom_indexes(
-            session, collection_id=collection_id, local_media_profile_id=local_media_profile_id,
+            w, collection_id=collection_id, local_media_profile_id=local_media_profile_id,
         )
-        if not result.superseded:
-            break
-        session.rollback()
-    _queue_targeted_rename(
-        session, collection_id=collection_id, local_media_profile_id=local_media_profile_id,
-        episode_ids=result.synced_episode_ids,
-        expected_sources=result.synced_source_paths,
-    )
-    session.commit()
+        _queue_targeted_rename(
+            w, collection_id=collection_id, local_media_profile_id=local_media_profile_id,
+            episode_ids=result.synced_episode_ids,
+            expected_sources=result.synced_source_paths,
+        )
+        return result
+
+    # The write transaction keeps every other writer out, so no newer generation can supersede it.
+    result = run_write_transaction(reconcile)
     update_progress(progress, 100, "Episode index ranks reconciled")
     return TaskResult(
         summary="Custom indexes reconciled",
@@ -116,28 +119,24 @@ async def run_manage_profile_custom_indexes(
     states = list(session.scalars(select(CustomIndexState).where(
         CustomIndexState.local_media_profile_id == local_media_profile_id,
     ).order_by(CustomIndexState.collection_id)))
+    collection_ids = [state.collection_id for state in states]
+    session.rollback()
     changed = 0
-    for index, state in enumerate(states, start=1):
-        async with custom_index_pair_lock(state.collection_id, local_media_profile_id):
-            while True:
-                result = reconcile_collection_profile_custom_indexes(
-                    session, collection_id=state.collection_id,
-                    local_media_profile_id=local_media_profile_id,
-                    auto_rename=False,
-                )
-                if not result.superseded:
-                    break
-                session.rollback()
-            session.commit()
+    for index, collection_id in enumerate(collection_ids, start=1):
+        async with custom_index_pair_lock(collection_id, local_media_profile_id):
+            result = run_write_transaction(lambda w: reconcile_collection_profile_custom_indexes(
+                w, collection_id=collection_id,
+                local_media_profile_id=local_media_profile_id,
+                auto_rename=False,
+            ))
         changed += result.assignments_changed
         update_progress(progress, round(index / max(len(states), 1) * 90), f"Indexed {index}/{len(states)} collections")
 
-    rename_queued = False
-    if rename_after:
-        profile = session.get(CollectionLocalMediaProfile, local_media_profile_id)
-        if profile is not None:
-            rename_queued = _queue_profile_rename(session, profile)
-            session.commit()
+    def queue_rename(w: Session) -> bool:
+        profile = w.get(CollectionLocalMediaProfile, local_media_profile_id)
+        return profile is not None and _queue_profile_rename(w, profile)
+
+    rename_queued = rename_after and run_write_transaction(queue_rename)
     update_progress(progress, 100, "Custom index maintenance complete")
     return TaskResult(
         summary="Custom index maintenance complete",

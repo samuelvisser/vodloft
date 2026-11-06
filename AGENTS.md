@@ -95,15 +95,19 @@ VODLoft uses Pydantic as the API mapping and serialization boundary. Keep that b
   data merely because the fields currently happen to overlap.
 
 ## Database writes
-A transaction that reads a row and then writes based on what it read (task runs, operations, anything two
-workers can change at once) runs through `run_write_transaction` in `backend.db.core`. It reserves the write
-up front, retries the whole transaction when another one was in the way, and commits. Do not add retry loops,
-extra worker pools or process-wide caches to work around a locked database; fix the transaction instead.
-Keep each such transaction short: SQLite has one writer at a time, so every other write waits while it runs,
+Every write to the database runs through `run_write_transaction` in `backend.db.core`. It reserves the write
+up front, retries the whole transaction when another one was in the way, and commits. A session from `get_session()`
+only reads: a flush or an insert, update or delete on it raises `UnguardedWriteError`, so a missed write shows up in
+the tests. Do not add retry loops, extra worker pools or process-wide caches to work around a locked database; fix the
+transaction instead.
+
+Keep each write transaction short: SQLite has one writer at a time, so every other write waits while it runs,
 and a retry runs it again. Read files, look things up at a Site and do other slow work before it, and send webhooks
-or other side effects after it. A transaction that only writes what it was given, such as a new row or a value the
-user chose, passes `concurrent=True`, so PostgreSQL runs it beside other writers instead of queueing it.
-Reading never writes: code that only shows state computes it and rolls back.
+or other side effects after it. A write transaction never starts another one, so progress updates and other helpers
+that write on their own run outside it. A transaction that only writes what it was given, such as a new row or a
+value the user chose, passes `concurrent=True`, so PostgreSQL runs it beside other writers instead of queueing it.
+A check that runs often and seldom finds anything to store uses `write_when_changed`, which only takes the writer's
+turn when the check changed something. Reading never writes: code that only shows state computes it and rolls back.
 
 ## Forms
 VODLoft forms are configured within React Hook Form and Zod to ensure field validation in the frontend.

@@ -7,6 +7,7 @@ from time import monotonic
 from sqlalchemy import select
 
 from backend.db.models import CustomIndexState, CollectionLocalMediaProfile
+from backend.db.core import run_write_transaction, write_when_changed
 from backend.services.custom_indexes import (
     profile_uses_custom_indexes, request_custom_index_reconciliation,
 )
@@ -49,12 +50,31 @@ def pair_is_ready(collection_id: int, local_media_profile_id: int) -> bool:
 def request_missing_index_repair(error: CustomIndexNotReadyError) -> None:
     if error.repair_collection_id is None or error.repair_profile_id is None:
         return
-    with db_session() as session:
+    def work(session):
         request_custom_index_reconciliation(
             session, collection_id=error.repair_collection_id,
             local_media_profile_id=error.repair_profile_id,
         )
-        session.commit()
+
+    run_write_transaction(work)
+
+
+def _pair_settled(session, collection_id: int, local_media_profile_id: int) -> bool:
+    """Whether the pair needs no more waiting. Asks for its Custom Indexes when they were never asked for."""
+    profile = session.get(CollectionLocalMediaProfile, local_media_profile_id)
+    if profile is None or not profile_uses_custom_indexes(profile):
+        return True
+    state = session.scalar(select(CustomIndexState).where(
+        CustomIndexState.collection_id == collection_id,
+        CustomIndexState.local_media_profile_id == local_media_profile_id,
+    ))
+    if state is None:
+        request_custom_index_reconciliation(
+            session, collection_id=collection_id,
+            local_media_profile_id=local_media_profile_id,
+        )
+        return False
+    return state.completed_generation == state.requested_generation
 
 
 async def wait_for_custom_index_pair(
@@ -67,22 +87,8 @@ async def wait_for_custom_index_pair(
         while True:
             if progress is not None and hasattr(progress, "raise_if_canceled"):
                 progress.raise_if_canceled()
-            with db_session() as session:
-                profile = session.get(CollectionLocalMediaProfile, local_media_profile_id)
-                if profile is None or not profile_uses_custom_indexes(profile):
-                    return
-                state = session.scalar(select(CustomIndexState).where(
-                    CustomIndexState.collection_id == collection_id,
-                    CustomIndexState.local_media_profile_id == local_media_profile_id,
-                ))
-                if state is None:
-                    request_custom_index_reconciliation(
-                        session, collection_id=collection_id,
-                        local_media_profile_id=local_media_profile_id,
-                    )
-                    session.commit()
-                elif state.completed_generation == state.requested_generation:
-                    return
+            if write_when_changed(lambda session: _pair_settled(session, collection_id, local_media_profile_id)):
+                return
             if monotonic() >= deadline:
                 raise CustomIndexNotReadyError(
                     f"Manage Custom Indexes did not finish for Collection {collection_id}, "

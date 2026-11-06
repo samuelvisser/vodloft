@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import pytest
+
+from conftest import use_database
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -110,7 +112,9 @@ def installation(tmp_path, monkeypatch):
     folder.mkdir()
     wireloft_installation(folder, downloads)
     import_uploads.upload_from_folder(wireloft.IMPORTER, folder, include_secrets=True)
-    return _session(), applied
+    session = _session()
+    use_database(session.get_bind())
+    return session, applied
 
 
 def _run(session, options):
@@ -119,7 +123,8 @@ def _run(session, options):
 
     run = imports.start_run(session, wireloft.IMPORTER, options)
     session.commit()
-    imports.apply_run(session, run.id)
+    imports.apply_run(run.id)
+    session.expire_all()
     return session.get(ImportRun, run.id)
 
 

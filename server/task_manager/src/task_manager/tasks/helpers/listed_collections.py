@@ -35,6 +35,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Season, Collection
+from backend.db.core import run_write_transaction
 from backend.services.seasons import create_season_record
 from backend.services.metadata_refresh import new_item_metadata_is_final
 from backend.services.pending_episodes import site_follows_pending
@@ -183,16 +184,22 @@ def index_listed_collection(s: Session, *, collection_id: int, source: Source, p
     collection = s.get(Collection, collection_id)
     if collection is None:
         return 0
+    title = collection.title
     found = _list_new_episodes(s, collection, source, progress)
+    s.rollback()
     if dry_run:
         for details in found:
             logger.info("Dry run: would add %s (%s)", details.slug, details.title)
         return len(found)
-    return add_listed_episodes(s, collection_id=collection_id, found=found, progress=progress)
+    if found:
+        update_progress(progress, _SAVING_PROGRESS, f"Saving {len(found)} new episodes of '{title}'")
+    return run_write_transaction(lambda w: add_listed_episodes(w, collection_id=collection_id, found=found))
 
 
-def add_listed_episodes(s: Session, *, collection_id: int, found: list[VideoDetails], progress=None) -> int:
-    """Save episodes a Source found, numbered after the ones the collection has. Returns how many were added."""
+def add_listed_episodes(s: Session, *, collection_id: int, found: list[VideoDetails]) -> int:
+    """Save episodes a Source found, numbered after the ones the collection has. Returns how many were added.
+
+    ``s`` is a write transaction's session."""
     if not found:
         return 0
     collection = s.get(Collection, collection_id)
@@ -209,7 +216,6 @@ def add_listed_episodes(s: Session, *, collection_id: int, found: list[VideoDeta
         if details.slug not in known:
             new.setdefault(details.slug, details)
     ordered = sorted(new.values(), key=lambda details: _order_key(details, now))
-    update_progress(progress, _SAVING_PROGRESS, f"Saving {len(ordered)} new episodes of '{collection.title}'")
 
     # A Source's own season is found by its slug, a season per year by its year.
     by_slug = {season.slug: season for season in collection.seasons}
@@ -301,9 +307,17 @@ def refresh_listed_collection(s: Session, *, collection_id: int, source: Source)
     ]
     if not items:
         return RefreshCounts()
+    title = collection.title
     # No transaction stays open while the Source looks videos up.
     s.rollback()
     refresh = source.refresh_items(url, items)
+    counts = run_write_transaction(lambda w: _apply_refresh(w, collection_id, refresh))
+    if counts.removed or counts.returned:
+        logger.info("'%s': %d episodes no longer at the Source, %d back", title, counts.removed, counts.returned)
+    return counts
+
+
+def _apply_refresh(s: Session, collection_id: int, refresh) -> RefreshCounts:
     updated = removed = returned = 0
     for episode in s.scalars(select(Episode).where(Episode.collection_id == collection_id)):
         if episode.source_slug in refresh.removed:
@@ -320,7 +334,4 @@ def refresh_listed_collection(s: Session, *, collection_id: int, source: Source)
         changed = apply_refreshed_details(episode, details)
         updated += changed
         check_upgrades_after_refresh(s, episode)
-    s.commit()
-    if removed or returned:
-        logger.info("'%s': %d episodes no longer at the Source, %d back", collection.title, removed, returned)
     return RefreshCounts(updated=updated, removed=removed, returned=returned)

@@ -5,7 +5,9 @@ import importlib
 from types import SimpleNamespace
 
 import pytest
+from conftest import use_database
 from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import Session
 
 
@@ -36,8 +38,9 @@ def db_session():
     import backend.db.models  # noqa: F401
     from backend.db import Base
 
-    engine = create_engine("sqlite+pysqlite:///:memory:")
+    engine = create_engine("sqlite+pysqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
+    use_database(engine)
     session = Session(engine)
     yield session
     session.close()
@@ -300,6 +303,7 @@ def test_square_thumbnail_background_migration_leaves_missing_collection_empty(
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
+    use_database(engine)
 
     with Session(engine) as session:
         for slug in ("matched-collection", "missing-collection"):
@@ -344,6 +348,7 @@ def test_square_thumbnail_background_migration_only_fills_missing_square(
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
+    use_database(engine)
 
     def add_collection(session, slug, *, square):
         session.add(Collection(

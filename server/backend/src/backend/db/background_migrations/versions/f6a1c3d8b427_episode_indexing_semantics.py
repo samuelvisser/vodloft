@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 from sqlalchemy import select
 
 from backend.db.core import get_session
+from backend.db.core import run_write_transaction
 from backend.db.datetime_types import utc_datetime
 from backend.db.models import Metadata, Collection
 from backend.db.models.media_item import Episode
@@ -569,8 +570,7 @@ def _apply_collection_plan(plan: CollectionPlan) -> None:
         queue_episode_identifier_changed_event,
     )
 
-    session = get_session()
-    try:
+    def work(session):
         collection = session.get(Collection, plan.collection_id)
         if collection is None:
             return
@@ -629,12 +629,8 @@ def _apply_collection_plan(plan: CollectionPlan) -> None:
 
         collection.set_meta("ep_id.latest_aux_num", str(plan.latest_aux_num))
         collection.set_meta("ep_id.latest_trailer_num", str(plan.latest_trailer_num))
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
+
+    return run_write_transaction(work)
 
 
 def _build_client(collections: list[LocalCollection]) -> MiddlewareClient:

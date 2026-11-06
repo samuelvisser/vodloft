@@ -11,7 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from conftest import available_artifact
+from conftest import available_artifact, use_database
 
 MIGRATION = "backend.db.background_migrations.versions.e8ea12937f41_download_lengths"
 LENGTHS = {"/dw/cut.mkv": 7 * 3600.0, "/dw/old.mkv": 3600.0, "/yt/video.mkv": 600.0}
@@ -32,6 +32,7 @@ def factory():
 
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
+    use_database(engine)
     yield sessionmaker(engine)
     engine.dispose()
 
