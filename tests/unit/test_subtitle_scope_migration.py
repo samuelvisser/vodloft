@@ -1,3 +1,4 @@
+import pytest
 """Verify the subtitle defaults follow existing profile scope."""
 from importlib import import_module
 
@@ -6,6 +7,7 @@ from alembic.operations import Operations
 from sqlalchemy import create_engine, inspect, text
 
 
+@pytest.mark.sqlite_only
 def test_subtitle_migration_uses_existing_profile_scope():
     migration = import_module(
         "backend.db.alembic.versions.e6a2c9d4f817_vodloft_0_4_0"

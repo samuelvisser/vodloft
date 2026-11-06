@@ -5,7 +5,7 @@ import tomllib
 from typing import Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import computed_field
+from pydantic import Field, field_validator
 from pydantic_settings import DotEnvSettingsSource, EnvSettingsSource, YamlConfigSettingsSource
 
 from config.settings.base import SettingsBase, normalize_settings_source_keys
@@ -77,12 +77,16 @@ class AppSettings(SettingsBase):
 
     app_version: str = Field(default_factory=get_app_version, frozen=True)
 
+    # The SQLite file used when no database_url is set. Also the file that a
+    # PostgreSQL database takes its data from on its first start.
     database_path: Path = PROJECT_ROOT / "config" / "vodloft.db"
+    # A full SQLAlchemy URL such as postgresql+psycopg://user:password@host/vodloft.
+    # Excluded from dumps so its password never reaches the API or config.yml.
+    database_url: str | None = Field(default=None, exclude=True, repr=False)
 
-    @computed_field
     @property
-    def database_url(self) -> str:
-        return f"sqlite:///{self.database_path.as_posix()}"
+    def resolved_database_url(self) -> str:
+        return self.database_url or f"sqlite:///{self.database_path.as_posix()}"
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     timezone: str = Field(default="UTC", min_length=1, description="Application timezone")
@@ -145,6 +149,13 @@ class AppSettings(SettingsBase):
         scan_cron="*/10 * * * *",
         verify_file_size=True,
     ))
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _normalize_database_url(cls, value: Any):
+        if value is None:
+            return None
+        return str(value).strip() or None
 
     @field_validator("log_level", mode="before")
     @classmethod

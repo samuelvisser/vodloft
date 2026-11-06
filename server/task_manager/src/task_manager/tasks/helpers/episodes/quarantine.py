@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import Integer, cast, func, select
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session, joinedload
 
@@ -57,8 +58,10 @@ def rollback_identifier_head(s: Session, episode: Episode, previous_identifier: 
 def _reserve_not_usable_number(s: Session, episode: Episode) -> int:
     """Atomically reserve the next per-collection quarantine identifier number."""
     s.flush()
+    # Both dialects spell an upsert the same way, but each needs its own insert().
+    insert = postgresql_insert if s.get_bind().dialect.name == "postgresql" else sqlite_insert
     statement = (
-        sqlite_insert(Metadata)
+        insert(Metadata)
         .values(
             parent_table="collections",
             parent_id=episode.collection_id,

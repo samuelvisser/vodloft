@@ -6,9 +6,10 @@ from datetime import datetime
 from typing import Any, Literal, Optional
 
 from fastapi import HTTPException
-from sqlalchemy import and_, func, or_, select, text
+from sqlalchemy import and_, exists, func, literal, or_, select
 from sqlalchemy.orm import Session
 
+from backend.db.json_sql import json_array_items
 from backend.db.models import Collection
 from task_manager.scheduler.db import TaskDefinition, TaskRun
 from task_manager.scheduler.types import ResourceType, TaskStatus
@@ -17,11 +18,12 @@ _QUICK_CHECK_TASK_KEY = "quick_check_new_videos"
 _SCAN_TASK_KEYS = ("fetch_new_episodes", "rescan_quick_checked_collections", _QUICK_CHECK_TASK_KEY)
 _FINISHED = (TaskStatus.SUCCEEDED, TaskStatus.FAILED, TaskStatus.CANCELED)
 
-# A scan of several collections lists each collection it looked at in its result.
-_LISTS_COLLECTION = text(
-    "EXISTS (SELECT 1 FROM json_each(task_runs.result, '$.data.collections') AS scanned "
-    "WHERE json_extract(scanned.value, '$.collection_id') = :collection_id)"
-)
+def _lists_collection(collection_id: int):
+    """A scan of several collections lists each collection it looked at in its result."""
+    scanned = json_array_items(TaskRun.result, "data", "collections").alias("scanned")
+    return exists(
+        select(literal(1)).select_from(scanned).where(scanned.c.value["collection_id"].as_integer() == collection_id)
+    )
 
 
 @dataclass(frozen=True)
@@ -63,7 +65,7 @@ def collection_scans(s: Session, collection_slug: str, *, offset: int, limit: in
 
     included = or_(
         and_(TaskRun.resource_type == ResourceType.COLLECTION, TaskRun.resource_id == collection.id),
-        _LISTS_COLLECTION.bindparams(collection_id=collection.id),
+        _lists_collection(collection.id),
     )
     where = (TaskDefinition.key.in_(_SCAN_TASK_KEYS), TaskRun.status.in_(_FINISHED), included)
     total = s.scalar(select(func.count()).select_from(TaskRun).join(TaskRun.definition).where(*where)) or 0

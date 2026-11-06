@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from alembic import context
+from sqlalchemy.engine import make_url
 
 from backend.db.alembic_version import apply_settings_version_table
 from backend.db.core import Base, get_engine, load_database_models
@@ -43,12 +44,14 @@ def _set_sqlite_foreign_keys(connection, *, enabled: bool) -> None:
 
 
 def run_migrations_offline() -> None:
+    database_url = get_settings().resolved_database_url
     context.configure(
-        url=get_settings().database_url,
+        url=database_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
-        render_as_batch=True,
+        # Batch mode rebuilds tables, which only SQLite needs to alter them.
+        render_as_batch=make_url(database_url).get_backend_name() == "sqlite",
         compare_type=True,
         include_name=_include_name,
     )
@@ -65,7 +68,7 @@ def run_migrations_online() -> None:
             context.configure(
                 connection=connection,
                 target_metadata=target_metadata,
-                render_as_batch=True,
+                render_as_batch=connection.dialect.name == "sqlite",
                 compare_type=True,
                 include_name=_include_name,
             )

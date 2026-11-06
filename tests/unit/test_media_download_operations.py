@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from conftest import mark_artifact_available
 from datetime import datetime, timedelta, timezone
 
@@ -1412,6 +1414,7 @@ def test_delete_unavailable_media_download_rejects_restored_file(tmp_path):
         engine.dispose()
 
 
+@pytest.mark.sqlite_only
 def test_delete_media_download_action_removes_owned_files_and_history(tmp_path, monkeypatch):
     from contextlib import contextmanager
 

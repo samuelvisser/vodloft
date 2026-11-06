@@ -8,7 +8,7 @@ VODLoft is easy to back up when its persistent data is kept outside the containe
 
 Back up the entire `/config` directory. It contains the state needed to restore your VODLoft installation, including:
 
-- the SQLite database;
+- the SQLite database (unless you use PostgreSQL, see below);
 - `config.yml`;
 - the application secret key;
 - Daily Wire authentication state;
@@ -35,6 +35,22 @@ docker compose start vodloft
 ```
 
 If your storage/backup system supports application-consistent SQLite snapshots, you can use that instead.
+
+### If you use PostgreSQL
+
+With the PostgreSQL Compose file, the database lives in `./postgres` instead of `./config`. Back up both folders while VODLoft and PostgreSQL are stopped:
+
+```bash
+docker compose stop vodloft postgres
+# back up ./config and ./postgres here
+docker compose start postgres vodloft
+```
+
+Or make a backup file while everything keeps running:
+
+```bash
+docker compose exec postgres pg_dump -U vodloft -Fc vodloft > vodloft.dump
+```
 
 Do not run two VODLoft backends against the same SQLite database at the same time. For example, avoid starting a local development backend and a Docker instance that both point to the same `vodloft.db`.
 

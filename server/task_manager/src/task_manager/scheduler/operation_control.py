@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Iterable
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, selectinload
 
-from backend.db.core import get_session
+from backend.db.core import begin_write_transaction, get_session
 from task_manager.scheduler.db import (
     TaskDefinition,
     TaskOperation,
@@ -191,6 +191,7 @@ def cancel_operation(
     released_definition_ids: set[int] = set()
     terminal_callbacks: set = set()
     try:
+        begin_write_transaction(session)
         operation = _load_operation(session, operation_id)
         if operation is None:
             return None
@@ -338,6 +339,7 @@ def cancel_task_run(run_id: int, *, reason: str) -> bool:
     callbacks: set = set()
     was_running = False
     try:
+        begin_write_transaction(session)
         run = session.get(TaskRun, run_id)
         if run is None or _task_status(run.status) not in _ACTIVE_TASK_STATUSES:
             return False
@@ -397,6 +399,7 @@ def restart_operation(operation_id: str) -> OperationSnapshot | None:
     released_run_ids: set[int] = set()
     queue_dispatchers: set = set()
     try:
+        begin_write_transaction(session)
         operation = _load_operation(session, operation_id)
         if operation is None:
             return None

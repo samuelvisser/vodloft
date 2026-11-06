@@ -124,13 +124,14 @@ services:
 
 #### Volumes
 
-* `/config` -- App configuration (`config.yml`), the SQLite database, session secret key, your Source sign-ins, and yt-dlp's updates and cookies file. Persist this directory so your settings, shows, and sign-ins survive container restarts and upgrades.
+* `/config` -- App configuration (`config.yml`), the SQLite database (unless you use PostgreSQL), session secret key, your Source sign-ins, and yt-dlp's updates and cookies file. Persist this directory so your settings, shows, and sign-ins survive container restarts and upgrades.
 * `/downloads` -- Downloaded episodes and movies.
 
 #### Useful environment variables
 
 * `TZ` -- Container timezone. Defaults to `UTC`.
 * `VL_ADMIN_AUTH__PASSWORD` -- Set this to require a password to access the Web UI. Leave it unset for open access on your local network. Always set this when exposing VODLoft through a reverse proxy.
+* `VL_DATABASE_URL` -- Keep the database in PostgreSQL instead of SQLite, for example `postgresql+psycopg://vodloft:password@postgres/vodloft`. [`.docker/docker-compose.postgresql.yml`](.docker/docker-compose.postgresql.yml) sets this up with a PostgreSQL container. An empty PostgreSQL database is filled from the existing SQLite database on its first start. See [Installation](https://github.com/samuelvisser/vodloft/wiki/Installation#choose-a-database).
 * `API_URL` -- Override the API base URL given to the Web UI. This defaults to the relative `/api`, which works out of the box regardless of which host port you map.
 
 Literally every setting VODLoft provides can be managed by environment variables, too. However, I generally do not advise
