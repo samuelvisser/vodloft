@@ -83,7 +83,7 @@ export default function EditCollectionPage() {
     }))
   }, [id, collection])
 
-  const usesYtdlp = hasSourceFeature(collection, SourceFeature.YTDLP_DOWNLOADS)
+  const usesYtdlp = hasSourceFeature(collection, SourceFeature.YTDLP_OPTIONS)
   const optionalCookies = hasSourceFeature(collection, SourceFeature.OPTIONAL_COOKIES)
   const [cronError, setCronError] = useState<string | null>(null)
   const {data: suggestion} = useQuery({

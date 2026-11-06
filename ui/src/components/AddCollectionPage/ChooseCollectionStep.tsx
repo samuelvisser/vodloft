@@ -58,25 +58,17 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
     // --- Watch the URL and extract the slug when valid
     const watchedUrl = watch("url");
     const urlParsed = useMemo(() => CollectionCreateFormSchema.shape.url.safeParse(watchedUrl ?? ""), [watchedUrl]);
-    const slugFromUrl: string | undefined = useMemo(() => {
-        if (!urlParsed.success) return undefined;
-        try {
-            const parsedUrl = new URL(urlParsed.data ?? "");
-            const path: string = parsedUrl.pathname;
-            if (!path.startsWith("/show/")) return undefined;
-            const s: string = path.slice("/show/".length).split("/")[0];
-            return s || undefined;
-        } catch {
-            return undefined;
-        }
-    }, [urlParsed]);
 
-    // --- A link that is not a Daily Wire show page goes to the Source that recognises it.
-    // Sources that list their episodes describe the collection themselves.
-    const resolved = useResolvedLink(urlParsed.success && !slugFromUrl ? urlParsed.data : undefined);
-    const listedSource = resolved.data?.kind === 'collection' && sourceHas(resolved.data.source, SourceFeature.EPISODE_LISTS)
-        ? resolved.data.source
-        : undefined;
+    // --- The Source that recognises the link says what it points to. A Source that lists its
+    // episodes describes the collection itself; a show VODLoft walks itself has its own details.
+    const resolved = useResolvedLink(urlParsed.success ? urlParsed.data : undefined)
+    const resolvedCollection = resolved.data?.kind === 'collection' ? resolved.data : undefined
+    const slugFromUrl: string | undefined = resolvedCollection && sourceHas(resolvedCollection.source, SourceFeature.EPISODE_LOOKUPS)
+        ? resolvedCollection.slug
+        : undefined
+    const listedSource = resolvedCollection && sourceHas(resolvedCollection.source, SourceFeature.EPISODE_LISTS)
+        ? resolvedCollection.source
+        : undefined
     const listed = useListedCollectionDetails(listedSource?.id, listedSource ? resolved.data?.url : undefined);
     const lastListedUrlRef = useRef<string | undefined>(
         value.type && value.episodeIdentifier ? value.url : undefined,
@@ -214,7 +206,8 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
         const payload: CollectionCreatePayloadOut = CollectionCreatePayloadSchema.parse({
             ...formOnly,
             ...dailywireParsed.data,
-            sourceKey: DAILYWIRE_SOURCE_KEY,
+            url: resolvedCollection?.url ?? formOnly.url,
+            sourceKey: resolvedCollection?.source.id ?? DAILYWIRE_SOURCE_KEY,
         });
         onSeasonsSubmit(seasonsParsed.data);
         onSubmitParent(payload);

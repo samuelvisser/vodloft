@@ -10,8 +10,8 @@ def checks_pending(source: Source) -> bool:
 
 
 def monitors_pending(source: Source) -> bool:
-    """VODLoft's own monitor looks the Source's upcoming and live episodes up one by one: The Daily Wire."""
-    return source.has(Feature.LIVE_EPISODES) and not source.has(Feature.PENDING_CHECKS)
+    """VODLoft looks the Source's upcoming and live episodes up one by one, as for The Daily Wire."""
+    return source.has(Feature.LIVE_EPISODES) and source.has(Feature.EPISODE_LOOKUPS)
 
 
 def follows_pending(source_key: str) -> bool:

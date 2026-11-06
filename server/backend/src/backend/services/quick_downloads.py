@@ -282,7 +282,7 @@ def _metadata(source: Source, request: QuickDownloadRequest, details) -> MediaSe
         aired=published.date() if isinstance(published, datetime) else published if isinstance(published, date) else None,
         duration_seconds=details.duration if details is not None else None,
         authors=(author,) if author else (),
-        studios=() if source.has(Feature.EPISODE_LISTS) else (source.name,),
+        studios=(source.name,) if source.has(Feature.OWN_STUDIO) else (),
         media_type="movie" if request.kind is LinkKind.MOVIE else "video",
     )
 

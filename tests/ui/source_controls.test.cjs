@@ -27,7 +27,7 @@ const {sourceControls, linkTarget} = load('lib/sourceControls.ts', {'../types/sc
 const stubItem = {sourceKey: 'stub', sourceFeatures: []}
 const dailyWireItem = {
     sourceKey: 'dailywire',
-    sourceFeatures: ['browse', 'live_episodes', 'login', 'membership_levels', 'movie_extras', 'movies', 'rss_streaming', 'collections'],
+    sourceFeatures: ['browse', 'live_episodes', 'login', 'membership_levels', 'movie_extras', 'movies', 'rss_streaming', 'collections', 'episode_lookups'],
 }
 
 test('a Source without Features gets none of the Daily Wire controls', () => {
@@ -37,7 +37,7 @@ test('a Source without Features gets none of the Daily Wire controls', () => {
         countdownDownloads: false,
         rssStreaming: false,
         movieExtras: false,
-        metadataRefresh: true,
+        metadataRefresh: false,
     })
 })
 

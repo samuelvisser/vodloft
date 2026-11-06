@@ -19,7 +19,10 @@ export const SourceFeature = {
     API_KEY: 'api_key',
     QUICK_CHECK: 'quick_check',
     CATALOGUE_REFRESH: 'catalogue_refresh',
-    YTDLP_DOWNLOADS: 'ytdlp_downloads',
+    YTDLP_OPTIONS: 'ytdlp_options',
+    EPISODE_LOOKUPS: 'episode_lookups',
+    PAGE_STREAMS: 'page_streams',
+    OWN_STUDIO: 'own_studio',
 } as const
 export type SourceFeatureValue = typeof SourceFeature[keyof typeof SourceFeature]
 

@@ -115,7 +115,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
                 playback.url, command=playback.command, preferred_format=preferred, audio_only=audio_only,
                 quality=quality, subtitles=subtitle_request,
                 sponsorblock=sponsorblock if media_source.sponsorblock_for(page_url) else YtdlpSponsorBlock(),
-                custom_options=custom_ytdlp_options(*option_texts) if media_source.has(Feature.YTDLP_DOWNLOADS) else (),
+                custom_options=custom_ytdlp_options(*option_texts) if media_source.has(Feature.YTDLP_OPTIONS) else (),
                 ffmpeg_path=ffmpeg_path,
             )
         else:

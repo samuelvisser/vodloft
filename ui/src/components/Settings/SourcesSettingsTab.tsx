@@ -26,7 +26,8 @@ const FEATURE_LABELS: Record<string, string> = {
 
 // Features that are settings or details rather than kinds of content.
 const SETTING_FEATURES: readonly string[] = [
-    SourceFeature.PROGRAM_UPDATES, SourceFeature.COOKIES, SourceFeature.API_KEY, SourceFeature.COSTLY_SEARCH, SourceFeature.YTDLP_DOWNLOADS,
+    SourceFeature.PROGRAM_UPDATES, SourceFeature.COOKIES, SourceFeature.API_KEY, SourceFeature.COSTLY_SEARCH, SourceFeature.YTDLP_OPTIONS,
+    SourceFeature.EPISODE_LOOKUPS, SourceFeature.PAGE_STREAMS, SourceFeature.OWN_STUDIO,
 ]
 
 function SourceCard({source, tabProps}: {source: SourceRead; tabProps: SettingsTabProps}) {
@@ -36,7 +37,7 @@ function SourceCard({source, tabProps}: {source: SourceRead; tabProps: SettingsT
         sourceHas(source, SourceFeature.PROGRAM_UPDATES) ? <SourceProgramCard key="program" source={source}/> : null,
         sourceHas(source, SourceFeature.COOKIES) ? <SourceCookiesCard key="cookies" source={source}/> : null,
         Settings ? <Settings key="settings" {...tabProps}/> : null,
-        sourceHas(source, SourceFeature.YTDLP_DOWNLOADS) ? <SourceYtdlpOptionsCard key="ytdlp-options" source={source}/> : null,
+        sourceHas(source, SourceFeature.YTDLP_OPTIONS) ? <SourceYtdlpOptionsCard key="ytdlp-options" source={source}/> : null,
     ].filter(Boolean)
     return (
         <SourceSection

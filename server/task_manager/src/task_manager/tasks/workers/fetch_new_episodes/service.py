@@ -216,7 +216,7 @@ async def _index_collection(
             found = index_listed_collection(
                 s, collection_id=collection_id, source=source, progress=progress, dry_run=dry_run,
             )
-        else:
+        elif source.has(Feature.EPISODE_LOOKUPS):
             client = daily_wire.get(s)
             collection = s.get(Collection, collection_id)
             if collection is None:
@@ -225,6 +225,8 @@ async def _index_collection(
                 s, collection=collection, client=client, access_token=daily_wire.access_token, dry_run=dry_run,
                 initial_index=initial_index, progress=progress,
             )
+        else:
+            return result
         if dry_run:
             if source.has(Feature.EPISODE_LISTS):
                 update_progress(

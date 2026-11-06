@@ -1027,7 +1027,7 @@ def _join_newest_ahead(
         source = get_source(profile.collection.source_key)
     except UnknownSourceError:
         return
-    if not source.has(Feature.EPISODE_LISTS):
+    if not source.has(Feature.PAGE_STREAMS):
         return
     use_cookies = uses_cookies(profile.collection)
     waiting = [

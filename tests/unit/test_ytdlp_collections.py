@@ -582,7 +582,7 @@ def test_a_youtube_download_profile_marks_sponsors_and_adds_your_own_options(lis
 
     # A site SponsorBlock doesn't cover gets no segments; your own options apply to the yt-dlp Source.
     from sources import Feature
-    monkeypatch.setattr(ListedSource, "features", ListedSource.features | {Feature.YTDLP_DOWNLOADS})
+    monkeypatch.setattr(ListedSource, "features", ListedSource.features | {Feature.YTDLP_OPTIONS})
     plan = download_plans.prepare_download_plan(session, download.id, DownloadTracker())
     assert plan.source.ytdlp_sponsorblock == YtdlpSponsorBlock()
     command = plan.source.ytdlp_command

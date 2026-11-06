@@ -4,10 +4,10 @@ Each Site follows the system schedule, a schedule of its own, or none. A schedul
 is a list of offsets after publication; once the last one has passed and the item
 was looked up, its metadata is final. The metadata refresh sweep follows every
 item: those of a Source with ``Feature.METADATA_REFRESH`` are looked up in batches
-through the Source, and The Daily Wire's episodes one by one by its own refresh.
+through the Source, and those of a Source with ``Feature.EPISODE_LOOKUPS`` one by one.
 A Source that lists its episodes (``Feature.EPISODE_LISTS``) and has no metadata
 refresh keeps them up to date with its daily catalogue refresh instead: The Daily
-Wire's refresh must never touch those, because its "not found" would mark them as
+Wire's lookup must never touch those, because its "not found" would mark them as
 having no usable media.
 """
 from __future__ import annotations
@@ -67,12 +67,12 @@ def sweeps_metadata(source_key: str) -> bool:
 
 
 def refreshes_one_by_one(source_key: str) -> bool:
-    """Whether The Daily Wire's own refresh looks this Source's episodes up again, one by one."""
+    """Whether VODLoft looks this Source's episodes up again one by one, as for The Daily Wire."""
     try:
         source = get_source(source_key)
     except UnknownSourceError:
         return False
-    return not source.has(Feature.EPISODE_LISTS) and not source.has(Feature.METADATA_REFRESH)
+    return source.has(Feature.EPISODE_LOOKUPS)
 
 
 def refreshes_metadata(source_key: str) -> bool:

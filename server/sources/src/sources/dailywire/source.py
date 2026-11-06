@@ -80,6 +80,8 @@ class DailyWireSource(Source):
         Feature.LOGIN,
         Feature.LIVE_EPISODES,
         Feature.MEMBERSHIP_LEVELS,
+        Feature.EPISODE_LOOKUPS,
+        Feature.OWN_STUDIO,
     })
     episode_tags = (
         EpisodeTag(MAIN_TAG, "Episode", "A normal episode of the show", "episode", "episodes", main=True),
