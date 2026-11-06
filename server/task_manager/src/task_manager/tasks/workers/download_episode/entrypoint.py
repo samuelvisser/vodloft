@@ -11,6 +11,7 @@ from task_manager.tasks.helpers.custom_index_readiness import (
     wait_for_custom_index_pair,
 )
 from backend.utils.custom_index import CustomIndexNotReadyError
+from task_manager.scheduler.lanes import TaskLane
 from task_manager.scheduler.registry import task
 from task_manager.tasks.media_download_operations import on_media_download_task_terminal
 from task_manager.tasks.workers.download_attempt import serialize_download_attempt
@@ -24,7 +25,7 @@ from .service import run_download_episode
     allowed_resource_types=("media_download",),
     default_max_retries=2,
     tracks_progress=True,
-    executor_alias="downloads",
+    executor_alias=TaskLane.DOWNLOADS,
     terminal_callback=on_media_download_task_terminal,
     recovery_dispatcher=on_media_download_task_terminal,
 )

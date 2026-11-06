@@ -108,6 +108,7 @@ class LocalMediaProfileDeleteDownloadsOperation(OperationDefinition[LocalMediaPr
 
 class LocalMediaProfileRedownloadOperation(OperationDefinition[LocalMediaProfileBase]):
     kind = "local_media_profile.redownload_media"
+    request_priority = "bulk"
     resource_type = "local_media_profile"
 
     def __init__(

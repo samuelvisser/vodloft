@@ -184,6 +184,7 @@ class CollectionDeleteDownloadsOperation(_CollectionDownloadMaintenanceOperation
 
 class CollectionRedownloadOperation(_CollectionDownloadMaintenanceOperation):
     kind = "collection.redownload_episodes"
+    request_priority = "bulk"
 
     def __init__(
         self,

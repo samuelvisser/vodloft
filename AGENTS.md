@@ -94,6 +94,13 @@ VODLoft uses Pydantic as the API mapping and serialization boundary. Keep that b
 - API request models describe HTTP input. Do not reuse them as internal domain DTOs for Daily Wire records or worker
   data merely because the fields currently happen to overlap.
 
+## Database writes
+A transaction that reads a row and then writes based on what it read (task runs, operations, anything two
+workers can change at once) runs through `run_write_transaction` in `backend.db.core`. It reserves the write
+up front, retries the whole transaction when another one was in the way, and commits. Do not add retry loops,
+extra worker pools or process-wide caches to work around a locked database; fix the transaction instead.
+Reading never writes: code that only shows state computes it and rolls back.
+
 ## Forms
 VODLoft forms are configured within React Hook Form and Zod to ensure field validation in the frontend.
 However, all backend API endpoints use Pydantic models to do their own validation. In most cases,

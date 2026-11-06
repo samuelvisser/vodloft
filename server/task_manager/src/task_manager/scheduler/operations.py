@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from math import isfinite
-from time import monotonic
 from typing import Any, Iterable, Sequence
 from uuid import uuid4
 
@@ -11,6 +10,7 @@ from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.db.core import get_session
+from backend.db.datetime_types import utc_datetime
 from task_manager.scheduler.db import (
     TaskDefinition,
     TaskOperation,
@@ -500,9 +500,10 @@ def refresh_operation(session: Session, operation_id: str) -> TaskOperation | No
     return refreshed.get(operation_id)
 
 
-_PARENT_PROGRESS_REFRESH_SECONDS = 5.0
-# When each parent last took a progress-only refresh, per process.
-_parent_progress_refreshed_at: dict[str, float] = {}
+# How long a parent's progress may lag behind its running children. A parent of
+# a bulk action can depend on thousands of children, and refreshing it means
+# loading all of them inside the child's write transaction.
+_PARENT_PROGRESS_REFRESH_AFTER = timedelta(seconds=5)
 
 
 def _refresh_operation_tree(
@@ -511,13 +512,11 @@ def _refresh_operation_tree(
 ) -> dict[str, TaskOperation]:
     """Refresh operations and their transitive parents.
 
-    A parent of a bulk action can depend on thousands of children, and loading
-    it takes a while inside the write transaction of a progress update. A child
-    whose status changes, or that is no longer active, always refreshes its
-    parents, since that can change theirs. Progress alone reaches a parent at
-    most once every few seconds; a parent's progress is also recomputed
-    whenever it is read. Parents that already finished are left alone: they
-    have no running children left to follow.
+    A child whose status changes, or that is no longer active, always refreshes
+    its parents, since that can change theirs. A change of progress alone
+    refreshes a parent only once the parent's stored state is a few seconds
+    old; reading an operation recomputes its progress anyway. Parents that
+    already finished are left alone: they have no running children to follow.
     """
     # Flush here before populate_existing=True would reset it
     session.flush()
@@ -525,6 +524,7 @@ def _refresh_operation_tree(
     queue = list(dict.fromkeys(str(value) for value in operation_ids if value))
     visited: set[str] = set()
     refreshed: dict[str, TaskOperation] = {}
+    now = datetime.now(timezone.utc)
 
     while queue:
         operation_id = queue.pop(0)
@@ -537,6 +537,9 @@ def _refresh_operation_tree(
             continue
         previous_status = operation.status
         refreshed[operation_id] = _refresh_loaded_operation(operation)
+        if operation.dependencies:
+            # Even when nothing changed, the parent was refreshed just now.
+            operation.updated_at = now
         session.flush()
         status_settled = (
             operation.status == previous_status
@@ -544,7 +547,8 @@ def _refresh_operation_tree(
         )
 
         parent_stmt = select(
-            TaskOperationDependency.parent_operation_id
+            TaskOperationDependency.parent_operation_id,
+            TaskOperation.updated_at,
         ).join(
             TaskOperation,
             TaskOperation.id == TaskOperationDependency.parent_operation_id,
@@ -556,18 +560,13 @@ def _refresh_operation_tree(
             parent_stmt = parent_stmt.where(
                 TaskOperationDependency.parent_operation_id.not_in(visited)
             )
-        now = monotonic()
-        if len(_parent_progress_refreshed_at) > 1000:
-            for stale_id in [
-                key for key, at in _parent_progress_refreshed_at.items()
-                if now - at >= _PARENT_PROGRESS_REFRESH_SECONDS
-            ]:
-                del _parent_progress_refreshed_at[stale_id]
-        for parent_id in session.scalars(parent_stmt):
-            last = _parent_progress_refreshed_at.get(parent_id)
-            if status_settled and last is not None and now - last < _PARENT_PROGRESS_REFRESH_SECONDS:
+        for parent_id, updated_at in session.execute(parent_stmt):
+            if (
+                status_settled
+                and updated_at is not None
+                and now - utc_datetime(updated_at) < _PARENT_PROGRESS_REFRESH_AFTER
+            ):
                 continue
-            _parent_progress_refreshed_at[parent_id] = now
             queue.append(parent_id)
 
     return refreshed
@@ -1105,28 +1104,30 @@ def list_operations(
                 statement.order_by(*order_by).limit(max(1, min(limit, 500)))
             )
         )
-        for operation in operations:
-            _refresh_loaded_operation(operation)
-        session.flush()
-        payloads = [_operation_snapshot(operation) for operation in operations]
-        session.commit()
-        return payloads
+        return [_read_snapshot(operation) for operation in operations]
     finally:
+        session.rollback()
         session.close()
 
 
 def get_operation(operation_id: str) -> OperationSnapshot | None:
     session = get_session()
     try:
-        operation = refresh_operation(session, operation_id)
-        if operation is None:
-            return None
-        session.flush()
-        payload = _operation_snapshot(operation)
-        session.commit()
-        return payload
+        operation = _load_operation_with_runs(session, operation_id)
+        return _read_snapshot(operation) if operation is not None else None
     finally:
+        session.rollback()
         session.close()
+
+
+def _read_snapshot(operation: TaskOperation) -> OperationSnapshot:
+    """The operation as it stands now, computed from its runs and children.
+
+    Reading never writes: the work that changes an operation stores its state,
+    and what is computed here is only shown. A list of operations that wrote
+    on every read would take the database's write lock on every poll.
+    """
+    return _operation_snapshot(_refresh_loaded_operation(operation))
 
 
 def mark_operation_seen(operation_id: str) -> OperationSnapshot | None:

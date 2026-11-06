@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TypeVar
 import importlib
 import logging
 import os
 import pkgutil
+import time
 
 from sqlalchemy import MetaData, create_engine, event, text
 from sqlalchemy.engine import URL, Engine, make_url
@@ -21,6 +23,7 @@ from .text_types import create_case_insensitive_collation
 
 
 logger = logging.getLogger(__name__)
+T = TypeVar("T")
 
 _SQLITE_BUSY_TIMEOUT_SECONDS = 30
 _SQLITE_BUSY_TIMEOUT_MS = _SQLITE_BUSY_TIMEOUT_SECONDS * 1_000
@@ -207,6 +210,54 @@ def begin_write_transaction(session: Session) -> None:
         session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": _POSTGRESQL_WRITE_LOCK_KEY})
     else:
         session.begin()
+
+
+_WRITE_ATTEMPTS = 3
+_WRITE_RETRY_DELAY_SECONDS = 0.1
+# PostgreSQL error codes that mean "try the transaction again": a deadlock, or a
+# transaction that could not be serialized against another one.
+_POSTGRESQL_RETRY_CODES = {"40P01", "40001"}
+
+
+def is_lock_conflict(error: BaseException) -> bool:
+    """Whether a database error only means another transaction was in the way."""
+    if not isinstance(error, OperationalError):
+        return False
+    code = getattr(error.orig, "sqlstate", None) or getattr(error.orig, "pgcode", None)
+    if code in _POSTGRESQL_RETRY_CODES:
+        return True
+    message = str(error.orig).lower()
+    return "database is locked" in message or "database is busy" in message
+
+
+def run_write_transaction(work: Callable[[Session], T], *, attempts: int = _WRITE_ATTEMPTS) -> T:
+    """Run ``work`` in a write transaction of its own and commit it.
+
+    The transaction starts with ``begin_write_transaction``, so it reads what
+    the previous writer committed. When another transaction is in the way
+    (a locked SQLite database, a PostgreSQL deadlock), the whole of ``work``
+    runs again in a new transaction, a few times, before the error is raised.
+    ``work`` may end the transaction early with ``session.rollback()``; any
+    exception it raises rolls the transaction back and is raised as it is.
+    """
+    for attempt in range(attempts):
+        session = get_session()
+        try:
+            begin_write_transaction(session)
+            result = work(session)
+            session.commit()
+            return result
+        except OperationalError as error:
+            session.rollback()
+            if attempt + 1 >= attempts or not is_lock_conflict(error):
+                raise
+        except BaseException:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+        time.sleep(_WRITE_RETRY_DELAY_SECONDS * (2 ** attempt))
+    raise AssertionError("unreachable")
 
 
 def get_database_url() -> URL:

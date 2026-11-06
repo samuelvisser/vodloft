@@ -987,6 +987,10 @@ def test_operation_dependency_refresh_propagates_transitively():
             [OperationDependencySpec(middle.id)],
         )
 
+        # Their stored state is older than a progress update may lag.
+        long_ago = datetime.now(timezone.utc) - timedelta(minutes=1)
+        middle.updated_at = long_ago
+        root.updated_at = long_ago
         leaf.status = OperationStatus.RUNNING.value
         leaf.completion_progress = 63
         session.flush()
@@ -996,6 +1000,47 @@ def test_operation_dependency_refresh_propagates_transitively():
         assert root.completion_progress == 63
         assert middle.status == OperationStatus.RUNNING.value
         assert root.status == OperationStatus.RUNNING.value
+    finally:
+        session.close()
+
+
+def test_progress_alone_skips_a_parent_refreshed_moments_ago():
+    from task_manager.scheduler.operations import (
+        OperationDependencySpec,
+        add_operation_dependencies,
+        create_operation,
+        refresh_operation,
+    )
+    from task_manager.scheduler.types import OperationStatus
+
+    session = _session()
+    try:
+        child = create_operation(
+            session, kind="child", resource_type="media_download", resource_id=1, title="Child", targets=[],
+        )
+        parent = create_operation(
+            session, kind="parent", resource_type="media_download", resource_id=None, title="Parent", targets=[],
+        )
+        add_operation_dependencies(session, parent.id, [OperationDependencySpec(child.id)])
+        parent.updated_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+        child.status = OperationStatus.RUNNING.value
+        session.flush()
+        refresh_operation(session, child.id)
+        assert parent.status == OperationStatus.RUNNING.value
+        progress_before = parent.completion_progress
+
+        child.completion_progress = 63
+        session.flush()
+        refresh_operation(session, child.id)
+
+        # The parent was refreshed a moment ago; its progress follows a few seconds later.
+        assert parent.completion_progress == progress_before
+
+        parent.updated_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+        session.flush()
+        refresh_operation(session, child.id)
+
+        assert parent.completion_progress == 63
     finally:
         session.close()
 

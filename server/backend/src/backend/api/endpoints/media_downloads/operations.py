@@ -7,10 +7,12 @@ from task_manager.scheduler.operations import OperationTargetSpec
 
 
 _BULK_ACTION_TASK_KEY = "media_download_bulk_action_worker"
+_ATTACH_RETRIES_TASK_KEY = "media_download_attach_retries"
 
 
 class _BulkMediaDownloadOperation(OperationDefinition[None]):
     resource_type = "media_download"
+    request_priority = "bulk"
     action: str
 
     def __init__(self, media_download_ids: Sequence[int]) -> None:
@@ -27,13 +29,10 @@ class _BulkMediaDownloadOperation(OperationDefinition[None]):
             # request returns, so the operation, and its cancel, exist at once.
             return (
                 OperationTargetSpec(
-                    task_key=_BULK_ACTION_TASK_KEY,
+                    task_key=_ATTACH_RETRIES_TASK_KEY,
                     resource_type=self.resource_type,
                     resource_id=None,
-                    task_kwargs={
-                        "media_download_ids": list(self.media_download_ids),
-                        "action": "attach_retries",
-                    },
+                    task_kwargs={"media_download_ids": list(self.media_download_ids)},
                     slot_key="attach_retries",
                 ),
             )

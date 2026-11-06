@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from controller.db_utils import db_session
+from task_manager.scheduler.lanes import TaskLane
 from task_manager.scheduler.registry import on_event, task
 from task_manager.scheduler.results import TaskResult
 from .service import run_refresh_episode_metadata
@@ -15,7 +16,7 @@ from .service import run_refresh_episode_metadata
     allowed_resource_types=("episode",),
     default_max_retries=5,
     tracks_progress=False,
-    executor_alias="metadata",
+    executor_alias=TaskLane.METADATA,
 )
 async def refresh_episode_metadata(
     *,

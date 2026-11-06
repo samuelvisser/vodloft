@@ -8,10 +8,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from sqlalchemy import case, func, or_, select, update
-from sqlalchemy.exc import OperationalError
+from sqlalchemy import case, func, select, update
 
-from backend.db.core import begin_write_transaction, get_session
+from backend.db.core import get_session, run_write_transaction
 from task_manager.scheduler.db import *
 from task_manager.scheduler.db.TaskRun import (
     TASK_RUN_COMPLETION_PROGRESS_META_KEY,
@@ -30,6 +29,7 @@ from .operation_control import (
     run_cancel_reason,
     run_cancel_requested,
 )
+from .operation_factory import REQUEST_PRIORITY_CONTEXT_KEY
 from .operations import (
     link_run_to_operations,
     refresh_operations_for_run,
@@ -48,8 +48,6 @@ from task_manager.scheduler import scheduler
 
 logger = logging.getLogger(__name__)
 _WAIT_UNCHANGED = object()
-_DAILY_WIRE_COOLDOWN_REASON = "daily_wire_request_cooldown"
-_DAILY_WIRE_COOLDOWN_MESSAGE = "Waiting for Daily Wire request cooldown. Will resume soon."
 
 
 class TaskCancellationRequested(Exception):
@@ -74,6 +72,36 @@ def _run_has_active_operation_owner(session, run_id: int) -> bool:
     return not operation_ids or operation_ids_allow_execution(session, operation_ids)
 
 
+def _cancellation_reason(session, run_id: int) -> str | None:
+    """Why a TaskRun should stop, or None while it may keep running.
+
+    A run stops when it is gone, was canceled or asked to cancel, or when every
+    operation that owns it was canceled.
+    """
+    row = session.execute(
+        select(TaskRun.status, TaskRun.meta).where(TaskRun.id == run_id)
+    ).one_or_none()
+    if row is None:
+        return "Task resource was deleted"
+    status, meta = row
+    meta = meta if isinstance(meta, dict) else {}
+    if status == TaskStatus.CANCELED or meta.get(RUN_CANCEL_REQUESTED_META_KEY) is True:
+        reason = meta.get(RUN_CANCEL_REASON_META_KEY)
+        return reason if isinstance(reason, str) and reason else "Canceled"
+    if not _run_has_active_operation_owner(session, run_id):
+        return "Owning operation was canceled"
+    return None
+
+
+def _still_running(run_id: int):
+    """Only a RUNNING attempt that nobody asked to cancel may change its own state."""
+    return (
+        TaskRun.id == run_id,
+        TaskRun.status == TaskStatus.RUNNING,
+        func.coalesce(TaskRun.meta[RUN_CANCEL_REQUESTED_META_KEY].as_boolean(), False).is_(False),
+    )
+
+
 class ProgressUpdater:
     """Generic progress and cooperative-cancellation channel for a TaskRun.
 
@@ -84,6 +112,10 @@ class ProgressUpdater:
     updater itself as a ``should_cancel`` callback; cancellation is then driven
     by the same durable TaskRun state used for every other worker rather than by
     worker-specific generation flags.
+
+    Every write is one short write transaction of its own: the executor holds
+    no connection while worker code runs, so a fan-out operation cannot exhaust
+    the connection pool merely by filling the worker pool.
     """
 
     _CANCEL_CHECK_INTERVAL_SECONDS = 0.25
@@ -94,6 +126,10 @@ class ProgressUpdater:
         self._last_cancel_check = 0.0
         self._canceled = False
         self._cancel_reason = "Canceled"
+
+    def _stop(self, reason: str) -> None:
+        self._canceled = True
+        self._cancel_reason = reason
 
     def _read_cancellation(self, *, force: bool = False) -> tuple[bool, str]:
         if self._canceled:
@@ -106,35 +142,7 @@ class ProgressUpdater:
 
         s = get_session()
         try:
-            row = s.execute(
-                select(TaskRun.status, TaskRun.meta).where(TaskRun.id == self.run_id)
-            ).one_or_none()
-            if row is None:
-                self._canceled = True
-                self._cancel_reason = "Task resource was deleted"
-                return True, self._cancel_reason
-
-            status, meta = row
-            requested = (
-                isinstance(meta, dict)
-                and meta.get(RUN_CANCEL_REQUESTED_META_KEY) is True
-            )
-            if status == TaskStatus.CANCELED or requested:
-                reason = (
-                    meta.get(RUN_CANCEL_REASON_META_KEY)
-                    if isinstance(meta, dict)
-                    else None
-                )
-                self._canceled = True
-                self._cancel_reason = (
-                    reason if isinstance(reason, str) and reason else "Canceled"
-                )
-                return True, self._cancel_reason
-            if not _run_has_active_operation_owner(s, self.run_id):
-                self._canceled = True
-                self._cancel_reason = "Owning operation was canceled"
-                return True, self._cancel_reason
-            return False, self._cancel_reason
+            reason = _cancellation_reason(s, self.run_id)
         except Exception:
             # Cancellation checks are deliberately conservative: transient DB
             # contention must not abort irreversible worker/file work. The normal
@@ -143,6 +151,9 @@ class ProgressUpdater:
             return False, self._cancel_reason
         finally:
             s.close()
+        if reason is not None:
+            self._stop(reason)
+        return self._canceled, self._cancel_reason
 
     def __call__(self) -> bool:
         """Return True when the worker should stop, suitable for downloader callbacks."""
@@ -169,105 +180,50 @@ class ProgressUpdater:
             else max(0, min(100, int(completion_percent)))
         )
 
-        # Progress writes deliberately use their own short-lived Session. The
-        # executor does not hold a connection while worker code is running, so a
-        # fan-out operation cannot exhaust the SQLAlchemy pool merely by filling
-        # the APScheduler worker pool.
-        s = get_session()
-        last_operational_error: OperationalError | None = None
-        try:
-            for i in range(3):
-                try:
-                    begin_write_transaction(s)
-                    row = s.execute(
-                        select(TaskRun.status, TaskRun.meta).where(TaskRun.id == self.run_id)
-                    ).one_or_none()
-                    if row is None:
-                        self._canceled = True
-                        self._cancel_reason = "Task resource was deleted"
-                        raise TaskCancellationRequested(self._cancel_reason)
+        def write(s) -> None:
+            reason = _cancellation_reason(s, self.run_id)
+            if reason is not None:
+                self._stop(reason)
+                raise TaskCancellationRequested(reason)
+            current_meta = s.execute(select(TaskRun.meta).where(TaskRun.id == self.run_id)).scalar_one_or_none()
 
-                    status, current_meta = row
-                    if (
-                        status == TaskStatus.CANCELED
-                        or (
-                            isinstance(current_meta, dict)
-                            and current_meta.get(RUN_CANCEL_REQUESTED_META_KEY) is True
-                        )
-                    ):
-                        reason = (
-                            current_meta.get(RUN_CANCEL_REASON_META_KEY)
-                            if isinstance(current_meta, dict)
-                            else None
-                        )
-                        self._canceled = True
-                        self._cancel_reason = (
-                            reason if isinstance(reason, str) and reason else "Canceled"
-                        )
-                        raise TaskCancellationRequested(self._cancel_reason)
-                    if not _run_has_active_operation_owner(s, self.run_id):
-                        self._canceled = True
-                        self._cancel_reason = "Owning operation was canceled"
-                        raise TaskCancellationRequested(self._cancel_reason)
+            values: dict[str, Any] = {
+                "progress": p if self.tracks_progress else None,
+            }
+            if message is not None:
+                values["message"] = message
 
-                    values: dict[str, Any] = {
-                        "progress": p if self.tracks_progress else None,
-                    }
-                    if message is not None:
-                        values["message"] = message
-
-                    if (
-                        meta is not None
-                        or (self.tracks_progress and completion is not None)
-                        or wait_state is not _WAIT_UNCHANGED
-                    ):
-                        merged_meta = dict(current_meta or {})
-                        if meta is not None:
-                            current_progress_meta = merged_meta.get(TASK_RUN_PROGRESS_META_KEY)
-                            merged_progress_meta = (
-                                dict(current_progress_meta)
-                                if isinstance(current_progress_meta, dict)
-                                else {}
-                            )
-                            merged_progress_meta.update(meta)
-                            merged_meta[TASK_RUN_PROGRESS_META_KEY] = merged_progress_meta
-                        if self.tracks_progress and completion is not None:
-                            merged_meta[TASK_RUN_COMPLETION_PROGRESS_META_KEY] = completion
-                        if wait_state is not _WAIT_UNCHANGED:
-                            if wait_state is None:
-                                merged_meta.pop(TASK_RUN_WAIT_STATE_META_KEY, None)
-                            else:
-                                merged_meta[TASK_RUN_WAIT_STATE_META_KEY] = wait_state
-                        values["meta"] = merged_meta
-
-                    result = s.execute(
-                        update(TaskRun)
-                        .where(
-                            TaskRun.id == self.run_id,
-                            TaskRun.status == TaskStatus.RUNNING,
-                            func.coalesce(TaskRun.meta[RUN_CANCEL_REQUESTED_META_KEY].as_boolean(), False).is_(False),
-                        )
-                        .values(**values)
+            if (
+                meta is not None
+                or (self.tracks_progress and completion is not None)
+                or wait_state is not _WAIT_UNCHANGED
+            ):
+                merged_meta = dict(current_meta or {})
+                if meta is not None:
+                    current_progress_meta = merged_meta.get(TASK_RUN_PROGRESS_META_KEY)
+                    merged_progress_meta = (
+                        dict(current_progress_meta)
+                        if isinstance(current_progress_meta, dict)
+                        else {}
                     )
-                    if result.rowcount == 0:
-                        s.rollback()
-                        self._canceled = True
-                        self._cancel_reason = "Task resource was deleted"
-                        raise TaskCancellationRequested(self._cancel_reason)
-                    s.commit()
-                    begin_write_transaction(s)
-                    refresh_operations_for_run(s, self.run_id)
-                    s.commit()
-                    return
-                except OperationalError as exc:
-                    last_operational_error = exc
-                    s.rollback()
-                    time.sleep(0.1 * (2 ** i))
+                    merged_progress_meta.update(meta)
+                    merged_meta[TASK_RUN_PROGRESS_META_KEY] = merged_progress_meta
+                if self.tracks_progress and completion is not None:
+                    merged_meta[TASK_RUN_COMPLETION_PROGRESS_META_KEY] = completion
+                if wait_state is not _WAIT_UNCHANGED:
+                    if wait_state is None:
+                        merged_meta.pop(TASK_RUN_WAIT_STATE_META_KEY, None)
+                    else:
+                        merged_meta[TASK_RUN_WAIT_STATE_META_KEY] = wait_state
+                values["meta"] = merged_meta
 
-            if last_operational_error is not None:
-                raise last_operational_error
-        finally:
-            s.close()
+            result = s.execute(update(TaskRun).where(*_still_running(self.run_id)).values(**values))
+            if result.rowcount == 0:
+                self._stop("Task resource was deleted")
+                raise TaskCancellationRequested(self._cancel_reason)
+            refresh_operations_for_run(s, self.run_id)
+
+        run_write_transaction(write)
 
     def complete_transactionally(self, session, result: TaskResult) -> None:
         """Commit successful output and its execution outcome in one transaction.
@@ -280,10 +236,7 @@ class ProgressUpdater:
             raise ValueError("Transactional completion requires successful output")
         session.flush()
         changed = session.execute(
-            update(TaskRun).where(
-                TaskRun.id == self.run_id, TaskRun.status == TaskStatus.RUNNING,
-                func.coalesce(TaskRun.meta[RUN_CANCEL_REQUESTED_META_KEY].as_boolean(), False).is_(False),
-            ).values(
+            update(TaskRun).where(*_still_running(self.run_id)).values(
                 status=TaskStatus.SUCCEEDED, progress=100, result=result.as_dict(),
                 message=result.summary, last_error=None, next_retry_at=None,
                 finished_at=datetime.now(timezone.utc),
@@ -295,61 +248,28 @@ class ProgressUpdater:
 
     def set_wait_state(self, reason: str | None, message: str | None = None, *, until: float | None = None) -> None:
         """Persist transient worker waiting state without changing worker progress."""
-        s = get_session()
-        last_operational_error: OperationalError | None = None
-        try:
-            for i in range(3):
-                try:
-                    begin_write_transaction(s)
-                    current_meta = s.execute(
-                        select(TaskRun.meta).where(TaskRun.id == self.run_id)
-                    ).scalar_one_or_none()
-                    if current_meta is None:
-                        exists = s.execute(
-                            select(TaskRun.id).where(TaskRun.id == self.run_id)
-                        ).scalar_one_or_none()
-                        if exists is None:
-                            return
 
-                    if not _run_has_active_operation_owner(s, self.run_id):
-                        return
+        def write(s) -> None:
+            if _cancellation_reason(s, self.run_id) is not None:
+                return
+            current_meta = s.execute(select(TaskRun.meta).where(TaskRun.id == self.run_id)).scalar_one_or_none()
+            merged_meta = dict(current_meta or {})
+            if reason:
+                merged_meta[TASK_RUN_WAIT_STATE_META_KEY] = {
+                    "reason": reason,
+                    "message": message,
+                    "until": until,
+                }
+            else:
+                merged_meta.pop(TASK_RUN_WAIT_STATE_META_KEY, None)
 
-                    merged_meta = dict(current_meta or {})
-                    if reason:
-                        merged_meta[TASK_RUN_WAIT_STATE_META_KEY] = {
-                            "reason": reason,
-                            "message": message,
-                            "until": until,
-                        }
-                    else:
-                        merged_meta.pop(TASK_RUN_WAIT_STATE_META_KEY, None)
+            result = s.execute(
+                update(TaskRun).where(*_still_running(self.run_id)).values(meta=merged_meta or None)
+            )
+            if result.rowcount:
+                refresh_operations_for_run(s, self.run_id)
 
-                    result = s.execute(
-                        update(TaskRun)
-                        .where(
-                            TaskRun.id == self.run_id,
-                            TaskRun.status == TaskStatus.RUNNING,
-                            func.coalesce(TaskRun.meta[RUN_CANCEL_REQUESTED_META_KEY].as_boolean(), False).is_(False),
-                        )
-                        .values(meta=merged_meta or None)
-                    )
-                    if result.rowcount == 0:
-                        s.rollback()
-                        return
-                    s.commit()
-                    begin_write_transaction(s)
-                    refresh_operations_for_run(s, self.run_id)
-                    s.commit()
-                    return
-                except OperationalError as exc:
-                    last_operational_error = exc
-                    s.rollback()
-                    time.sleep(0.1 * (2 ** i))
-
-            if last_operational_error is not None:
-                raise last_operational_error
-        finally:
-            s.close()
+        run_write_transaction(write)
 
 
 def _resolve_max_retries(session, def_key: str, schedule_id: Optional[int], override: Optional[int]) -> int:
@@ -395,10 +315,10 @@ def _prepare_execution(
         tracks_progress: bool,
         kwargs: dict[str, Any],
 ) -> _PreparedExecution | None:
-    """Persist the RUNNING attempt, then release its Session before worker code runs."""
-    session = get_session()
-    try:
-        begin_write_transaction(session)
+    """Persist the RUNNING attempt in one write transaction, which ends before worker code runs."""
+
+    def work(session) -> _PreparedExecution | None:
+        nonlocal operation_ids
         if operation_ids and operation_ids_inherited:
             # Started by an operation's worker, not owned by the operation: it only
             # stops when that operation was canceled, and joins it while it is active.
@@ -418,10 +338,8 @@ def _prepare_execution(
             if run_cancel_requested(run):
                 _mark_run_canceled(run, run_cancel_reason(run))
                 run.finished_at = datetime.now(timezone.utc)
-                session.commit()
-                begin_write_transaction(session)
+                session.flush()
                 refresh_operations_for_run(session, run.id)
-                session.commit()
                 return None
 
             if kwargs:
@@ -481,18 +399,15 @@ def _prepare_execution(
         ):
             call_kwargs["resource_type"] = resource_type
 
-        prepared_run_id = run.id
-        session.commit()
-        begin_write_transaction(session)
-        refresh_operations_for_run(session, prepared_run_id)
-        session.commit()
+        session.flush()
+        refresh_operations_for_run(session, run.id)
         return _PreparedExecution(
-            run_id=prepared_run_id,
+            run_id=run.id,
             linked_operation_ids=linked_operation_ids,
             call_kwargs=call_kwargs,
         )
-    finally:
-        session.close()
+
+    return run_write_transaction(work)
 
 
 def _finalize_execution(
@@ -503,12 +418,12 @@ def _finalize_execution(
         worker_error: Exception | None = None,
         cancellation_reason: str | None = None,
 ) -> tuple[datetime | None, Exception | None]:
-    """Persist terminal/retry state using a fresh short-lived Session."""
-    session = get_session()
-    retry_at: datetime | None = None
-    terminal_error: Exception | None = None
-    try:
-        begin_write_transaction(session)
+    """Persist terminal/retry state in one short write transaction."""
+
+    def work(session) -> tuple[datetime | None, Exception | None]:
+        nonlocal cancellation_reason
+        retry_at: datetime | None = None
+        terminal_error: Exception | None = None
         run = session.get(TaskRun, prepared.run_id)
         if run is None:
             return None, None
@@ -521,7 +436,6 @@ def _finalize_execution(
             # A publishing worker already committed artifacts and outcome in one
             # transaction. A late callback/cleanup error cannot revoke success.
             run.runtime_ms = runtime_ms
-            session.commit()
             return None, None
 
         if run_cancel_requested(run):
@@ -563,13 +477,11 @@ def _finalize_execution(
         else:
             run.finished_at = None
 
-        session.commit()
-        begin_write_transaction(session)
+        session.flush()
         refresh_operations_for_run(session, run.id)
-        session.commit()
         return retry_at, terminal_error
-    finally:
-        session.close()
+
+    return run_write_transaction(work)
 
 
 def request_wait_message(reason: str) -> str:
@@ -587,10 +499,8 @@ def _execution_request_priority(operation_ids: tuple[str, ...]):
         return "background"
     session = get_session()
     try:
-        bulk_priority = or_(
-            TaskOperation.context["request_priority"].as_string() == "bulk",
-            TaskOperation.kind.contains("bulk"),
-            TaskOperation.kind.contains("redownload"),
+        bulk_priority = (
+            TaskOperation.context[REQUEST_PRIORITY_CONTEXT_KEY].as_string() == "bulk"
         )
         bulk, interactive = session.execute(
             select(

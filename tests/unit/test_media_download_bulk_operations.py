@@ -17,9 +17,9 @@ def test_bulk_retry_media_download_operation_attaches_retries_in_one_target():
     assert definition.context() == {"downloads_requested": 2}
     assert definition.media_download_ids == (8, 3)
     [target] = definition.targets()
-    assert target.task_key == "media_download_bulk_action_worker"
+    assert target.task_key == "media_download_attach_retries"
     assert target.slot_key == "attach_retries"
-    assert target.task_kwargs == {"media_download_ids": [8, 3], "action": "attach_retries"}
+    assert target.task_kwargs == {"media_download_ids": [8, 3]}
 
 
 def test_bulk_cancel_media_download_operation_keeps_per_download_targets():
