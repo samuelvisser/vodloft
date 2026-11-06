@@ -434,23 +434,39 @@ def _published(value: str | None) -> datetime | None:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
+@dataclass(frozen=True)
+class PathDifference:
+    path: str
+    rendered: str
+
+
+@dataclass(frozen=True)
+class PathProof:
+    """How many of a profile's files the converted template renders at their real path."""
+
+    identical: int
+    total: int
+    differences: list[PathDifference]
+    error: str | None = None
+
+
 def path_proof(
     profile: ProfilePlan, files: Sequence[FilePlan], titles: Mapping[str, str], mode: FilenameRestrictionMode,
     authors: Mapping[str, str] | None = None, fields: Mapping[str, Mapping[str, str]] | None = None,
-) -> dict[str, Any]:
+) -> PathProof:
     """How many of the files' real paths the converted template renders exactly, and every one it doesn't."""
     adopted = [file for file in files if file.kind == "file" and file.path]
     if profile.output_template is None or not adopted:
-        return {"identical": 0, "total": len(adopted), "differences": []}
+        return PathProof(0, len(adopted), [])
     try:
         prepared = prepare_output_template(
             profile.output_template, allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
             allowed_metadata_scopes=COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
         )
     except ValueError as exc:
-        return {"identical": 0, "total": len(adopted), "differences": [], "error": str(exc)}
+        return PathProof(0, len(adopted), [], str(exc))
     identical = 0
-    differences: list[dict[str, str]] = []
+    differences: list[PathDifference] = []
     for file in adopted:
         published = _published(file.published)
         values: dict[str, object] = {
@@ -477,8 +493,8 @@ def path_proof(
         if rendered == file.path:
             identical += 1
         else:
-            differences.append({"path": file.path, "rendered": rendered})
-    return {"identical": identical, "total": len(adopted), "differences": differences}
+            differences.append(PathDifference(file.path, rendered))
+    return PathProof(identical, len(adopted), differences)
 
 
 # Stands in for an uploader the upload has no metadata for; shown as "(uploader)".
@@ -539,7 +555,7 @@ class ProfilePreview:
     plan: ProfilePlan
     becomes: Literal["new", "linked", "reused"]
     local_media_profile_name: str | None
-    path_proof: dict[str, Any]
+    path_proof: PathProof
     changes: _Changes | None
 
 
@@ -1558,7 +1574,13 @@ def _finish_run_if_done(session: Session, run_id: int) -> None:
     run.finished_at = datetime.now(timezone.utc)
 
 
-def _matching_view(session: Session, step: ImportStep) -> dict[str, Any] | None:
+@dataclass(frozen=True)
+class MatchingView:
+    status: str
+    found: int
+
+
+def _matching_view(session: Session, step: ImportStep) -> MatchingView | None:
     """The Match existing files scan the step started, if it did."""
     if not (step.result or {}).get("matching"):
         return None
@@ -1569,7 +1591,7 @@ def _matching_view(session: Session, step: ImportStep) -> dict[str, Any] | None:
     if scan is None:
         return None
     found = sum(1 for item in scan.results if item.get("confidence") and not item.get("adopted"))
-    return {"status": scan.status, "found": found}
+    return MatchingView(scan.status, found)
 
 
 def _run_download_profiles(session: Session, run: ImportRun) -> list[DownloadProfile]:
@@ -1583,7 +1605,7 @@ def _run_download_profiles(session: Session, run: ImportRun) -> list[DownloadPro
         if step.download_profile_id not in ids:
             continue
         matching = _matching_view(session, step)
-        if matching is not None and matching["status"] != "finished":
+        if matching is not None and matching.status != "finished":
             held.add(step.download_profile_id)
     if not ids - held:
         return []
@@ -1626,11 +1648,27 @@ class DownloadProfilesView:
 
 
 @dataclass(frozen=True)
+class StepView:
+    """What happened to one Collection of a run, and to its files."""
+
+    collection_id: int | None
+    collection_slug: str | None
+    collection_title: str | None
+    status: str
+    indexed: bool
+    files: int
+    counts: dict[str, int]
+    problems: list[dict[str, Any]]
+    download_profile_on: bool
+    matching: MatchingView | None
+
+
+@dataclass(frozen=True)
 class RunView:
     """A run, and what happened to each of its Collections."""
 
     run: ImportRun
-    steps: list[dict[str, Any]]
+    steps: list[StepView]
     download_profiles: DownloadProfilesView
 
 
@@ -1639,19 +1677,19 @@ def run_view(session: Session, run: ImportRun) -> RunView:
     steps = []
     for step in session.scalars(select(ImportStep).where(ImportStep.run_id == run.id).order_by(ImportStep.id)):
         collection = session.get(Collection, step.collection_id)
-        steps.append({
-            "collection_id": step.collection_id,
-            "collection_slug": collection.slug if collection else None,
-            "collection_title": collection.title if collection else None,
-            "status": step.status,
-            "indexed": step.status != STEP_WAITING or _indexed(session, step.collection_id),
-            "files": sum(1 for file in step.files if file.get("kind") == "file"),
-            "counts": (step.result or {}).get("counts", {}),
-            "problems": (step.result or {}).get("problems", []),
-            "download_profile_on": step.enable_download_profile and step.status == STEP_DONE
-            and not (step.result or {}).get("matching"),
-            "matching": _matching_view(session, step),
-        })
+        result = step.result or {}
+        steps.append(StepView(
+            collection_id=step.collection_id,
+            collection_slug=collection.slug if collection else None,
+            collection_title=collection.title if collection else None,
+            status=step.status,
+            indexed=step.status != STEP_WAITING or _indexed(session, step.collection_id),
+            files=sum(1 for file in step.files if file.get("kind") == "file"),
+            counts=result.get("counts", {}),
+            problems=result.get("problems", []),
+            download_profile_on=step.enable_download_profile and step.status == STEP_DONE and not result.get("matching"),
+            matching=_matching_view(session, step),
+        ))
     download_profiles = _run_download_profiles(session, run)
     return RunView(run=run, steps=steps, download_profiles=DownloadProfilesView(
         total=len(download_profiles), on=sum(1 for item in download_profiles if item.enable_profile),

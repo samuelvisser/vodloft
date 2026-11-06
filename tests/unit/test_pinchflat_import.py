@@ -892,8 +892,8 @@ def test_the_path_check_marks_an_uploader_it_cannot_know():
 
     proof = imports.path_proof(profile, files, {"c": "Talks"}, FilenameRestrictionMode.UNRESTRICTED)
 
-    assert proof["identical"] == 1
-    assert [item["rendered"] for item in proof["differences"]] == ["/downloads/V/Talks/(uploader) - Second.mp4"]
+    assert proof.identical == 1
+    assert [item.rendered for item in proof.differences] == ["/downloads/V/Talks/(uploader) - Second.mp4"]
 
 
 def test_a_step_that_fails_shows_as_failed_and_the_import_finishes(installation):

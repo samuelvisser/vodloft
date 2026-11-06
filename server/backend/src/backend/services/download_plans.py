@@ -8,6 +8,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from backend.services.collection_cookies import uses_cookies
+from backend.services.playback import resolve_playback
 from backend.services.local_media_profile_sources import format_for_site
 from backend.services.sites import collection_site, video_site
 from backend.services.no_ascii_names import settle_no_ascii_name
@@ -28,7 +29,7 @@ from config import get_settings
 from config.network import is_no_internet_error
 from config.settings.submodels import MetadataMode, ThumbnailMode
 from downloader import (
-    DownloadCanceled, DownloadError, EncryptedMediaError, MediaUnavailableError, SubscriptionRequiredError,
+    DownloadCanceled, DownloadError, MediaUnavailableError,
 )
 from downloader.lifecycle import DownloadTracker
 from downloader.metadata import render_nfo
@@ -95,19 +96,13 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     if (episode is not None and media_source.has(Feature.EPISODE_LISTS)) or video is not None:
         # A listed episode is a video on a page, just like a single video.
         page_url = media.sharing_url
-        cookies = {}
+        use_cookies = None
         if episode is not None and media_source.has(Feature.OPTIONAL_COOKIES):
-            cookies = {"use_cookies": uses_cookies(episode.collection)}
+            use_cookies = uses_cookies(episode.collection)
         session.rollback()
-        tracker.preparing("resolve_playback")
-        playback = media_source.video_playback(slug=slug, url=page_url, **cookies)
-        tracker.ensure_active()
-        if playback.drm_protected:
-            raise EncryptedMediaError(f"{media_source.name} protects '{title}' with DRM")
-        if playback.needs_subscription:
-            raise SubscriptionRequiredError(
-                f"{media_source.name} only gives '{title}' to {media_source.subscription_name or 'paying'} subscribers"
-            )
+        playback = resolve_playback(
+            media_source, slug=slug, url=page_url, title=title, tracker=tracker, use_cookies=use_cookies,
+        )
         if playback.kind is PlaybackKind.YTDLP:
             if media_source.auto_subtitles_for(page_url):
                 subtitle_request = ytdlp_subtitles(profile, auto_subtitles)

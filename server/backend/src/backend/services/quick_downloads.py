@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Iterable, Literal
 
 from backend.services import quick_download_history
+from backend.services.playback import resolve_playback
 from backend.utils.filenames import clean_value
 from backend.utils.output_template import sanitize_path_component
 from config import get_settings
@@ -321,15 +322,7 @@ def _streams(source: Source, request: QuickDownloadRequest, tracker) -> _Streams
         tracker.ensure_active()
         return _Streams(video_url=playback.url)
     if request.kind is LinkKind.VIDEO or source.has(Feature.EPISODE_LISTS):
-        tracker.preparing("resolve_playback")
-        playback = source.video_playback(slug=request.slug, url=request.url)
-        tracker.ensure_active()
-        if playback.drm_protected:
-            raise EncryptedMediaError(f"{source.name} protects '{request.title}' with DRM")
-        if playback.needs_subscription:
-            raise SubscriptionRequiredError(
-                f"{source.name} only gives '{request.title}' to {source.subscription_name or 'paying'} subscribers"
-            )
+        playback = resolve_playback(source, slug=request.slug, url=request.url, title=request.title, tracker=tracker)
         if playback.kind is PlaybackKind.YTDLP:
             return _Streams(ytdlp=playback)
         return _Streams(video_url=playback.url)
