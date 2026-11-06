@@ -154,6 +154,9 @@ export default function CollectionPage() {
   }, [episodeTags, storedEpisodeTypes])
   const episodeTypes = useMemo(() => [...episodeTypeFilter].sort(), [episodeTypeFilter])
   const typeFiltered = episodeTypes.length > 0
+  // With one type selected, the count names it, such as "726 livestreams".
+  const singleTypeTag = episodeTypes.length === 1 ? episodeTags?.find((tag) => tag.key === episodeTypes[0]) : undefined
+  const countNouns = singleTypeTag ?? {singular: 'episode', plural: 'episodes'}
   const {
     data: episodePagesData,
     isLoading: episodesLoading,
@@ -640,7 +643,7 @@ export default function CollectionPage() {
             />
             {displayedTotal !== undefined && (
               <span className="collection-season-count">
-                {displayedTotal} {displayedTotal === 1 ? 'episode' : 'episodes'}
+                {displayedTotal} {displayedTotal === 1 ? countNouns.singular : countNouns.plural}
               </span>
             )}
           </div>
@@ -655,7 +658,7 @@ export default function CollectionPage() {
             />
             {typeFiltered && !isSeasonal && displayedTotal !== undefined && (
               <span className="collection-type-count">
-                {displayedTotal} {displayedTotal === 1 ? 'episode' : 'episodes'}
+                {displayedTotal} {displayedTotal === 1 ? countNouns.singular : countNouns.plural}
               </span>
             )}
           </div>

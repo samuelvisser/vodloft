@@ -35,13 +35,14 @@ _CACHE_SECONDS = 300
 _LISTING_PAUSE_SECONDS = 1.0
 _YOUTUBE_CHANNEL = re.compile(r"^/(@[^/]+|channel/[^/]+|c/[^/]+|user/[^/]+)/?$")
 _UNAVAILABLE_TITLES = {"[Private video]", "[Deleted video]"}
-_VIDEO_TAG = EpisodeTag(MAIN_TAG, "Video", "A normal video", main=True)
+_VIDEO_TAG = EpisodeTag(MAIN_TAG, "Video", "A normal video", "video", "videos", main=True)
 _YOUTUBE_TAGS = (
     _VIDEO_TAG,
-    EpisodeTag("short", "Short", "A YouTube Short", selected_by_default=False, rss_episode_type=RssEpisodeType.BONUS),
+    EpisodeTag("short", "Short", "A YouTube Short", "short", "shorts", selected_by_default=False, rss_episode_type=RssEpisodeType.BONUS),
     EpisodeTag(
         "livestream", "Livestream",
         "A livestream: upcoming, live now or finished. Finishing does not change the tag. A premiere is a video.",
+        "livestream", "livestreams",
     ),
 )
 # yt-dlp reports a livestream that is still live, upcoming or long finished alike.

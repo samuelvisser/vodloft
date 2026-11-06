@@ -794,7 +794,7 @@ def test_youtube_feeds_stream_at_its_own_resolutions_and_do_not_proxy(migration_
                 "INSERT INTO stream_profiles_rss (id, feed_url, max_items) VALUES (:id, :url, 0)"
             ), {"id": stream_id, "url": f"https://example.test/{stream_id}"})
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, "53adf1f1b502")
 
     with engine.connect() as connection:
         # Only feeds that stream from YouTube move; feeds of downloads keep any resolution.
@@ -876,12 +876,43 @@ def test_daily_wire_profiles_get_the_upgrade_check_for_a_different_length(migrat
         assert connection.execute(text("SELECT duration FROM media_downloads")).all() == []
 
 
-def test_collections_keep_the_episode_order_their_identification_gave_them(migration_database):
+def test_feeds_proxy_their_sites_video_by_default(migration_database):
     _database_path, engine = migration_database
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
     command.upgrade(config, "d6346ad993ee")
+    with engine.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+            "author_name, author_slug, source_key) VALUES (1, 'c1', 'c1', 'C', 'https://www.youtube.com/@host', "
+            "'free', 'series', 'numbered', 'Host', 'host', 'ytdlp')"
+        ))
+        connection.execute(text(
+            "INSERT INTO stream_profiles (id, type, collection_id, enable_profile, token, use_downloads, use_source_stream, "
+            "preferred_format, prefer_exact_match) VALUES (20, 'rss', 1, 1, 't20', 1, 1, 'format_720p', 0)"
+        ))
+        connection.execute(text("INSERT INTO stream_profiles_rss (id, feed_url, max_items) VALUES (20, 'https://example.test/20', 0)"))
+        assert connection.execute(text("SELECT proxy_source_stream FROM stream_profiles_rss")).scalar_one() == 0
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.begin() as connection:
+        assert connection.execute(text("SELECT proxy_source_stream FROM stream_profiles_rss")).scalar_one() == 1
+        connection.execute(text(
+            "INSERT INTO stream_profiles (id, type, collection_id, enable_profile, token, use_downloads, use_source_stream, "
+            "preferred_format, prefer_exact_match) VALUES (21, 'rss', 1, 1, 't21', 1, 1, 'format_720p', 0)"
+        ))
+        connection.execute(text("INSERT INTO stream_profiles_rss (id, feed_url, max_items) VALUES (21, 'https://example.test/21', 0)"))
+        assert connection.execute(text("SELECT proxy_source_stream FROM stream_profiles_rss WHERE id = 21")).scalar_one() == 1
+
+
+def test_collections_keep_the_episode_order_their_identification_gave_them(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "28c70478078a")
     with engine.begin() as connection:
         for collection_id, identifier in ((1, "date_based"), (2, "numbered"), (3, "seasonal")):
             connection.execute(text(

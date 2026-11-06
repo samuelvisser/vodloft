@@ -119,7 +119,9 @@ With YouTube streaming disabled, a feed serves only downloaded episodes. For an 
 
 ### Proxy video through VODLoft
 
-Normally your podcast app fetches YouTube video straight from YouTube. With **Proxy video through VODLoft** enabled, VODLoft fetches it and passes it on instead. This might make the feed more stable, but every video you watch then goes through your VODLoft server's internet connection twice: once down from YouTube and once up to your app.
+With **Proxy video through VODLoft**, VODLoft fetches YouTube video and passes it on to your podcast app. This is on by default, because it plays most reliably: when YouTube refuses a link, VODLoft looks the video up again before your app notices. The cost is bandwidth: every video you watch goes through your VODLoft server's internet connection twice, once down from YouTube and once up to your app.
+
+With it off, your podcast app fetches the video straight from YouTube. It still asks VODLoft for each part, and VODLoft sends it on to YouTube with a link that has not expired yet, so long videos and videos you come back to later keep playing.
 
 A YouTube feed with an HLS output can also list videos while they are live (see below). Your podcast app plays the live video straight from YouTube, or through VODLoft with **Proxy video through VODLoft**. Audio-only playback of a live video comes as one endless stream without seeking, and many podcast apps play the video instead.
 

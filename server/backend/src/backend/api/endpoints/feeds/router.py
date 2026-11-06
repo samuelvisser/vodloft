@@ -20,6 +20,7 @@ from .source_tracks import (
     stream_height,
     track_part_response,
     track_playlist_response,
+    track_redirect_response,
 )
 from .service import (
     can_stream_from_source,
@@ -399,7 +400,8 @@ def rss_feed_episode_live(token: str, episode_slug: str, name: str, request: Req
 )
 def rss_feed_episode_track(token: str, episode_slug: str, name: str, request: Request):
     """A playlist of one of the video or audio tracks of a Site's HLS stream that VODLoft writes, or
-    that track's bytes, passed on for a feed that proxies its Site's video."""
+    that track's bytes: passed on for a feed that proxies its Site's video, and otherwise a redirect
+    to the Site with a fresh link."""
     with db_session() as s:
         profile = get_rss_stream_profile_by_token(s, token)
         if (
@@ -420,7 +422,9 @@ def rss_feed_episode_track(token: str, episode_slug: str, name: str, request: Re
 
     head_only = request.method == "HEAD"
     if name.endswith(".m3u8"):
-        return track_playlist_response(source, episode_ref, name, proxy=proxy, head_only=head_only)
+        return track_playlist_response(source, episode_ref, name, head_only=head_only)
+    if not proxy:
+        return track_redirect_response(source, episode_ref, name, head_only=head_only)
     return track_part_response(source, episode_ref, name, range_header=request.headers.get("range"), head_only=head_only)
 
 

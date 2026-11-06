@@ -4,7 +4,7 @@ Seasonal Collections start each season at its first episode and every other Coll
 newest episode first, the order the Collection page already showed.
 
 Revision ID: db11a36f288f
-Revises: d6346ad993ee
+Revises: 28c70478078a
 Create Date: 2026-11-06
 """
 from __future__ import annotations
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "db11a36f288f"
-down_revision = "d6346ad993ee"
+down_revision = "28c70478078a"
 branch_labels = None
 depends_on = None
 

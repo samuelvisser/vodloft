@@ -176,6 +176,9 @@ export const EpisodeTagReadSchema = z.object({
     key: z.string(),
     label: z.string(),
     help: z.string(),
+    /** Names a count of these episodes, such as "1 livestream" or "726 livestreams". */
+    singular: z.string(),
+    plural: z.string(),
     selectedByDefault: z.boolean(),
     rssEpisodeType: z.enum(['full', 'trailer', 'bonus']),
     /** Episodes with the main tag follow the collection's numbering. */
