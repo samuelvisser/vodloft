@@ -71,12 +71,19 @@
     white-space: nowrap;
 }
 
+/* A cut-off section can still be scrolled sideways to read the rest, without a visible scroll bar. */
 @media (max-width: 640px) {
     .read-only-output-template-code-editor.is-path .cm-path-section {
         display: inline-block;
         max-width: 100%;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        overflow-x: auto;
+        overflow-y: hidden;
         vertical-align: bottom;
+        scrollbar-width: none;
+        overscroll-behavior-x: contain;
+    }
+
+    .read-only-output-template-code-editor.is-path .cm-path-section::-webkit-scrollbar {
+        display: none;
     }
 }
