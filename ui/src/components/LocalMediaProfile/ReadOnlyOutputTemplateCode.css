@@ -40,3 +40,20 @@
 .read-only-output-template-code-editor .cm-jinja-expression {
     white-space: nowrap;
 }
+
+/* A path view is about the folders: accent the slashes between them and fade the variable braces. */
+.read-only-output-template-code-editor.is-path .cm-path-slash {
+    margin: 0 0.18em;
+    color: #ea580c;
+    font-weight: 700;
+}
+
+.read-only-output-template-code-editor.is-path .cm-jinja-brace {
+    opacity: 0.45;
+}
+
+@media (prefers-color-scheme: dark) {
+    .read-only-output-template-code-editor.is-path .cm-path-slash {
+        color: #fb923c;
+    }
+}

@@ -46,3 +46,24 @@ export const keepExpressionsTogether = ViewPlugin.fromClass(class {
         this.decorations = expressionMatcher.updateDeco(update, this.decorations)
     }
 }, {decorations: (plugin) => plugin.decorations})
+
+// Marks the slashes between path parts, outside any `{{ … }}`, so a path view can make its folders stand out.
+const pathSlashMark = Decoration.mark({class: 'cm-path-slash'})
+const pathSlashMatcher = new MatchDecorator({
+    regexp: /\{\{.*?\}\}|\//g,
+    decorate: (add, from, to, match) => {
+        if (match[0] === '/') add(from, to, pathSlashMark)
+    },
+})
+
+export const markPathSlashes = ViewPlugin.fromClass(class {
+    decorations: DecorationSet
+
+    constructor(view: EditorView) {
+        this.decorations = pathSlashMatcher.createDeco(view)
+    }
+
+    update(update: ViewUpdate) {
+        this.decorations = pathSlashMatcher.updateDeco(update, this.decorations)
+    }
+}, {decorations: (plugin) => plugin.decorations})
