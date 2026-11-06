@@ -11,6 +11,7 @@ import {RssStreamProfileUpdateIn, RssStreamProfileUpdateSchema} from '../../type
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {faIcon} from '../../icons/faIcon'
 import {downloadedEpisodeTypes} from '../../components/DownloadProfile/episodeFilters'
+import {apiUrl} from '../../lib/api'
 
 
 type RouteParams = { type?: 'rss'; id?: string }
@@ -28,7 +29,7 @@ export default function EditStreamProfilePage() {
         enabled: !!id,
         refetchOnMount: 'always',
         queryFn: async ({signal}) => {
-            const res = await fetch(`${(window as any).appConfig.API_URL}/stream-profiles/as-view/${profileId}`, { signal, credentials: 'include' })
+            const res = await fetch(`${apiUrl()}/stream-profiles/as-view/${profileId}`, { signal, credentials: 'include' })
             if (!res.ok) throw new Error(`Failed to load profile (${res.status})`)
             return await res.json() as Promise<StreamProfileReadView>
         },
@@ -72,7 +73,7 @@ export default function EditStreamProfilePage() {
         setRegenerateConfirmOpen(false)
         setRegenerating(true)
         try {
-            const res = await fetch(`${(window as any).appConfig.API_URL}/rss-stream-profiles/${profileId}/regenerate-token`, {
+            const res = await fetch(`${apiUrl()}/rss-stream-profiles/${profileId}/regenerate-token`, {
                 method: 'POST',
                 credentials: 'include',
             })
@@ -89,7 +90,7 @@ export default function EditStreamProfilePage() {
 
     const submitFn = async (data: RssStreamProfileUpdateIn) => {
         if (!profileId) return undefined as any
-        return fetch(`${(window as any).appConfig.API_URL}/rss-stream-profiles/${profileId}`, {
+        return fetch(`${apiUrl()}/rss-stream-profiles/${profileId}`, {
             method: 'PATCH',
             headers: {'Content-Type': 'application/json'},
             credentials: 'include',

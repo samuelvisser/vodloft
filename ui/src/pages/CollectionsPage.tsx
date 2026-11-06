@@ -6,6 +6,7 @@ import DataTable, {Column} from '../components/DataTable/DataTable'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
 import {EpisodeIdentifierReg, CollectionTypeReg} from "../types/collection";
 import {faIcon} from '../icons/faIcon'
+import {apiUrl} from '../lib/api'
 
 export default function CollectionsPage() {
 
@@ -85,7 +86,7 @@ export default function CollectionsPage() {
                 ref={confirmRef}
                 title="Delete collection"
                 subjectProp={(s) => s.title}
-                deleteRequest={(s) => fetch(`${(window as any).appConfig.API_URL}/collections/${encodeURIComponent(s.slug)}`, {method: 'DELETE', credentials: 'include'})}
+                deleteRequest={(s) => fetch(`${apiUrl()}/collections/${encodeURIComponent(s.slug)}`, {method: 'DELETE', credentials: 'include'})}
                 invalidateQueries={[['collections']]}
                 inUseMessage="This collection is in use, it cannot be deleted"
             />

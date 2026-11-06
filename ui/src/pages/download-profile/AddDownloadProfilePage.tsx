@@ -15,6 +15,7 @@ import {buildCollectionSelectRegistry, EpisodeIdentifierReg} from "../../types/c
 import {useQueryClient} from "@tanstack/react-query";
 import {getZodDefaults} from "../../utils/defaultZod";
 import ReadMore from "../../utils/ReadMore";
+import {apiUrl} from '../../lib/api'
 
 export default function AddDownloadProfilePage() {
     const navigate = useNavigate()
@@ -81,7 +82,7 @@ export default function AddDownloadProfilePage() {
     const onCancel = useCallback(() => navigate('/download-profiles'), [navigate])
 
     const submitFn = async (data: DownloadProfileCreateOut) => {
-        return fetch(`${(window as any).appConfig.API_URL}/download-profiles`, {
+        return fetch(`${apiUrl()}/download-profiles`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             credentials: 'include',

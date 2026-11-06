@@ -1,4 +1,5 @@
 import {useQuery} from '@tanstack/react-query'
+import {apiUrl} from './api'
 
 export type CustomMetadataFieldScope = 'collection' | 'movie'
 
@@ -12,7 +13,7 @@ export function useCustomMetadataFields(
         queryFn: async ({signal}) => {
             const params = new URLSearchParams({scope})
             const response = await fetch(
-                `${(window as any).appConfig.API_URL}/custom-metadata/fields?${params.toString()}`,
+                `${apiUrl()}/custom-metadata/fields?${params.toString()}`,
                 {signal, credentials: 'include'},
             )
             if (!response.ok) throw new Error(`Failed to load custom metadata fields (${response.status})`)

@@ -18,6 +18,7 @@ import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from '../../lib/cache'
 import {episodeQueryKeys} from '../../lib/collectionQueryOptions'
 import {CollectionTypeReg, EpisodeIdentifierReg, EpisodeOrderReg, EpisodeOrderValue} from '../../types/collection'
+import {apiUrl} from '../../lib/api'
 
 const CheckFrequencyReg = createSelectRegistry('CollectionCheckFrequency', {
   default: {label: 'Like other Collections'},
@@ -90,7 +91,7 @@ export default function EditCollectionPage() {
     queryKey: ['collection', id, 'checkSuggestion'],
     enabled: !!id,
     queryFn: async ({signal}) => {
-      const r = await fetch(`${(window as any).appConfig.API_URL}/collections/${id}/check-suggestion`, {signal, credentials: 'include'})
+      const r = await fetch(`${apiUrl()}/collections/${id}/check-suggestion`, {signal, credentials: 'include'})
       if (!r.ok) return null
       return ((await r.json()) as {suggestion: string | null}).suggestion
     },
@@ -119,7 +120,7 @@ export default function EditCollectionPage() {
       ...(form.checkFrequency === 'own' ? {checkCron: form.checkCron} : {}),
       ...(optionalCookies ? {cookiesMode: form.cookiesMode} : {}),
     }
-    const r = await fetch(`${(window as any).appConfig.API_URL}/collections/${id}`, {
+    const r = await fetch(`${apiUrl()}/collections/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -163,7 +164,7 @@ export default function EditCollectionPage() {
   const closeDeleteConfirm = () => setDeleteConfirm(false)
   const onConfirmDelete = async () => {
     if (!id) return
-    const url = `${(window as any).appConfig.API_URL}/collections/${id}`
+    const url = `${apiUrl()}/collections/${id}`
     const r = await fetch(url, { method: 'DELETE', credentials: 'include' })
     if (!r.ok) {
       let friendly = `Failed to delete collection (HTTP ${r.status})`

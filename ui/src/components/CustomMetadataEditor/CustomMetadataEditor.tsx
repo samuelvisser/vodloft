@@ -15,6 +15,7 @@ import {
 } from '../../types/schemas/custom_metadata'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import './CustomMetadataEditor.css'
+import {apiUrl} from '../../lib/api'
 
 export type CustomMetadataScope = 'collection' | 'movie'
 
@@ -107,7 +108,7 @@ export default function CustomMetadataEditor({
             const removedFields = [...pendingRemovedFields]
                 .filter((key) => !activeFields.has(key))
                 .sort()
-            return fetch(`${(window as any).appConfig.API_URL}${endpoint}`, {
+            return fetch(`${apiUrl()}${endpoint}`, {
                 method: 'PUT',
                 headers: {'Content-Type': 'application/json'},
                 credentials: 'include',

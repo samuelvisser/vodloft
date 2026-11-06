@@ -11,6 +11,7 @@ import {useEpisodeTags} from '../../lib/queries'
 import {episodeTagLabel} from '../../types/schemas/source'
 import type {EpisodeFilter} from '../../types/schemas/download_profile'
 import {filterSentence, plainText} from '../DownloadProfile/whichEpisodesText'
+import {apiUrl} from '../../lib/api'
 
 // Beyond this many downloads for one episode, collapse the rest into a "+N" pill
 // instead of letting icons overflow the thumbnail.
@@ -58,7 +59,7 @@ export function toImageUrl(path?: string | null): string | undefined {
     if (!path) return undefined
     // If already an absolute URL, return as-is
     if (/^https?:\/\//i.test(path)) return path
-    const base = (window as any).appConfig?.API_URL?.replace(/\/+$/, '')
+    const base = apiUrl()
     if (!base) return path
     // If path is already rooted, just prefix API base
     if (path.startsWith('/')) return base + path

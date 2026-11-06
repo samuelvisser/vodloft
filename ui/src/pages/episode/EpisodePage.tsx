@@ -22,6 +22,7 @@ import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
 import {RemovedBadge} from '../../components/common/RemovedFromSource'
 import {SubscriptionBadge, SubscriptionNotice, useSubscriptionLocked} from '../../components/common/NeedsSubscription'
 import SponsorBlockTimeline from '../../components/Episode/SponsorBlockTimeline'
+import {apiUrl} from '../../lib/api'
 
 
 const OPERATION_STARTING_MESSAGE = 'This task is starting...'
@@ -191,7 +192,7 @@ export default function EpisodePage() {
 
         setMetadataRefreshStarting(true)
         try {
-            const base = (window as any).appConfig?.API_URL || '/api'
+            const base = apiUrl()
             await startOperation(
                 `${base}/episodes/${encodeURIComponent(episode.slug)}/refresh-metadata`,
                 {method: 'POST'},
@@ -210,7 +211,7 @@ export default function EpisodePage() {
 
         setEarlyDeleteStarting(true)
         try {
-            const base = (window as any).appConfig?.API_URL || '/api'
+            const base = apiUrl()
             await startOperation(
                 `${base}/episodes/${encodeURIComponent(episode.slug)}/early-delete`,
                 {method: 'POST'},

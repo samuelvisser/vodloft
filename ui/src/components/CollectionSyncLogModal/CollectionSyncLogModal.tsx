@@ -7,6 +7,7 @@ import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import './CollectionSyncLogModal.css'
 import {faIcon} from '../../icons/faIcon'
 import {useLoadMoreOnScroll} from '../../lib/useLoadMoreOnScroll'
+import {apiUrl} from '../../lib/api'
 
 type Props = {
   collectionId: number
@@ -69,7 +70,7 @@ export default function CollectionSyncLogModal({
     queryFn: async ({signal, pageParam}): Promise<CollectionSyncLog> => {
       const params = new URLSearchParams({offset: String(pageParam), limit: String(PAGE_SIZE)})
       const r = await fetch(
-        `${(window as any).appConfig.API_URL}/collections/${encodeURIComponent(collectionSlug)}/sync-log?${params}`,
+        `${apiUrl()}/collections/${encodeURIComponent(collectionSlug)}/sync-log?${params}`,
         {signal, credentials: 'include'},
       )
       if (!r.ok) throw new Error(`HTTP ${r.status}`)

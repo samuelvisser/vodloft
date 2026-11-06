@@ -4,6 +4,7 @@ import {useQuery} from '@tanstack/react-query'
 import {useLazyCollection} from './lazyCollection'
 
 import type {CollectionLocalMediaProfileScope} from '../types/local_media_profile'
+import {apiUrl} from './api'
 
 export type LocalMediaProfileTemplateSourceMode = 'collection' | 'movie' | 'video'
 
@@ -45,7 +46,7 @@ async function fetchTemplateJson<T>(
     cache?: RequestCache,
 ): Promise<T> {
     const response = await fetch(
-        `${(window as any).appConfig.API_URL}/local-media-profiles/template/${path}`,
+        `${apiUrl()}/local-media-profiles/template/${path}`,
         {signal, credentials: 'include', cache},
     )
     if (!response.ok) throw new Error(`Failed to load template data (${response.status})`)

@@ -18,6 +18,7 @@ import OnboardingMovieProfileStep from './OnboardingMovieProfileStep'
 import OnboardingMediaStep from './OnboardingMediaStep'
 import './Onboarding.css'
 import {faIcon} from '../../icons/faIcon'
+import {apiUrl} from '../../lib/api'
 
 
 type OnboardingStep = 'welcome' | 'sources' | 'security' | 'media' | 'import' | 'add' | 'browse' | 'search' | 'collection' | 'movie-profile' | 'movie'
@@ -69,7 +70,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
         setIsCompleting(true)
         setError(null)
         try {
-            const response = await fetch(`${(window as any).appConfig.API_URL}/onboarding/complete`, {
+            const response = await fetch(`${apiUrl()}/onboarding/complete`, {
                 method: 'POST',
                 credentials: 'include',
             })
@@ -86,7 +87,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
     // A fresh library gets the default Collection profiles only once its first collection needs one,
     // and loses them again when the person goes back to choose an import instead.
     const setFreshStartProfiles = async (wanted: boolean) => {
-        const response = await fetch(`${(window as any).appConfig.API_URL}/onboarding/start-fresh`, {
+        const response = await fetch(`${apiUrl()}/onboarding/start-fresh`, {
             method: wanted ? 'POST' : 'DELETE',
             credentials: 'include',
         })
@@ -119,7 +120,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
 
     const leaveCollectionWizard = async () => {
         try {
-            const response = await fetch(`${(window as any).appConfig.API_URL}/collections`, {credentials: 'include'})
+            const response = await fetch(`${apiUrl()}/collections`, {credentials: 'include'})
             if (response.ok) {
                 const currentCollections = await response.json() as CollectionRead[]
                 queryClient.setQueryData(['collections'], currentCollections)

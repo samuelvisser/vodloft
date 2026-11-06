@@ -19,6 +19,7 @@ import {
 import type {QuickDownloadSettings} from '../types/schemas/settings'
 import type {TaskOperationRead} from '../types/schemas/operation'
 import {formatBytes} from '../utils/formatting'
+import {apiUrl, responseError, apiJson} from './api'
 
 export const QUICK_DOWNLOAD_OPERATION_KIND = 'quick.download'
 export const quickDownloadsQueryKey = ['quickDownloads'] as const
@@ -43,24 +44,9 @@ export const CODEC_NOTES: Record<QuickCodec, string> = {
     av1: 'smallest, newest devices',
 }
 
-function apiBase(): string {
-    return ((window as any).appConfig?.API_URL || '/api').replace(/\/+$/, '')
-}
-
-async function responseError(response: Response): Promise<Error> {
-    let detail = `HTTP ${response.status}`
-    try {
-        const body = await response.json()
-        if (typeof body?.detail === 'string') detail = body.detail
-    } catch {
-        // Keep the status text when the body is not JSON.
-    }
-    return new Error(detail)
-}
-
 /** Look a link up, with what it can be quick downloaded as. */
 export async function fetchQuickDownloadOptions(url: string, signal?: AbortSignal, sourceKey?: string): Promise<QuickDownloadOptions> {
-    const response = await fetch(`${apiBase()}/quick-downloads/options`, {
+    const response = await fetch(`${apiUrl()}/quick-downloads/options`, {
         method: 'POST',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
@@ -87,7 +73,7 @@ export type QuickDownloadPreview = z.infer<typeof QuickDownloadPreviewSchema>
  */
 export async function fetchQuickDownloadPreview(url: string, signal?: AbortSignal, sourceKey?: string): Promise<QuickDownloadPreview | null> {
     try {
-        const response = await fetch(`${apiBase()}/quick-downloads/preview`, {
+        const response = await fetch(`${apiUrl()}/quick-downloads/preview`, {
             method: 'POST',
             credentials: 'include',
             headers: {'Content-Type': 'application/json'},
@@ -103,7 +89,7 @@ export async function fetchQuickDownloadPreview(url: string, signal?: AbortSigna
 }
 
 export async function startQuickDownload(url: string, sourceKey: string, choice: QuickChoice) {
-    const response = await fetch(`${apiBase()}/quick-downloads`, {
+    const response = await fetch(`${apiUrl()}/quick-downloads`, {
         method: 'POST',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
@@ -114,7 +100,7 @@ export async function startQuickDownload(url: string, sourceKey: string, choice:
 }
 
 export async function removeQuickDownload(quickId: string): Promise<void> {
-    const response = await fetch(`${apiBase()}/quick-downloads/${encodeURIComponent(quickId)}`, {
+    const response = await fetch(`${apiUrl()}/quick-downloads/${encodeURIComponent(quickId)}`, {
         method: 'DELETE',
         credentials: 'include',
     })
@@ -122,7 +108,7 @@ export async function removeQuickDownload(quickId: string): Promise<void> {
 }
 
 export function quickDownloadFileUrl(quickId: string): string {
-    return `${apiBase()}/quick-downloads/${encodeURIComponent(quickId)}/file`
+    return `${apiUrl()}/quick-downloads/${encodeURIComponent(quickId)}/file`
 }
 
 export const quickDownloadHistoryQueryKey = ['quickDownloads', 'history'] as const
@@ -132,7 +118,7 @@ export function useQuickDownloadHistory(enabled = true) {
         queryKey: quickDownloadHistoryQueryKey,
         enabled,
         queryFn: async ({signal}) => {
-            const response = await fetch(`${apiBase()}/quick-downloads/history`, {signal, credentials: 'include'})
+            const response = await fetch(`${apiUrl()}/quick-downloads/history`, {signal, credentials: 'include'})
             if (!response.ok) throw await responseError(response)
             return z.array(QuickDownloadHistoryEntrySchema).parse(await response.json())
         },
@@ -141,7 +127,7 @@ export function useQuickDownloadHistory(enabled = true) {
 }
 
 export async function clearQuickDownloadHistory(): Promise<void> {
-    const response = await fetch(`${apiBase()}/quick-downloads/history`, {method: 'DELETE', credentials: 'include'})
+    const response = await fetch(`${apiUrl()}/quick-downloads/history`, {method: 'DELETE', credentials: 'include'})
     if (!response.ok) throw await responseError(response)
 }
 
@@ -173,9 +159,7 @@ export function useQuickDownloadSettings() {
     return useQuery({
         queryKey: quickDownloadSettingsQueryKey,
         queryFn: async ({signal}) => {
-            const response = await fetch(`${apiBase()}/quick-downloads/settings`, {signal, credentials: 'include'})
-            if (!response.ok) throw await responseError(response)
-            return QuickDownloadSettingsForUserSchema.parse(await response.json())
+            return apiJson(`/quick-downloads/settings`, QuickDownloadSettingsForUserSchema.parse, {signal})
         },
         staleTime: 60_000,
     })
@@ -183,7 +167,7 @@ export function useQuickDownloadSettings() {
 
 /** Save a choice as the user's own defaults, or with ``null`` go back to the install's. */
 export async function saveQuickDownloadPreferences(choice: QuickChoice | null): Promise<QuickDownloadSettingsForUser> {
-    const response = await fetch(`${apiBase()}/quick-downloads/preferences`, {
+    const response = await fetch(`${apiUrl()}/quick-downloads/preferences`, {
         method: choice ? 'PUT' : 'DELETE',
         credentials: 'include',
         headers: choice ? {'Content-Type': 'application/json'} : undefined,
@@ -197,9 +181,7 @@ export function useQuickDownloads() {
     return useQuery({
         queryKey: quickDownloadsQueryKey,
         queryFn: async ({signal}) => {
-            const response = await fetch(`${apiBase()}/quick-downloads`, {signal, credentials: 'include'})
-            if (!response.ok) throw await responseError(response)
-            return QuickDownloadsSchema.parse(await response.json())
+            return apiJson(`/quick-downloads`, QuickDownloadsSchema.parse, {signal})
         },
         // Ready files count down to their deletion. A delivered file reaches
         // the page as a quick.delivered operation through the frontend puller.

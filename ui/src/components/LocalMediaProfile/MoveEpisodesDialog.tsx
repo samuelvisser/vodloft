@@ -18,6 +18,7 @@ import {
 } from '../../types/schemas/local_media_profile_move'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
 import './MoveEpisodesDialog.css'
+import {apiUrl} from '../../lib/api'
 
 type Props = {
     profile: {id: number, slug: string, name: string}
@@ -29,7 +30,7 @@ type Props = {
 
 type Choice = {move: boolean, moveDownloadProfile: boolean}
 
-const api = () => (window as any).appConfig.API_URL as string
+const api = () => apiUrl()
 
 const MOVES: readonly EpisodeMoveOutcome[] = ['move', 'replace']
 

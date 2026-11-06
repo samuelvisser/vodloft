@@ -32,6 +32,7 @@ import {
 } from '../../components/LocalMediaProfile/localMediaProfileDraft'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {localMediaProfileEndpoint} from '../../types/local_media_profile'
+import {apiUrl} from '../../lib/api'
 
 
 export default function AddLocalMediaProfilePage() {
@@ -105,7 +106,7 @@ export default function AddLocalMediaProfilePage() {
 
     const submitFn = async (data: LocalMediaProfileCreateOut) => {
         const endpoint = localMediaProfileEndpoint(mode)
-        return fetch(`${(window as any).appConfig.API_URL}/${endpoint}`, {
+        return fetch(`${apiUrl()}/${endpoint}`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             credentials: 'include',

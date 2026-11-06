@@ -1,6 +1,7 @@
 import {useCallback, useState} from 'react'
 import {useQueryClient} from '@tanstack/react-query'
 import {refreshFrontendPuller} from './puller'
+import {apiUrl, errorDetail} from './api'
 
 export type OperationAccepted = {
     operationId: string
@@ -29,16 +30,6 @@ export class OperationControlError extends Error {
     }
 }
 
-async function responseError(response: Response): Promise<string> {
-    try {
-        const body = await response.json()
-        if (typeof body?.detail === 'string' && body.detail.trim()) return body.detail
-    } catch {
-        // Fall back to the HTTP status below.
-    }
-    return `HTTP ${response.status}`
-}
-
 /**
  * Start a backend TaskOperation and register it with the global notifier.
  *
@@ -58,7 +49,7 @@ export function useStartOperation() {
             ...init,
         })
         if (!response.ok) {
-            throw new OperationStartError(await responseError(response), response.status)
+            throw new OperationStartError(await errorDetail(response), response.status)
         }
 
         const result = await response.json() as T
@@ -106,13 +97,13 @@ export function useControlOperation() {
         operationId: string,
         action: OperationControlAction,
     ): Promise<void> => {
-        const base = (window as any).appConfig?.API_URL || '/api'
+        const base = apiUrl()
         const response = await fetch(
             `${base}/operations/${encodeURIComponent(operationId)}/${action}`,
             {method: 'POST', credentials: 'include'},
         )
         if (!response.ok) {
-            throw new OperationControlError(await responseError(response), response.status)
+            throw new OperationControlError(await errorDetail(response), response.status)
         }
 
         await refreshFrontendPuller(queryClient)

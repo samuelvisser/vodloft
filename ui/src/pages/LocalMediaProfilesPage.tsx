@@ -17,6 +17,7 @@ import PageSubtitle from "../components/common/PageSubtitle";
 import OpaqueOutputTemplateCode from '../components/LocalMediaProfile/OpaqueOutputTemplateCode'
 import {localMediaProfileEndpoint} from '../types/local_media_profile'
 import './LocalMediaProfilesPage.css'
+import {apiUrl} from '../lib/api'
 
 type LocalMediaProfileOverviewRow = LocalMediaProfileRead & {
     storageSizeBytes: number
@@ -157,7 +158,7 @@ export default function LocalMediaProfilesPage() {
                 deleteRequest={(p) => {
                     const endpoint = localMediaProfileEndpoint(p.type)
                     const path = `${endpoint}/${p.slug}`
-                    return fetch(`${(window as any).appConfig.API_URL}/${path}`, { method: 'DELETE', credentials: 'include' })
+                    return fetch(`${apiUrl()}/${path}`, { method: 'DELETE', credentials: 'include' })
                 }}
                 invalidateQueries={[["localMediaProfiles"], ["localMediaProfilesView"]]}
                 inUseMessage="This media profile is in use, it cannot be deleted"

@@ -5,6 +5,7 @@ import {
     LocalMediaProfilePreviewSchema,
     type LocalMediaProfilePreview,
 } from '../types/schemas/local_media_profile_preview'
+import {apiUrl} from './api'
 
 type PreviewRequest = {
     type: 'collection' | 'movie' | 'video'
@@ -56,7 +57,7 @@ export function useLocalMediaProfilePreview(request: PreviewRequest | null): Loc
             // request is still running.
             if (request?.type === 'collection' && request.outputTemplate.includes('custom_index')) {
                 void fetch(
-                    `${(window as any).appConfig.API_URL}/local-media-profiles/preview/plan`,
+                    `${apiUrl()}/local-media-profiles/preview/plan`,
                     requestOptions,
                 ).then(async (response) => {
                     if (!response.ok) return
@@ -74,7 +75,7 @@ export function useLocalMediaProfilePreview(request: PreviewRequest | null): Loc
 
             try {
                 const response = await fetch(
-                    `${(window as any).appConfig.API_URL}/local-media-profiles/preview`,
+                    `${apiUrl()}/local-media-profiles/preview`,
                     requestOptions,
                 )
                 const payload = await response.json()

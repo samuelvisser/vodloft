@@ -37,6 +37,7 @@ import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import './MoviePage.css'
 import {isLocalMediaProfileAvailableForSource} from '../../types/local_media_profile'
+import {apiUrl} from '../../lib/api'
 
 type MovieExtraSummary = {
     id?: number
@@ -203,7 +204,7 @@ export default function MoviePage() {
         const refresh = async () => {
             try {
                 const response = await fetch(
-                    `${(window as any).appConfig.API_URL}/movies/${encodeURIComponent(slug)}/refresh`,
+                    `${apiUrl()}/movies/${encodeURIComponent(slug)}/refresh`,
                     {
                         method: 'POST',
                         credentials: 'include',
@@ -249,7 +250,7 @@ export default function MoviePage() {
         const movieWasAlreadyIndexed = Boolean(localMovie)
         setSubmitting(key)
         try {
-            const response = await fetch(`${(window as any).appConfig.API_URL}${path}`, {
+            const response = await fetch(`${apiUrl()}${path}`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 credentials: 'include',
@@ -281,7 +282,7 @@ export default function MoviePage() {
         const busyKey = `${download.id}:${action}`
         setDownloadControlBusy(busyKey)
         try {
-            const base = (window as any).appConfig.API_URL
+            const base = apiUrl()
             const response = await fetch(`${base}/media-downloads/${download.id}/${action}`, {
                 method: 'POST',
                 credentials: 'include',
@@ -310,7 +311,7 @@ export default function MoviePage() {
         setAddingMovie(true)
         try {
             const response = await fetch(
-                `${(window as any).appConfig.API_URL}/movies/${encodeURIComponent(slug)}/index`,
+                `${apiUrl()}/movies/${encodeURIComponent(slug)}/index`,
                 {method: 'POST', credentials: 'include'},
             )
             if (!response.ok) {
@@ -332,7 +333,7 @@ export default function MoviePage() {
         if (!slug || !localMovie || refreshingExtras) return
         setRefreshingExtrasStarting(true)
         try {
-            const base = (window as any).appConfig.API_URL
+            const base = apiUrl()
             await startOperation(
                 `${base}/movies/${encodeURIComponent(slug)}/extras/refresh`,
                 {method: 'POST'},
@@ -351,7 +352,7 @@ export default function MoviePage() {
         setRetryingMetadata(true)
         try {
             const response = await fetch(
-                `${(window as any).appConfig.API_URL}/movies/${encodeURIComponent(slug)}/release-metadata/retry`,
+                `${apiUrl()}/movies/${encodeURIComponent(slug)}/release-metadata/retry`,
                 {method: 'POST', credentials: 'include'},
             )
             if (!response.ok) {
@@ -426,7 +427,7 @@ export default function MoviePage() {
         setDeleting(true)
         try {
             const response = await fetch(
-                `${(window as any).appConfig.API_URL}/movies/${encodeURIComponent(slug)}`,
+                `${apiUrl()}/movies/${encodeURIComponent(slug)}`,
                 {method: 'DELETE', credentials: 'include'},
             )
             if (!response.ok) {
