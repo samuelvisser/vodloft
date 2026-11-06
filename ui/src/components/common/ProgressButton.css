@@ -12,6 +12,9 @@
 
 .progress-button {
     position: relative;
+    /* Room for the small title above the status, in every state, so the
+       button keeps its height when it switches to progress. */
+    min-height: 44px;
     z-index: 0;
     width: 100%;
     min-width: 0;
@@ -44,6 +47,27 @@
     background: rgba(59, 130, 246, 0.36);
     pointer-events: none;
     transition: width 220ms ease;
+}
+
+.progress-button-root.is-progress .progress-button {
+    flex-direction: column;
+    gap: 2px;
+    padding-block: 6px;
+}
+
+.progress-button-title {
+    position: relative;
+    z-index: 1;
+    max-width: 100%;
+    overflow: hidden;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.07em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--muted);
 }
 
 .progress-button-label {

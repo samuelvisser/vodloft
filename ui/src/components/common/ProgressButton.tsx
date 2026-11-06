@@ -88,6 +88,9 @@ export default function ProgressButton({
     ].filter(Boolean).join(' ')
     const surfaceClassName = `btn${primary ? ' btn-primary' : ''} progress-button`
     const accessibleLabel = ariaLabel || definition.label
+    // Keep the action's name visible while it runs, so a status like
+    // "Queued…" or "32%" still says which action it belongs to.
+    const title = typeof label === 'string' ? label : definition.label
 
     return (
         <span className="vl-progress-with-details download-progress">
@@ -103,6 +106,7 @@ export default function ProgressButton({
                     aria-label={`${accessibleLabel}: ${resolvedActiveLabel}`}
                 >
                     {resolved && <ProgressFill presentation={resolved} className="progress-button-fill"/>}
+                    <span className="progress-button-title" aria-hidden="true">{title}</span>
                     <span className="progress-button-label">{resolved?.mode !== 'determinate' && resolved && <FontAwesomeIcon className="vl-progress-icon" icon={resolved.icon}/>} {resolvedActiveLabel}</span>
                 </span>
             ) : (
