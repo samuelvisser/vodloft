@@ -1,4 +1,4 @@
-import {useCallback} from 'react'
+import {useCallback, useState} from 'react'
 import {useQueryClient} from '@tanstack/react-query'
 import {refreshFrontendPuller} from './puller'
 
@@ -75,6 +75,27 @@ export function useStartOperation() {
         await refreshFrontendPuller(queryClient)
         return result
     }, [queryClient])
+}
+
+/**
+ * Which actions, by operation kind, have a start request on its way. An action dialogue closes as soon as
+ * it starts the action, so the page shows this starting state on the action itself until the operation exists.
+ */
+export function useStartingOperations() {
+    const [starting, setStarting] = useState<ReadonlySet<string>>(() => new Set())
+
+    const isStarting = useCallback((kind: string) => starting.has(kind), [starting])
+    const onStartingChange = useCallback((kind: string) => (value: boolean) => {
+        setStarting((current) => {
+            if (current.has(kind) === value) return current
+            const next = new Set(current)
+            if (value) next.add(kind)
+            else next.delete(kind)
+            return next
+        })
+    }, [])
+
+    return {isStarting, onStartingChange}
 }
 
 /** Cancel or restart an existing durable TaskOperation. */

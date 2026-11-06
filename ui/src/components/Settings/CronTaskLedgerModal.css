@@ -110,20 +110,15 @@
     background: #fff;
 }
 
-.cron-task-ledger-pagination {
+.cron-task-ledger-more {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-}
-
-.cron-task-ledger-page-label {
-    min-width: 86px;
-    text-align: center;
-    color: var(--text-muted, #64748b);
+    justify-content: center;
+    gap: 10px;
+    min-height: 1px;
+    padding-top: 10px;
+    color: var(--muted);
     font-size: 0.86rem;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
 }
 
 .cron-task-ledger-actions {

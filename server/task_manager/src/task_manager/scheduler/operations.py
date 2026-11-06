@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from math import isfinite
+from time import monotonic
 from typing import Any, Iterable, Sequence
 from uuid import uuid4
 
@@ -499,11 +500,25 @@ def refresh_operation(session: Session, operation_id: str) -> TaskOperation | No
     return refreshed.get(operation_id)
 
 
+_PARENT_PROGRESS_REFRESH_SECONDS = 5.0
+# When each parent last took a progress-only refresh, per process.
+_parent_progress_refreshed_at: dict[str, float] = {}
+
+
 def _refresh_operation_tree(
         session: Session,
         operation_ids: Iterable[str],
 ) -> dict[str, TaskOperation]:
-    """Refresh operations and every transitive parent dependency exactly once."""
+    """Refresh operations and their transitive parents.
+
+    A parent of a bulk action can depend on thousands of children, and loading
+    it takes a while inside the write transaction of a progress update. A child
+    whose status changes, or that is no longer active, always refreshes its
+    parents, since that can change theirs. Progress alone reaches a parent at
+    most once every few seconds; a parent's progress is also recomputed
+    whenever it is read. Parents that already finished are left alone: they
+    have no running children left to follow.
+    """
     # Flush here before populate_existing=True would reset it
     session.flush()
 
@@ -520,19 +535,40 @@ def _refresh_operation_tree(
         operation = _load_operation_with_runs(session, operation_id)
         if operation is None:
             continue
+        previous_status = operation.status
         refreshed[operation_id] = _refresh_loaded_operation(operation)
         session.flush()
+        status_settled = (
+            operation.status == previous_status
+            and operation.status in _ACTIVE_OPERATION_STATUSES
+        )
 
         parent_stmt = select(
             TaskOperationDependency.parent_operation_id
+        ).join(
+            TaskOperation,
+            TaskOperation.id == TaskOperationDependency.parent_operation_id,
         ).where(
-            TaskOperationDependency.child_operation_id == operation_id
+            TaskOperationDependency.child_operation_id == operation_id,
+            TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES),
         )
         if visited:
             parent_stmt = parent_stmt.where(
                 TaskOperationDependency.parent_operation_id.not_in(visited)
             )
-        queue.extend(session.scalars(parent_stmt))
+        now = monotonic()
+        if len(_parent_progress_refreshed_at) > 1000:
+            for stale_id in [
+                key for key, at in _parent_progress_refreshed_at.items()
+                if now - at >= _PARENT_PROGRESS_REFRESH_SECONDS
+            ]:
+                del _parent_progress_refreshed_at[stale_id]
+        for parent_id in session.scalars(parent_stmt):
+            last = _parent_progress_refreshed_at.get(parent_id)
+            if status_settled and last is not None and now - last < _PARENT_PROGRESS_REFRESH_SECONDS:
+                continue
+            _parent_progress_refreshed_at[parent_id] = now
+            queue.append(parent_id)
 
     return refreshed
 
@@ -683,9 +719,12 @@ def _refresh_direct_operation(operation: TaskOperation) -> TaskOperation:
             operation.status = OperationStatus.WAITING.value
             message = wait_state.get("message")
             operation.message = message if isinstance(message, str) and message else "Waiting"
-        elif not running_runs:
+        elif not running_runs and not terminal_runs:
             # SCHEDULED/QUEUED TaskRuns can be durable reservations that have not
             # entered an executor yet. Do not present them as active execution.
+            # Once some targets have finished, the moment between one task and
+            # the next stays Running, so a bulk action does not flicker back
+            # to Queued.
             operation.status = OperationStatus.QUEUED.value
             if total == 1:
                 operation.message = linked_runs[-1].message or "Queued"
@@ -1024,7 +1063,11 @@ def list_operations(
         limit: int = 100,
         requested_by_user_id: int | None = None,
 ) -> list[OperationSnapshot]:
-    """Operations, newest first. With ``requested_by_user_id``, only those that user asked for."""
+    """Operations, newest first. With ``requested_by_user_id``, only those that user asked for.
+
+    With ``relevant``, operations that are not part of another operation come
+    first, then those that are not merely queued.
+    """
     session = get_session()
     try:
         statement = select(TaskOperation).options(*_operation_run_graph())
@@ -1038,14 +1081,28 @@ def list_operations(
             statement = statement.where(TaskOperation.resource_id == resource_id)
         if kind is not None:
             statement = statement.where(TaskOperation.kind == kind)
+        order_by = [TaskOperation.created_at.desc()]
         if relevant:
             statement = statement.where(
                 (TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES))
                 | (TaskOperation.notification_seen_at.is_(None))
             )
+            # One bulk action can create thousands of child operations, more
+            # than the limit. The operations a person started and the work
+            # that is running come first, so a bulk action keeps its cancel
+            # control and running downloads keep their progress; the newest
+            # queued children are what falls off.
+            is_child = exists().where(
+                TaskOperationDependency.child_operation_id == TaskOperation.id,
+            )
+            order_by = [
+                is_child.asc(),
+                (TaskOperation.status == OperationStatus.QUEUED.value).asc(),
+                *order_by,
+            ]
         operations = list(
             session.scalars(
-                statement.order_by(TaskOperation.created_at.desc()).limit(max(1, min(limit, 500)))
+                statement.order_by(*order_by).limit(max(1, min(limit, 500)))
             )
         )
         for operation in operations:

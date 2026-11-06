@@ -11,7 +11,6 @@ from backend.services import download_actions as actions
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import queue_operation_target_dispatch
 from task_manager.scheduler.types import OperationSource
-from task_manager.tasks.media_download_operations import attach_redownload_dependencies
 from .operations import _BulkMediaDownloadOperation
 
 
@@ -99,19 +98,12 @@ def queue_bulk_media_download_operation(
             )
 
     queued_operation = create_operation(s, operation)
-    if operation.action == "retry":
-        attach_redownload_dependencies(
+    for target in queued_operation.targets:
+        queue_operation_target_dispatch(
             s,
-            queued_operation,
-            tuple(downloads_by_id[download_id] for download_id in ids),
+            queued_operation.id,
+            target.slot_key,
         )
-    else:
-        for target in queued_operation.targets:
-            queue_operation_target_dispatch(
-                s,
-                queued_operation.id,
-                target.slot_key,
-            )
 
     return {
         "queued": True,

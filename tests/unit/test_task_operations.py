@@ -1041,3 +1041,69 @@ def test_operation_dependency_cycles_are_rejected():
             )
     finally:
         session.close()
+
+
+def test_relevant_operations_keep_bulk_and_running_work_within_the_limit(monkeypatch):
+    from sqlalchemy.orm import sessionmaker
+
+    from task_manager.scheduler import operations as module
+    from task_manager.scheduler.operations import (
+        OperationDependencySpec,
+        add_operation_dependencies,
+        create_operation,
+    )
+    from task_manager.scheduler.types import OperationStatus
+
+    session = _session()
+    try:
+        parent = create_operation(
+            session,
+            kind="media_download.bulk_retry",
+            resource_type="media_download",
+            resource_id=None,
+            title="Downloads",
+            targets=[],
+        )
+        running = create_operation(
+            session,
+            kind="media.download",
+            resource_type="media_download",
+            resource_id=1,
+            title="Running download",
+            targets=[],
+        )
+        queued = [
+            create_operation(
+                session,
+                kind="media.download",
+                resource_type="media_download",
+                resource_id=download_id,
+                title="Queued download",
+                targets=[],
+            )
+            for download_id in range(2, 6)
+        ]
+        add_operation_dependencies(
+            session,
+            parent.id,
+            [OperationDependencySpec(child.id) for child in (running, *queued)],
+            refresh=False,
+        )
+        # Children are created after their parent, so newest-first alone would
+        # push the parent and the running child out of a small limit.
+        base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        parent.created_at = base
+        running.created_at = base + timedelta(seconds=1)
+        running.status = OperationStatus.RUNNING.value
+        for offset, child in enumerate(queued, start=2):
+            child.created_at = base + timedelta(seconds=offset)
+        parent_id, running_id = parent.id, running.id
+        newest_queued_id = queued[-1].id
+        session.commit()
+
+        monkeypatch.setattr(module, "get_session", sessionmaker(session.get_bind()))
+        listed = [operation.id for operation in module.list_operations(relevant=True, limit=3)]
+    finally:
+        session.close()
+
+    assert listed == [parent_id, running_id, newest_queued_id]

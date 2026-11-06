@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 
-def test_bulk_retry_media_download_operation_is_dependency_only():
+def test_bulk_retry_media_download_operation_attaches_retries_in_one_target():
     from backend.api.endpoints.media_downloads.operations import BulkRetryMediaDownloadsOperation
 
     definition = BulkRetryMediaDownloadsOperation([8, 3, 8])
@@ -16,7 +16,10 @@ def test_bulk_retry_media_download_operation_is_dependency_only():
     assert definition.title == "Downloads"
     assert definition.context() == {"downloads_requested": 2}
     assert definition.media_download_ids == (8, 3)
-    assert definition.targets() == ()
+    [target] = definition.targets()
+    assert target.task_key == "media_download_bulk_action_worker"
+    assert target.slot_key == "attach_retries"
+    assert target.task_kwargs == {"media_download_ids": [8, 3], "action": "attach_retries"}
 
 
 def test_bulk_cancel_media_download_operation_keeps_per_download_targets():

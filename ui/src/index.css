@@ -62,6 +62,21 @@ body {
 .sidebar-inner::-webkit-scrollbar-track { background: transparent; }
 .sidebar-inner::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.25); border-radius: 4px; }
 
+/* Every scroll area inside the page (dialogs, lists, menus) uses the same thin scrollbar on a transparent track
+   as the sidebar. The page's own scrollbar is left to the browser. */
+:root { --scrollbar-thumb: rgba(15, 23, 42, 0.25); }
+@media (prefers-color-scheme: dark) {
+  :root { --scrollbar-thumb: rgba(255, 255, 255, 0.25); }
+}
+body * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+body *::-webkit-scrollbar { width: 8px; height: 8px; background: transparent; }
+body *::-webkit-scrollbar-track,
+body *::-webkit-scrollbar-corner { background: transparent; }
+body *::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
+
 .nav {
   display: flex;
   flex-direction: column;

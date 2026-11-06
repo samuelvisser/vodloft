@@ -46,6 +46,33 @@
     transition: width 220ms ease;
 }
 
+.progress-button-root.is-progress .progress-button {
+    flex-direction: column;
+    gap: 1px;
+    /* The title fits inside the normal button height, so the button keeps
+       its size when it switches to progress. */
+    padding-block: 3px;
+}
+
+.progress-button-root.is-progress .progress-button-label {
+    line-height: 1.15;
+}
+
+.progress-button-title {
+    position: relative;
+    z-index: 1;
+    max-width: 100%;
+    overflow: hidden;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.07em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--muted);
+}
+
 .progress-button-label {
     position: relative;
     z-index: 1;

@@ -45,13 +45,13 @@ _ACTIVE_WORKFLOW_STATUSES = (
     "canceling",
     "local_processing",
 )
-_RETRYABLE_STATUSES = (
+# Retry all leaves finished downloads alone: re-downloading a whole library by
+# accident is costly, so a finished download is only retried on its own row.
+_BULK_RETRYABLE_STATUSES = (
     "preparing",
     "waiting",
     "downloading",
     "local_processing",
-    "downloaded",
-    "redownloaded",
     "error",
     "missing",
     "corrupted",
@@ -515,7 +515,7 @@ def _collection_source() -> Subquery:
 
 def _bulk_action_predicate(source: Subquery, action: str):
     if action == "retry":
-        return source.c.status.in_(_RETRYABLE_STATUSES)
+        return source.c.status.in_(_BULK_RETRYABLE_STATUSES)
     if action == "cancel":
         return source.c.status.in_(_CANCELABLE_STATUSES)
     if action == "delete-unavailable":

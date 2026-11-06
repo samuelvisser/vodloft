@@ -19,6 +19,7 @@ import {
     OperationControlError,
     type OperationControlAction,
     useControlOperation,
+    useStartingOperations,
 } from '../../lib/operations'
 import {
     LocalMediaProfileTypeReg,
@@ -38,6 +39,7 @@ export default function LocalMediaProfilePage() {
     const queryClient = useQueryClient()
     const sourceLookup = useSourceLookup()
     const controlOperation = useControlOperation()
+    const {isStarting, onStartingChange} = useStartingOperations()
     const {data, isLoading, error} = useLocalMediaProfileView(slug)
 
     const [renameConfirm, setRenameConfirm] = useState(false)
@@ -306,6 +308,7 @@ export default function LocalMediaProfilePage() {
                                                 ? 'A re-download operation is running for this profile.'
                                                 : undefined,
                                     operation: renameOperation,
+                                    starting: isStarting('local_media_profile.rename_files'),
                                     controls: operationControls(renameOperation?.id, 'file rename'),
                                     onSelect: () => setRenameConfirm(true),
                                 },
@@ -325,6 +328,7 @@ export default function LocalMediaProfilePage() {
                                                     ? 'This Local Media Profile does not manage any downloads.'
                                                     : undefined,
                                     operation: deleteDownloadsOperation,
+                                    starting: isStarting('local_media_profile.delete_downloads'),
                                     controls: operationControls(
                                         deleteDownloadsOperation?.id,
                                         'delete downloads',
@@ -346,6 +350,7 @@ export default function LocalMediaProfilePage() {
                                                     ? 'This Local Media Profile does not manage any downloads.'
                                                     : undefined,
                                     operation: redownloadOperation,
+                                    starting: isStarting('local_media_profile.redownload_media'),
                                     controls: operationControls(
                                         redownloadOperation?.id,
                                         're-download',
@@ -404,6 +409,7 @@ export default function LocalMediaProfilePage() {
             <ActionConfirmDialogue
                 open={renameConfirm}
                 operationDefinition={frontendOperationDefinitions['local_media_profile.rename_files']}
+                onStartingChange={onStartingChange('local_media_profile.rename_files')}
                 requestPath={`/local-media-profiles/${encodeURIComponent(profile.slug)}/rename-files`}
                 resourceLabel={profile.name}
                 title="Rename all managed files"
@@ -421,6 +427,7 @@ export default function LocalMediaProfilePage() {
             <ActionConfirmDialogue
                 open={deleteDownloadsConfirm}
                 operationDefinition={frontendOperationDefinitions['local_media_profile.delete_downloads']}
+                onStartingChange={onStartingChange('local_media_profile.delete_downloads')}
                 requestPath={`/local-media-profiles/${encodeURIComponent(profile.slug)}/delete-downloads`}
                 resourceLabel={profile.name}
                 title="Delete all downloads"
@@ -445,6 +452,7 @@ export default function LocalMediaProfilePage() {
             <ActionConfirmDialogue
                 open={redownloadConfirm}
                 operationDefinition={frontendOperationDefinitions['local_media_profile.redownload_media']}
+                onStartingChange={onStartingChange('local_media_profile.redownload_media')}
                 requestPath={`/local-media-profiles/${encodeURIComponent(profile.slug)}/redownload-media`}
                 resourceLabel={profile.name}
                 title="Delete and re-download all media"

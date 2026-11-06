@@ -15,6 +15,7 @@ from .service import run_refresh_episode_metadata
     allowed_resource_types=("episode",),
     default_max_retries=5,
     tracks_progress=False,
+    executor_alias="metadata",
 )
 async def refresh_episode_metadata(
     *,
