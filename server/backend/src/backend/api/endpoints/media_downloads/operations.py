@@ -23,7 +23,20 @@ class _BulkMediaDownloadOperation(OperationDefinition[None]):
 
     def targets(self) -> tuple[OperationTargetSpec, ...]:
         if self.action == "retry":
-            return ()
+            # One worker attaches the re-downloads in small batches after the
+            # request returns, so the operation, and its cancel, exist at once.
+            return (
+                OperationTargetSpec(
+                    task_key=_BULK_ACTION_TASK_KEY,
+                    resource_type=self.resource_type,
+                    resource_id=None,
+                    task_kwargs={
+                        "media_download_ids": list(self.media_download_ids),
+                        "action": "attach_retries",
+                    },
+                    slot_key="attach_retries",
+                ),
+            )
         return tuple(
             OperationTargetSpec(
                 task_key=_BULK_ACTION_TASK_KEY,

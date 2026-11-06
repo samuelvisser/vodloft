@@ -24,6 +24,7 @@ _scheduler: Optional[AsyncIOScheduler] = None
 _critical_scheduler: Optional[AsyncIOScheduler] = None
 WATCHDOG_EXECUTOR_ALIAS = "watchdog"
 DOWNLOAD_EXECUTOR_ALIAS = "downloads"
+BULK_EXECUTOR_ALIAS = "bulk"
 logger = logging.getLogger(__name__)
 
 _scheduled_work_pause_lock = threading.Lock()
@@ -210,6 +211,10 @@ def _new_scheduler(loop: asyncio.AbstractEventLoop | None = None) -> AsyncIOSche
         "executors": {
             "default": ThreadPoolExecutor(max_workers=settings.scheduler.max_workers),
             DOWNLOAD_EXECUTOR_ALIAS: ThreadPoolExecutor(max_workers=download_workers),
+            # A bulk action queues one task per download, often thousands. They
+            # run one at a time, so they never take every database write slot:
+            # other work, and a cancel of that same bulk action, still get through.
+            BULK_EXECUTOR_ALIAS: ThreadPoolExecutor(max_workers=1),
             # The stalled-work watchdog must remain runnable when every normal
             # worker slot is occupied by the work it is responsible for watching.
             WATCHDOG_EXECUTOR_ALIAS: ThreadPoolExecutor(max_workers=1),

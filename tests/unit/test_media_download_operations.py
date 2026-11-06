@@ -1609,3 +1609,111 @@ def test_download_delete_routes_keep_files_unless_asked(monkeypatch):
     }
     assert ("/media-downloads/{media_download_id}", "DELETE") in paths
     assert ("/media-downloads/{media_download_id}/files", "DELETE") in paths
+
+
+def _attach_batches_setup(tmp_path, monkeypatch):
+    import backend.db.models  # noqa: F401
+    import task_manager.scheduler.db  # noqa: F401
+    from sqlalchemy.orm import sessionmaker
+    from backend.db import Base
+    from task_manager.scheduler.db import TaskDefinition
+    from task_manager.scheduler.operations import create_operation
+    from task_manager.scheduler.types import OperationStatus
+    from task_manager.tasks import media_download_operations
+
+    engine = create_engine(
+        f"sqlite+pysqlite:///{tmp_path / 'attach-batches.db'}",
+        connect_args={"check_same_thread": False},
+    )
+    Base.metadata.create_all(engine)
+    session = Session(engine)
+    session.add(TaskDefinition(
+        key="download_episode",
+        title="Download episode media",
+        description="",
+        allowed_resource_types=["media_download"],
+        default_max_retries=2,
+    ))
+    downloads = [_make_download(session, slug=f"attach-batch-{index}") for index in range(3)]
+    for download in downloads:
+        mark_artifact_available(download)
+        download.downloaded_at = datetime.now(timezone.utc)
+    parent = create_operation(
+        session,
+        kind="media_download.bulk_retry",
+        resource_type="media_download",
+        resource_id=None,
+        title="Downloads",
+        targets=[],
+    )
+    parent.status = OperationStatus.RUNNING.value
+    session.commit()
+    ids = [download.id for download in downloads]
+    parent_id = parent.id
+    session.close()
+
+    monkeypatch.setattr(media_download_operations, "get_session", sessionmaker(engine))
+    monkeypatch.setattr(media_download_operations, "ATTACH_REDOWNLOAD_BATCH_SIZE", 2)
+    monkeypatch.setattr(
+        media_download_operations,
+        "dispatch_queued_media_download_operations",
+        lambda _session: 0,
+    )
+    return engine, parent_id, ids
+
+
+def test_attach_redownload_batches_skip_downloads_already_attached(tmp_path, monkeypatch):
+    from task_manager.scheduler.db import TaskOperation, TaskOperationDependency
+    from task_manager.tasks import media_download_operations
+
+    engine, parent_id, ids = _attach_batches_setup(tmp_path, monkeypatch)
+    try:
+        progress: list[tuple[int, int]] = []
+        handled = media_download_operations.attach_redownload_batches(
+            parent_id, ids, after_batch=lambda done, total: progress.append((done, total)),
+        )
+        # A run recovered after a restart repeats the whole list.
+        media_download_operations.attach_redownload_batches(parent_id, ids)
+
+        with Session(engine) as session:
+            slots = session.scalars(
+                select(TaskOperationDependency.slot_key)
+                .where(TaskOperationDependency.parent_operation_id == parent_id)
+            ).all()
+            children = session.scalars(
+                select(TaskOperation.id).where(TaskOperation.kind == "media.download")
+            ).all()
+        assert handled == 3
+        assert progress == [(2, 3), (3, 3)]
+        assert sorted(slots) == sorted(f"media_download:{download_id}" for download_id in ids)
+        assert len(children) == 3
+    finally:
+        engine.dispose()
+
+
+def test_attach_redownload_batches_stop_once_the_parent_is_canceled(tmp_path, monkeypatch):
+    from task_manager.scheduler.db import TaskOperation, TaskOperationDependency
+    from task_manager.scheduler.operation_control import OPERATION_CANCEL_REQUESTED_CONTEXT_KEY
+    from task_manager.tasks import media_download_operations
+
+    engine, parent_id, ids = _attach_batches_setup(tmp_path, monkeypatch)
+    try:
+        def cancel_parent_after_first_batch(done: int, _total: int) -> None:
+            with Session(engine) as session:
+                parent = session.get(TaskOperation, parent_id)
+                parent.context = {**parent.context, OPERATION_CANCEL_REQUESTED_CONTEXT_KEY: True}
+                session.commit()
+
+        handled = media_download_operations.attach_redownload_batches(
+            parent_id, ids, after_batch=cancel_parent_after_first_batch,
+        )
+
+        with Session(engine) as session:
+            attached = session.scalars(
+                select(TaskOperationDependency.slot_key)
+                .where(TaskOperationDependency.parent_operation_id == parent_id)
+            ).all()
+        assert handled == 2
+        assert len(attached) == 2
+    finally:
+        engine.dispose()

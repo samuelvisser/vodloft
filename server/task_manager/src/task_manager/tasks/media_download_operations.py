@@ -3,12 +3,13 @@ from __future__ import annotations
 import logging
 import threading
 from datetime import datetime, timezone
+from collections.abc import Callable, Sequence
 from typing import Optional
 
 from sqlalchemy import case, event, exists, func, select
 from sqlalchemy.orm import Session, selectinload
 
-from backend.db.core import get_session
+from backend.db.core import begin_write_transaction, get_session
 from backend.db.models import Episode, Movie, MovieExtra
 from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
@@ -25,12 +26,14 @@ from config import get_settings
 from task_manager.scheduler.db import (
     TaskDefinition,
     TaskOperation,
+    TaskOperationDependency,
     TaskOperationRun,
     TaskOperationTarget,
     TaskRun,
 )
 from task_manager.scheduler.operation_control import (
     cancel_operation as cancel_task_operation,
+    operation_cancel_requested,
     restart_operation as restart_task_operation,
 )
 from task_manager.scheduler.operations import (
@@ -586,6 +589,74 @@ def attach_redownload_dependencies(
     return tuple(children)
 
 
+ATTACH_REDOWNLOAD_BATCH_SIZE = 50
+
+
+def attach_redownload_batches(
+        parent_operation_id: str,
+        media_download_ids: Sequence[int],
+        *,
+        before_batch: Callable[[], None] | None = None,
+        after_batch: Callable[[int, int], None] | None = None,
+) -> int:
+    """Attach re-downloads to a running parent operation, a small batch at a time.
+
+    Each batch is its own short write transaction, so a large selection never
+    holds the database for long. The batch first reads the parent's cancel
+    marker inside that transaction: once a cancel has committed, nothing more
+    is attached, and everything attached before it was there for the cancel to
+    stop. Downloads the parent already depends on are skipped, so a run that is
+    recovered after a restart continues where it stopped instead of starting
+    finished re-downloads again. Returns how many downloads were handled.
+    """
+    ids = list(dict.fromkeys(int(value) for value in media_download_ids))
+    handled = 0
+    for start in range(0, len(ids), ATTACH_REDOWNLOAD_BATCH_SIZE):
+        if before_batch is not None:
+            before_batch()
+        batch = ids[start:start + ATTACH_REDOWNLOAD_BATCH_SIZE]
+        session = get_session()
+        try:
+            begin_write_transaction(session)
+            parent = session.get(TaskOperation, parent_operation_id)
+            if (
+                parent is None
+                or parent.status not in _ACTIVE_OPERATION_STATUSES
+                or operation_cancel_requested(parent)
+            ):
+                session.rollback()
+                return handled
+            attached_slots = set(session.scalars(
+                select(TaskOperationDependency.slot_key).where(
+                    TaskOperationDependency.parent_operation_id == parent_operation_id,
+                    TaskOperationDependency.slot_key.in_(
+                        [f"media_download:{download_id}" for download_id in batch]
+                    ),
+                )
+            ))
+            downloads = [
+                download
+                for download in session.scalars(
+                    select(MediaDownloadBase)
+                    .where(MediaDownloadBase.id.in_(batch))
+                    .order_by(MediaDownloadBase.id)
+                )
+                if f"media_download:{download.id}" not in attached_slots
+            ]
+            if downloads:
+                attach_redownload_dependencies(session, parent, downloads)
+            session.commit()
+        except BaseException:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+        handled += len(batch)
+        if after_batch is not None:
+            after_batch(handled, len(ids))
+    return handled
+
+
 def _get_media_download_operation(
     session: Session,
     operation_id: str,
@@ -627,7 +698,12 @@ def cancel_media_download_operation(
     reason: str = "Canceled by user",
     acknowledge: bool = True,
 ):
-    """Cancel any media.download operation and durably mirror that action to history."""
+    """Cancel any media.download operation and durably mirror that action to history.
+
+    The request is recorded only after the cancel itself is saved: a cancel that
+    fails, for example on a locked database, must not leave history saying it
+    was requested while the download still runs later.
+    """
     session = get_session()
     try:
         operation = _get_media_download_operation(session, operation_id)
@@ -638,14 +714,6 @@ def cancel_media_download_operation(
             **_history_metadata_for_operation(session, operation),
             "reason": reason,
         }
-        record_media_download_operation_history_once(
-            session,
-            media_download_id,
-            MediaDownloadHistoryAction.CANCEL_REQUESTED,
-            operation_ids=(operation.id,),
-            metadata=metadata,
-        )
-        session.commit()
     finally:
         session.close()
 
@@ -654,7 +722,24 @@ def cancel_media_download_operation(
         reason=reason,
         acknowledge=acknowledge,
     )
-    if snapshot is None or snapshot.status != OperationStatus.CANCELED.value:
+    if snapshot is None:
+        return snapshot
+
+    session = get_session()
+    try:
+        record_media_download_operation_history_once(
+            session,
+            media_download_id,
+            MediaDownloadHistoryAction.CANCEL_REQUESTED,
+            operation_ids=(operation_id,),
+            metadata=metadata,
+            # Never later than the Canceled entry that follows it.
+            occurred_at=snapshot.finished_at,
+        )
+        session.commit()
+    finally:
+        session.close()
+    if snapshot.status != OperationStatus.CANCELED.value:
         return snapshot
 
     session = get_session()
