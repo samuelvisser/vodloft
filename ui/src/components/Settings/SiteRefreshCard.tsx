@@ -13,10 +13,24 @@ import {
     type SiteRefreshRead,
 } from '../../types/schemas/siteRefresh'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
+import NumberInput from '../common/NumberInput'
 import SimpleSelect from '../common/SimpleSelect'
 
+const PENDING_FIELDS = [
+    {name: 'pendingUpcomingMinutes', label: 'Upcoming', help: 'every … minutes until 15 minutes before the start'},
+    {name: 'pendingStartingMinutes', label: 'Starting', help: 'every … minutes around the start'},
+    {name: 'pendingLiveMinutes', label: 'Live', help: 'every … minutes while live or being finished'},
+] as const
+
 function formValues(site: SiteRefreshRead): SiteRefreshFormIn {
-    return {refreshMode: site.refreshMode, refreshIntervals: site.refreshIntervals ?? '', pendingChecks: site.pendingChecks}
+    return {
+        refreshMode: site.refreshMode,
+        refreshIntervals: site.refreshIntervals ?? '',
+        pendingChecks: site.pendingChecks,
+        pendingUpcomingMinutes: site.pendingUpcomingMinutes,
+        pendingStartingMinutes: site.pendingStartingMinutes,
+        pendingLiveMinutes: site.pendingLiveMinutes,
+    }
 }
 
 function SiteRefreshRow({site}: {site: SiteRefreshRead}) {
@@ -45,14 +59,15 @@ function SiteRefreshRow({site}: {site: SiteRefreshRead}) {
         },
     )
 
-    const error = errors.refreshIntervals?.message ?? errors.root?.message
+    const pendingError = PENDING_FIELDS.map(({name}) => errors[name]?.message).find(Boolean)
+    const error = errors.refreshIntervals?.message ?? pendingError ?? errors.root?.message
     return (
         <tr>
             <td>
                 {site.name}
                 {site.domains.length ? <span className="source-site-domains"> · {site.domains.join(', ')}</span> : null}
             </td>
-            {site.refreshes || site.checksPending ? (
+            {site.refreshes || site.checksPending || site.followsPending ? (
                 <td>
                     <form className="site-refresh-form" onSubmit={submit} noValidate>
                         {site.refreshes ? (
@@ -80,6 +95,23 @@ function SiteRefreshRow({site}: {site: SiteRefreshRead}) {
                                 aria-invalid={Boolean(errors.refreshIntervals)}
                                 {...register('refreshIntervals')}
                             />
+                        ) : null}
+                        {site.followsPending ? (
+                            <fieldset className="site-refresh-rhythm">
+                                <legend>Look upcoming and live episodes up</legend>
+                                {PENDING_FIELDS.map(({name, label, help}) => (
+                                    <label key={name} className="site-refresh-rhythm__field" title={help}>
+                                        <span>{label}</span>
+                                        <NumberInput
+                                            inputMode="numeric" min={2} max={name === 'pendingUpcomingMinutes' ? 1440 : 60} step={1}
+                                            aria-label={`${label}: ${help}, ${site.name}`}
+                                            aria-invalid={Boolean(errors[name])}
+                                            {...register(name, {valueAsNumber: true})}
+                                        />
+                                        <span>min</span>
+                                    </label>
+                                ))}
+                            </fieldset>
                         ) : null}
                         <button type="submit" className="btn" disabled={!isDirty || isSubmitting}>
                             Save
@@ -116,7 +148,9 @@ export default function SiteRefreshCard() {
                 Each Site follows the system schedule above, a schedule of its own, or none. Only what VODLoft shows and
                 serves in its feeds changes: downloaded files keep their names and metadata. With upcoming and live
                 videos on, VODLoft adds a stream or premiere as soon as it is announced and follows it until it is
-                published, then downloads it. It never records a stream while it is live.
+                published, then downloads it. It never records a stream while it is live. An upcoming episode is
+                looked up every so many minutes, more often from 15 minutes before it starts until an hour after,
+                and while it is live. An episode without a known start is looked up as if it were about to start.
             </div>
         </div>
     )

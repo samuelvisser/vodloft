@@ -128,8 +128,6 @@ class AppSettings(SettingsBase):
         quick_check_cron="*/5 * * * *",
         full_rescan_cron_enabled=True,
         full_rescan_cron="0 4 * * *",
-        monitor_pending_episode_cron_enabled=True,
-        monitor_pending_episode_cron="*/2 * * * *",
         monitor_no_usable_media_episode_cron_enabled=True,
         monitor_no_usable_media_episode_cron="*/20 * * * *",
         metadata_refresh_intervals="1h,6h,24h,3d",

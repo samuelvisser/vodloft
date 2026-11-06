@@ -159,7 +159,7 @@ def _quarantine_404(
     return new_status
 
 
-async def run_monitor_pending_episode(s: Session, *, episode_id: int) -> EpisodePublishStatus:
+def run_monitor_pending_episode(s: Session, *, episode_id: int) -> EpisodePublishStatus:
     """Look one pending Daily Wire episode up, and hand it over once it is published or gone."""
     episode = s.get(Episode, episode_id)
     if episode is None:

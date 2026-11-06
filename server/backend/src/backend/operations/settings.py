@@ -59,22 +59,6 @@ class FullRescanCronOperation(_SingleTaskSettingsCronOperation):
     target_resource_id = None
 
 
-class MonitorPendingEpisodesCronOperation(_SettingsCronOperation):
-    kind = "system.cron.monitor_pending_episodes"
-    title_text = "Monitor pending episodes"
-
-    def targets(self) -> tuple[OperationTargetSpec, ...]:
-        # "Run now" looks every pending Daily Wire episode up, due or not.
-        return (
-            OperationTargetSpec(
-                task_key="check_pending_episodes",
-                resource_type="system",
-                resource_id=0,
-                task_kwargs={"monitor_everything": True},
-            ),
-        )
-
-
 class MonitorNoUsableMediaCronOperation(_SingleTaskSettingsCronOperation):
     kind = "system.cron.monitor_no_usable_media"
     title_text = "Monitor episodes without usable media"

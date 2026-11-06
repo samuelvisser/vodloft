@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
 
 import pytest
@@ -88,9 +87,7 @@ def test_pending_monitor_marks_unreconciled_404_as_no_usable_media(monkeypatch):
 
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
     monkeypatch.setattr(service, "_try_reconcile_slug_after_404", lambda *args, **kwargs: False)
-    result = asyncio.run(service.run_monitor_pending_episode(
-        session, episode_id=episode.id,
-    ))
+    result = service.run_monitor_pending_episode(session, episode_id=episode.id)
     assert result is EpisodePublishStatus.NO_USABLE_MEDIA
     session.expire_all()
     stored = session.get(type(episode), episode.id)
@@ -114,8 +111,6 @@ def test_pending_monitor_still_raises_non_404_dailywire_errors(monkeypatch):
 
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
     with pytest.raises(MiddlewareAPIError, match="503"):
-        asyncio.run(service.run_monitor_pending_episode(
-            session, episode_id=episode.id,
-        ))
+        service.run_monitor_pending_episode(session, episode_id=episode.id)
     session.close()
     engine.dispose()

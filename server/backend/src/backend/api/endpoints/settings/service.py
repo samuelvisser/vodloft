@@ -48,7 +48,6 @@ from backend.operations.settings import (
     QuickCheckCronOperation,
     FindEpisodesCronOperation,
     MonitorNoUsableMediaCronOperation,
-    MonitorPendingEpisodesCronOperation,
     VerifyDownloadsCronOperation,
 )
 
@@ -646,7 +645,6 @@ _CRON_OPERATION_FACTORIES = {
     "find-episodes": FindEpisodesCronOperation,
     "quick-check": QuickCheckCronOperation,
     "full-rescan": FullRescanCronOperation,
-    "monitor-pending-episodes": MonitorPendingEpisodesCronOperation,
     "monitor-no-usable-media": MonitorNoUsableMediaCronOperation,
     "verify-downloads": VerifyDownloadsCronOperation,
     "file-watcher": FileWatcherCronOperation,

@@ -29,26 +29,12 @@ def test_settings_cron_operations_target_the_scheduled_workers():
         assert target.resource_id == resource_id
 
 
-def test_running_the_pending_episode_monitor_now_looks_every_pending_episode_up():
-    from backend.operations.settings import MonitorPendingEpisodesCronOperation
-
-    operation = MonitorPendingEpisodesCronOperation()
-
-    assert operation.resource_type == "system"
-    assert operation.resource_id == 0
-    assert [
-        (target.task_key, target.resource_type, target.resource_id, target.task_kwargs)
-        for target in operation.targets()
-    ] == [("check_pending_episodes", "system", 0, {"monitor_everything": True})]
-
-
 def test_settings_cron_operations_have_distinct_system_kinds():
     from backend.operations.settings import (
         FileWatcherCronOperation,
         FindEpisodesCronOperation,
         FullRescanCronOperation,
         MonitorNoUsableMediaCronOperation,
-        MonitorPendingEpisodesCronOperation,
         QuickCheckCronOperation,
         VerifyDownloadsCronOperation,
     )
@@ -57,7 +43,6 @@ def test_settings_cron_operations_have_distinct_system_kinds():
         FindEpisodesCronOperation(),
         QuickCheckCronOperation(),
         FullRescanCronOperation(),
-        MonitorPendingEpisodesCronOperation(),
         MonitorNoUsableMediaCronOperation(),
         VerifyDownloadsCronOperation(),
         FileWatcherCronOperation(),
@@ -67,7 +52,6 @@ def test_settings_cron_operations_have_distinct_system_kinds():
         "system.cron.find_episodes",
         "system.cron.quick_check",
         "system.cron.full_rescan",
-        "system.cron.monitor_pending_episodes",
         "system.cron.monitor_no_usable_media",
         "system.cron.verify_downloads",
         "system.cron.file_watcher",

@@ -173,42 +173,6 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     }
                 />
                 <CronEditor
-                    id="settings-monitor-pending-episode-cron"
-                    label="Monitor pending episodes"
-                    runNow={{
-                        definition: frontendOperationDefinitions['system.cron.monitor_pending_episodes'],
-                        job: 'monitor-pending-episodes',
-                        ledger: {definitionKey: 'check_pending_episodes', resourceType: 'system'},
-                    }}
-                    value={draft.newEpisodeSchedule.monitorPendingEpisodeCron}
-                    enabled={draft.newEpisodeSchedule.monitorPendingEpisodeCronEnabled}
-                    error={errorFor('newEpisodeSchedule.monitorPendingEpisodeCron')}
-                    environmentVariable={environmentVariableFor('newEpisodeSchedule.monitorPendingEpisodeCron')}
-                    enabledEnvironmentVariable={environmentVariableFor('newEpisodeSchedule.monitorPendingEpisodeCronEnabled')}
-                    onChange={(value) => updateDraft((next) => {
-                        next.newEpisodeSchedule.monitorPendingEpisodeCron = value
-                    })}
-                    onEnabledChange={(enabled) => updateDraft((next) => {
-                        next.newEpisodeSchedule.monitorPendingEpisodeCronEnabled = enabled
-                    })}
-                    help={
-                        <ReadMore summary={<span>Monitors scheduled, delayed, live, processing and countdown episodes.</span>}>
-                            <p>
-                                This cron schedule determines how often VODLoft looks up a pending episode of The Daily Wire after the{' '}
-                                <code>Find new episodes</code> worker found it. Upcoming and live YouTube videos follow their own rhythm.
-                            </p>
-                            <p>
-                                Pending episodes are checked every two minutes at most, so a schedule that runs more often than that has no
-                                extra effect.
-                            </p>
-                            <p>
-                                Once an episode becomes final, <code>Metadata refresh</code> takes over. If it enters <code>no_usable_media</code>,
-                                the dedicated <code>No-usable-media monitor</code> takes over instead.
-                            </p>
-                        </ReadMore>
-                    }
-                />
-                <CronEditor
                     id="settings-monitor-no-usable-media-episode-cron"
                     label="Monitor episodes without usable media"
                     runNow={{

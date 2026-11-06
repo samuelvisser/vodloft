@@ -415,7 +415,7 @@ def test_startup_cron_validation_issue_is_exposed_and_clears_after_save(tmp_path
     config_path = tmp_path / "config.yml"
     config_path.write_text(
         "newEpisodeSchedule:\n"
-        "  monitorPendingEpisodeCron: \"* * * * *\"\n",
+        "  monitorNoUsableMediaEpisodeCron: \"* * * * *\"\n",
         encoding="utf-8",
     )
     _point_settings_at(config_path, monkeypatch)
@@ -424,16 +424,16 @@ def test_startup_cron_validation_issue_is_exposed_and_clears_after_save(tmp_path
     issue = next(
         issue
         for issue in current.validation_issues
-        if issue.field == "newEpisodeSchedule.monitorPendingEpisodeCron"
+        if issue.field == "newEpisodeSchedule.monitorNoUsableMediaEpisodeCron"
     )
     assert issue.code == "worker_cron_interval_too_short"
     assert issue.source == "config.yml"
 
     values = current.values.model_copy(deep=True)
-    values.new_episode_schedule.monitor_pending_episode_cron = "*/2 * * * *"
+    values.new_episode_schedule.monitor_no_usable_media_episode_cron = "*/20 * * * *"
     result = save_ui_settings(SettingsAPIUpdate(
         values=values,
-        changed_fields=["newEpisodeSchedule.monitorPendingEpisodeCron"],
+        changed_fields=["newEpisodeSchedule.monitorNoUsableMediaEpisodeCron"],
     ))
 
     assert not result.validation_issues

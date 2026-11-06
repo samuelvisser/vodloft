@@ -501,6 +501,9 @@ export function saveSiteRefresh(key: string, values: SiteRefreshFormValues): Pro
             refreshMode: values.refreshMode,
             refreshIntervals: values.refreshIntervals.trim() || null,
             pendingChecks: values.pendingChecks,
+            pendingUpcomingMinutes: values.pendingUpcomingMinutes,
+            pendingStartingMinutes: values.pendingStartingMinutes,
+            pendingLiveMinutes: values.pendingLiveMinutes,
         }),
     })
 }

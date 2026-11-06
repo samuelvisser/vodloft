@@ -119,15 +119,20 @@ def ref(slug: str):
 
 
 def test_an_upcoming_episode_is_checked_hourly_then_often_from_15_minutes_before():
-    from task_manager.tasks.workers.monitor_pending_episode.pending_checks import HOURLY, OFTEN, WHILE_LIVE, interval, is_due
+    from task_manager.tasks.workers.monitor_pending_episode.pending_checks import Rhythm, interval, is_due
 
+    usual = Rhythm()
     starts = NOW + timedelta(hours=2)
-    assert interval("scheduled", starts, NOW) == HOURLY
-    assert interval("scheduled", starts, starts - timedelta(minutes=10)) == OFTEN
-    assert interval("delayed", starts, starts + timedelta(minutes=30)) == OFTEN
+    assert interval("scheduled", starts, NOW) == usual.upcoming == timedelta(hours=1)
+    assert interval("scheduled", starts, starts - timedelta(minutes=10)) == usual.starting == timedelta(minutes=2)
+    assert interval("delayed", starts, starts + timedelta(minutes=30)) == usual.starting
     # A stream more than an hour late may wait for days.
-    assert interval("delayed", starts, starts + timedelta(hours=2)) == HOURLY
-    assert interval("live", None, NOW) == WHILE_LIVE
+    assert interval("delayed", starts, starts + timedelta(hours=2)) == usual.upcoming
+    # One without a known start may start any moment.
+    assert interval("scheduled", None, NOW) == usual.starting
+    assert interval("live", None, NOW) == usual.live == timedelta(minutes=5)
+    assert interval("published_preliminary", None, NOW) == usual.live
+    assert interval("no_usable_media", None, NOW) == usual.upcoming
 
     assert is_due("scheduled", starts, None, NOW)
     assert not is_due("scheduled", starts, NOW, NOW + timedelta(minutes=30))
@@ -136,6 +141,17 @@ def test_an_upcoming_episode_is_checked_hourly_then_often_from_15_minutes_before
     assert is_due("scheduled", starts, starts - timedelta(minutes=50), starts - timedelta(minutes=15))
     assert not is_due("scheduled", starts, starts - timedelta(minutes=14), starts - timedelta(minutes=13))
     assert is_due("scheduled", starts, starts - timedelta(minutes=14), starts - timedelta(minutes=12))
+
+
+def test_a_site_sets_its_own_rhythm():
+    from task_manager.tasks.workers.monitor_pending_episode.pending_checks import Rhythm, is_due
+
+    relaxed = Rhythm(upcoming=timedelta(hours=6), starting=timedelta(minutes=10), live=timedelta(minutes=30))
+    starts = NOW + timedelta(hours=12)
+    assert not is_due("scheduled", starts, NOW, NOW + timedelta(hours=2), relaxed)
+    assert is_due("scheduled", starts, NOW, NOW + timedelta(hours=6), relaxed)
+    assert not is_due("live", None, NOW, NOW + timedelta(minutes=20), relaxed)
+    assert is_due("live", None, NOW, NOW + timedelta(minutes=30), relaxed)
 
 
 # --- Adding and following episodes ---------------------------------------------------------------
@@ -317,14 +333,10 @@ def monitored(monkeypatch):
     from task_manager.tasks.workers.monitor_pending_episode import pending_checks
 
     monkeypatch.setattr(pending_checks, "_last_checked", {})
-    schedule = SimpleNamespace(monitor_pending_episode_cron_enabled=True, monitor_pending_episode_cron="*/10 * * * *")
-    monkeypatch.setattr(pending_checks, "get_settings", lambda: SimpleNamespace(
-        new_episode_schedule=schedule, dw_timeout=SimpleNamespace(min_slow_request_ms=1000), timezone="UTC",
-    ))
     answers: dict[int, EpisodePublishStatus | Exception] = {}
     checked: list[int] = []
 
-    async def monitor(s, *, episode_id):
+    def monitor(s, *, episode_id):
         checked.append(episode_id)
         answer = answers.get(episode_id, EpisodePublishStatus.LIVE)
         if isinstance(answer, Exception):
@@ -334,13 +346,14 @@ def monitored(monkeypatch):
         return answer
 
     monkeypatch.setattr(pending_checks, "run_monitor_pending_episode", monitor)
-    return SimpleNamespace(schedule=schedule, answers=answers, checked=checked)
+    return SimpleNamespace(answers=answers, checked=checked)
 
 
-def _dailywire_episode(session, slug: str, status: str = "live") -> int:
+def _dailywire_episode(session, slug: str, status: str = "live", site=None) -> int:
     from backend.db.models import Episode, Season
 
     collection = _collection(session, f"show-{slug}", source_key="dailywire")
+    collection.site_key = site
     season = Season(collection=collection, index=1, slug="season-1", name="One")
     episode = Episode(
         uuid=f"uuid-{slug}", type="episode", source_key="dailywire", collection=collection, season=season, index=1,
@@ -352,30 +365,28 @@ def _dailywire_episode(session, slug: str, status: str = "live") -> int:
     return episode.id
 
 
-def _monitor(session, now, **kwargs):
-    import asyncio
+def _sweep(session, now):
+    from task_manager.tasks.workers.monitor_pending_episode.pending_checks import run_pending_checks
 
-    from task_manager.tasks.workers.monitor_pending_episode.pending_checks import run_pending_monitors
-
-    return asyncio.run(run_pending_monitors(session, now=now, **kwargs))
+    return run_pending_checks(session, now=now)
 
 
-def test_a_pending_daily_wire_episode_is_looked_up_on_the_monitor_schedule(monitored, session):
+def test_a_live_daily_wire_episode_follows_the_same_rhythm_one_by_one(monitored, session):
     live = _dailywire_episode(session, "live")
     _dailywire_episode(session, "done", status="published_final")
 
     # Every pending episode is looked up once, also right after a restart.
-    assert _monitor(session, NOW).checked == 1
+    assert _sweep(session, NOW).checked == 1
     assert monitored.checked == [live]
-    # Not again until the schedule comes round, at ten past.
-    assert _monitor(session, NOW + timedelta(minutes=9)).checked == 0
-    assert _monitor(session, NOW + timedelta(minutes=10)).checked == 1
+    # A live one again after five minutes.
+    assert _sweep(session, NOW + timedelta(minutes=4)).checked == 0
+    assert _sweep(session, NOW + timedelta(minutes=5)).checked == 1
 
     monitored.answers[live] = EpisodePublishStatus.PUBLISHED_FINAL
-    result = _monitor(session, NOW + timedelta(minutes=20))
+    result = _sweep(session, NOW + timedelta(minutes=10))
     assert (result.checked, result.changed, result.published) == (1, 1, 1)
     # A published episode is no longer followed.
-    assert _monitor(session, NOW + timedelta(minutes=30)).checked == 0
+    assert _sweep(session, NOW + timedelta(minutes=30)).checked == 0
 
 
 def test_a_failed_daily_wire_lookup_is_tried_again_on_the_next_round(monitored, session):
@@ -384,23 +395,22 @@ def test_a_failed_daily_wire_lookup_is_tried_again_on_the_next_round(monitored, 
     monitored.answers[flaky] = RuntimeError("HTTP error 503")
     monitored.answers[gone] = EpisodePublishStatus.NO_USABLE_MEDIA
 
-    result = _monitor(session, NOW)
+    result = _sweep(session, NOW)
     assert (result.checked, result.failed, result.gone) == (2, 1, 1)
 
     del monitored.answers[flaky]
-    assert _monitor(session, NOW + timedelta(minutes=10)).checked == 1
+    # The episode without usable media is left to the no-usable-media checks.
+    assert _sweep(session, NOW + timedelta(minutes=5)).checked == 1
     assert monitored.checked == [flaky, gone, flaky]
 
 
-def test_the_daily_wire_monitor_follows_its_setting_and_run_now(monitored, session):
-    episode = _dailywire_episode(session, "live")
+def test_a_daily_wire_episode_follows_the_rhythm_of_its_site(monitored, session):
+    from backend.db.models import Site
 
-    monitored.schedule.monitor_pending_episode_cron_enabled = False
-    assert _monitor(session, NOW).checked == 0
-    # "Run now" looks every pending episode up, also with the schedule off.
-    assert _monitor(session, NOW, everything=True).checked == 1
+    session.add(Site(key="dailywire", name="The Daily Wire", domains=["dailywire.com"], pending_live_minutes=20))
+    session.commit()
+    _dailywire_episode(session, "live", site="dailywire")
 
-    monitored.schedule.monitor_pending_episode_cron_enabled = True
-    assert _monitor(session, NOW + timedelta(minutes=1)).checked == 0
-    assert _monitor(session, NOW + timedelta(minutes=1), everything=True).checked == 1
-    assert monitored.checked == [episode, episode]
+    assert _sweep(session, NOW).checked == 1
+    assert _sweep(session, NOW + timedelta(minutes=10)).checked == 0
+    assert _sweep(session, NOW + timedelta(minutes=20)).checked == 1

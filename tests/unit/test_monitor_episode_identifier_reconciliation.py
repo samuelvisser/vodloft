@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
 from unittest.mock import Mock
 
@@ -97,9 +96,7 @@ def test_monitor_reconciles_identifier_while_episode_stays_pending(monkeypatch):
     monkeypatch.setattr(service, "queue_event", Mock())
     monkeypatch.setattr(episode_events, "queue_event", Mock())
 
-    result = asyncio.run(
-        service.run_monitor_pending_episode(session, episode_id=episode.id)
-    )
+    result = service.run_monitor_pending_episode(session, episode_id=episode.id)
 
     assert result is EpisodePublishStatus.LIVE
     session.expire_all()

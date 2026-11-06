@@ -209,7 +209,8 @@ def test_a_sites_schedule_is_chosen_in_the_settings(client, session):
     assert row == {
         "key": "youtube", "name": "YouTube", "domains": ["youtube.com"],
         "refreshMode": "own", "refreshIntervals": "30m,2h", "pendingChecks": True, "refreshes": True,
-        "checksPending": True,
+        "checksPending": True, "followsPending": True,
+        "pendingUpcomingMinutes": 60, "pendingStartingMinutes": 2, "pendingLiveMinutes": 5,
     }
 
     saved = client.put("/api/settings/site-refresh/youtube", json={"refreshMode": "system", "refreshIntervals": None}).json()
@@ -219,3 +220,18 @@ def test_a_sites_schedule_is_chosen_in_the_settings(client, session):
     refused = client.put("/api/settings/site-refresh/youtube", json={"refreshMode": "own", "refreshIntervals": "2h,1h"})
     assert refused.status_code == 422
     assert client.put("/api/settings/site-refresh/nope", json={"refreshMode": "off"}).status_code == 404
+
+
+def test_a_site_chooses_how_often_its_upcoming_and_live_episodes_are_looked_up(client, session):
+    from backend.db.models import Site
+
+    session.add(Site(key="youtube", name="YouTube", domains=["youtube.com"]))
+    session.commit()
+    minutes = {"pendingUpcomingMinutes": 120, "pendingStartingMinutes": 3, "pendingLiveMinutes": 10}
+
+    saved = client.put("/api/settings/site-refresh/youtube", json={"refreshMode": "system", **minutes}).json()
+    assert {key: saved[key] for key in minutes} == minutes
+
+    # The sweep runs every two minutes, so nothing is looked up more often.
+    too_often = {**minutes, "pendingLiveMinutes": 1}
+    assert client.put("/api/settings/site-refresh/youtube", json={"refreshMode": "system", **too_often}).status_code == 422

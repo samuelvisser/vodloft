@@ -2387,6 +2387,10 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .site-refresh-form .settings-input { width: 220px; max-width: 100%; }
 .site-refresh-pending { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .site-refresh-unsupported { color: var(--muted, #64748b); }
+.site-refresh-rhythm { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0; padding: 0; border: 0; }
+.site-refresh-rhythm legend { float: left; margin-right: 6px; color: var(--muted); font-size: 13px; }
+.site-refresh-rhythm__field { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.site-refresh-rhythm__field input { width: 4.5em; }
 .source-site-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .source-site-table th, .source-site-table td { padding: 10px 16px 10px 0; text-align: left; border-top: 1px solid rgba(100,116,139,.25); }
 .source-site-table th { color: var(--muted); font-weight: 600; font-size: 13px; }

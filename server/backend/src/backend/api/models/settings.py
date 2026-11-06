@@ -337,8 +337,6 @@ class TrackNewEpisodeScheduleValue(_SettingsValueModel):
     quick_check_cron: str = Field(min_length=1)
     full_rescan_cron_enabled: bool
     full_rescan_cron: str = Field(min_length=1)
-    monitor_pending_episode_cron_enabled: bool
-    monitor_pending_episode_cron: str = Field(min_length=1)
     monitor_no_usable_media_episode_cron_enabled: bool
     monitor_no_usable_media_episode_cron: str = Field(min_length=1)
     metadata_refresh_intervals: str = Field(min_length=1)

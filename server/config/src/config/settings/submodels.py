@@ -327,15 +327,6 @@ class TrackNewEpisodeSchedule(SubmodelBase):
         min_length=1,
         description="Cron schedule for the full re-scan of collections whose Source has quick checks",
     )
-    monitor_pending_episode_cron_enabled: bool = Field(
-        default=True,
-        description="Enable the cron schedule for monitoring pending episodes",
-    )
-    monitor_pending_episode_cron: str = Field(
-        ...,
-        min_length=1,
-        description="Cron schedule string for monitoring an episode that exists but is not yet fully published",
-    )
     monitor_no_usable_media_episode_cron_enabled: bool = Field(
         default=True,
         description="Enable the cron schedule for rechecking episodes quarantined without usable media",

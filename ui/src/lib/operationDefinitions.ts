@@ -383,15 +383,6 @@ function invalidateFullRescanCron(
   invalidateTaskLedgerDefinition(queryClient, 'rescan_quick_checked_collections', invalidations)
 }
 
-function invalidatePendingEpisodeCron(
-  queryClient: QueryClient,
-  operation: TaskOperationRead,
-  invalidations: InvalidationCollector,
-) {
-  invalidateEpisodeAndDownloadCronJob(queryClient, operation, invalidations)
-  invalidateTaskLedgerDefinition(queryClient, 'check_pending_episodes', invalidations)
-}
-
 function invalidateNoUsableMediaCron(
   queryClient: QueryClient,
   operation: TaskOperationRead,
@@ -437,12 +428,6 @@ export const frontendOperationDefinitions = {
     resourceType: 'system',
     label: 'Re-scan collections with quick checks',
     invalidate: invalidateFullRescanCron,
-  },
-  'system.cron.monitor_pending_episodes': {
-    kind: 'system.cron.monitor_pending_episodes',
-    resourceType: 'system',
-    label: 'Monitor pending episodes',
-    invalidate: invalidatePendingEpisodeCron,
   },
   'system.cron.monitor_no_usable_media': {
     kind: 'system.cron.monitor_no_usable_media',
