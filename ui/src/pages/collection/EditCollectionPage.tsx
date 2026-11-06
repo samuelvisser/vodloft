@@ -319,7 +319,7 @@ export default function EditCollectionPage() {
               ? 'The order of the episodes within each season'
               : 'The order of the episodes'}
             {' '}on the Collection page and in podcast apps that follow its RSS feeds.
-            Podcasts start with the newest episode by default, and series with the first.
+            By default a seasonal Collection starts each season at its first episode, and any other Collection lists its newest episode first.
           </div>
         </div>
 

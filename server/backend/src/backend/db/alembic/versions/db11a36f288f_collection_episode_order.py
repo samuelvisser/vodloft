@@ -1,7 +1,7 @@
 """A Collection chooses which way its episodes are listed.
 
-Podcasts list their newest episode first and series their first episode first, the order RSS feeds
-already gave podcast apps. A seasonal Collection orders the episodes of each season.
+Seasonal Collections start each season at its first episode and every other Collection lists its
+newest episode first, the order the Collection page already showed.
 
 Revision ID: db11a36f288f
 Revises: d6346ad993ee
@@ -24,7 +24,7 @@ def upgrade() -> None:
     with op.batch_alter_table("collections") as batch:
         batch.add_column(sa.Column("episode_order", sa.String(), nullable=True, comment=_COMMENT))
     op.execute(sa.text(
-        "UPDATE collections SET episode_order = CASE WHEN type = 'podcast' THEN 'newest_first' ELSE 'oldest_first' END"
+        "UPDATE collections SET episode_order = CASE WHEN episode_identifier = 'seasonal' THEN 'oldest_first' ELSE 'newest_first' END"
     ))
     with op.batch_alter_table("collections") as batch:
         batch.alter_column("episode_order", existing_type=sa.String(), nullable=False, existing_comment=_COMMENT)

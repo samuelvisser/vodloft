@@ -405,7 +405,7 @@ def _all_pages(session, slug: str, **kwargs) -> list[str]:
             return slugs
 
 
-def test_collection_episode_order_defaults_by_type_and_orders_every_page():
+def test_collection_episode_order_defaults_by_identification_and_orders_every_page():
     import backend.db.models  # noqa: F401
 
     from backend.db import Base
@@ -423,15 +423,20 @@ def test_collection_episode_order_defaults_by_type_and_orders_every_page():
             session, slug="series", collection_type=CollectionType.SERIES.value,
             episode_identifier=EpisodeIdentifier.NUMBERED.value, order=None,
         )
+        seasonal, _ = _ordered_collection(
+            session, slug="seasonal", collection_type=CollectionType.SERIES.value,
+            episode_identifier=EpisodeIdentifier.SEASONAL.value, order=None,
+        )
         assert podcast.episode_order == EpisodeOrder.NEWEST_FIRST.value
-        assert series.episode_order == EpisodeOrder.OLDEST_FIRST.value
+        assert series.episode_order == EpisodeOrder.NEWEST_FIRST.value
+        assert seasonal.episode_order == EpisodeOrder.OLDEST_FIRST.value
 
         assert _all_pages(session, "podcast") == ["5", "4", "3", "2", "1"]
-        assert _all_pages(session, "series") == ["1", "2", "3", "4", "5"]
-
-        series.episode_order = EpisodeOrder.NEWEST_FIRST.value
-        session.commit()
         assert _all_pages(session, "series") == ["5", "4", "3", "2", "1"]
+
+        series.episode_order = EpisodeOrder.OLDEST_FIRST.value
+        session.commit()
+        assert _all_pages(session, "series") == ["1", "2", "3", "4", "5"]
 
     engine.dispose()
 

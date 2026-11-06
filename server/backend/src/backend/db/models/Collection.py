@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 
 def _default_episode_order(context) -> str:
-    return EpisodeOrder.default_for(context.get_current_parameters()["type"]).value
+    return EpisodeOrder.default_for(context.get_current_parameters()["episode_identifier"]).value
 
 
 class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):

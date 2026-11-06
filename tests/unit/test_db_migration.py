@@ -876,23 +876,23 @@ def test_daily_wire_profiles_get_the_upgrade_check_for_a_different_length(migrat
         assert connection.execute(text("SELECT duration FROM media_downloads")).all() == []
 
 
-def test_collections_keep_the_episode_order_their_type_gave_them(migration_database):
+def test_collections_keep_the_episode_order_their_identification_gave_them(migration_database):
     _database_path, engine = migration_database
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
     command.upgrade(config, "d6346ad993ee")
     with engine.begin() as connection:
-        for collection_id, collection_type in ((1, "podcast"), (2, "series")):
+        for collection_id, identifier in ((1, "date_based"), (2, "numbered"), (3, "seasonal")):
             connection.execute(text(
                 "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
                 "author_name, author_slug, source_key) VALUES (:id, :uuid, :uuid, 'C', 'https://example.test/' || :uuid, "
-                "'free', :type, 'numbered', 'Host', 'host', 'dailywire')"
-            ), {"id": collection_id, "uuid": f"c{collection_id}", "type": collection_type})
+                "'free', 'series', :identifier, 'Host', 'host', 'dailywire')"
+            ), {"id": collection_id, "uuid": f"c{collection_id}", "identifier": identifier})
 
     command.upgrade(config, HEAD_REVISION)
 
     with engine.connect() as connection:
         assert connection.execute(text("SELECT id, episode_order FROM collections ORDER BY id")).all() == [
-            (1, "newest_first"), (2, "oldest_first"),
+            (1, "newest_first"), (2, "newest_first"), (3, "oldest_first"),
         ]

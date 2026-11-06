@@ -18,9 +18,11 @@ class EpisodeOrder(StrEnum):
     OLDEST_FIRST = "oldest_first"
 
     @classmethod
-    def default_for(cls, collection_type: CollectionType | str) -> "EpisodeOrder":
-        """A podcast lists its newest episode first, and a series starts at its first episode."""
-        return cls.NEWEST_FIRST if CollectionType(collection_type) == CollectionType.PODCAST else cls.OLDEST_FIRST
+    def default_for(cls, episode_identifier: EpisodeIdentifier | str) -> "EpisodeOrder":
+        """A seasonal Collection starts each season at its first episode; any other lists its newest first."""
+        if EpisodeIdentifier(episode_identifier) == EpisodeIdentifier.SEASONAL:
+            return cls.OLDEST_FIRST
+        return cls.NEWEST_FIRST
 
 
 class CookiesMode(StrEnum):

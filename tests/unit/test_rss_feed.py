@@ -448,7 +448,8 @@ def test_seasonal_feed_emits_apple_and_podcasting20_numbering(db_session):
 
     xml = render_rss_feed(db_session, _FakeRequest(), profile).decode()
 
-    assert "<itunes:type>episodic</itunes:type>" in xml
+    # A seasonal collection starts each season at its first episode, so apps get a serial show.
+    assert "<itunes:type>serial</itunes:type>" in xml
     assert "<itunes:season>2</itunes:season>" in xml
     assert "<itunes:episode>7</itunes:episode>" in xml
     assert "<itunes:episodeType>full</itunes:episodeType>" in xml
