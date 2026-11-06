@@ -1,11 +1,12 @@
-import {useEffect, useState} from 'react'
-import {keepPreviousData, useQuery, useQueryClient} from '@tanstack/react-query'
+import {useEffect} from 'react'
+import {useInfiniteQuery, useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import ProgressButton from '../common/ProgressButton'
 import {useActiveOperation} from '../OperationNotifier/OperationNotifier'
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import './CollectionSyncLogModal.css'
 import {faIcon} from '../../icons/faIcon'
+import {useLoadMoreOnScroll} from '../../lib/useLoadMoreOnScroll'
 
 type Props = {
   collectionId: number
@@ -31,7 +32,7 @@ type CollectionScan = {
 
 type CollectionSyncLog = {items: CollectionScan[], total: number}
 
-const PAGE_SIZE = 10
+const PAGE_SIZE = 25
 
 const SCAN_KIND_LABELS: Record<CollectionScan['kind'], string> = {
   full_scan: 'Full scan',
@@ -53,21 +54,20 @@ function formatDate(value: string | null | undefined): string {
 export default function CollectionSyncLogModal({
   collectionId, collectionSlug, collectionTitle, open, starting, onClose, onSyncNow, onCancelSync, cancelSyncDisabled,
 }: Props) {
-  const [page, setPage] = useState(1)
   const queryClient = useQueryClient()
   const scanOperation = useActiveOperation('collection.sync', 'collection', collectionId)
   const scanning = starting || scanOperation !== undefined
 
-  useEffect(() => {
-    if (open) setPage(1)
-  }, [open, collectionSlug])
-
-  const log = useQuery({
-    queryKey: ['collection', collectionSlug, 'syncLog', page],
+  const log = useInfiniteQuery({
+    queryKey: ['collection', collectionSlug, 'syncLog'],
     enabled: open,
-    placeholderData: keepPreviousData,
-    queryFn: async ({signal}): Promise<CollectionSyncLog> => {
-      const params = new URLSearchParams({offset: String((page - 1) * PAGE_SIZE), limit: String(PAGE_SIZE)})
+    initialPageParam: 0,
+    getNextPageParam: (last: CollectionSyncLog, pages: CollectionSyncLog[]) => {
+      const loaded = pages.reduce((count, part) => count + part.items.length, 0)
+      return last.items.length > 0 && loaded < last.total ? loaded : undefined
+    },
+    queryFn: async ({signal, pageParam}): Promise<CollectionSyncLog> => {
+      const params = new URLSearchParams({offset: String(pageParam), limit: String(PAGE_SIZE)})
       const r = await fetch(
         `${(window as any).appConfig.API_URL}/collections/${encodeURIComponent(collectionSlug)}/sync-log?${params}`,
         {signal, credentials: 'include'},
@@ -82,13 +82,13 @@ export default function CollectionSyncLogModal({
     if (!scanning) void queryClient.invalidateQueries({queryKey: ['collection', collectionSlug, 'syncLog']})
   }, [scanning, collectionSlug, queryClient])
 
-  const total = log.data?.total ?? 0
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
-  const entries = log.data?.items ?? []
-
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages)
-  }, [page, totalPages])
+  const entries = log.data?.pages.flatMap((part) => part.items) ?? []
+  const loadingMore = log.isFetchingNextPage
+  const moreFailed = log.isFetchNextPageError
+  const {rootRef, endRef} = useLoadMoreOnScroll<HTMLDivElement, HTMLDivElement>(
+    open && log.hasNextPage && !loadingMore && !moreFailed,
+    () => void log.fetchNextPage(),
+  )
 
   if (!open) return null
 
@@ -111,10 +111,10 @@ export default function CollectionSyncLogModal({
           </div>
         </div>
 
-        <div className="collection-sync-log-content">
+        <div className="collection-sync-log-content" ref={rootRef}>
           {log.isLoading ? (
             <p className="modal-text">Loading sync history...</p>
-          ) : log.isError ? (
+          ) : log.isError && entries.length === 0 ? (
             <p className="modal-text">Could not load sync history.</p>
           ) : entries.length === 0 ? (
             <p className="modal-text">No syncs have been recorded yet.</p>
@@ -140,31 +140,19 @@ export default function CollectionSyncLogModal({
               ))}
             </div>
           )}
+          {entries.length > 0 && (
+            <div className="collection-sync-log-more" ref={endRef} aria-live="polite">
+              {moreFailed ? (
+                <>
+                  Could not load more syncs.
+                  <button type="button" className="btn" onClick={() => void log.fetchNextPage()}>Try again</button>
+                </>
+              ) : loadingMore ? 'Loading more syncs…' : null}
+            </div>
+          )}
         </div>
 
         <div className="collection-sync-log-footer">
-          <nav className="collection-sync-log-pagination" aria-label="Sync log pages">
-            <button
-              type="button"
-              className="btn"
-              disabled={page <= 1 || log.isFetching}
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-            >
-              Previous
-            </button>
-            <span className="collection-sync-log-page-label" aria-live="polite">
-              {`Page ${page} of ${totalPages}`}
-            </span>
-            <button
-              type="button"
-              className="btn"
-              disabled={page >= totalPages || log.isFetching}
-              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-            >
-              Next
-            </button>
-          </nav>
-
           <div className="modal-actions collection-sync-log-actions">
             <button type="button" className="btn" onClick={onClose}>Close</button>
             <ProgressButton

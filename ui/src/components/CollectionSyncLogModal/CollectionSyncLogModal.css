@@ -83,20 +83,15 @@
   background: #fff;
 }
 
-.collection-sync-log-pagination {
+.collection-sync-log-more {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.collection-sync-log-page-label {
-  min-width: 86px;
-  text-align: center;
-  color: var(--text-muted, #64748b);
+  justify-content: center;
+  gap: 10px;
+  min-height: 1px;
+  padding-top: 10px;
+  color: var(--muted);
   font-size: 0.86rem;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 .collection-sync-log-actions {
