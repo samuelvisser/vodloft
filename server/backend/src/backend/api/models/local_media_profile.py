@@ -61,7 +61,6 @@ class LocalMediaProfileAPIBaseOut(ResponseBase):
     audio_codec: Union[AudioCodec, str]
     audio_format: Union[AudioFormat, str]
     audio_language: str | None = None
-    append_media_type_to_filename: bool
     source_keys: list[str] | None = None
     created_at: datetime
     updated_at: datetime

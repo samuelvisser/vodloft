@@ -1228,8 +1228,7 @@ def _upsert_movie_profile(session: Session, plan: ProfilePlan, links, run: Impor
         _remember(session, links, run.importer, "profile", plan.external_id, reused.id, {}, [], run.id)
         report.add("reused", plan.name, f"Uses the Local Media Profile {reused.name}, which names files the same way")
         return reused
-    fields = ("preferred_format", "download_mode", "thumbnail_mode", "metadata_mode", "subtitle_mode",
-              "append_media_type_to_filename")
+    fields = ("preferred_format", "download_mode", "thumbnail_mode", "metadata_mode", "subtitle_mode")
     try:
         profile = create_movie_local_media_profile(session, MovieLocalMediaProfileInput.model_validate({
             **{name: plan.settings[name] for name in fields if plan.settings.get(name) is not None},
