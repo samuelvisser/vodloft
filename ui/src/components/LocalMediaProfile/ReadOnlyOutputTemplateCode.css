@@ -41,7 +41,24 @@
     white-space: nowrap;
 }
 
+/* On phones a variable can be longer than a whole line. There it moves to the next line as a whole,
+   and only wraps inside itself when it is longer than a line, instead of running past the edge. */
+@media (max-width: 640px) {
+    .read-only-output-template-code-editor .cm-jinja-expression {
+        display: inline-block;
+        max-width: 100%;
+        white-space: normal;
+        vertical-align: bottom;
+    }
+}
+
 /* A path view is about the folders: accent the slashes between them and fade the variable braces. */
+/* The zero-width space lets a wrapped path break after a slash, between folders, instead of at a
+   space inside a folder name such as "Season 01". */
+.read-only-output-template-code-editor.is-path .cm-path-slash::after {
+    content: "\200B";
+}
+
 .read-only-output-template-code-editor.is-path .cm-path-slash {
     margin: 0 0.1em;
     color: #ea580c;
