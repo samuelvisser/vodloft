@@ -151,22 +151,40 @@ def test_the_hls_stream_has_a_variant_per_resolution_up_to_the_feeds(tracks_modu
     ]
 
 
-def test_track_playlists_list_fragments_straight_from_youtube_or_through_vodloft(tracks_module, monkeypatch):
+def test_track_playlists_list_fragments_at_vodloft(tracks_module, monkeypatch):
     upstream = _Upstream({"https://yt/1080": TRACK})
     monkeypatch.setattr(tracks_module.requests, "get", upstream.get)
     source = _Source(_tracks())
 
-    direct = tracks_module.track_playlist_response(source, _episode(), "video-1080.m3u8", proxy=False, head_only=False)
-    lines = direct.body.decode().splitlines()
-    assert direct.headers["content-type"] == "application/x-mpegURL"
-    assert lines[5] == f'#EXT-X-MAP:URI="https://yt/1080",BYTERANGE="{len(HEAD)}@0"'
-    assert lines[6:9] == ["#EXTINF:5.000,", f"#EXT-X-BYTERANGE:1000@{len(HEAD) + len(_sidx([(0, 0), (0, 0)]))}", "https://yt/1080"]
+    playlist = tracks_module.track_playlist_response(source, _episode(), "video-1080.m3u8", head_only=False)
+    lines = playlist.body.decode().splitlines()
+    assert playlist.headers["content-type"] == "application/x-mpegURL"
+    assert lines[5] == f'#EXT-X-MAP:URI="video-1080.mp4",BYTERANGE="{len(HEAD)}@0"'
+    assert lines[6:9] == ["#EXTINF:5.000,", f"#EXT-X-BYTERANGE:1000@{len(HEAD) + len(_sidx([(0, 0), (0, 0)]))}", "video-1080.mp4"]
     assert lines[-1] == "#EXT-X-ENDLIST"
-
-    proxied = tracks_module.track_playlist_response(source, _episode(), "video-1080.m3u8", proxy=True, head_only=False)
-    assert proxied.body.decode().splitlines()[8] == "video-1080.mp4"
+    tracks_module.track_playlist_response(source, _episode(), "video-1080.m3u8", head_only=False)
     # The index was read once, and the tracks looked up once.
     assert len(upstream.ranges) == 1 and source.lookups == 1
+
+
+def test_a_fragment_redirects_to_youtube_with_a_link_that_has_not_expired(tracks_module, monkeypatch):
+    source = _Source(_tracks())
+    app = FastAPI()
+
+    @app.get("/{name}")
+    def part(name: str, request: Request):
+        return tracks_module.track_redirect_response(source, _episode(), name, head_only=False)
+
+    client = TestClient(app, follow_redirects=False)
+    response = client.get("/video-1080.mp4")
+    assert (response.status_code, response.headers["location"]) == (302, "https://yt/1080")
+    assert response.headers["cache-control"].startswith("no-store")
+    assert client.get("/audio.mp4").headers["location"] == "https://yt/audio"
+    assert client.get("/video-480.mp4").status_code == 404
+    # Shortly before the links expire, the next fragment is asked for with newly looked up ones.
+    monkeypatch.setattr(tracks_module.time, "time", lambda: 10**12)
+    client.get("/audio.mp4")
+    assert source.lookups == 2
 
 
 def test_a_proxied_fragment_is_passed_on_with_its_range(tracks_module, monkeypatch):

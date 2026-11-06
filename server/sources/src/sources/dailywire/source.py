@@ -81,16 +81,16 @@ class DailyWireSource(Source):
         Feature.MEMBERSHIP_LEVELS,
     })
     episode_tags = (
-        EpisodeTag(MAIN_TAG, "Episode", "A normal episode of the show", main=True),
+        EpisodeTag(MAIN_TAG, "Episode", "A normal episode of the show", "episode", "episodes", main=True),
         EpisodeTag(
-            "ep-extra", "Ep. Extra", "Extra content for a specific episode", selected_by_default=False,
+            "ep-extra", "Ep. Extra", "Extra content for a specific episode", "episode extra", "episode extras", selected_by_default=False,
             rss_episode_type=RssEpisodeType.BONUS,
         ),
         EpisodeTag(
-            "trailer", "Trailer", "A trailer for the show or its extra content", selected_by_default=False,
+            "trailer", "Trailer", "A trailer for the show or its extra content", "trailer", "trailers", selected_by_default=False,
             rss_episode_type=RssEpisodeType.TRAILER,
         ),
-        EpisodeTag("aux", "Auxiliary", "Extra content for the show", rss_episode_type=RssEpisodeType.BONUS),
+        EpisodeTag("aux", "Auxiliary", "Extra content for the show", "auxiliary episode", "auxiliary episodes", rss_episode_type=RssEpisodeType.BONUS),
     )
     publish_status_labels = publish_status_labels_with(
         PublishStatusLabel(EpisodePublishStatus.SCHEDULED, "Scheduled", "The Daily Wire has scheduled the episode."),

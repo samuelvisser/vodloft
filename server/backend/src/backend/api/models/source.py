@@ -194,6 +194,8 @@ class EpisodeTagAPIRead(ResponseBase):
     key: str
     label: str
     help: str
+    singular: str
+    plural: str
     selected_by_default: bool
     rss_episode_type: Literal["full", "trailer", "bonus"]
     main: bool

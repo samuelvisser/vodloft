@@ -150,11 +150,14 @@ class EpisodeTag:
     The key is the first part of an episode's identifier (``short.12``) and what
     Download and RSS profiles select. Episodes with the ``main`` tag follow the
     collection's numbering scheme; every other tag counts on its own across the collection.
+    ``singular`` and ``plural`` name a count of them, such as "1 livestream" or "726 livestreams".
     """
 
     key: str
     label: str
     help: str
+    singular: str
+    plural: str
     selected_by_default: bool = True
     rss_episode_type: RssEpisodeType = RssEpisodeType.FULL
     main: bool = False
@@ -631,7 +634,7 @@ class Source(ABC):
     domains: ClassVar[tuple[str, ...]]
     features: ClassVar[frozenset[Feature]]
     episode_tags: ClassVar[tuple[EpisodeTag, ...]] = (
-        EpisodeTag(MAIN_TAG, "Episode", "An episode of the collection", main=True),
+        EpisodeTag(MAIN_TAG, "Episode", "An episode of the collection", "episode", "episodes", main=True),
     )
     """Every tag the Source gives episodes, the main one first."""
     subscription_name: ClassVar[str | None] = None
