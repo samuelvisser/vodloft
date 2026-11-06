@@ -31,7 +31,7 @@ const readOnlyCodeExtensions = [
 
 const pathCodeExtensions = [
     ...readOnlyCodeExtensions,
-    markPathSlashes,
+    ...markPathSlashes,
 ]
 
 export default function ReadOnlyOutputTemplateCode({

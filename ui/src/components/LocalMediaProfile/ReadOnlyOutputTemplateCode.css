@@ -65,11 +65,18 @@
     }
 }
 
-/* The break points before slashes are for the wrapped phone view; a one-line table cell keeps the
-   whole path on its line. */
-@media (min-width: 641px) {
-    .read-only-output-template-code-editor.is-path wbr,
-    .read-only-output-template-code-editor.is-path .cm-widgetBuffer {
-        display: none;
+/* A wrapped path only breaks before a slash. Each section (a slash up to the next one) stays on one
+   line, and one too long for a line is cut off there. Several sections share a line when they fit. */
+.read-only-output-template-code-editor.is-path .cm-path-section {
+    white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+    .read-only-output-template-code-editor.is-path .cm-path-section {
+        display: inline-block;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        vertical-align: bottom;
     }
 }
