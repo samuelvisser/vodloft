@@ -1,5 +1,5 @@
 import {HighlightStyle, syntaxHighlighting} from '@codemirror/language'
-import {Prec} from '@codemirror/state'
+import {Prec, type Extension} from '@codemirror/state'
 import {Decoration, EditorView, MatchDecorator, ViewPlugin, type DecorationSet, type ViewUpdate} from '@codemirror/view'
 import {jinja} from '@codemirror/lang-jinja'
 import {tags} from '@lezer/highlight'
@@ -80,7 +80,7 @@ function matcherPlugin(matcher: MatchDecorator) {
 
 // The section mark has the lowest precedence, so it wraps the slash and variable marks instead of being
 // split by them.
-export const markPathSlashes = [
+export const markPathSlashes: Extension = [
     matcherPlugin(pathSlashMatcher),
     Prec.lowest(matcherPlugin(pathSectionMatcher)),
 ]
