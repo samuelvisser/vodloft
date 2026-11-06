@@ -501,9 +501,12 @@ def test_filtered_bulk_action_ids_do_not_depend_on_loaded_pages():
         queued_one = _make_download(session, slug="bulk-filter-queued-one")
         queued_two = _make_download(session, slug="bulk-filter-queued-two")
         downloaded = _make_download(session, slug="bulk-filter-downloaded")
+        missing = _make_download(session, slug="bulk-filter-missing")
         create_media_download_operation(session, queued_one)
         create_media_download_operation(session, queued_two)
         mark_artifact_available(downloaded)
+        mark_artifact_available(missing)
+        missing.artifact_status = MediaDownloadArtifactStatus.MISSING.value
         session.commit()
 
         assert set(get_media_download_bulk_action_ids(
@@ -518,11 +521,17 @@ def test_filtered_bulk_action_ids_do_not_depend_on_loaded_pages():
             action="retry",
         ) == []
 
+        # Retry all never re-downloads finished files; other statuses stay retryable.
         assert get_media_download_bulk_action_ids(
             session,
             statuses=["downloaded"],
             action="retry",
-        ) == [downloaded.id]
+        ) == []
+        assert get_media_download_bulk_action_ids(
+            session,
+            statuses=["downloaded", "missing"],
+            action="retry",
+        ) == [missing.id]
     finally:
         session.close()
         engine.dispose()
