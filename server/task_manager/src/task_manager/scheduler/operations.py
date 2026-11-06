@@ -719,9 +719,12 @@ def _refresh_direct_operation(operation: TaskOperation) -> TaskOperation:
             operation.status = OperationStatus.WAITING.value
             message = wait_state.get("message")
             operation.message = message if isinstance(message, str) and message else "Waiting"
-        elif not running_runs:
+        elif not running_runs and not terminal_runs:
             # SCHEDULED/QUEUED TaskRuns can be durable reservations that have not
             # entered an executor yet. Do not present them as active execution.
+            # Once some targets have finished, the moment between one task and
+            # the next stays Running, so a bulk action does not flicker back
+            # to Queued.
             operation.status = OperationStatus.QUEUED.value
             if total == 1:
                 operation.message = linked_runs[-1].message or "Queued"
