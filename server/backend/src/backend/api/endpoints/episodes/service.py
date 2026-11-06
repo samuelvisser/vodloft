@@ -15,6 +15,7 @@ from backend.api.pagination import InvalidCursorError, decode_cursor, encode_cur
 from backend.db.models import Collection
 from backend.db.models.media_item import Episode
 from backend.db.models.media_download import EpisodeMediaDownload
+from backend.types.collection_types import EpisodeIdentifier, EpisodeOrder
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode import episode_identifier_type_predicate
 from backend.services.episode_download_delay import episode_download_delay_ready_at
@@ -74,10 +75,25 @@ def get_episodes_by_collection_list(s: Session, collection_slug: str, limit: int
     return [_episode_api_read(episode) for episode in episodes]
 
 
+def _episode_view_order(s: Session, collection_slug: str, season_id: int | None) -> EpisodeOrder:
+    """The order of a collection's episode list, or of one of its seasons."""
+    row = s.execute(
+        select(Collection.episode_order, Collection.episode_identifier).where(Collection.slug == collection_slug)
+    ).one_or_none()
+    if row is None:
+        return EpisodeOrder.NEWEST_FIRST
+    # A seasonal collection orders the episodes of each season. Its list of every episode stays newest
+    # first: the browser keeps its start as a preview, and the page opens on the latest season.
+    if season_id is None and row.episode_identifier == EpisodeIdentifier.SEASONAL.value:
+        return EpisodeOrder.NEWEST_FIRST
+    return EpisodeOrder(row.episode_order)
+
+
 def _episode_view_stmt(
         collection_slug: str,
         season_id: int | None = None,
         episode_types: Sequence[str] = (),
+        order: EpisodeOrder = EpisodeOrder.NEWEST_FIRST,
 ):
     # The collection grid needs only a small subset of Episode. Selecting those columns directly avoids
     # constructing full ORM entities (and their select-in metadata relationship), then sending and
@@ -107,10 +123,15 @@ def _episode_view_stmt(
     )
     if episode_types:
         stmt = stmt.where(episode_identifier_type_predicate(Episode.episode_identifier, set(episode_types)))
+    newest_first = order == EpisodeOrder.NEWEST_FIRST
     if season_id is not None:
         stmt = stmt.where(Episode.season_id == season_id)
+        if newest_first:
+            return stmt.order_by(Episode.index.desc(), Episode.id.desc())
         return stmt.order_by(Episode.index.asc(), Episode.id.asc())
-    return stmt.order_by(Episode.published_date.desc().nulls_last(), Episode.id.desc())
+    if newest_first:
+        return stmt.order_by(Episode.published_date.desc().nulls_last(), Episode.id.desc())
+    return stmt.order_by(Episode.published_date.asc().nulls_last(), Episode.id.asc())
 
 
 def get_episode_views_by_collection_list(
@@ -119,7 +140,7 @@ def get_episode_views_by_collection_list(
         limit: int | None = None,
 ) -> list[EpisodeAPIReadView]:
     """Return compact rows for internal callers that still need a simple list."""
-    stmt = _episode_view_stmt(collection_slug)
+    stmt = _episode_view_stmt(collection_slug, order=_episode_view_order(s, collection_slug, None))
     if limit is not None:
         stmt = stmt.limit(limit)
 
@@ -175,7 +196,9 @@ def get_episode_views_by_collection_page(
         else ""
     )
 
-    stmt = _episode_view_stmt(collection_slug, season_id, episode_types)
+    order = _episode_view_order(s, collection_slug, season_id)
+    newest_first = order == EpisodeOrder.NEWEST_FIRST
+    stmt = _episode_view_stmt(collection_slug, season_id, episode_types, order)
     if cursor:
         try:
             values = decode_cursor(cursor)
@@ -193,15 +216,15 @@ def get_episode_views_by_collection_page(
             # Episode dates/indexes can be corrected by metadata refreshes. A
             # changed revision means the old sort boundary is no longer safe;
             # restart at the head and let the generic frontend replace the old
-            # page chain immediately.
-            if values.get("revision") == revision:
+            # page chain immediately. So does a change of the collection's order.
+            if values.get("revision") == revision and values.get("order") == order.value:
                 if season_id is not None:
                     cursor_index = values.get("index")
                     if not isinstance(cursor_index, int) or isinstance(cursor_index, bool):
                         raise InvalidCursorError("Invalid episode cursor index")
                     stmt = stmt.where(keyset_after([
-                        KeysetField(Episode.index, cursor_index),
-                        KeysetField(Episode.id, cursor_id),
+                        KeysetField(Episode.index, cursor_index, descending=newest_first),
+                        KeysetField(Episode.id, cursor_id, descending=newest_first),
                     ]))
                 else:
                     published_raw = values.get("published_at")
@@ -212,17 +235,23 @@ def get_episode_views_by_collection_page(
                         if published_raw is not None
                         else None
                     )
+                    # Episodes without a date come last either way.
+                    id_after = Episode.id < cursor_id if newest_first else Episode.id > cursor_id
                     if published_at is None:
                         stmt = stmt.where(
                             Episode.published_date.is_(None),
-                            Episode.id < cursor_id,
+                            id_after,
                         )
                     else:
                         stmt = stmt.where(or_(
-                            Episode.published_date < published_at,
+                            (
+                                Episode.published_date < published_at
+                                if newest_first
+                                else Episode.published_date > published_at
+                            ),
                             and_(
                                 Episode.published_date == published_at,
-                                Episode.id < cursor_id,
+                                id_after,
                             ),
                             Episode.published_date.is_(None),
                         ))
@@ -243,6 +272,7 @@ def get_episode_views_by_collection_page(
             "season_id": season_id,
             "episode_types": episode_types,
             "revision": revision,
+            "order": order.value,
             "id": last["id"],
         }
         if season_id is not None:

@@ -99,7 +99,8 @@ def _collection(source_key: str):
         id=1, uuid="collection-uuid", slug="a-collection", title="A Collection", sharing_url="https://example.test/a-collection",
         membership_level="ALL_ACCESS", type=CollectionType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value, author_name="Host", author_slug="host",
-        source_key=source_key, ytdlp_options="", cookies_mode="automatic", check_frequency="default", created_at=now, updated_at=now,
+        source_key=source_key, ytdlp_options="", cookies_mode="automatic", check_frequency="default", episode_order="newest_first",
+        created_at=now, updated_at=now,
     )
 
 

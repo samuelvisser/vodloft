@@ -1,5 +1,5 @@
 import {z} from "zod";
-import {EpisodeIdentifierReg, CollectionTypeReg} from "../collection";
+import {EpisodeIdentifierReg, EpisodeOrderReg, CollectionTypeReg} from "../collection";
 import {DwMembershipLevelReg} from "../dailywire_user_info";
 import {ApiDateTimeSchema} from "./datetime";
 import {SiteReadSchema, SourcedFields} from "./source";
@@ -113,6 +113,7 @@ export const CollectionReadSchema = z.looseObject({
     membershipLevel: z.union([z.enum(DwMembershipLevelReg.values), z.string()]).nullable(),
     type: z.union([z.enum(CollectionTypeReg.values), z.string()]),
     episodeIdentifier: z.union([z.enum(EpisodeIdentifierReg.values), z.string()]),
+    episodeOrder: z.enum(EpisodeOrderReg.values),
     authorSlug: z.string(),
     title: z.string(),
     description: z.string().nullable(),

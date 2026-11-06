@@ -9,7 +9,7 @@ from backend.api.models.base import RequestBase, ResponseBase, response_model_co
 from backend.api.models.custom_metadata import CustomMetadataResponseBase
 from backend.api.models.source import SiteAPIRead, SourcedResponse
 from backend.types.dailywire_user_info import DwMembershipLevel
-from backend.types.collection_types import CheckFrequency, CollectionType, CookiesMode, EpisodeIdentifier
+from backend.types.collection_types import CheckFrequency, CollectionType, CookiesMode, EpisodeIdentifier, EpisodeOrder
 from config.settings.cron_validation import CronExpressionError, validate_cron_expression
 from backend.types.download_profile_types import EpisodeTagKey
 from backend.utils.helpers import generate_uuid
@@ -61,6 +61,7 @@ class CollectionAPIUpdate(_CollectionAPIBaseIn):
     """Your own yt-dlp options for this Collection; left out, they stay as they are."""
 
     cookies_mode: Optional[CookiesMode] = None
+    episode_order: Optional[EpisodeOrder] = None
     check_frequency: Optional[CheckFrequency] = None
     check_cron: Optional[str] = Field(default=None, validate_default=True)
     """The Collection's own schedule, with ``check_frequency`` own."""
@@ -166,6 +167,7 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     membership_level: Optional[Union[DwMembershipLevel, str]] = None
     type: Union[CollectionType, str]
     episode_identifier: Union[EpisodeIdentifier, str]
+    episode_order: EpisodeOrder
     author_slug: str
     title: str
     description: Optional[str] = None

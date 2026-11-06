@@ -29,7 +29,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 SITE_REFRESH_REVISION = "5b75b63e55f2"
 NEUTRAL_STATUSES_REVISION = "b9dbb772c34e"
 UPCOMING_VIDEOS_REVISION = "158c03681e52"
-HEAD_REVISION = "d6346ad993ee"
+HEAD_REVISION = "db11a36f288f"
 
 
 @pytest.fixture
@@ -874,3 +874,25 @@ def test_daily_wire_profiles_get_the_upgrade_check_for_a_different_length(migrat
             (8, 0, ["resolution"], 5),
         ]
         assert connection.execute(text("SELECT duration FROM media_downloads")).all() == []
+
+
+def test_collections_keep_the_episode_order_their_type_gave_them(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "d6346ad993ee")
+    with engine.begin() as connection:
+        for collection_id, collection_type in ((1, "podcast"), (2, "series")):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key) VALUES (:id, :uuid, :uuid, 'C', 'https://example.test/' || :uuid, "
+                "'free', :type, 'numbered', 'Host', 'host', 'dailywire')"
+            ), {"id": collection_id, "uuid": f"c{collection_id}", "type": collection_type})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT id, episode_order FROM collections ORDER BY id")).all() == [
+            (1, "newest_first"), (2, "oldest_first"),
+        ]

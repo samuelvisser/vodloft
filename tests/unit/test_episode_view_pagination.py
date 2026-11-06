@@ -353,3 +353,108 @@ def test_episode_cursor_restarts_when_existing_sort_key_changes():
         ]
 
     engine.dispose()
+
+
+def _ordered_collection(session, *, slug: str, collection_type: str, episode_identifier: str, order: str | None):
+    from backend.db.models import Collection, Season
+
+    collection = Collection(
+        source_key="dailywire",
+        uuid=f"uuid-{slug}",
+        slug=slug,
+        title=slug,
+        description=None,
+        sharing_url=f"https://example.test/{slug}",
+        membership_level="FREE",
+        type=collection_type,
+        episode_identifier=episode_identifier,
+        author_name="Host",
+        author_slug="host",
+        **({"episode_order": order} if order else {}),
+    )
+    session.add(collection)
+    session.flush()
+    season = Season(collection_id=collection.id, index=1, slug=f"{slug}-season-1", name="Season 1")
+    session.add(season)
+    session.flush()
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    session.add_all(
+        _episode(
+            collection=collection,
+            season=season,
+            index=index,
+            slug=f"{slug}-{index}",
+            published=start + timedelta(days=index),
+        )
+        for index in range(1, 6)
+    )
+    session.commit()
+    return collection, season
+
+
+def _all_pages(session, slug: str, **kwargs) -> list[str]:
+    from backend.api.endpoints.episodes.service import get_episode_views_by_collection_page
+
+    slugs: list[str] = []
+    cursor = None
+    while True:
+        page = get_episode_views_by_collection_page(session, slug, cursor=cursor, limit=2, **kwargs)
+        slugs += [item.slug.rsplit("-", 1)[1] for item in page.items]
+        cursor = page.next_cursor
+        if cursor is None:
+            return slugs
+
+
+def test_collection_episode_order_defaults_by_type_and_orders_every_page():
+    import backend.db.models  # noqa: F401
+
+    from backend.db import Base
+    from backend.types.collection_types import CollectionType, EpisodeIdentifier, EpisodeOrder
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        podcast, _ = _ordered_collection(
+            session, slug="podcast", collection_type=CollectionType.PODCAST.value,
+            episode_identifier=EpisodeIdentifier.DATE_BASED.value, order=None,
+        )
+        series, _ = _ordered_collection(
+            session, slug="series", collection_type=CollectionType.SERIES.value,
+            episode_identifier=EpisodeIdentifier.NUMBERED.value, order=None,
+        )
+        assert podcast.episode_order == EpisodeOrder.NEWEST_FIRST.value
+        assert series.episode_order == EpisodeOrder.OLDEST_FIRST.value
+
+        assert _all_pages(session, "podcast") == ["5", "4", "3", "2", "1"]
+        assert _all_pages(session, "series") == ["1", "2", "3", "4", "5"]
+
+        series.episode_order = EpisodeOrder.NEWEST_FIRST.value
+        session.commit()
+        assert _all_pages(session, "series") == ["5", "4", "3", "2", "1"]
+
+    engine.dispose()
+
+
+def test_seasonal_collection_orders_each_season_and_lists_every_episode_newest_first():
+    import backend.db.models  # noqa: F401
+
+    from backend.db import Base
+    from backend.types.collection_types import CollectionType, EpisodeIdentifier, EpisodeOrder
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        collection, season = _ordered_collection(
+            session, slug="seasonal", collection_type=CollectionType.SERIES.value,
+            episode_identifier=EpisodeIdentifier.SEASONAL.value, order=EpisodeOrder.NEWEST_FIRST.value,
+        )
+        assert _all_pages(session, "seasonal", season_id=season.id) == ["5", "4", "3", "2", "1"]
+
+        collection.episode_order = EpisodeOrder.OLDEST_FIRST.value
+        session.commit()
+        assert _all_pages(session, "seasonal", season_id=season.id) == ["1", "2", "3", "4", "5"]
+        assert _all_pages(session, "seasonal") == ["5", "4", "3", "2", "1"]
+
+    engine.dispose()

@@ -17,6 +17,7 @@ import {toast} from 'react-hot-toast'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from '../../lib/cache'
 import {episodeQueryKeys} from '../../lib/collectionQueryOptions'
+import {CollectionTypeReg, EpisodeIdentifierReg, EpisodeOrderReg, EpisodeOrderValue} from '../../types/collection'
 
 const CheckFrequencyReg = createSelectRegistry('CollectionCheckFrequency', {
   default: {label: 'Like other Collections'},
@@ -41,6 +42,7 @@ type FormState = CollectionFormValue & {
   checkFrequency: CheckFrequency
   checkCron: string
   cookiesMode: CookiesMode
+  episodeOrder: EpisodeOrderValue
 }
 
 export default function EditCollectionPage() {
@@ -60,6 +62,7 @@ export default function EditCollectionPage() {
     checkFrequency: 'default',
     checkCron: '0 */6 * * *',
     cookiesMode: 'automatic',
+    episodeOrder: 'newest_first',
     ...defaultCollectionFormValue,
   }))
 
@@ -76,6 +79,7 @@ export default function EditCollectionPage() {
       checkFrequency: collection.checkFrequency,
       checkCron: collection.checkCron || prev.checkCron,
       cookiesMode: collection.cookiesMode,
+      episodeOrder: collection.episodeOrder,
     }))
   }, [id, collection])
 
@@ -110,6 +114,7 @@ export default function EditCollectionPage() {
       thumbnailPortraitPath: collection.thumbnailPortraitPath ?? null,
       thumbnailSquarePath: collection.thumbnailSquarePath ?? null,
       ...(usesYtdlp ? {ytdlpOptions: form.ytdlpOptions} : {}),
+      episodeOrder: form.episodeOrder,
       checkFrequency: form.checkFrequency,
       ...(form.checkFrequency === 'own' ? {checkCron: form.checkCron} : {}),
       ...(optionalCookies ? {cookiesMode: form.cookiesMode} : {}),
@@ -141,6 +146,11 @@ export default function EditCollectionPage() {
       console.error(msg)
       alert(msg)
       return
+    }
+    if (form.episodeOrder !== collection.episodeOrder) {
+      // The stored preview and loaded pages are in the old order.
+      removeEpisodePreviewFromStorage(id)
+      qc.removeQueries({queryKey: episodeQueryKeys.forCollection(id)})
     }
     await Promise.all([
       qc.invalidateQueries({ queryKey: ['collection', id] }),
@@ -267,6 +277,51 @@ export default function EditCollectionPage() {
           value={form}
           onChange={(v: CollectionFormValue) => setForm((prev) => ({ ...prev, ...v }))}
         />
+
+        <div className="form-row">
+          <label htmlFor="collection-type">Collection type</label>
+          <input
+            id="collection-type"
+            className="input"
+            type="text"
+            value={collection ? CollectionTypeReg.getLabelLoose(collection.type) : ''}
+            disabled
+            aria-describedby="collection-type-help"
+          />
+          <div className="help" id="collection-type-help">Chosen when the Collection was added, and cannot be changed.</div>
+        </div>
+
+        <div className="form-row">
+          <label htmlFor="collection-episode-identification">Episode identification</label>
+          <input
+            id="collection-episode-identification"
+            className="input"
+            type="text"
+            value={collection ? EpisodeIdentifierReg.getLabelLoose(collection.episodeIdentifier) : ''}
+            disabled
+            aria-describedby="collection-episode-identification-help"
+          />
+          <div className="help" id="collection-episode-identification-help">
+            How VODLoft numbers the episodes, chosen when the Collection was added. It cannot be changed.
+          </div>
+        </div>
+
+        <div className="form-row">
+          <label htmlFor="collection-episode-order">Episode order</label>
+          <SimpleSelect
+            inputId="collection-episode-order"
+            registry={EpisodeOrderReg}
+            value={form.episodeOrder}
+            onChange={(value) => setForm((prev) => ({...prev, episodeOrder: value as EpisodeOrderValue}))}
+          />
+          <div className="help">
+            {collection?.episodeIdentifier === 'seasonal'
+              ? 'The order of the episodes within each season'
+              : 'The order of the episodes'}
+            {' '}on the Collection page and in podcast apps that follow its RSS feeds.
+            Podcasts start with the newest episode by default, and series with the first.
+          </div>
+        </div>
 
         {usesYtdlp && (
           <div className="form-row">
