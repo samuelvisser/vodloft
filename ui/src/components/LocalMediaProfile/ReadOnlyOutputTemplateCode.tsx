@@ -6,12 +6,14 @@ import {
     parseOutputTemplate,
     renderCompactOutputTemplate,
     renderEditorOutputTemplate,
+    renderPathOutputTemplate,
     type OutputTemplateSourceMode,
 } from './outputTemplateFormatting'
 import './OutputTemplateEditor.css'
 import './ReadOnlyOutputTemplateCode.css'
 
-export type OutputTemplateRenderMode = 'compact' | 'editor'
+// 'path' hides set blocks, logic tags and comments and shows only the path with its variables.
+export type OutputTemplateRenderMode = 'compact' | 'editor' | 'path'
 
 export type ReadOnlyOutputTemplateCodeProps = {
     source: string
@@ -36,7 +38,9 @@ export default function ReadOnlyOutputTemplateCode({
     const ast = parseOutputTemplate(source, sourceMode)
     const value = renderMode === 'compact'
         ? renderCompactOutputTemplate(ast)
-        : renderEditorOutputTemplate(ast).value
+        : renderMode === 'path'
+            ? renderPathOutputTemplate(ast)
+            : renderEditorOutputTemplate(ast).value
 
     return (
         <CodeMirror

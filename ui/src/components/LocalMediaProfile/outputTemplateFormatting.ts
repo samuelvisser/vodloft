@@ -401,6 +401,27 @@ export function renderCompactOutputTemplate(ast: OutputTemplateAst): string {
     return renderCompactNodes(ast.children)
 }
 
+// Blocks that only define values or helpers, and print nothing where they stand.
+const DEFINITION_BLOCKS = new Set(['set', 'macro'])
+
+function renderPathNodes(nodes: OutputTemplateNode[]): string {
+    return nodes.map((node) => {
+        if (node.type === 'text') return node.value
+        if (node.type === 'expression') return node.source
+        // Comments and standalone statements such as `{% set x = … %}` print nothing.
+        if (node.type !== 'block') return ''
+        if (DEFINITION_BLOCKS.has(node.keyword)) return ''
+        // Logic tags are hidden. A block keeps its first part, so `if`/`else` reads as one path, not two joined.
+        return renderPathNodes(node.body)
+    }).join('')
+}
+
+// The template as it reads as a path: only the text and printed variables, without set blocks,
+// logic tags or comments, so every dynamic part stays a variable instead of one episode's value.
+export function renderPathOutputTemplate(ast: OutputTemplateAst): string {
+    return renderPathNodes(ast.children).trim()
+}
+
 function nodesHaveLeadingPathPartSpace(nodes: OutputTemplateNode[]): boolean {
     return nodes.some((node) => {
         if (node.type === 'text') return /\/ +/.test(node.value)

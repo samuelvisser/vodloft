@@ -53,7 +53,7 @@ export default function LocalMediaProfilesPage() {
                 <OpaqueOutputTemplateCode
                     source={p.outputTemplate}
                     sourceMode="compact"
-                    renderMode="compact"
+                    renderMode="path"
                     label={`Output path template for ${p.name}`}
                     className="local-media-profile-output-template"
                 />
