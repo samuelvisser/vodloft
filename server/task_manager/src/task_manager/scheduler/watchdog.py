@@ -6,11 +6,11 @@ from datetime import datetime, timedelta, timezone
 from threading import Lock
 
 from apscheduler.triggers.interval import IntervalTrigger
-from sqlalchemy import or_, select
+from sqlalchemy import exists, or_, select
 
 from backend.db.core import get_session
 from config import get_settings
-from task_manager.scheduler.db import TaskOperation, TaskOperationRun, TaskRun
+from task_manager.scheduler.db import TaskOperation, TaskOperationDependency, TaskOperationRun, TaskRun
 from task_manager.scheduler.db.TaskRun import (
     TASK_RUN_PROGRESS_META_KEY,
     TASK_RUN_WAIT_STATE_META_KEY,
@@ -132,6 +132,9 @@ def monitor_stalled_work(
     merely queued, scheduled, waiting on an external dependency, or waiting for a
     retry is intentionally excluded.
 
+    Parent operations are not watched: their progress comes solely from their
+    children, which are watched themselves.
+
     Runs attached to active TaskOperations are excluded from standalone watchdog
     accounting even when the operation itself is currently WAITING. This preserves
     shared-run semantics without turning an intentional external wait into a stall.
@@ -151,7 +154,9 @@ def monitor_stalled_work(
             operation_id: _percent(progress)
             for operation_id, progress in session.execute(
                 select(TaskOperation.id, TaskOperation.progress).where(
-                    TaskOperation.status.in_(_WATCHED_OPERATION_STATUSES)
+                    TaskOperation.status.in_(_WATCHED_OPERATION_STATUSES),
+                    # A parent has no progress of its own; the watchdog watches its children.
+                    ~exists().where(TaskOperationDependency.parent_operation_id == TaskOperation.id),
                 )
             )
         }
@@ -217,7 +222,11 @@ def monitor_stalled_work(
         for operation_id, run_id in session.execute(
             select(TaskOperationRun.operation_id, TaskOperationRun.task_run_id)
             .join(TaskOperation, TaskOperation.id == TaskOperationRun.operation_id)
-            .where(TaskOperationRun.task_run_id.in_(structured_runs), TaskOperation.status == OperationStatus.RUNNING.value)
+            .where(
+                TaskOperationRun.task_run_id.in_(structured_runs),
+                TaskOperation.status == OperationStatus.RUNNING.value,
+                ~exists().where(TaskOperationDependency.parent_operation_id == TaskOperation.id),
+            )
         ):
             structured_operation_ids.add(operation_id)
             if run_id in structured_stalled:

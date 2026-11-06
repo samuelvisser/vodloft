@@ -221,7 +221,7 @@ class ProgressUpdater:
             if result.rowcount == 0:
                 self._stop("Task resource was deleted")
                 raise TaskCancellationRequested(self._cancel_reason)
-            refresh_operations_for_run(s, self.run_id)
+            refresh_operations_for_run(s, self.run_id, progress_only=True)
 
         run_write_transaction(write)
 
@@ -267,7 +267,7 @@ class ProgressUpdater:
                 update(TaskRun).where(*_still_running(self.run_id)).values(meta=merged_meta or None)
             )
             if result.rowcount:
-                refresh_operations_for_run(s, self.run_id)
+                refresh_operations_for_run(s, self.run_id, progress_only=True)
 
         run_write_transaction(write)
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from math import isfinite
 from typing import Any, Iterable, Sequence
 from uuid import uuid4
@@ -10,7 +10,6 @@ from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.db.core import get_session
-from backend.db.datetime_types import utc_datetime
 from task_manager.scheduler.db import (
     TaskDefinition,
     TaskOperation,
@@ -484,7 +483,9 @@ def link_run_to_operations(
     return tuple(sorted(operation_ids_touched))
 
 
-def refresh_operations_for_run(session: Session, task_run_id: int) -> None:
+def refresh_operations_for_run(session: Session, task_run_id: int, *, progress_only: bool = False) -> None:
+    """Refresh the operations a run belongs to. ``progress_only`` says the run only
+    reported progress or a wait, so parents follow only when a status changes."""
     operation_ids = set(
         session.scalars(
             select(TaskOperationRun.operation_id).where(
@@ -492,7 +493,7 @@ def refresh_operations_for_run(session: Session, task_run_id: int) -> None:
             )
         )
     )
-    _refresh_operation_tree(session, operation_ids)
+    _refresh_operation_tree(session, operation_ids, progress_only=progress_only)
 
 
 def refresh_operation(session: Session, operation_id: str) -> TaskOperation | None:
@@ -500,23 +501,20 @@ def refresh_operation(session: Session, operation_id: str) -> TaskOperation | No
     return refreshed.get(operation_id)
 
 
-# How long a parent's progress may lag behind its running children. A parent of
-# a bulk action can depend on thousands of children, and refreshing it means
-# loading all of them inside the child's write transaction.
-_PARENT_PROGRESS_REFRESH_AFTER = timedelta(seconds=5)
-
-
 def _refresh_operation_tree(
         session: Session,
         operation_ids: Iterable[str],
+        *,
+        progress_only: bool = False,
 ) -> dict[str, TaskOperation]:
     """Refresh operations and their transitive parents.
 
-    A child whose status changes, or that is no longer active, always refreshes
-    its parents, since that can change theirs. A change of progress alone
-    refreshes a parent only once the parent's stored state is a few seconds
-    old; reading an operation recomputes its progress anyway. Parents that
-    already finished are left alone: they have no running children to follow.
+    A parent stores no progress of its own: reading it computes its progress from
+    its children. So a change of progress alone (``progress_only``) refreshes a
+    parent only when it changes a child's status. A parent of a bulk action can
+    depend on thousands of children, and refreshing it means loading all of them
+    inside the child's write transaction. Parents that already finished are left
+    alone: they have no running children to follow.
     """
     # Flush here before populate_existing=True would reset it
     session.flush()
@@ -524,7 +522,6 @@ def _refresh_operation_tree(
     queue = list(dict.fromkeys(str(value) for value in operation_ids if value))
     visited: set[str] = set()
     refreshed: dict[str, TaskOperation] = {}
-    now = datetime.now(timezone.utc)
 
     while queue:
         operation_id = queue.pop(0)
@@ -537,19 +534,11 @@ def _refresh_operation_tree(
             continue
         previous_status = operation.status
         refreshed[operation_id] = _refresh_loaded_operation(operation)
-        if operation.dependencies:
-            # Even when nothing changed, the parent was refreshed just now.
-            operation.updated_at = now
         session.flush()
-        status_settled = (
-            operation.status == previous_status
-            and operation.status in _ACTIVE_OPERATION_STATUSES
-        )
+        if progress_only and operation.status == previous_status and operation.status in _ACTIVE_OPERATION_STATUSES:
+            continue
 
-        parent_stmt = select(
-            TaskOperationDependency.parent_operation_id,
-            TaskOperation.updated_at,
-        ).join(
+        parent_stmt = select(TaskOperationDependency.parent_operation_id).join(
             TaskOperation,
             TaskOperation.id == TaskOperationDependency.parent_operation_id,
         ).where(
@@ -560,14 +549,7 @@ def _refresh_operation_tree(
             parent_stmt = parent_stmt.where(
                 TaskOperationDependency.parent_operation_id.not_in(visited)
             )
-        for parent_id, updated_at in session.execute(parent_stmt):
-            if (
-                status_settled
-                and updated_at is not None
-                and now - utc_datetime(updated_at) < _PARENT_PROGRESS_REFRESH_AFTER
-            ):
-                continue
-            queue.append(parent_id)
+        queue.extend(session.scalars(parent_stmt))
 
     return refreshed
 
@@ -619,21 +601,6 @@ def _direct_progress_is_determinate(targets: Sequence[TaskOperationTarget]) -> b
     # 3/10 finished is determinate even when none of the individual workers can
     # report an in-task percentage.
     return len(targets) > 1 or any(_target_tracks_progress(target) for target in targets)
-
-
-def _composite_progress_is_determinate(
-        targets: Sequence[TaskOperationTarget],
-        dependencies: Sequence[TaskOperationDependency],
-) -> bool:
-    total_units = len(targets) + len(dependencies)
-    if total_units > 1:
-        return True
-    if targets:
-        return _target_tracks_progress(targets[0])
-    if dependencies:
-        child = dependencies[0].child_operation
-        return child is None or child.progress is not None
-    return False
 
 
 def _refresh_direct_operation(operation: TaskOperation) -> TaskOperation:
@@ -765,40 +732,55 @@ def _refresh_direct_operation(operation: TaskOperation) -> TaskOperation:
     return operation
 
 
+def _composite_progress(operation: TaskOperation) -> tuple[int | None, int]:
+    """A parent's (progress, completion_progress), from its direct tasks and child operations.
+
+    Parent progress is orchestration progress, so dependency weights and child
+    completion drive it. A child that is a parent itself counts with its own
+    computed progress.
+    """
+    if operation.status not in _ACTIVE_OPERATION_STATUSES:
+        return 100, 100
+    targets = list(operation.targets)
+    dependencies = list(operation.dependencies)
+    total_weight = float(len(targets)) + sum(float(dep.weight) for dep in dependencies)
+    completed_weight = sum(
+        _run_completion_progress(run)
+        for run in (_effective_run_for_target(target) for target in targets)
+        if run is not None
+    ) / 100.0
+    child_determinate = True
+    for dependency in dependencies:
+        child = dependency.child_operation
+        if child is None or child.status not in _ACTIVE_OPERATION_STATUSES:
+            completed_weight += float(dependency.weight)
+            continue
+        progress, completion = _composite_progress(child) if child.dependencies else (
+            child.progress, child.completion_progress,
+        )
+        child_determinate = progress is not None
+        completed_weight += float(dependency.weight) * max(0.0, min(1.0, float(completion or 0) / 100.0))
+
+    completion_progress = max(0, min(100, int(100 * completed_weight / total_weight) if total_weight else 0))
+    total_units = len(targets) + len(dependencies)
+    determinate = (
+        total_units > 1
+        or (bool(targets) and _target_tracks_progress(targets[0]))
+        or (bool(dependencies) and child_determinate)
+    )
+    return (completion_progress if determinate else None), completion_progress
+
+
 def _refresh_composite_operation(operation: TaskOperation) -> TaskOperation:
     """Aggregate direct targets and independent child TaskOperations.
 
-    Parent progress is orchestration progress, so dependency weights and child
-    completion_progress drive it. A child remains independently visible because
-    its own display progress and lifecycle stay on that child operation.
+    Only the parent's state is stored; its progress is not, since it comes
+    solely from its children (see ``_composite_progress``). A child remains
+    independently visible because its own lifecycle stays on that child operation.
     """
     targets = list(operation.targets)
     dependencies = list(operation.dependencies)
     effective_runs = [_effective_run_for_target(target) for target in targets]
-
-    total_weight = float(len(targets)) + sum(float(dep.weight) for dep in dependencies)
-    completed_weight = sum(
-        _run_completion_progress(run)
-        for run in effective_runs
-        if run is not None
-    ) / 100.0
-
-    for dependency in dependencies:
-        child = dependency.child_operation
-        if child is None or child.status not in _ACTIVE_OPERATION_STATUSES:
-            fraction = 1.0
-        else:
-            fraction = max(0.0, min(1.0, float(child.completion_progress or 0) / 100.0))
-        completed_weight += float(dependency.weight) * fraction
-
-    aggregate_progress = int(100 * completed_weight / total_weight) if total_weight else 0
-    aggregate_progress = max(0, min(100, aggregate_progress))
-    operation.progress = (
-        aggregate_progress
-        if _composite_progress_is_determinate(targets, dependencies)
-        else None
-    )
-    operation.completion_progress = aggregate_progress
 
     starts = [
         run.started_at for run in effective_runs
@@ -924,8 +906,6 @@ def _refresh_composite_operation(operation: TaskOperation) -> TaskOperation:
         operation.status = OperationStatus.CANCELED.value
         operation.error = errors[0] if errors else None
 
-    operation.progress = 100
-    operation.completion_progress = 100
     operation.result = _aggregate_composite_results(
         result_payloads,
         succeeded=succeeded,
@@ -1184,6 +1164,10 @@ def _operation_snapshot(operation: TaskOperation) -> OperationSnapshot:
         or dependency.child_operation.status not in _ACTIVE_OPERATION_STATUSES
         for dependency in dependencies
     )
+    progress, completion_progress = (
+        _composite_progress(operation) if dependencies
+        else (operation.progress, operation.completion_progress)
+    )
     return OperationSnapshot(
         id=operation.id,
         kind=operation.kind,
@@ -1192,8 +1176,8 @@ def _operation_snapshot(operation: TaskOperation) -> OperationSnapshot:
         resource_id=operation.resource_id,
         title=operation.title,
         status=operation.status,
-        progress=operation.progress,
-        completion_progress=operation.completion_progress,
+        progress=progress,
+        completion_progress=completion_progress,
         requested_by_user_id=operation.requested_by_user_id,
         progress_current=terminal_count,
         progress_total=len(targets) + len(dependencies),
