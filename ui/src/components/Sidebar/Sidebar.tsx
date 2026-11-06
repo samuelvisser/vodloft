@@ -34,10 +34,10 @@ const items: NavItem[] = [
     },
 ]
 
-// How far the desktop sidebar shrinks its logo and footer to fit the window height, in order:
-// the full sidebar; a smaller logo with the footer links side by side; the smallest logo with the footer
-// icons and version on one row; and no footer, with its icons next to a small logo.
-// The navigation only scrolls when even the last one is too tall.
+// How far the desktop sidebar shrinks its footer to fit the window height, in order: the full footer;
+// the footer links side by side; the footer icons and version on one row; and no footer, with its icons
+// next to the logo. The navigation only scrolls when even the last one is too tall. The logo size follows
+// the window height alone (index.css), so opening a submenu never moves the items above it.
 const FITS = ['roomy', 'compact', 'icons', 'header'] as const
 type SidebarFit = typeof FITS[number]
 
