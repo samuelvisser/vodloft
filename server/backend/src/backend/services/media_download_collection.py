@@ -12,10 +12,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import blake2b
 
-from sqlalchemy import String, and_, case, exists, func, or_, select, type_coerce
+from sqlalchemy import String, and_, case, exists, func, literal, or_, select, type_coerce
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.selectable import Subquery
 
+from backend.db.json_sql import json_array_items
 from backend.db.models import MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from task_manager.scheduler.db import (
@@ -190,15 +191,11 @@ def _download_is_canceling(active_operation, progress_meta, execution):
 
 
 def _main_download_stage_is_waiting(execution):
-    stages = func.json_each(
-        TaskRun.meta,
-        '$."_progress_meta".download.stages',
-    ).table_valued("key", "value").alias("download_stage")
+    stages = json_array_items(TaskRun.meta, "_progress_meta", "download", "stages").alias("download_stage")
     return exists(
-        select(stages.c.key).where(
-            func.json_extract(stages.c.value, "$.id")
-            == execution["main_activity"].as_string(),
-            func.json_extract(stages.c.value, "$.wait.reason").is_not(None),
+        select(literal(1)).select_from(stages).where(
+            stages.c.value["id"].as_string() == execution["main_activity"].as_string(),
+            stages.c.value[("wait", "reason")].as_string().is_not(None),
         )
     )
 

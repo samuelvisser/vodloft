@@ -20,7 +20,7 @@ class TaskSchedule(Base):
     definition_id: Mapped[int] = mapped_column(ForeignKey("task_definitions.id", ondelete="CASCADE"), index=True)
     scheduler_job_id: Mapped[Optional[str]] = mapped_column(index=True, comment="APScheduler job id")
     resource_id: Mapped[int] = mapped_column(index=True)
-    resource_type: Mapped[ResourceType] = mapped_column(SAEnum(ResourceType), index=True)
+    resource_type: Mapped[ResourceType] = mapped_column(SAEnum(ResourceType, native_enum=False), index=True)
     trigger: Mapped[Literal["cron", "interval", "date"]] = mapped_column(String(20))
     trigger_args: Mapped[dict] = mapped_column(JSON)
     next_run_time: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())

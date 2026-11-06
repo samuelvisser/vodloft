@@ -36,3 +36,6 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]
 addopts = ["--strict-markers", "--disable-socket", "--allow-unix-socket"]
+markers = [
+    "sqlite_only: tests of SQLite itself or of SQLite-only migrations, skipped when VL_TEST_POSTGRESQL_URL is set",
+]

@@ -12,7 +12,7 @@ from sqlalchemy import inspect as sa_inspect, text
 from sqlalchemy.engine import Connection
 
 from .alembic_version import SETTINGS_VERSION_COLUMN, SETTINGS_VERSION_TABLE
-from .core import get_db_path, get_engine
+from .core import Base, get_database_label, get_engine, get_sqlite_database_path, load_database_models
 
 
 ALEMBIC_DIR = Path(__file__).with_name("alembic")
@@ -59,18 +59,26 @@ def get_head_revision() -> str:
 class WireLoftDatabaseError(DatabaseMigrationError):
     """The database is WireLoft's. VODLoft imports it instead of taking it over."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, database: Path | str) -> None:
         super().__init__(
-            f"Database '{path}' belongs to WireLoft. VODLoft no longer upgrades a WireLoft "
+            f"Database '{database}' belongs to WireLoft. VODLoft no longer upgrades a WireLoft "
             "database in place. Start VODLoft with an empty config folder, then import the "
             "WireLoft config folder from Settings > Import > WireLoft. The WireLoft folder is "
             "only read, never changed."
         )
 
 
+def _sqlite_database_missing() -> bool:
+    """Whether VODLoft runs on SQLite and its file does not exist yet."""
+    path = get_sqlite_database_path()
+    return path is not None and not path.exists()
+
+
 def _refuse_wireloft_config() -> None:
     """A WireLoft config folder mounted as VODLoft's: its wireloft.db sits where VODLoft's database would."""
-    path = get_db_path()
+    path = get_sqlite_database_path()
+    if path is None:
+        return
     wireloft = path.with_name("wireloft.db")
     if wireloft.is_file() and not (path.is_file() and path.stat().st_size > 0):
         raise WireLoftDatabaseError(wireloft)
@@ -80,10 +88,10 @@ def _settings_revisions(connection: Connection) -> tuple[str, ...]:
     """Read the current revision from VODLoft's only supported version store."""
     inspector = sa_inspect(connection)
     if inspector.has_table(_LEGACY_VERSION_TABLE):
-        raise WireLoftDatabaseError(get_db_path())
+        raise WireLoftDatabaseError(get_database_label())
     if not inspector.has_table(SETTINGS_VERSION_TABLE):
         raise DatabaseMigrationError(
-            f"Database '{get_db_path()}' does not contain current VODLoft migration metadata. "
+            f"Database '{get_database_label()}' does not contain current VODLoft migration metadata. "
             "Run 'backend-api db upgrade' to migrate it."
         )
 
@@ -92,7 +100,7 @@ def _settings_revisions(connection: Connection) -> tuple[str, ...]:
     }
     if SETTINGS_VERSION_COLUMN not in settings_columns:
         raise DatabaseMigrationError(
-            f"Database '{get_db_path()}' predates the current VODLoft migration metadata. "
+            f"Database '{get_database_label()}' predates the current VODLoft migration metadata. "
             "Run 'backend-api db upgrade' to migrate it."
         )
 
@@ -111,8 +119,7 @@ def _settings_revisions(connection: Connection) -> tuple[str, ...]:
 
 
 def get_current_revisions() -> tuple[str, ...]:
-    path = get_db_path()
-    if not path.exists():
+    if _sqlite_database_missing():
         return ()
 
     engine = get_engine()
@@ -124,8 +131,7 @@ def get_current_revisions() -> tuple[str, ...]:
 
 
 def _database_tables() -> set[str]:
-    path = get_db_path()
-    if not path.exists():
+    if _sqlite_database_missing():
         return set()
     return set(sa_inspect(get_engine()).get_table_names())
 
@@ -141,11 +147,11 @@ def validate_database_migration_state() -> None:
     current = get_current_revisions()
     if not current:
         raise DatabaseMigrationError(
-            f"Database '{get_db_path()}' contains VODLoft tables but its Alembic revision is empty. "
+            f"Database '{get_database_label()}' contains VODLoft tables but its Alembic revision is empty. "
             "Refusing to guess the schema version."
         )
     if WIRELOFT_REVISIONS.intersection(current):
-        raise WireLoftDatabaseError(get_db_path())
+        raise WireLoftDatabaseError(get_database_label())
 
     scripts = _script_directory()
     for revision in current:
@@ -153,7 +159,7 @@ def validate_database_migration_state() -> None:
             scripts.get_revision(revision)
         except (CommandError, ResolutionError) as exc:
             raise DatabaseMigrationError(
-                f"Database '{get_db_path()}' references unknown Alembic revision '{revision}'."
+                f"Database '{get_database_label()}' references unknown Alembic revision '{revision}'."
             ) from exc
 
 
@@ -173,7 +179,7 @@ def require_database_current() -> None:
 def initialize_database() -> None:
     if _database_tables():
         raise DatabaseMigrationError(
-            f"Database '{get_db_path()}' is not empty; db init only supports new or empty databases."
+            f"Database '{get_database_label()}' is not empty; db init only supports new or empty databases."
         )
     upgrade_database()
 
@@ -185,17 +191,40 @@ def upgrade_database() -> None:
     if not is_initial_install:
         validate_database_migration_state()
 
+    copied_from_sqlite = False
     try:
-        command.upgrade(get_alembic_config(), "head")
+        if is_initial_install and get_engine().dialect.name != "sqlite":
+            from .sqlite_copy import copy_sqlite_database_on_first_start
+
+            copied_from_sqlite = copy_sqlite_database_on_first_start()
+            if not copied_from_sqlite:
+                _create_current_schema()
+        else:
+            command.upgrade(get_alembic_config(), "head")
     except CommandError as exc:
         raise DatabaseMigrationError(str(exc)) from exc
 
     require_database_current()
 
-    if is_initial_install:
+    if is_initial_install and not copied_from_sqlite:
         from .initial_seed import seed_initial_database
 
         seed_initial_database()
+
+
+def _create_current_schema() -> None:
+    """Create a new database other than SQLite straight at the latest schema.
+
+    VODLoft's migrations so far were written for SQLite alone, so other
+    databases start from the ORM schema and are marked current instead of
+    replaying them. Migrations added after that run on every database. Defaults that a
+    new installation needs come from the initial seed, never from a migration.
+    """
+    load_database_models()
+    engine = get_engine()
+    tables = [table for table in Base.metadata.sorted_tables if table.name not in _UNMANAGED_TABLES]
+    Base.metadata.create_all(engine, tables=tables)
+    command.stamp(get_alembic_config(), "head")
 
 
 def _is_relative_downgrade(revision: str) -> bool:
@@ -207,7 +236,7 @@ def _validate_downgrade_target(revision: str) -> list:
     current = get_current_revisions()
     if not current:
         raise DatabaseMigrationError(
-            f"Database '{get_db_path()}' has no current Alembic revision to downgrade."
+            f"Database '{get_database_label()}' has no current Alembic revision to downgrade."
         )
 
     if len(current) > 1 and _is_relative_downgrade(revision):

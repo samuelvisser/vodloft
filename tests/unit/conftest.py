@@ -1,10 +1,135 @@
 from __future__ import annotations
 
+import itertools
+import os
+import sys
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine
+import sqlalchemy
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
+
+
+# Set VL_TEST_POSTGRESQL_URL (an empty PostgreSQL database the tests may fill) to
+# run the tests that build an in-memory SQLite database on PostgreSQL instead. Each
+# such engine gets a schema of its own, dropped when its test ends.
+POSTGRESQL_TEST_URL = os.environ.get("VL_TEST_POSTGRESQL_URL") or None
+_sqlite_create_engine = sqlalchemy.create_engine
+_test_schema_numbers = itertools.count(1)
+_test_schemas: list[tuple[str, object]] = []
+
+
+def _postgresql_engine_for_memory_sqlite(url, *args, **kwargs):
+    parsed = make_url(url)
+    called_by_a_test = Path(sys._getframe(1).f_code.co_filename).is_relative_to(Path(__file__).parent)
+    if (
+        not called_by_a_test  # VODLoft's own scratch databases stay SQLite.
+        or parsed.get_backend_name() != "sqlite"
+        or parsed.database not in (None, "", ":memory:")
+    ):
+        return _sqlite_create_engine(url, *args, **kwargs)
+    schema = f"test_{os.getpid()}_{next(_test_schema_numbers)}"
+    with _postgresql_admin().connect() as connection:
+        connection.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
+    engine = _sqlite_create_engine(POSTGRESQL_TEST_URL, connect_args={"options": f"-csearch_path={schema}"})
+    _test_schemas.append((schema, engine))
+    return engine
+
+
+_admin_engine = None
+
+
+def _postgresql_admin():
+    global _admin_engine
+    if _admin_engine is None:
+        _admin_engine = _sqlite_create_engine(POSTGRESQL_TEST_URL, isolation_level="AUTOCOMMIT")
+    return _admin_engine
+
+
+if POSTGRESQL_TEST_URL:
+    # Test modules import create_engine after this conftest, so they get this one.
+    sqlalchemy.create_engine = _postgresql_engine_for_memory_sqlite
+
+
+def pytest_collection_modifyitems(config, items):
+    if not POSTGRESQL_TEST_URL:
+        return
+    skip = pytest.mark.skip(reason="Tests SQLite itself; VL_TEST_POSTGRESQL_URL runs the tests on PostgreSQL")
+    for item in items:
+        if "sqlite_only" in item.keywords:
+            item.add_marker(skip)
+
+
+@pytest.fixture(autouse=True)
+def drop_postgresql_test_schemas():
+    yield
+    while _test_schemas:
+        schema, engine = _test_schemas.pop()
+        engine.dispose()
+        with _postgresql_admin().connect() as connection:
+            connection.exec_driver_sql("SET lock_timeout = '5s'")
+            try:
+                connection.exec_driver_sql(f'DROP SCHEMA "{schema}" CASCADE')
+            except sqlalchemy.exc.OperationalError:
+                pass  # A connection the test left open still uses it; the database is disposable.
+
+
+create_engine = sqlalchemy.create_engine
+_test_schema_numbers = itertools.count(1)
+_test_schemas: list[tuple[str, object]] = []
+
+
+def _postgresql_engine_for_memory_sqlite(url, *args, **kwargs):
+    parsed = make_url(url)
+    called_by_a_test = Path(sys._getframe(1).f_code.co_filename).is_relative_to(Path(__file__).parent)
+    if (
+        not called_by_a_test  # VODLoft's own scratch databases stay SQLite.
+        or parsed.get_backend_name() != "sqlite"
+        or parsed.database not in (None, "", ":memory:")
+    ):
+        return _sqlite_create_engine(url, *args, **kwargs)
+    schema = f"test_{os.getpid()}_{next(_test_schema_numbers)}"
+    admin = _sqlite_create_engine(POSTGRESQL_TEST_URL, isolation_level="AUTOCOMMIT")
+    with admin.connect() as connection:
+        connection.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
+    engine = _sqlite_create_engine(
+        POSTGRESQL_TEST_URL, connect_args={"options": f"-csearch_path={schema}"},
+    )
+    _test_schemas.append((schema, admin))
+    return engine
+
+
+if POSTGRESQL_TEST_URL:
+    # Test modules import create_engine after this conftest, so they get this one.
+    sqlalchemy.create_engine = _postgresql_engine_for_memory_sqlite
+
+
+def pytest_collection_modifyitems(config, items):
+    if not POSTGRESQL_TEST_URL:
+        return
+    skip = pytest.mark.skip(reason="Tests SQLite itself; VL_TEST_POSTGRESQL_URL runs the tests on PostgreSQL")
+    for item in items:
+        if "sqlite_only" in item.keywords:
+            item.add_marker(skip)
+
+
+@pytest.fixture(autouse=True)
+def drop_postgresql_test_schemas():
+    yield
+    while _test_schemas:
+        schema, admin = _test_schemas.pop()
+        with admin.connect() as connection:
+            connection.exec_driver_sql(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                f"WHERE pid <> pg_backend_pid() AND query_start IS NOT NULL AND datname = current_database() "
+                f"AND state = 'idle in transaction'"
+            )
+            connection.exec_driver_sql(f'DROP SCHEMA "{schema}" CASCADE')
+        admin.dispose()
+
+
+create_engine = sqlalchemy.create_engine
 
 
 @pytest.fixture(autouse=True)

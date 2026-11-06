@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 import importlib
 
 from alembic.migration import MigrationContext
@@ -7,6 +9,7 @@ from alembic.operations import Operations
 from sqlalchemy import create_engine, inspect, text
 
 
+@pytest.mark.sqlite_only
 def test_operation_dependency_schema_is_created_directly():
     migration = importlib.import_module(
         "importer.wireloft.migrations.f2a6c93d8b14_wireloft_1_2_1"

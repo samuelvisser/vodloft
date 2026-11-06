@@ -49,6 +49,10 @@ If you need to do any database migrations to implement a feature, please follow 
 - Create a new alembic migration script in server/backend/src/backend/db/alembic/versions/
 - Run `backend-api db history` to verify the new migration is the current head, and no multiple
 migration heads exist.
+- VODLoft runs on SQLite and on PostgreSQL, so a migration must work on both. Use portable Alembic
+operations, and keep anything SQLite-only (batch table rebuilds, PRAGMAs) behind a check of
+`op.get_bind().dialect.name`. New PostgreSQL databases start at the latest schema, so older migrations
+never run there.
 
 ### Background migrations
 If you need to do any API/ filesystem or any other long- running migration work to implement a feature

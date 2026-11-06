@@ -64,6 +64,7 @@ class Episode(
             "ix_media_items_episode_unfinished_metadata_status",
             "publish_status",
             sqlite_where=text("metadata_is_final = 0"),
+            postgresql_where=text("NOT metadata_is_final"),
         ),
         PrimaryKeyConstraint("id", "collection_id", name="pk_episodes"),
     )

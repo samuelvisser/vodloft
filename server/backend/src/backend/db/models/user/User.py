@@ -3,11 +3,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import JSON, ForeignKey, String, false, func, true
+from sqlalchemy import JSON, ForeignKey, false, func, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
+from backend.db.text_types import case_insensitive_string
 
 if TYPE_CHECKING:
     from .UserAccess import UserAccess
@@ -25,7 +26,7 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str] = mapped_column(
-        String(64, collation="NOCASE"), unique=True,
+        case_insensitive_string(64), unique=True,
         comment="Sign-in name; unique regardless of upper or lower case",
     )
     password_hash: Mapped[str] = mapped_column(

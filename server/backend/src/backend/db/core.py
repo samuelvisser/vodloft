@@ -9,7 +9,7 @@ import os
 import pkgutil
 
 from sqlalchemy import MetaData, create_engine, event, text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import URL, Engine, make_url
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import NullPool
@@ -17,12 +17,22 @@ from sqlalchemy.pool import NullPool
 from config import get_settings
 
 from .datetime_types import UTCDateTime
+from .text_types import create_case_insensitive_collation
 
 
 logger = logging.getLogger(__name__)
 
 _SQLITE_BUSY_TIMEOUT_SECONDS = 30
 _SQLITE_BUSY_TIMEOUT_MS = _SQLITE_BUSY_TIMEOUT_SECONDS * 1_000
+# Idle connections kept open, and how many more may be opened under load.
+# PostgreSQL allows 100 connections by default, so 60 leaves room for other clients.
+_SERVER_POOL_SIZE = 10
+_SERVER_POOL_MAX_OVERFLOW = 50
+# The advisory lock that begin_write_transaction queues on in PostgreSQL. Any
+# fixed 64-bit number works, as long as nothing else in the database uses it.
+_POSTGRESQL_WRITE_LOCK_KEY = 0x564F444C6F6674  # "VODLoft"
+# Database servers and proxies may drop idle connections; renew them well before that.
+_SERVER_POOL_RECYCLE_SECONDS = 30 * 60
 
 naming_convention = {
     "ix": "ix_%(table_name)s_%(column_0_name)s",
@@ -38,8 +48,12 @@ class Base(DeclarativeBase):
     type_annotation_map = {datetime: UTCDateTime()}
 
 
+create_case_insensitive_collation(Base.metadata)
+
+
 _engine: Optional[Engine] = None
-_SessionLocal: Optional[Session] = None
+_SessionLocal: Optional[sessionmaker] = None
+_database_url: Optional[str] = None
 _db_path: Optional[Path] = None
 
 
@@ -79,22 +93,26 @@ def _enable_sqlite_wal(engine: Engine) -> None:
         )
 
 
-def configure_db() -> None:
-    """Configure the global SQLAlchemy engine and session factory."""
-    global _engine, _SessionLocal, _db_path
+def _sqlite_path(url: URL) -> Path | None:
+    """The file behind a file-backed SQLite URL, or None for any other database."""
+    if url.get_backend_name() != "sqlite":
+        return None
+    database = url.database
+    if not database or database == ":memory:" or database.startswith("file:"):
+        return None
+    return Path(database)
 
-    path = get_settings().database_path
-    if _db_path is not None and path.resolve() == _db_path.resolve():
-        return
 
-    os.makedirs(path.parent, exist_ok=True)
+def _create_sqlite_engine(url: URL, path: Path | None) -> Engine:
+    if path is not None:
+        os.makedirs(path.parent, exist_ok=True)
     # A bounded QueuePool is a poor fit for VODLoft's threaded SQLite workload.
     # The scheduler may run as many workers as the old default pool could serve,
     # leaving no connection headroom for API requests. SQLite connections are
     # cheap, and the busy timeout/WAL settings below already govern the actual
     # database contention, so open them on demand and close them with each Session.
     engine = create_engine(
-        get_settings().database_url,
+        url,
         connect_args={
             "check_same_thread": False,
             # sqlite3 defaults to five seconds. Background workers and API writes
@@ -105,10 +123,48 @@ def configure_db() -> None:
     )
     event.listen(engine, "connect", _configure_sqlite_connection)
     _enable_sqlite_wal(engine)
+    return engine
 
+
+def _create_server_engine(url: URL) -> Engine:
+    """An engine for a database server such as PostgreSQL.
+
+    Every scheduler worker and every API request can hold a connection at the
+    same time, and the worker counts can change while VODLoft runs. Keep a
+    small pool of idle connections, but let it grow well past SQLAlchemy's
+    default limit of fifteen instead of making workers wait for a connection.
+    """
+    return create_engine(
+        url,
+        pool_size=_SERVER_POOL_SIZE,
+        max_overflow=_SERVER_POOL_MAX_OVERFLOW,
+        pool_pre_ping=True,
+        pool_recycle=_SERVER_POOL_RECYCLE_SECONDS,
+    )
+
+
+def configure_db() -> None:
+    """Configure the global SQLAlchemy engine and session factory."""
+    global _engine, _SessionLocal, _database_url, _db_path
+
+    url = make_url(get_settings().resolved_database_url)
+    url_key = url.render_as_string(hide_password=False)
+    if _engine is not None and _database_url == url_key:
+        return
+
+    sqlite_path = _sqlite_path(url)
+    if url.get_backend_name() == "sqlite":
+        engine = _create_sqlite_engine(url, sqlite_path)
+    else:
+        engine = _create_server_engine(url)
+
+    old_engine = _engine
     _engine = engine
-    _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
-    _db_path = path
+    _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    _database_url = url_key
+    _db_path = sqlite_path
+    if old_engine is not None:
+        old_engine.dispose()
 
 
 def get_engine() -> Engine:
@@ -126,11 +182,20 @@ def get_session() -> Session:
 def begin_write_transaction(session: Session) -> None:
     """Begin a write-intent transaction before any reads.
 
+    These transactions read a row and then write it based on what they read,
+    such as a task run's state. They must never run side by side, or one would
+    overwrite the other's change.
+
     SQLite WAL permits concurrent readers, but a deferred transaction that reads
     before writing can fail with SQLITE_BUSY_SNAPSHOT when another writer commits
     first. BEGIN IMMEDIATE reserves the writer slot up front, allowing SQLite's
     busy timeout to queue these short write transactions instead of failing the
     later read-to-write upgrade.
+
+    PostgreSQL lets every other transaction write at the same time. These ones
+    queue on one transaction-level advisory lock instead, and as each statement
+    reads the rows committed before it (READ COMMITTED), every transaction sees
+    what the one before it wrote.
     """
     if session.in_transaction():
         raise RuntimeError("Write transaction must begin before the session is used")
@@ -138,12 +203,28 @@ def begin_write_transaction(session: Session) -> None:
     bind = session.get_bind()
     if bind.dialect.name == "sqlite":
         session.execute(text("BEGIN IMMEDIATE"))
+    elif bind.dialect.name == "postgresql":
+        session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": _POSTGRESQL_WRITE_LOCK_KEY})
     else:
         session.begin()
 
 
-def get_db_path() -> Path:
-    if _db_path is None:
+def get_database_url() -> URL:
+    if _engine is None:
+        configure_db()
+    return _engine.url
+
+
+def get_database_label() -> str:
+    """The configured database for messages and logs, with any password hidden."""
+    if _db_path is not None:
+        return str(_db_path)
+    return get_database_url().render_as_string(hide_password=True)
+
+
+def get_sqlite_database_path() -> Path | None:
+    """The SQLite file in use, or None when VODLoft runs on another database."""
+    if _engine is None:
         configure_db()
     return _db_path
 

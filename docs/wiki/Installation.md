@@ -56,6 +56,31 @@ You can point Plex, Jellyfin, Audiobookshelf, or another media application at th
 
 VODLoft uses temporary download mode by default. Its **Temporary download folder** defaults to container-local storage so remuxing and metadata processing stay off network media mounts. You can point it at another suitable local disk or mount if needed.
 
+## Choose a database
+
+VODLoft keeps its database in a single SQLite file in `/config` (`vodloft.db`). That needs no setup. VODLoft can also use a PostgreSQL server instead. PostgreSQL copes better when a lot happens at once, such as many downloads running together or bulk actions on thousands of downloads.
+
+To run VODLoft with PostgreSQL, use the PostgreSQL Compose file. It starts a PostgreSQL container next to VODLoft:
+
+```bash
+mkdir vodloft && cd vodloft
+curl -o docker-compose.yml https://raw.githubusercontent.com/samuelvisser/vodloft/main/.docker/docker-compose.postgresql.yml
+```
+
+Before the first start, replace both `change-me` passwords in the file (`POSTGRES_PASSWORD` and the one inside `VL_DATABASE_URL`) with the same new password. Then run `docker compose up -d`. The database lives in `./postgres`, next to `./config`.
+
+To use a PostgreSQL server you already run, set `VL_DATABASE_URL` (or `databaseUrl` in `config.yml`) to `postgresql+psycopg://USER:PASSWORD@HOST:5432/DATABASE`. The database must exist and be empty; VODLoft creates its tables itself.
+
+### Move an existing installation to PostgreSQL
+
+1. Back up `./config` (see [[Backups-and-Upgrades]]).
+2. Add the `postgres` service and the `VL_DATABASE_URL` line from the PostgreSQL Compose file to your own Compose file. Keep your `./config` mount as it is.
+3. Run `docker compose up -d`.
+
+On its first start with the empty PostgreSQL database, VODLoft copies everything from `/config/vodloft.db` into it. It then renames that file to `vodloft.db.copied-to-postgresql`, so it is never copied twice and you keep it as a backup. If the copy fails, nothing is changed, PostgreSQL stays empty and the container log says why.
+
+To go back to SQLite, remove `VL_DATABASE_URL` and rename the file back to `vodloft.db`. Changes made while VODLoft ran on PostgreSQL are not in that file.
+
 ## Set your timezone
 
 Change `TZ` to your local [IANA](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List)

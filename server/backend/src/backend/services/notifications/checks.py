@@ -37,7 +37,7 @@ def episode_url(episode: Episode) -> str:
 
 def _already(session: Session, event: Event, marker: str) -> bool:
     return session.scalar(select(EventRow.id).where(
-        EventRow.event == event.value, func.json_extract(EventRow.data, "$.marker") == marker,
+        EventRow.event == event.value, EventRow.data["marker"].as_string() == marker,
     ).limit(1)) is not None
 
 

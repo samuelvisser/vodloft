@@ -38,6 +38,7 @@ def _download(session: Session, *, path: str, media_item_id: int = 1):
     return download
 
 
+@pytest.mark.sqlite_only
 def test_file_watcher_filters_foreign_roots_in_sql(
     db_session, tmp_path, monkeypatch, caplog,
 ):
@@ -78,6 +79,7 @@ def test_file_watcher_filters_foreign_roots_in_sql(
     assert "outside the configured download root" in caplog.text
 
 
+@pytest.mark.sqlite_only
 def test_file_watcher_preserves_artifacts_when_configured_root_is_unavailable(
     db_session, tmp_path, monkeypatch, caplog,
 ):

@@ -168,9 +168,9 @@ Options:
 - --access-token <JWT>: optional bearer token for premium content
 - --membership-plan <PLAN>: optional membership plan (e.g., AllAccess)
 
-### Database (SQLite)
+### Database (SQLite or PostgreSQL)
 
-This project includes a required SQLite database for the backend.
+The backend uses SQLite unless `VL_DATABASE_URL` (or `databaseUrl` in `config.yml`) names another database.
 - Default development DB path: config/vodloft.db
 - Docker mounts the same project `config` directory at `/config` and uses `/config/vodloft.db`, so local development and Docker operate on the same database by default.
 
@@ -187,6 +187,33 @@ backend-api db seed
 # Use a custom database path
 backend-api db init --db <DATA_DIR>/vodloft.db
 backend-api db seed --db <DATA_DIR>/vodloft.db
+```
+
+#### PostgreSQL
+
+```bash
+# Run against PostgreSQL (the database must exist; an empty one gets the current schema)
+export VL_DATABASE_URL=postgresql+psycopg://vodloft:password@localhost/vodloft
+backend-api db upgrade
+backend-api run --debug
+
+# Or name it per command
+backend-api db current --database-url postgresql+psycopg://vodloft:password@localhost/vodloft
+
+# Copy a SQLite database into an empty PostgreSQL database (the SQLite file is upgraded first)
+backend-api db copy-from-sqlite config/vodloft.db
+```
+
+A new PostgreSQL database is created straight from the models and marked current, because the migrations
+written so far assume SQLite. Every migration added from now on runs on both databases, so write them with
+portable Alembic operations, and keep SQLite-only statements behind a check of `op.get_bind().dialect.name`.
+
+Run the unit tests on PostgreSQL by pointing `VL_TEST_POSTGRESQL_URL` at an empty database they may fill.
+Tests that build an in-memory SQLite database then get a PostgreSQL schema of their own, and tests marked
+`sqlite_only` are skipped:
+
+```bash
+VL_TEST_POSTGRESQL_URL='postgresql+psycopg://postgres@/vodloft_test?host=/var/run/postgresql' uv run pytest
 ```
 
 #### Backend API commands

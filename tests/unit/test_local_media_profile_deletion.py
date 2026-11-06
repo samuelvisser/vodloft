@@ -66,6 +66,7 @@ def _add_movie_download(
     return profile, download
 
 
+@pytest.mark.sqlite_only
 def test_delete_local_media_profile_removes_attached_download_without_file() -> None:
     from backend.api.endpoints.movie_local_media_profiles.service import (
         delete_movie_local_media_profile,
@@ -168,6 +169,7 @@ def test_delete_local_media_profile_allows_stale_available_row_when_file_is_gone
         engine.dispose()
 
 
+@pytest.mark.sqlite_only
 def test_direct_profile_delete_never_nulls_required_download_foreign_key() -> None:
     from backend.db.models import MovieMediaDownload
 

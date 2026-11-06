@@ -1,0 +1,50 @@
+# Run VODLoft from the published image, with its database in PostgreSQL
+#
+# Usage:
+#   mkdir vodloft && cd vodloft
+#   curl -o docker-compose.yml https://raw.githubusercontent.com/samuelvisser/vodloft/main/.docker/docker-compose.postgresql.yml
+#   (change POSTGRES_PASSWORD and the password in VL_DATABASE_URL to the same new value)
+#   docker compose up -d
+# Then open http://localhost:5274.
+#
+# Moving an existing VODLoft here: keep your ./config folder. On its first start
+# with an empty PostgreSQL database, VODLoft copies ./config/vodloft.db into it
+# and renames that file to vodloft.db.copied-to-postgresql.
+
+services:
+  vodloft:
+    image: ghcr.io/samuelvisser/vodloft:latest
+    container_name: vodloft
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "5274:80"
+    volumes:
+      # App config (keep to retain over container restarts)
+      - ./config:/config
+      # Downloaded shows/podcasts.
+      - ./downloads:/downloads
+    environment:
+      - TZ=UTC
+      - VL_DATABASE_URL=postgresql+psycopg://vodloft:change-me@postgres/vodloft
+      # Uncomment to require a login (recommended when running behind a reverse proxy):
+      # - VL_ADMIN_AUTH__PASSWORD=change-me
+
+  postgres:
+    image: postgres:17
+    container_name: vodloft-postgres
+    restart: unless-stopped
+    volumes:
+      # The database. Back it up together with ./config.
+      - ./postgres:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=vodloft
+      - POSTGRES_PASSWORD=change-me
+      - POSTGRES_DB=vodloft
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vodloft -d vodloft"]
+      interval: 5s
+      timeout: 5s
+      retries: 12

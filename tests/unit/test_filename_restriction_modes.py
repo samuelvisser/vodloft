@@ -178,6 +178,7 @@ def test_restricted_name_with_nothing_ascii_left_is_no_ascii_file_name(tmp_path,
     assert clean_component("東京物語", FilenameRestrictionMode.RESTRICTED) == "no_ascii_file_name"
 
 
+@pytest.mark.sqlite_only
 def test_second_no_ascii_file_in_a_folder_is_numbered_and_keeps_its_number(tmp_path):
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session

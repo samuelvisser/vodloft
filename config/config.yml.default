@@ -13,6 +13,11 @@
 # saving Settings does not populate config.yml with every application default.
 # VL_* environment variables and .env values take precedence over this file.
 
+# VODLoft keeps its database in SQLite at /config/vodloft.db unless databaseUrl
+# (or VL_DATABASE_URL) names another one, such as PostgreSQL:
+# databaseUrl: postgresql+psycopg://vodloft:password@postgres/vodloft
+# An empty PostgreSQL database is filled from /config/vodloft.db on its first start.
+
 crypto:
   # Fallback location for the auto-generated session-signing key, used when
   # neither secretKey nor secretKeyFile is set. Keep this on a persistent
