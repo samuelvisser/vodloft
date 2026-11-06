@@ -14,8 +14,9 @@ from datetime import datetime, time, timedelta, timezone
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from backend.db.core import run_write_transaction
 from backend.db.models import (
-    Collection, NotificationDelivery, NotificationDestination, NotificationRule, PushSubscription, User,
+    Collection, NotificationDelivery, NotificationDestination, NotificationRule, PushSubscription, PushVapidKey, User,
 )
 from backend.db.models import NotificationEvent as EventRow
 from backend.services.users import access_of, is_administrator
@@ -246,8 +247,7 @@ def _send(session: Session, batch: _Batch) -> Outcome | str:
     """Send one batch. Push answers SENT, EXPIRED or an Outcome; everything else an Outcome."""
     message = compose(batch.events, daily=batch.daily)
     if batch.subscription is not None:
-        key = vapid_key(session)
-        session.commit()
+        key = vapid_key(session) if session.get(PushVapidKey, 1) is not None else run_write_transaction(vapid_key)
         return send_push(key, batch.subscription, {
             "title": message.title, "body": message.body, "url": message.url or "/", "tag": message.tag,
         })
@@ -258,7 +258,6 @@ def _send(session: Session, batch: _Batch) -> Outcome | str:
     if config is None:
         return Outcome(False, "VODLoft cannot read this destination's settings. Enter them again")
     kind = Kind(destination.kind)
-    session.commit()
     if kind == Kind.APPRISE:
         from .events import Tone
 
@@ -317,18 +316,16 @@ def deliver_pending(session: Session, *, now: datetime | None = None) -> int:
 
     ``now`` fixes the clock for the whole pass. Without it, each outcome is recorded at the moment its send
     finished, so a slow destination does not shorten the wait before the next try.
+
+    ``session`` only reads: each send happens outside a write transaction, and its outcome is
+    recorded in a short write of its own.
     """
     clock = _now if now is None else (lambda: now)
     batches = _batches(session, clock())
-    session.commit()
     sent = 0
     for batch in batches:
         if batch.destination is not None and not batch.destination.enabled:
-            for delivery_id in batch.delivery_ids:
-                delivery = session.get(NotificationDelivery, delivery_id)
-                if delivery is not None:
-                    delivery.status = "CANCELED"
-            session.commit()
+            run_write_transaction(lambda w, batch=batch: _cancel(w, batch))
             continue
         try:
             outcome = _send(session, batch)
@@ -336,7 +333,14 @@ def deliver_pending(session: Session, *, now: datetime | None = None) -> int:
             logger.exception("Sending a notification failed")
             # An exception is a fault in VODLoft or a library, not a busy service: retrying gives the same result.
             outcome = Outcome(False, f"Sending failed ({type(error).__name__})", retry=False)
-        _record(session, batch, outcome, clock())
-        session.commit()
+        finished = clock()
+        run_write_transaction(lambda w, batch=batch, outcome=outcome: _record(w, batch, outcome, finished))
         sent += 1
     return sent
+
+
+def _cancel(session: Session, batch: _Batch) -> None:
+    for delivery_id in batch.delivery_ids:
+        delivery = session.get(NotificationDelivery, delivery_id)
+        if delivery is not None:
+            delivery.status = "CANCELED"

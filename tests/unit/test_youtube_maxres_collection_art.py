@@ -5,7 +5,9 @@ import asyncio
 import importlib
 
 import pytest
+from conftest import use_database
 from sqlalchemy import create_engine, select
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import sessionmaker
 
 MIGRATION = "backend.db.background_migrations.versions.9b3e5d7a1c62_youtube_maxres_collection_art"
@@ -30,8 +32,9 @@ def migration(monkeypatch):
     import backend.db.models  # noqa: F401
     from backend.db import Base
 
-    engine = create_engine("sqlite+pysqlite:///:memory:")
+    engine = create_engine("sqlite+pysqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
+    use_database(engine)
     factory = sessionmaker(engine)
     module = importlib.import_module(MIGRATION)
     monkeypatch.setattr(module, "get_session", factory)

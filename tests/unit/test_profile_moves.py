@@ -12,7 +12,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from conftest import available_artifact
+from conftest import available_artifact, use_database
 
 OLD = "/downloads/Old/{{ collection_title }}/{{ title }}.ext"
 NEW = "/downloads/New/{{ collection_title }}/S01E{{ episode_index }} {{ title }}.ext"
@@ -25,6 +25,7 @@ def _session() -> Session:
 
     engine = create_engine("sqlite+pysqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
+    use_database(engine)
     return Session(engine)
 
 
@@ -165,9 +166,10 @@ def test_moving_hands_the_downloads_over_and_moves_their_files(library):
     _target_download(session, target, episodes[3])
 
     result = move_collection_downloads(
-        session, source_id=source.id, target_id=target.id, collection_id=collection.id,
+        source_id=source.id, target_id=target.id, collection_id=collection.id,
         move_download_profile=True,
     )
+    session.expire_all()
 
     assert (result.moved, result.skipped, result.download_profiles_moved) == (3, 1, 1)
     moved = session.get(EpisodeMediaDownload, downloads[0].id)
@@ -270,9 +272,10 @@ def test_folders_the_move_leaves_empty_are_removed(library):
     session, collection, source, target, episodes, downloads, root = library
 
     result = move_collection_downloads(
-        session, source_id=source.id, target_id=target.id, collection_id=collection.id,
+        source_id=source.id, target_id=target.id, collection_id=collection.id,
         move_download_profile=False,
     )
+    session.expire_all()
 
     assert result.moved == 4
     assert not (root / "Old").exists()

@@ -14,6 +14,7 @@ from pathlib import Path
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from backend.db.core import get_session, run_write_transaction
 from backend.db.models import MediaItemBase
 from config import get_settings
 from config.network import is_no_internet_error
@@ -47,7 +48,7 @@ def newest_media_item_id(s: Session) -> int:
     return s.scalar(select(func.max(MediaItemBase.id))) or 0
 
 
-def take_first_frames(s: Session, item_ids: Sequence[int]) -> int:
+def take_first_frames(item_ids: Sequence[int]) -> int:
     """Give the episodes and videos among ``item_ids`` whose picture is missing a frame of the video.
 
     Their Source decides whether a picture is missing and takes the frame. No
@@ -55,13 +56,17 @@ def take_first_frames(s: Session, item_ids: Sequence[int]) -> int:
     """
     if not item_ids:
         return 0
-    items = [
-        (item.id, item.uuid, item.source_key, item.sharing_url, item.thumbnail_landscape_path)
-        for item in s.scalars(select(MediaItemBase).where(MediaItemBase.id.in_(item_ids)).order_by(MediaItemBase.id))
-        if getattr(item, "sharing_url", None) and not is_own_thumbnail(getattr(item, "thumbnail_landscape_path", None))
-        and not item.removed_from_source
-    ]
-    s.rollback()
+    s = get_session()
+    try:
+        items = [
+            (item.id, item.uuid, item.source_key, item.sharing_url, item.thumbnail_landscape_path)
+            for item in s.scalars(select(MediaItemBase).where(MediaItemBase.id.in_(item_ids)).order_by(MediaItemBase.id))
+            if getattr(item, "sharing_url", None) and not is_own_thumbnail(getattr(item, "thumbnail_landscape_path", None))
+            and not item.removed_from_source
+        ]
+    finally:
+        s.rollback()
+        s.close()
     made = 0
     for item_id, uuid, source_key, url, picture in items:
         try:
@@ -81,13 +86,17 @@ def take_first_frames(s: Session, item_ids: Sequence[int]) -> int:
         except OSError as exc:
             logger.warning("Could not save the thumbnail of %s: %s", url, exc)
             continue
-        item = s.get(MediaItemBase, item_id)
-        if item is None:
-            continue
-        for field in _PICTURE_FIELDS:
-            setattr(item, field, _PREFIX + name)
-        s.commit()
-        made += 1
+        if run_write_transaction(lambda s: _use_thumbnail(s, item_id, _PREFIX + name), concurrent=True):
+            made += 1
     if made:
         logger.info("Made %d %s from the first frames of their videos", made, "thumbnail" if made == 1 else "thumbnails")
     return made
+
+
+def _use_thumbnail(s: Session, item_id: int, path: str) -> bool:
+    item = s.get(MediaItemBase, item_id)
+    if item is None:
+        return False
+    for field in _PICTURE_FIELDS:
+        setattr(item, field, path)
+    return True

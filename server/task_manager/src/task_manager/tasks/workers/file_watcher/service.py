@@ -10,6 +10,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import set_committed_value
 
+from backend.db.core import is_read_session, is_write_session, run_write_transaction
 from backend.db.models.media_download import MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
@@ -134,7 +135,8 @@ def _release_clean_read_transaction(s: Session) -> bool:
     """End a caller's read transaction without expiring already-loaded objects."""
     if not s.in_transaction():
         return True
-    if s.new or s.dirty or s.deleted:
+    if s.new or s.dirty or s.deleted or is_write_session(s):
+        # A write transaction stays open: it belongs to the caller.
         return False
 
     expire_on_commit = s.expire_on_commit
@@ -448,6 +450,8 @@ def _apply_reconciliation_with_transaction(
     original: MediaDownloadBase,
     values: _ArtifactUpdates,
 ) -> bool:
+    if is_read_session(s):
+        return run_write_transaction(lambda w: _apply_reconciliation(w, original, values))
     if s.in_transaction():
         return _apply_reconciliation(s, original, values)
 
@@ -496,6 +500,9 @@ def _apply_reconciliations(
 ) -> int:
     if not changes:
         return 0
+
+    if is_read_session(s):
+        return run_write_transaction(lambda w: sum(_apply_reconciliation(w, original, values) for original, values in changes))
 
     updated = 0
     expire_on_commit = s.expire_on_commit

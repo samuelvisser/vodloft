@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Collection
+from backend.db.core import run_write_transaction
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from config.network import NoInternetConnectionError, is_no_internet_error
@@ -118,7 +119,6 @@ def _recover_episode(
         was_created=False,
     )
     # From here the pending check sweep or the metadata refresh sweep follows it.
-    s.commit()
     return True
 
 
@@ -245,27 +245,32 @@ async def run_monitor_no_usable_media_episode(
                 if is_target:
                     target_outcome = "unverified"
                 continue
-            episode = s.get(Episode, candidate_id)
-            if episode is None:
+            def confirm_not_found(w: Session, candidate_id=candidate_id, is_target=is_target):
+                """None when the episode is gone; otherwise whether it expired, was deleted and its replacement."""
+                episode = w.get(Episode, candidate_id)
+                if episode is None:
+                    return None
+                mark_episode_no_usable_media(
+                    w,
+                    episode,
+                    reason=NoUsableMediaReason.NOT_FOUND,
+                    now=now,
+                )
+                if not (force or no_usable_media_incident_expired(episode, now=now, minutes=delete_after_minutes)):
+                    return False, False, None
+                replacement = _replacement_for_quarantined_episode(w, episode) if is_target else None
+                logger.info("Deleting confirmed-404 episode %s", episode.slug)
+                was_deleted = delete_no_usable_media_episode(w, episode)
+                return True, was_deleted, None if replacement is None else (
+                    EpisodePublishStatus(replacement.publish_status), replacement.slug,
+                )
+
+            confirmed = run_write_transaction(confirm_not_found)
+            if confirmed is None:
                 continue
             verified += 1
-            mark_episode_no_usable_media(
-                s,
-                episode,
-                reason=NoUsableMediaReason.NOT_FOUND,
-                now=now,
-            )
-            s.commit()
-            if force or no_usable_media_incident_expired(episode, now=now, minutes=delete_after_minutes):
-                replacement = _replacement_for_quarantined_episode(s, episode) if is_target else None
-                replacement_status = (
-                    EpisodePublishStatus(replacement.publish_status)
-                    if replacement is not None
-                    else None
-                )
-                replacement_slug = replacement.slug if replacement is not None else None
-                logger.info("Deleting confirmed-404 episode %s", episode.slug)
-                was_deleted = delete_no_usable_media_episode(s, episode)
+            expired, was_deleted, replacement = confirmed
+            if expired:
                 if was_deleted:
                     removed += 1
                 if is_target:
@@ -274,8 +279,7 @@ async def run_monitor_no_usable_media_episode(
                         if was_deleted
                         else "retained"
                     )
-                    target_recovered_status = replacement_status
-                    target_slug = replacement_slug
+                    target_recovered_status, target_slug = replacement if replacement is not None else (None, None)
             elif is_target:
                 target_outcome = "retained"
         else:
@@ -291,35 +295,36 @@ async def run_monitor_no_usable_media_episode(
                 publication_timing_reference=publication_timing_reference,
                 snapshot=observed,
             )
-            episode = s.get(Episode, candidate_id)
-            if episode is None:
-                continue
-            verified += 1
+            def recover(w: Session, candidate_id=candidate_id, detail=detail, observed=observed, resolved=resolved):
+                """None when the episode is gone; otherwise whether it recovered, its status and slug."""
+                episode = w.get(Episode, candidate_id)
+                if episode is None:
+                    return None
+                recovered_now = _recover_episode(w, episode, detail, observed=observed, resolved=resolved)
+                return recovered_now, EpisodePublishStatus(episode.publish_status), episode.slug
+
             try:
-                if _recover_episode(
-                    s,
-                    episode,
-                    detail,
-                    observed=observed,
-                    resolved=resolved,
-                ):
+                outcome = run_write_transaction(recover)
+                if outcome is None:
+                    continue
+                verified += 1
+                recovered_now, status, slug = outcome
+                if recovered_now:
                     recovered += 1
                     if is_target:
                         target_outcome = "recovered"
-                        target_recovered_status = EpisodePublishStatus(episode.publish_status)
-                        target_slug = episode.slug
-                else:
-                    s.commit()
-                    if is_target:
-                        target_outcome = "retained"
-                        target_slug = episode.slug
+                        target_recovered_status = status
+                        target_slug = slug
+                elif is_target:
+                    target_outcome = "retained"
+                    target_slug = slug
             except Exception as exc:
-                s.rollback()
+                verified += 1
                 if is_no_internet_error(exc):
                     raise NoInternetConnectionError() from exc
                 logger.exception(
                     "Could not verify media usability for episode %s; leaving it quarantined",
-                    episode.slug,
+                    episode_slug,
                 )
                 if is_target:
                     target_outcome = "unverified"

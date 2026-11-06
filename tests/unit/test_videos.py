@@ -12,6 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from sources import Feature, LinkKind, Playback, ResolvedLink, Source, VideoDetails, registry
+from conftest import use_database
 
 
 VIDEO_TEMPLATE = (
@@ -84,6 +85,7 @@ def session():
         "sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool,
     )
     Base.metadata.create_all(engine)
+    use_database(engine)
     s = sessionmaker(bind=engine)()
     yield s
     s.close()

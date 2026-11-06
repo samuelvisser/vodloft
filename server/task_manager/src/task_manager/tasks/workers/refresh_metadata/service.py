@@ -32,6 +32,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.datetime_types import utc_datetime
+from backend.db.core import run_write_transaction
 from backend.db.models import Collection, Episode, Site, Video
 from backend.services.metadata_refresh import (
     refresh_watch_expired,
@@ -195,27 +196,34 @@ def _refresh(s: Session, due: list[_Watched], now: datetime) -> dict[str, SiteCo
         counts.checked += 1
         if item.one_by_one and not _refresh_one_by_one(s, item, counts):
             continue
-        row = s.get(item.model, item.id)
-        if row is None or row.metadata_is_final:
-            continue
-        if not item.one_by_one:
-            answer = answers[item.source_key]
-            if item.ref.slug in answer.removed:
-                if not row.removed_from_source:
-                    row.removed_from_source = True
-                    counts.removed += 1
-            elif (details := answer.details.get(item.ref.slug)) is not None:
-                row.removed_from_source = False
-                counts.updated += apply_refreshed_details(row, details)
-                if isinstance(row, Episode):
-                    check_upgrades_after_refresh(s, row)
-            else:
-                counts.failed += 1
-        if refresh_watch_expired(item.published, item.offsets, now=now):
-            row.metadata_is_final = True
-            counts.finished += 1
-        s.commit()
+        stored = run_write_transaction(lambda w, item=item: _store(w, item, answers.get(item.source_key), now))
+        for name in ("updated", "removed", "failed", "finished"):
+            setattr(counts, name, getattr(counts, name) + getattr(stored, name))
     return sites
+
+
+def _store(w: Session, item: _Watched, answer: _Answers | None, now: datetime) -> SiteCounts:
+    """Store what the Source said about one item. Returns what changed, to add to its Site's counts."""
+    counts = SiteCounts()
+    row = w.get(item.model, item.id)
+    if row is None or row.metadata_is_final:
+        return counts
+    if not item.one_by_one:
+        if item.ref.slug in answer.removed:
+            if not row.removed_from_source:
+                row.removed_from_source = True
+                counts.removed += 1
+        elif (details := answer.details.get(item.ref.slug)) is not None:
+            row.removed_from_source = False
+            counts.updated += apply_refreshed_details(row, details)
+            if isinstance(row, Episode):
+                check_upgrades_after_refresh(w, row)
+        else:
+            counts.failed += 1
+    if refresh_watch_expired(item.published, item.offsets, now=now):
+        row.metadata_is_final = True
+        counts.finished += 1
+    return counts
 
 
 def run_metadata_refresh(s: Session, *, now: Optional[datetime] = None) -> SweepResult:
@@ -235,12 +243,20 @@ def run_metadata_refresh(s: Session, *, now: Optional[datetime] = None) -> Sweep
             finished.append(item)
 
     sites = _refresh(s, due, now)
-    for item in finished:
-        row = s.get(item.model, item.id)
-        if row is not None:
-            row.metadata_is_final = True
-            sites.setdefault(item.site_name, SiteCounts()).finished += 1
-    s.commit()
+
+    def finish(w: Session) -> list[str]:
+        """The Site of each item whose watch ended."""
+        names = []
+        for item in finished:
+            row = w.get(item.model, item.id)
+            if row is not None:
+                row.metadata_is_final = True
+                names.append(item.site_name)
+        return names
+
+    if finished:
+        for name in run_write_transaction(finish):
+            sites.setdefault(name, SiteCounts()).finished += 1
     _last_sweep = now
     return SweepResult(sites)
 
@@ -252,11 +268,15 @@ def refresh_episode_now(s: Session, episode_id: int, *, now: Optional[datetime] 
     its Site's schedule says.
     """
     now = utc_datetime(now or datetime.now(timezone.utc))
-    episode = s.get(Episode, episode_id)
-    if episode is None or episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value:
-        s.rollback()
+
+    def follow_again(w: Session) -> _Watched | None:
+        episode = w.get(Episode, episode_id)
+        if episode is None or episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value:
+            return None
+        episode.metadata_is_final = False
+        return _watched_episode(episode)
+
+    item = run_write_transaction(follow_again)
+    if item is None:
         return SweepResult()
-    episode.metadata_is_final = False
-    item = _watched_episode(episode)
-    s.commit()
     return SweepResult(_refresh(s, [item], now))

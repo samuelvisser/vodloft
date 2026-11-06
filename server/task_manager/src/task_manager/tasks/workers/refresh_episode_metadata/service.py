@@ -6,6 +6,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from backend.db.models import Episode
+from backend.db.core import run_write_transaction
 from backend.services.custom_indexes import request_collection_custom_index_reconciliation
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
@@ -50,16 +51,18 @@ def refresh_dailywire_episode(s: Session, episode_id: int) -> Optional[bool]:
         require_member_exclusive=require_member_exclusive,
     )
 
-    # The episode may have changed during the lookup.
-    episode = s.get(Episode, episode_id)
-    if episode is None or episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value:
-        return None
-    refreshed_normally = _refresh_episode_from_dailywire(s, episode, detail)
-    request_collection_custom_index_reconciliation(s, episode.collection_id)
-    if not refreshed_normally:
-        episode.metadata_is_final = False
-    s.commit()
-    return refreshed_normally
+    def store(w: Session) -> Optional[bool]:
+        # The episode may have changed during the lookup.
+        episode = w.get(Episode, episode_id)
+        if episode is None or episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value:
+            return None
+        refreshed_normally = _refresh_episode_from_dailywire(w, episode, detail)
+        request_collection_custom_index_reconciliation(w, episode.collection_id)
+        if not refreshed_normally:
+            episode.metadata_is_final = False
+        return refreshed_normally
+
+    return run_write_transaction(store)
 
 
 def _no_usable_reason(detail, observed_status: EpisodePublishStatus) -> NoUsableMediaReason:

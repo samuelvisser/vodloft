@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from sqlalchemy import select
 
-from backend.db.core import get_session
+from backend.db.core import run_write_transaction
 from backend.db.models import Collection, Episode
 from backend.types.episode_types import EpisodePublishStatus
 
@@ -80,13 +80,5 @@ def _restore(session) -> int:
 
 async def migrate(context) -> None:
     context.update_progress(0, 1, "Restoring episodes wrongly marked as having no usable media")
-    session = get_session()
-    try:
-        _restore(session)
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
+    run_write_transaction(_restore)
     context.update_progress(1, 1, "Restoring episodes wrongly marked as having no usable media")

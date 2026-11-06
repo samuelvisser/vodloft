@@ -14,6 +14,7 @@ from sources import Feature, LinkKind, PlaybackKind, get_source, sources_for
 from sources.npo import NpoSource
 from sources.npo.client import NpoError, NpoNotFoundError
 from sources.npo.source import parse_link
+from conftest import use_database
 
 CLEAR = "https://vod.ak.md.npox.nl/legacy/package/clear/abc/index.m3u8?hdnts=x"
 PROTECTED = "https://vod.ak.md.npox.nl/legacy/package/drmcbcs/abc/index.m3u8?hdnts=x"
@@ -181,6 +182,7 @@ def session():
 
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
+    use_database(engine)
     s = sessionmaker(bind=engine)()
     yield s
     s.close()

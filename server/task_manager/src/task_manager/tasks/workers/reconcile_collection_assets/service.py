@@ -12,6 +12,7 @@ from downloader import DownloadCanceled
 from sqlalchemy import String, and_, cast, func, or_, select
 
 from backend.db.models import DownloadProfile, Episode, EpisodeMediaDownload, Collection, CollectionLocalMediaProfile
+from backend.db.core import run_write_transaction
 from backend.db.models.CollectionLocalAsset import CollectionLocalAsset
 from backend.services.collection_assets import (
     managed_collection_profile_pairs, resolve_collection_media_directory, shared_root_conflict,
@@ -189,7 +190,7 @@ def _claim_fresh_asset(
     for target in dict.fromkeys(candidates):
         check_canceled()
         with asset_file_lock(plan.download_root, target):
-            with db_session() as session:
+            def work(session):
                 if not _current(session, plan):
                     return False, None
                 rows = _path_rows(session, target)
@@ -221,15 +222,18 @@ def _claim_fresh_asset(
                     and target.suffix.lower() == f".{_expected_output_format(row, plan)}"
                 ), None)
                 if fresh is None:
-                    continue
+                    return None
                 owner = _owner(session, rows, plan, target)
                 owner.content_hash = digest
                 owner.pending_hash = None
                 owner.source_url = plan.url
                 owner.source_format = fresh.source_format
                 owner.checked_at = fresh.checked_at
-                session.commit()
                 return True, target
+
+            found = run_write_transaction(work)
+            if found is not None:
+                return found
     return True, None
 
 
@@ -259,10 +263,10 @@ def _cleanup_obsolete_variants(
         check_canceled()
         try:
             with asset_file_lock(plan.download_root, path):
-                with db_session() as session:
+                def work(session):
                     row = session.get(CollectionLocalAsset, record_id)
                     if row is None or not _current(session, plan):
-                        continue
+                        return None
                     replacement = session.scalar(select(CollectionLocalAsset).where(
                         CollectionLocalAsset.collection_id == plan.collection_id,
                         CollectionLocalAsset.local_media_profile_id == plan.profile_id,
@@ -274,7 +278,7 @@ def _cleanup_obsolete_variants(
                         or replacement.content_hash is None
                         or asset_file_hash(current_target) != replacement.content_hash
                     ):
-                        continue
+                        return None
                     shared = session.scalar(select(CollectionLocalAsset.id).where(
                         CollectionLocalAsset.file_path == str(path),
                         CollectionLocalAsset.id != record_id,
@@ -284,7 +288,8 @@ def _cleanup_obsolete_variants(
                         if digest is not None and digest in (row.content_hash, row.pending_hash):
                             safe_asset_path(plan.download_root, path).unlink(missing_ok=True)
                     session.delete(row)
-                    session.commit()
+
+                run_write_transaction(work)
         except ArtworkConflict as exc:
             logger.warning("Old collection artwork variant was left untouched: %s", exc)
 
@@ -315,31 +320,44 @@ def _refresh_asset(plan: AssetPlan, check_canceled: Callable[[], None]) -> bool:
             raise ValueError("Prepared collection artwork disappeared before publication")
         check_canceled()
         with asset_file_lock(plan.download_root, target):
-            with db_session() as session:
+            def claim(session) -> tuple[list[int], str | None] | None:
+                """Mark the file as being replaced; None when the plan is no longer current."""
                 if not _current(session, plan):
-                    return False
+                    return None
                 if shared_root_conflict(collection_profile_roots(session), plan.collection_id, str(plan.directory)):
                     raise ArtworkConflict("The collection directory became shared by another collection")
                 rows, previous_hash = _owned_file(session, plan, target)
                 _owner(session, rows, plan, target)
                 for row in rows:
                     row.pending_hash = new_hash
-                session.commit()
-                if new_hash != previous_hash:
-                    publish_collection_asset(
-                        prepared.path,
-                        target,
-                        download_root=plan.download_root,
-                        expected_hash=previous_hash,
-                        check_canceled=check_canceled,
-                    )
-                for row in rows:
+                session.flush()
+                return [row.id for row in rows], previous_hash
+
+            claimed = run_write_transaction(claim)
+            if claimed is None:
+                return False
+            row_ids, previous_hash = claimed
+            if new_hash != previous_hash:
+                publish_collection_asset(
+                    prepared.path,
+                    target,
+                    download_root=plan.download_root,
+                    expected_hash=previous_hash,
+                    check_canceled=check_canceled,
+                )
+
+            def publish(session) -> None:
+                for row_id in row_ids:
+                    row = session.get(CollectionLocalAsset, row_id)
+                    if row is None:
+                        continue
                     row.content_hash = new_hash
                     row.pending_hash = None
                     row.source_url = plan.url
                     row.source_format = prepared.source_format
                     row.checked_at = now
-                session.commit()
+
+            run_write_transaction(publish)
 
     _cleanup_obsolete_variants(plan, target, check_canceled)
     return True
@@ -373,16 +391,16 @@ def _cleanup_old_roots(
             continue
         try:
             with asset_file_lock(download_root, path):
-                with db_session() as session:
+                def work(session):
                     row = session.get(CollectionLocalAsset, record_id)
                     profile = session.get(CollectionLocalMediaProfile, profile_id)
                     collection = session.get(Collection, collection_id)
                     if row is None or profile is None or collection is None or not collection_assets_enabled(profile):
-                        continue
+                        return None
                     if not collection_profile_is_managed(session, collection_id, profile_id):
-                        continue
+                        return None
                     if resolve_collection_media_directory(collection, profile.output_template).path != str(current_root):
-                        continue
+                        return None
                     replacement = session.scalar(
                         select(CollectionLocalAsset)
                         .where(
@@ -399,9 +417,9 @@ def _cleanup_old_roots(
                         .limit(1)
                     )
                     if replacement is None:
-                        continue
+                        return None
                     if asset_file_hash(Path(replacement.file_path)) != replacement.content_hash:
-                        continue
+                        return None
                     shared = session.scalar(select(CollectionLocalAsset.id).where(
                         CollectionLocalAsset.file_path == str(path), CollectionLocalAsset.id != record_id,
                     ).limit(1))
@@ -410,7 +428,8 @@ def _cleanup_old_roots(
                         if digest is not None and digest in (row.content_hash, row.pending_hash):
                             safe_asset_path(download_root, path).unlink(missing_ok=True)
                     session.delete(row)
-                    session.commit()
+
+                run_write_transaction(work)
         except ArtworkConflict as exc:
             logger.warning("Old collection artwork was left untouched: %s", exc)
 

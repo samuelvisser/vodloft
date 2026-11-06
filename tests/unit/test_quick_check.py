@@ -15,6 +15,7 @@ from sources.ytdlp.youtube_api import Share, key as key_store, quota
 
 from test_youtube_catalogue import FakeResponse, _video_item, lookups, youtube, ytdlp_dir  # noqa: F401
 from test_ytdlp_collections import ListedSource
+from conftest import use_database
 
 FEED = """<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns="http://www.w3.org/2005/Atom">
@@ -168,6 +169,7 @@ def session():
 
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
+    use_database(engine)
     s = sessionmaker(bind=engine)()
     yield s
     s.close()

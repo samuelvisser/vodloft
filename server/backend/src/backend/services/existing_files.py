@@ -19,6 +19,7 @@ from jinja_analysis import analyze_template
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from backend.db.core import get_session, run_write_transaction
 from backend.db.models import (
     Collection,
     DownloadProfile,
@@ -244,42 +245,60 @@ def _read_sidecar(virtual: str) -> bytes | None:
         return None
 
 
-def run_scan(session: Session, *, collection_id: int, local_media_profile_id: int) -> dict[str, int]:
-    scan = session.scalar(select(ExistingFileScan).where(
-        ExistingFileScan.collection_id == collection_id,
-        ExistingFileScan.local_media_profile_id == local_media_profile_id,
-    ))
-    collection = session.get(Collection, collection_id)
-    profile = session.get(LocalMediaProfileBase, local_media_profile_id)
-    if scan is None or collection is None or profile is None:
+def run_scan(*, collection_id: int, local_media_profile_id: int) -> dict[str, int]:
+    """Scan the folder of a waiting scan and store its matches. The folder is read outside any write transaction."""
+    def start(session: Session) -> int | None:
+        scan = session.scalar(select(ExistingFileScan).where(
+            ExistingFileScan.collection_id == collection_id,
+            ExistingFileScan.local_media_profile_id == local_media_profile_id,
+        ))
+        if scan is None or session.get(Collection, collection_id) is None \
+                or session.get(LocalMediaProfileBase, local_media_profile_id) is None:
+            return None
+        scan.status = SCANNING
+        return scan.id
+
+    scan_id = run_write_transaction(start)
+    if scan_id is None:
         return {"files": 0}
-    scan.status = SCANNING
-    session.commit()
     try:
-        root = check_folder(scan.folder)
-        known = {
-            Path(path).resolve() for path in session.scalars(select(MediaDownloadBase.file_path).where(
-                MediaDownloadBase.artifact_status != MediaDownloadArtifactStatus.ABSENT.value,
-            ))
-        }
-        episodes = _episode_facts(session, collection, profile)
-        patterns = template_patterns(profile.output_template)
-        if scan.template:
-            patterns += template_patterns(scan.template)
-        folder = virtual_path(root)
-        session.rollback()
+        session = get_session()
+        try:
+            scan = session.get(ExistingFileScan, scan_id)
+            collection = session.get(Collection, collection_id)
+            profile = session.get(LocalMediaProfileBase, local_media_profile_id)
+            root = check_folder(scan.folder)
+            known = {
+                Path(path).resolve() for path in session.scalars(select(MediaDownloadBase.file_path).where(
+                    MediaDownloadBase.artifact_status != MediaDownloadArtifactStatus.ABSENT.value,
+                ))
+            }
+            episodes = _episode_facts(session, collection, profile)
+            patterns = template_patterns(profile.output_template)
+            if scan.template:
+                patterns += template_patterns(scan.template)
+            folder = virtual_path(root)
+        finally:
+            session.rollback()
+            session.close()
         files = [file for file in scan_folder(root) if (root / file.path).resolve() not in known]
         result = match_files(files, episodes, folder=folder, patterns=patterns, read=_read_sidecar)
     except Exception as exc:
-        session.rollback()
-        scan = session.get(ExistingFileScan, scan.id)
-        scan.status, scan.error = FAILED, str(exc)
-        session.commit()
+        error = str(exc)
+
+        def fail(session: Session) -> None:
+            scan = session.get(ExistingFileScan, scan_id)
+            scan.status, scan.error = FAILED, error
+
+        run_write_transaction(fail)
         raise
-    scan = session.get(ExistingFileScan, scan.id)
-    scan.results = [{**asdict(item), "candidates": list(item.candidates), "adopted": False} for item in result.files]
-    scan.status = READY
-    session.commit()
+
+    def finish(session: Session) -> None:
+        scan = session.get(ExistingFileScan, scan_id)
+        scan.results = [{**asdict(item), "candidates": list(item.candidates), "adopted": False} for item in result.files]
+        scan.status = READY
+
+    run_write_transaction(finish)
     return {
         "files": len(result.files), "certain": result.count("certain"),
         "likely": result.count("likely"), "review": result.count("review"),

@@ -6,6 +6,7 @@ import os
 from sqlalchemy.orm import Session
 
 from backend.db import get_session
+from backend.db.core import run_write_transaction
 from backend.db.models import Episode
 from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
@@ -65,16 +66,15 @@ def retry_media_download_action(
         schedule_for_delay: bool = False,
 ) -> str:
     """Replace one download attempt and return the new media.download operation ID."""
-    active_operation_id: str | None = None
-    is_redownload = False
-    with db_session() as s:
+    def record_retry(s: Session) -> tuple[str | None, str | None, bool]:
+        """The operation to reuse, the active one to replace, and whether this downloads again."""
         download = s.get(MediaDownloadBase, media_download_id)
         if download is None:
             raise DownloadActionError("missing", "Media download not found")
 
         active = get_active_media_download_operation(s, media_download_id)
         if schedule_for_delay and is_media_download_publication_delay_wait(active):
-            return str(active.id)
+            return str(active.id), None, False
 
         if isinstance(download, EpisodeMediaDownload):
             episode = s.get(Episode, download.media_item_id)
@@ -92,16 +92,19 @@ def retry_media_download_action(
             MediaDownloadHistoryAction.RETRY_REQUESTED,
             metadata={"source": source},
         )
-        s.commit()
+        s.flush()
         active = get_active_media_download_operation(s, media_download_id)
-        if active is not None:
-            if reuse_matching_active and active.source == source:
-                return str(active.id)
-            active_operation_id = str(active.id)
+        if active is not None and reuse_matching_active and active.source == source:
+            return str(active.id), None, False
         is_redownload = (
             download.downloaded_at is not None
             or download.artifact_status in {"available", "missing", "corrupted"}
         )
+        return None, None if active is None else str(active.id), is_redownload
+
+    reused_operation_id, active_operation_id, is_redownload = run_write_transaction(record_retry)
+    if reused_operation_id is not None:
+        return reused_operation_id
 
     if active_operation_id is not None:
         cancel_media_download_operation(
@@ -110,34 +113,30 @@ def retry_media_download_action(
             acknowledge=True,
         )
 
-    with db_session() as s:
-        try:
-            download = s.get(MediaDownloadBase, media_download_id)
-            if download is None:
-                raise DownloadActionError("missing", "Media download not found")
-            scheduled_ready_at = None
-            operation_source = source
-            if schedule_for_delay and isinstance(download, EpisodeMediaDownload):
-                episode = s.get(Episode, download.media_item_id)
-                if episode is not None:
-                    scheduled_ready_at = episode_download_delay_ready_at(episode)
-                operation_source = OperationSource.SYSTEM.value
+    def queue_retry(s: Session) -> str:
+        download = s.get(MediaDownloadBase, media_download_id)
+        if download is None:
+            raise DownloadActionError("missing", "Media download not found")
+        scheduled_ready_at = None
+        operation_source = source
+        if schedule_for_delay and isinstance(download, EpisodeMediaDownload):
+            episode = s.get(Episode, download.media_item_id)
+            if episode is not None:
+                scheduled_ready_at = episode_download_delay_ready_at(episode)
+            operation_source = OperationSource.SYSTEM.value
 
-            operation = create_media_download_operation(
-                s,
-                download,
-                source=operation_source,
-                is_redownload=is_redownload,
-                prepare_existing_artifact=True,
-                not_before=scheduled_ready_at,
-            )
-            dispatch_queued_media_download_operations(s)
-            operation_id = str(operation.id)
-            s.commit()
-            return operation_id
-        except Exception:
-            s.rollback()
-            raise
+        operation = create_media_download_operation(
+            s,
+            download,
+            source=operation_source,
+            is_redownload=is_redownload,
+            prepare_existing_artifact=True,
+            not_before=scheduled_ready_at,
+        )
+        dispatch_queued_media_download_operations(s)
+        return str(operation.id)
+
+    return run_write_transaction(queue_retry)
 
 
 def cancel_media_download_action(
@@ -168,30 +167,30 @@ def cancel_media_download_action(
             if not allow_inactive:
                 raise DownloadActionError("conflict", "This download is not currently in progress") from exc
 
-    with db_session() as s:
-        try:
-            download = s.get(MediaDownloadBase, media_download_id)
-            if download is None:
-                if missing_ok:
-                    return None
-                raise DownloadActionError("missing", "Media download not found")
+    def suppress(s: Session) -> MediaDownloadBase | None:
+        download = s.get(MediaDownloadBase, media_download_id)
+        if download is None:
+            if missing_ok:
+                return None
+            raise DownloadActionError("missing", "Media download not found")
 
-            # Persist the user's intent even when an earlier bulk attempt already
-            # canceled the active worker but crashed before recording suppression.
-            download.automatic_retry_suppressed = (
-                download.artifact_status != MediaDownloadArtifactStatus.AVAILABLE.value
-            )
-            if isinstance(download, EpisodeMediaDownload):
-                download.redownload_when_final = False
-                download.redownload_when_delay_passed = False
-            s.commit()
-            s.refresh(download)
-            _ = download.assets
-            s.expunge(download)
-            payload = download
-        except Exception:
-            s.rollback()
-            raise
+        # Persist the user's intent even when an earlier bulk attempt already
+        # canceled the active worker but crashed before recording suppression.
+        download.automatic_retry_suppressed = (
+            download.artifact_status != MediaDownloadArtifactStatus.AVAILABLE.value
+        )
+        if isinstance(download, EpisodeMediaDownload):
+            download.redownload_when_final = False
+            download.redownload_when_delay_passed = False
+        s.flush()
+        s.refresh(download)
+        _ = download.assets
+        s.expunge(download)
+        return download
+
+    payload = run_write_transaction(suppress)
+    if payload is None:
+        return None
 
     # Close the cancellation/requeue race without canceling a newer explicit retry.
     with db_session() as s:
@@ -285,25 +284,25 @@ def delete_unavailable_media_download_action(
         missing_ok: bool = False,
 ) -> bool:
     """Delete one confirmed-unavailable MediaDownload row as a serialized user action."""
-    with serialize_download_attempt(media_download_id), db_session() as s:
+    def delete(s: Session) -> bool | DownloadActionError:
+        if s.get(MediaDownloadBase, media_download_id) is None:
+            if missing_ok:
+                return False
+            raise DownloadActionError("missing", "Media download not found")
         try:
-            if s.get(MediaDownloadBase, media_download_id) is None:
-                if missing_ok:
-                    return False
-                raise DownloadActionError("missing", "Media download not found")
-
             delete_unavailable_media_download(s, media_download_id)
-            s.commit()
-            return True
-        except DownloadActionError:
+        except DownloadActionError as refused:
             # A Missing-row recheck may have restored the artifact state or
             # discovered a same-directory rename. Persist that reconciliation
             # even though the destructive action itself is rejected.
-            s.commit()
-            raise
-        except Exception:
-            s.rollback()
-            raise
+            return refused
+        return True
+
+    with serialize_download_attempt(media_download_id):
+        result = run_write_transaction(delete)
+    if isinstance(result, DownloadActionError):
+        raise result
+    return result
 
 
 def delete_media_download_action(
@@ -318,60 +317,58 @@ def delete_media_download_action(
         missing_ok=missing_ok,
     )
 
-    with serialize_download_attempt(media_download_id), db_session() as s:
-        try:
-            download = s.get(MediaDownloadBase, media_download_id)
-            if download is None:
-                if missing_ok:
-                    return False
-                raise DownloadActionError("missing", "Media download not found")
-            if get_active_media_download_operation(s, media_download_id) is not None:
-                raise DownloadActionError(
-                    "conflict",
-                    "This download still has an active operation; try again after it stops",
-                )
-
-            # An ABSENT record has not claimed an output file yet. Do not remove
-            # some other file that happens to occupy its planned destination.
-            if download.artifact_status == MediaDownloadArtifactStatus.ABSENT.value:
-                try:
-                    os.stat(download.file_path)
-                except FileNotFoundError:
-                    pass
-                except OSError as exc:
-                    raise DownloadActionError(
-                        "conflict",
-                        f"Could not verify the download destination: {exc}",
-                    ) from exc
-                else:
-                    raise DownloadActionError(
-                        "conflict",
-                        "A file exists at this not-downloaded item's destination",
-                    )
-
-            # Resolve tracked renames and clean up media, temporary output and
-            # sidecars before deleting the row (and its durable action history).
-            # A removal failure must not silently leave an orphan on disk.
-            had_file = download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
-            path = download.file_path
-            prepare_media_download_artifact(s, download, strict_cleanup=True)
-            if had_file and isinstance(download.media, Episode):
-                episode_deleted(s, download.media, path=path, reason="It was deleted by hand.")
-            # Unlike Delete unavailable, the episode is not dismissed: a Download
-            # Profile that still covers it may download it again, which can be
-            # the reason for deleting it.
-            s.delete(download)
-            s.commit()
-            return True
-        except OSError as exc:
-            s.rollback()
+    def delete(s: Session) -> bool:
+        download = s.get(MediaDownloadBase, media_download_id)
+        if download is None:
+            if missing_ok:
+                return False
+            raise DownloadActionError("missing", "Media download not found")
+        if get_active_media_download_operation(s, media_download_id) is not None:
             raise DownloadActionError(
                 "conflict",
-                f"Could not remove download files: {exc}",
-            ) from exc
-        except Exception:
-            s.rollback()
-            raise
+                "This download still has an active operation; try again after it stops",
+            )
+
+        # An ABSENT record has not claimed an output file yet. Do not remove
+        # some other file that happens to occupy its planned destination.
+        if download.artifact_status == MediaDownloadArtifactStatus.ABSENT.value:
+            try:
+                os.stat(download.file_path)
+            except FileNotFoundError:
+                pass
+            except OSError as exc:
+                raise DownloadActionError(
+                    "conflict",
+                    f"Could not verify the download destination: {exc}",
+                ) from exc
+            else:
+                raise DownloadActionError(
+                    "conflict",
+                    "A file exists at this not-downloaded item's destination",
+                )
+
+        # Resolve tracked renames and clean up media, temporary output and
+        # sidecars before deleting the row (and its durable action history).
+        # A removal failure must not silently leave an orphan on disk.
+        had_file = download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
+        path = download.file_path
+        prepare_media_download_artifact(s, download, strict_cleanup=True)
+        if had_file and isinstance(download.media, Episode):
+            episode_deleted(s, download.media, path=path, reason="It was deleted by hand.")
+        # Unlike Delete unavailable, the episode is not dismissed: a Download
+        # Profile that still covers it may download it again, which can be
+        # the reason for deleting it.
+        s.delete(download)
+        return True
+
+    try:
+        with serialize_download_attempt(media_download_id):
+            return run_write_transaction(delete)
+    except OSError as exc:
+        raise DownloadActionError(
+            "conflict",
+            f"Could not remove download files: {exc}",
+        ) from exc
 
 
 def delete_media_download_artifact_action(
@@ -386,22 +383,20 @@ def delete_media_download_artifact_action(
         missing_ok=missing_ok,
     )
 
-    with serialize_download_attempt(media_download_id), db_session() as s:
-        try:
-            download = s.get(MediaDownloadBase, media_download_id)
-            if download is None:
-                if missing_ok:
-                    return False
-                raise DownloadActionError("missing", "Media download not found")
+    def delete(s: Session) -> bool:
+        download = s.get(MediaDownloadBase, media_download_id)
+        if download is None:
+            if missing_ok:
+                return False
+            raise DownloadActionError("missing", "Media download not found")
 
-            prepare_media_download_artifact(s, download)
-            # A profile-wide delete is explicit user intent. Keep automatic
-            # reconciliation from immediately replacing this artifact even if a
-            # stale worker or profile sweep observes the row before its parent
-            # Download Profile disable becomes visible.
-            download.automatic_retry_suppressed = True
-            s.commit()
-            return True
-        except Exception:
-            s.rollback()
-            raise
+        prepare_media_download_artifact(s, download)
+        # A profile-wide delete is explicit user intent. Keep automatic
+        # reconciliation from immediately replacing this artifact even if a
+        # stale worker or profile sweep observes the row before its parent
+        # Download Profile disable becomes visible.
+        download.automatic_retry_suppressed = True
+        return True
+
+    with serialize_download_attempt(media_download_id):
+        return run_write_transaction(delete)

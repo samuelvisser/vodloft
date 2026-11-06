@@ -5,6 +5,7 @@ from backend.services.no_ascii_names import settle_no_ascii_name
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
+from backend.db.core import run_write_transaction
 from backend.db.models import LocalMediaProfileBase, Movie, MovieExtra, Video
 from backend.db.models.media_download import MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
@@ -29,12 +30,29 @@ _PROFILE_MEDIA_TYPES = {
 }
 
 
-def run_rename_movie_profile_files(
-    session: Session,
-    *,
-    local_media_profile_id: int,
-    progress=None,
-) -> TaskResult:
+def run_rename_movie_profile_files(*, local_media_profile_id: int, progress=None) -> TaskResult:
+    """Plan the renames in a short write transaction, then move the files outside it."""
+    update_progress(progress, 0, "Planning file renames")
+    planned = run_write_transaction(
+        lambda session: _plan_renames(session, local_media_profile_id=local_media_profile_id)
+    )
+    if isinstance(planned, TaskResult):
+        update_progress(progress, 100, planned.summary)
+        return planned
+    moves, considered, unchanged = planned
+    renamed, skipped = relocate_downloads(moves, progress=progress, skip_existing=False)
+    summary = f"Renamed {renamed} file(s)" + (f"; skipped {skipped} existing destination(s)" if skipped else "")
+    update_progress(progress, 100, summary)
+    return TaskResult(summary=summary, data={
+        "files_considered": considered, "files_renamed": renamed,
+        "files_unchanged": unchanged, "files_skipped_existing": skipped,
+    })
+
+
+def _plan_renames(
+    session: Session, *, local_media_profile_id: int,
+) -> TaskResult | tuple[list[DownloadRelocation], int, int]:
+    """The moves to make, the number of files considered and unchanged; or the result when there is nothing to move."""
     profile = session.get(LocalMediaProfileBase, local_media_profile_id)
     if profile is None:
         return TaskResult(summary="Local Media Profile no longer exists")
@@ -57,7 +75,6 @@ def run_rename_movie_profile_files(
     ).unique())
 
     if not downloads:
-        update_progress(progress, 100, "No existing files need renaming")
         return TaskResult(
             summary="No existing files need renaming",
             data={
@@ -69,7 +86,7 @@ def run_rename_movie_profile_files(
 
     moves: list[DownloadRelocation] = []
     unchanged = 0
-    for index, download in enumerate(downloads, start=1):
+    for download in downloads:
         source = resolve_media_download_file(session, download)
         if source is None:
             raise FileNotFoundError(
@@ -106,14 +123,8 @@ def run_rename_movie_profile_files(
             continue
 
         moves.append(plan_download_relocation(download, source, destination))
-        update_progress(
-            progress,
-            min(20, round(index / len(downloads) * 20)),
-            "Planning file renames",
-        )
 
     if not moves:
-        update_progress(progress, 100, "Files already have the expected names")
         return TaskResult(
             summary="Files already have the expected names",
             data={
@@ -123,10 +134,4 @@ def run_rename_movie_profile_files(
             },
         )
 
-    renamed, skipped = relocate_downloads(session, moves, progress=progress, skip_existing=False)
-    summary = f"Renamed {renamed} file(s)" + (f"; skipped {skipped} existing destination(s)" if skipped else "")
-    update_progress(progress, 100, summary)
-    return TaskResult(summary=summary, data={
-        "files_considered": len(downloads), "files_renamed": renamed,
-        "files_unchanged": unchanged, "files_skipped_existing": skipped,
-    })
+    return moves, len(downloads), unchanged

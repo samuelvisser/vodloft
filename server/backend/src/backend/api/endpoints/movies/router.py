@@ -21,6 +21,7 @@ from task_manager.tasks.media_download_operations import (
 )
 from backend.security.access import Access, Area, Level
 from backend.security.deps import requires, signed_in
+from backend.db.core import run_write_transaction
 
 router = APIRouter(prefix="/movies", tags=["Movies"])
 
@@ -34,15 +35,11 @@ def movie_index(movie_slug: str, access: Access = signed_in()):
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    with db_session() as s:
-        try:
-            movie, _ = index_dailywire_movie(s, movie_data)
-            payload = MovieAPIRead.model_validate(movie)
-            s.commit()
-            return payload
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        movie, _ = index_dailywire_movie(s, movie_data)
+        return MovieAPIRead.model_validate(movie)
+
+    return run_write_transaction(work)
 
 
 @router.post(
@@ -57,26 +54,23 @@ def movie_download_create(movie_slug: str, body: MediaDownloadAPICreate):
         movie_data = get_dailywire_movie(movie_slug)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    with db_session() as s:
-        try:
-            movie, _ = index_dailywire_movie(s, movie_data)
-            download = create_movie_download(s, movie, body)
-            operation = create_media_download_operation(
-                s,
-                download,
-                source=OperationSource.UI,
-            )
-            dispatch_queued_media_download_operations(s)
-            result = {
-                "queued": True,
-                "operation_id": operation.id,
-                "media_download_id": download.id,
-            }
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        movie, _ = index_dailywire_movie(s, movie_data)
+        download = create_movie_download(s, movie, body)
+        operation = create_media_download_operation(
+            s,
+            download,
+            source=OperationSource.UI,
+        )
+        dispatch_queued_media_download_operations(s)
+        result = {
+            "queued": True,
+            "operation_id": operation.id,
+            "media_download_id": download.id,
+        }
+        return result
+
+    return run_write_transaction(work)
 
 
 @router.post(
@@ -91,26 +85,23 @@ def movie_extra_download_create(movie_slug: str, movie_extra_slug: str, body: Me
         movie_data = get_dailywire_movie(movie_slug)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    with db_session() as s:
-        try:
-            movie, _ = index_dailywire_movie(s, movie_data)
-            download = create_movie_extra_download(s, movie, movie_extra_slug, body)
-            operation = create_media_download_operation(
-                s,
-                download,
-                source=OperationSource.UI,
-            )
-            dispatch_queued_media_download_operations(s)
-            result = {
-                "queued": True,
-                "operation_id": operation.id,
-                "media_download_id": download.id,
-            }
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        movie, _ = index_dailywire_movie(s, movie_data)
+        download = create_movie_extra_download(s, movie, movie_extra_slug, body)
+        operation = create_media_download_operation(
+            s,
+            download,
+            source=OperationSource.UI,
+        )
+        dispatch_queued_media_download_operations(s)
+        result = {
+            "queued": True,
+            "operation_id": operation.id,
+            "media_download_id": download.id,
+        }
+        return result
+
+    return run_write_transaction(work)
 
 
 @router.post(
@@ -121,14 +112,10 @@ def movie_extra_download_create(movie_slug: str, movie_extra_slug: str, body: Me
 )
 def movie_extras_refresh(movie_slug: str):
     """Queue a UI-visible refresh that indexes newly published movie extras."""
-    with db_session() as s:
-        try:
-            result = request_movie_extras_refresh(s, movie_slug)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return request_movie_extras_refresh(s, movie_slug)
+
+    return run_write_transaction(work)
 
 
 @router.post(
@@ -139,14 +126,10 @@ def movie_extras_refresh(movie_slug: str):
 )
 def movie_redownload_media(movie_slug: str):
     """Delete and re-download all existing movie and movie-extra artifacts."""
-    with db_session() as s:
-        try:
-            result = request_movie_redownload(s, movie_slug)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return request_movie_redownload(s, movie_slug)
+
+    return run_write_transaction(work)
 
 
 @router.get("", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[MovieAPIRead])
@@ -158,26 +141,18 @@ def movie_list():
 @router.post("", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=MovieAPIRead, status_code=status.HTTP_201_CREATED)
 def movie_create(body: MovieAPICreate, access: Access = signed_in()):
     access.check_link_at(body.source_key, body.sharing_url)
-    with db_session() as s:
-        try:
-            result = create_movie(s, body)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return create_movie(s, body)
+
+    return run_write_transaction(work)
 
 
 @router.post("/{movie_slug}/release-metadata/retry", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=MovieAPIRead)
 def movie_release_metadata_retry(movie_slug: str):
-    with db_session() as s:
-        try:
-            result = retry_movie_release_metadata(s, movie_slug)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return retry_movie_release_metadata(s, movie_slug)
+
+    return run_write_transaction(work)
 
 
 @router.post("/{movie_slug}/refresh", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=MovieAPIRead)
@@ -188,14 +163,10 @@ def movie_refresh(movie_slug: str):
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    with db_session() as s:
-        try:
-            result = refresh_dailywire_movie(s, movie_slug, movie_data)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return refresh_dailywire_movie(s, movie_slug, movie_data)
+
+    return run_write_transaction(work)
 
 
 @router.get("/{movie_slug}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=MovieAPIRead)
@@ -206,23 +177,15 @@ def movie_detail(movie_slug: str):
 
 @router.patch("/{movie_slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=MovieAPIRead)
 def movie_update(movie_slug: str, body: MovieAPIUpdate):
-    with db_session() as s:
-        try:
-            result = update_movie(s, movie_slug, body)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return update_movie(s, movie_slug, body)
+
+    return run_write_transaction(work)
 
 
 @router.delete("/{movie_slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=MovieAPIRead)
 def movie_delete(movie_slug: str):
-    with db_session() as s:
-        try:
-            result = delete_movie(s, movie_slug)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return delete_movie(s, movie_slug)
+
+    return run_write_transaction(work)

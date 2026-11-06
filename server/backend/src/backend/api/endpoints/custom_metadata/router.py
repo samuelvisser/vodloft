@@ -13,8 +13,8 @@ from backend.utils.custom_metadata import (
     replace_custom_metadata,
 )
 
-from task_manager.events.transactional import queue_event
 
+from backend.db.core import run_write_transaction
 from .service import (
     get_custom_metadata_fields,
     remove_shared_custom_metadata_fields,
@@ -38,46 +38,38 @@ def custom_metadata_fields(
 
 @router.put("/collections/{collection_slug}/metadata", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=CollectionAPIRead)
 def collection_custom_metadata_update(collection_slug: str, body: CustomMetadataAPIUpdate) -> CollectionAPIRead:
-    with db_session() as session:
+    def work(session):
         collection = session.query(Collection).filter_by(slug=collection_slug).one_or_none()
         if collection is None:
             raise HTTPException(status_code=404, detail="Collection not found")
-        try:
-            remove_shared_custom_metadata_fields(
-                session,
-                collection,
-                parent_table=Collection.__tablename__,
-                fields=body.removed_fields,
-            )
-            replace_custom_metadata(collection, body.custom_metadata)
-            request_collection_custom_index_reconciliation(session, collection.id)
-            session.flush()
-            result = CollectionAPIRead.model_validate(collection)
-            session.commit()
-            return result
-        except Exception:
-            session.rollback()
-            raise
+        remove_shared_custom_metadata_fields(
+            session,
+            collection,
+            parent_table=Collection.__tablename__,
+            fields=body.removed_fields,
+        )
+        replace_custom_metadata(collection, body.custom_metadata)
+        request_collection_custom_index_reconciliation(session, collection.id)
+        session.flush()
+        return CollectionAPIRead.model_validate(collection)
+
+    return run_write_transaction(work)
 
 
 @router.put("/movies/{movie_slug}/metadata", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=MovieAPIRead)
 def movie_custom_metadata_update(movie_slug: str, body: CustomMetadataAPIUpdate) -> MovieAPIRead:
-    with db_session() as session:
+    def work(session):
         movie = session.query(Movie).filter_by(slug=movie_slug).one_or_none()
         if movie is None:
             raise HTTPException(status_code=404, detail="Movie not found")
-        try:
-            remove_shared_custom_metadata_fields(
-                session,
-                movie,
-                parent_table=Movie.__tablename__,
-                fields=body.removed_fields,
-            )
-            replace_custom_metadata(movie, body.custom_metadata)
-            session.flush()
-            result = MovieAPIRead.model_validate(movie)
-            session.commit()
-            return result
-        except Exception:
-            session.rollback()
-            raise
+        remove_shared_custom_metadata_fields(
+            session,
+            movie,
+            parent_table=Movie.__tablename__,
+            fields=body.removed_fields,
+        )
+        replace_custom_metadata(movie, body.custom_metadata)
+        session.flush()
+        return MovieAPIRead.model_validate(movie)
+
+    return run_write_transaction(work)

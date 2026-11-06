@@ -8,8 +8,9 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from conftest import available_artifact
+from conftest import available_artifact, use_database
 from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import Session
 
 from sources import Site, SponsorBlockSegment, UpgradeChecks, UpgradeImprovement, UpgradeOffer, VideoFormat
@@ -26,8 +27,9 @@ def db_session(tmp_path, monkeypatch):
     from backend.db import Base
     from config import get_settings
 
-    engine = create_engine("sqlite+pysqlite:///:memory:")
+    engine = create_engine("sqlite+pysqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
+    use_database(engine)
     session = Session(engine)
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
     yield session

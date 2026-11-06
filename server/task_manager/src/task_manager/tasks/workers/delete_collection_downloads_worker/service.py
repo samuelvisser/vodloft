@@ -4,6 +4,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from backend.db.core import run_write_transaction
+from backend.db.models.media_download import EpisodeMediaDownload
 from backend.utils.episode_download_scope import EpisodeDownloadScope
 from downloader import DownloadCanceled
 from task_manager.tasks.helpers.download_profiles import (
@@ -41,10 +43,9 @@ def run_delete_collection_downloads_worker(
     # and commit it before cancellation helpers roll back their read transaction.
     # A partial delete (selected downloads) leaves the profiles on.
     disabled_during_worker = (
-        disable_download_profiles_for_episode_scope(s, scope)
+        run_write_transaction(lambda w: disable_download_profiles_for_episode_scope(w, scope))
         if selected_media_download_ids is None else 0
     )
-    s.commit()
     disabled_profile_count = max(download_profiles_disabled, disabled_during_worker)
 
     if not downloads:
@@ -78,11 +79,12 @@ def run_delete_collection_downloads_worker(
             [download],
             reason="Deleted by collection download cleanup",
         )
-        delete_episode_download_artifact(s, download)
         # Make each destructive step durable independently. A user may cancel a
         # long-running collection cleanup without rolling already removed files back
         # into database state that claims they still exist.
-        s.commit()
+        download_id = download.id
+        s.rollback()
+        run_write_transaction(lambda w: _delete_artifact(w, download_id))
 
         percentage = min(99, max(1, int(index * 100 / total)))
         update_progress(
@@ -97,3 +99,9 @@ def run_delete_collection_downloads_worker(
         "episode_files": total,
         "download_profiles_disabled": disabled_profile_count,
     }
+
+
+def _delete_artifact(s: Session, download_id: int) -> None:
+    download = s.get(EpisodeMediaDownload, download_id)
+    if download is not None:
+        delete_episode_download_artifact(s, download)

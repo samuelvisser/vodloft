@@ -10,6 +10,7 @@ import requests
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from backend.db.core import write_when_changed
 from backend.db.models import Episode
 from backend.db.models import NotificationEvent as EventRow
 from backend.db.models.media_download import MediaDownloadBase
@@ -95,8 +96,8 @@ def failing_tasks(session: Session, now: datetime) -> int:
     return emitted
 
 
-def disk_check(session: Session) -> bool:
-    disk = disk_space()
+def disk_check(session: Session, disk) -> bool:
+    """``disk`` is the download folder's ``disk_space()``."""
     minimum = get_settings().health.min_free_disk_mb * 1024 * 1024
     if disk is None or disk.free_bytes >= minimum:
         return False
@@ -108,15 +109,24 @@ def disk_check(session: Session) -> bool:
     return True
 
 
-def source_problems(session: Session) -> int:
-    """A Source that needs you: a sign-in that expired, or a site that wants cookies."""
-    emitted = 0
+def sources_with_problems() -> list[tuple[object, list]]:
+    """Each Source with the problems it reports. Asking may go out to the Source."""
+    found = []
     for source in all_sources():
         try:
-            problems = source.problems()
+            found.append((source, list(source.problems())))
         except Exception:
             logger.debug("Could not ask %s for its problems", source.name, exc_info=True)
-            continue
+    return found
+
+
+def source_problems(session: Session, found: list[tuple[object, list]]) -> int:
+    """A Source that needs you: a sign-in that expired, or a site that wants cookies.
+
+    ``found`` is what ``sources_with_problems()`` returned.
+    """
+    emitted = 0
+    for source, problems in found:
         for problem in problems:
             emit(
                 session, Event.SIGN_IN_NEEDED, title=f"{source.name}: {problem.title}", body=problem.detail,
@@ -131,17 +141,23 @@ def _version_tuple(text: str) -> tuple[int, int, int] | None:
     return tuple(int(part) for part in found.groups()) if found else None  # type: ignore[return-value]
 
 
-def update_check(session: Session) -> bool:
-    """A newer VODLoft release, told once per version."""
+def latest_release() -> dict | None:
+    """The newest VODLoft release on GitHub, or None when it could not be asked."""
+    try:
+        response = requests.get(_RELEASES_URL, timeout=10, headers={"Accept": "application/vnd.github+json"})
+        response.raise_for_status()
+        return response.json()
+    except (requests.RequestException, ValueError):
+        return None
+
+
+def update_check(session: Session, release: dict | None) -> bool:
+    """A newer VODLoft release, told once per version. ``release`` is what ``latest_release()`` returned."""
     try:
         current = _version_tuple(version("backend"))
     except PackageNotFoundError:
         return False
-    try:
-        response = requests.get(_RELEASES_URL, timeout=10, headers={"Accept": "application/vnd.github+json"})
-        response.raise_for_status()
-        release = response.json()
-    except (requests.RequestException, ValueError):
+    if release is None:
         return False
     tag = str(release.get("tag_name") or "")
     latest = _version_tuple(tag)
@@ -154,18 +170,23 @@ def update_check(session: Session) -> bool:
     return True
 
 
-def run_checks(session: Session, *, now: datetime | None = None, include_slow: bool = False) -> None:
-    """Every check; the slow ones, which ask outside services, only when asked."""
+def run_checks(*, now: datetime | None = None, include_slow: bool = False) -> None:
+    """Every check; the slow ones, which ask outside services, only when asked.
+
+    What a check asks outside VODLoft, it asks before its transaction starts.
+    """
     now = now or datetime.now(timezone.utc)
-    failed_downloads(session, now)
-    session.commit()
+    write_when_changed(lambda session: failed_downloads(session, now))
     if not include_slow:
         return
-    for check in (lambda: failing_tasks(session, now), lambda: disk_check(session), lambda: source_problems(session),
-                  lambda: update_check(session)):
+    for ask, check in (
+        (lambda: now, failing_tasks),
+        (disk_space, disk_check),
+        (sources_with_problems, source_problems),
+        (latest_release, update_check),
+    ):
         try:
-            check()
-            session.commit()
+            facts = ask()
+            write_when_changed(lambda session: check(session, facts))
         except Exception:
-            session.rollback()
             logger.exception("A notification check failed")

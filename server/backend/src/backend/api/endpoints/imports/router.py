@@ -23,6 +23,7 @@ from backend.services.imports import (
 from backend.utils.feed_urls import request_base_url
 from importer.registry import all_importers
 
+from backend.db.core import run_write_transaction
 from ...models.imports import (
     ImportChunkAPIRead, ImporterAPIRead, ImportFolderAPIRequest, ImportOptionsAPIRequest, ImportPreviewAPIRead,
     ImportRunAPIRead, ImportRunSummaryAPIRead, ImportUploadAPIRequest, ImportUploadStatusAPIRead,
@@ -141,13 +142,14 @@ def import_preview(importer_key: str, body: ImportOptionsAPIRequest, request: Re
 def import_run(importer_key: str, body: ImportOptionsAPIRequest, request: Request):
     """Run the import as previewed. It runs as a task; its files are adopted once each Collection is indexed."""
     importer = _importer(importer_key)
-    with db_session() as s:
+    def work(s):
         try:
             run = start_run(s, importer, _options(body, request))
         except ImportServiceError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        s.commit()
         return ImportRunSummaryAPIRead.model_validate(run)
+
+    return run_write_transaction(work)
 
 
 @router.get("/{importer_key}/runs", dependencies=_ADMIN, response_model=list[ImportRunSummaryAPIRead])
@@ -173,7 +175,7 @@ def import_run_read(importer_key: str, run_id: int):
 def import_run_enable_download_profiles(importer_key: str, run_id: int):
     """Turn on every Download Profile a finished import brought over."""
     importer = _importer(importer_key)
-    with db_session() as s:
+    def work(s):
         run = s.get(ImportRun, run_id)
         if run is None or run.importer != importer.key:
             raise HTTPException(status_code=404, detail="Import run not found")
@@ -181,5 +183,6 @@ def import_run_enable_download_profiles(importer_key: str, run_id: int):
             enable_run_download_profiles(s, run)
         except ImportServiceError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        s.commit()
         return ImportRunAPIRead.model_validate(run_view(s, run))
+
+    return run_write_transaction(work)

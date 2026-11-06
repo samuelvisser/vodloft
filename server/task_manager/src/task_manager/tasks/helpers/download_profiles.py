@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.models import DownloadProfile
@@ -11,17 +11,11 @@ from task_manager.events.transactional import queue_event
 def _lock_download_profile(s: Session, profile_id: int) -> DownloadProfile | None:
     """Load one Download Profile while serializing changes to its enabled state.
 
-    PostgreSQL can lock the profile row directly. SQLite ignores ``FOR UPDATE``,
-    so use a no-op SQL update there to acquire its write lock before reading the
-    current value. Raw SQL deliberately avoids the model's ``updated_at`` onupdate.
+    Callers run inside ``run_write_transaction``. On SQLite its BEGIN IMMEDIATE already keeps every
+    other writer out; PostgreSQL locks the profile row, which also covers concurrent transactions.
     """
     statement = select(DownloadProfile).where(DownloadProfile.id == profile_id)
-    if s.get_bind().dialect.name == "sqlite":
-        s.execute(
-            text("UPDATE download_profiles SET id = id WHERE id = :profile_id"),
-            {"profile_id": profile_id},
-        )
-    else:
+    if s.get_bind().dialect.name != "sqlite":
         statement = statement.with_for_update()
 
     return s.scalars(
@@ -60,14 +54,8 @@ def disable_download_profiles_for_episode_scope(
         DownloadProfile.local_media_profile_id.in_(local_media_profile_ids),
         DownloadProfile.enable_profile.is_(True),
     )
-    if s.get_bind().dialect.name == "sqlite":
-        # SQLite has a database-wide writer lock. Acquire it before selecting the
-        # profiles so the enabled-state read cannot race a profile reconciliation.
-        s.execute(
-            text("UPDATE download_profiles SET id = id WHERE collection_id = :collection_id"),
-            {"collection_id": scope.collection.id},
-        )
-    else:
+    # On SQLite the caller's write transaction already keeps a profile reconciliation out.
+    if s.get_bind().dialect.name != "sqlite":
         statement = statement.with_for_update()
 
     profiles = list(s.scalars(

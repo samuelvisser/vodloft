@@ -28,6 +28,7 @@ from task_manager.tasks.media_download_operations import (
 )
 from backend.security.access import Area, Level
 from backend.security.deps import may_delete_files, requires
+from backend.db.core import run_write_transaction
 
 router = APIRouter(prefix="/media-downloads", tags=["Media Downloads"])
 
@@ -90,14 +91,10 @@ def media_downloads_view(
 
 
 def _queue_bulk_operation(operation):
-    with db_session() as s:
-        try:
-            result = queue_bulk_media_download_operation(s, operation)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return queue_bulk_media_download_operation(s, operation)
+
+    return run_write_transaction(work)
 
 
 @router.post(
@@ -174,33 +171,28 @@ def media_downloads_retry(
 )
 def media_downloads_prioritize(media_download_id: int):
     """Prioritize a queued download without replacing or restarting its attempt."""
-    with db_session() as s:
-        download = s.get(MediaDownloadBase, media_download_id)
-        if download is None:
+    def work(s):
+        if s.get(MediaDownloadBase, media_download_id) is None:
             raise HTTPException(status_code=404, detail="Media download not found")
+        operation = prioritize_media_download_operation(s, media_download_id)
+        # If a slot is already free, fill it now using the newly updated
+        # ordering. Otherwise the terminal callback will honor this timestamp
+        # when the next running download releases a slot.
+        dispatch_queued_media_download_operations(s)
+        return operation.id
 
-        try:
-            operation = prioritize_media_download_operation(s, media_download_id)
-            # If a slot is already free, fill it now using the newly updated
-            # ordering. Otherwise the terminal callback will honor this timestamp
-            # when the next running download releases a slot.
-            dispatch_queued_media_download_operations(s)
-            operation_id = operation.id
-            s.commit()
-            queue_positions = get_media_download_queue_positions(s)
-        except ValueError as exc:
-            s.rollback()
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-        except Exception:
-            s.rollback()
-            raise
-
-        return {
-            "queued": True,
-            "operation_id": operation_id,
-            "media_download_id": media_download_id,
-            "queue_positions": queue_positions,
-        }
+    try:
+        operation_id = run_write_transaction(work)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    with db_session() as s:
+        queue_positions = get_media_download_queue_positions(s)
+    return {
+        "queued": True,
+        "operation_id": operation_id,
+        "media_download_id": media_download_id,
+        "queue_positions": queue_positions,
+    }
 
 
 @router.post("/{media_download_id}/cancel", dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE)], response_model=MediaDownloadAPIRead)
@@ -245,14 +237,10 @@ def media_downloads_delete_with_files(media_download_id: int):
 
 @router.patch("/{media_download_id}", dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE)], response_model=MediaDownloadAPIRead)
 def media_downloads_update(media_download_id: int, body: MediaDownloadAPIUpdate):
-    with db_session() as s:
-        try:
-            result = update_media_download(s, media_download_id, body)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return update_media_download(s, media_download_id, body)
+
+    return run_write_transaction(work)
 
 
 
@@ -260,11 +248,7 @@ def media_downloads_update(media_download_id: int, body: MediaDownloadAPIUpdate)
 @router.put("/{media_download_id}/kept", dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE)], response_model=MediaDownloadAPIRead)
 def media_downloads_set_kept(media_download_id: int, body: MediaDownloadKeptAPIRequest):
     """Keep an episode's download from retention, or let retention delete it again."""
-    with db_session() as s:
-        try:
-            result = set_media_download_kept(s, media_download_id, body)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return set_media_download_kept(s, media_download_id, body)
+
+    return run_write_transaction(work)

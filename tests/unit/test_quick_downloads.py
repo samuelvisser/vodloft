@@ -6,9 +6,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from conftest import use_database
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import Session
 
 from downloader.models import MediaInfo, MediaKind, VideoRendition
@@ -460,8 +462,9 @@ def _session():
     from backend.db import Base
     from task_manager.scheduler.db import TaskDefinition
 
-    engine = create_engine("sqlite+pysqlite:///:memory:", connect_args={"check_same_thread": False})
+    engine = create_engine("sqlite+pysqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
+    use_database(engine)
     session = Session(engine)
     for key in ("download_episode", "download_movie", "quick_download"):
         session.add(TaskDefinition(key=key, title=key, description="", allowed_resource_types=[], default_max_retries=0))
@@ -715,8 +718,6 @@ def test_the_history_follows_each_quick_download_to_its_end(api, temporary_root,
     from backend.services.quick_downloads import sweep_quick_downloads
     from task_manager.scheduler.operation_control import cancel_operation
 
-    monkeypatch.setattr("backend.services.quick_download_history.get_session", lambda: api.session)
-    monkeypatch.setattr(api.session, "close", lambda: None)
 
     downloaded = _start(api, "https://clips.example/v/abc").json()
     expired = _start(api, "https://clips.example/v/def", kind="audio").json()

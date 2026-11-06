@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from conftest import available_artifact, mark_artifact_available
+from conftest import available_artifact, mark_artifact_available, use_database
 import asyncio
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
 
 
 @pytest.fixture
@@ -17,8 +18,11 @@ def db_session(tmp_path, monkeypatch):
     from backend.db import Base
     from config import get_settings
 
-    engine = create_engine("sqlite+pysqlite:///:memory:")
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False},
+    )
     Base.metadata.create_all(engine)
+    use_database(engine)
     session = Session(engine)
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
     yield session
@@ -482,20 +486,15 @@ def test_batch_file_rename_rollback_restores_cycle_without_overwrite(db_session,
     db_session.add_all([first_download, second_download])
     db_session.commit()
 
-    real_commit = db_session.commit
-    commit_count = 0
+    from backend.services import download_relocation
 
-    def fail_second_commit():
-        nonlocal commit_count
-        commit_count += 1
-        if commit_count == 2:
-            raise RuntimeError("forced database commit failure")
-        real_commit()
+    def fail_to_record(*_args, **_kwargs):
+        raise RuntimeError("forced database commit failure")
 
-    monkeypatch.setattr(db_session, "commit", fail_second_commit)
+    # The files are moved, then recording the new paths fails.
+    monkeypatch.setattr(download_relocation, "_record_relocations", fail_to_record)
     with pytest.raises(RuntimeError, match="forced database commit failure"):
         run_rename_collection_profile_files(
-            db_session,
             collection_id=collection.id,
             local_media_profile_id=profile.id,
         )
@@ -554,7 +553,6 @@ def test_batch_file_rename_stages_source_destination_cycle(db_session):
     db_session.commit()
 
     result = run_rename_collection_profile_files(
-        db_session,
         collection_id=collection.id,
         local_media_profile_id=profile.id,
     )

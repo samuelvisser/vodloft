@@ -6,7 +6,9 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from conftest import use_database
 from sqlalchemy import create_engine, select
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import Session
 
 
@@ -77,8 +79,9 @@ def _make_replacement_episode(session, original, *, slug="canonical-slug"):
 def db_session():
     import backend.db.models  # noqa: F401
     from backend.db import Base
-    engine = create_engine("sqlite+pysqlite:///:memory:")
+    engine = create_engine("sqlite+pysqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
+    use_database(engine)
     session = Session(engine)
     yield session
     session.close()

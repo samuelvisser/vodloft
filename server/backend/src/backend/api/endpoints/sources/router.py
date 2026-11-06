@@ -18,6 +18,7 @@ from .service import (
 )
 from backend.security.access import Access, Area, Level
 from backend.security.deps import requires, requires_any, signed_in
+from backend.db.core import run_write_transaction
 
 
 router = APIRouter(tags=["Sources"])
@@ -52,13 +53,14 @@ def source_sites():
 @router.put("/sources/sites/{key}", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SourceSiteAPIRead)
 def update_source_site(key: str, body: SourceSiteAPIUpdate):
     """Choose the Source to ask first for links on a Site."""
-    with db_session() as s:
+    def work(s):
         try:
             result = set_site_preference(s, key, body.preferred_source_key)
         except UnknownSiteError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        s.commit()
         return result
+
+    return run_write_transaction(work)
 
 
 @router.post("/resolve", dependencies=[requires_any((Area.ADD_MEDIA, Level.VIEW), (Area.QUICK_DOWNLOADS, Level.VIEW))], response_model=ResolvedLinkAPIRead)
@@ -126,10 +128,11 @@ def ytdlp_options(source_id: str):
 @router.put("/sources/{source_id}/ytdlp-options", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=YtdlpOptionsAPIRead)
 def save_ytdlp_options(source_id: str, body: YtdlpOptionsAPIUpdate):
     _source(source_id, Feature.YTDLP_OPTIONS)
-    with db_session() as s:
+    def work(s):
         text = save_ytdlp_source_options(s, body.text)
-        s.commit()
         return YtdlpOptionsAPIRead(text=text)
+
+    return run_write_transaction(work)
 
 
 @router.get("/sources/{source_id}/collection", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=CollectionDetailsAPIRead)

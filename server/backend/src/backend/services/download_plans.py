@@ -12,6 +12,7 @@ from backend.services.playback import resolve_playback
 from backend.services.local_media_profile_sources import format_for_site
 from backend.services.sites import collection_site, video_site
 from backend.services.no_ascii_names import settle_no_ascii_name
+from backend.db.core import run_write_transaction
 from backend.db.models import DownloadProfile, Episode, Movie, MovieExtra, Video
 from backend.db.models.media_download import MediaDownloadBase
 from backend.services.download_metadata import build_episode_metadata, build_movie_metadata, build_video_metadata, select_thumbnail_url
@@ -138,12 +139,8 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
                 tracker.preparing("resolve_playback")
                 detail = media_source.episode_media(slug=slug, members_only=member_only)
                 tracker.ensure_active()
-                current = session.get(Episode, media_id)
-                if current is None:
-                    raise DownloadCanceled("Episode was deleted during preparation")
                 video_url, audio_url = detail.video_url, detail.audio_url
-                current.video_url, current.audio_url = video_url, audio_url
-                session.commit()
+                run_write_transaction(lambda w: _store_episode_media(w, media_id, detail))
                 refreshed = True
                 continue
             tracker.preparing("inspect_stream")
@@ -186,13 +183,9 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         )
         tracker.ensure_active()
         if playback.metadata is not None and is_extra:
-            current = session.get(MovieExtra, media_id)
-            if current is None:
-                raise DownloadCanceled("Movie extra was deleted during preparation")
-            update_movie_extra_source_metadata(current.source, playback.metadata)
+            run_write_transaction(lambda w: _store_movie_extra_metadata(w, media_id, playback.metadata))
             if playback.metadata.model_fields_set & {"thumbnail_landscape_path", "thumbnail_portrait_path", "thumbnail_square_path", "background_image_path"}:
                 thumbnail_url = select_thumbnail_url(playback.metadata)
-            session.commit()
         tracker.preparing("inspect_stream")
         source = resolve_download_source(playback.url, preferred_format=preferred, audio_only=False, remux_video_to_mp4=remux, cancellation=tracker.is_canceled)
 
@@ -286,3 +279,18 @@ def _download_profile(download: MediaDownloadBase, episode: Episode | None) -> D
          if candidate.local_media_profile_id == download.local_media_profile_id),
         None,
     )
+
+
+def _store_episode_media(session: Session, media_id: int, detail) -> None:
+    """Store the media links the Source just gave for an episode."""
+    current = session.get(Episode, media_id)
+    if current is None:
+        raise DownloadCanceled("Episode was deleted during preparation")
+    current.video_url, current.audio_url = detail.video_url, detail.audio_url
+
+
+def _store_movie_extra_metadata(session: Session, media_id: int, metadata) -> None:
+    current = session.get(MovieExtra, media_id)
+    if current is None:
+        raise DownloadCanceled("Movie extra was deleted during preparation")
+    update_movie_extra_source_metadata(current.source, metadata)

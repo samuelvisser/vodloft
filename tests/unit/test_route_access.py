@@ -201,18 +201,19 @@ def test_deleting_files_is_its_own_switch(app):
 
 
 def test_users_only_see_their_own_operations(app):
-    from backend.db import get_session
+    from backend.db.core import run_write_transaction
     from task_manager.scheduler.db import TaskOperation
 
     downloader = _client_for(app, "downloader")
     me = downloader.get("/api/auth/me").json()["user"]["id"]
-    with get_session() as session:
+    def add(session):
         for op_id, requester in (("mine", me), ("theirs", None)):
             session.add(TaskOperation(
                 id=op_id, kind="quick.download", source="ui", resource_type="quick_download",
                 resource_id=None, title=op_id, status="queued", requested_by_user_id=requester,
             ))
-        session.commit()
+
+    run_write_transaction(add)
 
     assert [operation["id"] for operation in downloader.get("/api/operations").json()] == ["mine"]
     assert downloader.get("/api/operations/theirs").status_code == 404
@@ -225,20 +226,21 @@ def test_users_only_see_their_own_operations(app):
 
 
 def test_operations_remember_who_asked(app):
-    from backend.db import get_session
+    from backend.db.core import run_write_transaction
     from task_manager.scheduler.operations import create_operation
     from task_manager.scheduler.requester import current_requester
 
     token = current_requester.set(42)
     try:
-        with get_session() as session:
+        def add(session):
             from backend.db.models import User
             session.add(User(id=42, username="someone", password_hash="x"))
             operation = create_operation(
                 session, kind="test", resource_type="none", resource_id=None, title="t", targets=(),
             )
-            session.commit()
-            assert operation.requested_by_user_id == 42
+            return operation.requested_by_user_id
+
+        assert run_write_transaction(add) == 42
     finally:
         current_requester.reset(token)
 

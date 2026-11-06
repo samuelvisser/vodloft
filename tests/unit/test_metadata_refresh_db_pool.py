@@ -4,6 +4,13 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 
+def _write(session, work):
+    """``run_write_transaction`` on the fake session: the work, then a commit."""
+    result = work(session)
+    session.commit()
+    return result
+
+
 def _final_episode(*, episode_id: int = 71):
     from backend.types.dailywire_user_info import DwMembershipLevel
     from backend.types.episode_types import EpisodePublishStatus
@@ -67,6 +74,7 @@ def test_metadata_refresh_releases_read_transaction_before_dailywire_request(mon
         ),
     )
     monkeypatch.setattr(service, "request_collection_custom_index_reconciliation", lambda *_args: None)
+    monkeypatch.setattr(service, "run_write_transaction", lambda work, **_kwargs: _write(session, work))
 
     did_refresh = service.refresh_dailywire_episode(session, episode.id)
 
@@ -110,6 +118,7 @@ def test_metadata_refresh_revalidates_episode_after_dailywire_request(monkeypatc
         "_refresh_episode_from_dailywire",
         lambda *_args: applied.append(True) or True,
     )
+    monkeypatch.setattr(service, "run_write_transaction", lambda work, **_kwargs: work(session))
 
     did_refresh = service.refresh_dailywire_episode(session, initial.id)
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.db.core import run_write_transaction
 from backend.db.models import Episode
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.episode_types import EpisodePublishStatus
@@ -67,8 +68,8 @@ async def run_finalize_countdown_downloads(
             and active.context.get("episode_publish_status")
             == EpisodePublishStatus.PUBLISHED_FINAL.value
         ):
-            queue_episode_redownload_if_ready(s, download_id)
-            s.commit()
+            s.rollback()
+            run_write_transaction(lambda w: queue_episode_redownload_if_ready(w, download_id))
             continue
         active_operation_id = active.id if active is not None else None
 
@@ -88,12 +89,10 @@ async def run_finalize_countdown_downloads(
 
         # A queued/scheduled cancellation may already be terminal. A RUNNING
         # worker keeps the intent pending until its terminal callback consumes it.
-        if queue_episode_redownload_if_ready(s, download_id):
+        if run_write_transaction(lambda w: queue_episode_redownload_if_ready(w, download_id)):
             queued += 1
-        s.commit()
 
-    dispatched = dispatch_queued_media_download_operations(s)
-    s.commit()
+    dispatched = run_write_transaction(dispatch_queued_media_download_operations)
 
     return TaskResult(
         summary=f"Queued {queued} final episode replacement(s)",

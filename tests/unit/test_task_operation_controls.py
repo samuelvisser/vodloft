@@ -875,13 +875,17 @@ def test_executor_rechecks_operation_ownership_after_link(task_database, monkeyp
     original_owner_check = executor_module._run_has_active_operation_owner
 
     def cancel_before_owner_check(session, run_id):
-        operation = session.get(TaskOperation, operation_id)
-        assert operation is not None
-        operation.context = {
-            **(operation.context or {}),
-            OPERATION_CANCEL_REQUESTED_CONTEXT_KEY: True,
-        }
-        session.commit()
+        from backend.db.core import run_write_transaction
+
+        def cancel(w):
+            operation = w.get(TaskOperation, operation_id)
+            assert operation is not None
+            operation.context = {
+                **(operation.context or {}),
+                OPERATION_CANCEL_REQUESTED_CONTEXT_KEY: True,
+            }
+
+        run_write_transaction(cancel)
         return original_owner_check(session, run_id)
 
     monkeypatch.setattr(

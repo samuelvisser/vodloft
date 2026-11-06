@@ -6,7 +6,7 @@ from backend.db.background_migrations import (
     get_current_background_migration_revision,
     get_pending_background_migrations,
 )
-from backend.db.core import get_session
+from backend.db.core import run_write_transaction
 from task_manager.scheduler.db import TaskOperation
 from task_manager.scheduler.operations import (
     OperationTargetSpec,
@@ -34,8 +34,7 @@ def ensure_background_migration_operation() -> str | None:
     if not pending:
         return None
 
-    session = get_session()
-    try:
+    def work(session):
         existing = session.scalar(
             select(TaskOperation)
             .where(
@@ -73,10 +72,6 @@ def ensure_background_migration_operation() -> str | None:
             _BACKGROUND_MIGRATION_SLOT,
         )
         operation_id = operation.id
-        session.commit()
         return operation_id
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
+
+    return run_write_transaction(work)

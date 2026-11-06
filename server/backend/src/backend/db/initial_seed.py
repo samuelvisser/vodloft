@@ -5,7 +5,8 @@ from collections.abc import Callable
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from .core import get_session, load_database_models
+from .core import load_database_models
+from backend.db.core import run_write_transaction
 
 
 # Data every brand-new VODLoft installation should start with belongs here.
@@ -137,13 +138,8 @@ def seed_initial_database() -> None:
     """Populate the application data for a brand-new VODLoft database."""
     load_database_models()
 
-    session = get_session()
-    try:
+    def work(session):
         for seed_step in _INITIAL_SEED_STEPS:
             seed_step(session)
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
+
+    run_write_transaction(work)

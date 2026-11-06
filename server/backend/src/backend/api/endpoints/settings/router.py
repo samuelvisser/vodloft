@@ -19,6 +19,7 @@ from .service import (
 )
 from backend.security.access import Area, Level
 from backend.security.deps import requires, requires_any
+from backend.db.core import run_write_transaction
 
 
 router = APIRouter(prefix="/settings", tags=["Settings"])
@@ -74,9 +75,10 @@ def settings_update(body: SettingsAPIUpdate):
         "downloadSettings.downloadRoot", "downloadSettings.filenameRestrictionMode",
         "downloadSettings.ffmpegPath",
     }:
-        with db_session() as session:
+        def work(session):
             request_collection_asset_reconciliation(session)
-            session.commit()
+
+        run_write_transaction(work)
     return result
 
 
@@ -88,14 +90,7 @@ def settings_update(body: SettingsAPIUpdate):
 )
 def settings_cron_run(job: str):
     """Run one configured cron job immediately as a TaskOperation."""
-    with db_session() as session:
-        try:
-            result = run_cron_job_now(session, job)
-            session.commit()
-            return result
-        except ValueError as exc:
-            session.rollback()
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        except Exception:
-            session.rollback()
-            raise
+    try:
+        return run_write_transaction(lambda session: run_cron_job_now(session, job))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

@@ -8,7 +8,7 @@ from backend.db.models import DownloadProfile
 from backend.services.collection_assets import request_collection_asset_reconciliation
 from backend.services.profile_moves import move_collection_downloads
 from backend.utils.custom_index import CustomIndexNotReadyError
-from controller.db_utils import db_session
+from backend.db.core import run_write_transaction
 from task_manager.scheduler.registry import task
 from task_manager.scheduler.results import TaskResult
 from task_manager.tasks.helpers.custom_index_readiness import (
@@ -45,17 +45,14 @@ async def move_collection_profile_episodes(
                     await locks.enter_async_context(custom_index_pair_lock(resource_id, profile_id))
                 if not pair_is_ready(resource_id, target_local_media_profile_id):
                     continue
-                with db_session() as session:
-                    result = move_collection_downloads(
-                        session,
-                        collection_id=resource_id,
-                        source_id=source_local_media_profile_id,
-                        target_id=target_local_media_profile_id,
-                        move_download_profile=move_download_profile,
-                        progress=progress,
-                    )
-                    request_collection_asset_reconciliation(session, resource_id)
-                    session.commit()
+                result = move_collection_downloads(
+                    collection_id=resource_id,
+                    source_id=source_local_media_profile_id,
+                    target_id=target_local_media_profile_id,
+                    move_download_profile=move_download_profile,
+                    progress=progress,
+                )
+                run_write_transaction(lambda session: request_collection_asset_reconciliation(session, resource_id))
                 summary = f"Moved {result.moved} episode{'s' if result.moved != 1 else ''}"
                 if result.skipped:
                     summary += f"; {result.skipped} stayed where they were"
@@ -66,10 +63,8 @@ async def move_collection_profile_episodes(
         raise
     finally:
         if held_download_profile_ids:
-            with db_session() as session:
-                session.execute(
-                    update(DownloadProfile)
-                    .where(DownloadProfile.id.in_(held_download_profile_ids))
-                    .values(enable_profile=True)
-                )
-                session.commit()
+            run_write_transaction(lambda session: session.execute(
+                update(DownloadProfile)
+                .where(DownloadProfile.id.in_(held_download_profile_ids))
+                .values(enable_profile=True)
+            ))

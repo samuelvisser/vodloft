@@ -37,11 +37,7 @@ def _item_ids() -> list[int]:
 
 
 def _take(item_ids: list[int]) -> None:
-    session = get_session()
-    try:
-        take_first_frames(session, item_ids)
-    finally:
-        session.close()
+    take_first_frames(item_ids)
 
 
 async def migrate(context) -> None:

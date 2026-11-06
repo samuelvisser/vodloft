@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from conftest import available_artifact
+from conftest import available_artifact, use_database
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import ANY, Mock
 
 import pytest
 from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import Session
 
 
@@ -23,8 +24,9 @@ def final_download(tmp_path, monkeypatch):
     from backend.utils.helpers import generate_uuid
     from config import get_settings
 
-    engine = create_engine("sqlite+pysqlite:///:memory:")
+    engine = create_engine("sqlite+pysqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
+    use_database(engine)
     session = Session(engine)
     monkeypatch.setattr(
         get_settings().download_settings,
@@ -113,8 +115,8 @@ def test_final_publication_queues_replacement(final_download, monkeypatch):
 
     result = asyncio.run(service.run_finalize_countdown_downloads(session, episode_id=episode.id))
 
-    queued.assert_called_once_with(session, download.id)
-    dispatched.assert_called_once_with(session)
+    queued.assert_called_once_with(ANY, download.id)
+    dispatched.assert_called_once()
     assert result.data["redownloads_queued"] == 1
 
 
@@ -141,7 +143,7 @@ def test_final_publication_cancels_countdown_attempt_and_waits_for_terminal(fina
         reason="Final episode media became available",
         acknowledge=True,
     )
-    queued.assert_called_once_with(session, download.id)
+    queued.assert_called_once_with(ANY, download.id)
     assert download.redownload_when_final is True
     assert result.data["redownloads_queued"] == 0
 

@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 
 from backend.db.core import get_session
+from backend.db.core import run_write_transaction
 from backend.db.datetime_types import utc_datetime
 from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
 from backend.services.sites import collection_site
@@ -54,8 +55,7 @@ def _downloads() -> list[tuple[int, str]]:
 
 
 def _apply(lengths: dict[int, float]) -> None:
-    session = get_session()
-    try:
+    def work(session):
         now = datetime.now(timezone.utc)
         for download in session.scalars(select(MediaDownloadBase).where(MediaDownloadBase.id.in_(lengths))):
             download.duration = lengths[download.id]
@@ -70,12 +70,8 @@ def _apply(lengths: dict[int, float]) -> None:
                     and download.downloaded_at is not None and utc_datetime(download.downloaded_at) > now - _RECENT
                 ):
                     download.upgrade_check_at = now
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
+
+    run_write_transaction(work)
 
 
 def _lengths(files: list[tuple[int, str]], ffmpeg_path: str) -> dict[int, float]:

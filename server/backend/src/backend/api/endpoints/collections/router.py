@@ -42,6 +42,7 @@ from ...models.source import EpisodeTagAPIRead
 from backend.app import db_session
 from backend.security.access import Access, Area, Level
 from backend.security.deps import may_delete_files, requires, signed_in
+from backend.db.core import run_write_transaction
 
 router = APIRouter(prefix="/collections", tags=["Collections"])
 
@@ -69,15 +70,12 @@ def collection_create(body: CollectionAPICreate, access: Access = signed_in()) -
     Returns the created show with a generated slug identifier.
     """
     access.check_link_at(body.source_key, body.sharing_url)
-    with db_session() as s:
-        try:
-            result = create_collection(s, body, added_by_id=access.user_id)
-            s.commit()
+    def work(s):
+        result = create_collection(s, body, added_by_id=access.user_id)
 
-            return result
-        except Exception:
-            s.rollback()
-            raise
+        return result
+
+    return run_write_transaction(work)
 
 
 @router.post(
@@ -88,14 +86,10 @@ def collection_create(body: CollectionAPICreate, access: Access = signed_in()) -
 )
 def collection_sync(collection_slug: str):
     """Queue an immediate new-episode sync for one show."""
-    with db_session() as s:
-        try:
-            result = request_collection_sync(s, collection_slug)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return request_collection_sync(s, collection_slug)
+
+    return run_write_transaction(work)
 
 
 @router.post(
@@ -106,14 +100,10 @@ def collection_sync(collection_slug: str):
 )
 def collection_metadata_refresh(collection_slug: str):
     """Queue metadata refreshes for every episode in one show."""
-    with db_session() as s:
-        try:
-            result = request_collection_metadata_refresh(s, collection_slug)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return request_collection_metadata_refresh(s, collection_slug)
+
+    return run_write_transaction(work)
 
 
 @router.post(
@@ -124,14 +114,10 @@ def collection_metadata_refresh(collection_slug: str):
 )
 def collection_download_all(collection_slug: str, body: CollectionDownloadAllAPIRequest):
     """Queue all eligible indexed episodes for one Local Media Profile."""
-    with db_session() as s:
-        try:
-            result = request_collection_download_all(s, collection_slug, body)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return request_collection_download_all(s, collection_slug, body)
+
+    return run_write_transaction(work)
 
 
 @router.post(
@@ -142,18 +128,15 @@ def collection_download_all(collection_slug: str, body: CollectionDownloadAllAPI
 )
 def collection_rename_files(collection_slug: str, body: CollectionFileRenameAPIRequest):
     """Rename existing show files for one or every Local Media Profile in use."""
-    with db_session() as s:
-        try:
-            result = request_collection_file_rename(
-                s,
-                collection_slug,
-                body.local_media_profile_id,
-            )
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        result = request_collection_file_rename(
+            s,
+            collection_slug,
+            body.local_media_profile_id,
+        )
+        return result
+
+    return run_write_transaction(work)
 
 
 @router.post(
@@ -164,21 +147,18 @@ def collection_rename_files(collection_slug: str, body: CollectionFileRenameAPIR
 )
 def collection_delete_downloads(collection_slug: str, body: CollectionDeleteDownloadsAPIRequest):
     """Delete show downloads for one or every Local Media Profile in use."""
-    with db_session() as s:
-        try:
-            result = request_collection_download_delete(
-                s,
-                collection_slug,
-                body.local_media_profile_id,
-                delete_older_than=body.delete_older_than,
-                delete_older_than_days=body.delete_older_than_days,
-                delete_older_than_latest_downloads=body.delete_older_than_latest_downloads,
-            )
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        result = request_collection_download_delete(
+            s,
+            collection_slug,
+            body.local_media_profile_id,
+            delete_older_than=body.delete_older_than,
+            delete_older_than_days=body.delete_older_than_days,
+            delete_older_than_latest_downloads=body.delete_older_than_latest_downloads,
+        )
+        return result
+
+    return run_write_transaction(work)
 
 
 @router.post(
@@ -189,21 +169,18 @@ def collection_delete_downloads(collection_slug: str, body: CollectionDeleteDown
 )
 def collection_redownload_episodes(collection_slug: str, body: CollectionRedownloadEpisodesAPIRequest):
     """Delete and re-download existing show files for one or every Local Media Profile in use."""
-    with db_session() as s:
-        try:
-            result = request_collection_episode_redownload(
-                s,
-                collection_slug,
-                body.local_media_profile_id,
-                delete_older_than=body.delete_older_than,
-                delete_older_than_days=body.delete_older_than_days,
-                delete_older_than_latest_downloads=body.delete_older_than_latest_downloads,
-            )
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        result = request_collection_episode_redownload(
+            s,
+            collection_slug,
+            body.local_media_profile_id,
+            delete_older_than=body.delete_older_than,
+            delete_older_than_days=body.delete_older_than_days,
+            delete_older_than_latest_downloads=body.delete_older_than_latest_downloads,
+        )
+        return result
+
+    return run_write_transaction(work)
 
 
 @router.get("/{collection_slug}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=CollectionAPIRead)
@@ -259,14 +236,10 @@ def collection_update(collection_slug: str, body: CollectionAPIUpdate):
     Partially updates show information with the provided fields.
     Only specified fields remain unchanged.
     """
-    with db_session() as s:
-        try:
-            result = update_collection(s, collection_slug, body)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return update_collection(s, collection_slug, body)
+
+    return run_write_transaction(work)
 
 
 @router.delete("/{collection_slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=CollectionAPIRead)
@@ -277,11 +250,7 @@ def collection_delete(collection_slug: str):
     Permanently removes the specified show and its associated data.
     Returns the deleted show's information for confirmation.
     """
-    with db_session() as s:
-        try:
-            result = delete_collection(s, collection_slug)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return delete_collection(s, collection_slug)
+
+    return run_write_transaction(work)

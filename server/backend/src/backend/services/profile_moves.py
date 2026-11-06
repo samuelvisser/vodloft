@@ -18,8 +18,9 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from backend.db.core import get_session, run_write_transaction
 from backend.db.models import Collection, CollectionLocalMediaProfile, DownloadProfile, Episode
-from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadAsset, MediaDownloadBase
+from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadAsset
 from backend.services.adoption import download_root, sidecar_assets
 from backend.services.custom_indexes import profile_applies_to_collection
 from backend.services.download_metadata import build_episode_metadata, select_thumbnail_url
@@ -238,8 +239,21 @@ class CollectionMoveResult:
         }
 
 
+@dataclass
+class _PlannedMove:
+    """What planning a Collection's move found, kept as plain values so no transaction stays open."""
+    source_id: int
+    source_name: str
+    target_id: int
+    target_name: str
+    relocations: list[DownloadRelocation]
+    in_place_ids: list[int]
+    skipped: int
+    managing_profile_id: int | None
+    movable_download_profile_ids: list[int]
+
+
 def move_collection_downloads(
-    session: Session,
     *,
     source_id: int,
     target_id: int,
@@ -251,15 +265,51 @@ def move_collection_downloads(
 
     Files move first, each download's path is recorded, and only then does the
     download change profile. A run that stops halfway leaves files on the source
-    profile at their new path, which running the move again picks up.
+    profile at their new path, which running the move again picks up. Planning
+    and each change are short write transactions; files move and sidecars are
+    made between them.
     """
+    _progress(progress, 0, "Planning the move")
+    planned = run_write_transaction(lambda session: _plan_move(
+        session, source_id=source_id, target_id=target_id, collection_id=collection_id,
+        move_download_profile=move_download_profile,
+    ))
+    if planned is None:
+        return CollectionMoveResult()
+
+    remaining, blocked = filter_relocation_conflicts(planned.relocations)
+    skipped = planned.skipped + len(blocked)
+    if remaining:
+        relocate_downloads(remaining, progress=progress, reason="profile_move")
+        _remove_empty_folders(path.source.parent for move in remaining for path in move.paths)
+    moved_items = [move.download_id for move in remaining] + planned.in_place_ids
+
+    moved_ids, stayed = run_write_transaction(lambda session: _record_move(session, planned, moved_items))
+    skipped += stayed
+    profiles_moved = len(planned.movable_download_profile_ids)
+
+    sidecars = 0
+    for index, download_id in enumerate(moved_ids, start=1):
+        sidecars += fill_missing_sidecars(download_id)
+        _progress(progress, 90 + round(index / len(moved_ids) * 10), "Filling in missing sidecars")
+
+    return CollectionMoveResult(
+        moved=len(moved_ids), skipped=skipped,
+        sidecars_added=sidecars, download_profiles_moved=profiles_moved,
+    )
+
+
+def _plan_move(
+    session: Session, *, source_id: int, target_id: int, collection_id: int, move_download_profile: bool,
+) -> _PlannedMove | None:
+    """Plan the move. Finding the files can update their records, so this is a write transaction."""
     source = session.get(CollectionLocalMediaProfile, source_id)
     target = session.get(CollectionLocalMediaProfile, target_id)
     if source is None or target is None:
         raise ProfileMoveError("The Local Media Profile no longer exists")
     plans = plan_profile_move(session, source, target, collection_ids=(collection_id,))
     if not plans:
-        return CollectionMoveResult()
+        return None
     plan = plans[0]
     if not plan.in_scope:
         raise ProfileMoveError(f"{target.name} is not offered for {plan.collection.title}")
@@ -271,9 +321,8 @@ def move_collection_downloads(
     candidates = [item for item in plan.episodes if item.outcome.moves]
     skipped = len(plan.episodes) - len(candidates)
     moves: list[DownloadRelocation] = []
-    in_place: list[EpisodeMove] = []
-    by_id: dict[int, EpisodeMove] = {}
-    for index, item in enumerate(candidates, start=1):
+    in_place: list[int] = []
+    for item in candidates:
         download = item.download
         current = resolve_media_download_file(session, download)
         if current is None:
@@ -281,69 +330,59 @@ def move_collection_downloads(
             continue
         _record_untracked_sidecars(session, download, current)
         destination = target_destination(session, download, target, current)
-        by_id[download.id] = item
         if destination == current:
-            in_place.append(item)
+            in_place.append(download.id)
         else:
             moves.append(plan_download_relocation(download, current, destination))
-        _progress(progress, round(index / max(len(candidates), 1) * 20), "Planning the move")
-
-    remaining, blocked = filter_relocation_conflicts(moves)
-    skipped += len(blocked)
-    if remaining:
-        relocate_downloads(session, remaining, progress=progress, reason="profile_move")
-        _remove_empty_folders(path.source.parent for move in remaining for path in move.paths)
-    moved_items = [by_id[move.download_id] for move in remaining] + in_place
 
     managing_profile = _managing_download_profile(plan, move_download_profile)
+    return _PlannedMove(
+        source_id=source.id, source_name=source.name, target_id=target.id, target_name=target.name,
+        relocations=moves, in_place_ids=in_place, skipped=skipped,
+        managing_profile_id=managing_profile.id if managing_profile is not None else None,
+        movable_download_profile_ids=(
+            [profile.id for profile in plan.source_download_profiles]
+            if move_download_profile and plan.can_move_download_profile else []
+        ),
+    )
+
+
+def _record_move(session: Session, planned: _PlannedMove, download_ids: list[int]) -> tuple[list[int], int]:
+    """Give the moved downloads their new profile. Returns their ids, and how many stayed behind."""
     moved_ids: list[int] = []
-    for item in moved_items:
-        download = session.get(EpisodeMediaDownload, item.download.id)
-        if download is None or download.local_media_profile_id != source.id:
+    stayed = 0
+    for download_id in download_ids:
+        download = session.get(EpisodeMediaDownload, download_id)
+        if download is None or download.local_media_profile_id != planned.source_id:
             continue
         existing = session.scalar(select(EpisodeMediaDownload).where(
-            EpisodeMediaDownload.local_media_profile_id == target.id,
+            EpisodeMediaDownload.local_media_profile_id == planned.target_id,
             EpisodeMediaDownload.media_item_id == download.media_item_id,
         ))
         if existing is not None:
             if existing.artifact_status in _WITH_FILE:
-                skipped += 1
+                stayed += 1
                 continue
             # The target only had a record without a file; the moved download takes its place.
             session.delete(existing)
             session.flush()
-        download.local_media_profile_id = target.id
-        download.download_profile_id = managing_profile.id if managing_profile is not None else None
+        download.local_media_profile_id = planned.target_id
+        download.download_profile_id = planned.managing_profile_id
         record_media_download_history(session, download.id, MediaDownloadHistoryAction.MOVED, metadata={
-            "from_profile": source.name, "to_profile": target.name,
-            "from_profile_id": source.id, "to_profile_id": target.id,
+            "from_profile": planned.source_name, "to_profile": planned.target_name,
+            "from_profile_id": planned.source_id, "to_profile_id": planned.target_id,
         })
         moved_ids.append(download.id)
     session.flush()
 
-    profiles_moved = 0
-    if move_download_profile and plan.can_move_download_profile:
-        for profile in plan.source_download_profiles:
-            profile.local_media_profile_id = target.id
-            profiles_moved += 1
-            # Downloads that stayed behind no longer belong to a Download Profile of their own profile.
-            for download in list(profile.episode_downloads):
-                if download.local_media_profile_id == source.id:
-                    download.download_profile_id = None
-    session.commit()
-
-    sidecars = 0
-    for index, download_id in enumerate(moved_ids, start=1):
-        download = session.get(EpisodeMediaDownload, download_id)
-        if download is not None:
-            sidecars += fill_missing_sidecars(session, download)
-            session.commit()
-        _progress(progress, 90 + round(index / len(moved_ids) * 10), "Filling in missing sidecars")
-
-    return CollectionMoveResult(
-        moved=len(moved_ids), skipped=skipped,
-        sidecars_added=sidecars, download_profiles_moved=profiles_moved,
-    )
+    for profile_id in planned.movable_download_profile_ids:
+        profile = session.get(DownloadProfile, profile_id)
+        profile.local_media_profile_id = planned.target_id
+        # Downloads that stayed behind no longer belong to a Download Profile of their own profile.
+        for download in list(profile.episode_downloads):
+            if download.local_media_profile_id == planned.source_id:
+                download.download_profile_id = None
+    return moved_ids, stayed
 
 
 def _managing_download_profile(plan: CollectionMove, move_download_profile: bool) -> DownloadProfile | None:
@@ -372,37 +411,61 @@ def _record_untracked_sidecars(session: Session, download: EpisodeMediaDownload,
     session.flush()
 
 
-def fill_missing_sidecars(session: Session, download: EpisodeMediaDownload) -> int:
+def fill_missing_sidecars(download_id: int) -> int:
     """Write the NFO and thumbnail the download's profile asks for but the file doesn't have yet.
 
     Subtitles need the episode's stream looked up again, so a move leaves them to a redownload.
     Returns how many sidecars were added. A sidecar that can't be made is logged and skipped.
+    The thumbnail is fetched and the files written outside any transaction; the new
+    sidecars are then recorded in a short one.
     """
-    profile = download.local_media_profile
-    media_path = Path(download.file_path)
-    episode = download.media
-    kinds = {asset.kind for asset in download.assets}
-    added = 0
+    session = get_session()
+    try:
+        download = session.get(EpisodeMediaDownload, download_id)
+        if download is None:
+            return 0
+        profile = download.local_media_profile
+        media_path = Path(download.file_path)
+        episode = download.media
+        kinds = {asset.kind for asset in download.assets}
+        wants_nfo = effective_metadata_mode(profile) in (MetadataMode.NFO, MetadataMode.EMBED_AND_NFO) and "nfo" not in kinds
+        nfo = render_nfo(build_episode_metadata(episode, episode.collection)) if wants_nfo else None
+        wants_thumbnail = (
+            effective_thumbnail_mode(profile) in (ThumbnailMode.SIDECAR, ThumbnailMode.EMBED_AND_SIDECAR)
+            and "thumbnail" not in kinds
+        )
+        thumbnail_url = select_thumbnail_url(episode) if wants_thumbnail else None
+    finally:
+        session.rollback()
+        session.close()
 
-    if effective_metadata_mode(profile) in (MetadataMode.NFO, MetadataMode.EMBED_AND_NFO) and "nfo" not in kinds:
+    written: list[tuple[str, str, Path]] = []
+    if nfo is not None:
         path = media_path.with_name(media_path.stem + ".nfo")
-        content = render_nfo(build_episode_metadata(episode, episode.collection))
+        if _write_new_file(path, nfo):
+            written.append(("nfo", "nfo", path))
+    fetched = _fetch_thumbnail(thumbnail_url) if thumbnail_url else None
+    if fetched is not None:
+        extension, content = fetched
+        path = media_path.with_name(f"{media_path.stem}.{extension}")
         if _write_new_file(path, content):
-            _add_asset(download, "nfo", "nfo", path, media_path)
-            added += 1
+            written.append(("artwork", "thumbnail", path))
+    if not written:
+        return 0
+    identities = [inspect_artifact(path) for _, _, path in written]
 
-    thumbnail_mode = effective_thumbnail_mode(profile)
-    if thumbnail_mode in (ThumbnailMode.SIDECAR, ThumbnailMode.EMBED_AND_SIDECAR) and "thumbnail" not in kinds:
-        url = select_thumbnail_url(episode)
-        fetched = _fetch_thumbnail(url) if url else None
-        if fetched is not None:
-            extension, content = fetched
-            path = media_path.with_name(f"{media_path.stem}.{extension}")
-            if _write_new_file(path, content):
-                _add_asset(download, "artwork", "thumbnail", path, media_path)
-                added += 1
-    session.flush()
-    return added
+    def record(session: Session) -> int:
+        download = session.get(EpisodeMediaDownload, download_id)
+        if download is None:
+            return 0
+        for (asset_key, kind, path), identity in zip(written, identities):
+            download.assets.append(MediaDownloadAsset(
+                asset_key=asset_key, kind=kind, path=str(path), suffix=path.name[len(media_path.stem):],
+                size_bytes=identity.size_bytes, fingerprint=identity.fingerprint,
+            ))
+        return len(written)
+
+    return run_write_transaction(record)
 
 
 def _fetch_thumbnail(url: str) -> tuple[str, bytes] | None:
@@ -438,14 +501,6 @@ def _write_new_file(path: Path, content: bytes) -> bool:
         path.unlink(missing_ok=True)
         return False
     return True
-
-
-def _add_asset(download: MediaDownloadBase, asset_key: str, kind: str, path: Path, media_path: Path) -> None:
-    identity = inspect_artifact(path)
-    download.assets.append(MediaDownloadAsset(
-        asset_key=asset_key, kind=kind, path=str(path), suffix=path.name[len(media_path.stem):],
-        size_bytes=identity.size_bytes, fingerprint=identity.fingerprint,
-    ))
 
 
 def _remove_empty_folders(folders) -> None:

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from backend.db.core import run_write_transaction
 from backend.db.models.media_download import MediaDownloadBase
 from backend.services.media_download_history import record_media_download_history
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
@@ -67,9 +68,10 @@ def filter_relocation_conflicts(moves: list[DownloadRelocation]) -> tuple[list[D
 
 
 def relocate_downloads(
-    session: Session, moves: list[DownloadRelocation], *, progress=None, skip_existing: bool = False,
+    moves: list[DownloadRelocation], *, progress=None, skip_existing: bool = False,
     reason: str = 'output_template_rename',
 ) -> tuple[int, int]:
+    """Move the files, then record where they went. No transaction stays open while files are copied."""
     destinations = [path.destination for move in moves for path in move.paths]
     if len(destinations) != len(set(destinations)):
         raise FileExistsError('Multiple managed artifacts resolve to the same destination')
@@ -78,31 +80,32 @@ def relocate_downloads(
         moves, skipped = filter_relocation_conflicts(moves)
     paths = tuple(path for move in moves for path in move.paths)
     transaction = RelocationTransaction(paths, progress if callable(progress) else lambda: False)
-    session.commit()  # Never hold a database connection while copying files.
     try:
         transaction.execute(lambda value: progress.set(value, 'Renaming media and auxiliary files') if progress else None)
-        for move in moves:
-            download = session.get(MediaDownloadBase, move.download_id)
-            if download is None:
-                raise RuntimeError('Download was deleted while renaming')
-            identity = inspect_artifact(move.destination)
-            download.file_path = str(move.destination)
-            download.artifact_status, download.artifact_error = 'available', None
-            download.artifact_stat_dev, download.artifact_stat_ino = identity.stat_dev, identity.stat_ino
-            download.artifact_size_bytes, download.artifact_fingerprint = identity.size_bytes, identity.fingerprint
-            targets = dict(move.assets)
-            for asset in list(download.assets):
-                if asset.asset_key in targets:
-                    asset.path = str(targets[asset.asset_key])
-                else:
-                    download.assets.remove(asset)
-            record_media_download_history(session, download.id, MediaDownloadHistoryAction.ARTIFACT_RENAMED, metadata={
-                'old_path': str(move.source), 'new_path': str(move.destination),
-                'reason': reason, 'recovered': move.recovered,
-            })
-        session.commit()
+        identities = [inspect_artifact(move.destination) for move in moves]
+        run_write_transaction(lambda session: _record_relocations(session, moves, identities, reason))
     except BaseException:
-        session.rollback()
         transaction.rollback()
         raise
     return len(moves), len(skipped)
+
+
+def _record_relocations(session: Session, moves: list[DownloadRelocation], identities, reason: str) -> None:
+    for move, identity in zip(moves, identities):
+        download = session.get(MediaDownloadBase, move.download_id)
+        if download is None:
+            raise RuntimeError('Download was deleted while renaming')
+        download.file_path = str(move.destination)
+        download.artifact_status, download.artifact_error = 'available', None
+        download.artifact_stat_dev, download.artifact_stat_ino = identity.stat_dev, identity.stat_ino
+        download.artifact_size_bytes, download.artifact_fingerprint = identity.size_bytes, identity.fingerprint
+        targets = dict(move.assets)
+        for asset in list(download.assets):
+            if asset.asset_key in targets:
+                asset.path = str(targets[asset.asset_key])
+            else:
+                download.assets.remove(asset)
+        record_media_download_history(session, download.id, MediaDownloadHistoryAction.ARTIFACT_RENAMED, metadata={
+            'old_path': str(move.source), 'new_path': str(move.destination),
+            'reason': reason, 'recovered': move.recovered,
+        })

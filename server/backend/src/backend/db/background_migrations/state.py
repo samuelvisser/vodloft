@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select, update
 
 from backend.db.core import get_session
+from backend.db.core import run_write_transaction
 from backend.db.models.Settings import Settings
 
 from .registry import (
@@ -39,8 +40,7 @@ def advance_background_migration_revision(
 ) -> None:
     """Advance the stored revision atomically after one migration succeeds."""
 
-    session = get_session()
-    try:
+    def work(session):
         statement = update(Settings)
         if expected_revision is None:
             statement = statement.where(Settings.background_migration_version.is_(None))
@@ -57,12 +57,8 @@ def advance_background_migration_revision(
                 "Background migration revision changed unexpectedly while advancing "
                 f"from {expected_revision!r} to {new_revision!r}."
             )
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
+
+    run_write_transaction(work)
 
 
 def validate_background_migration_state() -> tuple[str | None, str | None]:

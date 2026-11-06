@@ -11,6 +11,7 @@ import asyncio
 from sqlalchemy import func, select
 
 from backend.db.core import get_session
+from backend.db.core import run_write_transaction
 from backend.db.models import Collection
 from sources.dailywire.api.dw_api.client import MiddlewareClient
 from sources.dailywire.auth import DeviceAuthClient
@@ -31,9 +32,8 @@ def _collection_count() -> int:
 
 def _apply_square_thumbnails(thumbnails: dict[str, str]) -> int:
     """Apply only artwork present in the carousel; absent shows are expected."""
-    session = get_session()
-    updated = 0
-    try:
+    def work(session):
+        updated = 0
         for collection in session.scalars(select(Collection).order_by(Collection.id)):
             if collection.thumbnail_square_path is not None:
                 continue
@@ -44,13 +44,9 @@ def _apply_square_thumbnails(thumbnails: dict[str, str]) -> int:
 
             collection.thumbnail_square_path = square_path
             updated += 1
-        session.commit()
         return updated
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
+
+    return run_write_transaction(work)
 
 
 async def migrate(context) -> None:
