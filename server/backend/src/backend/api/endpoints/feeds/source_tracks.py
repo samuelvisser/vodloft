@@ -36,6 +36,7 @@ import requests
 from fastapi import HTTPException
 from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
 
+from backend.utils.keyed_locks import KeyedLocks
 from config import get_settings
 from config.network import is_no_internet_error
 from sources import MediaStream, MediaTracks, Site, Source
@@ -101,13 +102,9 @@ class _Kept:
 
 
 _tracks: dict[str, _Kept] = {}
-_locks: dict[str, threading.Lock] = {}
+_locks: KeyedLocks[str] = KeyedLocks()
 _guard = threading.Lock()
 
-
-def _lock_for(key: str) -> threading.Lock:
-    with _guard:
-        return _locks.setdefault(key, threading.Lock())
 
 
 def _kept_until(tracks: MediaTracks | None) -> float:
@@ -122,7 +119,7 @@ def _kept_until(tracks: MediaTracks | None) -> float:
 
 def episode_tracks(source: Source, episode: EpisodeRef, *, fresh: bool = False) -> MediaTracks:
     """The episode's tracks, looked up once and kept until shortly before their links expire."""
-    with _lock_for(episode.uuid):
+    with _locks.hold(episode.uuid):
         kept = _tracks.get(episode.uuid)
         if kept is None or fresh or kept.until <= time.time():
             try:
@@ -313,7 +310,7 @@ def parse_segment_index(data: bytes) -> SegmentIndex | None:
 
 
 def _segment_index(track: MediaStream) -> SegmentIndex:
-    with _lock_for(f"index:{track.url}"):
+    with _locks.hold(f"index:{track.url}"):
         kept = _indexes.get(track.url)
         if kept is not None and kept[0] > time.time():
             return kept[1]

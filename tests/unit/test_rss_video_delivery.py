@@ -192,7 +192,6 @@ def test_cached_mp4_is_prepared_once_and_reused(monkeypatch, tmp_path):
         ),
     )
     monkeypatch.setattr(cached_video.subprocess, "run", fake_run)
-    cached_video._CACHE_LOCKS.clear()
 
     first = cached_video.prepare_cached_mp4(
         "https://stream.dailywire.test/master.m3u8",

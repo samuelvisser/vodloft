@@ -4,11 +4,11 @@ import hashlib
 import logging
 import os
 import subprocess
-import threading
 import time
 from pathlib import Path
 from uuid import uuid4
 
+from backend.utils.keyed_locks import KeyedLocks
 from config import get_settings
 from config.network import NO_INTERNET_CONNECTION_MESSAGE, message_indicates_no_internet
 
@@ -25,8 +25,7 @@ class VideoCacheError(Exception):
         self.detail = detail
 
 _VIDEO_CACHE_DIRECTORY = "video"
-_CACHE_LOCKS: dict[Path, threading.Lock] = {}
-_CACHE_LOCKS_GUARD = threading.Lock()
+_CACHE_LOCKS: KeyedLocks[Path] = KeyedLocks()
 
 
 def _video_cache_root() -> Path:
@@ -68,11 +67,6 @@ def get_cached_mp4_size(episode_uuid: str) -> int | None:
         return path.stat().st_size
     except OSError:
         return None
-
-
-def _lock_for(path: Path) -> threading.Lock:
-    with _CACHE_LOCKS_GUARD:
-        return _CACHE_LOCKS.setdefault(path, threading.Lock())
 
 
 def _cleanup_expired_files(root: Path, *, retention_seconds: int) -> int:
@@ -127,7 +121,7 @@ def prepare_cached_mp4(source_url: str, *, episode_uuid: str) -> Path:
     except OSError as exc:
         raise VideoCacheError(503, "RSS video cache is not writable") from exc
 
-    with _lock_for(target):
+    with _CACHE_LOCKS.hold(target):
         if _is_current(target):
             try:
                 target.touch()

@@ -14,7 +14,6 @@ from __future__ import annotations
 import logging
 import re
 import subprocess
-import threading
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -24,6 +23,7 @@ from fastapi import HTTPException
 from fastapi.responses import Response, StreamingResponse
 
 from backend.services.collection_cookies import uses_cookies
+from backend.utils.keyed_locks import KeyedLocks
 from config import get_settings
 from config.network import is_no_internet_error
 from sources import MediaStream, Source
@@ -66,13 +66,8 @@ class _Kept:
 
 
 _streams: dict[tuple[str, bool], _Kept] = {}
-_locks: dict[tuple[str, bool], threading.Lock] = {}
-_guard = threading.Lock()
+_locks: KeyedLocks[tuple[str, bool]] = KeyedLocks()
 
-
-def _lock_for(key: tuple[str, bool]) -> threading.Lock:
-    with _guard:
-        return _locks.setdefault(key, threading.Lock())
 
 
 def _kept_until(stream: MediaStream | None) -> float:
@@ -100,7 +95,7 @@ def episode_stream(source: Source, episode, *, audio: bool, fresh: bool = False)
     ``fresh`` looks it up again, for a URL the site stopped accepting.
     """
     key = (episode.uuid, audio)
-    with _lock_for(key):
+    with _locks.hold(key):
         kept = _streams.get(key)
         if kept is not None and not fresh and kept.until > time.time():
             return kept.stream

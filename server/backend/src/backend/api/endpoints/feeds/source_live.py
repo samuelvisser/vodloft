@@ -14,7 +14,6 @@ import logging
 import re
 import secrets
 import subprocess
-import threading
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -24,6 +23,7 @@ import requests
 from fastapi import HTTPException
 from fastapi.responses import Response, StreamingResponse
 
+from backend.utils.keyed_locks import KeyedLocks
 from config import get_settings
 from config.network import is_no_internet_error
 from sources import LiveStream, MediaStream, Source
@@ -55,19 +55,14 @@ class _Kept:
 
 
 _kept: dict[str, _Kept] = {}
-_locks: dict[str, threading.Lock] = {}
-_guard = threading.Lock()
+_locks: KeyedLocks[str] = KeyedLocks()
 
-
-def _lock_for(key: str) -> threading.Lock:
-    with _guard:
-        return _locks.setdefault(key, threading.Lock())
 
 
 def episode_live(source: Source, episode: EpisodeRef, *, fresh: bool = False) -> LiveStream:
     """The episode's live playlists, looked up once and kept for a while: the Site's links to them
     last for hours, and each one lists the newest parts whenever it is fetched."""
-    with _lock_for(episode.uuid):
+    with _locks.hold(episode.uuid):
         kept = _kept.get(episode.uuid)
         if kept is None or fresh or kept.until <= time.time():
             try:
