@@ -23,8 +23,8 @@ class RssStreamProfile(StreamProfileBase):
         nullable=False,
     )
     proxy_source_stream: Mapped[bool] = mapped_column(
-        default=False,
-        server_default="0",
+        default=True,
+        server_default="1",
         nullable=False,
     )
     live_episode_handoff_ids: Mapped[list[int]] = mapped_column(

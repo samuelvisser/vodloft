@@ -38,7 +38,7 @@ class _RssStreamProfileAPIBaseIn(RequestBase):
         )
     )
     stream_live_episodes: bool = False
-    proxy_source_stream: bool = False
+    proxy_source_stream: bool = True
     max_items: int = Field(default=0, ge=0)
 
     @field_validator("title")
