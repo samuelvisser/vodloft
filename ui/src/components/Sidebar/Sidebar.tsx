@@ -36,9 +36,9 @@ const items: NavItem[] = [
 
 // How far the desktop sidebar shrinks its logo and footer to fit the window height, in order:
 // the full sidebar; a smaller logo with the footer links side by side; the smallest logo with the footer
-// icons and version on one row; just the house from the logo with that same footer; and no footer, with
-// its icons next to a small logo. The navigation only scrolls when even the last one is too tall.
-const FITS = ['roomy', 'compact', 'icons', 'house', 'header'] as const
+// icons and version on one row; and no footer, with its icons next to a small logo.
+// The navigation only scrolls when even the last one is too tall.
+const FITS = ['roomy', 'compact', 'icons', 'header'] as const
 type SidebarFit = typeof FITS[number]
 
 function useSidebarFit() {
@@ -98,14 +98,6 @@ export default function Sidebar() {
                         height={78}
                         decoding="sync"
                         style={{borderRadius: 2, height: 'auto'}}
-                    />
-                    <img
-                        className="sidebar-logo-house"
-                        src="/logo-wide-house.png"
-                        alt="VODLoft logo"
-                        width={44}
-                        decoding="sync"
-                        style={{height: 'auto'}}
                     />
                 </NavLink>
                 {/* The footer links, shown here only when the footer itself is left out to make room. */}

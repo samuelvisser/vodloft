@@ -151,7 +151,6 @@ body {
 
 /* A short window: the sidebar shrinks its logo and footer in steps before the navigation has to
    scroll. Sidebar.tsx picks the first step where the navigation fits. */
-.sidebar-logo-house,
 .sidebar-header-links { display: none; }
 
 @media (min-width: 901px) {
@@ -159,15 +158,11 @@ body {
   .sidebar[data-fit="icons"] .sidebar-logo,
   .sidebar[data-fit="header"] .sidebar-logo { width: 84px; }
 
-  .sidebar[data-fit="house"] .sidebar-logo { display: none; }
-  .sidebar[data-fit="house"] .sidebar-logo-house { display: block; }
-
   .sidebar[data-fit="compact"] .sidebar-footer,
-  .sidebar[data-fit="icons"] .sidebar-footer,
-  .sidebar[data-fit="house"] .sidebar-footer { padding: 8px 12px; }
+  .sidebar[data-fit="icons"] .sidebar-footer { padding: 8px 12px; }
 
   /* Footer links side by side instead of stacked. */
-  .sidebar:is([data-fit="compact"], [data-fit="icons"], [data-fit="house"]) .footer-links,
+  .sidebar:is([data-fit="compact"], [data-fit="icons"]) .footer-links,
   .sidebar[data-fit="header"] .sidebar-header-links .footer-links {
     flex-direction: row;
     flex-wrap: wrap;
@@ -175,7 +170,7 @@ body {
     gap: 2px;
     margin-bottom: 4px;
   }
-  .sidebar:is([data-fit="compact"], [data-fit="icons"], [data-fit="house"], [data-fit="header"]) .footer-link {
+  .sidebar:is([data-fit="compact"], [data-fit="icons"], [data-fit="header"]) .footer-link {
     width: auto !important;
     padding: 6px 10px;
     font-size: 13px;
@@ -183,7 +178,7 @@ body {
   .sidebar[data-fit="compact"] .version { font-size: 12px; }
 
   /* Footer icons only; the label stays for screen readers. */
-  .sidebar:is([data-fit="icons"], [data-fit="house"], [data-fit="header"]) .footer-link > span:not(.icon) {
+  .sidebar:is([data-fit="icons"], [data-fit="header"]) .footer-link > span:not(.icon) {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -192,15 +187,15 @@ body {
     white-space: nowrap;
   }
 
-  /* Icons and house: icons and version on one row. */
-  .sidebar:is([data-fit="icons"], [data-fit="house"]) .sidebar-footer {
+  /* Icons: icons and version on one row. */
+  .sidebar[data-fit="icons"] .sidebar-footer {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
   }
-  .sidebar:is([data-fit="icons"], [data-fit="house"]) .footer-links { margin: 0; }
-  .sidebar:is([data-fit="icons"], [data-fit="house"]) .version { font-size: 12px; }
+  .sidebar[data-fit="icons"] .footer-links { margin: 0; }
+  .sidebar[data-fit="icons"] .version { font-size: 12px; }
 
   /* Header: no footer; its icons sit next to the logo. */
   .sidebar[data-fit="header"] .sidebar-footer { display: none; }
