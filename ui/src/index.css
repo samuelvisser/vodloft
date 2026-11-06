@@ -149,6 +149,72 @@ body {
   }
 }
 
+/* A short window: the sidebar shrinks its logo and footer in steps before the navigation has to
+   scroll. Sidebar.tsx picks the first step where the navigation fits. */
+.sidebar-logo-house,
+.sidebar-header-links { display: none; }
+
+@media (min-width: 901px) {
+  .sidebar[data-fit="compact"] .sidebar-logo { width: 112px; }
+  .sidebar[data-fit="icons"] .sidebar-logo,
+  .sidebar[data-fit="header"] .sidebar-logo { width: 84px; }
+
+  .sidebar[data-fit="house"] .sidebar-logo { display: none; }
+  .sidebar[data-fit="house"] .sidebar-logo-house { display: block; }
+
+  .sidebar[data-fit="compact"] .sidebar-footer,
+  .sidebar[data-fit="icons"] .sidebar-footer,
+  .sidebar[data-fit="house"] .sidebar-footer { padding: 8px 12px; }
+
+  /* Footer links side by side instead of stacked. */
+  .sidebar:is([data-fit="compact"], [data-fit="icons"], [data-fit="house"]) .footer-links,
+  .sidebar[data-fit="header"] .sidebar-header-links .footer-links {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 2px;
+    margin-bottom: 4px;
+  }
+  .sidebar:is([data-fit="compact"], [data-fit="icons"], [data-fit="house"], [data-fit="header"]) .footer-link {
+    width: auto !important;
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+  .sidebar:is([data-fit="compact"], [data-fit="icons"]) .version { font-size: 12px; }
+
+  /* Footer icons only; the label stays for screen readers. */
+  .sidebar:is([data-fit="icons"], [data-fit="house"], [data-fit="header"]) .footer-link > span:not(.icon) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  /* House: icons and version on one row. */
+  .sidebar[data-fit="house"] .sidebar-footer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .sidebar[data-fit="house"] .footer-links { margin: 0; }
+  .sidebar[data-fit="house"] .version { font-size: 12px; }
+
+  /* Header: no footer; its icons sit next to the logo. */
+  .sidebar[data-fit="header"] .sidebar-footer { display: none; }
+  .sidebar[data-fit="header"] .sidebar-header {
+    justify-content: space-between !important;
+    align-items: center;
+    padding: 8px 14px 0 !important;
+  }
+  .sidebar[data-fit="header"] .sidebar-header-links { display: block; }
+  .sidebar[data-fit="header"] .sidebar-header-links .footer-links { margin: 0; gap: 0; }
+  .sidebar[data-fit="header"] .sidebar-header-links .footer-link { padding: 6px 8px; }
+  .sidebar[data-fit="header"] .sidebar-header-links .footer-meta { display: none; }
+}
+
 /* Responsive layout for small screens */
 @media (max-width: 900px) {
   .app {
