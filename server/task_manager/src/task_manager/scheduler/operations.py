@@ -1024,7 +1024,11 @@ def list_operations(
         limit: int = 100,
         requested_by_user_id: int | None = None,
 ) -> list[OperationSnapshot]:
-    """Operations, newest first. With ``requested_by_user_id``, only those that user asked for."""
+    """Operations, newest first. With ``requested_by_user_id``, only those that user asked for.
+
+    With ``relevant``, operations that are not part of another operation come
+    first, then those that are not merely queued.
+    """
     session = get_session()
     try:
         statement = select(TaskOperation).options(*_operation_run_graph())
@@ -1038,14 +1042,28 @@ def list_operations(
             statement = statement.where(TaskOperation.resource_id == resource_id)
         if kind is not None:
             statement = statement.where(TaskOperation.kind == kind)
+        order_by = [TaskOperation.created_at.desc()]
         if relevant:
             statement = statement.where(
                 (TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES))
                 | (TaskOperation.notification_seen_at.is_(None))
             )
+            # One bulk action can create thousands of child operations, more
+            # than the limit. The operations a person started and the work
+            # that is running come first, so a bulk action keeps its cancel
+            # control and running downloads keep their progress; the newest
+            # queued children are what falls off.
+            is_child = exists().where(
+                TaskOperationDependency.child_operation_id == TaskOperation.id,
+            )
+            order_by = [
+                is_child.asc(),
+                (TaskOperation.status == OperationStatus.QUEUED.value).asc(),
+                *order_by,
+            ]
         operations = list(
             session.scalars(
-                statement.order_by(TaskOperation.created_at.desc()).limit(max(1, min(limit, 500)))
+                statement.order_by(*order_by).limit(max(1, min(limit, 500)))
             )
         )
         for operation in operations:

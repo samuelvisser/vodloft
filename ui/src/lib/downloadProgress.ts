@@ -97,6 +97,10 @@ export function presentDownloadProgress(download?: MediaDownloadDomainViewRead, 
     if (operation?.status === 'SUCCEEDED') return terminal(operation.context?.is_redownload ? 'redownloaded' : 'downloaded', 'Downloaded', 'All required outputs were published successfully.', 'success')
     if (operation?.status === 'FAILED' || operation?.status === 'PARTIAL') return terminal('error', 'Failed', operation.error || operation.message || 'Download failed.', 'error')
     if (operation?.status === 'CANCELED') return terminal('canceled', 'Canceled', 'The download was canceled.', 'canceled')
+    // The live operation list holds a limited number of operations. After a
+    // bulk action queues thousands of downloads, the newest queued ones are
+    // left out of it, and the server's queue position still says they wait.
+    if (!operation && download?.queuePosition != null) return {status: 'pending', ...waitingPresentation('download_capacity'), canRetry: false}
     if (download?.artifactStatus === 'available') return terminal(download.latestTaskIsRedownload ? 'redownloaded' : 'downloaded', 'Downloaded', 'The media file is available.', 'success')
     if (download?.artifactStatus === 'missing') return terminal('missing', 'Missing', 'The downloaded file could not be found.', 'error')
     if (download?.artifactStatus === 'corrupted') return terminal('corrupted', 'Corrupted', download.artifactError || 'The downloaded file failed verification.', 'error')

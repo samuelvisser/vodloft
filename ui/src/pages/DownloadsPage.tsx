@@ -17,6 +17,8 @@ import {frontendOperationDefinitions} from '../lib/operationDefinitions'
 import {useControlOperation, useStartOperation} from '../lib/operations'
 import {applyMediaDownloadQueuePositions, useMediaDownloadsCollection} from '../lib/queries'
 import {useFilterChipPress} from '../lib/useFilterChipPress'
+import {workingPresentation} from '../lib/progressPresentation'
+import {presentOperationProgress} from '../lib/operationProgress'
 import {faIcon} from '../icons/faIcon'
 import {
     DEFAULT_DOWNLOAD_STATUS_FILTER,
@@ -34,6 +36,12 @@ import {movieExtraTypeLabel} from '../utils/movieExtras'
 import './DownloadsPage.css'
 
 type BulkAction = 'retry' | 'cancel' | 'delete-unavailable'
+
+/** A bulk action between the click and the server accepting its operation. */
+type BulkActionStart = {
+    controller: AbortController
+    cancelRequested: boolean
+}
 
 const DOWNLOAD_PAGE_SIZE = 50
 
@@ -111,6 +119,8 @@ export default function DownloadsPage() {
     )
     const [bulkActionStarting, setBulkActionStarting] = useState<BulkAction | null>(null)
     const [bulkControlBusy, setBulkControlBusy] = useState<string | null>(null)
+    const [bulkStartCanceling, setBulkStartCanceling] = useState(false)
+    const bulkStartRef = useRef<BulkActionStart | null>(null)
     const selectedStatuses = useMemo(
         () => downloadStatusesForApi(statusFilter),
         [statusFilter],
@@ -307,6 +317,8 @@ export default function DownloadsPage() {
                 : deletableCount
         if (!expectedCount || bulkOperationActive) return
 
+        const start: BulkActionStart = {controller: new AbortController(), cancelRequested: false}
+        bulkStartRef.current = start
         setBulkActionStarting(action)
         try {
             const base = (window as any).appConfig?.API_URL || '/api'
@@ -314,21 +326,35 @@ export default function DownloadsPage() {
             for (const status of selectedStatuses ?? []) params.append('status', status)
             const idsResponse = await fetch(
                 `${base}/media-downloads/as-view/action-ids?${params}`,
-                {credentials: 'include'},
+                {credentials: 'include', signal: start.controller.signal},
             )
             if (!idsResponse.ok) {
                 const {error: message} = await getErrorMessageFromResponse(idsResponse)
                 throw new Error(message || 'Could not resolve the filtered downloads')
             }
             const mediaDownloadIds = await idsResponse.json() as number[]
-            if (!mediaDownloadIds.length) return
+            if (start.cancelRequested || !mediaDownloadIds.length) return
 
-            await startOperation(`${base}/media-downloads/bulk/${action}`, {
+            // The request is not aborted: the server creates the operation even
+            // if the browser stops waiting, and its ID is needed to cancel it.
+            const accepted = await startOperation(`${base}/media-downloads/bulk/${action}`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({mediaDownloadIds}),
             })
+            if (start.cancelRequested) {
+                try {
+                    await controlOperation(accepted.operationId, 'cancel')
+                } catch (controlError) {
+                    toast.error(
+                        controlError instanceof Error && controlError.message
+                            ? controlError.message
+                            : 'Could not stop the bulk action',
+                    )
+                }
+            }
         } catch (actionError) {
+            if (start.cancelRequested) return
             const fallback = action === 'retry'
                 ? 'Could not retry the selected downloads'
                 : action === 'cancel'
@@ -336,9 +362,33 @@ export default function DownloadsPage() {
                     : 'Could not delete the selected download items'
             toast.error(actionError instanceof Error && actionError.message ? actionError.message : fallback)
         } finally {
+            bulkStartRef.current = null
             setBulkActionStarting(null)
+            setBulkStartCanceling(false)
         }
     }
+
+    const cancelStartingBulkAction = () => {
+        const start = bulkStartRef.current
+        if (!start || start.cancelRequested) return
+        start.cancelRequested = true
+        start.controller.abort()
+        setBulkStartCanceling(true)
+    }
+
+    const bulkCancelControl = (action: BulkAction, operation: TaskOperationRead | undefined) => ({
+        // The page tracks the bulk operation itself, so it hands the button the
+        // same batch progress that movie and profile re-downloads show.
+        presentation: operation
+            ? presentOperationProgress(operation)
+            : bulkStartCanceling && bulkActionStarting === action
+                ? workingPresentation('Canceling')
+                : undefined,
+        onCancel: operation
+            ? () => void cancelBulkOperation(operation)
+            : bulkActionStarting === action ? cancelStartingBulkAction : undefined,
+        cancelDisabled: operation ? bulkControlBusy === operation.id : bulkStartCanceling,
+    })
 
     const cancelBulkOperation = async (operation: TaskOperationRead) => {
         if (bulkControlBusy) return
@@ -470,8 +520,7 @@ export default function DownloadsPage() {
                             starting={bulkActionStarting === 'retry'}
                             active={retryAllOperation !== undefined}
                             ariaLabel={`Retry ${retryableCount} filtered retryable downloads`}
-                            onCancel={retryAllOperation ? () => void cancelBulkOperation(retryAllOperation) : undefined}
-                            cancelDisabled={bulkControlBusy === retryAllOperation?.id}
+                            {...bulkCancelControl('retry', retryAllOperation)}
                             cancelLabel="Cancel retry all"
                         />
                     )}
@@ -486,8 +535,7 @@ export default function DownloadsPage() {
                             starting={bulkActionStarting === 'cancel'}
                             active={cancelAllOperation !== undefined}
                             ariaLabel={`Cancel ${cancellableCount} filtered active downloads`}
-                            onCancel={cancelAllOperation ? () => void cancelBulkOperation(cancelAllOperation) : undefined}
-                            cancelDisabled={bulkControlBusy === cancelAllOperation?.id}
+                            {...bulkCancelControl('cancel', cancelAllOperation)}
                             cancelLabel="Stop cancel all"
                         />
                     )}
@@ -502,8 +550,7 @@ export default function DownloadsPage() {
                             starting={bulkActionStarting === 'delete-unavailable'}
                             active={deleteUnavailableOperation !== undefined}
                             ariaLabel={`Delete ${deletableCount} filtered unavailable download records`}
-                            onCancel={deleteUnavailableOperation ? () => void cancelBulkOperation(deleteUnavailableOperation) : undefined}
-                            cancelDisabled={bulkControlBusy === deleteUnavailableOperation?.id}
+                            {...bulkCancelControl('delete-unavailable', deleteUnavailableOperation)}
                             cancelLabel="Stop deleting unavailable download records"
                         />
                     )}
