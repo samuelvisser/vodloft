@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.services.check_frequency import full_scan_done, full_scan_due
-from backend.db.models import Episode, Season, Collection
+from backend.db.models import Episode, Collection
 from backend.services.collection_assets import update_collection_artwork_metadata
 from backend.services.thumbnails import newest_media_item_id, take_first_frames
 from backend.types.dailywire_user_info import DwMembershipLevel
@@ -30,7 +30,6 @@ from ...helpers.episodes.mapper import (
 )
 from ...helpers.episodes.quarantine import vacated_canonical_identifiers_for_collection
 from ...helpers.episodes.same_episode import (
-    PENDING_EPISODE_PUBLISH_STATUSES,
     reconcile_single_pending_episode_slug,
 )
 from ...helpers.episodes.save import (
@@ -43,7 +42,6 @@ from ...helpers.listed_collections import index_listed_collection
 from ...helpers.progress import ProgressBounds, update_progress
 from ...helpers.seasons import create_season_by_dw_season
 from ...types.general import RecordOrder
-from ..monitor_pending_episode.scheduling import MONITOR_REQUESTED_EVENT
 
 
 logger = logging.getLogger(__name__)
@@ -237,14 +235,6 @@ async def _fetch_collection(
     latest_final_season_id = latest_final_episode.season_id if latest_final_episode is not None else None
     vacated_identifiers = vacated_canonical_identifiers_for_collection(s, collection_id)
 
-    monitor_requests: dict[int, dict] = {
-        episode.id: _monitor_request_for_db_episode(collection, episode)
-        for episode in s.scalars(select(Episode).where(
-            Episode.collection_id == collection_id,
-            Episode.publish_status.in_(PENDING_EPISODE_PUBLISH_STATUSES),
-        ))
-    }
-
     # The local snapshot is complete. Release its transaction before the first
     # Daily Wire request so an outage cannot pin a DB connection per worker.
     s.rollback()
@@ -354,18 +344,12 @@ async def _fetch_collection(
         season = get_season_from_list_by_id(collection.seasons, season_id)
         if season is None:
             continue
-        if reconcile_single_pending_episode_slug(
+        reconcile_single_pending_episode_slug(
             s,
             collection=collection,
             season=season,
             remote_records=records,
-        ) is not None:
-            # Refresh requests with the newly adopted slug while keeping immutable id identity.
-            for episode in s.scalars(select(Episode).where(
-                Episode.collection_id == collection_id,
-                Episode.publish_status.in_(PENDING_EPISODE_PUBLISH_STATUSES),
-            )):
-                monitor_requests[episode.id] = _monitor_request_for_db_episode(collection, episode)
+        )
 
     candidate_remote_slugs = {
         record.slug
@@ -424,10 +408,9 @@ async def _fetch_collection(
     if total == 0:
         for key, value in identifier_max_values.items():
             collection.set_meta(key=key, value=str(value))
-        _queue_monitor_requests(s, monitor_requests.values())
         _queue_collection_indexed(s, collection=collection, indexed_count=0)
         s.commit()
-        update_progress(progress, 100, _completion_message(0, len(monitor_requests)))
+        update_progress(progress, 100, "Indexed 0 episode(s)")
         return 0
 
     # Slug reconciliation is now complete. Persist it before resolving individual
@@ -473,15 +456,13 @@ async def _fetch_collection(
             s,
             collection=collection,
             saved_episodes=saved_episodes,
-            monitor_requests=monitor_requests,
         )
 
-    _queue_monitor_requests(s, monitor_requests.values())
     from backend.services.custom_indexes import request_collection_custom_index_reconciliation
     request_collection_custom_index_reconciliation(s, collection.id)
     _queue_collection_indexed(s, collection=collection, indexed_count=total)
     s.commit()
-    update_progress(progress, 100, _completion_message(total, len(monitor_requests)))
+    update_progress(progress, 100, f"Indexed {total} episode(s)")
     return total
 
 
@@ -518,7 +499,6 @@ def _announce_new_episodes(
     *,
     collection: Collection,
     saved_episodes: list[SavedEpisode],
-    monitor_requests: dict[int, dict],
 ) -> None:
     for saved in saved_episodes:
         if not saved.detail_resolved:
@@ -531,26 +511,6 @@ def _announce_new_episodes(
             new_status=saved.status,
             was_created=True,
         )
-        if saved.status.value in PENDING_EPISODE_PUBLISH_STATUSES:
-            monitor_requests[saved.episode.id] = _monitor_request_for_db_episode(collection, saved.episode)
-
-
-def _monitor_request_for_db_episode(collection: Collection, episode: Episode) -> dict:
-    return {
-        "resource_id": episode.id,
-        "slug": episode.slug,
-        "collection_id": collection.id,
-        "collection_slug": collection.slug,
-        "season_id": episode.season_id,
-        "episode_identifier": episode.episode_identifier,
-        "episode_index": episode.index,
-        "status": episode.publish_status,
-    }
-
-
-def _queue_monitor_requests(s: Session, requests) -> None:
-    for request in requests:
-        queue_event(s, MONITOR_REQUESTED_EVENT, request)
 
 
 def _queue_collection_indexed(s: Session, *, collection: Collection, indexed_count: int) -> None:
@@ -568,12 +528,6 @@ def _queue_collection_indexed(s: Session, *, collection: Collection, indexed_cou
 
     start_waiting_scans(s, collection)
     start_waiting_import_steps(s, collection)
-
-
-def _completion_message(indexed_count: int, monitor_count: int) -> str:
-    if monitor_count:
-        return f"Indexed {indexed_count} episode(s); ensured {monitor_count} pending episode monitor(s)"
-    return f"Indexed {indexed_count} episode(s); no pending episodes found"
 
 
 def _print_dry_run_report(collection: Collection, ep_map_asc, identifier_max_values: IdentifierMaxValues) -> None:

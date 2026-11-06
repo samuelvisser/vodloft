@@ -2,65 +2,10 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
-from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
-
-
-class FakeScheduler:
-    def __init__(self) -> None:
-        self.job: dict | None = None
-    def add_job(self, function, **kwargs):
-        self.job = {"function": function, **kwargs}
-        return SimpleNamespace(id=kwargs["id"])
-
-
-def test_recurring_pending_monitor_disables_task_retries(monkeypatch):
-    from task_manager.tasks.workers.monitor_pending_episode import scheduling
-    scheduler = FakeScheduler()
-    monkeypatch.setattr(scheduling, "start_scheduler", lambda: scheduler)
-    monkeypatch.setattr(
-        scheduling, "get_settings",
-        lambda: SimpleNamespace(
-            new_episode_schedule=SimpleNamespace(
-                monitor_pending_episode_cron_enabled=True,
-                monitor_pending_episode_cron="*/2 * * * *",
-            ),
-            dw_timeout=SimpleNamespace(min_slow_request_ms=2 * 60 * 1000),
-            timezone="Europe/Amsterdam",
-        ),
-    )
-    scheduling.schedule_episode_monitor(resource_id=501)
-    assert scheduler.job is not None
-    assert scheduler.job["kwargs"]["def_key"] == "monitor_pending_episode"
-    assert scheduler.job["kwargs"]["max_retries"] == 0
-    assert scheduler.job["max_instances"] == 1
-    assert scheduler.job["coalesce"] is True
-
-
-def test_recurring_pending_monitor_can_be_disabled(monkeypatch):
-    from task_manager.tasks.workers.monitor_pending_episode import scheduling
-
-    monkeypatch.setattr(
-        scheduling,
-        "get_settings",
-        lambda: SimpleNamespace(
-            new_episode_schedule=SimpleNamespace(
-                monitor_pending_episode_cron_enabled=False,
-                monitor_pending_episode_cron="*/1 * * * *",
-            ),
-            timezone="Europe/Amsterdam",
-        ),
-    )
-    monkeypatch.setattr(
-        scheduling,
-        "start_scheduler",
-        lambda: pytest.fail("disabled pending monitor should not start the scheduler"),
-    )
-
-    assert scheduling.schedule_episode_monitor(resource_id=501) is None
 
 
 def _episode_record(slug: str):
@@ -144,8 +89,7 @@ def test_pending_monitor_marks_unreconciled_404_as_no_usable_media(monkeypatch):
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
     monkeypatch.setattr(service, "_try_reconcile_slug_after_404", lambda *args, **kwargs: False)
     result = asyncio.run(service.run_monitor_pending_episode(
-        session, episode_id=episode.id, episode_slug=episode.slug, collection_slug=collection.slug,
-        episode_identifier=episode.episode_identifier, episode_index=episode.index,
+        session, episode_id=episode.id,
     ))
     assert result is EpisodePublishStatus.NO_USABLE_MEDIA
     session.expire_all()
@@ -171,8 +115,7 @@ def test_pending_monitor_still_raises_non_404_dailywire_errors(monkeypatch):
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
     with pytest.raises(MiddlewareAPIError, match="503"):
         asyncio.run(service.run_monitor_pending_episode(
-            session, episode_id=episode.id, episode_slug=episode.slug, collection_slug=collection.slug,
-            episode_identifier=episode.episode_identifier, episode_index=episode.index,
+            session, episode_id=episode.id,
         ))
     session.close()
     engine.dispose()

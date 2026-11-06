@@ -303,3 +303,104 @@ def test_a_stream_that_comes_back_is_followed_again(pending, session):
     episode = _episode(session, "back")
     assert result.recovered == 1
     assert (episode.publish_status, episode.episode_identifier) == ("scheduled", identifier)
+
+
+# --- The Daily Wire's pending episodes -----------------------------------------------------------
+
+
+@pytest.fixture
+def monitored(monkeypatch):
+    """The Daily Wire's own monitor, answering from a table instead of The Daily Wire."""
+    from types import SimpleNamespace
+
+    from backend.db.models import Episode
+    from task_manager.tasks.workers.monitor_pending_episode import pending_checks
+
+    monkeypatch.setattr(pending_checks, "_last_checked", {})
+    schedule = SimpleNamespace(monitor_pending_episode_cron_enabled=True, monitor_pending_episode_cron="*/10 * * * *")
+    monkeypatch.setattr(pending_checks, "get_settings", lambda: SimpleNamespace(
+        new_episode_schedule=schedule, dw_timeout=SimpleNamespace(min_slow_request_ms=1000), timezone="UTC",
+    ))
+    answers: dict[int, EpisodePublishStatus | Exception] = {}
+    checked: list[int] = []
+
+    async def monitor(s, *, episode_id):
+        checked.append(episode_id)
+        answer = answers.get(episode_id, EpisodePublishStatus.LIVE)
+        if isinstance(answer, Exception):
+            raise answer
+        s.get(Episode, episode_id).publish_status = answer.value
+        s.commit()
+        return answer
+
+    monkeypatch.setattr(pending_checks, "run_monitor_pending_episode", monitor)
+    return SimpleNamespace(schedule=schedule, answers=answers, checked=checked)
+
+
+def _dailywire_episode(session, slug: str, status: str = "live") -> int:
+    from backend.db.models import Episode, Season
+
+    collection = _collection(session, f"show-{slug}", source_key="dailywire")
+    season = Season(collection=collection, index=1, slug="season-1", name="One")
+    episode = Episode(
+        uuid=f"uuid-{slug}", type="episode", source_key="dailywire", collection=collection, season=season, index=1,
+        episode_identifier=f"ep.{slug}", slug=slug, title=slug, publish_status=status, metadata_is_final=False,
+        sharing_url=f"https://example.test/{slug}",
+    )
+    session.add(episode)
+    session.commit()
+    return episode.id
+
+
+def _monitor(session, now, **kwargs):
+    import asyncio
+
+    from task_manager.tasks.workers.monitor_pending_episode.pending_checks import run_pending_monitors
+
+    return asyncio.run(run_pending_monitors(session, now=now, **kwargs))
+
+
+def test_a_pending_daily_wire_episode_is_looked_up_on_the_monitor_schedule(monitored, session):
+    live = _dailywire_episode(session, "live")
+    _dailywire_episode(session, "done", status="published_final")
+
+    # Every pending episode is looked up once, also right after a restart.
+    assert _monitor(session, NOW).checked == 1
+    assert monitored.checked == [live]
+    # Not again until the schedule comes round, at ten past.
+    assert _monitor(session, NOW + timedelta(minutes=9)).checked == 0
+    assert _monitor(session, NOW + timedelta(minutes=10)).checked == 1
+
+    monitored.answers[live] = EpisodePublishStatus.PUBLISHED_FINAL
+    result = _monitor(session, NOW + timedelta(minutes=20))
+    assert (result.checked, result.changed, result.published) == (1, 1, 1)
+    # A published episode is no longer followed.
+    assert _monitor(session, NOW + timedelta(minutes=30)).checked == 0
+
+
+def test_a_failed_daily_wire_lookup_is_tried_again_on_the_next_round(monitored, session):
+    flaky = _dailywire_episode(session, "flaky")
+    gone = _dailywire_episode(session, "gone", status="scheduled")
+    monitored.answers[flaky] = RuntimeError("HTTP error 503")
+    monitored.answers[gone] = EpisodePublishStatus.NO_USABLE_MEDIA
+
+    result = _monitor(session, NOW)
+    assert (result.checked, result.failed, result.gone) == (2, 1, 1)
+
+    del monitored.answers[flaky]
+    assert _monitor(session, NOW + timedelta(minutes=10)).checked == 1
+    assert monitored.checked == [flaky, gone, flaky]
+
+
+def test_the_daily_wire_monitor_follows_its_setting_and_run_now(monitored, session):
+    episode = _dailywire_episode(session, "live")
+
+    monitored.schedule.monitor_pending_episode_cron_enabled = False
+    assert _monitor(session, NOW).checked == 0
+    # "Run now" looks every pending episode up, also with the schedule off.
+    assert _monitor(session, NOW, everything=True).checked == 1
+
+    monitored.schedule.monitor_pending_episode_cron_enabled = True
+    assert _monitor(session, NOW + timedelta(minutes=1)).checked == 0
+    assert _monitor(session, NOW + timedelta(minutes=1), everything=True).checked == 1
+    assert monitored.checked == [episode, episode]

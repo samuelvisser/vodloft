@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -64,23 +63,16 @@ class MonitorPendingEpisodesCronOperation(_SettingsCronOperation):
     kind = "system.cron.monitor_pending_episodes"
     title_text = "Monitor pending episodes"
 
-    def __init__(self, episode_ids: Sequence[int]) -> None:
-        super().__init__()
-        self.episode_ids = tuple(dict.fromkeys(int(episode_id) for episode_id in episode_ids))
-
     def targets(self) -> tuple[OperationTargetSpec, ...]:
-        return tuple(
+        # "Run now" looks every pending Daily Wire episode up, due or not.
+        return (
             OperationTargetSpec(
-                task_key="monitor_pending_episode",
-                resource_type="episode",
-                resource_id=episode_id,
-                slot_key=f"episode:{episode_id}",
-            )
-            for episode_id in self.episode_ids
+                task_key="check_pending_episodes",
+                resource_type="system",
+                resource_id=0,
+                task_kwargs={"monitor_everything": True},
+            ),
         )
-
-    def context(self) -> dict[str, object]:
-        return {"episodes_requested": len(self.episode_ids)}
 
 
 class MonitorNoUsableMediaCronOperation(_SingleTaskSettingsCronOperation):

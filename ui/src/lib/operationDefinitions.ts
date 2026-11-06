@@ -389,7 +389,7 @@ function invalidatePendingEpisodeCron(
   invalidations: InvalidationCollector,
 ) {
   invalidateEpisodeAndDownloadCronJob(queryClient, operation, invalidations)
-  invalidateTaskLedgerDefinition(queryClient, 'monitor_pending_episode', invalidations)
+  invalidateTaskLedgerDefinition(queryClient, 'check_pending_episodes', invalidations)
 }
 
 function invalidateNoUsableMediaCron(

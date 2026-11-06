@@ -21,11 +21,10 @@ from backend.utils.episode_publication_timing import (
 )
 from sources.dailywire.api.dw_api.client import MiddlewareAPIError, MiddlewareClient
 from sources.dailywire.api.records import DwEpisodeDetailRecord
-from task_manager.events.transactional import queue_event
 from task_manager.scheduler.db import TaskOperation, TaskOperationTarget
 from task_manager.scheduler.executor import trigger_now
 from task_manager.scheduler.types import OperationStatus
-from ...helpers.episodes.events import episode_event_payload, queue_episode_status_events
+from ...helpers.episodes.events import queue_episode_status_events
 from ...helpers.episodes.identifier_reconciliation import reconcile_episode_identifier
 from ...helpers.episodes.metadata import episode_refresh_offsets, update_episode_from_dailywire
 from ...helpers.episodes.no_show import is_no_show_today_slug
@@ -33,7 +32,6 @@ from ...helpers.episodes.same_episode import PENDING_EPISODE_PUBLISH_STATUSES
 from ...helpers.episodes.status import observe_episode_detail, resolve_episode_status
 from ...helpers.refreshed_metadata import check_upgrades_after_refresh
 from ...helpers.episodes.unusable_media import NoUsableMediaReason, mark_episode_no_usable_media
-from ..monitor_pending_episode.scheduling import MONITOR_REQUESTED_EVENT
 from .scheduling import remove_episode_metadata_jobs, schedule_remaining_metadata_checks
 
 
@@ -273,11 +271,7 @@ def _refresh_episode_from_dailywire(
             new_status=new_status,
             was_created=False,
         )
-        queue_event(
-            s,
-            MONITOR_REQUESTED_EVENT,
-            episode_event_payload(episode=episode, collection=collection, old_status=old_status),
-        )
+        # The pending check sweep follows it again from here.
         s.flush()
         return False
 

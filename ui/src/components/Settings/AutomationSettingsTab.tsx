@@ -178,7 +178,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     runNow={{
                         definition: frontendOperationDefinitions['system.cron.monitor_pending_episodes'],
                         job: 'monitor-pending-episodes',
-                        ledger: {definitionKey: 'monitor_pending_episode', resourceType: 'episode'},
+                        ledger: {definitionKey: 'check_pending_episodes', resourceType: 'system'},
                     }}
                     value={draft.newEpisodeSchedule.monitorPendingEpisodeCron}
                     enabled={draft.newEpisodeSchedule.monitorPendingEpisodeCronEnabled}
@@ -194,12 +194,12 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     help={
                         <ReadMore summary={<span>Monitors scheduled, delayed, live, processing and countdown episodes.</span>}>
                             <p>
-                                This cron schedule determines how often VODLoft monitors an episode after the <code>Find new episodes</code> worker
-                                found it.
+                                This cron schedule determines how often VODLoft looks up a pending episode of The Daily Wire after the{' '}
+                                <code>Find new episodes</code> worker found it. Upcoming and live YouTube videos follow their own rhythm.
                             </p>
                             <p>
-                                This worker is expected to run quite frequently. Make sure to not set it to run more often than once every two
-                                minutes.
+                                Pending episodes are checked every two minutes at most, so a schedule that runs more often than that has no
+                                extra effect.
                             </p>
                             <p>
                                 Once an episode becomes final, <code>Metadata refresh</code> takes over. If it enters <code>no_usable_media</code>,

@@ -17,7 +17,7 @@ _WORKER_EXPORTS = {
     "download_profile_worker": ".workers.download_profile_worker",
     "finalize_countdown_downloads": ".workers.finalize_countdown_downloads",
     "reconcile_collection_assets": ".workers.reconcile_collection_assets",
-    "monitor_pending_episode": ".workers.monitor_pending_episode",
+    "check_pending_episodes": ".workers.monitor_pending_episode",
     "refresh_episode_metadata": ".workers.refresh_episode_metadata",
     "refresh_metadata": ".workers.refresh_metadata",
     "rename_file_worker": ".workers.rename_file_worker",

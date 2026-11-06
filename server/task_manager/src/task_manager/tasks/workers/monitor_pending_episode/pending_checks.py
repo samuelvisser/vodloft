@@ -1,8 +1,8 @@
-"""Following upcoming and live episodes of Sources with ``Feature.PENDING_CHECKS``, such as yt-dlp.
+"""Following upcoming and live episodes until they are published.
 
-The Daily Wire's episodes get a monitor job each. These episodes are swept
-instead, like the metadata refresh does: the sweep runs every couple of minutes
-and looks up the episodes that are due, through ``Source.check_pending``.
+One sweep runs every couple of minutes and looks up the episodes that are due.
+Episodes of Sources with ``Feature.PENDING_CHECKS``, such as yt-dlp, are looked
+up together through ``Source.check_pending``:
 
 - An upcoming episode is looked up every hour, and often from 15 minutes before
   it is due to start until it goes live. One that is more than an hour late is
@@ -16,6 +16,11 @@ and looks up the episodes that are due, through ``Source.check_pending``.
   comes back, and deleted after the same grace period. A lookup that fails for
   another reason is just tried again later.
 
+Episodes of a Source that has live episodes but no pending checks, which is The
+Daily Wire, are looked up one by one by its own monitor, on the "Monitor pending
+episodes" schedule from the settings. The monitor also hands an episode over to
+the metadata refresh or to the no-usable-media checks.
+
 Nothing is stored per episode: the sweep remembers when it last looked each one
 up, so after a restart every one of them is looked up once.
 """
@@ -26,6 +31,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -33,6 +39,11 @@ from backend.db.datetime_types import utc_datetime
 from backend.db.models import Episode
 from backend.types.episode_types import PENDING_EPISODE_PUBLISH_STATUSES, EpisodePublishStatus
 from config import get_settings
+from config.settings.cron_validation import (
+    WorkerCronExpressionError,
+    WorkerCronIntervalError,
+    validate_worker_cron_interval,
+)
 from sources import Feature, ItemRef, VideoDetails, all_sources, get_source
 from ...helpers.episodes.events import queue_episode_status_events
 from ...helpers.episodes.quarantine import restore_quarantined_identifier
@@ -46,6 +57,7 @@ from ...helpers.episodes.unusable_media import (
 )
 from ...helpers.listed_collections import date_based_identifier
 from ...helpers.refreshed_metadata import apply_refreshed_details
+from .service import run_monitor_pending_episode
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +125,13 @@ class PendingCheckResult:
         return vars(self)
 
 
+def _forget_unfollowed(s: Session) -> None:
+    """A published or deleted episode is no longer followed."""
+    followed = set(s.scalars(select(Episode.id).where(Episode.publish_status.in_(_FOLLOWED))))
+    for episode_id in set(_last_checked) - followed:
+        del _last_checked[episode_id]
+
+
 def _due(s: Session, source_keys: list[str], now: datetime) -> list[_Pending]:
     rows = s.execute(
         select(Episode.id, Episode.source_key, Episode.source_slug, Episode.sharing_url, Episode.publish_status,
@@ -120,9 +139,6 @@ def _due(s: Session, source_keys: list[str], now: datetime) -> list[_Pending]:
         .where(Episode.source_key.in_(source_keys), Episode.publish_status.in_(_FOLLOWED))
         .order_by(Episode.id)
     ).all()
-    # A published or deleted episode is no longer followed.
-    for episode_id in set(_last_checked) - {row[0] for row in rows}:
-        del _last_checked[episode_id]
     due = []
     for episode_id, source_key, slug, url, status, scheduled in rows:
         scheduled = utc_datetime(scheduled) if scheduled is not None else None
@@ -201,6 +217,7 @@ def _gone(s: Session, episode: Episode, result: PendingCheckResult, now: datetim
 def run_pending_checks(s: Session, *, now: Optional[datetime] = None) -> PendingCheckResult:
     now = utc_datetime(now or datetime.now(timezone.utc))
     source_keys = [source.id for source in all_sources() if source.has(Feature.PENDING_CHECKS)]
+    _forget_unfollowed(s)
     due = _due(s, source_keys, now)
     # No transaction stays open while the Sources look episodes up.
     s.rollback()
@@ -224,4 +241,88 @@ def run_pending_checks(s: Session, *, now: Optional[datetime] = None) -> Pending
         else:
             result.failed += 1
         s.commit()
+    return result
+
+
+def _monitor_schedule() -> Optional[CronTrigger]:
+    """The "Monitor pending episodes" schedule, or None when it is off or cannot be used."""
+    schedule = get_settings().new_episode_schedule
+    if not schedule.monitor_pending_episode_cron_enabled:
+        return None
+    settings = get_settings()
+    try:
+        validate_worker_cron_interval(
+            schedule.monitor_pending_episode_cron,
+            min_interval_ms=settings.dw_timeout.min_slow_request_ms,
+            setting_name="Monitor pending episodes",
+            field_path=("new_episode_schedule", "monitor_pending_episode_cron"),
+        )
+        return CronTrigger.from_crontab(schedule.monitor_pending_episode_cron, timezone=settings.timezone)
+    except (WorkerCronExpressionError, WorkerCronIntervalError, TypeError, ValueError) as exc:
+        logger.error("Cannot monitor pending episodes because the schedule is invalid: %s", exc)
+        return None
+
+
+def _monitored(source) -> bool:
+    return source.has(Feature.LIVE_EPISODES) and not source.has(Feature.PENDING_CHECKS)
+
+
+def _monitor_due(s: Session, now: datetime, *, everything: bool) -> list[int]:
+    source_keys = [source.id for source in all_sources() if _monitored(source)]
+    trigger = _monitor_schedule()
+    if not source_keys or (trigger is None and not everything):
+        return []
+    episode_ids = s.scalars(
+        select(Episode.id)
+        .where(
+            Episode.source_key.in_(source_keys),
+            Episode.publish_status.in_([status.value for status in PENDING_EPISODE_PUBLISH_STATUSES]),
+        )
+        .order_by(Episode.id)
+    ).all()
+    due = []
+    for episode_id in episode_ids:
+        last = _last_checked.get(episode_id)
+        # Due once the schedule has come round since the last lookup.
+        if everything or last is None or trigger.get_next_fire_time(None, last + timedelta(seconds=1)) <= now:
+            due.append(episode_id)
+    return due
+
+
+async def run_pending_monitors(
+    s: Session,
+    *,
+    result: Optional[PendingCheckResult] = None,
+    now: Optional[datetime] = None,
+    everything: bool = False,
+) -> PendingCheckResult:
+    """Look up each due episode of a monitored Source, one after another.
+
+    ``everything`` looks up every one of them now, as "Run now" in the settings does.
+    """
+    now = utc_datetime(now or datetime.now(timezone.utc))
+    result = result or PendingCheckResult()
+    _forget_unfollowed(s)
+    due = _monitor_due(s, now, everything=everything)
+    s.rollback()
+    for episode_id in due:
+        _last_checked[episode_id] = now
+        result.checked += 1
+        episode = s.get(Episode, episode_id)
+        if episode is None:
+            continue
+        old_status = episode.publish_status
+        try:
+            new_status = await run_monitor_pending_episode(s, episode_id=episode_id)
+        except Exception:
+            s.rollback()
+            logger.warning("Could not check pending episode %s", episode_id, exc_info=True)
+            result.failed += 1
+            continue
+        if new_status.value != old_status:
+            result.changed += 1
+        if new_status is EpisodePublishStatus.NO_USABLE_MEDIA:
+            result.gone += 1
+        elif new_status not in PENDING_EPISODE_PUBLISH_STATUSES:
+            result.published += 1
     return result
