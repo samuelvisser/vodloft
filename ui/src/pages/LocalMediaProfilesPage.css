@@ -65,6 +65,12 @@
 }
 
 @media (max-width: 640px) {
+  /* Mobile detail values are right-aligned; a path reads better from the left. */
+  .local-media-profile-output-template,
+  .local-media-profile-output-template .cm-line {
+    text-align: left;
+  }
+
   .local-media-profile-output-template .cm-line {
     display: -webkit-box;
     overflow: hidden;

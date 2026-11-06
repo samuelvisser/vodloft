@@ -1,7 +1,7 @@
 import CodeMirror from '@uiw/react-codemirror'
 import {EditorView} from '@codemirror/view'
 
-import {outputTemplateSyntaxExtensions} from './outputTemplateCodeMirror'
+import {keepExpressionsTogether, outputTemplateSyntaxExtensions} from './outputTemplateCodeMirror'
 import {
     parseOutputTemplate,
     renderCompactOutputTemplate,
@@ -26,6 +26,7 @@ export type ReadOnlyOutputTemplateCodeProps = {
 const readOnlyCodeExtensions = [
     ...outputTemplateSyntaxExtensions,
     EditorView.lineWrapping,
+    keepExpressionsTogether,
 ]
 
 export default function ReadOnlyOutputTemplateCode({

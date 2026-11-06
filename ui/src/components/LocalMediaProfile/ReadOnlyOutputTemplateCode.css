@@ -35,3 +35,8 @@
 .read-only-output-template-code-editor .cm-line {
     padding: 0 10px;
 }
+
+/* A wrapped template breaks between variables, never inside one. */
+.read-only-output-template-code-editor .cm-jinja-expression {
+    white-space: nowrap;
+}
