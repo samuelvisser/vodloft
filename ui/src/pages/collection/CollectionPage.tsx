@@ -175,6 +175,8 @@ export default function CollectionPage() {
     () => id ? getEpisodePreviewTotal(id) : undefined,
     [id],
   )
+  // A seasonal collection orders each season; the preview of every episode is always newest first.
+  const newestFirst = collection?.episodeOrder !== 'oldest_first'
   const cachedPreviewEpisodesForView = useMemo(() => {
     if (!cachedPreviewEpisodes) return []
     const ofTypes = typeFiltered
@@ -184,8 +186,8 @@ export default function CollectionPage() {
     if (selectedSeasonId === null) return []
     return ofTypes
       .filter((episode) => episode.seasonId === selectedSeasonId)
-      .sort((a, b) => a.index - b.index)
-  }, [cachedPreviewEpisodes, isSeasonal, selectedSeasonId, typeFiltered, episodeTypeFilter])
+      .sort((a, b) => newestFirst ? b.index - a.index : a.index - b.index)
+  }, [cachedPreviewEpisodes, isSeasonal, selectedSeasonId, typeFiltered, episodeTypeFilter, newestFirst])
   const fetchedEpisodes = useMemo(
     () => episodePagesData?.pages.flatMap((page) => page.items) ?? [],
     [episodePagesData],

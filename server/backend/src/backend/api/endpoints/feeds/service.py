@@ -29,7 +29,7 @@ from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.download_profile_types import EpIdType, MediaDownloadArtifactStatus
 from backend.types.episode_types import EpisodeExtraType, EpisodePublishStatus
 from backend.types.local_media_profile_types import PREFERRED_FORMAT_HEIGHTS, PreferredFormat
-from backend.types.collection_types import EpisodeIdentifier, CollectionType
+from backend.types.collection_types import EpisodeIdentifier, EpisodeOrder
 from backend.types.stream_profile_types import (
     RSS_AUDIO_PRIMARY_OUTPUT_MODES,
     RSS_HLS_OUTPUT_MODES,
@@ -1071,12 +1071,14 @@ def render_rss_feed(
     _sub_text(channel, "generator", "VODLoft")
     _sub_text(channel, "itunes:author", collection.author_name)
     _sub_text(channel, "itunes:explicit", "false")
+    # The items stay newest first, as feeds list them; itunes:type tells podcast apps which way to show
+    # them, and a serial show's episodes by season.
     _sub_text(
         channel,
         "itunes:type",
         (
             "episodic"
-            if collection.type == CollectionType.PODCAST.value
+            if collection.episode_order == EpisodeOrder.NEWEST_FIRST.value
             else "serial"
         ),
     )

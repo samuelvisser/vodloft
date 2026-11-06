@@ -237,7 +237,7 @@ def update_collection(s: Session, collection_slug: str, body: CollectionAPIUpdat
         raise HTTPException(status_code=404, detail="Collection not found")
 
     left_out = {
-        name for name in ("membership_level", "ytdlp_options", "cookies_mode", "check_frequency", "check_cron")
+        name for name in ("membership_level", "ytdlp_options", "cookies_mode", "episode_order", "check_frequency", "check_cron")
         if getattr(body, name) is None
     }
     update_database_fields(collection, body, exclude_fields=left_out or None)

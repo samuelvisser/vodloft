@@ -18,6 +18,13 @@ export const EpisodeIdentifierReg = createSelectRegistry("EpisodeIdentifier", {
 });
 export type EpisodeIdentifierValue = (typeof EpisodeIdentifierReg)["values"][number];
 
+// EpisodeOrder: which way a collection lists its episodes, within each season for a seasonal collection
+export const EpisodeOrderReg = createSelectRegistry("EpisodeOrder", {
+    newest_first: {label: "Newest first"},
+    oldest_first: {label: "Oldest first"},
+});
+export type EpisodeOrderValue = (typeof EpisodeOrderReg)["values"][number];
+
 /** Build a select registry for Collections from an array (no memoization). */
 export function buildCollectionSelectRegistry(collections: readonly CollectionRead[] | undefined | null): SelectRegistry {
     const spec: Record<string, { label: string }> = {}

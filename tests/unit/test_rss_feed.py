@@ -448,7 +448,8 @@ def test_seasonal_feed_emits_apple_and_podcasting20_numbering(db_session):
 
     xml = render_rss_feed(db_session, _FakeRequest(), profile).decode()
 
-    assert "<itunes:type>episodic</itunes:type>" in xml
+    # A seasonal collection starts each season at its first episode, so apps get a serial show.
+    assert "<itunes:type>serial</itunes:type>" in xml
     assert "<itunes:season>2</itunes:season>" in xml
     assert "<itunes:episode>7</itunes:episode>" in xml
     assert "<itunes:episodeType>full</itunes:episodeType>" in xml
@@ -981,3 +982,25 @@ def test_a_downloaded_audio_enclosure_gives_the_file_size(db_session, tmp_path):
 
     # The file's own ten bytes, not the 57,600,000 that an hour streamed at 128 kbit/s would get.
     assert 'length="10"' in xml
+
+
+def test_feed_type_follows_the_collection_episode_order(db_session):
+    from backend.api.endpoints.feeds.service import render_rss_feed
+    from backend.types.collection_types import EpisodeOrder
+
+    collection = _make_collection(db_session)
+    assert collection.episode_order == EpisodeOrder.NEWEST_FIRST.value
+    collection.episode_order = EpisodeOrder.OLDEST_FIRST.value
+    season = _make_season(db_session, collection)
+    _make_episode(db_session, collection, season, index=1)
+    profile = _make_rss_profile(
+        db_session,
+        collection,
+        mode="mp4",
+        use_downloads=False,
+        use_source_stream=True,
+    )
+
+    xml = render_rss_feed(db_session, _FakeRequest(), profile).decode()
+
+    assert "<itunes:type>serial</itunes:type>" in xml
