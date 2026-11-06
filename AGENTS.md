@@ -99,6 +99,10 @@ A transaction that reads a row and then writes based on what it read (task runs,
 workers can change at once) runs through `run_write_transaction` in `backend.db.core`. It reserves the write
 up front, retries the whole transaction when another one was in the way, and commits. Do not add retry loops,
 extra worker pools or process-wide caches to work around a locked database; fix the transaction instead.
+Keep each such transaction short: SQLite has one writer at a time, so every other write waits while it runs,
+and a retry runs it again. Read files, look things up at a Site and do other slow work before it, and send webhooks
+or other side effects after it. A transaction that only writes what it was given, such as a new row or a value the
+user chose, passes `concurrent=True`, so PostgreSQL runs it beside other writers instead of queueing it.
 Reading never writes: code that only shows state computes it and rolls back.
 
 ## Forms

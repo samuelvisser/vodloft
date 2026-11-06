@@ -1,9 +1,10 @@
 """Taking files already on disk into VODLoft, as if VODLoft had downloaded them.
 
-Every importer and the existing-files matcher adopt through :func:`adopt`. It
-reads the file's identity, records the download as available with the
-sidecars VODLoft recognises next to it, and writes an "Imported" history
-entry. Files are never moved or changed.
+Every importer and the existing-files matcher adopt through :func:`adopt`.
+:func:`find_file` first reads the file's identity and the sidecars VODLoft
+recognises next to it, outside any write transaction; :func:`adopt` then
+records the download as available and writes an "Imported" history entry.
+Files are never moved or changed.
 """
 from __future__ import annotations
 
@@ -36,7 +37,7 @@ from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.types.media_types import MediaType
 from config import get_settings
-from downloader.storage.identity import inspect_artifact
+from downloader.storage.identity import ArtifactIdentity, inspect_artifact
 
 DOWNLOADS_PREFIX = "/downloads/"
 _THUMBNAIL_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
@@ -45,6 +46,24 @@ _SUBTITLE = re.compile(r"^\.(?:(?P<language>[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8}
 
 class AdoptionError(ValueError):
     """The file can't be adopted; the message says why."""
+
+
+@dataclass(frozen=True)
+class FoundAsset:
+    asset_key: str
+    kind: str
+    path: Path
+    identity: ArtifactIdentity
+
+
+@dataclass(frozen=True)
+class FoundFile:
+    """A file on disk as :func:`find_file` read it, ready to adopt."""
+
+    path: Path
+    identity: ArtifactIdentity
+    modified_at: datetime
+    assets: tuple[FoundAsset, ...]
 
 
 @dataclass(frozen=True)
@@ -122,22 +141,37 @@ def sidecar_assets(media_path: Path) -> list[tuple[str, str, Path]]:
     return found
 
 
-def adopt(
-    session: Session,
-    *,
-    media: MediaItemBase,
-    local_media_profile: LocalMediaProfileBase,
-    path: Path,
-    matched_by: str | None = None,
-    metadata: Mapping[str, Any] | None = None,
-) -> Adopted:
-    """Record ``path`` as the available download of ``media`` for ``local_media_profile``."""
+def find_file(path: Path) -> FoundFile:
+    """Read a file inside the download folder and its sidecars, for :func:`adopt`. Reading a file on a
+    network mount can take a while, so this runs before the transaction that adopts it."""
     root = download_root()
     path = path.resolve()
     if not path.is_relative_to(root):
         raise AdoptionError(f"{path} is outside the download folder")
     if not path.is_file():
         raise AdoptionError(f"{path} is not a file")
+    identity = inspect_artifact(path)
+    assets = []
+    for asset_key, kind, asset_path in sidecar_assets(path):
+        try:
+            assets.append(FoundAsset(asset_key, kind, asset_path, inspect_artifact(asset_path)))
+        except (OSError, ValueError):
+            continue
+    modified_at = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+    return FoundFile(path, identity, modified_at, tuple(assets))
+
+
+def adopt(
+    session: Session,
+    *,
+    media: MediaItemBase,
+    local_media_profile: LocalMediaProfileBase,
+    found: FoundFile,
+    matched_by: str | None = None,
+    metadata: Mapping[str, Any] | None = None,
+) -> Adopted:
+    """Record the found file as the available download of ``media`` for ``local_media_profile``."""
+    path = found.path
     download_type, type_value = _download_type(media)
     existing = session.scalar(
         select(MediaDownloadBase).where(
@@ -158,7 +192,7 @@ def adopt(
     if taken is not None and (existing is None or taken != existing.id):
         raise AdoptionError(f"{path} already belongs to another download")
 
-    identity = inspect_artifact(path)
+    identity = found.identity
     created = existing is None
     download = existing or download_type(
         type=type_value, media_item_id=media.id, local_media_profile_id=local_media_profile.id, file_path="",
@@ -171,19 +205,15 @@ def adopt(
     download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
     download.artifact_error = None
     download.downloaded_bytes = identity.size_bytes
-    download.downloaded_at = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+    download.downloaded_at = found.modified_at
     if isinstance(download, EpisodeMediaDownload) and isinstance(media, Episode):
         download.downloaded_publish_status = media.publish_status
     download.assets.clear()
     session.flush()
-    for asset_key, kind, asset_path in sidecar_assets(path):
-        try:
-            asset_identity = inspect_artifact(asset_path)
-        except (OSError, ValueError):
-            continue
+    for asset in found.assets:
         download.assets.append(MediaDownloadAsset(
-            asset_key=asset_key, kind=kind, path=str(asset_path), suffix=asset_path.name[len(path.stem):],
-            size_bytes=asset_identity.size_bytes, fingerprint=asset_identity.fingerprint,
+            asset_key=asset.asset_key, kind=asset.kind, path=str(asset.path), suffix=asset.path.name[len(path.stem):],
+            size_bytes=asset.identity.size_bytes, fingerprint=asset.identity.fingerprint,
         ))
     session.flush()
     record_media_download_history(session, download.id, MediaDownloadHistoryAction.IMPORTED, metadata={

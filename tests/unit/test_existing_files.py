@@ -313,14 +313,14 @@ def test_a_scan_set_up_with_a_new_collection_waits_for_its_index(library, monkey
 
 
 def test_adoption_refuses_files_outside_the_download_folder(library, tmp_path_factory):
-    from backend.services.adoption import AdoptionError, adopt, real_path
+    from backend.services.adoption import AdoptionError, find_file, real_path
 
-    session, _collection, profile, _download_profile, episodes, _root = library
+    _session, _collection, _profile, _download_profile, _episodes, _root = library
     outside = tmp_path_factory.mktemp("elsewhere") / "file.mp4"
     outside.write_bytes(b"x")
 
     with pytest.raises(AdoptionError, match="outside"):
-        adopt(session, media=episodes[0], local_media_profile=profile, path=outside)
+        find_file(outside)
     with pytest.raises(AdoptionError, match="outside"):
         real_path("/downloads/../etc/passwd")
 

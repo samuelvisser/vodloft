@@ -42,13 +42,13 @@ from importer.paths import DEFAULT_PATH_MAP, PathMap, detect_path_map, map_path,
 from importer.registry import get_importer as _registered_importer
 from sources.ytdlp_options import check_ytdlp_options
 
-from backend.db.core import run_write_transaction
+from backend.db.core import get_session, run_write_transaction
 from backend.db.models import (
     Collection, CollectionLocalMediaProfile, DownloadProfile, Episode, ExistingFileScan, ImportLink, ImportRun, ImportStep,
     LocalMediaProfileBase, MediaDownloadBase, MovieLocalMediaProfile,
 )
 from backend.db.models.media_download import EpisodeMediaDownload
-from backend.services.adoption import AdoptionError, adopt, download_root, real_path
+from backend.services.adoption import AdoptionError, FoundFile, adopt, download_root, find_file, real_path
 from backend.services.episode_filters import set_profile_filters
 from backend.services.import_filters import filters_from_plan
 from backend.services.local_media_profile_changes import (
@@ -1385,14 +1385,14 @@ def _start_step(session: Session, step_id: int) -> _StepFiles | None:
 
 
 def _adopt_step_file(
-    session: Session, started: _StepFiles, episode_id: int, file: Mapping[str, Any],
+    session: Session, started: _StepFiles, episode_id: int, file: Mapping[str, Any], found: FoundFile,
 ) -> tuple[str, str | None]:
     """Adopt one recorded file: the count it adds to, and the error when it could not be adopted."""
     episode = session.get(Episode, episode_id)
     profile = session.get(CollectionLocalMediaProfile, started.local_media_profile_id)
     try:
         with session.begin_nested():
-            adopted = adopt(session, media=episode, local_media_profile=profile, path=real_path(file["path"]),
+            adopted = adopt(session, media=episode, local_media_profile=profile, found=found,
                             matched_by="Recorded path", metadata={"importer": started.importer})
     except (AdoptionError, OSError, ValueError) as exc:
         return "not_adopted", str(exc)
@@ -1401,7 +1401,9 @@ def _adopt_step_file(
     return ("adopted" if adopted.created else "already_adopted"), None
 
 
-def _finish_step(session: Session, step_id: int, counts: Counter, problems: list[dict[str, str]]) -> dict[str, int]:
+def _finish_step(
+    session: Session, step_id: int, counts: Counter, problems: list[dict[str, str]], folder: str | None,
+) -> dict[str, int]:
     # Copies, so a transaction that runs again starts from the same counts and problems.
     counts, problems = Counter(counts), list(problems)
     step = session.get(ImportStep, step_id)
@@ -1414,7 +1416,7 @@ def _finish_step(session: Session, step_id: int, counts: Counter, problems: list
         counts["would_download"] = _would_download(session, download_profile)
     run_options = ImportOptions.from_dict(run.options or {}) if run else ImportOptions()
     matching = run_options.match_existing_files
-    if matching and not _match_existing_files(session, step, profile, download_profile, problems):
+    if matching and not _match_existing_files(session, step, profile, download_profile, problems, folder):
         matching = False
     renaming = run_options.rename_existing_files
     if renaming and not matching:
@@ -1439,8 +1441,7 @@ def run_step(step_id: int) -> dict[str, int]:
     if started is None:
         return {}
     counts: Counter = Counter(numbers=started.numbers)
-    # Each file gets a transaction of its own: adopting reads the file from disk, and one transaction for a
-    # whole Collection would hold SQLite's write lock that long, so other steps and indexes time out.
+    # Each file gets a short transaction of its own that only records it; reading the file from disk comes first.
     # Adopting again is a no-op, so a step that stops halfway picks up where it was.
     problems: list[dict[str, str]] = []
 
@@ -1462,11 +1463,20 @@ def run_step(step_id: int) -> dict[str, int]:
                 session.get(CollectionLocalMediaProfile, started.local_media_profile_id),
             )))
         elif file["kind"] == "file":
-            outcome, error = run_write_transaction(lambda session: _adopt_step_file(session, started, episode_id, file))
+            # The file is read before the transaction, which only records it.
+            try:
+                found = find_file(real_path(file["path"]))
+            except (AdoptionError, OSError, ValueError) as exc:
+                outcome, error = "not_adopted", str(exc)
+            else:
+                outcome, error = run_write_transaction(
+                    lambda session: _adopt_step_file(session, started, episode_id, file, found),
+                )
             counts[outcome] += 1
             if error is not None:
                 problem(file["path"], error)
-    return run_write_transaction(lambda session: _finish_step(session, step_id, counts, problems))
+    folder = _scan_folder(step_id)
+    return run_write_transaction(lambda session: _finish_step(session, step_id, counts, problems, folder))
 
 
 def fail_step(step_id: int, error: str) -> None:
@@ -1515,23 +1525,39 @@ def rename_after_matching(session: Session, scan: ExistingFileScan) -> bool:
     return True
 
 
+def _scan_folder(step_id: int) -> str | None:
+    """The folder Match existing files looks in for the step's Collection. Seeing whether the Collection
+    has a folder of its own reads the disk, so this runs before the transaction that finishes the step."""
+    from backend.services.existing_files import scan_folder_for
+
+    session = get_session()
+    try:
+        step = session.get(ImportStep, step_id)
+        collection = session.get(Collection, step.collection_id) if step else None
+        profile = session.get(CollectionLocalMediaProfile, step.local_media_profile_id) if step else None
+        return scan_folder_for(collection, profile) if collection and profile else None
+    finally:
+        session.rollback()
+        session.close()
+
+
 def _match_existing_files(
     session: Session, step: ImportStep, profile: CollectionLocalMediaProfile,
-    download_profile: DownloadProfile | None, problems: list[dict[str, str]],
+    download_profile: DownloadProfile | None, problems: list[dict[str, str]], folder: str | None,
 ) -> bool:
     """Scan the profile's folder for the Collection's files the import did not name.
 
     The files the import adopted are skipped by the scan. A Download Profile to
     switch on waits for the scan instead, until the matches are reviewed.
     """
-    from backend.services.existing_files import ExistingFilesError, request_scan, scan_folder_for
+    from backend.services.existing_files import ExistingFilesError, default_folder, request_scan
 
     collection = session.get(Collection, step.collection_id)
     hold: list[DownloadProfile] = []
     if download_profile is not None and step.enable_download_profile:
         download_profile.enable_profile = True
         hold.append(download_profile)
-    folder = scan_folder_for(collection, profile)
+    folder = folder or default_folder(profile.output_template)
     try:
         with session.begin_nested():
             request_scan(session, collection, profile, folder=folder, hold=hold, indexed=True)

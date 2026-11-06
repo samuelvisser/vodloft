@@ -27,7 +27,7 @@ from backend.db.models import (
     LocalMediaProfileBase,
     MediaDownloadBase,
 )
-from backend.services.adoption import AdoptionError, adopt, download_root, real_path, virtual_path
+from backend.services.adoption import AdoptionError, adopt, download_root, find_file, real_path, virtual_path
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.custom_index import CustomIndexNotReadyError
 from backend.utils.output_template import episode_output_template_values, resolve_episode_output_path
@@ -491,7 +491,7 @@ def adopt_matches(
         try:
             with session.begin_nested():
                 adopt(
-                    session, media=episode, local_media_profile=profile, path=real_path(path),
+                    session, media=episode, local_media_profile=profile, found=find_file(real_path(path)),
                     matched_by=_EVIDENCE_NAMES.get(item.get("evidence") or "", "Picked by hand")
                     if item.get("episode_id") == episode_id else "Picked by hand",
                 )
