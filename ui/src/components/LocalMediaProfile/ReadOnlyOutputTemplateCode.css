@@ -43,13 +43,20 @@
 
 /* A path view is about the folders: accent the slashes between them and fade the variable braces. */
 .read-only-output-template-code-editor.is-path .cm-path-slash {
-    margin: 0 0.18em;
+    margin: 0 0.1em;
     color: #ea580c;
     font-weight: 700;
 }
 
 .read-only-output-template-code-editor.is-path .cm-jinja-brace {
     opacity: 0.45;
+}
+
+/* The wrapped phone view has room for a little more air around each slash than a one-line table cell. */
+@media (max-width: 640px) {
+    .read-only-output-template-code-editor.is-path .cm-path-slash {
+        margin: 0 0.18em;
+    }
 }
 
 @media (prefers-color-scheme: dark) {
