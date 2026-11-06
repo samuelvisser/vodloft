@@ -12,9 +12,6 @@
 
 .progress-button {
     position: relative;
-    /* Room for the small title above the status, in every state, so the
-       button keeps its height when it switches to progress. */
-    min-height: 44px;
     z-index: 0;
     width: 100%;
     min-width: 0;
@@ -51,8 +48,14 @@
 
 .progress-button-root.is-progress .progress-button {
     flex-direction: column;
-    gap: 2px;
-    padding-block: 6px;
+    gap: 1px;
+    /* The title fits inside the normal button height, so the button keeps
+       its size when it switches to progress. */
+    padding-block: 3px;
+}
+
+.progress-button-root.is-progress .progress-button-label {
+    line-height: 1.15;
 }
 
 .progress-button-title {
