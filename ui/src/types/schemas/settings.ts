@@ -171,17 +171,49 @@ export const QuickDownloadSettingsSchema = z.object({
 })
 export type QuickDownloadSettings = z.infer<typeof QuickDownloadSettingsSchema>
 
-/** One Site's own scheduling under siteSchedules in config.yml; null follows the Site's default. */
-const SiteScheduleSchema = z.object({
-    metadataRefresh: z.string().nullable(),
-    upcomingAndLive: z.boolean().nullable(),
-    pendingUpcomingMinutes: z.number().nullable(),
-    pendingStartingMinutes: z.number().nullable(),
-    pendingLiveMinutes: z.number().nullable(),
-})
-export type SiteSchedule = z.infer<typeof SiteScheduleSchema>
+/** A Site's value for a setting that follows the system default, even when the Site has a preset. */
+export const SITE_SETTING_DEFAULT = 'default'
 /** The metadata refresh a Site gives itself: none at all. */
 export const SITE_REFRESH_OFF = 'off'
+
+const UpgradeImprovementValues = ['resolution', 'sponsorblock', 'subtitles', 'codec', 'length'] as const
+const UpgradeRepeatValues = ['once', 'twice', 'every'] as const
+const AutoSubtitlesValues = ['never', 'fallback', 'always'] as const
+const orDefault = <T extends z.ZodType>(schema: T) => z.union([z.literal(SITE_SETTING_DEFAULT), schema]).nullish()
+
+export const LookupMinutesSchema = z.object({upcoming: z.number(), starting: z.number(), live: z.number()})
+export type LookupMinutes = z.infer<typeof LookupMinutesSchema>
+
+/**
+ * One Site's own settings under siteSettings in config.yml. A setting left out (null) follows the Site's
+ * preset, or else the system default; ``default`` follows the system default.
+ */
+const SiteSettingValuesSchema = z.object({
+    metadataRefresh: z.string().nullish(),
+    upcomingAndLive: orDefault(z.boolean()),
+    lookupMinutes: orDefault(LookupMinutesSchema),
+    downloadWithCountdown: z.boolean().nullish(),
+    upgradeCheck: orDefault(z.boolean()),
+    upgradeAfterDays: orDefault(z.number()),
+    upgradeRepeat: orDefault(z.enum(UpgradeRepeatValues)),
+    upgradeImprovements: orDefault(z.array(z.enum(UpgradeImprovementValues))),
+    upgradeLengthMinutes: orDefault(z.number()),
+    autoSubtitles: orDefault(z.enum(AutoSubtitlesValues)),
+    sponsorblock: z.boolean().nullish(),
+    sponsorblockSegments: z.record(z.string(), z.enum(['keep', 'chapter', 'cut'])).nullish(),
+})
+export type SiteSettingValues = z.infer<typeof SiteSettingValuesSchema>
+export type SiteSettingKey = keyof SiteSettingValues
+
+/** What a new Download Profile starts with, for Sites that follow the system default. */
+const DownloadProfileDefaultsSchema = z.object({
+    upgradeCheck: z.boolean(),
+    upgradeAfterDays: z.number(),
+    upgradeRepeat: z.enum(UpgradeRepeatValues),
+    upgradeImprovements: z.array(z.enum(UpgradeImprovementValues)),
+    upgradeLengthMinutes: z.number(),
+    autoSubtitles: z.enum(AutoSubtitlesValues),
+})
 
 export const SettingsValuesSchema = z.object({
     logLevel: z.enum(['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']),
@@ -194,7 +226,8 @@ export const SettingsValuesSchema = z.object({
     dwTimeout: TimeoutSettingsSchema,
     scheduler: SchedulerSettingsSchema,
     newEpisodeSchedule: TrackNewEpisodeScheduleSchema,
-    siteSchedules: z.record(z.string(), SiteScheduleSchema),
+    siteSettings: z.record(z.string(), SiteSettingValuesSchema),
+    downloadProfileDefaults: DownloadProfileDefaultsSchema,
     episodeStatusTiming: EpisodeStatusTimingSchema,
     downloadSettings: DownloadSettingsSchema,
     youtubeApi: YouTubeApiSettingsSchema,
@@ -235,14 +268,26 @@ export const metadataRefreshIntervals = z.string().refine((value) => {
     return true
 }, 'Use unique, increasing comma-separated offsets such as 5m,15m,30m,1h,3h,6h,24h.')
 
-const SiteScheduleFormSchema = SiteScheduleSchema.extend({
-    metadataRefresh: z.string().nullable().refine(
-        (value) => value === null || value === SITE_REFRESH_OFF || metadataRefreshIntervals.safeParse(value).success,
+const wholeNumber = (min: number, max: number, unit: string) => requiredNumber()
+    .int(`Use whole ${unit}.`)
+    .min(min, `Must be at least ${min} ${unit}.`)
+    .max(max, `Must be at most ${max} ${unit}.`)
+const upgradeAfterDays = wholeNumber(1, 365, 'days')
+const upgradeLengthMinutes = wholeNumber(1, 600, 'minutes')
+
+const SiteSettingValuesFormSchema = SiteSettingValuesSchema.extend({
+    metadataRefresh: z.string().nullish().refine(
+        (value) => value == null || value === SITE_SETTING_DEFAULT || value === SITE_REFRESH_OFF
+            || metadataRefreshIntervals.safeParse(value).success,
         'Use unique, increasing comma-separated offsets such as 30m,2h,24h.',
     ),
-    pendingUpcomingMinutes: pendingMinutes(24 * 60).nullable(),
-    pendingStartingMinutes: pendingMinutes(60).nullable(),
-    pendingLiveMinutes: pendingMinutes(60).nullable(),
+    lookupMinutes: orDefault(z.object({
+        upcoming: pendingMinutes(24 * 60),
+        starting: pendingMinutes(60),
+        live: pendingMinutes(60),
+    })),
+    upgradeAfterDays: orDefault(upgradeAfterDays),
+    upgradeLengthMinutes: orDefault(upgradeLengthMinutes),
 })
 
 export const SettingsFormSchema = SettingsValuesSchema.extend({
@@ -274,7 +319,8 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
         pendingStartingMinutes: pendingMinutes(60),
         pendingLiveMinutes: pendingMinutes(60),
     }),
-    siteSchedules: z.record(z.string(), SiteScheduleFormSchema),
+    siteSettings: z.record(z.string(), SiteSettingValuesFormSchema),
+    downloadProfileDefaults: DownloadProfileDefaultsSchema.extend({upgradeAfterDays, upgradeLengthMinutes}),
     episodeStatusTiming: EpisodeStatusTimingSchema.extend({
         publishedFinalAfterMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
         dwProcessingMaxMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
@@ -374,7 +420,13 @@ export const SETTINGS_FIELD_PATHS = [
     'newEpisodeSchedule.pendingUpcomingMinutes',
     'newEpisodeSchedule.pendingStartingMinutes',
     'newEpisodeSchedule.pendingLiveMinutes',
-    'siteSchedules',
+    'siteSettings',
+    'downloadProfileDefaults.upgradeCheck',
+    'downloadProfileDefaults.upgradeAfterDays',
+    'downloadProfileDefaults.upgradeRepeat',
+    'downloadProfileDefaults.upgradeImprovements',
+    'downloadProfileDefaults.upgradeLengthMinutes',
+    'downloadProfileDefaults.autoSubtitles',
     'episodeStatusTiming.publishedFinalAfterMinutes',
     'episodeStatusTiming.dwProcessingMaxMinutes',
     'episodeStatusTiming.noUsableMediaDeleteAfterMinutes',

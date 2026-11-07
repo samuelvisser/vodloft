@@ -1,17 +1,17 @@
-.site-refresh-sites {
+.site-settings-sites {
     display: flex;
     flex-direction: column;
     gap: 10px;
     margin-top: 6px;
 }
 
-.site-refresh-site {
+.site-settings-site {
     border: 1px solid rgba(100, 116, 139, 0.24);
     border-radius: 12px;
     background: rgba(148, 163, 184, 0.06);
 }
 
-.site-refresh-site > summary {
+.site-settings-site > summary {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -22,11 +22,11 @@
     user-select: none;
 }
 
-.site-refresh-site > summary::-webkit-details-marker {
+.site-settings-site > summary::-webkit-details-marker {
     display: none;
 }
 
-.site-refresh-site > summary::before {
+.site-settings-site > summary::before {
     content: '›';
     width: 12px;
     color: var(--muted);
@@ -35,39 +35,39 @@
     transition: transform 140ms ease;
 }
 
-.site-refresh-site[open] > summary::before {
+.site-settings-site[open] > summary::before {
     transform: rotate(90deg);
 }
 
-.site-refresh-site[open] > summary {
+.site-settings-site[open] > summary {
     border-bottom: 1px solid rgba(100, 116, 139, 0.2);
 }
 
-.site-refresh-site__name {
+.site-settings-site__name {
     display: inline-flex;
     align-items: baseline;
     gap: 8px;
     min-width: 0;
 }
 
-.site-refresh-site__name strong {
+.site-settings-site__name strong {
     color: var(--text);
     font-size: 15px;
 }
 
-.site-refresh-site__name span {
+.site-settings-site__name span {
     color: var(--muted);
     font-size: 13px;
 }
 
-.site-refresh-site__badges {
+.site-settings-site__badges {
     display: inline-flex;
     flex-wrap: wrap;
     gap: 6px;
     margin-left: auto;
 }
 
-.site-refresh-badge {
+.site-settings-badge {
     padding: 3px 10px;
     border: 1px solid rgba(100, 116, 139, 0.32);
     border-radius: 999px;
@@ -78,23 +78,23 @@
     white-space: nowrap;
 }
 
-.site-refresh-badge--schedule {
+.site-settings-badge--own {
     border-color: rgba(59, 130, 246, 0.4);
     background: rgba(59, 130, 246, 0.12);
     color: #1d4ed8;
 }
 
-.site-refresh-badge--on {
+.site-settings-badge--on {
     border-color: rgba(34, 197, 94, 0.4);
     background: rgba(34, 197, 94, 0.12);
     color: #15803d;
 }
 
-.site-refresh-site__body {
+.site-settings-site__body {
     padding: 4px 16px 8px;
 }
 
-.site-refresh-setting {
+.site-settings-setting {
     display: grid;
     grid-template-columns: 180px minmax(0, 1fr);
     align-items: center;
@@ -102,54 +102,54 @@
     padding: 10px 0;
 }
 
-.site-refresh-setting + .site-refresh-setting {
+.site-settings-setting + .site-settings-setting {
     border-top: 1px solid rgba(100, 116, 139, 0.16);
 }
 
-.site-refresh-setting__label {
+.site-settings-setting__label {
     color: var(--text);
     font-size: 14px;
     font-weight: 600;
 }
 
-.site-refresh-setting__control {
+.site-settings-setting__control {
     display: flex;
     flex-direction: column;
     gap: 6px;
     min-width: 0;
 }
 
-.site-refresh-setting__control .settings-field__help {
+.site-settings-setting__control .settings-field__help {
     margin: 0;
 }
 
-.site-refresh-setting__line {
+.site-settings-setting__line {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 8px 12px;
 }
 
-.site-refresh-choice {
+.site-settings-choice {
     width: 190px;
     max-width: 100%;
 }
 
-.site-refresh-inherited {
+.site-settings-inherited {
     color: var(--muted);
     font-size: 14px;
 }
 
-.site-refresh-system {
+.site-settings-system {
     margin-bottom: -6px;
 }
 
-.site-refresh-intervals.settings-input {
+.site-settings-intervals.settings-input {
     flex: 1 1 220px;
     max-width: 360px;
 }
 
-.site-refresh-switch {
+.site-settings-switch {
     display: inline-flex;
     align-items: center;
     gap: 10px;
@@ -158,14 +158,14 @@
     cursor: pointer;
 }
 
-.site-refresh-rhythm {
+.site-settings-rhythm {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 8px 18px;
 }
 
-.site-refresh-rhythm__field {
+.site-settings-rhythm__field {
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -174,38 +174,95 @@
     white-space: nowrap;
 }
 
-.site-refresh-rhythm__field input {
+.site-settings-rhythm__field input {
     width: 4.5em;
     text-align: right;
 }
 
+.site-settings-preset {
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: rgba(245, 158, 11, 0.14);
+    color: #b45309;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.site-settings-number {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 14px;
+}
+
+.site-settings-number input {
+    width: 5em;
+    text-align: right;
+}
+
+.site-settings-checks {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+}
+
+.site-settings-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text);
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.site-settings-segments {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 8px 16px;
+    width: 100%;
+}
+
+.site-settings-segment {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 120px;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+
 @media (prefers-color-scheme: dark) {
-    .site-refresh-site {
+    .site-settings-site {
         border-color: rgba(148, 163, 184, 0.2);
         background: rgba(15, 23, 42, 0.5);
     }
 
-    .site-refresh-badge--schedule {
+    .site-settings-badge--own {
         color: #93c5fd;
     }
 
-    .site-refresh-badge--on {
+    .site-settings-badge--on {
         color: #86efac;
+    }
+
+    .site-settings-preset {
+        color: #fcd34d;
     }
 }
 
 @media (max-width: 640px) {
-    .site-refresh-site__badges {
+    .site-settings-site__badges {
         flex-basis: 100%;
         margin-left: 20px;
     }
 
-    .site-refresh-setting {
+    .site-settings-setting {
         grid-template-columns: minmax(0, 1fr);
     }
 
-    .site-refresh-choice,
-    .site-refresh-intervals.settings-input {
+    .site-settings-choice,
+    .site-settings-intervals.settings-input {
         width: 100%;
         max-width: none;
     }

@@ -8,7 +8,8 @@ from pydantic import Field, computed_field, field_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.types.collection_types import CollectionType
-from sources import Feature, StreamMethod, UnknownSourceError, UpgradeImprovement, get_source
+from config.settings.site_settings import AutoSubtitles, SponsorBlockAction, SponsorBlockCategory, UpgradeRepeat
+from sources import Feature, SiteSetting, StreamMethod, UnknownSourceError, UpgradeImprovement, get_source
 from sources.ytdlp_options import MAX_OPTIONS_LENGTH, OptionsRefused, ytdlp_option_arguments
 
 
@@ -48,9 +49,20 @@ class UpgradeChecksAPIRead(ResponseBase):
     """What the upgrade check can find on a Site; nothing to find means no upgrade check."""
 
     improvements: list[UpgradeImprovement]
-    checked: list[UpgradeImprovement]
-    """The improvements a new Download Profile starts with."""
-    on_by_default: bool
+
+
+class DownloadProfileDefaultsAPIRead(ResponseBase):
+    """What a new Download Profile on a Site starts with: the Site's own settings, its presets or the system defaults."""
+
+    download_with_countdown: bool
+    upgrade_check: bool
+    upgrade_after_days: int
+    upgrade_repeat: UpgradeRepeat
+    upgrade_improvements: list[UpgradeImprovement]
+    upgrade_length_minutes: int
+    auto_subtitles: AutoSubtitles
+    sponsorblock_enabled: bool
+    sponsorblock_segments: dict[SponsorBlockCategory, SponsorBlockAction]
 
 
 class SourceAPIRead(ResponseBase):
@@ -172,10 +184,10 @@ class SiteOptionsAPIRead(ResponseBase):
     """What the site of one collection offers beyond its Source's usual choices."""
 
     site_name: str
-    auto_subtitles: bool
-    sponsorblock: bool
-    countdown_downloads: bool
-    """A Download Profile can download live episodes with their countdown, and again as the final version."""
+    settings: list[SiteSetting]
+    """The download profile settings the site shows, such as auto-generated subtitles or downloading with the countdown."""
+    profile_defaults: DownloadProfileDefaultsAPIRead
+    """What a new Download Profile for the collection starts with."""
     upgrade_checks: UpgradeChecksAPIRead
     stream_methods: list[StreamMethod] = []
     """How RSS feeds can stream the collection's episodes without downloading them first; none for downloads only."""

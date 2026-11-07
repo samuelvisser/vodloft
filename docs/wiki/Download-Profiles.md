@@ -127,12 +127,15 @@ added through yt-dlp gets what yt-dlp offers any site. A site with nothing to ch
 Subtitles only show when the Local Media Profile stores them.
 
 - **Download again when a better version is out** turns the check on. New profiles have it on.
-- **Check after … days**: how long after downloading the first check happens. 7 days by default.
+
+A new profile starts with its site's Download profile defaults (see [[Settings#download-profile-defaults]]), which you can
+change under **Settings → Downloads**. The defaults below are the ones VODLoft comes with.
+- **Check after … days**: how long after downloading the first check happens. 7 days by default, 3 for The Daily Wire.
 - **How often**: **Once, then stop**; **Twice, again after 30 days**; or **Every … days, up to 3 times**, which with
   7 days checks on day 7, 14 and 21. Every choice stops early once an episode can't get any better.
 - **Better means**: a higher resolution (up to the Local Media Profile's quality), new SponsorBlock segments of the types
   you mark or cut out, new subtitles in a language the Local Media Profile asks for, or the preferred codec (the first
-  allowed codec in the Local Media Profile). A higher resolution and new SponsorBlock segments are on by default.
+  allowed codec in the Local Media Profile). A higher resolution is on by default, and on YouTube new SponsorBlock segments too.
   For The Daily Wire it is **a different length**: longer or shorter by more than the minutes you set, 5 by default.
 
 The check first asks the site what it has now, and only downloads when one of your improvements is there. The old
@@ -159,9 +162,9 @@ the Upgrade check card:
 
 If you only want the finished episode, leave countdown downloading disabled.
 
-## YouTube
+## YouTube and other sites
 
-Download Profiles of YouTube Collections have a YouTube section under Which episodes, with auto-generated subtitles and SponsorBlock.
+Download Profiles of YouTube Collections have a YouTube section under Which episodes, with auto-generated subtitles and SponsorBlock. Collections on other sites yt-dlp downloads have the same section with auto-generated subtitles only, under the site's name. The Daily Wire makes no subtitles, so it has no such section.
 
 ### Auto-generated subtitles
 

@@ -501,13 +501,14 @@ def test_settings_get_uses_cached_runtime_state(tmp_path, monkeypatch):
     assert second.configured_fields == first.configured_fields
 
 
-def test_site_schedules_are_saved_as_a_block_with_only_what_each_site_sets(tmp_path, monkeypatch):
+def test_site_settings_are_saved_as_a_block_with_only_what_each_site_sets(tmp_path, monkeypatch):
     from backend.api.endpoints.settings.service import get_ui_settings, save_ui_settings
-    from backend.api.models.settings import SettingsAPIUpdate, SiteScheduleValue
+    from backend.api.models.settings import SettingsAPIUpdate
+    from config.settings.site_settings import SiteSettingValues
 
     config_path = tmp_path / "config.yml"
     config_path.write_text(
-        "siteSchedules:\n"
+        "siteSettings:\n"
         "  youtube:\n"
         "    metadataRefresh: 1h\n"
         "# Kept below the Sites.\n"
@@ -517,33 +518,54 @@ def test_site_schedules_are_saved_as_a_block_with_only_what_each_site_sets(tmp_p
     _point_settings_at(config_path, monkeypatch)
 
     values = get_ui_settings().values.model_copy(deep=True)
-    assert values.site_schedules["youtube"].metadata_refresh == "1h"
-    values.site_schedules = {
-        "youtube": SiteScheduleValue(),
-        "dailywire": SiteScheduleValue(metadata_refresh="OFF", upcoming_and_live=False),
-        "generic:vimeo.com": SiteScheduleValue(
-            pending_upcoming_minutes=90, pending_starting_minutes=3, pending_live_minutes=10,
-        ),
+    assert values.site_settings["youtube"].metadata_refresh == "1h"
+    values.site_settings = {
+        "youtube": SiteSettingValues(),
+        "dailywire": SiteSettingValues(metadata_refresh="OFF", upcoming_and_live=False, upgrade_after_days="default"),
+        "generic:vimeo.com": SiteSettingValues(lookup_minutes={"upcoming": 90, "starting": 3, "live": 10}),
     }
-    result = save_ui_settings(SettingsAPIUpdate(values=values, changed_fields=["siteSchedules"]))
+    result = save_ui_settings(SettingsAPIUpdate(values=values, changed_fields=["siteSettings"]))
 
     text = config_path.read_text(encoding="utf-8")
     assert "# Kept below the Sites.\nlogLevel: INFO" in text
-    assert yaml.safe_load(text)["siteSchedules"] == {
-        "dailywire": {"metadataRefresh": "off", "upcomingAndLive": False},
-        "generic:vimeo.com": {"pendingUpcomingMinutes": 90, "pendingStartingMinutes": 3, "pendingLiveMinutes": 10},
+    assert yaml.safe_load(text)["siteSettings"] == {
+        "dailywire": {"metadataRefresh": "off", "upcomingAndLive": False, "upgradeAfterDays": "default"},
+        "generic:vimeo.com": {"lookupMinutes": {"upcoming": 90, "starting": 3, "live": 10}},
     }
-    assert set(result.values.site_schedules) == {"dailywire", "generic:vimeo.com"}
+    assert set(result.values.site_settings) == {"dailywire", "generic:vimeo.com"}
 
-    values.site_schedules = {}
-    save_ui_settings(SettingsAPIUpdate(values=values, changed_fields=["siteSchedules"]))
-    assert yaml.safe_load(config_path.read_text(encoding="utf-8"))["siteSchedules"] == {}
+    values.site_settings = {}
+    save_ui_settings(SettingsAPIUpdate(values=values, changed_fields=["siteSettings"]))
+    assert yaml.safe_load(config_path.read_text(encoding="utf-8"))["siteSettings"] == {}
 
 
-def test_a_site_gives_all_three_lookup_times_or_none():
-    from backend.api.models.settings import SiteScheduleValue
+def test_download_profile_defaults_are_saved_one_by_one(tmp_path, monkeypatch):
+    from backend.api.endpoints.settings.service import get_ui_settings, save_ui_settings
+    from backend.api.models.settings import SettingsAPIUpdate
+
+    config_path = tmp_path / "config.yml"
+    config_path.write_text("logLevel: INFO\n", encoding="utf-8")
+    _point_settings_at(config_path, monkeypatch)
+
+    values = get_ui_settings().values.model_copy(deep=True)
+    values.download_profile_defaults.upgrade_after_days = 14
+    values.download_profile_defaults.auto_subtitles = "never"
+    save_ui_settings(SettingsAPIUpdate(values=values, changed_fields=[
+        "downloadProfileDefaults.upgradeAfterDays", "downloadProfileDefaults.autoSubtitles",
+    ]))
+
+    assert yaml.safe_load(config_path.read_text(encoding="utf-8"))["downloadProfileDefaults"] == {
+        "upgradeAfterDays": 14, "autoSubtitles": "never",
+    }
+
+
+def test_a_site_setting_is_its_own_value_or_default():
+    from config.settings.site_settings import SiteSettingValues
 
     with pytest.raises(ValidationError):
-        SiteScheduleValue(pending_live_minutes=10)
+        SiteSettingValues(lookup_minutes={"live": 10})
     with pytest.raises(ValidationError):
-        SiteScheduleValue(metadata_refresh="2h,1h")
+        SiteSettingValues(metadata_refresh="2h,1h")
+    with pytest.raises(ValidationError):
+        SiteSettingValues(upgrade_after_days=0)
+    assert SiteSettingValues(upgrade_check="default").upgrade_check == "default"

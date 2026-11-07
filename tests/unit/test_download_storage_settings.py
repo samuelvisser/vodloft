@@ -1,5 +1,14 @@
 from __future__ import annotations
 
+from config.settings.site_settings import DEFAULT_SPONSORBLOCK_SEGMENTS
+
+# What every Download Profile request names; the UI starts them from the Site's settings.
+PROFILE_CHOICES = dict(
+    auto_subtitles="fallback", sponsorblock_enabled=False, sponsorblock_segments=dict(DEFAULT_SPONSORBLOCK_SEGMENTS),
+    upgrade_check=False, upgrade_after_days=7, upgrade_repeat="once", upgrade_improvements=[], upgrade_length_minutes=5,
+)
+
+
 
 def test_system_download_storage_defaults_to_local_temporary_mode():
     from backend.api.models.settings import SettingsValues
@@ -177,6 +186,7 @@ def test_download_profile_no_longer_contains_storage_mode():
         download_with_countdown=False,
         redownload_final=False,
         delete_older_episodes=False,
+        **PROFILE_CHOICES,
     )
 
     assert "download_mode" not in body.model_dump(by_alias=True, mode="json")

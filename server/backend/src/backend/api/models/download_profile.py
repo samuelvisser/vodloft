@@ -14,10 +14,8 @@ from backend.types.download_profile_types import (
     EpisodeFilterField,
     EpisodeTagKey,
     AutoSubtitles,
-    DEFAULT_SPONSORBLOCK_SEGMENTS,
     SponsorBlockAction,
     SponsorBlockCategory,
-    DEFAULT_UPGRADE_IMPROVEMENTS,
     UpgradeImprovement,
     UpgradeRepeat,
 )
@@ -100,18 +98,14 @@ class DownloadProfileAPIBaseIn(RequestBase):
     download_with_countdown: bool
     redownload_final: bool
     delete_older_episodes: bool
-    auto_subtitles: AutoSubtitles = AutoSubtitles.FALLBACK
-    sponsorblock_enabled: bool = True
-    sponsorblock_segments: dict[SponsorBlockCategory, SponsorBlockAction] = Field(
-        default_factory=lambda: dict(DEFAULT_SPONSORBLOCK_SEGMENTS),
-    )
-    upgrade_check: bool = True
-    upgrade_after_days: int = Field(default=7, ge=1, le=365)
-    upgrade_repeat: UpgradeRepeat = UpgradeRepeat.ONCE
-    upgrade_improvements: list[UpgradeImprovement] = Field(
-        default_factory=lambda: list(DEFAULT_UPGRADE_IMPROVEMENTS), max_length=len(UpgradeImprovement),
-    )
-    upgrade_length_minutes: int = Field(default=5, ge=1, le=600)
+    auto_subtitles: AutoSubtitles
+    sponsorblock_enabled: bool
+    sponsorblock_segments: dict[SponsorBlockCategory, SponsorBlockAction]
+    upgrade_check: bool
+    upgrade_after_days: int = Field(ge=1, le=365)
+    upgrade_repeat: UpgradeRepeat
+    upgrade_improvements: list[UpgradeImprovement] = Field(max_length=len(UpgradeImprovement))
+    upgrade_length_minutes: int = Field(ge=1, le=600)
 
     filters: list[DownloadProfileFilterAPIIn] = Field(default_factory=list, max_length=50)
 

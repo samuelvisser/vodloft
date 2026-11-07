@@ -1,7 +1,7 @@
 """How long VODLoft looks a published item up again, so changes made after publication reach it.
 
-Each Site follows its own schedule from ``siteSchedules`` in config.yml, then the one
-the sources package knows for it, then the system schedule; or none when it is off. A schedule
+Each Site follows its own schedule from ``siteSettings`` in config.yml, its preset or the
+system schedule (``backend.services.site_settings``); or none when it is off. A schedule
 is a list of offsets after publication; once the last one has passed and the item
 was looked up, its metadata is final. The metadata refresh sweep follows every
 item: those of a Source with ``Feature.METADATA_REFRESH`` are looked up in batches
@@ -17,25 +17,15 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from backend.db.datetime_types import utc_datetime
-from config import get_settings
-from config.settings.submodels import SITE_REFRESH_OFF, SiteSchedule, parse_metadata_refresh_intervals
-from sources import Feature, UnknownSourceError, get_source, site_refresh_intervals
-
-
-def own_site_schedule(site_key: Optional[str]) -> SiteSchedule:
-    """What config.yml sets for the Site; a setting it leaves out is None."""
-    return get_settings().site_schedules.get(site_key, SiteSchedule()) if site_key else SiteSchedule()
-
-
-def default_metadata_refresh(site_key: Optional[str]) -> str:
-    """The schedule a Site follows when config.yml sets none: the one the sources package knows for it, or the system schedule."""
-    known = site_refresh_intervals(site_key) if site_key else None
-    return known or get_settings().new_episode_schedule.metadata_refresh_intervals
+from backend.services.site_settings import site_setting
+from config.settings.site_settings import SiteSetting
+from config.settings.submodels import SITE_REFRESH_OFF, parse_metadata_refresh_intervals
+from sources import Feature, UnknownSourceError, get_source
 
 
 def site_metadata_refresh(site_key: Optional[str]) -> str:
     """The Site's schedule, such as ``30m,2h,24h``, or ``off``."""
-    return own_site_schedule(site_key).metadata_refresh or default_metadata_refresh(site_key)
+    return site_setting(site_key, SiteSetting.METADATA_REFRESH)
 
 
 def site_refresh_offsets(site_key: Optional[str]) -> tuple[int, ...]:

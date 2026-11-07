@@ -234,16 +234,23 @@ export type AutoSubtitlesUse = z.infer<typeof AutoSubtitlesUseSchema>
 
 export const SiteOptionsSchema = z.object({
     siteName: z.string(),
-    autoSubtitles: z.boolean(),
-    sponsorblock: z.boolean(),
-    /** Downloading live episodes with their countdown, and again as the final version. */
-    countdownDownloads: z.boolean(),
+    /** The download profile settings the site shows, such as autoSubtitles, sponsorblock or downloadWithCountdown. */
+    settings: z.array(z.string()),
+    /** What a new Download Profile for the collection starts with. */
+    profileDefaults: z.object({
+        downloadWithCountdown: z.boolean(),
+        upgradeCheck: z.boolean(),
+        upgradeAfterDays: z.int(),
+        upgradeRepeat: z.enum(['once', 'twice', 'every']),
+        upgradeImprovements: z.array(UpgradeImprovementSchema),
+        upgradeLengthMinutes: z.int(),
+        autoSubtitles: z.enum(['never', 'fallback', 'always']),
+        sponsorblockEnabled: z.boolean(),
+        sponsorblockSegments: z.record(z.string(), z.enum(['keep', 'chapter', 'cut'])),
+    }),
     /** What the upgrade check can find on the site; no improvements means no upgrade check. */
     upgradeChecks: z.object({
         improvements: z.array(UpgradeImprovementSchema),
-        /** The improvements a new Download Profile starts with. */
-        checked: z.array(UpgradeImprovementSchema),
-        onByDefault: z.boolean(),
     }),
     /**
      * How RSS feeds can stream the collection's episodes without downloading them: as M4A and MP4 files,

@@ -9,7 +9,7 @@ from downloader.hls import is_master_playlist, media_playlist_segments, parse_ma
 
 from ..contract import (
     MAIN_TAG, MIN_NEWEST_EPISODES, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
-    DownloadOptions, PublishStatusLabel, ResolvedLink, RssEpisodeType, SeasonRef, Site, Source, StreamMethod,
+    DownloadOptions, PublishStatusLabel, ResolvedLink, RssEpisodeType, SeasonRef, Site, SiteSetting, SiteSettings, Source, StreamMethod,
     UpgradeChecks, UpgradeImprovement, UpgradeOffer, VideoDetails, publish_status_labels_with,
 )
 from .api.dw_api.client import ByShowSeason, MiddlewareClient
@@ -62,14 +62,27 @@ class DailyWireSource(Source):
     name = "The Daily Wire"
     domains = ("dailywire.com",)
     sites = (Site(
-        "dailywire", "The Daily Wire", domains, refresh_intervals="15m,30m,1h,3h,6h,24h,3d", 
+        "dailywire", "The Daily Wire", domains,
         stream_methods=frozenset({StreamMethod.FILE, StreamMethod.HLS, StreamMethod.LIVE}),
         stream_video_heights=_VIDEO_HEIGHTS,
         # Fixed versions: an HLS stream of 480p, 720p and 1080p, and audio.
         downloads=DownloadOptions(video_heights=_VIDEO_HEIGHTS, hls_bundle=True, quality_choices=False),
-        countdown_downloads=True,
         # The Daily Wire sometimes edits an episode after it is out, such as cutting a long live stream down.
-        upgrade_checks=UpgradeChecks((UpgradeImprovement.LENGTH,), (UpgradeImprovement.LENGTH,), on_by_default=True),
+        upgrade_checks=UpgradeChecks((UpgradeImprovement.LENGTH,)),
+        settings=SiteSettings(
+            # It publishes live episodes with a countdown in the recording at first, so a Download Profile can
+            # download them with the countdown and again once the final version is out.
+            shows=frozenset({SiteSetting.DOWNLOAD_WITH_COUNTDOWN}),
+            # It makes no subtitles of its own.
+            hides=frozenset({SiteSetting.AUTO_SUBTITLES}),
+            presets=MappingProxyType({
+                SiteSetting.METADATA_REFRESH: "15m,30m,1h,3h,6h,24h,3d",
+                SiteSetting.DOWNLOAD_WITH_COUNTDOWN: False,
+                SiteSetting.UPGRADE_CHECK: True,
+                SiteSetting.UPGRADE_AFTER_DAYS: 3,
+                SiteSetting.UPGRADE_IMPROVEMENTS: [UpgradeImprovement.LENGTH.value],
+            }),
+        ),
     ),)
     kind_names = MappingProxyType({LinkKind.COLLECTION: "Show"})
     features = frozenset({

@@ -10,11 +10,14 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from sources import Feature, LinkKind, Playback, PlaybackKind, CollectionDetails, Source, VideoDetails, registry
+from sources import (
+    Feature, LinkKind, Playback, PlaybackKind, CollectionDetails, Site, SiteSetting, SiteSettings, Source, VideoDetails, registry,
+)
 from sources import ytdlp_runner as runner
 from sources.ytdlp import YtDlpSource
 from sources.ytdlp.source import collection_url
 from conftest import use_database
+from backend.services.sites import _site_of
 
 
 def _video(slug: str, year: int, month: int = 1, day: int = 1) -> VideoDetails:
@@ -487,7 +490,9 @@ def test_a_bundle_that_matches_existing_files_holds_its_download_profile(listed,
         },
         "downloadProfile": {
             "enableProfile": True, "downloadWithCountdown": False, "redownloadFinal": False,
-            "deleteOlderEpisodes": False,
+            "deleteOlderEpisodes": False, "autoSubtitles": "fallback", "sponsorblockEnabled": False,
+            "sponsorblockSegments": {"sponsor": "keep", "intro": "keep", "outro": "keep", "selfpromo": "keep", "preview": "keep", "filler": "keep", "interaction": "keep", "music_offtopic": "keep"}, "upgradeCheck": False, "upgradeAfterDays": 7, "upgradeRepeat": "once",
+            "upgradeImprovements": [], "upgradeLengthMinutes": 5,
             "filters": [{"action": "only", "field": "types", "episodeTypes": ["ep"]}],
         },
         "existingFiles": {"folder": "/downloads/YouTube"},
@@ -533,11 +538,17 @@ def test_a_youtube_download_profile_chooses_auto_generated_subtitles(listed, ses
     session.commit()
     everyone = SimpleNamespace(allows_source=lambda _key: True)
 
-    # Only a site that makes auto-generated subtitles gets them, and the Local Media Profile lists it there.
+    # A site whose contract hides auto-generated subtitles doesn't get them; any other site does, and the
+    # Local Media Profile lists it there.
+    _site_of.cache_clear()
+    monkeypatch.setattr(ListedSource, "sites", (Site(
+        "youtube", "YouTube", ("youtube.com",), settings=SiteSettings(hides=frozenset({SiteSetting.AUTO_SUBTITLES})),
+    ),))
     assert auto_subtitles_uses(session, profile.id, everyone) == []
     assert download_plans.prepare_download_plan(session, download.id, DownloadTracker()).source.ytdlp_subtitles.auto_generated == "never"
 
-    monkeypatch.setattr(ListedSource, "auto_subtitles_for", lambda self, url: "youtube.com" in url)
+    _site_of.cache_clear()
+    monkeypatch.setattr(ListedSource, "sites", ())
     plan = download_plans.prepare_download_plan(session, download.id, DownloadTracker())
     assert (plan.source.ytdlp_subtitles.languages, plan.source.ytdlp_subtitles.auto_generated) == (("nl", "en"), "always")
     uses = auto_subtitles_uses(session, profile.id, everyone)
@@ -590,7 +601,10 @@ def test_a_youtube_download_profile_marks_sponsors_and_adds_your_own_options(lis
     )
 
     # A new profile's default: chapters for sponsors, intros and outros; nothing is cut out.
-    monkeypatch.setattr(ListedSource, "sponsorblock_for", lambda self, url: "youtube.com" in url)
+    _site_of.cache_clear()
+    monkeypatch.setattr(ListedSource, "sites", (Site(
+        "youtube", "YouTube", ("youtube.com",), settings=SiteSettings(shows=frozenset({SiteSetting.SPONSORBLOCK})),
+    ),))
     plan = download_plans.prepare_download_plan(session, download.id, DownloadTracker())
     assert plan.source.ytdlp_sponsorblock == YtdlpSponsorBlock(chapter=("sponsor", "intro", "outro"))
     assert "--sponsorblock-mark" in plan.source.ytdlp_command

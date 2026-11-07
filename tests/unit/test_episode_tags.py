@@ -18,6 +18,15 @@ from sources.ytdlp import YtDlpSource
 from test_ytdlp_collections import ListedSource
 from conftest import use_database
 
+from config.settings.site_settings import DEFAULT_SPONSORBLOCK_SEGMENTS
+
+# What every Download Profile request names; the UI starts them from the Site's settings.
+PROFILE_CHOICES = dict(
+    auto_subtitles="fallback", sponsorblock_enabled=False, sponsorblock_segments=dict(DEFAULT_SPONSORBLOCK_SEGMENTS),
+    upgrade_check=False, upgrade_after_days=7, upgrade_repeat="once", upgrade_improvements=[], upgrade_length_minutes=5,
+)
+
+
 
 def _video(slug: str, day: int, tag: str = MAIN_TAG) -> VideoDetails:
     return VideoDetails(
@@ -147,7 +156,7 @@ def test_the_episode_tags_endpoint_and_profiles_accept_source_tags():
 
     body = {
         "collection_id": 1, "local_media_profile_id": 1, "enable_profile": True,
-        "download_with_countdown": False, "redownload_final": False, "delete_older_episodes": False,
+        "download_with_countdown": False, "redownload_final": False, "delete_older_episodes": False, **PROFILE_CHOICES,
         "filters": [{"action": "only", "field": "types", "episode_types": ["ep", "livestream"]}],
     }
     assert DownloadProfileAPICreate.model_validate(body).filters[0].episode_types == ["ep", "livestream"]

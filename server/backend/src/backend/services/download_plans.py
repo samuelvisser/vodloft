@@ -39,7 +39,7 @@ from downloader.metadata import render_nfo
 from downloader.plan import DownloadPlan, SidecarSpec, YtdlpSponsorBlock, build_download_plan
 from downloader.source import resolve_download_source
 from downloader.ytdlp import resolve_ytdlp_source
-from sources import Feature, PlaybackKind, get_source
+from sources import Feature, PlaybackKind, SiteSetting, get_source
 
 
 def prepare_download_plan(session: Session, media_download_id: int, tracker: DownloadTracker) -> DownloadPlan:
@@ -62,9 +62,11 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     if profile.type != expected_type:
         raise DownloadError("The Local Media Profile does not match the media type")
     preferred = profile.preferred_format
+    media_site = None
     if episode is not None or video is not None:
+        media_site = collection_site(episode.collection) if episode is not None else video_site(video)
         # The profile may be offered for Sites that cannot give what it chose, such as an HLS bundle.
-        preferred = format_for_site(collection_site(episode.collection) if episode is not None else video_site(video), preferred)
+        preferred = format_for_site(media_site, preferred)
     audio_only = preferred == PreferredFormat.FORMAT_AUDIO_ONLY.value
     if movie is not None and preferred in (PreferredFormat.FORMAT_AUDIO_ONLY.value, PreferredFormat.FORMAT_HLS.value):
         raise DownloadError("Movies and extras require a normal video Local Media Profile")
@@ -107,12 +109,12 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
             media_source, slug=slug, url=page_url, title=title, tracker=tracker, use_cookies=use_cookies,
         )
         if playback.kind is PlaybackKind.YTDLP:
-            if media_source.auto_subtitles_for(page_url):
+            if media_site.settings.offers(SiteSetting.AUTO_SUBTITLES):
                 subtitle_request = ytdlp_subtitles(profile, auto_subtitles)
             source = resolve_ytdlp_source(
                 playback.url, command=playback.command, preferred_format=preferred, audio_only=audio_only,
                 quality=quality, subtitles=subtitle_request,
-                sponsorblock=sponsorblock if media_source.sponsorblock_for(page_url) else YtdlpSponsorBlock(),
+                sponsorblock=sponsorblock if media_site.settings.offers(SiteSetting.SPONSORBLOCK) else YtdlpSponsorBlock(),
                 custom_options=custom_ytdlp_options(*option_texts) if media_source.has(Feature.YTDLP_OPTIONS) else (),
                 ffmpeg_path=ffmpeg_path,
             )

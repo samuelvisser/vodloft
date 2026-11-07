@@ -1,14 +1,14 @@
 """Which Sources and Sites VODLoft follows upcoming and live episodes of, and how.
 
-A Site follows the system setting for each of these, or has its own under ``siteSchedules`` in config.yml.
+A Site follows the system setting for each of these, its preset, or its own under ``siteSettings`` in config.yml.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Optional
 
-from backend.services.metadata_refresh import own_site_schedule
-from config import get_settings
+from backend.services.site_settings import site_setting
+from config.settings.site_settings import SiteSetting
 from sources import Feature, Source, UnknownSourceError, get_source
 
 
@@ -21,23 +21,15 @@ class PendingMinutes:
     live: int
 
 
-def system_pending_minutes() -> PendingMinutes:
-    schedule = get_settings().new_episode_schedule
-    return PendingMinutes(schedule.pending_upcoming_minutes, schedule.pending_starting_minutes, schedule.pending_live_minutes)
-
-
 def site_pending_minutes(site_key: Optional[str]) -> PendingMinutes:
-    """The Site's lookup times from config.yml, or the system setting's."""
-    own = own_site_schedule(site_key)
-    if own.pending_upcoming_minutes is None:
-        return system_pending_minutes()
-    return PendingMinutes(own.pending_upcoming_minutes, own.pending_starting_minutes, own.pending_live_minutes)
+    """How often the Site's upcoming and live episodes are looked up."""
+    minutes = site_setting(site_key, SiteSetting.LOOKUP_MINUTES)
+    return PendingMinutes(minutes.upcoming, minutes.starting, minutes.live)
 
 
 def site_follows_pending(site_key: Optional[str]) -> bool:
     """Whether the Site's upcoming and live videos are added and followed until they are published."""
-    own = own_site_schedule(site_key).upcoming_and_live
-    return get_settings().new_episode_schedule.upcoming_and_live if own is None else own
+    return site_setting(site_key, SiteSetting.UPCOMING_AND_LIVE)
 
 
 def checks_pending(source: Source) -> bool:

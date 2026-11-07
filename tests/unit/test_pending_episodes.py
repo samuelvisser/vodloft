@@ -201,16 +201,16 @@ def _upcoming(slug: str, starts: datetime, status=EpisodePublishStatus.SCHEDULED
 
 
 @pytest.fixture
-def site_schedules():
-    """Give Sites their own scheduling, as under siteSchedules in config.yml."""
+def site_settings():
+    """Give Sites settings of their own, as under siteSettings in config.yml."""
     from config.registry import get_settings, replace_settings
-    from config.settings.submodels import SiteSchedule
+    from config.settings.site_settings import SiteSettingValues
 
     original = get_settings()
 
     def apply(**schedules: dict):
         replace_settings(original.model_copy(update={
-            "site_schedules": {key: SiteSchedule(**own) for key, own in schedules.items()},
+            "site_settings": {key: SiteSettingValues(**own) for key, own in schedules.items()},
         }))
 
     yield apply
@@ -257,8 +257,8 @@ def test_an_upcoming_video_is_added_with_its_status_and_not_downloaded(pending, 
     assert not [name for name, _ in events if name.startswith("download_profile")]
 
 
-def test_a_site_can_leave_upcoming_videos_out_until_they_are_published(pending, session, site_schedules):
-    site_schedules(tube={"upcoming_and_live": False})
+def test_a_site_can_leave_upcoming_videos_out_until_they_are_published(pending, session, site_settings):
+    site_settings(tube={"upcoming_and_live": False})
     collection = _pending_collection(session)
 
     assert _add(session, collection, _upcoming("soon", NOW + timedelta(hours=3))) == 0
@@ -422,10 +422,10 @@ def test_a_failed_daily_wire_lookup_is_tried_again_on_the_next_round(monitored, 
     assert monitored.checked == [flaky, gone, flaky]
 
 
-def test_a_daily_wire_episode_follows_the_rhythm_of_its_site(monitored, session, site_schedules):
+def test_a_daily_wire_episode_follows_the_rhythm_of_its_site(monitored, session, site_settings):
     from backend.db.models import Site
 
-    site_schedules(dailywire={"pending_upcoming_minutes": 60, "pending_starting_minutes": 2, "pending_live_minutes": 20})
+    site_settings(dailywire={"lookup_minutes": {"upcoming": 60, "starting": 2, "live": 20}})
     session.add(Site(key="dailywire", name="The Daily Wire", domains=["dailywire.com"]))
     session.commit()
     _dailywire_episode(session, "live", site="dailywire")
@@ -435,10 +435,10 @@ def test_a_daily_wire_episode_follows_the_rhythm_of_its_site(monitored, session,
     assert _sweep(session, NOW + timedelta(minutes=20)).checked == 1
 
 
-def test_a_site_with_upcoming_and_live_off_is_not_followed(monitored, session, site_schedules):
+def test_a_site_with_upcoming_and_live_off_is_not_followed(monitored, session, site_settings):
     from backend.db.models import Site
 
-    site_schedules(dailywire={"upcoming_and_live": False})
+    site_settings(dailywire={"upcoming_and_live": False})
     session.add(Site(key="dailywire", name="The Daily Wire", domains=["dailywire.com"]))
     session.commit()
     _dailywire_episode(session, "live", site="dailywire")
@@ -447,12 +447,12 @@ def test_a_site_with_upcoming_and_live_off_is_not_followed(monitored, session, s
     assert monitored.checked == []
 
 
-def test_a_site_follows_the_system_setting_unless_it_has_its_own(site_schedules):
+def test_a_site_follows_the_system_setting_unless_it_has_its_own(site_settings):
     from config import get_settings
     from backend.services import pending_episodes
 
-    site_schedules(b={"upcoming_and_live": False}, c={
-        "pending_upcoming_minutes": 90, "pending_starting_minutes": 3, "pending_live_minutes": 10,
+    site_settings(b={"upcoming_and_live": False}, c={
+        "lookup_minutes": {"upcoming": 90, "starting": 3, "live": 10},
     })
     system = get_settings().new_episode_schedule
 

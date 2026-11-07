@@ -1,6 +1,6 @@
 import type {SettingsTabProps} from './SettingsTabTypes'
 import CronEditor from './CronEditor'
-import SiteRefreshCard from './SiteRefreshCard'
+import SiteSettingsCard from './SiteSettingsCard'
 import {
     DurationField,
     NumberField,
@@ -221,7 +221,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                 title="Per-Site scheduling"
                 description="How each Site's new uploads are looked up again, and how its upcoming and live videos are followed."
             >
-                <div className="settings-field settings-field--wide site-refresh-system">
+                <div className="settings-field settings-field--wide site-settings-system">
                     <label>System settings</label>
                     <div className="settings-field__help">Used by every Site that follows the system setting, and by Sites VODLoft has not seen yet.</div>
                 </div>
@@ -283,7 +283,10 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                         help={help}
                     />
                 ))}
-                <SiteRefreshCard draft={draft} updateDraft={updateDraft} errorFor={errorFor}/>
+                <SiteSettingsCard
+                    group="scheduling" draft={draft} updateDraft={updateDraft} errorFor={errorFor}
+                    help="Default follows the system settings above. A Site with a preset starts with its own value, which you can change or set back to Default."
+                />
             </SettingsSection>
 
             <SettingsDisclosure

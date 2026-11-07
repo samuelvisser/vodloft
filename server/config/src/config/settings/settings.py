@@ -10,6 +10,7 @@ from pydantic_settings import DotEnvSettingsSource, EnvSettingsSource, YamlConfi
 
 from config.settings.base import SettingsBase, normalize_settings_source_keys
 from config.settings.submodels import *
+from config.settings.site_settings import DownloadProfileDefaults, SiteSettingValues
 
 
 TIMEZONE_ENVIRONMENT_VARIABLE = "TZ"
@@ -137,10 +138,11 @@ class AppSettings(SettingsBase):
         dw_processing_max_minutes=60,
         no_usable_media_delete_after_minutes=4 * 60,
     ))
-    site_schedules: dict[str, SiteSchedule] = Field(
+    site_settings: dict[str, SiteSettingValues] = Field(
         default_factory=dict,
-        description="Per Site key, the scheduling settings the Site has of its own",
+        description="Per Site key, the settings the Site has of its own",
     )
+    download_profile_defaults: DownloadProfileDefaults = Field(default_factory=DownloadProfileDefaults)
     download_settings: DownloadSettings = Field(default_factory=DownloadSettings)
     quick_download: QuickDownloadSettings = Field(default_factory=QuickDownloadSettings)
     youtube_api: YouTubeApiSettings = Field(default_factory=YouTubeApiSettings)

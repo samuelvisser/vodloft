@@ -17,7 +17,7 @@ from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
     ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, DownloadOptions, Feature, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
-    ResolvedLink, SearchResults, CollectionDetails, Site, Source, SourceProblem, SponsorBlockSegment, StreamMethod, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
+    ResolvedLink, SearchResults, CollectionDetails, Site, SiteSetting, Source, SourceProblem, SponsorBlockSegment, StreamMethod, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
 )
 from .. import pacing, ytdlp_runner as runner
@@ -429,18 +429,12 @@ class YtDlpSource(Source):
         """The site of the yt-dlp extractor that handles the link: one Site for all of YouTube's domains."""
         return sites.site_for(url)
 
-    def refresh_intervals_of(self, site_key: str) -> str | None:
-        return sites.refresh_intervals_of(site_key)
+    def site_of(self, site_key: str) -> Site:
+        return sites.site_of(site_key)
 
     def episode_tags_for(self, url: str | None) -> tuple[EpisodeTag, ...]:
         """Shorts and livestreams are YouTube's; other sites only have videos."""
         return _YOUTUBE_TAGS if url is None or _is_youtube(url) else (_VIDEO_TAG,)
-
-    def auto_subtitles_for(self, url: str) -> bool:
-        return _is_youtube(url)
-
-    def sponsorblock_for(self, url: str) -> bool:
-        return _is_youtube(url)
 
     def _info(self, url: str) -> dict:
         """The video info for a link. Adding a video right after looking up its link reuses the lookup."""
@@ -596,7 +590,7 @@ class YtDlpSource(Source):
             if language != "live_chat" and tracks
         )
         sponsorblock = None
-        if sponsorblock_categories and self.sponsorblock_for(url) and info.get("id"):
+        if sponsorblock_categories and self.site_for(url).settings.offers(SiteSetting.SPONSORBLOCK) and info.get("id"):
             sponsorblock = _sponsorblock_segments(str(info["id"]), sponsorblock_categories)
         return UpgradeOffer(videos=video_formats(info).videos, subtitle_languages=languages, sponsorblock=sponsorblock)
 

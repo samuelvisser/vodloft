@@ -30,7 +30,8 @@ from typing import Any, Literal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.services.sites import CollectionAlreadyAddedError
+from backend.services.site_settings import download_profile_defaults
+from backend.services.sites import CollectionAlreadyAddedError, collection_site
 
 import importer.pinchflat  # noqa: F401  (registers the importer)
 import importer.wireloft  # noqa: F401  (registers the importer)
@@ -1112,9 +1113,11 @@ def _upsert_download_profile(
     wanted = _download_profile_wanted(plan)
     unsupported = _unsupported(plan.warnings)
     if existing is None:
+        # What the other program had, over what a new Download Profile on the Site starts with.
         existing = DownloadProfile(
             collection_id=collection.id, local_media_profile_id=profile.id, enable_profile=False,
-            download_with_countdown=False, redownload_final=False, **wanted,
+            **{**download_profile_defaults(collection_site(collection)), "download_with_countdown": False,
+               "redownload_final": False, **wanted},
         )
         set_profile_filters(existing, filters_from_plan(plan.download_profile, seasons=False))
         session.add(existing)
