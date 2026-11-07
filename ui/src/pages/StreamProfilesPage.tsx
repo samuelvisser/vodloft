@@ -1,4 +1,4 @@
-import {useCallback, useRef} from 'react'
+import {useCallback, useRef, useState} from 'react'
 import {can} from '../lib/access'
 import {Link} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
@@ -14,12 +14,32 @@ import {RssStreamProfileUpdateSchema} from '../types/schemas/rss_stream_profile'
 import {faIcon} from '../icons/faIcon'
 import {apiUrl} from '../lib/api'
 
+import ProfileTableFilters, {ChipFilter, ENABLED_OPTIONS, FORMAT_KIND_OPTIONS, formatKind, matchesChips, matchesWords, searchWords} from '../components/common/ProfileTableFilters'
+
+const STREAMS_FROM_OPTIONS = [
+    {value: 'downloads', label: 'Downloads'},
+    {value: 'source', label: 'The Daily Wire'},
+]
+
 export default function StreamProfilesPage() {
     const queryClient = useQueryClient()
 
     const {data: profiles, isLoading, error} = useStreamProfilesView()
 
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
+
+    const [search, setSearch] = useState('')
+    const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set())
+    const [streamsFrom, setStreamsFrom] = useState<Set<string>>(new Set())
+    const [formatFilter, setFormatFilter] = useState<Set<string>>(new Set())
+    const words = searchWords(search)
+    const shownProfiles = profiles?.filter((p) => (
+        matchesWords(words, p.streamProfileImpl.effectiveTitle, p.collectionTitle)
+        && matchesChips(p.enableProfile ? 'enabled' : 'disabled', statusFilter)
+        && (streamsFrom.size === 0 || (streamsFrom.has('downloads') && p.useDownloads) || (streamsFrom.has('source') && p.useSourceStream))
+        && matchesChips(formatKind(p.preferredFormat), formatFilter)
+    ))
+    const filtered = words.length > 0 || statusFilter.size > 0 || streamsFrom.size > 0 || formatFilter.size > 0
 
     const setProfileEnabled = useCallback(async (profile: StreamProfileReadView, enableProfile: boolean) => {
         try {
@@ -105,11 +125,27 @@ export default function StreamProfilesPage() {
                 {can('stream_profiles') && <Link className="btn btn-primary" to="/add-stream-profile">Add stream profile</Link>}
             </div>
 
+            <ProfileTableFilters
+                search={search}
+                onSearch={setSearch}
+                searchPlaceholder="Search stream profiles or collections"
+                shown={shownProfiles?.length ?? 0}
+                total={profiles?.length ?? 0}
+                noun={['profile', 'profiles']}
+                filtered={filtered}
+                activeCount={[statusFilter, streamsFrom, formatFilter].filter((f) => f.size > 0).length}
+                onReset={() => { setSearch(''); setStatusFilter(new Set()); setStreamsFrom(new Set()); setFormatFilter(new Set()) }}
+            >
+                <ChipFilter label="Status" options={ENABLED_OPTIONS} selected={statusFilter} onChange={setStatusFilter}/>
+                <ChipFilter label="Streams from" options={STREAMS_FROM_OPTIONS} selected={streamsFrom} onChange={setStreamsFrom}/>
+                <ChipFilter label="Format" options={FORMAT_KIND_OPTIONS} selected={formatFilter} onChange={setFormatFilter}/>
+            </ProfileTableFilters>
+
             <div className="form-row">
                 <DataTable<StreamProfileReadView>
                     ariaLabel="Existing stream profiles"
                     columns={columns}
-                    data={profiles}
+                    data={shownProfiles}
                     loading={isLoading}
                     error={error}
                     rowKey={(p) => `${p.type}-${p.id}`}

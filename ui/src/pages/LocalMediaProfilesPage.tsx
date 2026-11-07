@@ -1,4 +1,5 @@
-import {useRef} from 'react'
+import {useRef, useState} from 'react'
+import ProfileTableFilters, {ChipFilter, FORMAT_KIND_OPTIONS, formatKind, matchesChips, matchesWords, searchWords} from '../components/common/ProfileTableFilters'
 import {can} from '../lib/access'
 import {Link} from 'react-router-dom'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
@@ -27,6 +28,23 @@ function getAvailableForLabel(profile: LocalMediaProfileRead) {
     return profile.type === 'collection'
         ? CollectionLocalMediaProfileScopeReg.getLabelLoose(profile.collectionScope)
         : 'Movies'
+}
+
+const USED_FOR_OPTIONS = [
+    {value: 'podcast', label: 'Podcasts'},
+    {value: 'series', label: 'Series'},
+    {value: 'movie', label: 'Movies'},
+    {value: 'video', label: 'Videos'},
+]
+
+const STORAGE_OPTIONS = [
+    {value: 'files', label: 'Has files'},
+    {value: 'empty', label: 'Empty'},
+]
+
+function usedFor(profile: LocalMediaProfileRead): string[] {
+    if (profile.type !== 'collection') return [profile.type]
+    return profile.collectionScope === 'both' ? ['podcast', 'series'] : [profile.collectionScope]
 }
 
 export default function LocalMediaProfilesPage() {
@@ -98,6 +116,19 @@ export default function LocalMediaProfilesPage() {
         }),
     ).sort((left, right) => left.name.localeCompare(right.name, undefined, {sensitivity: 'base', numeric: true}))
 
+    const [search, setSearch] = useState('')
+    const [usedForFilter, setUsedForFilter] = useState<Set<string>>(new Set())
+    const [formatFilter, setFormatFilter] = useState<Set<string>>(new Set())
+    const [storageFilter, setStorageFilter] = useState<Set<string>>(new Set())
+    const words = searchWords(search)
+    const shownProfiles = profiles?.filter((p) => (
+        matchesWords(words, p.name, p.outputTemplate)
+        && (usedForFilter.size === 0 || usedFor(p).some((value) => usedForFilter.has(value)))
+        && matchesChips(formatKind(p.preferredFormat), formatFilter)
+        && matchesChips(p.storageSizeBytes > 0 ? 'files' : 'empty', storageFilter)
+    ))
+    const filtered = words.length > 0 || usedForFilter.size > 0 || formatFilter.size > 0 || storageFilter.size > 0
+
     return (
         <section className="view" aria-labelledby="profiles-title">
             <div className="view-header">
@@ -110,11 +141,27 @@ export default function LocalMediaProfilesPage() {
                 {can('local_media_profiles', 'manage') && <Link className="btn btn-primary" to="/add-local-media-profile">Add media profile</Link>}
             </div>
 
+            <ProfileTableFilters
+                search={search}
+                onSearch={setSearch}
+                searchPlaceholder="Search names or output paths"
+                shown={shownProfiles?.length ?? 0}
+                total={profiles?.length ?? 0}
+                noun={['profile', 'profiles']}
+                filtered={filtered}
+                activeCount={[usedForFilter, formatFilter, storageFilter].filter((f) => f.size > 0).length}
+                onReset={() => { setSearch(''); setUsedForFilter(new Set()); setFormatFilter(new Set()); setStorageFilter(new Set()) }}
+            >
+                <ChipFilter label="Used for" options={USED_FOR_OPTIONS} selected={usedForFilter} onChange={setUsedForFilter}/>
+                <ChipFilter label="Format" options={FORMAT_KIND_OPTIONS} selected={formatFilter} onChange={setFormatFilter}/>
+                <ChipFilter label="Storage" options={STORAGE_OPTIONS} selected={storageFilter} onChange={setStorageFilter}/>
+            </ProfileTableFilters>
+
             <div className="form-row">
                 <DataTable<LocalMediaProfileOverviewRow>
                     ariaLabel="Existing media profiles"
                     columns={columns}
-                    data={profiles}
+                    data={shownProfiles}
                     loading={isLoading}
                     error={error}
                     rowKey={(p) => p.id}

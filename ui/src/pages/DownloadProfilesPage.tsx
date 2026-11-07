@@ -1,4 +1,4 @@
-import {useCallback, useRef} from 'react'
+import {useCallback, useMemo, useRef, useState} from 'react'
 import {can} from '../lib/access'
 import {Link} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
@@ -14,6 +14,9 @@ import {DownloadProfileUpdateSchema} from '../types/schemas/download_profile'
 import {faIcon} from '../icons/faIcon'
 import {formatBytes} from '../utils/formatting'
 import {apiUrl} from '../lib/api'
+import Select from 'react-select'
+import {useSourceLookup} from '../lib/queries'
+import ProfileTableFilters, {ChipFilter, ENABLED_OPTIONS, FORMAT_KIND_OPTIONS, formatKind, matchesChips, matchesWords, searchWords} from '../components/common/ProfileTableFilters'
 
 export default function DownloadProfilesPage() {
     const queryClient = useQueryClient()
@@ -21,6 +24,26 @@ export default function DownloadProfilesPage() {
     const {data: profiles, isLoading, error} = useDownloadProfilesView()
 
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
+
+    const sources = useSourceLookup()
+    const [search, setSearch] = useState('')
+    const [sourceFilter, setSourceFilter] = useState<Set<string>>(new Set())
+    const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set())
+    const [formatFilter, setFormatFilter] = useState<Set<string>>(new Set())
+    const [mediaProfile, setMediaProfile] = useState<string | null>(null)
+    const words = searchWords(search)
+    const sourceOptions = useMemo(() => [...new Set((profiles ?? []).map((p) => p.collectionSourceKey))]
+        .map((key) => ({value: key, label: sources.name(key)})), [profiles, sources])
+    const mediaProfileOptions = useMemo(() => [...new Set((profiles ?? []).map((p) => p.localMediaProfileName))]
+        .sort().map((name) => ({value: name, label: name})), [profiles])
+    const shownProfiles = profiles?.filter((p) => (
+        matchesWords(words, p.collectionTitle, p.localMediaProfileName)
+        && matchesChips(p.collectionSourceKey, sourceFilter)
+        && matchesChips(p.enableProfile ? 'enabled' : 'disabled', statusFilter)
+        && matchesChips(formatKind(p.localMediaProfilePreferredFormat), formatFilter)
+        && (!mediaProfile || p.localMediaProfileName === mediaProfile)
+    ))
+    const filtered = words.length > 0 || sourceFilter.size > 0 || statusFilter.size > 0 || formatFilter.size > 0 || !!mediaProfile
 
     const setProfileEnabled = useCallback(async (profile: DownloadProfileReadView, enableProfile: boolean) => {
         try {
@@ -100,11 +123,39 @@ export default function DownloadProfilesPage() {
                 {can('download_profiles', 'manage') && <Link className="btn btn-primary" to="/add-download-profile">Add download profile</Link>}
             </div>
 
+            <ProfileTableFilters
+                search={search}
+                onSearch={setSearch}
+                searchPlaceholder="Search collections"
+                beside={(
+                    <Select
+                        className="profile-filters-select"
+                        classNamePrefix="select"
+                        aria-label="Filter by local media profile"
+                        placeholder="All media profiles"
+                        isClearable
+                        options={mediaProfileOptions}
+                        value={mediaProfileOptions.find((o) => o.value === mediaProfile) ?? null}
+                        onChange={(o) => setMediaProfile(o?.value ?? null)}
+                    />
+                )}
+                shown={shownProfiles?.length ?? 0}
+                total={profiles?.length ?? 0}
+                noun={['profile', 'profiles']}
+                filtered={filtered}
+                activeCount={[sourceFilter, statusFilter, formatFilter].filter((f) => f.size > 0).length + (mediaProfile ? 1 : 0)}
+                onReset={() => { setSearch(''); setSourceFilter(new Set()); setStatusFilter(new Set()); setFormatFilter(new Set()); setMediaProfile(null) }}
+            >
+                <ChipFilter label="Source" options={sourceOptions} selected={sourceFilter} onChange={setSourceFilter}/>
+                <ChipFilter label="Status" options={ENABLED_OPTIONS} selected={statusFilter} onChange={setStatusFilter}/>
+                <ChipFilter label="Format" options={FORMAT_KIND_OPTIONS} selected={formatFilter} onChange={setFormatFilter}/>
+            </ProfileTableFilters>
+
             <div className="form-row">
                 <DataTable<DownloadProfileReadView>
                     ariaLabel="Existing download profiles"
                     columns={columns}
-                    data={profiles}
+                    data={shownProfiles}
                     loading={isLoading}
                     error={error}
                     rowKey={(p) => String(p.id)}
