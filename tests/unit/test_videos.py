@@ -383,3 +383,31 @@ def test_a_ytdlp_download_plans_thumbnails_and_nfo_in_every_container(video_sour
     # An Opus file gets the thumbnail and NFO beside it; VODLoft can't embed into it.
     assert (plan.artwork_asset_id == "artwork") is embeds
     assert bool(plan.metadata_tags) is embeds
+
+
+def test_a_frame_vodloft_took_from_the_video_is_embedded_and_kept_beside_it(video_sources, session, monkeypatch, tmp_path):
+    from backend.api.endpoints.media_downloads.service import create_video_download
+    from backend.api.models.media_download import MediaDownloadAPICreate
+    from backend.services import download_plans
+    from backend.services.videos import index_video
+    from config import get_settings
+    from downloader.lifecycle import DownloadTracker
+    from sources import PlaybackKind
+
+    monkeypatch.setattr(get_settings().download_settings, "thumbnail_root", tmp_path / "thumbnails")
+    (tmp_path / "thumbnails").mkdir()
+    monkeypatch.setattr(video_sources, "video_playback", lambda *, slug, url: Playback(url=url, kind=PlaybackKind.YTDLP, command=("yt-dlp",)))
+    profile = _video_profile(
+        session, preferred_format="format_1080p", thumbnail_mode="embed_and_sidecar", metadata_mode="no_metadata",
+        subtitle_mode="no_subtitles", quality_goal="custom", container="mp4",
+    )
+    video, _ = index_video(session, "clips", video_sources.video_details("https://clips.example/v/abc"))
+    (tmp_path / "thumbnails" / f"{video.uuid}.jpg").write_bytes(b"frame")
+    video.thumbnail_landscape_path = video.background_image_path = f"thumbnails/{video.uuid}.jpg"
+    download = create_video_download(session, video, MediaDownloadAPICreate(local_media_profile_id=profile.id))
+    session.commit()
+
+    plan = download_plans.prepare_download_plan(session, download.id, DownloadTracker())
+    artwork = {asset.id: asset for asset in plan.assets}["artwork"]
+    assert (artwork.url, artwork.content, artwork.extension, artwork.publish) == (None, b"frame", "jpg", True)
+    assert plan.artwork_asset_id == "artwork"
