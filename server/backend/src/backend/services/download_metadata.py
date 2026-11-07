@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from pathlib import Path
 from typing import Iterable
 
 from backend.db.models.media_item import Episode
+from backend.services.thumbnails import own_thumbnail_file
 from backend.types.collection_types import EpisodeIdentifier
 from downloader.metadata import MediaServerMetadata
 from sources import Feature, UnknownSourceError, get_source
@@ -152,8 +154,11 @@ def _named_values(values: Iterable[object] | object | None) -> tuple[str, ...]:
 
 
 
-def select_thumbnail_url(media) -> str | None:
-    """Choose the best artwork source for embedding or a per-media sidecar."""
+def select_thumbnail(media) -> str | Path | None:
+    """Choose the best artwork for embedding or a per-media sidecar.
+
+    That is a web address, or the file of a thumbnail VODLoft took from the video itself.
+    """
     for attribute in (
         "thumbnail_square_path",
         "thumbnail_portrait_path",
@@ -163,4 +168,6 @@ def select_thumbnail_url(media) -> str | None:
         value = getattr(media, attribute, None)
         if isinstance(value, str) and value.startswith(("http://", "https://")):
             return value
+        if (own := own_thumbnail_file(value)) is not None:
+            return own
     return None
