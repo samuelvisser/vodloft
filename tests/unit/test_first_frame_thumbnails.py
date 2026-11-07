@@ -174,3 +174,20 @@ def test_a_saved_thumbnail_is_served(thumbnail_root):
     thumbnail_root.mkdir()
     (thumbnail_root / "abc-123.jpg").write_bytes(b"jpeg")
     assert thumbnail_file("abc-123.jpg") == thumbnail_root / "abc-123.jpg"
+
+
+def test_a_frame_vodloft_made_is_the_thumbnail_a_download_takes(thumbnail_root):
+    from types import SimpleNamespace
+
+    from backend.services.download_metadata import select_thumbnail
+
+    thumbnail_root.mkdir()
+    (thumbnail_root / "abc-123.jpg").write_bytes(b"jpeg")
+    made = SimpleNamespace(
+        thumbnail_square_path=None, thumbnail_portrait_path=None,
+        thumbnail_landscape_path="thumbnails/abc-123.jpg", background_image_path="thumbnails/abc-123.jpg",
+    )
+    assert select_thumbnail(made) == thumbnail_root / "abc-123.jpg"
+    # A frame that is gone is no thumbnail.
+    gone = SimpleNamespace(**{**made.__dict__, "thumbnail_landscape_path": "thumbnails/gone.jpg", "background_image_path": None})
+    assert select_thumbnail(gone) is None

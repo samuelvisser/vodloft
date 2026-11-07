@@ -23,7 +23,7 @@ from backend.db.models import Collection, CollectionLocalMediaProfile, DownloadP
 from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadAsset
 from backend.services.adoption import download_root, sidecar_assets
 from backend.services.custom_indexes import profile_applies_to_collection
-from backend.services.download_metadata import build_episode_metadata, select_thumbnail_url
+from backend.services.download_metadata import build_episode_metadata, select_thumbnail
 from backend.services.download_options import effective_metadata_mode, effective_thumbnail_mode
 from backend.services.download_relocation import (
     DownloadRelocation, filter_relocation_conflicts, plan_download_relocation, relocate_downloads,
@@ -434,7 +434,7 @@ def fill_missing_sidecars(download_id: int) -> int:
             effective_thumbnail_mode(profile) in (ThumbnailMode.SIDECAR, ThumbnailMode.EMBED_AND_SIDECAR)
             and "thumbnail" not in kinds
         )
-        thumbnail_url = select_thumbnail_url(episode) if wants_thumbnail else None
+        thumbnail = select_thumbnail(episode) if wants_thumbnail else None
     finally:
         session.rollback()
         session.close()
@@ -444,7 +444,10 @@ def fill_missing_sidecars(download_id: int) -> int:
         path = media_path.with_name(media_path.stem + ".nfo")
         if _write_new_file(path, nfo):
             written.append(("nfo", "nfo", path))
-    fetched = _fetch_thumbnail(thumbnail_url) if thumbnail_url else None
+    fetched = (
+        _own_thumbnail(thumbnail) if isinstance(thumbnail, Path)
+        else _fetch_thumbnail(thumbnail) if thumbnail else None
+    )
     if fetched is not None:
         extension, content = fetched
         path = media_path.with_name(f"{media_path.stem}.{extension}")
@@ -466,6 +469,15 @@ def fill_missing_sidecars(download_id: int) -> int:
         return len(written)
 
     return run_write_transaction(record)
+
+
+def _own_thumbnail(path: Path) -> tuple[str, bytes] | None:
+    """A frame VODLoft took from the video, which it keeps as a JPEG."""
+    try:
+        return "jpg", path.read_bytes()
+    except OSError as exc:  # A missing thumbnail never fails the move.
+        logger.warning("Could not read the thumbnail %s: %s", path, exc)
+        return None
 
 
 def _fetch_thumbnail(url: str) -> tuple[str, bytes] | None:

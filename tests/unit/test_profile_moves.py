@@ -280,3 +280,24 @@ def test_folders_the_move_leaves_empty_are_removed(library):
     assert result.moved == 4
     assert not (root / "Old").exists()
     assert root.is_dir()
+
+
+def test_a_frame_vodloft_took_from_the_video_becomes_the_thumbnail_beside_it(library, monkeypatch):
+    from backend.services.profile_moves import fill_missing_sidecars
+    from config import get_settings
+
+    session, _collection, _source, target, episodes, downloads, tmp_path = library
+    monkeypatch.setattr(get_settings().download_settings, "thumbnail_root", tmp_path / "thumbnails")
+    (tmp_path / "thumbnails").mkdir()
+    (tmp_path / "thumbnails" / "e1.jpg").write_bytes(b"frame")
+    episodes[0].thumbnail_landscape_path = episodes[0].background_image_path = "thumbnails/e1.jpg"
+    target.metadata_mode, target.thumbnail_mode = "no_metadata", "sidecar"
+    download = downloads[0]
+    download.local_media_profile_id = target.id
+    session.commit()
+
+    assert fill_missing_sidecars(download.id) == 1
+    session.expire_all()
+    media = Path(download.file_path)
+    assert media.with_name(f"{media.stem}.jpg").read_bytes() == b"frame"
+    assert [(asset.kind, asset.suffix) for asset in download.assets] == [("thumbnail", ".jpg")]

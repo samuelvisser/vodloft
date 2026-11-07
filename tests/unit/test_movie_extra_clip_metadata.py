@@ -28,7 +28,7 @@ def test_download_clip_metadata_refresh_updates_canonical_source() -> None:
     from backend.db.models import Movie, MovieExtra, MovieExtraSource
     from backend.types.media_types import MediaType
     from sources.dailywire.api.records import DwMovieExtraDetailRecord
-    from backend.services.download_metadata import select_thumbnail_url
+    from backend.services.download_metadata import select_thumbnail
     from backend.services.movies import update_movie_extra_source_metadata
 
     engine = create_engine("sqlite:///:memory:")
@@ -94,7 +94,7 @@ def test_download_clip_metadata_refresh_updates_canonical_source() -> None:
 
         # The download plan applies clip metadata this way after resolving playback.
         update_movie_extra_source_metadata(extra.source, playback.metadata)
-        selected_thumbnail = select_thumbnail_url(playback.metadata)
+        selected_thumbnail = select_thumbnail(playback.metadata)
         session.commit()
 
         session.expire_all()

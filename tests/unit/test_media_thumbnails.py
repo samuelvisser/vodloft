@@ -27,8 +27,8 @@ def test_effective_thumbnail_mode_honors_profile_override(monkeypatch):
     assert effective_thumbnail_mode(profile) is ThumbnailMode.NO_THUMBNAIL
 
 
-def test_select_thumbnail_url_prefers_square_artwork():
-    from backend.services.download_metadata import select_thumbnail_url
+def test_select_thumbnail_prefers_square_artwork():
+    from backend.services.download_metadata import select_thumbnail
 
     media = SimpleNamespace(
         thumbnail_square_path="https://example.test/square.jpg",
@@ -37,11 +37,11 @@ def test_select_thumbnail_url_prefers_square_artwork():
         background_image_path="https://example.test/background.jpg",
     )
 
-    assert select_thumbnail_url(media) == "https://example.test/square.jpg"
+    assert select_thumbnail(media) == "https://example.test/square.jpg"
 
 
-def test_select_thumbnail_url_ignores_non_http_paths():
-    from backend.services.download_metadata import select_thumbnail_url
+def test_select_thumbnail_ignores_non_http_paths():
+    from backend.services.download_metadata import select_thumbnail
 
     media = SimpleNamespace(
         thumbnail_square_path="/local/square.jpg",
@@ -50,7 +50,7 @@ def test_select_thumbnail_url_ignores_non_http_paths():
         background_image_path=None,
     )
 
-    assert select_thumbnail_url(media) == "https://example.test/landscape.jpg"
+    assert select_thumbnail(media) == "https://example.test/landscape.jpg"
 
 
 def test_embed_thumbnail_uses_attached_picture_stream_for_audio(tmp_path, monkeypatch):
