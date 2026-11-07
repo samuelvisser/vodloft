@@ -1,4 +1,5 @@
-import {useCallback, useRef, useState} from 'react'
+import {useCallback, useMemo, useRef, useState} from 'react'
+import {useSourceLookup} from '../lib/queries'
 import {can} from '../lib/access'
 import {Link} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
@@ -18,7 +19,7 @@ import ProfileTableFilters, {ChipFilter, ENABLED_OPTIONS, FORMAT_KIND_OPTIONS, f
 
 const STREAMS_FROM_OPTIONS = [
     {value: 'downloads', label: 'Downloads'},
-    {value: 'source', label: 'The Daily Wire'},
+    {value: 'source', label: 'Direct from Site'},
 ]
 
 export default function StreamProfilesPage() {
@@ -29,17 +30,22 @@ export default function StreamProfilesPage() {
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
 
     const [search, setSearch] = useState('')
+    const sources = useSourceLookup()
+    const [sourceFilter, setSourceFilter] = useState<Set<string>>(new Set())
+    const sourceOptions = useMemo(() => [...new Set((profiles ?? []).map((p) => p.collectionSourceKey))]
+        .map((key) => ({value: key, label: sources.name(key)})), [profiles, sources])
     const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set())
     const [streamsFrom, setStreamsFrom] = useState<Set<string>>(new Set())
     const [formatFilter, setFormatFilter] = useState<Set<string>>(new Set())
     const words = searchWords(search)
     const shownProfiles = profiles?.filter((p) => (
         matchesWords(words, p.streamProfileImpl.effectiveTitle, p.collectionTitle)
+        && matchesChips(p.collectionSourceKey, sourceFilter)
         && matchesChips(p.enableProfile ? 'enabled' : 'disabled', statusFilter)
         && (streamsFrom.size === 0 || (streamsFrom.has('downloads') && p.useDownloads) || (streamsFrom.has('source') && p.useSourceStream))
         && matchesChips(formatKind(p.preferredFormat), formatFilter)
     ))
-    const filtered = words.length > 0 || statusFilter.size > 0 || streamsFrom.size > 0 || formatFilter.size > 0
+    const filtered = words.length > 0 || sourceFilter.size > 0 || statusFilter.size > 0 || streamsFrom.size > 0 || formatFilter.size > 0
 
     const setProfileEnabled = useCallback(async (profile: StreamProfileReadView, enableProfile: boolean) => {
         try {
@@ -128,14 +134,15 @@ export default function StreamProfilesPage() {
             <ProfileTableFilters
                 search={search}
                 onSearch={setSearch}
-                searchPlaceholder="Search stream profiles or collections"
+                searchPlaceholder="Search stream profiles"
                 shown={shownProfiles?.length ?? 0}
                 total={profiles?.length ?? 0}
                 noun={['profile', 'profiles']}
                 filtered={filtered}
-                activeCount={[statusFilter, streamsFrom, formatFilter].filter((f) => f.size > 0).length}
-                onReset={() => { setSearch(''); setStatusFilter(new Set()); setStreamsFrom(new Set()); setFormatFilter(new Set()) }}
+                activeCount={[sourceFilter, statusFilter, streamsFrom, formatFilter].filter((f) => f.size > 0).length}
+                onReset={() => { setSearch(''); setSourceFilter(new Set()); setStatusFilter(new Set()); setStreamsFrom(new Set()); setFormatFilter(new Set()) }}
             >
+                <ChipFilter label="Source" options={sourceOptions} selected={sourceFilter} onChange={setSourceFilter}/>
                 <ChipFilter label="Status" options={ENABLED_OPTIONS} selected={statusFilter} onChange={setStatusFilter}/>
                 <ChipFilter label="Streams from" options={STREAMS_FROM_OPTIONS} selected={streamsFrom} onChange={setStreamsFrom}/>
                 <ChipFilter label="Format" options={FORMAT_KIND_OPTIONS} selected={formatFilter} onChange={setFormatFilter}/>

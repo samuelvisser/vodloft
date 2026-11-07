@@ -38,6 +38,7 @@ class StreamProfileAPIReadView(StreamProfileAPIRead):
 
     collection_title: str = Field(validation_alias=AliasPath("profile", "collection", "title"))
     collection_slug: str = Field(validation_alias=AliasPath("profile", "collection", "slug"))
+    collection_source_key: str = Field(validation_alias=AliasPath("profile", "collection", "source_key"))
     stream_profile_impl: RssStreamProfileAPIRead = Field(
         validation_alias="profile"
     )
