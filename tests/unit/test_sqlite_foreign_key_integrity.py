@@ -3,6 +3,8 @@ from __future__ import annotations
 import threading
 import time
 
+import pytest
+
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
 
@@ -23,7 +25,9 @@ def test_shared_sqlite_connections_enable_foreign_keys(tmp_path):
         engine.dispose()
 
 
-def test_write_intent_transaction_waits_for_existing_sqlite_writer(tmp_path):
+# On SQLite a concurrent transaction still takes the one writer slot.
+@pytest.mark.parametrize("concurrent", [False, True])
+def test_write_intent_transaction_waits_for_existing_sqlite_writer(tmp_path, concurrent):
     from backend.db.core import (
         _configure_sqlite_connection,
         begin_write_transaction,
@@ -50,7 +54,7 @@ def test_write_intent_transaction_waits_for_existing_sqlite_writer(tmp_path):
         waiter = sessions()
         entered.set()
         try:
-            begin_write_transaction(waiter)
+            begin_write_transaction(waiter, concurrent=concurrent)
             waiter.commit()
         except Exception as exc:
             errors.append(exc)

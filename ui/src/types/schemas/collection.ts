@@ -13,41 +13,19 @@ function ensureProtocol(input: string): string {
     return v;
 }
 
-function isDailyWire(url: URL): boolean {
-    const host = url.hostname.toLowerCase();
-    return host === "dailywire.com" || host === "www.dailywire.com";
-}
-
-/** A show's link. Daily Wire links must point at a collection page; other sites keep their full link. */
+/** A collection's link. The Source that recognises it checks it and gives its canonical link. */
 const collectionUrl = z
     .string()
     .nonempty({message: "URL is required"})
     .default('')
     .transform(ensureProtocol)
-    .transform((s) => {
-        try {
-            const u = new URL(s);
-            return isDailyWire(u) ? `${u.origin}${u.pathname}` : s;
-        } catch {
-            // let the later refinements surface the error
-            return s;
-        }
-    })
     .refine((s) => {
         try {
             return ["http:", "https:"].includes(new URL(s).protocol);
         } catch {
             return false;
         }
-    }, {message: "Enter a valid link"})
-    .refine((s) => {
-        const u = new URL(s);
-        return !isDailyWire(u) || u.pathname.startsWith("/show/");
-    }, {message: "URL must include /show/ in the path"})
-    .refine((s) => {
-        const u = new URL(s);
-        return !isDailyWire(u) || !!u.pathname.slice("/show/".length).split("/")[0];
-    }, {message: "URL must include a show name after /show/ (e.g., the-ben-shapiro-show)"});
+    }, {message: "Enter a valid link"});
 
 /* ------------------------------------------------------------------ */
 /* FORM schemas (only user-editable fields)                          */

@@ -7,9 +7,10 @@ import {
     type UserAccountsSettingsRead,
     type UserRead,
 } from '../types/schemas/user'
+import {apiUrl} from './api'
 
 function base(): string {
-    return ((window as any).appConfig?.API_URL || '/api').replace(/\/+$/, '')
+    return (apiUrl()).replace(/\/+$/, '')
 }
 
 async function readJson<T>(path: string, parse: (data: unknown) => T, signal?: AbortSignal): Promise<T> {

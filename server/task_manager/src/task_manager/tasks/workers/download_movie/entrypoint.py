@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 from controller.db_utils import db_session
+from task_manager.scheduler.lanes import TaskLane
 from task_manager.scheduler.registry import task
 from task_manager.tasks.media_download_operations import on_media_download_task_terminal
 from task_manager.tasks.workers.download_attempt import serialize_download_attempt
@@ -17,7 +18,7 @@ from .service import run_download_movie
     allowed_resource_types=("media_download",),
     default_max_retries=2,
     tracks_progress=True,
-    executor_alias="downloads",
+    executor_alias=TaskLane.DOWNLOADS,
     terminal_callback=on_media_download_task_terminal,
     recovery_dispatcher=on_media_download_task_terminal,
 )

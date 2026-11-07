@@ -9,6 +9,7 @@ import { hashPasswordForAdminAuth } from '../utils/security/adminAuth'
 import { getPublicConfig } from '../lib/publicConfig'
 import { ClearInputButton } from '../components/common/ClearInputButton'
 import './LoginPage.css'
+import {apiUrl} from '../lib/api'
 
 const LoginSchema = z.object({
   // Only asked for once user accounts are on; empty signs in with the environment password.
@@ -29,7 +30,7 @@ export default function LoginPage() {
   const handleSubmit = buildServerAwareSubmit<LoginValues>(
     form,
     async (data) => {
-      const base = (window as any).appConfig?.API_URL || '/api'
+      const base = apiUrl()
       const passwordHash = await hashPasswordForAdminAuth(data.password)
       const username = data.username?.trim()
       const payload = username ? { username, passwordHash } : { passwordHash }

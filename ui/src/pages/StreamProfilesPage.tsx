@@ -12,6 +12,7 @@ import PageSubtitle from "../components/common/PageSubtitle";
 import ProfileEnabledSwitch from '../components/common/ProfileEnabledSwitch'
 import {RssStreamProfileUpdateSchema} from '../types/schemas/rss_stream_profile'
 import {faIcon} from '../icons/faIcon'
+import {apiUrl} from '../lib/api'
 
 export default function StreamProfilesPage() {
     const queryClient = useQueryClient()
@@ -27,7 +28,7 @@ export default function StreamProfilesPage() {
                 title: profile.streamProfileImpl.effectiveTitle,
                 enableProfile,
             })
-            const response = await fetch(`${(window as any).appConfig.API_URL}/rss-stream-profiles/${profile.id}`, {
+            const response = await fetch(`${apiUrl()}/rss-stream-profiles/${profile.id}`, {
                 method: 'PATCH',
                 headers: {'Content-Type': 'application/json'},
                 credentials: 'include',
@@ -150,7 +151,7 @@ export default function StreamProfilesPage() {
                 subjectProp="collectionTitle"
                 deleteRequest={(p) => {
                     const path = `${p.type === 'rss' ? 'rss-stream-profiles' : 'stream-profiles'}/${p.id}`
-                    return fetch(`${(window as any).appConfig.API_URL}/${path}`, {method: 'DELETE', credentials: 'include'})
+                    return fetch(`${apiUrl()}/${path}`, {method: 'DELETE', credentials: 'include'})
                 }}
                 invalidateQueries={[["streamProfilesView"], ["rssStreamProfiles"]]}
                 inUseMessage="This stream profile is in use, it cannot be deleted"

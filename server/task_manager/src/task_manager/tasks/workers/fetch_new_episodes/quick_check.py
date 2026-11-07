@@ -19,9 +19,9 @@ from backend.services.check_frequency import joins_regular_checks
 from backend.db.models import Episode, Collection
 from config.network import is_no_internet_error
 from sources import Feature, Source, get_source
-from ...helpers.listed_collections import add_listed_episodes, known_episode_slugs
-from backend.services.thumbnails import newest_media_item_id, take_first_frames
-from .service import _episodes_after, _index_listed_collection, _queue_collection_indexed
+from ...helpers.listed_collections import add_listed_episodes, index_listed_collection, known_episode_slugs
+from backend.services.thumbnails import newest_media_item_id
+from .service import finish_index
 
 logger = logging.getLogger(__name__)
 
@@ -91,13 +91,9 @@ def _check_collection(s: Session, *, collection: Collection, source: Source) -> 
     newest = newest_media_item_id(s)
     added = add_listed_episodes(s, collection_id=collection_id, found=found)
     if added:
-        from backend.services.custom_indexes import request_collection_custom_index_reconciliation
-
-        request_collection_custom_index_reconciliation(s, collection_id)
-        _queue_collection_indexed(s, collection=s.get(Collection, collection_id), indexed_count=added)
-    s.commit()
-    if added:
-        take_first_frames(s, _episodes_after(s, collection_id, newest))
+        finish_index(s, collection_id=collection_id, found=added, newest=newest)
+    else:
+        s.commit()
     return added
 
 
@@ -111,7 +107,9 @@ def run_quick_check(s: Session, *, now: datetime | None = None) -> QuickCheckRes
         try:
             if count == 0:
                 # A collection that was never indexed gets its full first index, so its numbering follows upload order.
-                added = _index_listed_collection(s, collection=collection, source=source, dry_run=False).episodes_found
+                newest = newest_media_item_id(s)
+                added = index_listed_collection(s, collection_id=collection_id, source=source)
+                finish_index(s, collection_id=collection_id, found=added, newest=newest)
             else:
                 added = _check_collection(s, collection=collection, source=source)
         except Exception as exc:

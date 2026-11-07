@@ -2,9 +2,10 @@ import {useQuery} from '@tanstack/react-query'
 
 import {SpeedLimitStatusSchema} from '../types/schemas/settings'
 import {errorMessage} from './users'
+import {apiUrl} from './api'
 
 function base(): string {
-    return ((window as any).appConfig?.API_URL || '/api').replace(/\/+$/, '')
+    return (apiUrl()).replace(/\/+$/, '')
 }
 
 /** How fast downloads may go right now; it follows saved settings and new measurements. */

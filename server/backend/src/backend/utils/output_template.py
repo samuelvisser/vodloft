@@ -643,14 +643,9 @@ def resolve_movie_output_path(
     *,
     movie: "Movie",
     media_item: "Movie | MovieExtra | None" = None,
-    append_media_type_to_filename: bool = False,
     extension: Optional[str] = None,
 ) -> Path:
-    """Resolve a Movie Local Media Profile for a movie or one of its extras.
-
-    The deprecated ``append_media_type_to_filename`` argument remains for API
-    compatibility. New profiles express that behavior directly in Jinja.
-    """
+    """Resolve a Movie Local Media Profile for a movie or one of its extras."""
     if output_template_custom_index_keys(output_template):
         raise ValueError("custom_index is only available to Collection Local Media Profiles")
     values = movie_output_template_values(movie, media_item)
@@ -660,8 +655,6 @@ def resolve_movie_output_path(
         allowed_fields=MOVIE_OUTPUT_TEMPLATE_FIELDS,
         allowed_metadata_scopes=MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
     )
-    if append_media_type_to_filename and values["media_type"] != "movie":
-        rendered = _append_filename_suffix(rendered, f"-{values['media_type']}")
     return _finish_output_path(rendered, extension=extension)
 
 
@@ -700,13 +693,6 @@ def _date_substitutions(value: Optional[date | datetime]) -> dict[str, str]:
         "minute": value_datetime.strftime("%M"),
         "second": value_datetime.strftime("%S"),
     }
-
-
-def _append_filename_suffix(path: str, suffix: str) -> str:
-    if path.endswith(".ext"):
-        return path[:-4] + suffix + ".ext"
-    file_path = Path(path)
-    return str(file_path.with_name(file_path.stem + suffix + file_path.suffix))
 
 
 def replace_output_extension(resolved: str, extension: Optional[str]) -> str:

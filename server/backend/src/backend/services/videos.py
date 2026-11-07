@@ -55,7 +55,7 @@ def index_video(s: Session, source_key: str, details: VideoDetails) -> tuple[Vid
     if created:
         # The metadata refresh sweep follows a new upload for a while; an older one is done.
         video.metadata_is_final = new_item_metadata_is_final(
-            s, source_key=source_key, site_key=video.site_key, published_at=details.published_at,
+            source_key=source_key, site_key=video.site_key, published_at=details.published_at,
         )
     s.flush()
     return video, created

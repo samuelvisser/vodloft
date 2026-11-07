@@ -13,6 +13,7 @@ import {operationNotificationDefinitions} from './components/OperationNotifier/O
 import FrontendPuller from './lib/puller'
 import ForcedPasswordChangePage from './pages/ForcedPasswordChangePage'
 import { accessChecked, getAccess, loadAccess } from './lib/access'
+import {apiUrl} from './lib/api'
 
 type OnboardingStatus = {
   completed: boolean
@@ -45,7 +46,7 @@ export default function App() {
   const loadOnboardingStatus = useCallback(async () => {
     setOnboardingError(null)
     try {
-      const base = (window as any).appConfig?.API_URL || '/api'
+      const base = apiUrl()
       const response = await fetch(`${base}/onboarding/status`, { credentials: 'include' })
       if (response.status === 401) {
         setAuthState('no')

@@ -2,10 +2,11 @@ import {useCallback, useEffect, useRef, useState} from 'react'
 import { DeviceAuthResponse, DeviceAuthResponseSchema, PollResponse, PollResponseSchema, StatusResponse, StatusResponseSchema } from '../../types/schemas/dailywire_auth'
 import { DailywireUserInfoRead, DailywireUserInfoReadSchema } from '../../types/schemas/dailywire_user_info'
 import {DwMembershipLevelReg} from "../../types/dailywire_user_info";
+import {apiUrl} from '../../lib/api'
 
 
 function apiBase() {
-    const base = (window as any).appConfig?.API_URL?.replace(/\/+$/, '')
+    const base = apiUrl()
     return `${base}/dailywire/auth`
 }
 
@@ -30,7 +31,7 @@ export default function DailywireAuthCard() {
         setUserInfoLoading(true)
         setUserInfoError(null)
         try {
-            const base = (window as any).appConfig?.API_URL?.replace(/\/+$/, '')
+            const base = apiUrl()
             const r = await fetch(`${base}/dailywire/user-info`, {credentials: 'include'})
             if (!r.ok) throw new Error(`Failed to load user info (HTTP ${r.status})`)
             const j = DailywireUserInfoReadSchema.parse(await r.json())

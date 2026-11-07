@@ -94,7 +94,6 @@ export const LocalMediaProfileSchemaResponse = z.looseObject({
     metadataMode: LocalMediaProfileMetadataModeSchema.default('system'),
     subtitleMode: LocalMediaProfileSubtitleModeSchema.default('sidecar'),
     ...QualityAndLanguageFields,
-    appendMediaTypeToFilename: z.boolean().optional().default(false),
     sourceKeys: z.array(z.string()).nullable().optional().transform((value) => value ?? null),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,

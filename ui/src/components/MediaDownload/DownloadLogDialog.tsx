@@ -12,6 +12,7 @@ import {PUBLISH_STATUS_LABELS} from '../../types/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {movieExtraTypeLabel} from '../../utils/movieExtras'
 import {faIcon} from '../../icons/faIcon'
+import {apiUrl} from '../../lib/api'
 
 type Props = {
     row: MediaDownloadViewRead | null
@@ -56,7 +57,7 @@ export default function DownloadLogDialog({row, onClose}: Props) {
         if (!row || deleteBusy) return
         setDeleteBusy(true)
         try {
-            const base = (window as any).appConfig.API_URL
+            const base = apiUrl()
             const response = await fetch(`${base}/media-downloads/${row.id}/files`, {
                 method: 'DELETE',
                 credentials: 'include',

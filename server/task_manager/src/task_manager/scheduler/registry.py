@@ -8,6 +8,7 @@ from backend.db.core import get_session
 from sqlalchemy import select
 
 from task_manager.scheduler.db import TaskDefinition
+from task_manager.scheduler.lanes import TaskLane
 
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,7 @@ class TaskMeta:
     default_max_retries: Optional[int] = None
     tracks_progress: bool = True
     pauses_scheduled_work: bool = False
-    executor_alias: str = "default"
+    executor_alias: TaskLane = TaskLane.DEFAULT
     terminal_callback: Optional[TerminalCallback] = None
     recovery_dispatcher: Optional[RecoveryDispatcher] = None
     triggers: List[TriggerMeta] = field(default_factory=list)
@@ -65,7 +66,7 @@ def task(
     default_max_retries: Optional[int] = None,
     tracks_progress: bool = True,
     pauses_scheduled_work: bool = False,
-    executor_alias: str = "default",
+    executor_alias: TaskLane = TaskLane.DEFAULT,
     terminal_callback: Optional[TerminalCallback] = None,
     recovery_dispatcher: Optional[RecoveryDispatcher] = None,
 ):

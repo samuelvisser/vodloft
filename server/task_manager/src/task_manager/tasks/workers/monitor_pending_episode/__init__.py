@@ -1,3 +1,3 @@
-from .entrypoint import monitor_pending_episode
+from .entrypoint import check_pending_episodes
 
-__all__ = ["monitor_pending_episode"]
+__all__ = ["check_pending_episodes"]

@@ -1,5 +1,6 @@
 import {useInfiniteQuery} from '@tanstack/react-query'
 import {MediaDownloadHistoryPageReadSchema} from '../types/schemas/media_download_history'
+import {apiUrl} from './api'
 
 export function useMediaDownloadHistory(mediaDownloadId?: number, limit = 50) {
     return useInfiniteQuery({
@@ -12,7 +13,7 @@ export function useMediaDownloadHistory(mediaDownloadId?: number, limit = 50) {
                 limit: String(limit),
             })
             const response = await fetch(
-                `${(window as any).appConfig.API_URL}/media-downloads/${mediaDownloadId}/history?${params}`,
+                `${apiUrl()}/media-downloads/${mediaDownloadId}/history?${params}`,
                 {signal, credentials: 'include'},
             )
             if (!response.ok) throw new Error(`HTTP ${response.status}`)

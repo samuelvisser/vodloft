@@ -118,14 +118,14 @@ def ytdlp_options_check(body: YtdlpOptionsCheckAPIRequest):
 @router.get("/sources/{source_id}/ytdlp-options", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=YtdlpOptionsAPIRead)
 def ytdlp_options(source_id: str):
     """The yt-dlp options the Source gives every download."""
-    _source(source_id, Feature.YTDLP_DOWNLOADS)
+    _source(source_id, Feature.YTDLP_OPTIONS)
     with db_session() as s:
         return YtdlpOptionsAPIRead(text=ytdlp_source_options(s))
 
 
 @router.put("/sources/{source_id}/ytdlp-options", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=YtdlpOptionsAPIRead)
 def save_ytdlp_options(source_id: str, body: YtdlpOptionsAPIUpdate):
-    _source(source_id, Feature.YTDLP_DOWNLOADS)
+    _source(source_id, Feature.YTDLP_OPTIONS)
     with db_session() as s:
         text = save_ytdlp_source_options(s, body.text)
         s.commit()

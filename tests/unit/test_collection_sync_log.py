@@ -61,7 +61,7 @@ def test_the_sync_log_lists_only_scans_that_looked_at_the_collection(quick, list
     assert collection_scans(session, "UC1", offset=2, limit=10)[0][0].id == quick_check.id
 
 def test_sync_now_runs_the_scan_the_regular_checks_give_the_collection(quick, listed_too, session):
-    from backend.api.endpoints.collections.operations import CollectionSyncOperation
+    from backend.operations.collections import CollectionSyncOperation
 
     assert CollectionSyncOperation(_collection(session, "UC1")).task == "rescan_quick_checked_collections"
     assert CollectionSyncOperation(_collection(session, "PL1", source_key="listed")).task == "fetch_new_episodes"

@@ -13,6 +13,7 @@ import ProfileEnabledSwitch from '../components/common/ProfileEnabledSwitch'
 import {DownloadProfileUpdateSchema} from '../types/schemas/download_profile'
 import {faIcon} from '../icons/faIcon'
 import {formatBytes} from '../utils/formatting'
+import {apiUrl} from '../lib/api'
 
 export default function DownloadProfilesPage() {
     const queryClient = useQueryClient()
@@ -25,7 +26,7 @@ export default function DownloadProfilesPage() {
         try {
             const body = DownloadProfileUpdateSchema.parse({...profile, enableProfile})
 
-            const response = await fetch(`${(window as any).appConfig.API_URL}/download-profiles/${profile.id}`, {
+            const response = await fetch(`${apiUrl()}/download-profiles/${profile.id}`, {
                 method: 'PATCH',
                 headers: {'Content-Type': 'application/json'},
                 credentials: 'include',
@@ -146,7 +147,7 @@ export default function DownloadProfilesPage() {
                 title="Delete download profile"
                 subjectProp="collectionTitle"
                 deleteRequest={(p) => fetch(
-                    `${(window as any).appConfig.API_URL}/download-profiles/${p.id}`,
+                    `${apiUrl()}/download-profiles/${p.id}`,
                     {method: 'DELETE', credentials: 'include'},
                 )}
                 invalidateQueries={[["downloadProfilesView"], ["downloadProfilesByCollectionSlug"]]}

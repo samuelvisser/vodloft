@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from backend.api.endpoints.local_media_profiles.helpers import ensure_unique_profile_settings
+from backend.services.local_media_profile_changes import ensure_unique_profile_settings
 from backend.api.endpoints.local_media_profiles.service import delete_local_media_profile_record
 from backend.api.models.video_local_media_profile import (
     VideoLocalMediaProfileAPICreate,

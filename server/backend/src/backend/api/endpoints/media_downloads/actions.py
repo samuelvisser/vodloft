@@ -11,7 +11,7 @@ from backend.services import download_actions as actions
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import queue_operation_target_dispatch
 from task_manager.scheduler.types import OperationSource
-from .operations import _BulkMediaDownloadOperation
+from backend.operations.media_downloads import _BulkMediaDownloadOperation
 
 
 def _invoke(action, *args, **kwargs):

@@ -5,7 +5,7 @@ subpackage (``sources.dailywire``); the rest of VODLoft reaches it through the
 contract in ``sources.contract`` and the registry below.
 """
 from .contract import ANY_DOMAIN, ApiKeyRejected, ApiQuotaShare, ApiStatus, EpisodeMedia, EpisodePublishStatus, EpisodeTag, PublishStatusLabel, Feature, ItemRef, ItemRefresh, MAIN_TAG, MIN_NEWEST_EPISODES, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus, ResolvedLink, RssEpisodeType, SearchNotice, SearchResults, SeasonRef, CollectionDetails, CookiesStatus, DownloadOptions, Site, Source, SourceProblem, SponsorBlockSegment, StreamMethod, UpgradeChecks, UpgradeImprovement, UpgradeOffer, VIDEO_HEIGHTS, VideoDetails, VideoFormat, VideoFormats, names_a_podcast
-from .registry import UnknownSourceError, all_sources, collection_on_site, get_source, named_site_for, named_sites, register, site_for, source_site, sources_for
+from .registry import UnknownSourceError, all_sources, collection_on_site, get_source, named_site_for, named_sites, register, site_for, site_refresh_intervals, source_site, sources_for
 from .dailywire import DailyWireSource
 from .npo import NpoSource
 from .ytdlp import YtDlpSource
@@ -71,5 +71,6 @@ __all__ = [
     "named_site_for",
     "named_sites",
     "site_for",
+    "site_refresh_intervals",
     "source_site",
 ]

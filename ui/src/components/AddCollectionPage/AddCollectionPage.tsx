@@ -28,6 +28,7 @@ import {SeasonDetachedOut} from "../../types/schemas/season";
 import {useEpisodeTags, useSiteOptions} from "../../lib/queries";
 import {EpisodeTagRead} from "../../types/schemas/source";
 import {CollectionExamplesContext, useCollectionExamplesQuery} from "../../lib/collectionExamples";
+import {apiUrl} from '../../lib/api'
 
 export type Props = {
     onCancel: () => void
@@ -279,7 +280,7 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
         }
 
         try {
-            const response = await fetch(`${(window as any).appConfig.API_URL}/collections/as-bundle`, {
+            const response = await fetch(`${apiUrl()}/collections/as-bundle`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 credentials: 'include',

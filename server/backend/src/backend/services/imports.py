@@ -25,7 +25,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -36,21 +36,27 @@ import importer.pinchflat  # noqa: F401  (registers the importer)
 import importer.wireloft  # noqa: F401  (registers the importer)
 from config import get_settings
 from config.settings.submodels import FilenameRestrictionMode
-from importer.contract import CollectionPlan, FilePlan, Importer, ImportPlan, ImportWarning, ProfilePlan
+from importer.contract import CollectionPlan, FilePlan, Importer, ImportPlan, ImportWarning, ProfilePlan, SettingPlan
 from importer.profile_merge import merge_profiles
 from importer.paths import DEFAULT_PATH_MAP, PathMap, detect_path_map, map_path, path_map_candidates
 from importer.registry import get_importer as _registered_importer
 from sources.ytdlp_options import check_ytdlp_options
 
-from backend.db.core import begin_write_transaction
+from backend.db.core import get_session, run_write_transaction
 from backend.db.models import (
     Collection, CollectionLocalMediaProfile, DownloadProfile, Episode, ExistingFileScan, ImportLink, ImportRun, ImportStep,
     LocalMediaProfileBase, MediaDownloadBase, MovieLocalMediaProfile,
 )
 from backend.db.models.media_download import EpisodeMediaDownload
-from backend.services.adoption import AdoptionError, adopt, download_root, real_path
+from backend.services.adoption import AdoptionError, FoundFile, adopt, download_root, find_file, real_path
 from backend.services.episode_filters import set_profile_filters
 from backend.services.import_filters import filters_from_plan
+from backend.services.local_media_profile_changes import (
+    create_collection_local_media_profile, create_movie_local_media_profile, update_collection_local_media_profile,
+)
+from backend.services.local_media_profile_inputs import (
+    CollectionLocalMediaProfileInput, MovieLocalMediaProfileInput, NewCollectionLocalMediaProfile,
+)
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.custom_index import (
     INDEX_ASSIGNMENT_PREFIX, get_indexing_value_definitions, remove_episode_index_assignments,
@@ -428,23 +434,39 @@ def _published(value: str | None) -> datetime | None:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
+@dataclass(frozen=True)
+class PathDifference:
+    path: str
+    rendered: str
+
+
+@dataclass(frozen=True)
+class PathProof:
+    """How many of a profile's files the converted template renders at their real path."""
+
+    identical: int
+    total: int
+    differences: list[PathDifference]
+    error: str | None = None
+
+
 def path_proof(
     profile: ProfilePlan, files: Sequence[FilePlan], titles: Mapping[str, str], mode: FilenameRestrictionMode,
     authors: Mapping[str, str] | None = None, fields: Mapping[str, Mapping[str, str]] | None = None,
-) -> dict[str, Any]:
+) -> PathProof:
     """How many of the files' real paths the converted template renders exactly, and every one it doesn't."""
     adopted = [file for file in files if file.kind == "file" and file.path]
     if profile.output_template is None or not adopted:
-        return {"identical": 0, "total": len(adopted), "differences": []}
+        return PathProof(0, len(adopted), [])
     try:
         prepared = prepare_output_template(
             profile.output_template, allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
             allowed_metadata_scopes=COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
         )
     except ValueError as exc:
-        return {"identical": 0, "total": len(adopted), "differences": [], "error": str(exc)}
+        return PathProof(0, len(adopted), [], str(exc))
     identical = 0
-    differences: list[dict[str, str]] = []
+    differences: list[PathDifference] = []
     for file in adopted:
         published = _published(file.published)
         values: dict[str, object] = {
@@ -471,8 +493,8 @@ def path_proof(
         if rendered == file.path:
             identical += 1
         else:
-            differences.append({"path": file.path, "rendered": rendered})
-    return {"identical": identical, "total": len(adopted), "differences": differences}
+            differences.append(PathDifference(file.path, rendered))
+    return PathProof(identical, len(adopted), differences)
 
 
 # Stands in for an uploader the upload has no metadata for; shown as "(uploader)".
@@ -509,7 +531,83 @@ def _warning(warning: ImportWarning) -> dict[str, str]:
 
 # ---------- Preview ----------
 
-def preview(session: Session, importer: Importer, options: ImportOptions) -> dict[str, Any]:
+@dataclass(frozen=True)
+class CollectionPreview:
+    """A Collection the import brings, and what VODLoft knows about it already."""
+
+    plan: CollectionPlan
+    profile_name: str | None
+    becomes: Literal["new", "linked", "in_library"]
+    collection_slug: str | None
+    files: int
+    files_on_disk: int
+    files_adopted: int
+    suppressed: int
+    missing: int
+    download_profile_on: bool
+    custom_metadata: dict[str, str]
+
+
+@dataclass(frozen=True)
+class ProfilePreview:
+    """A profile the import brings, and the VODLoft profile it becomes."""
+
+    plan: ProfilePlan
+    becomes: Literal["new", "linked", "reused"]
+    local_media_profile_name: str | None
+    path_proof: PathProof
+    changes: _Changes | None
+
+
+@dataclass(frozen=True)
+class SettingPreview:
+    plan: SettingPlan
+    selected: bool
+
+    @property
+    def value(self) -> object:
+        """Secrets are never shown."""
+        return None if self.plan.secret else self.plan.value
+
+
+@dataclass(frozen=True)
+class PathMapPreview:
+    source: str
+    target: str
+    sampled: int
+    found: int
+
+
+@dataclass(frozen=True)
+class ImportCounts:
+    collections: int
+    files: int
+
+
+@dataclass(frozen=True)
+class ImportPreview:
+    """Everything the import would do, for the person to check first."""
+
+    importer: str
+    version: str | None
+    uploaded_at: datetime | None
+    path_map: PathMapPreview
+    collections: list[CollectionPreview]
+    profiles: list[ProfilePreview]
+    settings: list[SettingPreview]
+    warnings: tuple[ImportWarning, ...]
+    records: dict[str, Any] | None
+    last_run: ImportRun | None
+    merge_profiles: bool
+    counts: ImportCounts
+
+
+def last_run(session: Session, importer: Importer) -> ImportRun | None:
+    return session.scalar(select(ImportRun).where(ImportRun.importer == importer.key)
+                          .order_by(ImportRun.id.desc()).limit(1))
+
+
+def preview(session: Session, importer: Importer, options: ImportOptions) -> ImportPreview:
     """Everything the import would do, for the person to check first. Writes nothing."""
     options = with_merge_default(session, importer, options)
     loaded = load_plan(importer, options)
@@ -533,7 +631,6 @@ def preview(session: Session, importer: Importer, options: ImportOptions) -> dic
         link = links.get(("collection", collection.external_id))
         linked = session.get(Collection, link.entity_id) if link and link.entity_id else None
         existing = linked or library.get(_normalise_url(collection.url))
-        on_disk = sum(1 for file in files if file.kind == "file" and file.path and _exists(file.path))
         adopted = 0
         if existing is not None:
             adopted = session.scalar(select(func.count(MediaDownloadBase.id)).join(
@@ -542,23 +639,20 @@ def preview(session: Session, importer: Importer, options: ImportOptions) -> dic
                 Episode.collection_id == existing.id,
                 MediaDownloadBase.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value,
             )) or 0
-        collections.append({
-            "external_id": collection.external_id,
-            "title": collection.title,
-            "url": collection.url,
-            "profile_external_id": collection.profile_external_id,
-            "profile_name": profiles[collection.profile_external_id].name if collection.profile_external_id in profiles else None,
-            "becomes": "linked" if linked else "in_library" if existing else "new",
-            "collection_slug": existing.slug if existing else None,
-            "files": kinds.get("file", 0),
-            "files_on_disk": on_disk,
-            "files_adopted": adopted,
-            "suppressed": kinds.get("suppressed", 0),
-            "missing": kinds.get("missing", 0),
-            "download_profile_on": bool((collection.download_profile or {}).get("enable_profile")),
-            "custom_metadata": fields[collection.external_id],
-            "warnings": [_warning(warning) for warning in collection.warnings],
-        })
+        profile = profiles.get(collection.profile_external_id) if collection.profile_external_id else None
+        collections.append(CollectionPreview(
+            plan=collection,
+            profile_name=profile.name if profile else None,
+            becomes="linked" if linked else "in_library" if existing else "new",
+            collection_slug=existing.slug if existing else None,
+            files=kinds.get("file", 0),
+            files_on_disk=sum(1 for file in files if file.kind == "file" and file.path and _exists(file.path)),
+            files_adopted=adopted,
+            suppressed=kinds.get("suppressed", 0),
+            missing=kinds.get("missing", 0),
+            download_profile_on=bool((collection.download_profile or {}).get("enable_profile")),
+            custom_metadata=fields[collection.external_id],
+        ))
 
     profile_files: dict[str, list[FilePlan]] = defaultdict(list)
     for collection in plan.collections:
@@ -570,76 +664,44 @@ def preview(session: Session, importer: Importer, options: ImportOptions) -> dic
         reused = None if linked else _matching_profile(session, profile)
         changes = None
         if linked is not None:
-            _write, _hashes, found = _merge_fields(
+            _write, _hashes, changes = _merge_fields(
                 _profile_values(linked), _profile_wanted(profile), link, _unsupported(profile.warnings),
             )
-            changes = asdict(found)
-        profile_views.append({
-            "external_id": profile.external_id,
-            "name": profile.name,
-            "becomes": "linked" if linked else "reused" if reused else "new",
-            "local_media_profile_name": (linked or reused).name if (linked or reused) else None,
-            "original_template": profile.original_template,
-            "output_template": profile.output_template,
-            "support": profile.support,
-            "report": list(profile.report),
-            "settings": dict(profile.settings),
-            "custom_indexes": [asdict(index) for index in profile.custom_indexes],
-            "warnings": [_warning(warning) for warning in profile.warnings],
-            "path_proof": path_proof(profile, profile_files.get(profile.external_id, []), titles, mode, authors, fields),
-            "changes": changes,
-            "base_name": profile.base_name,
-            "merged_from": list(profile.merged_from),
-            "template_overrides": profile.template_overrides,
-            "fields": list(profile.fields),
-            "kept_separate": profile.kept_separate,
-        })
+        profile_views.append(ProfilePreview(
+            plan=profile,
+            becomes="linked" if linked else "reused" if reused else "new",
+            local_media_profile_name=(linked or reused).name if (linked or reused) else None,
+            path_proof=path_proof(profile, profile_files.get(profile.external_id, []), titles, mode, authors, fields),
+            changes=changes,
+        ))
 
     selected = _selected_settings(plan, options)
-    settings = [{
-        "key": item.key,
-        "value": None if item.secret else item.value,
-        "support": item.support,
-        "note": item.note,
-        "secret": item.secret,
-        "selected": item.key in selected,
-    } for item in plan.settings]
-
-    last = session.scalar(select(ImportRun).where(ImportRun.importer == importer.key)
-                          .order_by(ImportRun.id.desc()).limit(1))
     records = _record_summary(session, plan, links) if plan.records else None
-    return {
-        "importer": importer.key,
-        "version": plan.version,
-        "uploaded_at": uploaded_at(importer),
-        "path_map": {"source": loaded.path_map[0], "target": loaded.path_map[1],
-                     "sampled": loaded.sampled, "found": loaded.found},
-        "collections": collections,
-        "profiles": profile_views,
-        "settings": settings,
-        "warnings": [_warning(warning) for warning in plan.warnings],
-        "records": records,
-        "last_run": run_summary(last) if last else None,
-        "merge_profiles": bool(options.merge_profiles),
-        "counts": {
-            "collections": len(records["collections"]) if records else len(plan.collections),
-            "files": sum(item["files"] for item in records["collections"]) if records
+    return ImportPreview(
+        importer=importer.key,
+        version=plan.version,
+        uploaded_at=uploaded_at(importer),
+        path_map=PathMapPreview(source=loaded.path_map[0], target=loaded.path_map[1],
+                                sampled=loaded.sampled, found=loaded.found),
+        collections=collections,
+        profiles=profile_views,
+        settings=[SettingPreview(plan=item, selected=item.key in selected) for item in plan.settings],
+        warnings=plan.warnings,
+        records=records,
+        last_run=last_run(session, importer),
+        merge_profiles=bool(options.merge_profiles),
+        counts=ImportCounts(
+            collections=len(records["collections"]) if records else len(plan.collections),
+            files=sum(item["files"] for item in records["collections"]) if records
             else sum(1 for file in plan.files if file.kind == "file"),
-        },
-    }
+        ),
+    )
 
 
 def _record_summary(session: Session, plan: ImportPlan, links) -> dict[str, Any]:
     from .import_records import record_summary
 
     return record_summary(session, plan, links)
-
-
-def run_summary(run: ImportRun) -> dict[str, Any]:
-    return {
-        "id": run.id, "status": run.status, "created_at": run.created_at, "finished_at": run.finished_at,
-        "uploaded_at": run.uploaded_at, "counts": dict(run.counts or {}), "error": run.error,
-    }
 
 
 # ---------- Running ----------
@@ -657,7 +719,7 @@ def _start_operation(session: Session, definition) -> None:
 
 def start_run(session: Session, importer: Importer, options: ImportOptions) -> ImportRun:
     """Record the run and queue the task that applies it."""
-    from backend.api.endpoints.imports.operations import ImportRunOperation
+    from backend.operations.imports import ImportRunOperation
 
     running = session.scalar(select(ImportRun.id).where(
         ImportRun.importer == importer.key, ImportRun.status == RUNNING,
@@ -721,9 +783,9 @@ def _apply_setting(key: str, value: object, session: Session | None = None) -> N
         ))
         return
     if key == "dailywire.sign_in":
-        from backend.api.endpoints.dailywire.auth.imported_sign_in import save_imported_sign_in
+        from sources import get_source
 
-        save_imported_sign_in(dict(value))  # type: ignore[call-overload]
+        get_source("dailywire").import_sign_in(dict(value))  # type: ignore[call-overload]
         return
     if key == "downloads.filename_restriction_mode":
         from backend.api.endpoints.settings.service import save_ui_settings
@@ -830,15 +892,6 @@ def _unique_name(session: Session, name: str) -> str:
 
 
 def _upsert_profile(session: Session, plan: ProfilePlan, links, run: ImportRun, report: _Report) -> CollectionLocalMediaProfile | None:
-    from fastapi import HTTPException
-
-    from backend.api.endpoints.collection_local_media_profiles.service import (
-        create_collection_local_media_profile, update_collection_local_media_profile,
-    )
-    from backend.api.models.collection_local_media_profile import (
-        CollectionLocalMediaProfileAPICreate, CollectionLocalMediaProfileAPIUpdate,
-    )
-
     if plan.output_template is None:
         report.add("failed", plan.name, "The output template could not be converted; its sources were not imported",
                    warnings=[_warning(warning) for warning in plan.warnings])
@@ -856,13 +909,10 @@ def _upsert_profile(session: Session, plan: ProfilePlan, links, run: ImportRun, 
                           {name: _hash(value) for name, value in _profile_values(reused).items()}, unsupported, run.id)
                 report.add("reused", plan.name, f"Uses the Local Media Profile {reused.name}, which names files the same way")
                 return reused
-            body = CollectionLocalMediaProfileAPICreate.model_validate({
+            profile = create_collection_local_media_profile(session, NewCollectionLocalMediaProfile.model_validate({
                 **{name: value for name, value in wanted.items() if value is not None},
                 "name": _unique_name(session, plan.name),
-                "type": "collection",
-            })
-            created = create_collection_local_media_profile(session, body)
-            profile = session.get(CollectionLocalMediaProfile, created.id)
+            }))
             _write, hashes, _changes = _merge_fields(_profile_values(profile), wanted, None, unsupported)
             _remember(session, links, run.importer, "profile", plan.external_id, profile.id, hashes, unsupported, run.id)
             report.add("created", plan.name, f"Local Media Profile {profile.name}", support=plan.support,
@@ -872,19 +922,15 @@ def _upsert_profile(session: Session, plan: ProfilePlan, links, run: ImportRun, 
         write, hashes, changes = _merge_fields(_profile_values(existing), wanted, link, unsupported)
         if write:
             values = {**_profile_values(existing), **write}
-            body = CollectionLocalMediaProfileAPIUpdate.model_validate({
+            update_collection_local_media_profile(session, existing.slug, CollectionLocalMediaProfileInput.model_validate({
                 **{name: value for name, value in values.items() if value is not None},
-                "name": existing.name, "type": "collection",
-            })
-            update_collection_local_media_profile(session, existing.slug, body)
+                "name": existing.name,
+            }))
         _remember(session, links, run.importer, "profile", plan.external_id, existing.id, hashes, unsupported, run.id)
         _report_changes(report, existing.name, changes)
         return existing
-    except HTTPException as exc:
-        detail = exc.detail[0]["msg"] if isinstance(exc.detail, list) and exc.detail else str(exc.detail)
-        report.add("failed", plan.name, f"{detail}; its sources were not imported")
-        return None
     except ValueError as exc:
+        # A ServiceError the profile service refused with, or the input's ValidationError.
         report.add("failed", plan.name, f"{exc}; its sources were not imported")
         return None
 
@@ -971,27 +1017,25 @@ def _settle_field_keys(session: Session, plan: ImportPlan, links, library: Mappi
 
 def _create_collection(session: Session, plan: CollectionPlan) -> Collection:
     """A new yt-dlp Collection for the plan, looked up the way Add Collection does."""
-    from backend.api.endpoints.collections.as_bundle.service import create_collection_bundle
-    from backend.api.models.collection_as_bundle import CollectionAPICreateBundle
-    from backend.utils.helpers import slugify
+    from backend.services.collections import add_collection, index_new_collection
+    from backend.types.collection_types import CollectionType, EpisodeIdentifier
+    from backend.utils.helpers import generate_uuid, slugify
     from sources import get_source
 
     source = get_source("ytdlp")
     details = source.collection_details(plan.url)
     author = details.author_name or details.title
-    payload = CollectionAPICreateBundle.model_validate({
-        "collection": {
-            "slug": details.slug, "sourceKey": source.id, "title": plan.title or details.title,
-            "description": details.description, "sharingUrl": details.url,
-            "membershipLevel": "FREE", "type": plan.settings.get("type", "series"),
-            "episodeIdentifier": plan.settings.get("episode_identifier", "date_based"),
-            "authorName": author, "authorSlug": slugify(author) or details.slug,
-            "thumbnailLandscapePath": details.image_url,
-        },
-        "seasons": [],
-    })
-    created = create_collection_bundle(session, None, payload)
-    return session.get(Collection, created.id)
+    collection = Collection(
+        uuid=generate_uuid(), slug=details.slug, source_key=source.id, title=plan.title or details.title,
+        description=details.description, sharing_url=details.url,
+        membership_level="FREE", type=CollectionType(plan.settings.get("type", "series")).value,
+        episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")).value,
+        author_name=author, author_slug=slugify(author) or details.slug,
+        thumbnail_landscape_path=details.image_url,
+    )
+    add_collection(session, collection)
+    index_new_collection(session, collection)
+    return collection
 
 
 def _upsert_collection(session: Session, plan: CollectionPlan, library, links, run: ImportRun, report: _Report) -> tuple[Collection | None, bool]:
@@ -1170,7 +1214,7 @@ def apply_run(session: Session, run_id: int) -> dict[str, int]:
             known = set(session.scalars(select(Episode.source_slug).where(Episode.collection_id == collection.id)))
             missing = {file["media_site_id"] for file in step.files} - known
             if missing and not _index_running(session, collection.id):
-                from backend.api.endpoints.collections.operations import CollectionSyncOperation
+                from backend.operations.collections import CollectionSyncOperation
 
                 _start_operation(session, CollectionSyncOperation(collection))
             elif not missing and not _index_running(session, collection.id):
@@ -1188,11 +1232,6 @@ def apply_run(session: Session, run_id: int) -> dict[str, int]:
 
 def _upsert_movie_profile(session: Session, plan: ProfilePlan, links, run: ImportRun, report: _Report) -> LocalMediaProfileBase | None:
     """A movie Local Media Profile: one that names files the same way is used instead of a copy."""
-    from fastapi import HTTPException
-
-    from backend.api.endpoints.movie_local_media_profiles.service import create_movie_local_media_profile
-    from backend.api.models.movie_local_media_profile import MovieLocalMediaProfileAPICreate
-
     link = links.get(("profile", plan.external_id))
     existing = session.get(MovieLocalMediaProfile, link.entity_id) if link and link.entity_id else None
     if existing is not None:
@@ -1205,18 +1244,15 @@ def _upsert_movie_profile(session: Session, plan: ProfilePlan, links, run: Impor
         _remember(session, links, run.importer, "profile", plan.external_id, reused.id, {}, [], run.id)
         report.add("reused", plan.name, f"Uses the Local Media Profile {reused.name}, which names files the same way")
         return reused
-    fields = ("preferred_format", "download_mode", "thumbnail_mode", "metadata_mode", "subtitle_mode",
-              "append_media_type_to_filename")
+    fields = ("preferred_format", "download_mode", "thumbnail_mode", "metadata_mode", "subtitle_mode")
     try:
-        created = create_movie_local_media_profile(session, MovieLocalMediaProfileAPICreate.model_validate({
+        profile = create_movie_local_media_profile(session, MovieLocalMediaProfileInput.model_validate({
             **{name: plan.settings[name] for name in fields if plan.settings.get(name) is not None},
-            "name": _unique_name(session, plan.name), "output_template": plan.output_template, "type": "movie",
+            "name": _unique_name(session, plan.name), "output_template": plan.output_template,
         }))
-    except (HTTPException, ValueError) as exc:
-        detail = getattr(exc, "detail", exc)
-        report.add("failed", plan.name, f"{detail}; its movies' downloads were not imported")
+    except ValueError as exc:
+        report.add("failed", plan.name, f"{exc}; its movies' downloads were not imported")
         return None
-    profile = session.get(MovieLocalMediaProfile, created.id)
     _remember(session, links, run.importer, "profile", plan.external_id, profile.id, {}, [], run.id)
     report.add("created", plan.name, f"Local Media Profile {profile.name}")
     report.counts["profiles_created"] += 1
@@ -1253,7 +1289,7 @@ def _apply_record_plan(session: Session, plan: ImportPlan, options: ImportOption
 
 
 def _queue_step(session: Session, step: ImportStep) -> None:
-    from backend.api.endpoints.imports.operations import ImportStepOperation
+    from backend.operations.imports import ImportStepOperation
 
     collection = session.get(Collection, step.collection_id)
     _start_operation(session, ImportStepOperation(collection, step_id=step.id))
@@ -1317,25 +1353,21 @@ def _suppress(session: Session, episode: Episode, profile: CollectionLocalMediaP
     return True
 
 
-def _begin_write(session: Session) -> None:
-    """Commit what came before and start a transaction that writes.
+@dataclass(frozen=True)
+class _StepFiles:
+    """What adopting a step's files needs from the step that started it."""
 
-    With SQLite, a transaction that reads first and only then writes fails at once
-    with "database is locked" when another job committed in between, which
-    indexing and progress updates do all the time. Reserving the write up front
-    waits for the other job instead.
-    """
-    if session.in_transaction():
-        session.commit()
-    begin_write_transaction(session)
+    local_media_profile_id: int
+    episode_ids: dict[str, int]
+    files: list[dict[str, Any]]
+    importer: str | None
+    numbers: int
 
 
-def run_step(session: Session, step_id: int) -> dict[str, int]:
-    """Number, adopt and hold back the episodes of one imported Collection."""
-    _begin_write(session)
+def _start_step(session: Session, step_id: int) -> _StepFiles | None:
     step = session.get(ImportStep, step_id)
     if step is None or step.status != STEP_WAITING:
-        return {}
+        return None
     profile = session.get(CollectionLocalMediaProfile, step.local_media_profile_id)
     run = session.get(ImportRun, step.run_id)
     episodes = {
@@ -1343,47 +1375,48 @@ def run_step(session: Session, step_id: int) -> dict[str, int]:
         for episode in session.scalars(select(Episode).where(Episode.collection_id == step.collection_id))
         if episode.source_slug
     }
-    counts: Counter = Counter()
-    counts["numbers"] = _seed_indexes(session, step, profile, episodes)
-    # Each file is committed on its own: adopting reads the file from disk, and one transaction for a
-    # whole Collection would hold SQLite's write lock that long, so other steps and indexes time out.
-    # Adopting again is a no-op, so a step that stops halfway picks up where it was.
-    problems: list[dict[str, str]] = []
-    for file in step.files:
-        episode = episodes.get(file["media_site_id"])
-        if episode is None:
-            if file["kind"] == "file":
-                counts["not_indexed"] += 1
-                if len(problems) < 50:
-                    problems.append({"path": file["path"], "error": "The video is not in the Collection (removed or private)"})
-            continue
-        if file["kind"] == "suppressed":
-            _begin_write(session)
-            counts["suppressed"] += int(_suppress(session, episode, profile))
-            continue
-        if file["kind"] != "file":
-            continue
-        _begin_write(session)
-        try:
-            with session.begin_nested():
-                adopted = adopt(session, media=episode, local_media_profile=profile, path=real_path(file["path"]),
-                                matched_by="Recorded path", metadata={"importer": run.importer if run else None})
-        except (AdoptionError, OSError, ValueError) as exc:
-            counts["not_adopted"] += 1
-            if len(problems) < 50:
-                problems.append({"path": file["path"], "error": str(exc)})
-            continue
-        if file.get("kept") and isinstance(adopted.download, EpisodeMediaDownload):
-            adopted.download.kept = True
-        counts["adopted" if adopted.created else "already_adopted"] += 1
-    _begin_write(session)
+    return _StepFiles(
+        local_media_profile_id=profile.id,
+        episode_ids={slug: episode.id for slug, episode in episodes.items()},
+        files=list(step.files),
+        importer=run.importer if run else None,
+        numbers=_seed_indexes(session, step, profile, episodes),
+    )
+
+
+def _adopt_step_file(
+    session: Session, started: _StepFiles, episode_id: int, file: Mapping[str, Any], found: FoundFile,
+) -> tuple[str, str | None]:
+    """Adopt one recorded file: the count it adds to, and the error when it could not be adopted."""
+    episode = session.get(Episode, episode_id)
+    profile = session.get(CollectionLocalMediaProfile, started.local_media_profile_id)
+    try:
+        with session.begin_nested():
+            adopted = adopt(session, media=episode, local_media_profile=profile, found=found,
+                            matched_by="Recorded path", metadata={"importer": started.importer})
+    except (AdoptionError, OSError, ValueError) as exc:
+        return "not_adopted", str(exc)
+    if file.get("kept") and isinstance(adopted.download, EpisodeMediaDownload):
+        adopted.download.kept = True
+    return ("adopted" if adopted.created else "already_adopted"), None
+
+
+def _finish_step(
+    session: Session, step_id: int, counts: Counter, problems: list[dict[str, str]], folder: str | None,
+) -> dict[str, int]:
+    # Copies, so a transaction that runs again starts from the same counts and problems.
+    counts, problems = Counter(counts), list(problems)
+    step = session.get(ImportStep, step_id)
+    if step is None or step.status != STEP_WAITING:
+        return dict(counts)
+    profile = session.get(CollectionLocalMediaProfile, step.local_media_profile_id)
+    run = session.get(ImportRun, step.run_id)
     download_profile = session.get(DownloadProfile, step.download_profile_id) if step.download_profile_id else None
     if download_profile is not None:
         counts["would_download"] = _would_download(session, download_profile)
-    session.flush()
     run_options = ImportOptions.from_dict(run.options or {}) if run else ImportOptions()
     matching = run_options.match_existing_files
-    if matching and not _match_existing_files(session, step, profile, download_profile, problems):
+    if matching and not _match_existing_files(session, step, profile, download_profile, problems, folder):
         matching = False
     renaming = run_options.rename_existing_files
     if renaming and not matching:
@@ -1399,21 +1432,66 @@ def run_step(session: Session, step_id: int) -> dict[str, int]:
     step.status = STEP_DONE
     session.flush()
     _finish_run_if_done(session, step.run_id)
-    session.commit()
     return dict(counts)
 
 
-def fail_step(session: Session, step_id: int, error: str) -> None:
+def run_step(step_id: int) -> dict[str, int]:
+    """Number, adopt and hold back the episodes of one imported Collection."""
+    started = run_write_transaction(lambda session: _start_step(session, step_id))
+    if started is None:
+        return {}
+    counts: Counter = Counter(numbers=started.numbers)
+    # Each file gets a short transaction of its own that only records it; reading the file from disk comes first.
+    # Adopting again is a no-op, so a step that stops halfway picks up where it was.
+    problems: list[dict[str, str]] = []
+
+    def problem(path: str, error: str) -> None:
+        if len(problems) < 50:
+            problems.append({"path": path, "error": error})
+
+    for file in started.files:
+        episode_id = started.episode_ids.get(file["media_site_id"])
+        if episode_id is None:
+            if file["kind"] == "file":
+                counts["not_indexed"] += 1
+                problem(file["path"], "The video is not in the Collection (removed or private)")
+            continue
+        if file["kind"] == "suppressed":
+            counts["suppressed"] += int(run_write_transaction(lambda session: _suppress(
+                session,
+                session.get(Episode, episode_id),
+                session.get(CollectionLocalMediaProfile, started.local_media_profile_id),
+            )))
+        elif file["kind"] == "file":
+            # The file is read before the transaction, which only records it.
+            try:
+                found = find_file(real_path(file["path"]))
+            except (AdoptionError, OSError, ValueError) as exc:
+                outcome, error = "not_adopted", str(exc)
+            else:
+                outcome, error = run_write_transaction(
+                    lambda session: _adopt_step_file(session, started, episode_id, file, found),
+                )
+            counts[outcome] += 1
+            if error is not None:
+                problem(file["path"], error)
+    folder = _scan_folder(step_id)
+    return run_write_transaction(lambda session: _finish_step(session, step_id, counts, problems, folder))
+
+
+def fail_step(step_id: int, error: str) -> None:
     """Record that adopting a Collection's files stopped with an error, so the import does not wait for it."""
-    _begin_write(session)
-    step = session.get(ImportStep, step_id)
-    if step is None or step.status != STEP_WAITING:
-        return
-    step.result = {"counts": {}, "problems": [{"path": None, "error": error}]}
-    step.status = STEP_FAILED
-    session.flush()
-    _finish_run_if_done(session, step.run_id)
-    session.commit()
+
+    def fail(session: Session) -> None:
+        step = session.get(ImportStep, step_id)
+        if step is None or step.status != STEP_WAITING:
+            return
+        step.result = {"counts": {}, "problems": [{"path": None, "error": error}]}
+        step.status = STEP_FAILED
+        session.flush()
+        _finish_run_if_done(session, step.run_id)
+
+    run_write_transaction(fail)
 
 
 def rename_collection_files(session: Session, collection_id: int, local_media_profile_id: int) -> None:
@@ -1421,7 +1499,7 @@ def rename_collection_files(session: Session, collection_id: int, local_media_pr
     from task_manager.scheduler.operation_factory import create_operation
     from task_manager.scheduler.operations import queue_operation_target_dispatch
 
-    from backend.api.endpoints.collections.operations import CollectionFileRenameOperation
+    from backend.operations.collections import CollectionFileRenameOperation
 
     collection = session.get(Collection, collection_id)
     if collection is None:
@@ -1447,23 +1525,39 @@ def rename_after_matching(session: Session, scan: ExistingFileScan) -> bool:
     return True
 
 
+def _scan_folder(step_id: int) -> str | None:
+    """The folder Match existing files looks in for the step's Collection. Seeing whether the Collection
+    has a folder of its own reads the disk, so this runs before the transaction that finishes the step."""
+    from backend.services.existing_files import scan_folder_for
+
+    session = get_session()
+    try:
+        step = session.get(ImportStep, step_id)
+        collection = session.get(Collection, step.collection_id) if step else None
+        profile = session.get(CollectionLocalMediaProfile, step.local_media_profile_id) if step else None
+        return scan_folder_for(collection, profile) if collection and profile else None
+    finally:
+        session.rollback()
+        session.close()
+
+
 def _match_existing_files(
     session: Session, step: ImportStep, profile: CollectionLocalMediaProfile,
-    download_profile: DownloadProfile | None, problems: list[dict[str, str]],
+    download_profile: DownloadProfile | None, problems: list[dict[str, str]], folder: str | None,
 ) -> bool:
     """Scan the profile's folder for the Collection's files the import did not name.
 
     The files the import adopted are skipped by the scan. A Download Profile to
     switch on waits for the scan instead, until the matches are reviewed.
     """
-    from backend.services.existing_files import ExistingFilesError, request_scan, scan_folder_for
+    from backend.services.existing_files import ExistingFilesError, default_folder, request_scan
 
     collection = session.get(Collection, step.collection_id)
     hold: list[DownloadProfile] = []
     if download_profile is not None and step.enable_download_profile:
         download_profile.enable_profile = True
         hold.append(download_profile)
-    folder = scan_folder_for(collection, profile)
+    folder = folder or default_folder(profile.output_template)
     try:
         with session.begin_nested():
             request_scan(session, collection, profile, folder=folder, hold=hold, indexed=True)
@@ -1506,7 +1600,13 @@ def _finish_run_if_done(session: Session, run_id: int) -> None:
     run.finished_at = datetime.now(timezone.utc)
 
 
-def _matching_view(session: Session, step: ImportStep) -> dict[str, Any] | None:
+@dataclass(frozen=True)
+class MatchingView:
+    status: str
+    found: int
+
+
+def _matching_view(session: Session, step: ImportStep) -> MatchingView | None:
     """The Match existing files scan the step started, if it did."""
     if not (step.result or {}).get("matching"):
         return None
@@ -1517,7 +1617,7 @@ def _matching_view(session: Session, step: ImportStep) -> dict[str, Any] | None:
     if scan is None:
         return None
     found = sum(1 for item in scan.results if item.get("confidence") and not item.get("adopted"))
-    return {"status": scan.status, "found": found}
+    return MatchingView(scan.status, found)
 
 
 def _run_download_profiles(session: Session, run: ImportRun) -> list[DownloadProfile]:
@@ -1531,7 +1631,7 @@ def _run_download_profiles(session: Session, run: ImportRun) -> list[DownloadPro
         if step.download_profile_id not in ids:
             continue
         matching = _matching_view(session, step)
-        if matching is not None and matching["status"] != "finished":
+        if matching is not None and matching.status != "finished":
             held.add(step.download_profile_id)
     if not ids - held:
         return []
@@ -1567,28 +1667,56 @@ def _indexed(session: Session, collection_id: int) -> bool:
     ).limit(1)) is not None
 
 
-def run_view(session: Session, run: ImportRun) -> dict[str, Any]:
+@dataclass(frozen=True)
+class DownloadProfilesView:
+    total: int
+    on: int
+
+
+@dataclass(frozen=True)
+class StepView:
+    """What happened to one Collection of a run, and to its files."""
+
+    collection_id: int | None
+    collection_slug: str | None
+    collection_title: str | None
+    status: str
+    indexed: bool
+    files: int
+    counts: dict[str, int]
+    problems: list[dict[str, Any]]
+    download_profile_on: bool
+    matching: MatchingView | None
+
+
+@dataclass(frozen=True)
+class RunView:
+    """A run, and what happened to each of its Collections."""
+
+    run: ImportRun
+    steps: list[StepView]
+    download_profiles: DownloadProfilesView
+
+
+def run_view(session: Session, run: ImportRun) -> RunView:
     """A run with its report and what happened to each Collection's files."""
     steps = []
     for step in session.scalars(select(ImportStep).where(ImportStep.run_id == run.id).order_by(ImportStep.id)):
         collection = session.get(Collection, step.collection_id)
-        steps.append({
-            "collection_id": step.collection_id,
-            "collection_slug": collection.slug if collection else None,
-            "collection_title": collection.title if collection else None,
-            "status": step.status,
-            "indexed": step.status != STEP_WAITING or _indexed(session, step.collection_id),
-            "files": sum(1 for file in step.files if file.get("kind") == "file"),
-            "counts": (step.result or {}).get("counts", {}),
-            "problems": (step.result or {}).get("problems", []),
-            "download_profile_on": step.enable_download_profile and step.status == STEP_DONE
-            and not (step.result or {}).get("matching"),
-            "matching": _matching_view(session, step),
-        })
+        result = step.result or {}
+        steps.append(StepView(
+            collection_id=step.collection_id,
+            collection_slug=collection.slug if collection else None,
+            collection_title=collection.title if collection else None,
+            status=step.status,
+            indexed=step.status != STEP_WAITING or _indexed(session, step.collection_id),
+            files=sum(1 for file in step.files if file.get("kind") == "file"),
+            counts=result.get("counts", {}),
+            problems=result.get("problems", []),
+            download_profile_on=step.enable_download_profile and step.status == STEP_DONE and not result.get("matching"),
+            matching=_matching_view(session, step),
+        ))
     download_profiles = _run_download_profiles(session, run)
-    return {
-        **run_summary(run), "options": run.options, "version": run.version, "report": run.report, "steps": steps,
-        "download_profiles": {
-            "total": len(download_profiles), "on": sum(1 for item in download_profiles if item.enable_profile),
-        },
-    }
+    return RunView(run=run, steps=steps, download_profiles=DownloadProfilesView(
+        total=len(download_profiles), on=sum(1 for item in download_profiles if item.enable_profile),
+    ))

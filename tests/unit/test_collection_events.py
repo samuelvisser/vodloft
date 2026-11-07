@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 
 def test_collection_added_payload_contains_canonical_collection_identity():
-    from backend.api.endpoints.collections.events import CollectionAdded
+    from backend.services.collections import CollectionAdded
 
     collection = SimpleNamespace(
         id=42,

@@ -12,6 +12,7 @@ import SimpleSelect from '../common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import {getZodDefaults} from '../../utils/defaultZod'
 import NumberInput from '../common/NumberInput'
+import {apiUrl} from '../../lib/api'
 
 const DeleteOlderThanReg = createSelectRegistry('BulkDeleteOlderThan', {
     all: {label: 'Delete all'},
@@ -151,7 +152,7 @@ export default function ActionConfirmDialogue({
         onStartingChange?.(true)
         onDismiss()
         try {
-            const base = (window as any).appConfig?.API_URL || '/api'
+            const base = apiUrl()
             const request: RequestInit = {method}
             if (scope_by_local_media_profile) {
                 request.headers = {'Content-Type': 'application/json'}

@@ -182,3 +182,37 @@ def test_waiting_standalone_task_is_not_marked_stalled(task_database):
         assert persisted.wait_state["reason"] == "daily_wire_request_queue"
     finally:
         session.close()
+
+
+def test_a_parent_operation_is_left_to_its_children(task_database):
+    from task_manager.scheduler.db import TaskOperation
+    from task_manager.scheduler.operations import OperationDependencySpec, add_operation_dependencies, create_operation
+    from task_manager.scheduler.types import OperationStatus
+    from task_manager.scheduler.watchdog import monitor_stalled_work, reset_watchdog_state
+
+    reset_watchdog_state()
+    session = task_database()
+    child = create_operation(
+        session, kind="child", resource_type="collection", resource_id=7, title="Waiting child", targets=[],
+    )
+    parent = create_operation(
+        session, kind="parent", resource_type="collection", resource_id=None, title="Parent", targets=[],
+    )
+    add_operation_dependencies(session, parent.id, [OperationDependencySpec(child.id)])
+    # A child that waits, as for a Source's cooldown, keeps its parent running without progress.
+    child.status = OperationStatus.WAITING.value
+    parent.status = OperationStatus.RUNNING.value
+    parent_id = parent.id
+    session.commit()
+    session.close()
+
+    started = datetime(2026, 9, 5, 12, 0, tzinfo=timezone.utc)
+    monitor_stalled_work(now=started, timeout_minutes=20)
+    later = monitor_stalled_work(now=started + timedelta(minutes=40), timeout_minutes=20)
+
+    assert later.operations_canceled == 0
+    session = task_database()
+    try:
+        assert session.get(TaskOperation, parent_id).status == OperationStatus.RUNNING.value
+    finally:
+        session.close()

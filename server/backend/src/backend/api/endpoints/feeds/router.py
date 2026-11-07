@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import FileResponse, RedirectResponse
 
-from .cached_video import get_cached_mp4_path, prepare_cached_mp4
+from backend.services.video_cache import VideoCacheError, get_cached_mp4_path, prepare_cached_mp4
 from .source_stream import episode_stream, proxy_response
 from .source_live import live_audio_response, live_master_response, live_part_response, live_playlist_response
 from .source_tracks import (
@@ -201,9 +201,9 @@ def rss_feed_episode_audio(token: str, episode_slug: str, request: Request):
             raise _not_streamed(profile, "audio")
 
         source = get_source(episode.source_key)
-        if source.has(Feature.EPISODE_LISTS) and episode.publish_status == EpisodePublishStatus.LIVE.value:
+        if source.has(Feature.PAGE_STREAMS) and episode.publish_status == EpisodePublishStatus.LIVE.value:
             return live_audio_response(source, _episode_ref(episode), head_only=request.method == "HEAD")
-        if source.has(Feature.EPISODE_LISTS):
+        if source.has(Feature.PAGE_STREAMS):
             return proxy_response(
                 source, episode, audio=True, media_type="audio/mp4", filename=f"{episode.slug}.m4a",
                 range_header=request.headers.get("range"), head_only=request.method == "HEAD",
@@ -259,7 +259,7 @@ def rss_feed_episode_video_mp4(token: str, episode_slug: str, request: Request):
             raise _not_streamed(profile, "MP4 video")
 
         source = get_source(episode.source_key)
-        if source.has(Feature.EPISODE_LISTS):
+        if source.has(Feature.PAGE_STREAMS):
             return _site_video_mp4(source, profile, episode, request)
 
         episode_uuid = episode.uuid
@@ -276,10 +276,10 @@ def rss_feed_episode_video_mp4(token: str, episode_slug: str, request: Request):
             )
 
     if cached_file is None:
-        cached_file = prepare_cached_mp4(
-            source_url,
-            episode_uuid=episode_uuid,
-        )
+        try:
+            cached_file = prepare_cached_mp4(source_url, episode_uuid=episode_uuid)
+        except VideoCacheError as error:
+            raise HTTPException(status_code=error.status_code, detail=error.detail) from error
     else:
         try:
             cached_file.touch()
@@ -332,7 +332,7 @@ def rss_feed_episode_video_hls(token: str, episode_slug: str, request: Request):
         if StreamMethod.HLS not in site.stream_methods:
             raise HTTPException(status_code=404, detail=f"{site.name} cannot stream episodes as HLS")
         source = get_source(episode.source_key)
-        if source.has(Feature.EPISODE_LISTS) and episode.publish_status == EpisodePublishStatus.LIVE.value:
+        if source.has(Feature.PAGE_STREAMS) and episode.publish_status == EpisodePublishStatus.LIVE.value:
             if request.method != "HEAD":
                 remember_live_episode_handoff(profile, episode)
                 _commit_feed_state_if_changed(s)
@@ -340,7 +340,7 @@ def rss_feed_episode_video_hls(token: str, episode_slug: str, request: Request):
                 source, _episode_ref(episode), height=_profile_stream_height(profile, site) or 0,
                 head_only=request.method == "HEAD",
             )
-        if source.has(Feature.EPISODE_LISTS):
+        if source.has(Feature.PAGE_STREAMS):
             return master_playlist_response(
                 source, _episode_ref(episode), height=_profile_stream_height(profile, site) or 0,
                 head_only=request.method == "HEAD",
@@ -380,7 +380,7 @@ def rss_feed_episode_live(token: str, episode_slug: str, name: str, request: Req
         if not can_stream_from_source(profile, episode):
             raise _not_streamed(profile, "live video")
         source = get_source(episode.source_key)
-        if not source.has(Feature.EPISODE_LISTS):
+        if not source.has(Feature.PAGE_STREAMS):
             raise HTTPException(status_code=404, detail="No such playlist")
         site = collection_site(profile.collection)
         proxy = profile.proxy_source_stream or not site.stream_proxy_choice
@@ -414,7 +414,7 @@ def rss_feed_episode_track(token: str, episode_slug: str, name: str, request: Re
         if not can_stream_from_source(profile, episode):
             raise _not_streamed(profile, "HLS video")
         source = get_source(episode.source_key)
-        if not source.has(Feature.EPISODE_LISTS):
+        if not source.has(Feature.PAGE_STREAMS):
             raise HTTPException(status_code=404, detail="No such track")
         site = collection_site(profile.collection)
         proxy = profile.proxy_source_stream or not site.stream_proxy_choice

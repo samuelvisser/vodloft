@@ -12,8 +12,8 @@ export function sourceControls(item: SourcedItem) {
     return {
         membershipLevels: has(SourceFeature.MEMBERSHIP_LEVELS),
         movieExtras: has(SourceFeature.MOVIE_EXTRAS),
-        // Listed episodes are not refreshed from their Source after they are indexed.
-        metadataRefresh: item === undefined || !hasSourceFeature(item, SourceFeature.EPISODE_LISTS),
+        // Episodes a Source lists are refreshed in batches by the sweep and the daily refresh instead.
+        metadataRefresh: has(SourceFeature.EPISODE_LOOKUPS),
     }
 }
 

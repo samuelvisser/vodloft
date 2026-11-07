@@ -20,6 +20,7 @@ import {
 } from '../../lib/operations'
 import NumberInput from '../common/NumberInput'
 import './CronEditor.css'
+import {apiUrl} from '../../lib/api'
 
 
 type CronEditorProps = {
@@ -292,7 +293,7 @@ export default function CronEditor({
         if (!runNow || startingRunNow) return
         setStartingRunNow(true)
         try {
-            const base = (window as any).appConfig?.API_URL || '/api'
+            const base = apiUrl()
             await startOperation(
                 `${base}/settings/cron/${encodeURIComponent(runNow.job)}/run`,
                 {method: 'POST'},

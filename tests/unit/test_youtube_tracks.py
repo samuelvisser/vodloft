@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import requests
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
@@ -127,8 +128,10 @@ class _Source:
 def tracks_module(monkeypatch):
     from backend.api.endpoints.feeds import source_tracks
 
-    monkeypatch.setattr(source_tracks, "_tracks", {})
-    monkeypatch.setattr(source_tracks, "_indexes", {})
+    from backend.api.endpoints.feeds.upstream import LinkCache
+
+    monkeypatch.setattr(source_tracks, "_tracks", LinkCache(source_tracks._kept_for))
+    monkeypatch.setattr(source_tracks, "_indexes", LinkCache(lambda kept: 3600))
     return source_tracks
 
 
@@ -153,7 +156,7 @@ def test_the_hls_stream_has_a_variant_per_resolution_up_to_the_feeds(tracks_modu
 
 def test_track_playlists_list_fragments_at_vodloft(tracks_module, monkeypatch):
     upstream = _Upstream({"https://yt/1080": TRACK})
-    monkeypatch.setattr(tracks_module.requests, "get", upstream.get)
+    monkeypatch.setattr(requests, "get", upstream.get)
     source = _Source(_tracks())
 
     playlist = tracks_module.track_playlist_response(source, _episode(), "video-1080.m3u8", head_only=False)
@@ -188,7 +191,7 @@ def test_a_fragment_redirects_to_youtube_with_a_link_that_has_not_expired(tracks
 
 
 def test_a_proxied_fragment_is_passed_on_with_its_range(tracks_module, monkeypatch):
-    monkeypatch.setattr(tracks_module.requests, "get", _Upstream({"https://yt/audio": b"0123456789"}).get)
+    monkeypatch.setattr(requests, "get", _Upstream({"https://yt/audio": b"0123456789"}).get)
     source = _Source(_tracks())
     app = FastAPI()
 
@@ -214,8 +217,10 @@ def test_video_and_audio_tracks_are_joined_into_one_mp4(tracks_module, monkeypat
 
     video = made("v.mp4", "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=25", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-an")
     audio = made("a.m4a", "-f", "lavfi", "-i", "sine=f=440", "-c:a", "aac", "-vn")
-    monkeypatch.setattr(tracks_module.requests, "get", _Upstream({"https://yt/v": video, "https://yt/a": audio}).get)
-    monkeypatch.setattr(tracks_module, "_UPSTREAM_CHUNK_BYTES", 20_000)
+    monkeypatch.setattr(requests, "get", _Upstream({"https://yt/v": video, "https://yt/a": audio}).get)
+    from backend.api.endpoints.feeds import upstream as feed_upstream
+
+    monkeypatch.setattr(feed_upstream, "UPSTREAM_CHUNK_BYTES", 20_000)
     monkeypatch.setattr(tracks_module, "get_settings", lambda: SimpleNamespace(download_settings=SimpleNamespace(ffmpeg_path="ffmpeg")))
 
     target = tmp_path / "cache" / "joined.mp4"

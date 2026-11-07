@@ -14,6 +14,7 @@ import {waitingPresentation} from '../lib/progressPresentation'
 import {TaskDefinitionReadSchema, type TaskLedgerEntryRead} from '../types/schemas/task'
 import {createSelectRegistry} from '../utils/selectRegistry'
 import './TasksPage.css'
+import {apiUrl} from '../lib/api'
 
 type TaskStatusFilter = {
     value: string
@@ -142,7 +143,7 @@ export default function TasksPage() {
         queryKey: ['taskDefinitions'],
         queryFn: async ({signal}) => {
             const response = await fetch(
-                `${(window as any).appConfig.API_URL}/tasks/definitions`,
+                `${apiUrl()}/tasks/definitions`,
                 {signal, credentials: 'include'},
             )
             if (!response.ok) throw new Error(`HTTP ${response.status}`)

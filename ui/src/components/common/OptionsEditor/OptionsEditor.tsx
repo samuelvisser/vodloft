@@ -4,6 +4,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 
 import {faIcon} from '../../../icons/faIcon'
 import './OptionsEditor.css'
+import {apiUrl} from '../../../lib/api'
 
 const OptionLineSchema = z.object({
     line: z.number(),
@@ -45,7 +46,7 @@ function useOptionsCheck(text: string) {
         const controller = new AbortController()
         const timer = window.setTimeout(async () => {
             try {
-                const response = await fetch(`${(window as any).appConfig.API_URL}/sources/ytdlp-options/check`, {
+                const response = await fetch(`${apiUrl()}/sources/ytdlp-options/check`, {
                     method: 'POST',
                     credentials: 'include',
                     headers: {'Content-Type': 'application/json'},

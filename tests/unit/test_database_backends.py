@@ -258,3 +258,21 @@ def test_write_transactions_queue_behind_each_other_on_postgresql(postgresql_dat
     first.close()
     thread.join(timeout=10)
     assert entered.is_set()
+
+
+@needs_postgresql
+def test_a_concurrent_write_transaction_does_not_wait_on_postgresql(postgresql_database):
+    from backend.db import get_session
+    from backend.db.core import begin_write_transaction
+    from backend.db.migrations import upgrade_database
+
+    upgrade_database()
+    first = get_session()
+    begin_write_transaction(first)
+    try:
+        with get_session() as second:
+            begin_write_transaction(second, concurrent=True)
+            second.rollback()
+    finally:
+        first.rollback()
+        first.close()

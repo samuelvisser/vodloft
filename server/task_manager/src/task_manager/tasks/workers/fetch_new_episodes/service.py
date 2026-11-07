@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.services.check_frequency import full_scan_done, full_scan_due
-from backend.db.models import Episode, Season, Collection
+from backend.db.models import Episode, Collection
 from backend.services.collection_assets import update_collection_artwork_metadata
 from backend.services.thumbnails import newest_media_item_id, take_first_frames
 from backend.types.dailywire_user_info import DwMembershipLevel
@@ -17,7 +17,7 @@ from backend.types.collection_types import EpisodeIdentifier
 from sources.dailywire.api.dw_api.client import ByShowSeason, MiddlewareClient
 from sources.dailywire.api.records import DwEpisodeRecord, DwSeasonRecord
 from sources.dailywire.auth import DeviceAuthClient
-from sources import Feature, Source, get_source
+from sources import Feature, get_source
 from task_manager.events.transactional import queue_event
 from ._helpers import get_latest_ep_index, get_season_from_list_by_id, get_collections
 from ...helpers.episodes.events import queue_episode_status_events
@@ -30,7 +30,6 @@ from ...helpers.episodes.mapper import (
 )
 from ...helpers.episodes.quarantine import vacated_canonical_identifiers_for_collection
 from ...helpers.episodes.same_episode import (
-    PENDING_EPISODE_PUBLISH_STATUSES,
     reconcile_single_pending_episode_slug,
 )
 from ...helpers.episodes.save import (
@@ -43,7 +42,6 @@ from ...helpers.listed_collections import index_listed_collection
 from ...helpers.progress import ProgressBounds, update_progress
 from ...helpers.seasons import create_season_by_dw_season
 from ...types.general import RecordOrder
-from ..monitor_pending_episode.scheduling import MONITOR_REQUESTED_EVENT
 
 
 logger = logging.getLogger(__name__)
@@ -158,48 +156,105 @@ async def run_fetch_new_episodes(
         # Each Collection's check frequency: on its own schedule it is left out, checked less often it skips scans.
         collections = [collection for collection in collections if full_scan_due(collection)]
     collection_ids = [collection.id for collection in collections]
-    lists_episodes = {collection.id: get_source(collection.source_key).has(Feature.EPISODE_LISTS) for collection in collections}
-
-    # Token refresh can itself require the internet. Do not retain the SELECT
-    # transaction used to find the collections while waiting for OAuth/DNS/HTTP.
-    s.rollback()
-    access_token: str | None = None
-    client: MiddlewareClient | None = None
-    if not all(lists_episodes.values()):
-        tokens = DeviceAuthClient().get_token()
-        access_token = tokens.access_token if tokens else None
-        client = MiddlewareClient(access_token=access_token)
+    daily_wire = _DailyWireClient()
     completed: list[CollectionEpisodeScanResult] = []
     for current_collection_id in collection_ids:
         collection = s.get(Collection, current_collection_id)
         if collection is None:
             continue
         full_scan_done(current_collection_id)
-        if lists_episodes[current_collection_id]:
-            completed.append(_index_listed_collection(
-                s, collection=collection, source=get_source(collection.source_key), dry_run=dry_run, progress=progress,
-            ))
-            continue
-        try:
-            found = await _fetch_collection(
-                s,
-                collection=collection,
-                client=client,
-                access_token=access_token,
-                dry_run=dry_run,
-                initial_index=initial_index,
-                progress=progress,
-            )
-        except Exception:
-            s.rollback()
-            raise
-        completed.append(CollectionEpisodeScanResult(
-            collection_id=collection.id,
-            collection_slug=collection.slug,
-            collection_title=collection.title,
-            episodes_found=0 if dry_run else found,
+        completed.append(await _index_collection(
+            s, collection=collection, daily_wire=daily_wire, dry_run=dry_run, initial_index=initial_index,
+            progress=progress,
         ))
     return FetchNewEpisodesResult(collections=tuple(completed), dry_run=dry_run)
+
+
+class _DailyWireClient:
+    """The Daily Wire's API client, signed in once per scan and only when a collection needs it."""
+
+    def __init__(self) -> None:
+        self.client: MiddlewareClient | None = None
+        self.access_token: str | None = None
+
+    def get(self, s: Session) -> MiddlewareClient:
+        if self.client is None:
+            # Signing in can itself need the internet; no transaction stays open meanwhile.
+            s.rollback()
+            tokens = DeviceAuthClient().get_token()
+            self.access_token = tokens.access_token if tokens else None
+            self.client = MiddlewareClient(access_token=self.access_token)
+        return self.client
+
+
+async def _index_collection(
+    s: Session,
+    *,
+    collection: Collection,
+    daily_wire: _DailyWireClient,
+    dry_run: bool,
+    initial_index: bool,
+    progress=None,
+) -> CollectionEpisodeScanResult:
+    """Add a collection's new episodes, the same way for every Source once they are found.
+
+    A Source that lists its episodes finds them through ``Source.list_episodes``;
+    The Daily Wire's are found season by season, with their numbering worked out
+    from The Daily Wire's own episode numbers. After that every collection is
+    finished alike: its custom indexes are brought up to date, waiting scans and
+    imports go on, and new episodes without a picture get a frame of their video.
+    """
+    result = CollectionEpisodeScanResult(
+        collection_id=collection.id, collection_slug=collection.slug, collection_title=collection.title,
+        episodes_found=0,
+    )
+    collection_id = collection.id
+    source = get_source(collection.source_key)
+    newest = newest_media_item_id(s)
+    try:
+        if source.has(Feature.EPISODE_LISTS):
+            found = index_listed_collection(
+                s, collection_id=collection_id, source=source, progress=progress, dry_run=dry_run,
+            )
+        elif source.has(Feature.EPISODE_LOOKUPS):
+            client = daily_wire.get(s)
+            collection = s.get(Collection, collection_id)
+            if collection is None:
+                return result
+            found = await _fetch_collection(
+                s, collection=collection, client=client, access_token=daily_wire.access_token, dry_run=dry_run,
+                initial_index=initial_index, progress=progress,
+            )
+        else:
+            return result
+        if dry_run:
+            if source.has(Feature.EPISODE_LISTS):
+                update_progress(
+                    progress, 100, f"Dry run complete for '{result.collection_slug}': {found} new episodes (nothing saved)",
+                )
+            return result
+        finish_index(s, collection_id=collection_id, found=found, newest=newest)
+    except Exception:
+        s.rollback()
+        raise
+    return replace(result, episodes_found=found)
+
+
+def finish_index(s: Session, *, collection_id: int, found: int, newest: int) -> None:
+    """What follows every search for a collection's new episodes, whichever Source found them.
+
+    ``newest`` is the newest media item before the search, so the episodes added
+    after it get a frame of their video when they have no picture.
+    """
+    from backend.services.custom_indexes import request_collection_custom_index_reconciliation
+
+    collection = s.get(Collection, collection_id)
+    if collection is not None:
+        request_collection_custom_index_reconciliation(s, collection_id)
+        _queue_collection_indexed(s, collection=collection, indexed_count=found)
+    s.commit()
+    if found:
+        take_first_frames(s, _episodes_after(s, collection_id, newest))
 
 
 async def _fetch_collection(
@@ -236,14 +291,6 @@ async def _fetch_collection(
     latest_final_episode_slug = latest_final_episode.slug if latest_final_episode is not None else None
     latest_final_season_id = latest_final_episode.season_id if latest_final_episode is not None else None
     vacated_identifiers = vacated_canonical_identifiers_for_collection(s, collection_id)
-
-    monitor_requests: dict[int, dict] = {
-        episode.id: _monitor_request_for_db_episode(collection, episode)
-        for episode in s.scalars(select(Episode).where(
-            Episode.collection_id == collection_id,
-            Episode.publish_status.in_(PENDING_EPISODE_PUBLISH_STATUSES),
-        ))
-    }
 
     # The local snapshot is complete. Release its transaction before the first
     # Daily Wire request so an outage cannot pin a DB connection per worker.
@@ -354,18 +401,12 @@ async def _fetch_collection(
         season = get_season_from_list_by_id(collection.seasons, season_id)
         if season is None:
             continue
-        if reconcile_single_pending_episode_slug(
+        reconcile_single_pending_episode_slug(
             s,
             collection=collection,
             season=season,
             remote_records=records,
-        ) is not None:
-            # Refresh requests with the newly adopted slug while keeping immutable id identity.
-            for episode in s.scalars(select(Episode).where(
-                Episode.collection_id == collection_id,
-                Episode.publish_status.in_(PENDING_EPISODE_PUBLISH_STATUSES),
-            )):
-                monitor_requests[episode.id] = _monitor_request_for_db_episode(collection, episode)
+        )
 
     candidate_remote_slugs = {
         record.slug
@@ -424,10 +465,8 @@ async def _fetch_collection(
     if total == 0:
         for key, value in identifier_max_values.items():
             collection.set_meta(key=key, value=str(value))
-        _queue_monitor_requests(s, monitor_requests.values())
-        _queue_collection_indexed(s, collection=collection, indexed_count=0)
         s.commit()
-        update_progress(progress, 100, _completion_message(0, len(monitor_requests)))
+        update_progress(progress, 100, "Indexed 0 episode(s)")
         return 0
 
     # Slug reconciliation is now complete. Persist it before resolving individual
@@ -473,39 +512,11 @@ async def _fetch_collection(
             s,
             collection=collection,
             saved_episodes=saved_episodes,
-            monitor_requests=monitor_requests,
         )
 
-    _queue_monitor_requests(s, monitor_requests.values())
-    from backend.services.custom_indexes import request_collection_custom_index_reconciliation
-    request_collection_custom_index_reconciliation(s, collection.id)
-    _queue_collection_indexed(s, collection=collection, indexed_count=total)
     s.commit()
-    update_progress(progress, 100, _completion_message(total, len(monitor_requests)))
+    update_progress(progress, 100, f"Indexed {total} episode(s)")
     return total
-
-
-def _index_listed_collection(s: Session, *, collection: Collection, source: Source, dry_run: bool, progress=None) -> CollectionEpisodeScanResult:
-    result = CollectionEpisodeScanResult(collection_id=collection.id, collection_slug=collection.slug, collection_title=collection.title, episodes_found=0)
-    from backend.services.custom_indexes import request_collection_custom_index_reconciliation
-    collection_id = collection.id
-    newest = newest_media_item_id(s)
-    try:
-        found = index_listed_collection(s, collection_id=collection_id, source=source, progress=progress, dry_run=dry_run)
-        if dry_run:
-            update_progress(progress, 100, f"Dry run complete for '{result.collection_slug}': {found} new episodes (nothing saved)")
-            return result
-        collection = s.get(Collection, collection_id)
-        if collection is not None:
-            request_collection_custom_index_reconciliation(s, collection_id)
-            _queue_collection_indexed(s, collection=collection, indexed_count=found)
-        s.commit()
-    except Exception:
-        s.rollback()
-        raise
-    if found:
-        take_first_frames(s, _episodes_after(s, collection_id, newest))
-    return replace(result, episodes_found=found)
 
 
 def _episodes_after(s: Session, collection_id: int, newest: int) -> list[int]:
@@ -518,7 +529,6 @@ def _announce_new_episodes(
     *,
     collection: Collection,
     saved_episodes: list[SavedEpisode],
-    monitor_requests: dict[int, dict],
 ) -> None:
     for saved in saved_episodes:
         if not saved.detail_resolved:
@@ -531,26 +541,6 @@ def _announce_new_episodes(
             new_status=saved.status,
             was_created=True,
         )
-        if saved.status.value in PENDING_EPISODE_PUBLISH_STATUSES:
-            monitor_requests[saved.episode.id] = _monitor_request_for_db_episode(collection, saved.episode)
-
-
-def _monitor_request_for_db_episode(collection: Collection, episode: Episode) -> dict:
-    return {
-        "resource_id": episode.id,
-        "slug": episode.slug,
-        "collection_id": collection.id,
-        "collection_slug": collection.slug,
-        "season_id": episode.season_id,
-        "episode_identifier": episode.episode_identifier,
-        "episode_index": episode.index,
-        "status": episode.publish_status,
-    }
-
-
-def _queue_monitor_requests(s: Session, requests) -> None:
-    for request in requests:
-        queue_event(s, MONITOR_REQUESTED_EVENT, request)
 
 
 def _queue_collection_indexed(s: Session, *, collection: Collection, indexed_count: int) -> None:
@@ -568,12 +558,6 @@ def _queue_collection_indexed(s: Session, *, collection: Collection, indexed_cou
 
     start_waiting_scans(s, collection)
     start_waiting_import_steps(s, collection)
-
-
-def _completion_message(indexed_count: int, monitor_count: int) -> str:
-    if monitor_count:
-        return f"Indexed {indexed_count} episode(s); ensured {monitor_count} pending episode monitor(s)"
-    return f"Indexed {indexed_count} episode(s); no pending episodes found"
 
 
 def _print_dry_run_report(collection: Collection, ep_map_asc, identifier_max_values: IdentifierMaxValues) -> None:

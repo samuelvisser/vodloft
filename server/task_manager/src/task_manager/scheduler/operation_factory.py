@@ -10,10 +10,12 @@ from task_manager.scheduler.operations import (
     OperationTargetSpec,
     create_operation as create_task_operation,
 )
+from sources.pacing import RequestPriority
 from task_manager.scheduler.types import OperationSource
 
 
 ResourceT = TypeVar("ResourceT")
+REQUEST_PRIORITY_CONTEXT_KEY = "request_priority"
 
 
 class OperationDefinition(Generic[ResourceT]):
@@ -22,6 +24,9 @@ class OperationDefinition(Generic[ResourceT]):
     kind: ClassVar[str]
     resource_type: ClassVar[str]
     task: ClassVar[str | None] = None
+    request_priority: ClassVar[RequestPriority | None] = None
+    """How the operation's requests to a Source queue behind others. "bulk"
+    work, which touches many items at once, goes before background checks."""
 
     def __init__(
         self,
@@ -66,6 +71,13 @@ class OperationDefinition(Generic[ResourceT]):
     def context(self) -> dict[str, Any]:
         return {}
 
+    def full_context(self) -> dict[str, Any]:
+        """``context`` plus what every operation records about itself."""
+        context = self.context()
+        if self.request_priority is not None:
+            context = {**context, REQUEST_PRIORITY_CONTEXT_KEY: self.request_priority}
+        return context
+
 
 class OperationFactory:
     """Materialize an OperationDefinition into scheduler state."""
@@ -84,7 +96,7 @@ class OperationFactory:
             title=definition.title,
             targets=tuple(definition.targets()),
             dependencies=tuple(definition.dependencies()),
-            context=definition.context(),
+            context=definition.full_context(),
         )
 
 

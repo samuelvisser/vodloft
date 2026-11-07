@@ -1,7 +1,6 @@
 """The per-episode metadata refresh only reads episodes from The Daily Wire, never listed episodes."""
 from __future__ import annotations
 
-import asyncio
 import importlib
 from datetime import datetime, timezone
 
@@ -84,26 +83,23 @@ def _episode(session, collection, slug, identifier, *, status="published_final",
     return episode
 
 
-def test_the_refresh_worker_never_asks_the_daily_wire_about_a_listed_episode(listed, session, monkeypatch):
-    from task_manager.tasks.workers.refresh_episode_metadata import service
+def test_the_refresh_never_asks_the_daily_wire_about_a_listed_episode(listed, session, monkeypatch):
+    from task_manager.tasks.workers.refresh_metadata import service
 
     collection = _collection(session)
     episode = _episode(session, collection, "VsUtykQi2uE", "ep.2021-01-01T00:00:00.000000", metadata_is_final=False)
 
-    def daily_wire(**_kwargs):
+    def daily_wire(*_args):
         raise AssertionError("The Daily Wire was asked about a listed episode")
 
-    removed: list[int] = []
-    monkeypatch.setattr(service, "_fetch_episode_from_dailywire", daily_wire)
-    monkeypatch.setattr(service, "remove_episode_metadata_jobs", removed.append)
+    monkeypatch.setattr(service, "refresh_dailywire_episode", daily_wire)
+    monkeypatch.setattr(service, "_last_sweep", None)
 
-    assert asyncio.run(service.run_refresh_episode_metadata(session, episode_id=episode.id, refresh=True)) is False
+    service.run_metadata_refresh(session)
 
     session.refresh(episode)
     assert episode.publish_status == "published_final"
     assert episode.episode_identifier == "ep.2021-01-01T00:00:00.000000"
-    assert episode.metadata_is_final is True
-    assert removed == [episode.id]
 
 
 def test_metadata_refresh_cannot_be_requested_for_listed_episodes(listed, session):

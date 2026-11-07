@@ -36,12 +36,11 @@ def _adopt(import_step_id: int) -> TaskResult:
 
     try:
         # Like the import itself: the Download Profile run it starts must outlive this task's operation.
-        with operation_context(()), db_session() as session:
-            counts = run_step(session, import_step_id)
+        with operation_context(()):
+            counts = run_step(import_step_id)
     except Exception as exc:
         # The files adopted so far stay adopted; the import shows this Collection as failed instead of waiting.
-        with db_session() as session:
-            fail_step(session, import_step_id, str(exc))
+        fail_step(import_step_id, str(exc))
         raise
     return TaskResult(
         summary=f"Adopted {counts.get('adopted', 0)} file(s), {counts.get('not_adopted', 0)} could not be adopted",

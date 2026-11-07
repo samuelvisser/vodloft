@@ -296,7 +296,7 @@ def fake_ytdlp(tmp_path):
     return (sys.executable, str(script))
 
 
-def test_ytdlp_downloads_report_progress_across_streams(fake_ytdlp, tmp_path):
+def test_ytdlp_options_report_progress_across_streams(fake_ytdlp, tmp_path):
     from downloader.ytdlp import download_ytdlp
 
     seen = []

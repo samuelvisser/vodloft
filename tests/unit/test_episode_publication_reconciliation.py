@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -312,9 +311,7 @@ def test_metadata_refresh_repairs_wrong_main_episode_identifier(monkeypatch):
 
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
     monkeypatch.setattr(status, "get_vod_info", lambda _url: SimpleNamespace(seconds=3600))
-    monkeypatch.setattr(service, "schedule_remaining_metadata_checks", lambda **kwargs: ["pending"])
-    monkeypatch.setattr(service, "remove_episode_metadata_jobs", Mock())
-    asyncio.run(service.run_refresh_episode_metadata(session, episode_id=episode.id, refresh=True))
+    assert service.refresh_dailywire_episode(session, episode.id) is True
     session.expire_all()
     stored = session.get(type(episode), episode.id)
     assert stored.episode_identifier == "ep.2500"

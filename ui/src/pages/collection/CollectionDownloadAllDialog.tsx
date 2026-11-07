@@ -16,6 +16,7 @@ import type {SeasonRead} from '../../types/schemas/season'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import NumberInput from '../../components/common/NumberInput'
 import './CollectionDownloadAllDialog.css'
+import {apiUrl} from '../../lib/api'
 
 const LimitByReg = createSelectRegistry('DownloadAllLimitBy', {
   none: {label: 'No limits'},
@@ -159,7 +160,7 @@ export default function CollectionDownloadAllDialog({
     onStartingChange?.(true)
     onDismiss()
     try {
-      const base = (window as any).appConfig?.API_URL || '/api'
+      const base = apiUrl()
       const result = await startOperation<{
         operationId: string
         queued: boolean

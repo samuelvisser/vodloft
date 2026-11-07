@@ -327,15 +327,6 @@ class TrackNewEpisodeSchedule(SubmodelBase):
         min_length=1,
         description="Cron schedule for the full re-scan of collections whose Source has quick checks",
     )
-    monitor_pending_episode_cron_enabled: bool = Field(
-        default=True,
-        description="Enable the cron schedule for monitoring pending episodes",
-    )
-    monitor_pending_episode_cron: str = Field(
-        ...,
-        min_length=1,
-        description="Cron schedule string for monitoring an episode that exists but is not yet fully published",
-    )
     monitor_no_usable_media_episode_cron_enabled: bool = Field(
         default=True,
         description="Enable the cron schedule for rechecking episodes quarantined without usable media",
@@ -350,11 +341,60 @@ class TrackNewEpisodeSchedule(SubmodelBase):
         min_length=1,
         description="The system schedule: comma-separated offsets after publication for refreshing the metadata of Sites that follow it",
     )
+    upcoming_and_live: bool = Field(
+        default=True,
+        description="Add upcoming and live videos and follow them until they are published, for Sites that follow the system setting",
+    )
+    pending_upcoming_minutes: int = Field(
+        default=60, ge=2, le=24 * 60,
+        description="Minutes between lookups of an upcoming episode, for Sites that follow the system setting",
+    )
+    pending_starting_minutes: int = Field(
+        default=2, ge=2, le=60,
+        description="Minutes between lookups from 15 minutes before an episode starts until an hour after, for Sites that follow the system setting",
+    )
+    pending_live_minutes: int = Field(
+        default=5, ge=2, le=60,
+        description="Minutes between lookups while an episode is live or still being finished, for Sites that follow the system setting",
+    )
 
     @field_validator("metadata_refresh_intervals")
     @classmethod
     def _validate_metadata_refresh_intervals(cls, value: str) -> str:
         return normalize_metadata_refresh_intervals(value)
+
+
+SITE_REFRESH_OFF = "off"
+"""A Site's ``metadata_refresh`` when its items are not looked up again after publication."""
+
+
+class SiteSchedule(SubmodelBase):
+    """One Site's own scheduling. A setting left out follows the Site's default, then the system setting."""
+
+    metadata_refresh: Optional[str] = Field(
+        default=None,
+        description="Offsets after publication for refreshing the metadata of the Site's items, or off",
+    )
+    upcoming_and_live: Optional[bool] = Field(
+        default=None, description="Add upcoming and live videos and follow them until they are published",
+    )
+    pending_upcoming_minutes: Optional[int] = Field(default=None, ge=2, le=24 * 60)
+    pending_starting_minutes: Optional[int] = Field(default=None, ge=2, le=60)
+    pending_live_minutes: Optional[int] = Field(default=None, ge=2, le=60)
+
+    @field_validator("metadata_refresh")
+    @classmethod
+    def _validate_metadata_refresh(cls, value: Optional[str]) -> Optional[str]:
+        if value is None or value.strip().lower() == SITE_REFRESH_OFF:
+            return None if value is None else SITE_REFRESH_OFF
+        return normalize_metadata_refresh_intervals(value)
+
+    @model_validator(mode="after")
+    def _minutes_come_together(self) -> "SiteSchedule":
+        minutes = (self.pending_upcoming_minutes, self.pending_starting_minutes, self.pending_live_minutes)
+        if any(value is None for value in minutes) and any(value is not None for value in minutes):
+            raise ValueError("Give all three lookup times of a Site, or none to follow the system setting")
+        return self
 
 
 class EpisodeStatusTiming(SubmodelBase):

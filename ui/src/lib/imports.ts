@@ -14,6 +14,7 @@ import {
     type ImportUploadStatus,
     type Importer,
 } from '../types/schemas/imports'
+import {apiUrl} from './api'
 
 /** The server takes chunks of up to 8 MiB. */
 export const CHUNK_SIZE = 8 * 1024 * 1024
@@ -22,7 +23,7 @@ export const SMALL_CHUNK_SIZE = 512 * 1024
 const ARCHIVE_SUFFIXES = ['.zip', '.tar.gz', '.tgz', '.tar']
 
 function base(): string {
-    return ((window as any).appConfig?.API_URL || '/api').replace(/\/+$/, '')
+    return (apiUrl()).replace(/\/+$/, '')
 }
 
 async function request<T>(path: string, parse: (data: unknown) => T, init: RequestInit = {}): Promise<T> {

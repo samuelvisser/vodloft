@@ -17,9 +17,10 @@ import {
     type TestRead,
 } from '../types/schemas/notifications'
 import {errorMessage} from './users'
+import {apiUrl} from './api'
 
 function base(): string {
-    return ((window as any).appConfig?.API_URL || '/api').replace(/\/+$/, '')
+    return (apiUrl()).replace(/\/+$/, '')
 }
 
 async function readJson<T>(path: string, schema: {parse(value: unknown): T}, signal?: AbortSignal): Promise<T> {

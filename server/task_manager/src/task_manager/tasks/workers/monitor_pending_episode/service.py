@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
-
 from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Collection
@@ -10,17 +8,14 @@ from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode_publication_timing import best_effort_published_date
 from sources.dailywire.api.dw_api.client import ByShowSeason, MiddlewareAPIError, MiddlewareClient
-from task_manager.events.transactional import queue_event
 
 from ._helpers import save_status_metadata
-from .scheduling import queue_monitor_completion_if_settled
 from backend.services.metadata_refresh import refresh_watch_expired
 from ...helpers.episodes.trusted_publication_timing import track_monitor_publication_timing
 from ...helpers.episodes.events import queue_episode_status_events
 from ...helpers.episodes.identifier_reconciliation import reconcile_episode_identifier
 from ...helpers.episodes.mapper import fetch_all_episodes_paginated
 from ...helpers.episodes.metadata import (
-    METADATA_REFRESH_REQUESTED_EVENT,
     episode_refresh_offsets,
     update_episode_from_dailywire,
 )
@@ -35,7 +30,6 @@ from ...helpers.episodes.unusable_media import (
     clear_episode_no_usable_media_tracking,
     mark_episode_no_usable_media,
 )
-from ...helpers.collections.get import get_collection_from_params
 
 
 logger = logging.getLogger(__name__)
@@ -46,38 +40,6 @@ def _membership_plan(collection: Collection) -> tuple[str, bool]:
     if membership_plan == DwMembershipLevel.HIGHEST_ALLOWED.value:
         return DwMembershipLevel.FREE.value, False
     return membership_plan, membership_plan != DwMembershipLevel.FREE.value
-
-
-def _find_episode(
-    s: Session,
-    *,
-    collection: Collection,
-    episode_id: int | None,
-    episode_slug: str | None,
-    episode_identifier: str | None,
-) -> Episode | None:
-    if episode_id is not None:
-        episode = s.get(Episode, episode_id)
-        if episode is not None:
-            return episode
-    if episode_slug is not None:
-        episode = (
-            s.query(Episode)
-            .filter(Episode.collection_id == collection.id, Episode.slug == episode_slug)
-            .one_or_none()
-        )
-        if episode is not None:
-            return episode
-    if episode_identifier is None:
-        return None
-    return (
-        s.query(Episode)
-        .filter(
-            Episode.collection_id == collection.id,
-            Episode.episode_identifier == episode_identifier,
-        )
-        .one_or_none()
-    )
 
 
 def _reload_episode_and_collection(
@@ -102,9 +64,8 @@ def _try_reconcile_slug_after_404(
 ) -> str | None:
     """Try the same conservative pending-slug reconciliation used by discovery.
 
-    Remote requests deliberately run outside a database transaction. This worker
-    can fan out across many pending episodes, so retaining one checked-out
-    connection per request can otherwise exhaust the pool during an outage.
+    Remote requests deliberately run outside a database transaction, so no
+    connection stays checked out while The Daily Wire is slow or offline.
     """
     membership_plan, _ = _membership_plan(collection)
     collection_id = collection.id
@@ -186,12 +147,6 @@ def _quarantine_404(
         new_status=new_status,
         was_created=False,
     )
-    queue_monitor_completion_if_settled(
-        s,
-        episode=episode,
-        collection=collection,
-        old_status=old_status,
-    )
     s.commit()
     logger.info(
         "Daily Wire returned 404 for pending episode %s; status %s -> %s",
@@ -202,53 +157,16 @@ def _quarantine_404(
     return new_status
 
 
-async def run_monitor_pending_episode(
-    s: Session,
-    *,
-    episode_id: Optional[int] = None,
-    episode_slug: Optional[str] = None,
-    collection_id: Optional[int] = None,
-    collection_slug: Optional[str] = None,
-    season_id: Optional[int] = None,
-    episode_identifier: Optional[str] = None,
-    episode_index: Optional[int] = None,
-) -> EpisodePublishStatus:
-    """Refresh one pending episode until ownership transfers to another stage."""
-    del season_id, episode_index
-    print(f"Starting monitor_pending_episode for {episode_slug or episode_id}")
-
-    collection = get_collection_from_params(
-        s,
-        episode_id=episode_id,
-        episode_slug=episode_slug,
-        collection_id=collection_id,
-        collection_slug=collection_slug,
-    )
-    if collection is None:
-        raise ValueError("Collection not found; provide a valid collection_slug or collection_id")
-
-    episode = _find_episode(
-        s,
-        collection=collection,
-        episode_id=episode_id,
-        episode_slug=episode_slug,
-        episode_identifier=episode_identifier,
-    )
+def run_monitor_pending_episode(s: Session, *, episode_id: int) -> EpisodePublishStatus:
+    """Look one pending Daily Wire episode up, and hand it over once it is published or gone."""
+    episode = s.get(Episode, episode_id)
     if episode is None:
-        raise ValueError(
-            "Pending episode not found in database; "
-            "fetch_new_episodes must index it first"
-        )
+        raise ValueError(f"Pending episode {episode_id} was removed before it was checked")
+    collection = episode.collection
 
     old_status = episode.publish_status
     if old_status not in PENDING_EPISODE_PUBLISH_STATUSES:
-        queue_monitor_completion_if_settled(
-            s,
-            episode=episode,
-            collection=collection,
-            old_status=old_status,
-        )
-        s.commit()
+        s.rollback()
         return EpisodePublishStatus(old_status)
 
     episode_db_id = episode.id
@@ -258,7 +176,7 @@ async def run_monitor_pending_episode(
     client = MiddlewareClient()
 
     # A SELECT starts an ORM transaction. Release it before DNS/HTTP/HLS work so
-    # concurrent episode monitors cannot consume the whole DB pool while offline.
+    # no transaction stays open while The Daily Wire is looked up.
     s.rollback()
     try:
         detail = client.get_episode_details(
@@ -324,13 +242,7 @@ async def run_monitor_pending_episode(
     )
     old_status = episode.publish_status
     if old_status not in PENDING_EPISODE_PUBLISH_STATUSES:
-        queue_monitor_completion_if_settled(
-            s,
-            episode=episode,
-            collection=collection,
-            old_status=old_status,
-        )
-        s.commit()
+        s.rollback()
         return EpisodePublishStatus(old_status)
 
     # Record the observed publication timing before applying status fallbacks.
@@ -381,15 +293,7 @@ async def run_monitor_pending_episode(
             dw_episode=detail,
             status=new_status,
         )
-    elif (
-        new_status is EpisodePublishStatus.PUBLISHED_FINAL
-        and not episode.metadata_is_final
-    ):
-        queue_event(
-            s,
-            METADATA_REFRESH_REQUESTED_EVENT,
-            {"resource_id": episode.id, "id": episode.id},
-        )
+    # Once published, the metadata refresh sweep follows it until its metadata is final.
 
     track_monitor_publication_timing(
         episode,
@@ -404,14 +308,7 @@ async def run_monitor_pending_episode(
         new_status=new_status,
         was_created=False,
     )
-    queue_monitor_completion_if_settled(
-        s,
-        episode=episode,
-        collection=collection,
-        old_status=old_status,
-    )
     s.commit()
 
     logger.info("Episode %s status: %s -> %s", episode.id, old_status, new_status.value)
-    print(f"monitor_pending_episode completed for {episode.slug}: {new_status.value}")
     return new_status

@@ -23,7 +23,7 @@ from backend.utils.custom_index import CustomIndexNotReadyError
 from backend.db import get_session
 from backend.security.auth import resolve_access
 from backend.security.access import LinkNotAllowed
-from backend.services.users import UserError
+from backend.services.errors import ServiceError
 from task_manager.scheduler.requester import current_requester
 from config import get_settings
 from config.network import NO_INTERNET_CONNECTION_MESSAGE, is_no_internet_error
@@ -199,12 +199,12 @@ def create_app() -> FastAPI:
     async def _link_not_allowed(_request: Request, error: LinkNotAllowed):
         return JSONResponse({"detail": str(error)}, status_code=403)
 
-    @app.exception_handler(UserError)
-    async def _user_error(_request: Request, error: UserError):
+    @app.exception_handler(ServiceError)
+    async def _service_error(_request: Request, error: ServiceError):
         if error.field is None:
             return JSONResponse({"detail": str(error)}, status_code=error.status_code)
         return JSONResponse(
-            {"detail": [{"loc": ["body", error.field], "msg": str(error), "type": "value_error"}]},
+            {"detail": [{"loc": ["body", error.field], "msg": str(error), "type": error.kind}]},
             status_code=error.status_code,
         )
 

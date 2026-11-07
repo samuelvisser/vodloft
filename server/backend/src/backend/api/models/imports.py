@@ -5,7 +5,7 @@ from typing import Any, Literal, Optional
 
 from pydantic import Field
 
-from .base import RequestBase, ResponseBase
+from .base import RequestBase, ResponseBase, response_model_config
 
 
 class ImportUploadFileAPIRequest(RequestBase):
@@ -91,6 +91,8 @@ class ImportPathMapAPIRead(ResponseBase):
 
 
 class ImportCollectionAPIRead(ResponseBase):
+    model_config = response_model_config(nested_source="plan")
+
     external_id: str
     title: str
     url: str
@@ -135,6 +137,8 @@ class ImportCustomIndexAPIRead(ResponseBase):
 
 
 class ImportProfileAPIRead(ResponseBase):
+    model_config = response_model_config(nested_source="plan")
+
     external_id: str
     name: str
     becomes: Literal["new", "linked", "reused"]
@@ -156,6 +160,8 @@ class ImportProfileAPIRead(ResponseBase):
 
 
 class ImportSettingAPIRead(ResponseBase):
+    model_config = response_model_config(nested_source="plan")
+
     key: str
     value: Any = None
     support: Literal["exact", "close", "unsupported"]
@@ -248,6 +254,8 @@ class ImportRunDownloadProfilesAPIRead(ResponseBase):
 
 
 class ImportRunAPIRead(ImportRunSummaryAPIRead):
+    model_config = response_model_config(nested_source="run")
+
     options: dict[str, Any]
     download_profiles: ImportRunDownloadProfilesAPIRead
     version: Optional[str] = None

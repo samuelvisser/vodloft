@@ -801,6 +801,7 @@ def test_refresh_operation_eager_loads_target_run_graph_without_n_plus_one_queri
 def test_operation_dependencies_weight_child_completion_without_replacing_child_progress():
     from task_manager.scheduler.operations import (
         OperationDependencySpec,
+        _operation_snapshot,
         add_operation_dependencies,
         create_operation,
         refresh_operation,
@@ -860,8 +861,8 @@ def test_operation_dependencies_weight_child_completion_without_replacing_child_
         refresh_operation(session, parent.id)
 
         assert parent.status == OperationStatus.RUNNING.value
-        assert parent.progress == 35
-        assert parent.completion_progress == 35
+        snapshot = _operation_snapshot(parent)
+        assert (snapshot.progress, snapshot.completion_progress) == (35, 35)
         assert first.progress == 80
         assert second.progress == 10
         assert {dependency.child_operation_id for dependency in parent.dependencies} == {
@@ -875,6 +876,7 @@ def test_operation_dependencies_weight_child_completion_without_replacing_child_
 def test_dependency_child_terminal_outcomes_finish_parent_at_full_completion():
     from task_manager.scheduler.operations import (
         OperationDependencySpec,
+        _operation_snapshot,
         add_operation_dependencies,
         create_operation,
         refresh_operation,
@@ -929,8 +931,8 @@ def test_dependency_child_terminal_outcomes_finish_parent_at_full_completion():
         refresh_operation(session, second.id)
 
         assert parent.status == OperationStatus.PARTIAL.value
-        assert parent.progress == 100
-        assert parent.completion_progress == 100
+        snapshot = _operation_snapshot(parent)
+        assert (snapshot.progress, snapshot.completion_progress) == (100, 100)
         assert parent.result["data"] == {
             "completed": 1,
             "failed": 1,
@@ -944,6 +946,7 @@ def test_dependency_child_terminal_outcomes_finish_parent_at_full_completion():
 def test_operation_dependency_refresh_propagates_transitively():
     from task_manager.scheduler.operations import (
         OperationDependencySpec,
+        _operation_snapshot,
         add_operation_dependencies,
         create_operation,
         refresh_operation,
@@ -992,10 +995,45 @@ def test_operation_dependency_refresh_propagates_transitively():
         session.flush()
         refresh_operation(session, leaf.id)
 
-        assert middle.completion_progress == 63
-        assert root.completion_progress == 63
+        assert _operation_snapshot(middle).completion_progress == 63
+        assert _operation_snapshot(root).completion_progress == 63
         assert middle.status == OperationStatus.RUNNING.value
         assert root.status == OperationStatus.RUNNING.value
+    finally:
+        session.close()
+
+
+def test_a_parent_stores_no_progress_and_reading_it_follows_its_children():
+    from task_manager.scheduler.operations import (
+        OperationDependencySpec,
+        _operation_snapshot,
+        add_operation_dependencies,
+        create_operation,
+        refresh_operation,
+    )
+    from task_manager.scheduler.types import OperationStatus
+
+    session = _session()
+    try:
+        child = create_operation(
+            session, kind="child", resource_type="media_download", resource_id=1, title="Child", targets=[],
+        )
+        parent = create_operation(
+            session, kind="parent", resource_type="media_download", resource_id=None, title="Parent", targets=[],
+        )
+        add_operation_dependencies(session, parent.id, [OperationDependencySpec(child.id)])
+        child.status = OperationStatus.RUNNING.value
+        session.flush()
+        refresh_operation(session, child.id)
+        assert parent.status == OperationStatus.RUNNING.value
+        stored = (parent.progress, parent.completion_progress)
+
+        child.completion_progress = 63
+        session.flush()
+        refresh_operation(session, child.id)
+
+        assert (parent.progress, parent.completion_progress) == stored
+        assert _operation_snapshot(parent).completion_progress == 63
     finally:
         session.close()
 

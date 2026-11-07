@@ -13,6 +13,7 @@ import {
 } from '../../types/schemas/movie_local_media_profile'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
 import {getZodDefaults} from '../../utils/defaultZod'
+import {apiUrl} from '../../lib/api'
 
 
 type Props = {
@@ -72,7 +73,7 @@ export default function OnboardingMovieProfileStep({movieTitle, onBack, onContin
         form.clearErrors('root')
         try {
             const data = MovieLocalMediaProfileCreateSchema.parse(input)
-            const base = (window as any).appConfig?.API_URL || '/api'
+            const base = apiUrl()
             const isUpdating = selectedSlug !== null
             const response = await fetch(
                 isUpdating

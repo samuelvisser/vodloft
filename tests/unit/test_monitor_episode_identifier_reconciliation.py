@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
 from unittest.mock import Mock
 
@@ -18,9 +17,6 @@ def test_monitor_reconciles_identifier_while_episode_stays_pending(monkeypatch):
     from sources.dailywire.api.records import DwEpisodeDetailRecord
     from task_manager.tasks.helpers.episodes import events as episode_events
     from task_manager.tasks.workers.monitor_pending_episode import service
-    from task_manager.tasks.workers.monitor_pending_episode.scheduling import (
-        MONITOR_COMPLETED_EVENT,
-    )
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
@@ -96,22 +92,10 @@ def test_monitor_reconciles_identifier_while_episode_stays_pending(monkeypatch):
             assert require_member_exclusive is False
             return detail
 
-    monitor_events = Mock()
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
-    monkeypatch.setattr(service, "queue_event", monitor_events)
     monkeypatch.setattr(episode_events, "queue_event", Mock())
 
-    result = asyncio.run(
-        service.run_monitor_pending_episode(
-            session,
-            episode_id=episode.id,
-            episode_slug=episode.slug,
-            collection_slug=collection.slug,
-            season_id=season.id,
-            episode_identifier=old_identifier,
-            episode_index=episode.index,
-        )
-    )
+    result = service.run_monitor_pending_episode(session, episode_id=episode.id)
 
     assert result is EpisodePublishStatus.LIVE
     session.expire_all()
@@ -119,15 +103,6 @@ def test_monitor_reconciles_identifier_while_episode_stays_pending(monkeypatch):
     assert stored is not None
     assert stored.episode_identifier == "ep.2500"
     assert stored.dw_episode_number == "2500.00"
-
-    # Monitor jobs are keyed by episode id, so an identifier change needs no
-    # re-keying, and a still-live episode keeps its monitor.
-    completed = [
-        call.args[2]
-        for call in monitor_events.call_args_list
-        if call.args[1] == MONITOR_COMPLETED_EVENT
-    ]
-    assert completed == []
 
     session.close()
     engine.dispose()

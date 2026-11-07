@@ -28,7 +28,9 @@ function harness() {
     }
     vm.runInNewContext(code, {
         exports, AbortController,
-        require: (name) => name === 'react' ? react : {LocalMediaProfilePreviewSchema: {parse: (value) => value}},
+        require: (name) => name === 'react' ? react
+            : name === './api' ? {apiUrl: (path = '') => `/api${path}`}
+            : {LocalMediaProfilePreviewSchema: {parse: (value) => value}},
         window: {
             appConfig: {API_URL: '/api'},
             setTimeout: (callback) => { timers.set(++timerId, callback); return timerId },

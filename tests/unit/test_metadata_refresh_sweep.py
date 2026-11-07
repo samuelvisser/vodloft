@@ -35,6 +35,23 @@ class SweptSource(ListedSource):
 
 
 @pytest.fixture
+def site_schedules():
+    """Give Sites their own scheduling, as under siteSchedules in config.yml."""
+    from config.registry import get_settings, replace_settings
+    from config.settings.submodels import SiteSchedule
+
+    original = get_settings()
+
+    def apply(**schedules: dict):
+        replace_settings(original.model_copy(update={
+            "site_schedules": {key: SiteSchedule(**own) for key, own in schedules.items()},
+        }))
+
+    yield apply
+    replace_settings(original)
+
+
+@pytest.fixture
 def swept(monkeypatch):
     from task_manager.tasks.workers.refresh_metadata import service
 
@@ -43,10 +60,11 @@ def swept(monkeypatch):
     return registry.register(SweptSource())
 
 
-def _site_collection(session, *, mode="own", intervals="1h,1d"):
+def _site_collection(session, site_schedules, *, refresh="1h,1d"):
     from backend.db.models import Site
 
-    session.add(Site(key="tube", name="Tube", domains=["tube.example"], refresh_mode=mode, refresh_intervals=intervals))
+    site_schedules(tube={"metadata_refresh": refresh})
+    session.add(Site(key="tube", name="Tube", domains=["tube.example"]))
     collection = _collection(session, "UC1", source_key="swept")
     collection.site_key = "tube"
     session.commit()
@@ -69,10 +87,10 @@ def _episode(session, slug: str):
     return session.query(Episode).filter(Episode.source_slug == slug).one()
 
 
-def test_an_upload_is_looked_up_on_each_interval_until_its_metadata_is_final(swept, session):
+def test_an_upload_is_looked_up_on_each_interval_until_its_metadata_is_final(swept, session, site_schedules):
     from task_manager.tasks.workers.refresh_metadata.service import run_metadata_refresh
 
-    collection = _site_collection(session)
+    collection = _site_collection(session, site_schedules)
     now = datetime.now(timezone.utc)
     _add(session, collection, "new", now - timedelta(minutes=30))
     # A video from the back catalogue is done from the start.
@@ -105,10 +123,10 @@ def test_an_upload_is_looked_up_on_each_interval_until_its_metadata_is_final(swe
     assert episode.episode_identifier == "ep.1"
 
 
-def test_a_failed_lookup_is_tried_again_and_a_removed_upload_is_marked(swept, session):
+def test_a_failed_lookup_is_tried_again_and_a_removed_upload_is_marked(swept, session, site_schedules):
     from task_manager.tasks.workers.refresh_metadata.service import run_metadata_refresh
 
-    collection = _site_collection(session)
+    collection = _site_collection(session, site_schedules)
     now = datetime.now(timezone.utc)
     _add(session, collection, "gone", now - timedelta(minutes=5))
     _add(session, collection, "flaky", now - timedelta(minutes=5))
@@ -122,10 +140,10 @@ def test_a_failed_lookup_is_tried_again_and_a_removed_upload_is_marked(swept, se
     assert result.sites["Tube"].failed == 1 and result.sites["Tube"].removed == 1
 
 
-def test_a_site_with_its_refresh_off_is_never_looked_up(swept, session):
+def test_a_site_with_its_refresh_off_is_never_looked_up(swept, session, site_schedules):
     from task_manager.tasks.workers.refresh_metadata.service import run_metadata_refresh
 
-    collection = _site_collection(session, mode="off", intervals="1h,1d")
+    collection = _site_collection(session, site_schedules, refresh="off")
     now = datetime.now(timezone.utc)
     _add(session, collection, "new", now - timedelta(minutes=5))
     # Off means no schedule, so the upload is done from the start.
@@ -144,9 +162,20 @@ def test_a_new_site_starts_on_the_schedule_its_source_knows(session):
 
     youtube = site_record(session, site_for("https://www.youtube.com/@a-channel", "ytdlp"))
     vimeo = site_record(session, site_for("https://vimeo.com/123", "ytdlp"))
-    assert (youtube.refresh_mode, youtube.refresh_intervals) == ("own", "30m,2h,6h,24h,3d,7d,14d")
-    assert site_refresh_offsets(youtube)[-1] == 14 * 24 * 3600
-    assert (vimeo.refresh_mode, vimeo.refresh_intervals) == ("system", None)
+    assert site_refresh_offsets(youtube.key)[-1] == 14 * 24 * 3600
+    assert site_refresh_offsets(vimeo.key) == site_refresh_offsets(None)
+
+
+def test_a_site_follows_its_own_schedule_then_its_default_then_the_system(site_schedules):
+    from backend.services.metadata_refresh import site_metadata_refresh, site_refresh_offsets
+    from config import get_settings
+
+    system = get_settings().new_episode_schedule.metadata_refresh_intervals
+    assert site_metadata_refresh("youtube") == "30m,2h,6h,24h,3d,7d,14d"
+    assert site_metadata_refresh("generic:vimeo.com") == system
+    site_schedules(youtube={"metadata_refresh": "1h"}, dailywire={"metadata_refresh": "off"})
+    assert site_metadata_refresh("youtube") == "1h"
+    assert site_refresh_offsets("dailywire") == ()
 
 
 def _refs(*slugs: str) -> list[ItemRef]:
@@ -199,23 +228,97 @@ def client(session, monkeypatch):  # noqa: F811
         yield test_client
 
 
-def test_a_sites_schedule_is_chosen_in_the_settings(client, session):
+def test_the_settings_list_each_site_with_the_schedule_it_starts_on(client, session):
     from backend.db.models import Site
 
-    session.add(Site(key="youtube", name="YouTube", domains=["youtube.com"], refresh_mode="own", refresh_intervals="30m,2h"))
+    session.add(Site(key="youtube", name="YouTube", domains=["youtube.com"]))
+    session.add(Site(key="generic:vimeo.com", name="vimeo.com", domains=["vimeo.com"]))
     session.commit()
 
-    [row] = client.get("/api/settings/site-refresh").json()
-    assert row == {
-        "key": "youtube", "name": "YouTube", "domains": ["youtube.com"],
-        "refreshMode": "own", "refreshIntervals": "30m,2h", "pendingChecks": True, "refreshes": True,
-        "checksPending": True,
-    }
+    rows = client.get("/api/settings/site-refresh").json()
+    assert rows == [
+        {"key": "youtube", "name": "YouTube", "domains": ["youtube.com"], "refreshes": True,
+         "followsPending": True, "defaultRefreshIntervals": "30m,2h,6h,24h,3d,7d,14d"},
+        {"key": "generic:vimeo.com", "name": "vimeo.com", "domains": ["vimeo.com"], "refreshes": True,
+         "followsPending": True, "defaultRefreshIntervals": None},
+    ]
 
-    saved = client.put("/api/settings/site-refresh/youtube", json={"refreshMode": "system", "refreshIntervals": None}).json()
-    # The Site's own schedule is kept for when it gets it back.
-    assert (saved["refreshMode"], saved["refreshIntervals"]) == ("system", "30m,2h")
 
-    refused = client.put("/api/settings/site-refresh/youtube", json={"refreshMode": "own", "refreshIntervals": "2h,1h"})
-    assert refused.status_code == 422
-    assert client.put("/api/settings/site-refresh/nope", json={"refreshMode": "off"}).status_code == 404
+# --- The Daily Wire's episodes ------------------------------------------------------------------
+
+
+def _dailywire_episode(session, slug: str, published: datetime):
+    from backend.db.models import Episode, Season, Site
+
+    session.add(Site(key="dailywire", name="The Daily Wire", domains=["dailywire.com"]))
+    collection = _collection(session, f"show-{slug}", source_key="dailywire")
+    collection.site_key = "dailywire"
+    season = Season(collection=collection, index=1, slug="season-1", name="One")
+    episode = Episode(
+        uuid=f"uuid-{slug}", type="episode", source_key="dailywire", collection=collection, season=season, index=1,
+        episode_identifier=f"ep.{slug}", slug=slug, title=slug, publish_status="published_final",
+        metadata_is_final=False, sharing_url=f"https://example.test/{slug}", published_date=published,
+    )
+    session.add(episode)
+    session.commit()
+    return episode.id
+
+
+@pytest.fixture
+def daily_wire(monkeypatch, site_schedules):
+    """The Daily Wire's own refresh, answering from a list instead of The Daily Wire."""
+    from task_manager.tasks.workers.refresh_metadata import service
+
+    site_schedules(dailywire={"metadata_refresh": "1h,1d"})
+
+    monkeypatch.setattr(service, "_last_sweep", None)
+    answers: list[bool | None | Exception] = []
+    asked: list[int] = []
+
+    def refresh(_session, episode_id):
+        asked.append(episode_id)
+        answer = answers.pop(0) if answers else True
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setattr(service, "refresh_dailywire_episode", refresh)
+    return answers, asked
+
+
+def test_a_daily_wire_episode_is_refreshed_one_by_one_on_its_sites_schedule(daily_wire, session):
+    from task_manager.tasks.workers.refresh_metadata.service import refresh_episode_now, run_metadata_refresh
+
+    answers, asked = daily_wire
+    now = datetime.now(timezone.utc)
+    episode_id = _dailywire_episode(session, "show", now - timedelta(minutes=30))
+
+    assert "The Daily Wire: looked up 1, 1 changed" in run_metadata_refresh(session, now=now).summary()
+    assert run_metadata_refresh(session, now=now + timedelta(minutes=10)).summary() == "No metadata refresh is due"
+    # A lookup that fails is tried again within the sweep.
+    answers.extend([RuntimeError("HTTP error 503"), True])
+    run_metadata_refresh(session, now=now + timedelta(minutes=40))
+    assert asked == [episode_id] * 3
+
+    run_metadata_refresh(session, now=now + timedelta(days=1))
+    session.expire_all()
+    assert _episode(session, "show").metadata_is_final
+
+    # Refresh now looks it up again, and the sweep follows it as long as its schedule says.
+    refresh_episode_now(session, episode_id, now=now + timedelta(days=2))
+    session.expire_all()
+    assert len(asked) == 5 and _episode(session, "show").metadata_is_final
+
+
+def test_a_daily_wire_episode_that_changed_hands_is_not_made_final(daily_wire, session):
+    from task_manager.tasks.workers.refresh_metadata.service import run_metadata_refresh
+
+    answers, _ = daily_wire
+    now = datetime.now(timezone.utc)
+    _dailywire_episode(session, "show", now - timedelta(days=2))
+
+    # Live again: the pending checks follow it from here.
+    answers.append(False)
+    run_metadata_refresh(session, now=now)
+    session.expire_all()
+    assert not _episode(session, "show").metadata_is_final

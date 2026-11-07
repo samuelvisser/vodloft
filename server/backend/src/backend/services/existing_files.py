@@ -27,7 +27,7 @@ from backend.db.models import (
     LocalMediaProfileBase,
     MediaDownloadBase,
 )
-from backend.services.adoption import AdoptionError, adopt, download_root, real_path, virtual_path
+from backend.services.adoption import AdoptionError, adopt, download_root, find_file, real_path, virtual_path
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.custom_index import CustomIndexNotReadyError
 from backend.utils.output_template import episode_output_template_values, resolve_episode_output_path
@@ -198,7 +198,7 @@ def queue_scan(session: Session, collection: Collection, local_media_profile: Lo
     from task_manager.scheduler.operation_factory import create_operation
     from task_manager.scheduler.operations import queue_operation_target_dispatch
 
-    from backend.api.endpoints.collections.operations import CollectionExistingFilesScanOperation
+    from backend.operations.collections import CollectionExistingFilesScanOperation
 
     operation = create_operation(session, CollectionExistingFilesScanOperation(
         collection, local_media_profile_id=local_media_profile.id,
@@ -491,7 +491,7 @@ def adopt_matches(
         try:
             with session.begin_nested():
                 adopt(
-                    session, media=episode, local_media_profile=profile, path=real_path(path),
+                    session, media=episode, local_media_profile=profile, found=find_file(real_path(path)),
                     matched_by=_EVIDENCE_NAMES.get(item.get("evidence") or "", "Picked by hand")
                     if item.get("episode_id") == episode_id else "Picked by hand",
                 )

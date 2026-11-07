@@ -6,6 +6,7 @@ import time
 from types import SimpleNamespace
 
 import pytest
+import requests
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 
@@ -73,7 +74,7 @@ def test_video_is_only_the_mp4_with_sound():
 def test_a_missing_stream_is_looked_up_again_soon():
     from backend.api.endpoints.feeds import source_stream
 
-    assert source_stream._kept_until(None) - time.time() <= 2 * 60
+    assert source_stream._kept_for(None) <= 2 * 60
 
 
 def test_a_site_that_cannot_stream_is_not_looked_up():
@@ -159,7 +160,9 @@ def proxied(monkeypatch):
     from backend.api.endpoints.feeds import source_stream
 
     monkeypatch.setattr(source_stream, "uses_cookies", lambda collection: True)
-    monkeypatch.setattr(source_stream, "_UPSTREAM_CHUNK_BYTES", 4)
+    from backend.api.endpoints.feeds import upstream
+
+    monkeypatch.setattr(upstream, "UPSTREAM_CHUNK_BYTES", 4)
     return source_stream
 
 
@@ -175,7 +178,7 @@ def _client(response_for):
 
 def test_m4a_is_passed_on_range_by_range(proxied, monkeypatch):
     upstream = _Upstream(b"0123456789abcdef")
-    monkeypatch.setattr(proxied.requests, "get", upstream.get)
+    monkeypatch.setattr(requests, "get", upstream.get)
     source = _Source(MediaStream(url="https://rr1.googlevideo.com/a", size_bytes=16))
     episode = _episode()
     client = _client(lambda range_header, head_only: proxied.proxy_response(
@@ -204,7 +207,7 @@ def test_m4a_is_passed_on_range_by_range(proxied, monkeypatch):
 
 def test_a_refused_url_is_looked_up_again(proxied, monkeypatch):
     upstream = _Upstream(b"abcd", refuse=1)
-    monkeypatch.setattr(proxied.requests, "get", upstream.get)
+    monkeypatch.setattr(requests, "get", upstream.get)
     source = _Source(MediaStream(url="https://old"), MediaStream(url="https://new"))
     response = _client(lambda range_header, head_only: proxied.proxy_response(
         source, _episode(), audio=True, media_type="audio/mp4", filename="e.m4a", range_header=range_header, head_only=head_only,

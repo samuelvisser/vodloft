@@ -14,6 +14,7 @@ import {type TaskOperationRead} from '../../types/schemas/operation'
 import {invalidateForOperation} from '../../lib/operationInvalidation'
 import {refreshFrontendPuller, useFrontendPuller} from '../../lib/puller'
 import {type OperationNotificationDefinitions} from './OperationNotificationDefinitions'
+import {apiUrl} from '../../lib/api'
 
 const ACTIVE_STATUSES = new Set(['QUEUED', 'RUNNING', 'WAITING'])
 const TERMINAL_STATUSES = new Set(['SUCCEEDED', 'PARTIAL', 'FAILED', 'CANCELED'])
@@ -33,7 +34,7 @@ const OperationContext = createContext<OperationContextValue>({
 })
 
 async function markSeen(operationId: string): Promise<void> {
-  const base = (window as any).appConfig?.API_URL || '/api'
+  const base = apiUrl()
   const response = await fetch(`${base}/operations/${encodeURIComponent(operationId)}/seen`, {
     method: 'POST',
     credentials: 'include',

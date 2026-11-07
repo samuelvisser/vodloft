@@ -1652,7 +1652,10 @@ def _attach_batches_setup(tmp_path, monkeypatch):
     parent_id = parent.id
     session.close()
 
-    monkeypatch.setattr(media_download_operations, "get_session", sessionmaker(engine))
+    from backend.db import core
+
+    monkeypatch.setattr(core, "_engine", engine)
+    monkeypatch.setattr(core, "_SessionLocal", sessionmaker(engine))
     monkeypatch.setattr(media_download_operations, "ATTACH_REDOWNLOAD_BATCH_SIZE", 2)
     monkeypatch.setattr(
         media_download_operations,

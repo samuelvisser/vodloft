@@ -8,7 +8,7 @@ from .actions import (
     retry_media_download_action,
 )
 from .history import get_media_download_history
-from .operations import (
+from backend.operations.media_downloads import (
     BulkCancelMediaDownloadsOperation,
     BulkDeleteUnavailableMediaDownloadsOperation,
     BulkRetryMediaDownloadsOperation,

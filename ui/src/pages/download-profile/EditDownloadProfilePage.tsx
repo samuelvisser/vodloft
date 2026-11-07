@@ -13,6 +13,7 @@ import {isLocalMediaProfileAvailableForSource, useLocalMediaProfileSelectRegistr
 import {DownloadProfileReadView} from "../../types/schemas/download_profile_view";
 import {useQuery, useQueryClient} from "@tanstack/react-query";
 import ReadMore from "../../utils/ReadMore";
+import {apiUrl} from '../../lib/api'
 
 type RouteParams = { id?: string }
 
@@ -29,7 +30,7 @@ export default function EditDownloadProfilePage() {
         enabled: !!id,
         refetchOnMount: 'always',
         queryFn: async ({signal}) => {
-            const res = await fetch(`${(window as any).appConfig.API_URL}/download-profiles/as-view/${profileId}`, {signal, credentials: 'include'})
+            const res = await fetch(`${apiUrl()}/download-profiles/as-view/${profileId}`, {signal, credentials: 'include'})
             if (!res.ok) throw new Error(`Failed to load profile (${res.status})`)
             return await res.json() as Promise<DownloadProfileReadView>
         },
@@ -78,7 +79,7 @@ export default function EditDownloadProfilePage() {
     const onCancel = useCallback(() => navigate('/download-profiles'), [navigate])
 
     const submitFn = async (data: DownloadProfileUpdateOut) => {
-        return fetch(`${(window as any).appConfig.API_URL}/download-profiles/${profileId}`, {
+        return fetch(`${apiUrl()}/download-profiles/${profileId}`, {
             method: 'PATCH',
             headers: {'Content-Type': 'application/json'},
             credentials: 'include',

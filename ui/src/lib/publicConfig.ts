@@ -1,7 +1,8 @@
 import { ConfigPublic, ConfigPublicSchema } from '../types/schemas/config_public'
+import {apiUrl} from './api'
 
 export async function loadPublicConfig(): Promise<ConfigPublic> {
-  const base = (window as any).appConfig?.API_URL || '/api'
+  const base = apiUrl()
   const r = await fetch(`${base}/config/public`, { credentials: 'include' })
   if (!r.ok) throw new Error(`HTTP ${r.status}`)
   const json = await r.json()

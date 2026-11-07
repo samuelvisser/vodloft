@@ -9,7 +9,7 @@ from typing import Optional
 from sqlalchemy import case, event, exists, func, select
 from sqlalchemy.orm import Session, selectinload
 
-from backend.db.core import begin_write_transaction, get_session
+from backend.db.core import get_session, run_write_transaction
 from backend.db.models import Episode, Movie, MovieExtra
 from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
@@ -615,17 +615,15 @@ def attach_redownload_batches(
         if before_batch is not None:
             before_batch()
         batch = ids[start:start + ATTACH_REDOWNLOAD_BATCH_SIZE]
-        session = get_session()
-        try:
-            begin_write_transaction(session)
+
+        def attach(session) -> bool:
             parent = session.get(TaskOperation, parent_operation_id)
             if (
                 parent is None
                 or parent.status not in _ACTIVE_OPERATION_STATUSES
                 or operation_cancel_requested(parent)
             ):
-                session.rollback()
-                return handled
+                return False
             attached_slots = set(session.scalars(
                 select(TaskOperationDependency.slot_key).where(
                     TaskOperationDependency.parent_operation_id == parent_operation_id,
@@ -645,12 +643,10 @@ def attach_redownload_batches(
             ]
             if downloads:
                 attach_redownload_dependencies(session, parent, downloads)
-            session.commit()
-        except BaseException:
-            session.rollback()
-            raise
-        finally:
-            session.close()
+            return True
+
+        if not run_write_transaction(attach):
+            return handled
         handled += len(batch)
         if after_batch is not None:
             after_batch(handled, len(ids))

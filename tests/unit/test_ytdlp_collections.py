@@ -331,6 +331,8 @@ def test_a_listed_episode_whose_playback_is_protected_is_not_downloaded(listed, 
 def test_a_listed_collection_bundle_is_seasonal_and_streams_only_downloads(listed, session):
     from fastapi import HTTPException
 
+    from backend.services.errors import ServiceError
+
     from backend.api.endpoints.collections.as_bundle.service import create_collection_bundle
     from backend.api.models.collection_as_bundle import CollectionAPICreateBundle
 
@@ -353,7 +355,7 @@ def test_a_listed_collection_bundle_is_seasonal_and_streams_only_downloads(liste
     assert (created.source_key, created.episode_identifier, created.membership_level) == ("listed", "numbered", "FREE")
     assert created.model_dump(by_alias=True).get("seasons") in (None, [])
 
-    with pytest.raises(HTTPException, match="Unknown|No Source"):
+    with pytest.raises(ServiceError, match="Unknown|No Source"):
         create_collection_bundle(session, None, CollectionAPICreateBundle.model_validate({"collection": {**collection, "slug": "x", "sourceKey": "nope"}, "seasons": []}))
 
 
@@ -580,7 +582,7 @@ def test_a_youtube_download_profile_marks_sponsors_and_adds_your_own_options(lis
 
     # A site SponsorBlock doesn't cover gets no segments; your own options apply to the yt-dlp Source.
     from sources import Feature
-    monkeypatch.setattr(ListedSource, "features", ListedSource.features | {Feature.YTDLP_DOWNLOADS})
+    monkeypatch.setattr(ListedSource, "features", ListedSource.features | {Feature.YTDLP_OPTIONS})
     plan = download_plans.prepare_download_plan(session, download.id, DownloadTracker())
     assert plan.source.ytdlp_sponsorblock == YtdlpSponsorBlock()
     command = plan.source.ytdlp_command

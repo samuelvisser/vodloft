@@ -404,9 +404,9 @@ class YtDlpSource(Source):
     name = "yt-dlp"
     domains = (ANY_DOMAIN,)
     features = frozenset({
-        Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.OPTIONAL_COOKIES, Feature.API_KEY,
+        Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.PAGE_STREAMS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.OPTIONAL_COOKIES, Feature.API_KEY,
         Feature.QUICK_CHECK, Feature.CATALOGUE_REFRESH, Feature.SEARCH, Feature.COSTLY_SEARCH,
-        Feature.FORMAT_CHOICES, Feature.YTDLP_DOWNLOADS, Feature.METADATA_REFRESH,
+        Feature.FORMAT_CHOICES, Feature.YTDLP_OPTIONS, Feature.METADATA_REFRESH,
         Feature.PENDING_CHECKS,
     })
     episode_tags = _YOUTUBE_TAGS
@@ -428,6 +428,9 @@ class YtDlpSource(Source):
     def site_for(self, url: str) -> Site:
         """The site of the yt-dlp extractor that handles the link: one Site for all of YouTube's domains."""
         return sites.site_for(url)
+
+    def refresh_intervals_of(self, site_key: str) -> str | None:
+        return sites.refresh_intervals_of(site_key)
 
     def episode_tags_for(self, url: str | None) -> tuple[EpisodeTag, ...]:
         """Shorts and livestreams are YouTube's; other sites only have videos."""

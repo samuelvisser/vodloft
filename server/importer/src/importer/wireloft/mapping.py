@@ -63,7 +63,7 @@ _DOWNLOAD_FIELDS = (
     "downloaded_at", "artifact_stat_dev", "artifact_stat_ino", "artifact_size_bytes", "artifact_fingerprint",
 )
 _PROFILE_SETTINGS = (
-    "preferred_format", "append_media_type_to_filename", "download_mode", "thumbnail_mode", "metadata_mode",
+    "preferred_format", "download_mode", "thumbnail_mode", "metadata_mode",
     "subtitle_mode",
 )
 

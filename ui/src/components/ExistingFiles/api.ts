@@ -11,8 +11,9 @@ import {
     FolderList,
     FolderListSchema,
 } from '../../types/schemas/existing_files'
+import {apiUrl} from '../../lib/api'
 
-const api = () => (window as any).appConfig.API_URL as string
+const api = () => apiUrl()
 
 export class ExistingFilesRequestError extends Error {}
 

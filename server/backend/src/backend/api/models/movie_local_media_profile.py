@@ -2,59 +2,19 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import field_validator
-
 from backend.api.models.local_media_profile import (
-    LocalMediaProfileAPIBaseIn,
     LocalMediaProfileAPIBaseOut,
 )
-from backend.types.local_media_profile_types import LocalMediaProfileSubtitleMode, LocalMediaProfileType, PreferredFormat
-from backend.utils.output_template import (
-    MOVIE_OUTPUT_TEMPLATE_FIELDS,
-    MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
-    movie_template_has_media_item_field,
-    output_template_custom_index_keys,
-    validate_output_template_path_requirements,
-)
+from backend.api.models.base import RequestBase
+from backend.services.local_media_profile_inputs import MovieLocalMediaProfileInput
+from backend.types.local_media_profile_types import LocalMediaProfileType
 
 
-_MOVIE_EXTRA_COLLISION_MESSAGE = (
-    "Movie and movie-extra downloads could resolve to the same file. Include at least "
-    "one variable that describes the downloaded item, such as {{ title }}, {{ slug }}, "
-    "{{ duration_seconds }}, or {{ media_type }}."
-)
-
-class _MovieLocalMediaProfileAPIBaseIn(LocalMediaProfileAPIBaseIn):
-    type: Literal["movie"] = LocalMediaProfileType.MOVIE.value
-    subtitle_mode: LocalMediaProfileSubtitleMode = LocalMediaProfileSubtitleMode.SIDECAR
-
-    @field_validator("preferred_format")
-    @classmethod
-    def _require_video_format(cls, value: PreferredFormat) -> PreferredFormat:
-        if value in {PreferredFormat.FORMAT_AUDIO_ONLY, PreferredFormat.FORMAT_HLS}:
-            raise ValueError("Movie Local Media Profiles require a normal video format")
-        return value
-
-    @field_validator("output_template")
-    @classmethod
-    def _validate_output_template(cls, value: str) -> str:
-        validate_output_template_path_requirements(
-            value,
-            allowed_fields=MOVIE_OUTPUT_TEMPLATE_FIELDS,
-            allowed_metadata_scopes=MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
-        )
-        if output_template_custom_index_keys(value):
-            raise ValueError("custom_index is only available to Collection Local Media Profiles")
-        if not movie_template_has_media_item_field(value):
-            raise ValueError(_MOVIE_EXTRA_COLLISION_MESSAGE)
-        return value
-
-
-class MovieLocalMediaProfileAPICreate(_MovieLocalMediaProfileAPIBaseIn):
+class MovieLocalMediaProfileAPICreate(RequestBase, MovieLocalMediaProfileInput):
     """Create a Movie Local Media Profile."""
 
 
-class MovieLocalMediaProfileAPIUpdate(_MovieLocalMediaProfileAPIBaseIn):
+class MovieLocalMediaProfileAPIUpdate(RequestBase, MovieLocalMediaProfileInput):
     """Update a Movie Local Media Profile."""
 
 

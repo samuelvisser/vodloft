@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -69,161 +68,54 @@ def test_new_episode_metadata_finality_uses_last_interval(monkeypatch):
     ) is True
 
 
-def test_remaining_metadata_checks_are_anchored_to_publish_time(monkeypatch):
-    from task_manager.tasks.workers.refresh_episode_metadata import scheduling
-
-    class FakeScheduler:
-        def __init__(self):
-            self.jobs = {}
-
-        def add_job(self, function, **kwargs):
-            job_id = kwargs["id"]
-            self.jobs[job_id] = SimpleNamespace(function=function, **kwargs)
-
-    scheduler = FakeScheduler()
-    monkeypatch.setattr(scheduling, "start_scheduler", lambda: scheduler)
-
-    published_at = datetime(2026, 9, 2, 10, tzinfo=timezone.utc)
-    now = published_at + timedelta(hours=1, minutes=30)
-    job_ids = scheduling.schedule_remaining_metadata_checks(
-        episode_id=42,
-        publication_time=published_at,
-        offsets=(300, 900, 1800, 3600, 10800, 21600, 86400),
-        now=now,
-    )
-
-    assert job_ids == [
-        scheduling.metadata_job_id(42, 10800),
-        scheduling.metadata_job_id(42, 21600),
-        scheduling.metadata_job_id(42, 86400),
-    ]
-    assert {
-        job.kwargs["scheduled_offset_seconds"]
-        for job in scheduler.jobs.values()
-    } == {10800, 21600, 86400}
-    assert all(
-        job.kwargs["def_key"] == "refresh_episode_metadata"
-        for job in scheduler.jobs.values()
-    )
-
-
 @pytest.mark.parametrize("has_safe_final", [True, False])
-def test_metadata_refresh_timing_explicitly_prefers_safe_final(monkeypatch, has_safe_final):
+def test_the_refresh_schedule_counts_from_the_safe_final_publication(has_safe_final):
     from backend.types.episode_types import EpisodePublishStatus
-    from task_manager.tasks.workers.refresh_episode_metadata import service
+    from task_manager.tasks.workers.refresh_metadata.service import _watched_episode
 
     dailywire_published = datetime(2026, 10, 2, 8, tzinfo=timezone.utc)
     safe_final = datetime(2026, 10, 2, 9, 3, tzinfo=timezone.utc)
     episode = SimpleNamespace(
-        id=42,
-        source_key="dailywire",
-        metadata_is_final=False,
-        publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
-        safe_published_final=safe_final if has_safe_final else None,
-        last_known_pending=None,
-        published_date=dailywire_published,
+        id=42, source_key="dailywire", source_slug="episode", sharing_url="https://example.test/episode",
+        metadata_is_final=False, publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
+        safe_published_final=safe_final if has_safe_final else None, last_known_pending=None,
+        published_date=dailywire_published, collection=SimpleNamespace(site=None, site_key=None),
     )
 
-    class FakeSession:
-        def get(self, model, episode_id):
-            assert episode_id == episode.id
-            return episode
+    item = _watched_episode(episode)
 
-    scheduled: list[datetime | None] = []
-    monkeypatch.setattr(service, "episode_refresh_offsets", lambda _episode: (900, 1800))
-    monkeypatch.setattr(
-        service,
-        "schedule_remaining_metadata_checks",
-        lambda *, episode_id, publication_time, offsets, now: (
-            scheduled.append(publication_time) or ["future-job"]
-        ),
-    )
-
-    did_refresh = asyncio.run(
-        service.run_refresh_episode_metadata(
-            FakeSession(),
-            episode_id=episode.id,
-            refresh=False,
-        )
-    )
-
-    assert did_refresh is False
-    assert scheduled == [
-        safe_final if has_safe_final else dailywire_published
-    ]
+    assert item.published == (safe_final if has_safe_final else dailywire_published)
+    # The Daily Wire's own refresh looks it up.
+    assert item.one_by_one
 
 
-def test_metadata_refresh_timing_ignores_ensure_safe_delay_setting(monkeypatch):
+def test_the_refresh_schedule_ignores_the_ensure_safe_delay_setting(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
     from config import get_settings
-    from task_manager.tasks.workers.refresh_episode_metadata import service
+    from task_manager.tasks.workers.refresh_metadata.service import _watched_episode
 
-    monkeypatch.setattr(
-        get_settings().download_settings,
-        "ensure_safe_delay",
-        True,
-    )
-    dailywire_published = datetime(2026, 10, 2, 8, tzinfo=timezone.utc)
+    monkeypatch.setattr(get_settings().download_settings, "ensure_safe_delay", True)
     last_known_pending = datetime(2026, 10, 2, 9, tzinfo=timezone.utc)
     episode = SimpleNamespace(
-        id=42,
-        source_key="dailywire",
-        metadata_is_final=False,
-        publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
-        safe_published_final=None,
-        last_known_pending=last_known_pending,
-        published_date=dailywire_published,
+        id=42, source_key="dailywire", source_slug="episode", sharing_url="https://example.test/episode",
+        metadata_is_final=False, publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
+        safe_published_final=None, last_known_pending=last_known_pending,
+        published_date=datetime(2026, 10, 2, 8, tzinfo=timezone.utc), collection=SimpleNamespace(site=None, site_key=None),
     )
 
-    class FakeSession:
-        def get(self, model, episode_id):
-            assert episode_id == episode.id
-            return episode
-
-    scheduled: list[datetime | None] = []
-    monkeypatch.setattr(service, "episode_refresh_offsets", lambda _episode: (900, 1800))
-    monkeypatch.setattr(
-        service,
-        "schedule_remaining_metadata_checks",
-        lambda *, episode_id, publication_time, offsets, now: (
-            scheduled.append(publication_time) or ["future-job"]
-        ),
-    )
-
-    did_refresh = asyncio.run(
-        service.run_refresh_episode_metadata(
-            FakeSession(),
-            episode_id=episode.id,
-            refresh=False,
-        )
-    )
-
-    assert did_refresh is False
-    assert scheduled == [last_known_pending]
+    assert _watched_episode(episode).published == last_known_pending
 
 
-def test_metadata_worker_uses_registry_trigger_metadata_without_manual_ids():
+def test_refresh_now_runs_only_when_asked():
     import inspect
     import task_manager.tasks  # noqa: F401
     from task_manager.scheduler.registry import get_task
-    from task_manager.tasks.helpers.episodes.metadata import METADATA_REFRESH_REQUESTED_EVENT
 
     meta, worker = get_task("refresh_episode_metadata")
-    events = {
-        trigger.event_name
-        for trigger in meta.triggers
-        if trigger.trigger_type == "event"
-    }
 
-    assert events == {
-        "app.startup",
-        METADATA_REFRESH_REQUESTED_EVENT,
-    }
-    parameters = inspect.signature(worker).parameters
-    assert "refresh" in parameters
-    assert "scheduled_offset_seconds" in parameters
-    assert "manual_request_id" not in parameters
-    assert "manual_request_ids" not in parameters
+    # The metadata refresh sweep follows episodes; this task only answers Refresh now.
+    assert not meta.triggers
+    assert list(inspect.signature(worker).parameters) == ["resource_id", "progress"]
 
 
 def test_episode_metadata_refresh_creates_operation_and_queues_worker(monkeypatch):
@@ -284,7 +176,7 @@ def test_episode_metadata_refresh_creates_operation_and_queues_worker(monkeypatc
     assert created[0]["resource_id"] == episode.id
     target = created[0]["targets"][0]
     assert target.task_key == "refresh_episode_metadata"
-    assert target.task_kwargs == {"refresh": True}
+    assert target.task_kwargs == {}
     assert queued == [("operation-episode-refresh", target.resolved_slot_key())]
 
 
@@ -352,7 +244,7 @@ def test_collection_metadata_refresh_creates_one_operation_for_all_episode_targe
     assert created[0]["kind"] == "collection.refresh_metadata"
     assert [target.resource_id for target in created[0]["targets"]] == [1, 2, 3]
     assert all(target.task_key == "refresh_episode_metadata" for target in created[0]["targets"])
-    assert all(target.task_kwargs == {"refresh": True} for target in created[0]["targets"])
+    assert all(target.task_kwargs == {} for target in created[0]["targets"])
     assert queued == [
         ("operation-collection-refresh", "episode:1"),
         ("operation-collection-refresh", "episode:2"),
@@ -362,109 +254,20 @@ def test_collection_metadata_refresh_creates_one_operation_for_all_episode_targe
     assert session.flushes == 1
 
 
-def test_startup_metadata_recovery_skips_live_and_active_operation_targets(monkeypatch):
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import Session
-
-    import backend.db.models  # noqa: F401
-    import task_manager.scheduler.db  # noqa: F401
-    from backend.db import Base
-    from backend.db.models import Episode, Season, Collection
+def test_refresh_now_leaves_an_episode_that_is_not_published_alone(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
-    from task_manager.scheduler.db import TaskOperation, TaskOperationTarget
-    from task_manager.scheduler.types import OperationSource, OperationStatus
-    from task_manager.tasks.workers.refresh_episode_metadata import service
+    from task_manager.tasks.workers.refresh_metadata import service
 
-    engine = create_engine("sqlite+pysqlite:///:memory:")
-    Base.metadata.create_all(engine)
-    with Session(engine) as session:
-        collection = Collection(
-            source_key="dailywire",
-            uuid="collection-uuid", slug="collection", title="Collection", description=None,
-            sharing_url="https://example.test/collection", membership_level="FREE",
-            type="podcast", episode_identifier="numbered",
-            author_name="Host", author_slug="host",
-        )
-        season = Season(collection=collection, index=1, slug="season-1", name="Season 1")
-        episodes = [
-            Episode(
-                source_key="dailywire",
-                uuid=f"episode-{index}", type="episode", collection=collection, season=season,
-                index=index, episode_identifier=f"ep.{index}", slug=f"episode-{index}",
-                title=f"Episode {index}", duration=60, publish_status=status,
-                sharing_url=f"https://example.test/episode-{index}",
-                metadata_is_final=False,
-            )
-            for index, status in (
-                (1, EpisodePublishStatus.PUBLISHED_FINAL.value),
-                (2, EpisodePublishStatus.PUBLISHED_FINAL.value),
-                (3, EpisodePublishStatus.LIVE.value),
-            )
-        ]
-        session.add_all([collection, season, *episodes])
-        session.flush()
-        final_episode, final_with_operation, _live_episode = episodes
-        operation = TaskOperation(
-            id="active-refresh", kind="episode.refresh_metadata",
-            source=OperationSource.SYSTEM.value, resource_type="episode",
-            resource_id=final_with_operation.id, title="Refresh",
-            status=OperationStatus.RUNNING.value, progress=0, context={},
-        )
-        session.add_all([operation, TaskOperationTarget(
-            operation=operation, task_key="refresh_episode_metadata",
-            resource_type="episode", resource_id=final_with_operation.id,
-            slot_key=f"episode:{final_with_operation.id}", task_kwargs={"refresh": True},
-        )])
-        session.commit()
-        final_episode_id = final_episode.id
-
-        queued: list[dict] = []
-        monkeypatch.setattr(service, "trigger_now", lambda **kwargs: queued.append(kwargs))
-
-        service._queue_startup_recovery(session)
-
-    engine.dispose()
-    assert queued == [
-        {
-            "def_key": "refresh_episode_metadata",
-            "resource_type": "episode",
-            "resource_id": final_episode_id,
-            "refresh": True,
-        },
-    ]
-
-
-def test_explicit_metadata_refresh_does_not_take_ownership_of_non_final_episode(monkeypatch):
-    from backend.types.episode_types import EpisodePublishStatus
-    from task_manager.tasks.workers.refresh_episode_metadata import service
-
-    episode = SimpleNamespace(
-        id=21,
-        source_key="dailywire",
-        metadata_is_final=False,
-        publish_status=EpisodePublishStatus.LIVE.value,
-    )
-    refreshed: list[int] = []
+    episode = SimpleNamespace(id=21, source_key="dailywire", metadata_is_final=False, publish_status=EpisodePublishStatus.LIVE.value)
 
     class FakeSession:
         def get(self, model, episode_id):
             assert episode_id == episode.id
             return episode
 
-    session = FakeSession()
-    monkeypatch.setattr(
-        service,
-        "_refresh_episode_from_dailywire",
-        lambda _session, item: refreshed.append(item.id),
-    )
+        def rollback(self):
+            pass
 
-    did_refresh = asyncio.run(
-        service.run_refresh_episode_metadata(
-            session,
-            episode_id=episode.id,
-            refresh=True,
-        )
-    )
+    monkeypatch.setattr(service, "refresh_dailywire_episode", lambda *_args: pytest.fail("looked up"))
 
-    assert did_refresh is False
-    assert refreshed == []
+    assert service.refresh_episode_now(FakeSession(), episode.id).summary() == "No metadata refresh is due"

@@ -119,7 +119,7 @@ An announced livestream or premiere is added as soon as VODLoft finds it, marked
 
 A stream that starts late shows as **Delayed**. In a collection named by date, the episode takes the date it was actually published. A stream that is cancelled, or made private before it airs, gets **No usable media** and is removed after a while, just like a Daily Wire episode that disappears. If it comes back, VODLoft follows it again.
 
-This works for every site yt-dlp supports that announces streams, not only YouTube. If you would rather only see videos once they are published, turn off **Upcoming and live videos** for the site under **Settings → Automation → Metadata refresh and upcoming videos per Site**.
+This works for every site yt-dlp supports that announces streams, not only YouTube. If you would rather only see videos once they are published, turn off **Upcoming and live videos** for the site under **Settings → Automation → Per-Site scheduling**, or for every site at once with the system setting there.
 
 ### Renamed and removed videos
 

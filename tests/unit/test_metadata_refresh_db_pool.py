@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -67,21 +66,9 @@ def test_metadata_refresh_releases_read_transaction_before_dailywire_request(mon
             applied.append((refreshed_episode, fetched_detail)) or True
         ),
     )
-    monkeypatch.setattr(
-        service,
-        "schedule_remaining_metadata_checks",
-        lambda **_kwargs: ["future-refresh"],
-    )
-    monkeypatch.setattr(service, "refresh_watch_expired", lambda *_args, **_kwargs: False)
     monkeypatch.setattr(service, "request_collection_custom_index_reconciliation", lambda *_args: None)
 
-    did_refresh = asyncio.run(
-        service.run_refresh_episode_metadata(
-            session,
-            episode_id=episode.id,
-            refresh=True,
-        )
-    )
+    did_refresh = service.refresh_dailywire_episode(session, episode.id)
 
     assert did_refresh is True
     assert session.rollbacks == 1
@@ -124,15 +111,9 @@ def test_metadata_refresh_revalidates_episode_after_dailywire_request(monkeypatc
         lambda *_args: applied.append(True) or True,
     )
 
-    did_refresh = asyncio.run(
-        service.run_refresh_episode_metadata(
-            session,
-            episode_id=initial.id,
-            refresh=True,
-        )
-    )
+    did_refresh = service.refresh_dailywire_episode(session, initial.id)
 
-    assert did_refresh is False
+    assert did_refresh is None
     assert session.rollbacks == 1
     assert session.get_calls == 2
     assert applied == []

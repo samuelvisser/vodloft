@@ -12,7 +12,7 @@ from backend.services.profile_moves import ProfileMoveError, plan_profile_move
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import queue_operation_target_dispatch
 
-from .operations import LocalMediaProfileMoveEpisodesOperation
+from backend.operations.local_media_profiles import LocalMediaProfileMoveEpisodesOperation
 
 
 def _collection_profile(s: Session, slug: str) -> CollectionLocalMediaProfile:

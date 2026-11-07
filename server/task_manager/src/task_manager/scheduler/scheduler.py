@@ -19,13 +19,12 @@ from backend.db.datetime_types import utc_datetime
 from config import get_settings
 from config.network import is_no_internet_error
 from downloader import MediaUnavailableError
+from .lanes import BULK_WORKERS, METADATA_WORKERS, WATCHDOG_WORKERS, TaskLane
 
 _scheduler: Optional[AsyncIOScheduler] = None
 _critical_scheduler: Optional[AsyncIOScheduler] = None
-WATCHDOG_EXECUTOR_ALIAS = "watchdog"
-DOWNLOAD_EXECUTOR_ALIAS = "downloads"
-BULK_EXECUTOR_ALIAS = "bulk"
-METADATA_EXECUTOR_ALIAS = "metadata"
+WATCHDOG_EXECUTOR_ALIAS = TaskLane.WATCHDOG
+DOWNLOAD_EXECUTOR_ALIAS = TaskLane.DOWNLOADS
 logger = logging.getLogger(__name__)
 
 _scheduled_work_pause_lock = threading.Lock()
@@ -210,18 +209,11 @@ def _new_scheduler(loop: asyncio.AbstractEventLoop | None = None) -> AsyncIOSche
     kwargs = {
         "timezone": settings.timezone,
         "executors": {
-            "default": ThreadPoolExecutor(max_workers=settings.scheduler.max_workers),
-            DOWNLOAD_EXECUTOR_ALIAS: ThreadPoolExecutor(max_workers=download_workers),
-            # A bulk action queues one task per download, often thousands. They
-            # run one at a time, so they never take every database write slot:
-            # other work, and a cancel of that same bulk action, still get through.
-            BULK_EXECUTOR_ALIAS: ThreadPoolExecutor(max_workers=1),
-            # Refreshing a show's metadata queues one task per episode. A few at
-            # a time keeps the rest of the default pool, and the database, free.
-            METADATA_EXECUTOR_ALIAS: ThreadPoolExecutor(max_workers=3),
-            # The stalled-work watchdog must remain runnable when every normal
-            # worker slot is occupied by the work it is responsible for watching.
-            WATCHDOG_EXECUTOR_ALIAS: ThreadPoolExecutor(max_workers=1),
+            TaskLane.DEFAULT: ThreadPoolExecutor(max_workers=settings.scheduler.max_workers),
+            TaskLane.DOWNLOADS: ThreadPoolExecutor(max_workers=download_workers),
+            TaskLane.BULK: ThreadPoolExecutor(max_workers=BULK_WORKERS),
+            TaskLane.METADATA: ThreadPoolExecutor(max_workers=METADATA_WORKERS),
+            TaskLane.WATCHDOG: ThreadPoolExecutor(max_workers=WATCHDOG_WORKERS),
         },
     }
     if loop is not None:
@@ -349,8 +341,8 @@ def _task_pauses_scheduled_work(def_key: str) -> bool:
 def _executor_alias_for_task(def_key: str) -> str:
     meta = _task_meta(def_key)
     if meta is None or meta.pauses_scheduled_work:
-        return "default"
-    return meta.executor_alias or "default"
+        return TaskLane.DEFAULT
+    return meta.executor_alias
 
 
 def _release_job_scheduled_work_pause(job_kwargs: dict) -> None:

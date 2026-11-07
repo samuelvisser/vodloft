@@ -183,7 +183,6 @@ def test_movie_and_extra_downloads_share_one_persisted_release_lookup(tmp_path, 
             "{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext"
         ),
         preferred_format="format_1080p",
-        append_media_type_to_filename=False,
     )
     session.add(profile)
     session.commit()

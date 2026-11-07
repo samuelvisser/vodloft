@@ -14,6 +14,7 @@ import {RssStreamProfileCreateIn, RssStreamProfileCreateOut, RssStreamProfileCre
 import {useQueryClient} from '@tanstack/react-query'
 import ReadMore from "../../utils/ReadMore";
 import {downloadedEpisodeTypes} from '../../components/DownloadProfile/episodeFilters'
+import {apiUrl} from '../../lib/api'
 
 export default function AddStreamProfilePage() {
     const navigate = useNavigate()
@@ -64,7 +65,7 @@ export default function AddStreamProfilePage() {
     const onCancel = useCallback(() => navigate('/stream-profiles'), [navigate])
 
     const submitFn = async (data: RssStreamProfileCreateOut) => {
-        return fetch(`${(window as any).appConfig.API_URL}/rss-stream-profiles`, {
+        return fetch(`${apiUrl()}/rss-stream-profiles`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             credentials: 'include',

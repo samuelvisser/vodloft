@@ -121,11 +121,11 @@ def test_source_and_profile_types_are_separate():
 
 def test_create_and_update_use_conditional_collision_analysis():
     pytest.importorskip('backend.db')
-    from fastapi import HTTPException
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
     from backend.db import Base
     import backend.db.models  # noqa: F401
+    from backend.services.errors import ServiceError
     from backend.api.endpoints.collection_local_media_profiles.service import create_collection_local_media_profile, update_collection_local_media_profile
     from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPICreate, CollectionLocalMediaProfileAPIUpdate
 
@@ -136,17 +136,17 @@ def test_create_and_update_use_conditional_collision_analysis():
             original = create_collection_local_media_profile(session, CollectionLocalMediaProfileAPICreate(
                 name='Original', preferred_format='format_1080p',
                 output_template='/downloads/{% if episode_type == "aux" %}Extras/{% else %}Episodes/{% endif %}{{ episode_title }}.ext'))
-            with pytest.raises(HTTPException) as conflict:
+            with pytest.raises(ServiceError) as conflict:
                 create_collection_local_media_profile(session, CollectionLocalMediaProfileAPICreate(
                     name='Conflicting', preferred_format='format_720p',
                     output_template='{% macro label(value) %}{{ value }}{% endmacro %}/downloads/Extras/{{ label(title) }}.ext'))
             assert conflict.value.status_code == 409
-            assert conflict.value.detail[0]['loc'] == ['body', 'outputTemplate']
-            assert conflict.value.detail[0]['type'] == 'output_path_collision'
-            assert 'Original' in conflict.value.detail[0]['msg']
+            assert conflict.value.field == 'outputTemplate'
+            assert conflict.value.kind == 'output_path_collision'
+            assert 'Original' in str(conflict.value)
             separate = create_collection_local_media_profile(session, CollectionLocalMediaProfileAPICreate(
                 name='Separate', preferred_format='format_1080p', output_template='/downloads/Separate/{{ title }}.ext'))
-            with pytest.raises(HTTPException):
+            with pytest.raises(ServiceError):
                 update_collection_local_media_profile(session, separate.slug, CollectionLocalMediaProfileAPIUpdate(
                     name='Separate', preferred_format='format_1080p', output_template='/downloads/Extras/{{ title }}.ext'))
             update_collection_local_media_profile(session, original.slug, CollectionLocalMediaProfileAPIUpdate(
