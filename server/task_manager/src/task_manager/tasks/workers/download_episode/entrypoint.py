@@ -4,6 +4,7 @@ from typing import Optional
 
 from controller.db_utils import db_session
 from backend.db.models.media_download import EpisodeMediaDownload
+from backend.db.core import run_write_transaction
 from backend.db.models import Episode
 from backend.services.collection_assets import request_collection_asset_reconciliation
 from task_manager.tasks.helpers.custom_index_readiness import (
@@ -64,9 +65,8 @@ async def download_episode(
                                 prepare_existing_artifact=prepare_existing_artifact,
                                 progress=progress,
                             )
-                            request_collection_asset_reconciliation(session, pair[0])
-                            session.commit()
-                            return result
+                        run_write_transaction(lambda w: request_collection_asset_reconciliation(w, pair[0]))
+                        return result
                 with db_session() as session:
                     return await run_download_episode(
                         session, media_download_id=resource_id,

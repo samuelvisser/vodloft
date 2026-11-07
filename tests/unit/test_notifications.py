@@ -6,7 +6,9 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
 import pytest
+from conftest import use_database
 from sqlalchemy import create_engine, select
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import Session
 
 NOW = datetime(2026, 11, 3, 12, tzinfo=timezone.utc)
@@ -19,8 +21,9 @@ def db(tmp_path, monkeypatch):
     from backend.db import Base
     from config import get_settings
 
-    engine = create_engine("sqlite+pysqlite:///:memory:")
+    engine = create_engine("sqlite+pysqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
+    use_database(engine)
     session = Session(engine)
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
     yield session
@@ -67,6 +70,16 @@ def _deliveries(session):
     from backend.db.models import NotificationDelivery
 
     return list(session.scalars(select(NotificationDelivery).order_by(NotificationDelivery.id)))
+
+
+def _deliver(session, **kwargs):
+    """Deliver what is due: the test's own changes are committed first, as delivery writes in transactions of its own."""
+    from backend.services.notifications import delivery
+
+    session.commit()
+    sent = delivery.deliver_pending(session, **kwargs)
+    session.expire_all()
+    return sent
 
 
 def _emit(session, event, **values):
@@ -181,7 +194,7 @@ def _destination(db, kind, config, name="Somewhere"):
 
 
 def test_media_server_refreshes_are_batched_into_one_call(db, monkeypatch):
-    from backend.services.notifications import Event, delivery
+    from backend.services.notifications import Event
 
     collection = _collection(db)
     jellyfin = _destination(db, "jellyfin", {"address": "http://jellyfin:8096/", "api_key": "secret"})
@@ -194,7 +207,7 @@ def test_media_server_refreshes_are_batched_into_one_call(db, monkeypatch):
         "backend.services.notifications.senders.requests.request",
         lambda method, url, **kwargs: calls.append((method, url, kwargs)) or Mock(status_code=204),
     )
-    assert delivery.deliver_pending(db, now=NOW + timedelta(minutes=2)) == 1
+    assert _deliver(db, now=NOW + timedelta(minutes=2)) == 1
     ((method, url, kwargs),) = calls
     assert (method, url) == ("POST", "http://jellyfin:8096/Library/Media/Updated")
     assert kwargs["headers"] == {"X-Emby-Token": "secret"}
@@ -204,7 +217,7 @@ def test_media_server_refreshes_are_batched_into_one_call(db, monkeypatch):
 
 def test_a_failing_webhook_is_tried_again_then_reported(db, monkeypatch):
     from backend.db.models import NotificationEvent
-    from backend.services.notifications import Event, delivery
+    from backend.services.notifications import Event
 
     collection = _collection(db)
     hook = _destination(db, "webhook", {"url": "https://example.com/hook", "method": "POST"})
@@ -217,7 +230,7 @@ def test_a_failing_webhook_is_tried_again_then_reported(db, monkeypatch):
     )
     at = NOW
     for _ in range(4):
-        delivery.deliver_pending(db, now=at)
+        _deliver(db, now=at)
         at += timedelta(minutes=5)
     (row,) = [row for row in _deliveries(db) if row.destination_id == hook.id]
     assert (row.status, row.attempts, row.error) == ("FAILED", 4, "It answered with HTTP 500")
@@ -386,13 +399,13 @@ def test_a_crash_fails_at_once_and_a_retry_shows_when_it_is_tried_again(db, monk
         raise ValueError("misconfigured")
 
     monkeypatch.setattr(delivery, "send_push", broken)
-    delivery.deliver_pending(db, now=NOW + timedelta(minutes=1))
+    _deliver(db, now=NOW + timedelta(minutes=1))
     (row,) = history(db)
     assert (row.status, row.error, row.retry_at) == ("FAILED", "Sending failed (ValueError)", None)
 
     _emit(db, Event.DOWNLOAD_FAILED, dedupe_key="two")
     monkeypatch.setattr(delivery, "send_push", lambda *_args: Outcome(False, "The push service answered 503"))
-    delivery.deliver_pending(db, now=NOW + timedelta(minutes=1))
+    _deliver(db, now=NOW + timedelta(minutes=1))
     retried = history(db)[0]
     assert retried.status == "PENDING" and retried.error == "The push service answered 503"
     assert retried.retry_at is not None

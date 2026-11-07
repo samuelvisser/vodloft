@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from profile_filters import filter_rows, line
 
-from conftest import available_artifact
+from conftest import available_artifact, use_database
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
@@ -10,6 +10,7 @@ from uuid import UUID
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import Session
 
 
@@ -18,8 +19,9 @@ def _session() -> tuple[Session, object]:
     import task_manager.scheduler.db  # noqa: F401
     from backend.db import Base
 
-    engine = create_engine("sqlite+pysqlite:///:memory:")
+    engine = create_engine("sqlite+pysqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
+    use_database(engine)
     return Session(engine), engine
 
 

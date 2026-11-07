@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.services.check_frequency import full_scan_done, full_scan_due
+from backend.db.core import run_write_transaction
 from backend.db.models import Episode, Collection
 from backend.services.collection_assets import update_collection_artwork_metadata
 from backend.services.thumbnails import newest_media_item_id, take_first_frames
@@ -233,14 +234,15 @@ async def _index_collection(
                     progress, 100, f"Dry run complete for '{result.collection_slug}': {found} new episodes (nothing saved)",
                 )
             return result
-        finish_index(s, collection_id=collection_id, found=found, newest=newest)
+        s.rollback()
+        finish_index(collection_id=collection_id, found=found, newest=newest)
     except Exception:
         s.rollback()
         raise
     return replace(result, episodes_found=found)
 
 
-def finish_index(s: Session, *, collection_id: int, found: int, newest: int) -> None:
+def finish_index(*, collection_id: int, found: int, newest: int) -> None:
     """What follows every search for a collection's new episodes, whichever Source found them.
 
     ``newest`` is the newest media item before the search, so the episodes added
@@ -248,13 +250,16 @@ def finish_index(s: Session, *, collection_id: int, found: int, newest: int) -> 
     """
     from backend.services.custom_indexes import request_collection_custom_index_reconciliation
 
-    collection = s.get(Collection, collection_id)
-    if collection is not None:
-        request_collection_custom_index_reconciliation(s, collection_id)
-        _queue_collection_indexed(s, collection=collection, indexed_count=found)
-    s.commit()
-    if found:
-        take_first_frames(s, _episodes_after(s, collection_id, newest))
+    def work(s: Session) -> list[int]:
+        collection = s.get(Collection, collection_id)
+        if collection is not None:
+            request_collection_custom_index_reconciliation(s, collection_id)
+            _queue_collection_indexed(s, collection=collection, indexed_count=found)
+        return _episodes_after(s, collection_id, newest) if found else []
+
+    added = run_write_transaction(work)
+    if added:
+        take_first_frames(added)
 
 
 async def _fetch_collection(
@@ -307,31 +312,30 @@ async def _fetch_collection(
                 membership_plan=membership_plan,
             ).get(collection_slug)
 
-    collection = s.get(Collection, collection_id)
-    if collection is None:
-        raise ValueError(f"Collection {collection_id} was removed while it was being indexed")
-    if not dry_run:
-        update_collection_artwork_metadata(collection, dw_show)
-    if initial_index and not dry_run:
-        collection.thumbnail_square_path = square_thumbnail_path
-    for remote_season in all_dw_seasons:
-        if not any(season.slug == remote_season.slug for season in collection.seasons):
-            create_season_by_dw_season(s, collection=collection, dw_season=remote_season)
-            s.flush()
-            s.refresh(collection, attribute_names=["seasons"])
-    if not dry_run:
-        # Newly discovered seasons are independent local facts and must exist before
-        # the network-only prefetch phase. Committing also releases the connection.
-        s.commit()
+    write = _rehearsal if dry_run else run_write_transaction
 
+    def add_seasons(w: Session) -> list[tuple[int, str]]:
+        """Newly discovered seasons are independent local facts and must exist before the prefetch."""
+        collection = _indexed_collection(w, collection_id)
+        if not dry_run:
+            update_collection_artwork_metadata(collection, dw_show)
+        if initial_index and not dry_run:
+            collection.thumbnail_square_path = square_thumbnail_path
+        for remote_season in all_dw_seasons:
+            if not any(season.slug == remote_season.slug for season in collection.seasons):
+                create_season_by_dw_season(w, collection=collection, dw_season=remote_season)
+                w.flush()
+                w.refresh(collection, attribute_names=["seasons"])
+        return [(season.id, season.slug) for season in collection.seasons]
+
+    seasons_to_scan = write(add_seasons)
     dw_id_by_slug = {season.slug: season.dw_id for season in all_dw_seasons}
-    seasons_to_scan = list(collection.seasons)
     if latest_final_season_id is not None:
         cursor_position = next(
             (
                 index
-                for index, season in enumerate(seasons_to_scan)
-                if season.id == latest_final_season_id
+                for index, (season_id, _slug) in enumerate(seasons_to_scan)
+                if season_id == latest_final_season_id
             ),
             None,
         )
@@ -339,11 +343,9 @@ async def _fetch_collection(
             seasons_to_scan = seasons_to_scan[:cursor_position + 1]
 
     season_requests = [
-        (season.id, season.slug, dw_id_by_slug.get(season.slug))
-        for season in seasons_to_scan
+        (season_id, season_slug, dw_id_by_slug.get(season_slug))
+        for season_id, season_slug in seasons_to_scan
     ]
-    if not dry_run:
-        s.rollback()
 
     # Normal incremental scans only need records newer than the latest settled
     # local episode. A first index or vacated-identifier recovery still uses the
@@ -387,27 +389,27 @@ async def _fetch_collection(
             ),
         )
 
-    if not dry_run:
-        collection = s.get(Collection, collection_id)
-        if collection is None:
-            raise ValueError(f"Collection {collection_id} was removed while it was being indexed")
-        latest_final_episode = (
-            s.get(Episode, latest_final_episode_id)
-            if latest_final_episode_id is not None
-            else None
-        )
+    def reconcile_slugs(w: Session) -> None:
+        collection = _indexed_collection(w, collection_id)
+        for season_id, records in prefetched.items():
+            season = get_season_from_list_by_id(collection.seasons, season_id)
+            if season is None:
+                continue
+            reconcile_single_pending_episode_slug(
+                w,
+                collection=collection,
+                season=season,
+                remote_records=records,
+            )
 
-    for season_id, records in prefetched.items():
-        season = get_season_from_list_by_id(collection.seasons, season_id)
-        if season is None:
-            continue
-        reconcile_single_pending_episode_slug(
-            s,
-            collection=collection,
-            season=season,
-            remote_records=records,
-        )
+    write(reconcile_slugs)
 
+    collection = _indexed_collection(s, collection_id)
+    latest_final_episode = (
+        s.get(Episode, latest_final_episode_id)
+        if latest_final_episode_id is not None
+        else None
+    )
     candidate_remote_slugs = {
         record.slug
         for records in prefetched.values()
@@ -462,17 +464,19 @@ async def _fetch_collection(
         return 0
 
     total = count_total_episodes(ep_map_asc)
+    s.rollback()
     if total == 0:
-        for key, value in identifier_max_values.items():
-            collection.set_meta(key=key, value=str(value))
-        s.commit()
+        def store_identifiers(w: Session) -> None:
+            collection = _indexed_collection(w, collection_id)
+            for key, value in identifier_max_values.items():
+                collection.set_meta(key=key, value=str(value))
+
+        run_write_transaction(store_identifiers)
         update_progress(progress, 100, "Indexed 0 episode(s)")
         return 0
 
-    # Slug reconciliation is now complete. Persist it before resolving individual
-    # episode details, then perform all remaining remote/HLS work with no DB
-    # connection checked out.
-    s.commit()
+    # Slug reconciliation is stored. Resolve the individual episode details,
+    # remote and HLS work alike, with no transaction open.
     always_resolve_details = latest_final_episode_id is not None
     resolved_by_season: dict[int, list[ResolvedEpisode]] = {}
     for season_id, ep_list in ep_map_asc.items():
@@ -483,40 +487,56 @@ async def _fetch_collection(
             always_resolve_details=always_resolve_details,
         )
 
+    def save(w: Session) -> None:
+        collection = _indexed_collection(w, collection_id)
+        resolved, max_values = _canonicalize_resolved_identifiers(
+            collection=collection,
+            resolved_by_season=resolved_by_season,
+            previous_values=prev_max_values,
+            occupied_identifiers=set(occupied_identifiers),
+        )
+        for key, value in max_values.items():
+            collection.set_meta(key=key, value=str(value))
+
+        latest_episode_index = get_latest_ep_index(w, collection=collection) or 0
+        current_index = latest_episode_index + 1
+        for season_id, resolved_episodes in resolved.items():
+            season = get_season_from_list_by_id(collection.seasons, season_id)
+            if season is None:
+                continue
+            current_index, saved_episodes = save_resolved_episodes_per_season_asc(
+                w,
+                collection=collection,
+                season=season,
+                episodes=resolved_episodes,
+                start_index=current_index,
+            )
+            _announce_new_episodes(
+                w,
+                collection=collection,
+                saved_episodes=saved_episodes,
+            )
+
+    run_write_transaction(save)
+    update_progress(progress, 100, f"Indexed {total} episode(s)")
+    return total
+
+
+def _indexed_collection(s: Session, collection_id: int) -> Collection:
     collection = s.get(Collection, collection_id)
     if collection is None:
         raise ValueError(f"Collection {collection_id} was removed while it was being indexed")
-    resolved_by_season, identifier_max_values = _canonicalize_resolved_identifiers(
-        collection=collection,
-        resolved_by_season=resolved_by_season,
-        previous_values=prev_max_values,
-        occupied_identifiers=occupied_identifiers,
-    )
-    for key, value in identifier_max_values.items():
-        collection.set_meta(key=key, value=str(value))
+    return collection
 
-    latest_episode_index = get_latest_ep_index(s, collection=collection) or 0
-    current_index = latest_episode_index + 1
-    for season_id, resolved_episodes in resolved_by_season.items():
-        season = get_season_from_list_by_id(collection.seasons, season_id)
-        if season is None:
-            continue
-        current_index, saved_episodes = save_resolved_episodes_per_season_asc(
-            s,
-            collection=collection,
-            season=season,
-            episodes=resolved_episodes,
-            start_index=current_index,
-        )
-        _announce_new_episodes(
-            s,
-            collection=collection,
-            saved_episodes=saved_episodes,
-        )
 
-    s.commit()
-    update_progress(progress, 100, f"Indexed {total} episode(s)")
-    return total
+def _rehearsal(work):
+    """A dry run's write: ``work`` runs in a write transaction that is rolled back."""
+    def rolled_back(w: Session):
+        result = work(w)
+        w.rollback()
+        return result
+
+    return run_write_transaction(rolled_back)
 
 
 def _episodes_after(s: Session, collection_id: int, newest: int) -> list[int]:

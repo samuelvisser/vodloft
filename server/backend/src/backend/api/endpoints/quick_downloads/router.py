@@ -32,6 +32,7 @@ from .service import (
 )
 from backend.security.access import Access, Area, Level
 from backend.security.deps import requires, signed_in
+from backend.db.core import run_write_transaction
 
 
 router = APIRouter(prefix="/quick-downloads", tags=["Quick downloads"])
@@ -42,17 +43,10 @@ def quick_download_create(body: QuickDownloadAPICreate, access: Access = signed_
     """Fetch one video, episode or movie as a file to download, without adding it to the library."""
     from backend.api.endpoints.sources.service import LinkNotRecognisedError
 
-    with db_session() as s:
-        try:
-            result = start_quick_download(s, access, body)
-            s.commit()
-            return result
-        except (LinkNotRecognisedError, QuickDownloadRefused) as exc:
-            s.rollback()
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        except Exception:
-            s.rollback()
-            raise
+    try:
+        return start_quick_download(access, body)
+    except (LinkNotRecognisedError, QuickDownloadRefused) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/preview", dependencies=[requires(Area.QUICK_DOWNLOADS, Level.VIEW)], response_model=Optional[QuickDownloadPreviewAPIRead])
@@ -84,25 +78,27 @@ def quick_download_settings(access: Access = signed_in()):
 @router.put("/preferences", dependencies=[requires(Area.QUICK_DOWNLOADS, Level.VIEW)], response_model=QuickDownloadSettingsForUser)
 def quick_download_preferences_save(body: QuickDownloadPreferencesValue, access: Access = signed_in()):
     """Save the user's own Quick download defaults, to start from next time."""
-    with db_session() as s:
+    def work(s):
         try:
             result = save_quick_download_preferences(s, access, body)
         except PreferencesNeedAnAccount as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        s.commit()
         return result
+
+    return run_write_transaction(work)
 
 
 @router.delete("/preferences", dependencies=[requires(Area.QUICK_DOWNLOADS, Level.VIEW)], response_model=QuickDownloadSettingsForUser)
 def quick_download_preferences_forget(access: Access = signed_in()):
     """Go back to the install's Quick download defaults."""
-    with db_session() as s:
+    def work(s):
         try:
             result = save_quick_download_preferences(s, access, None)
         except PreferencesNeedAnAccount as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        s.commit()
         return result
+
+    return run_write_transaction(work)
 
 
 @router.get("", dependencies=[requires(Area.QUICK_DOWNLOADS, Level.VIEW)], response_model=QuickDownloadsAPIRead)
@@ -122,8 +118,7 @@ def quick_download_history_list(access: Access = signed_in()):
 @router.delete("/history", dependencies=[requires(Area.QUICK_DOWNLOADS, Level.VIEW)], status_code=status.HTTP_204_NO_CONTENT)
 def quick_download_history_clear(access: Access = signed_in()):
     """Forget every finished quick download. Ones still working or waiting to be downloaded stay."""
-    with db_session() as s:
-        clear_quick_download_history(s, access)
+    run_write_transaction(lambda s: clear_quick_download_history(s, access))
     return Response(status_code=204)
 
 

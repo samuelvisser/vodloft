@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from backend.services.download_recovery import STARTUP_RECOVERY_PAUSE_OWNER, recover_download_filesystem
+from backend.db.core import run_write_transaction
 from backend.services.retired_folders import retire_changed_folders
 
 import logging
@@ -187,12 +188,13 @@ def create_app() -> FastAPI:
     async def _custom_index_waiting(_request: Request, error: CustomIndexNotReadyError):
         if error.repair_collection_id is not None and error.repair_profile_id is not None:
             from backend.services.custom_indexes import request_custom_index_reconciliation
-            with db_session() as session:
+            def work(session):
                 request_custom_index_reconciliation(
                     session, collection_id=error.repair_collection_id,
                     local_media_profile_id=error.repair_profile_id,
                 )
-                session.commit()
+
+            run_write_transaction(work)
         return JSONResponse({"detail": str(error)}, status_code=409)
 
     @app.exception_handler(LinkNotAllowed)

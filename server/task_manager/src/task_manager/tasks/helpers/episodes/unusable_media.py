@@ -97,11 +97,9 @@ def delete_no_usable_media_episode(s: Session, episode: Episode) -> bool:
     if media_download is not None:
         # The quarantined Episode remains the durable owner of its download history.
         # It stays hidden by its NO_USABLE_MEDIA state until the Collection is deleted.
-        s.commit()
         return False
 
     queue_event(s, "episode.deleted", episode_event_payload(episode=episode, collection=episode.collection))
     request_collection_custom_index_reconciliation(s, episode.collection_id)
     s.delete(episode)
-    s.commit()
     return True

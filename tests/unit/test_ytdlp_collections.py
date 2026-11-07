@@ -14,6 +14,7 @@ from sources import Feature, LinkKind, Playback, PlaybackKind, CollectionDetails
 from sources import ytdlp_runner as runner
 from sources.ytdlp import YtDlpSource
 from sources.ytdlp.source import collection_url
+from conftest import use_database
 
 
 def _video(slug: str, year: int, month: int = 1, day: int = 1) -> VideoDetails:
@@ -67,6 +68,7 @@ def session():
 
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
+    use_database(engine)
     s = sessionmaker(bind=engine)()
     yield s
     s.close()
@@ -86,16 +88,13 @@ def _collection(session, slug="PL1", source_key="listed"):
     return collection
 
 
-def _pending_events(session) -> list[str]:
-    from task_manager.events.transactional import _PENDING_EVENTS_KEY
-
-    return [event.name for event in session.info.get(_PENDING_EVENTS_KEY, [])]
-
-
-def test_listed_episodes_get_a_season_per_upload_year(listed, session):
+def test_listed_episodes_get_a_season_per_upload_year(listed, session, monkeypatch):
     from backend.db.models import Episode
+    from task_manager.events import transactional
     from task_manager.tasks.helpers.listed_collections import index_listed_collection
 
+    emitted: list[str] = []
+    monkeypatch.setattr(transactional, "emit_event", lambda name, _data: emitted.append(name))
     collection = _collection(session)
     listed.videos = [_video("c", 2024, 3), _video("a", 2023, 5), _video("b", 2023, 9)]
     assert index_listed_collection(session, collection_id=collection.id, source=listed) == 3
@@ -110,9 +109,9 @@ def test_listed_episodes_get_a_season_per_upload_year(listed, session):
     assert all(e.metadata_is_final and e.source_key == "listed" for e in episodes)
     assert episodes[0].sharing_url == "https://www.youtube.com/watch?v=a"
     assert [(s.season_number, s.index) for s in sorted(collection.seasons, key=lambda s: s.index)] == [(2023, 1), (2024, 2)]
-    assert _pending_events(session).count("episode.added") == 3
-    assert _pending_events(session).count("episode.published_final") == 3
-    assert _pending_events(session).count("season.added") == 2
+    assert emitted.count("episode.added") == 3
+    assert emitted.count("episode.published_final") == 3
+    assert emitted.count("season.added") == 2
 
 
 def test_listed_episodes_can_be_identified_by_date_or_number(listed, session):

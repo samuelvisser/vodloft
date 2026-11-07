@@ -35,6 +35,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from backend.db.datetime_types import utc_datetime
+from backend.db.core import run_write_transaction
 from backend.db.models import Collection, Episode
 from backend.services.pending_episodes import (
     PendingMinutes, checks_pending, monitors_pending, site_follows_pending, site_pending_minutes,
@@ -275,15 +276,22 @@ def run_pending_checks(s: Session, *, now: Optional[datetime] = None) -> Pending
         if item.monitored:
             _monitor(s, item, result)
             continue
-        answer = answers[item.source_key]
-        episode = s.get(Episode, item.id)
-        if episode is None:
-            continue
-        if answer is not None and item.ref.slug in answer.removed:
-            _gone(s, episode, result, now)
-        elif answer is not None and (details := answer.details.get(item.ref.slug)) is not None:
-            _apply(s, episode, details, result, now)
-        else:
-            result.failed += 1
-        s.commit()
+        stored = run_write_transaction(lambda w, item=item: _store(w, item, answers[item.source_key], now))
+        for name in ("changed", "published", "gone", "recovered", "deleted", "failed"):
+            setattr(result, name, getattr(result, name) + getattr(stored, name))
+    return result
+
+
+def _store(s: Session, item: _Pending, answer, now: datetime) -> PendingCheckResult:
+    """Store what the Source said about one pending episode. Returns what changed, to add to the sweep's result."""
+    result = PendingCheckResult()
+    episode = s.get(Episode, item.id)
+    if episode is None:
+        return result
+    if answer is not None and item.ref.slug in answer.removed:
+        _gone(s, episode, result, now)
+    elif answer is not None and (details := answer.details.get(item.ref.slug)) is not None:
+        _apply(s, episode, details, result, now)
+    else:
+        result.failed += 1
     return result

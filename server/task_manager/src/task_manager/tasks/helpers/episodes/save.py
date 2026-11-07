@@ -212,23 +212,20 @@ def _save_resolved(
         start_index: int,
         step: int,
 ) -> tuple[int, list[SavedEpisode]]:
+    """Store the episodes in the caller's write transaction."""
     current_index = start_index
     saved: list[SavedEpisode] = []
-    try:
-        for resolved in episodes:
-            saved.append(_upsert_resolved_episode(
-                s,
-                collection=collection,
-                season=season,
-                resolved=resolved,
-                index_value=current_index,
-            ))
-            current_index += step
-        s.commit()
-        return current_index, saved
-    except Exception:
-        s.rollback()
-        raise
+    for resolved in episodes:
+        saved.append(_upsert_resolved_episode(
+            s,
+            collection=collection,
+            season=season,
+            resolved=resolved,
+            index_value=current_index,
+        ))
+        current_index += step
+    s.flush()
+    return current_index, saved
 
 
 def save_resolved_episodes_per_season_desc(s: Session, *, collection: Collection, season: Season, episodes: list[ResolvedEpisode], start_index: int):

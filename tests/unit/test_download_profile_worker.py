@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from conftest import available_artifact
+from conftest import available_artifact, use_database
 from profile_filters import latest, only_seasons, only_types, published_days, with_filters
 import asyncio
 from datetime import datetime, timedelta, timezone
@@ -10,6 +10,7 @@ from unittest.mock import Mock
 
 import pytest
 from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import Session
 
 
@@ -119,8 +120,9 @@ def db_session(monkeypatch, tmp_path):
     from backend.db import Base
     from config import get_settings
 
-    engine = create_engine("sqlite+pysqlite:///:memory:")
+    engine = create_engine("sqlite+pysqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
+    use_database(engine)
     session = Session(engine)
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
     # Keep existing profile tests focused on their own admission rules. Tests for
@@ -1067,4 +1069,4 @@ def test_run_worker_no_enabled_profiles_still_reconciles_manual_download_waits(d
     asyncio.run(service.run_download_profile_worker(db_session, resource_id=0, resource_type="download_profile"))
 
     created.assert_not_called()
-    dispatched.assert_called_once_with(db_session)
+    dispatched.assert_called_once()

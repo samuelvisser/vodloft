@@ -16,6 +16,7 @@ from task_manager.tasks.media_download_operations import (
 from backend.security.access import Area, Level
 from backend.types.download_profile_types import EpisodeTagKey
 from backend.security.deps import may_delete_files, requires
+from backend.db.core import run_write_transaction
 
 router = APIRouter(prefix="/episodes", tags=["Episodes"])
 
@@ -28,36 +29,33 @@ router = APIRouter(prefix="/episodes", tags=["Episodes"])
 )
 def episode_download_create(episode_slug: str, body: EpisodeDownloadAPICreate):
     """Start now or schedule an episode download through the canonical operation path."""
-    with db_session() as s:
-        try:
-            download = create_episode_download(s, episode_slug, body)
-            scheduled_ready_at = None
-            if body.schedule_for_delay:
-                episode = download.media
-                if not isinstance(episode, Episode):
-                    raise RuntimeError("Episode download does not reference an episode")
-                scheduled_ready_at = episode_download_delay_ready_at(episode)
-            operation = create_media_download_operation(
-                s,
-                download,
-                source=(
-                    OperationSource.SYSTEM
-                    if body.schedule_for_delay
-                    else OperationSource.UI
-                ),
-                not_before=scheduled_ready_at,
-            )
-            dispatch_queued_media_download_operations(s)
-            result = {
-                "queued": True,
-                "operation_id": operation.id,
-                "media_download_id": download.id,
-            }
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        download = create_episode_download(s, episode_slug, body)
+        scheduled_ready_at = None
+        if body.schedule_for_delay:
+            episode = download.media
+            if not isinstance(episode, Episode):
+                raise RuntimeError("Episode download does not reference an episode")
+            scheduled_ready_at = episode_download_delay_ready_at(episode)
+        operation = create_media_download_operation(
+            s,
+            download,
+            source=(
+                OperationSource.SYSTEM
+                if body.schedule_for_delay
+                else OperationSource.UI
+            ),
+            not_before=scheduled_ready_at,
+        )
+        dispatch_queued_media_download_operations(s)
+        result = {
+            "queued": True,
+            "operation_id": operation.id,
+            "media_download_id": download.id,
+        }
+        return result
+
+    return run_write_transaction(work)
 
 
 @router.get("/by-collection-slug/{collection_slug}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[EpisodeAPIRead])
@@ -114,14 +112,10 @@ def episode_create(body: EpisodeAPICreate):
     Creates a new episode with the provided metadata and associates it with a collection.
     Returns the created episode with a generated slug identifier.
     """
-    with db_session() as s:
-        try:
-            result = create_episode(s, body)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return create_episode(s, body)
+
+    return run_write_transaction(work)
 
 
 @router.post(
@@ -132,14 +126,10 @@ def episode_create(body: EpisodeAPICreate):
 )
 def episode_metadata_refresh(episode_slug: str):
     """Queue an immediate metadata refresh for one episode."""
-    with db_session() as s:
-        try:
-            result = request_episode_metadata_refresh(s, episode_slug)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return request_episode_metadata_refresh(s, episode_slug)
+
+    return run_write_transaction(work)
 
 
 @router.post(
@@ -150,14 +140,10 @@ def episode_metadata_refresh(episode_slug: str):
 )
 def episode_early_delete(episode_slug: str):
     """Immediately remove one episode that is currently stuck in source_processing."""
-    with db_session() as s:
-        try:
-            result = request_episode_early_delete(s, episode_slug)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return request_episode_early_delete(s, episode_slug)
+
+    return run_write_transaction(work)
 
 
 @router.get("/{episode_slug}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=EpisodeAPIRead)
@@ -168,23 +154,15 @@ def episode_detail(episode_slug: str):
 
 @router.patch("/{episode_slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=EpisodeAPIRead)
 def episode_update(episode_slug: str, body: EpisodeAPIUpdate):
-    with db_session() as s:
-        try:
-            result = update_episode(s, episode_slug, body)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return update_episode(s, episode_slug, body)
+
+    return run_write_transaction(work)
 
 
 @router.delete("/{episode_slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=EpisodeAPIRead)
 def episode_delete(episode_slug: str):
-    with db_session() as s:
-        try:
-            result = delete_episode(s, episode_slug)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return delete_episode(s, episode_slug)
+
+    return run_write_transaction(work)

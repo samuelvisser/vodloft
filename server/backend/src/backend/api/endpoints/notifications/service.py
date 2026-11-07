@@ -16,6 +16,7 @@ from backend.api.models.notifications import (
     PushSubscriptionInput,
     RuleInput,
 )
+from backend.db.core import get_session, run_write_transaction
 from backend.db.models import (
     NotificationDelivery,
     NotificationDestination,
@@ -137,7 +138,6 @@ def add_destination(s: Session, body: DestinationCreate) -> DestinationSource:
     destination = _checked(lambda: create_destination(
         s, kind=Kind(body.destination.kind), name=body.name, config=_config(body.destination),
     ))
-    s.commit()
     return _shown(destination)
 
 
@@ -158,13 +158,11 @@ def change_destination(s: Session, destination_id: int, body: DestinationUpdate)
     destination = _checked(lambda: update_destination(
         s, destination_id, name=body.name, enabled=body.enabled, config=config,
     ))
-    s.commit()
     return _shown(destination)
 
 
 def remove_destination(s: Session, destination_id: int) -> None:
     _found(lambda: delete_destination(s, destination_id))
-    s.commit()
 
 
 def _sample(s: Session) -> NotificationEvent | None:
@@ -186,14 +184,26 @@ def test_unsaved(s: Session, body: DestinationInput) -> dict[str, Any]:
     return _timed_test(Kind(body.kind), checked.config, _sample(s))
 
 
-def test_saved(s: Session, destination_id: int) -> dict[str, Any]:
-    destination = _found(lambda: get_destination(s, destination_id))
-    config = config_of(destination)
-    if config is None:
-        raise ServiceError("VODLoft cannot read this destination's settings. Enter them again", field="destination")
-    result = _timed_test(Kind(destination.kind), config, _sample(s))
-    record_attempt(destination, delivered=result["delivered"], error=result["error"])
-    s.commit()
+def test_saved(destination_id: int) -> dict[str, Any]:
+    """Send a test, then record how it went. Sending can take a while, so it happens outside any transaction."""
+    s = get_session()
+    try:
+        destination = _found(lambda: get_destination(s, destination_id))
+        config = config_of(destination)
+        if config is None:
+            raise ServiceError("VODLoft cannot read this destination's settings. Enter them again", field="destination")
+        kind, sample = Kind(destination.kind), _sample(s)
+        result = _timed_test(kind, config, sample)
+    finally:
+        s.rollback()
+        s.close()
+
+    def record(s: Session) -> None:
+        destination = s.get(NotificationDestination, destination_id)
+        if destination is not None:
+            record_attempt(destination, delivered=result["delivered"], error=result["error"])
+
+    run_write_transaction(record)
     return result
 
 
@@ -243,9 +253,7 @@ def rules(s: Session) -> list[NotificationRule]:
 
 
 def add_rule(s: Session, body: RuleInput, *, personal: bool = False, user_id: int | None = None) -> NotificationRule:
-    rule = create_rule(s, _values(s, body, personal=personal), personal=personal, user_id=user_id)
-    s.commit()
-    return rule
+    return create_rule(s, _values(s, body, personal=personal), personal=personal, user_id=user_id)
 
 
 def change_rule(
@@ -253,19 +261,16 @@ def change_rule(
 ) -> NotificationRule:
     rule = _found(lambda: get_rule(s, rule_id, personal=personal, user_id=user_id))
     update_rule(s, rule, _values(s, body, personal=personal))
-    s.commit()
     return rule
 
 
 def remove_rule(s: Session, rule_id: int, *, personal: bool = False, user_id: int | None = None) -> None:
     rule = _found(lambda: get_rule(s, rule_id, personal=personal, user_id=user_id))
     delete_rule(s, rule)
-    s.commit()
 
 
 def restore_defaults(s: Session) -> list[NotificationRule]:
     restore_default_rules(s)
-    s.commit()
     return shared_rules(s)
 
 
@@ -305,7 +310,6 @@ def history(s: Session) -> list[DeliverySource]:
 # ---------- A person's own page ----------
 def personal(s: Session, user_id: int | None) -> dict[str, Any]:
     rules_ = personal_rules(s, user_id)
-    s.commit()
     devices = s.scalars(select(PushSubscription).where(
         PushSubscription.user_id.is_(None) if user_id is None else PushSubscription.user_id == user_id,
     ).order_by(PushSubscription.created_at.desc())).all()
@@ -322,14 +326,11 @@ def remove_device(s: Session, device_id: int, user_id: int | None) -> None:
     if device is None or device.user_id != user_id:
         raise ServiceError("This device is no longer registered", status_code=404)
     s.delete(device)
-    s.commit()
 
 
 # ---------- Push ----------
 def push_key(s: Session) -> dict[str, str]:
-    key = vapid_public_key(s)
-    s.commit()
-    return {"public_key": key}
+    return {"public_key": vapid_public_key(s)}
 
 
 def subscribe(s: Session, body: PushSubscriptionInput, user_id: int | None) -> PushSubscription:
@@ -340,7 +341,6 @@ def subscribe(s: Session, body: PushSubscriptionInput, user_id: int | None) -> P
         )
     except PushRejected as error:
         raise ServiceError(str(error), field="endpoint") from None
-    s.commit()
     return device
 
 
@@ -355,7 +355,6 @@ def unsubscribe(s: Session, endpoint: str, user_id: int | None) -> None:
     device = find_subscription(s, endpoint)
     if device is not None and device.user_id == user_id:
         s.delete(device)
-        s.commit()
 
 
 def push_test(s: Session, endpoint: str, user_id: int | None) -> None:
@@ -373,5 +372,4 @@ def push_test(s: Session, endpoint: str, user_id: int | None) -> None:
         event_id=event.id, subscription_id=device.id, user_id=user_id, status="PENDING",
         next_attempt_at=datetime.now(timezone.utc),
     ))
-    s.commit()
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from controller.db_utils import db_session
+from backend.db.core import run_write_transaction
 from backend.services.collection_assets import request_collection_asset_reconciliation
 from task_manager.tasks.helpers.custom_index_readiness import (
     custom_index_pair_lock, pair_is_ready, request_missing_index_repair,
@@ -37,18 +37,15 @@ async def rename_collection_profile_files(
             async with custom_index_pair_lock(resource_id, local_media_profile_id):
                 if not pair_is_ready(resource_id, local_media_profile_id):
                     continue
-                with db_session() as session:
-                    result = run_rename_collection_profile_files(
-                        session,
-                        collection_id=resource_id,
-                        local_media_profile_id=local_media_profile_id,
-                        episode_ids=episode_ids,
-                        expected_sources=expected_sources,
-                        progress=progress,
-                    )
-                    request_collection_asset_reconciliation(session, resource_id)
-                    session.commit()
-                    return result
+                result = run_rename_collection_profile_files(
+                    collection_id=resource_id,
+                    local_media_profile_id=local_media_profile_id,
+                    episode_ids=episode_ids,
+                    expected_sources=expected_sources,
+                    progress=progress,
+                )
+                run_write_transaction(lambda session: request_collection_asset_reconciliation(session, resource_id))
+                return result
     except CustomIndexNotReadyError as exc:
         request_missing_index_repair(exc)
         raise

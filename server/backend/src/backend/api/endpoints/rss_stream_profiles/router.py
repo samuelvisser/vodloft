@@ -5,6 +5,7 @@ from ...models.rss_stream_profile import *
 from backend.app import db_session
 from backend.security.access import Access, Area, Level
 from backend.security.deps import requires, requires_any, signed_in
+from backend.db.core import run_write_transaction
 
 router = APIRouter(prefix="/rss-stream-profiles", tags=["Stream Profiles (rss)"])
 
@@ -29,14 +30,10 @@ def rss_stream_profiles_create(body: RssStreamProfileAPICreate, request: Request
     Returns the created profile with tracking information. If no feed_url is
     given, one is generated automatically.
     """
-    with db_session() as s:
-        try:
-            result = create_stream_profile_rss(s, request, body, access)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return create_stream_profile_rss(s, request, body, access)
+
+    return run_write_transaction(work)
 
 
 @router.get("/{rss_stream_profile_id}", dependencies=[requires_any((Area.STREAM_PROFILES, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=RssStreamProfileAPIRead)
@@ -58,14 +55,10 @@ def rss_stream_profiles_update(rss_stream_profile_id: int, body: RssStreamProfil
     Partially updates profile configuration with the provided fields.
     Only specified fields will be modified; omitted fields remain unchanged.
     """
-    with db_session() as s:
-        try:
-            result = update_stream_profile_rss(s, access, rss_stream_profile_id, body)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return update_stream_profile_rss(s, access, rss_stream_profile_id, body)
+
+    return run_write_transaction(work)
 
 
 @router.post("/{rss_stream_profile_id}/regenerate-token", dependencies=[requires(Area.STREAM_PROFILES, Level.VIEW)], response_model=RssStreamProfileAPIRead)
@@ -75,14 +68,10 @@ def rss_stream_profiles_regenerate_token(rss_stream_profile_id: int, request: Re
 
     Immediately invalidates the previous feed URL (e.g. if it leaked).
     """
-    with db_session() as s:
-        try:
-            result = regenerate_stream_profile_rss_token(s, access, request, rss_stream_profile_id)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return regenerate_stream_profile_rss_token(s, access, request, rss_stream_profile_id)
+
+    return run_write_transaction(work)
 
 
 @router.delete("/{rss_stream_profile_id}", dependencies=[requires(Area.STREAM_PROFILES, Level.VIEW)], response_model=RssStreamProfileAPIRead)
@@ -93,11 +82,7 @@ def rss_stream_profiles_delete(rss_stream_profile_id: int, access: Access = sign
     Permanently removes the specified profile configuration.
     Returns the deleted profile's information for confirmation.
     """
-    with db_session() as s:
-        try:
-            result = delete_stream_profile_rss(s, access, rss_stream_profile_id)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return delete_stream_profile_rss(s, access, rss_stream_profile_id)
+
+    return run_write_transaction(work)

@@ -11,6 +11,7 @@ from threading import Lock
 from typing import Any
 
 from backend.db import get_session
+from backend.db.core import run_write_transaction
 from config import get_settings
 
 
@@ -55,7 +56,7 @@ def clear_interrupted_task_runs() -> int:
         TaskStatus.RUNNING,
         TaskStatus.RETRY_SCHEDULED,
     )
-    with db_session() as session:
+    def work(session):
         interrupted_runs = list(
             session.scalars(
                 select(TaskRun).where(TaskRun.status.in_(interrupted_statuses))
@@ -85,13 +86,14 @@ def clear_interrupted_task_runs() -> int:
                 TaskOperationRun.task_run_id.in_(interrupted_ids)
             )
         )
-        session.commit()
+        return len(interrupted_ids)
 
-    logger.warning(
-        "Canceled %s task run(s) that could not survive the previous VODLoft process",
-        len(interrupted_runs),
-    )
-    return len(interrupted_runs)
+    interrupted = run_write_transaction(work)
+    if interrupted:
+        logger.warning(
+            "Canceled %s task run(s) that could not survive the previous VODLoft process", interrupted,
+        )
+    return interrupted
 
 
 def _task_event_kwargs(task_key: str, event_data: dict[str, Any]) -> dict[str, Any]:

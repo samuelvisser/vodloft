@@ -4,8 +4,10 @@ import asyncio
 from pathlib import Path
 
 import pytest
+from conftest import use_database
 from fastapi import HTTPException
 from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import Session
 
 
@@ -14,8 +16,9 @@ def _session() -> tuple[Session, object]:
     import task_manager.scheduler.db  # noqa: F401
     from backend.db import Base
 
-    engine = create_engine("sqlite+pysqlite:///:memory:")
+    engine = create_engine("sqlite+pysqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
+    use_database(engine)
     return Session(engine), engine
 
 
@@ -207,11 +210,14 @@ def test_identifier_event_scope_skips_templates_not_derived_from_identifier(monk
         engine.dispose()
 
 
-def test_collection_file_rename_operation_targets_selected_local_media_profile(tmp_path):
+def test_collection_file_rename_operation_targets_selected_local_media_profile(tmp_path, monkeypatch):
     from backend.api.endpoints.collections import service
     from backend.db.models import LocalMediaProfile
+    from task_manager.scheduler import scheduler
     from task_manager.scheduler.db import TaskOperationTarget
 
+    # Only the queued operation is checked; running its task would use the database this test disposes.
+    monkeypatch.setattr(scheduler, "trigger_now", lambda **_kwargs: None)
     session, engine = _session()
     try:
         collection, episode, local_profile, _download, _old_path = _library(session, tmp_path)

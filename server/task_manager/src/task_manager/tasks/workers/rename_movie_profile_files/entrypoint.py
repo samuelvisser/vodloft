@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from controller.db_utils import db_session
 from task_manager.scheduler.registry import task
 from task_manager.scheduler.results import TaskResult
 
@@ -23,9 +22,4 @@ async def rename_movie_profile_files(
     if resource_id is None:
         raise ValueError("Movie File Rename requires a Local Media Profile")
 
-    with db_session() as session:
-        return run_rename_movie_profile_files(
-            session,
-            local_media_profile_id=resource_id,
-            progress=progress,
-        )
+    return run_rename_movie_profile_files(local_media_profile_id=resource_id, progress=progress)

@@ -1139,20 +1139,41 @@ def _index_running(session: Session, collection_id: int) -> bool:
     return running(session, collection_id)
 
 
-def apply_run(session: Session, run_id: int) -> dict[str, int]:
-    """Apply a run's plan: settings, profiles, Collections, Download Profiles, then the files."""
-    run = session.get(ImportRun, run_id)
-    if run is None:
-        return {}
-    importer = get_importer(run.importer)
-    options = ImportOptions.from_dict(run.options or {})
-    report = _Report()
+def apply_run(run_id: int) -> dict[str, int]:
+    """Apply a run's plan: settings, profiles, Collections, Download Profiles, then the files.
+
+    The upload is read before the write transaction, which only applies what it found.
+    """
+    with get_session() as session:
+        run = session.get(ImportRun, run_id)
+        if run is None:
+            return {}
+        importer = get_importer(run.importer)
+        options = ImportOptions.from_dict(run.options or {})
     try:
         loaded = load_plan(importer, options)
     except (UploadError, ValueError, OSError) as exc:
-        run.status, run.error, run.finished_at = FAILED, str(exc), datetime.now(timezone.utc)
-        session.commit()
+        error = str(exc)
+
+        def fail(session: Session) -> None:
+            failed = session.get(ImportRun, run_id)
+            if failed is not None:
+                failed.status, failed.error, failed.finished_at = FAILED, error, datetime.now(timezone.utc)
+
+        run_write_transaction(fail)
         raise
+    counts, cookies_imported = run_write_transaction(lambda session: _apply_loaded_plan(session, run_id, options, loaded))
+    if cookies_imported:
+        remove_secrets(importer)
+    return counts
+
+
+def _apply_loaded_plan(
+    session: Session, run_id: int, options: ImportOptions, loaded: LoadedPlan,
+) -> tuple[dict[str, int], bool]:
+    run = session.get(ImportRun, run_id)
+    importer = get_importer(run.importer)
+    report = _Report()
     links = _links(session, importer.key)
     plan = _settle_field_keys(session, loaded.plan, links, _library_collections(session))
     run.version = plan.version
@@ -1224,10 +1245,7 @@ def apply_run(session: Session, run_id: int) -> dict[str, int]:
     run.status = WAITING if steps else FINISHED
     if not steps:
         run.finished_at = datetime.now(timezone.utc)
-    session.commit()
-    if any(item.key == "ytdlp.cookies" for item in plan.settings):
-        remove_secrets(importer)
-    return dict(report.counts)
+    return dict(report.counts), any(item.key == "ytdlp.cookies" for item in plan.settings)
 
 
 def _upsert_movie_profile(session: Session, plan: ProfilePlan, links, run: ImportRun, report: _Report) -> LocalMediaProfileBase | None:

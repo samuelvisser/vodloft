@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from backend.db import get_session
+from backend.db.core import run_write_transaction
 from downloader import storage
 from downloader.storage import temporary
 from downloader.storage.identity import ArtifactIdentity, inspect_artifact
@@ -83,8 +84,7 @@ def _commit_abandoned_replacement(
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_download_history_types import MediaDownloadHistoryAction
 
-    session = get_session()
-    try:
+    def work(session) -> bool:
         download = session.get(MediaDownloadBase, record["media_download_id"])
         media_record = record["media"]
         if download is None or download.file_path != media_record["path"]:
@@ -172,13 +172,10 @@ def _commit_abandoned_replacement(
             },
             occurred_at=replacement_time,
         )
-        session.commit()
         return True
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
+
+    # Startup recovery runs while scheduled work is paused; the renames are quick, and replaying them is safe.
+    return run_write_transaction(work)
 
 
 def recover_abandoned_download_replacements(download_root: str | Path) -> int:

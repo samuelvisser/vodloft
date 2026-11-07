@@ -20,6 +20,7 @@ import logging
 from sqlalchemy import or_, select
 
 from backend.db.core import get_session
+from backend.db.core import run_write_transaction
 from backend.db.models import Collection
 from backend.db.models.media_item import Episode
 from sources import Feature, get_source
@@ -62,8 +63,7 @@ def _collections() -> list[tuple[int, str, str, frozenset[str], frozenset[str]]]
 
 
 def _apply(collection_id: int, details: dict) -> int:
-    session = get_session()
-    try:
+    def work(session):
         changed = 0
         for episode in session.scalars(
             select(Episode).where(Episode.collection_id == collection_id, Episode.source_slug.in_(details))
@@ -74,13 +74,9 @@ def _apply(collection_id: int, details: dict) -> int:
                 changed += 1
             if found.author_name and not episode.author_name:
                 episode.author_name = found.author_name
-        session.commit()
         return changed
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
+
+    return run_write_transaction(work)
 
 
 def _list(source_key: str, url: str, known: frozenset[str], missing: frozenset[str]) -> dict:

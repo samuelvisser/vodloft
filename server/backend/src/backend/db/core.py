@@ -8,6 +8,7 @@ import importlib
 import logging
 import os
 import pkgutil
+import threading
 import time
 
 from sqlalchemy import MetaData, create_engine, event, text
@@ -176,10 +177,50 @@ def get_engine() -> Engine:
     return _engine
 
 
+# Session.info keys: a session from get_session only writes inside run_write_transaction.
+_GUARDED = "vodloft_guarded"
+_WRITER = "vodloft_writer"
+_writing = threading.local()
+
+
+class UnguardedWriteError(RuntimeError):
+    """A write outside run_write_transaction, which every write in VODLoft goes through."""
+
+
 def get_session() -> Session:
+    """A session for reading. It refuses to write: writes go through ``run_write_transaction``."""
     if _SessionLocal is None:
         configure_db()
-    return _SessionLocal()
+    session = _SessionLocal()
+    session.info[_GUARDED] = True
+    return session
+
+
+def is_read_session(session: Session) -> bool:
+    """Whether ``session`` refuses writes: it came from ``get_session`` and is not a write transaction's."""
+    return bool(session.info.get(_GUARDED)) and not session.info.get(_WRITER)
+
+
+def is_write_session(session: Session) -> bool:
+    """Whether ``session`` is the session of a ``run_write_transaction``."""
+    return bool(session.info.get(_WRITER))
+
+
+def _refuse_unguarded(session: Session) -> None:
+    if is_read_session(session):
+        raise UnguardedWriteError("VODLoft writes to the database only through run_write_transaction")
+
+
+@event.listens_for(Session, "before_flush")
+def _flush_only_in_write_transactions(session: Session, _flush_context, _instances) -> None:
+    if session.new or session.dirty or session.deleted:
+        _refuse_unguarded(session)
+
+
+@event.listens_for(Session, "do_orm_execute")
+def _execute_writes_only_in_write_transactions(state) -> None:
+    if state.is_insert or state.is_update or state.is_delete:
+        _refuse_unguarded(state.session)
 
 
 def begin_write_transaction(session: Session, *, concurrent: bool = False) -> None:
@@ -251,8 +292,13 @@ def run_write_transaction(
     after. ``concurrent`` lets the transaction run beside other writers where
     the database allows it; see ``begin_write_transaction``.
     """
+    if getattr(_writing, "active", False):
+        # A second write transaction on the same thread would wait for the first one forever.
+        raise RuntimeError("run_write_transaction cannot run inside another write transaction")
     for attempt in range(attempts):
         session = get_session()
+        session.info[_WRITER] = True
+        _writing.active = True
         try:
             begin_write_transaction(session, concurrent=concurrent)
             result = work(session)
@@ -266,9 +312,29 @@ def run_write_transaction(
             session.rollback()
             raise
         finally:
+            _writing.active = False
             session.close()
         time.sleep(_WRITE_RETRY_DELAY_SECONDS * (2 ** attempt))
     raise AssertionError("unreachable")
+
+
+def write_when_changed(work: Callable[[Session], T], *, concurrent: bool = False) -> T:
+    """Run ``work`` on a read session, and again in a write transaction only when it changes something.
+
+    For checks that run often and seldom find anything to store: most passes then
+    only read, and do not wait for the writer's turn. ``work`` runs twice when it
+    writes, so like any write transaction it must be short and free of side effects.
+    """
+    session = get_session()
+    try:
+        result = work(session)
+        changed = bool(session.new or session.dirty or session.deleted)
+    except UnguardedWriteError:
+        changed = True
+    finally:
+        session.rollback()
+        session.close()
+    return run_write_transaction(work, concurrent=concurrent) if changed else result
 
 
 def get_database_url() -> URL:
@@ -319,8 +385,7 @@ def seed_db() -> None:
     from backend.db.models import Episode, Season, Collection
     from backend.services.sites import place_collection
 
-    session = get_session()
-    try:
+    def work(session):
         for collection_index, collection_data in enumerate(seed_collections, start=1):
             if session.scalar(select(Collection.id).where(Collection.uuid == collection_data["uuid"])) is not None:
                 continue
@@ -334,9 +399,4 @@ def seed_db() -> None:
                 for episode_data in episodes_for(collection_data, collection_index)
             )
 
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
+    run_write_transaction(work)

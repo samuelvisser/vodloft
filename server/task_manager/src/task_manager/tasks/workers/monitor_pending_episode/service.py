@@ -4,6 +4,7 @@ import logging
 from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Collection
+from backend.db.core import run_write_transaction
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode_publication_timing import best_effort_published_date
@@ -93,24 +94,25 @@ def _try_reconcile_slug_after_404(
         ),
     )
 
-    episode, collection = _reload_episode_and_collection(
-        s,
-        episode_id=episode_id,
-        collection_id=collection_id,
-    )
-    reconciled = reconcile_single_pending_episode_slug(
-        s,
-        collection=collection,
-        season=episode.season,
-        remote_records=records,
-    )
-    if reconciled is None or reconciled.id != episode.id:
-        s.rollback()
-        return None
+    def store(s: Session) -> str | None:
+        episode, collection = _reload_episode_and_collection(
+            s,
+            episode_id=episode_id,
+            collection_id=collection_id,
+        )
+        reconciled = reconcile_single_pending_episode_slug(
+            s,
+            collection=collection,
+            season=episode.season,
+            remote_records=records,
+        )
+        if reconciled is None or reconciled.id != episode.id:
+            s.rollback()
+            return None
 
-    reconciled_slug = reconciled.slug
-    s.commit()
-    return reconciled_slug
+        return reconciled.slug
+
+    return run_write_transaction(store)
 
 
 def _no_usable_reason(detail, *, observed_status: EpisodePublishStatus) -> NoUsableMediaReason:
@@ -121,13 +123,25 @@ def _no_usable_reason(detail, *, observed_status: EpisodePublishStatus) -> NoUsa
     return NoUsableMediaReason.MEDIA_UNUSABLE
 
 
-def _quarantine_404(
-    s: Session,
-    *,
-    episode: Episode,
-    collection: Collection,
-    old_status: str,
-) -> EpisodePublishStatus:
+def _quarantine_404(*, episode_id: int, collection_id: int) -> EpisodePublishStatus:
+    """The Daily Wire no longer knows the pending episode: it has no usable media."""
+    def store(s: Session) -> str:
+        episode, collection = _reload_episode_and_collection(s, episode_id=episode_id, collection_id=collection_id)
+        old_status = episode.publish_status
+        _mark_not_found(s, episode=episode, collection=collection, old_status=old_status)
+        return old_status
+
+    old_status = run_write_transaction(store)
+    logger.info(
+        "Daily Wire returned 404 for pending episode %s; status %s -> %s",
+        episode_id,
+        old_status,
+        EpisodePublishStatus.NO_USABLE_MEDIA.value,
+    )
+    return EpisodePublishStatus.NO_USABLE_MEDIA
+
+
+def _mark_not_found(s: Session, *, episode: Episode, collection: Collection, old_status: str) -> None:
     new_status = EpisodePublishStatus.NO_USABLE_MEDIA
     mark_episode_no_usable_media(
         s,
@@ -147,14 +161,6 @@ def _quarantine_404(
         new_status=new_status,
         was_created=False,
     )
-    s.commit()
-    logger.info(
-        "Daily Wire returned 404 for pending episode %s; status %s -> %s",
-        episode.id,
-        old_status,
-        new_status.value,
-    )
-    return new_status
 
 
 def run_monitor_pending_episode(s: Session, *, episode_id: int) -> EpisodePublishStatus:
@@ -199,17 +205,7 @@ def run_monitor_pending_episode(s: Session, *, episode_id: int) -> EpisodePublis
             episode=episode,
         )
         if reconciled_slug is None:
-            episode, collection = _reload_episode_and_collection(
-                s,
-                episode_id=episode_db_id,
-                collection_id=collection_db_id,
-            )
-            return _quarantine_404(
-                s,
-                episode=episode,
-                collection=collection,
-                old_status=episode.publish_status,
-            )
+            return _quarantine_404(episode_id=episode_db_id, collection_id=collection_db_id)
 
         try:
             detail = client.get_episode_details(
@@ -219,96 +215,89 @@ def run_monitor_pending_episode(s: Session, *, episode_id: int) -> EpisodePublis
         except MiddlewareAPIError as reconciled_exc:
             if reconciled_exc.status_code != 404:
                 raise
-            episode, collection = _reload_episode_and_collection(
-                s,
-                episode_id=episode_db_id,
-                collection_id=collection_db_id,
-            )
-            return _quarantine_404(
-                s,
-                episode=episode,
-                collection=collection,
-                old_status=episode.publish_status,
-            )
+            return _quarantine_404(episode_id=episode_db_id, collection_id=collection_db_id)
 
     # Media inspection can itself fetch HLS manifests. Keep that I/O outside the
     # ORM transaction, then reload current rows before recording trusted facts.
     observed = observe_episode_detail(detail)
 
-    episode, collection = _reload_episode_and_collection(
-        s,
-        episode_id=episode_db_id,
-        collection_id=collection_db_id,
-    )
-    old_status = episode.publish_status
-    if old_status not in PENDING_EPISODE_PUBLISH_STATUSES:
-        s.rollback()
-        return EpisodePublishStatus(old_status)
-
-    # Record the observed publication timing before applying status fallbacks.
-    track_monitor_publication_timing(
-        episode,
-        old_status=old_status,
-        new_status=observed.status,
-    )
-    publication_timing_reference = episode.safe_live_ended
-    if publication_timing_reference is None:
-        publication_timing_reference = detail.published_date
-    resolved = resolve_episode_status(
-        detail,
-        publication_timing_reference=publication_timing_reference,
-        snapshot=observed,
-    )
-    new_status = resolved.status
-
-    update_episode_from_dailywire(episode, detail)
-    if new_status is EpisodePublishStatus.NO_USABLE_MEDIA:
-        mark_episode_no_usable_media(
+    def record(s: Session) -> tuple[EpisodePublishStatus, str | None]:
+        episode, collection = _reload_episode_and_collection(
             s,
-            episode,
-            reason=_no_usable_reason(detail, observed_status=observed.status),
+            episode_id=episode_db_id,
+            collection_id=collection_db_id,
         )
-    else:
-        episode.publish_status = new_status
-        clear_episode_no_usable_media_tracking(episode)
+        old_status = episode.publish_status
+        if old_status not in PENDING_EPISODE_PUBLISH_STATUSES:
+            # Something else handed it over meanwhile.
+            return EpisodePublishStatus(old_status), None
 
-    if new_status is not EpisodePublishStatus.NO_USABLE_MEDIA:
-        final_publication_time = best_effort_published_date(episode)
-        episode.metadata_is_final = (
-            refresh_watch_expired(final_publication_time, episode_refresh_offsets(episode))
-            if new_status is EpisodePublishStatus.PUBLISHED_FINAL
-            else False
-        )
-        reconcile_episode_identifier(
-            s,
+        # Record the observed publication timing before applying status fallbacks.
+        track_monitor_publication_timing(
             episode,
+            old_status=old_status,
+            new_status=observed.status,
+        )
+        publication_timing_reference = episode.safe_live_ended
+        if publication_timing_reference is None:
+            publication_timing_reference = detail.published_date
+        resolved = resolve_episode_status(
             detail,
-            previous_publish_status=old_status,
+            publication_timing_reference=publication_timing_reference,
+            snapshot=observed,
         )
+        new_status = resolved.status
 
-    if new_status in PENDING_EPISODE_PUBLISH_STATUSES:
-        save_status_metadata(
+        update_episode_from_dailywire(episode, detail)
+        if new_status is EpisodePublishStatus.NO_USABLE_MEDIA:
+            mark_episode_no_usable_media(
+                s,
+                episode,
+                reason=_no_usable_reason(detail, observed_status=observed.status),
+            )
+        else:
+            episode.publish_status = new_status
+            clear_episode_no_usable_media_tracking(episode)
+
+        if new_status is not EpisodePublishStatus.NO_USABLE_MEDIA:
+            final_publication_time = best_effort_published_date(episode)
+            episode.metadata_is_final = (
+                refresh_watch_expired(final_publication_time, episode_refresh_offsets(episode))
+                if new_status is EpisodePublishStatus.PUBLISHED_FINAL
+                else False
+            )
+            reconcile_episode_identifier(
+                s,
+                episode,
+                detail,
+                previous_publish_status=old_status,
+            )
+
+        if new_status in PENDING_EPISODE_PUBLISH_STATUSES:
+            save_status_metadata(
+                s,
+                episode=episode,
+                dw_episode=detail,
+                status=new_status,
+            )
+        # Once published, the metadata refresh sweep follows it until its metadata is final.
+
+        track_monitor_publication_timing(
+            episode,
+            old_status=old_status,
+            new_status=new_status,
+        )
+        queue_episode_status_events(
             s,
             episode=episode,
-            dw_episode=detail,
-            status=new_status,
+            collection=collection,
+            old_status=old_status,
+            new_status=new_status,
+            was_created=False,
         )
-    # Once published, the metadata refresh sweep follows it until its metadata is final.
+        return new_status, old_status
 
-    track_monitor_publication_timing(
-        episode,
-        old_status=old_status,
-        new_status=new_status,
-    )
-    queue_episode_status_events(
-        s,
-        episode=episode,
-        collection=collection,
-        old_status=old_status,
-        new_status=new_status,
-        was_created=False,
-    )
-    s.commit()
-
-    logger.info("Episode %s status: %s -> %s", episode.id, old_status, new_status.value)
+    new_status, old_status = run_write_transaction(record)
+    if old_status is not None:
+        logger.info("Episode %s status: %s -> %s", episode_db_id, old_status, new_status.value)
     return new_status

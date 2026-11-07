@@ -15,6 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.services import check_frequency
+from backend.db.core import run_write_transaction
 from backend.services.check_frequency import joins_regular_checks
 from backend.db.models import Episode, Collection
 from config.network import is_no_internet_error
@@ -89,11 +90,10 @@ def _check_collection(s: Session, *, collection: Collection, source: Source) -> 
         return 0
     found = [details for details in source.item_details(new).values() if details is not None]
     newest = newest_media_item_id(s)
-    added = add_listed_episodes(s, collection_id=collection_id, found=found)
+    s.rollback()
+    added = run_write_transaction(lambda w: add_listed_episodes(w, collection_id=collection_id, found=found))
     if added:
-        finish_index(s, collection_id=collection_id, found=added, newest=newest)
-    else:
-        s.commit()
+        finish_index(collection_id=collection_id, found=added, newest=newest)
     return added
 
 
@@ -109,7 +109,7 @@ def run_quick_check(s: Session, *, now: datetime | None = None) -> QuickCheckRes
                 # A collection that was never indexed gets its full first index, so its numbering follows upload order.
                 newest = newest_media_item_id(s)
                 added = index_listed_collection(s, collection_id=collection_id, source=source)
-                finish_index(s, collection_id=collection_id, found=added, newest=newest)
+                finish_index(collection_id=collection_id, found=added, newest=newest)
             else:
                 added = _check_collection(s, collection=collection, source=source)
         except Exception as exc:

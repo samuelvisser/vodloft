@@ -6,6 +6,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from backend.db.models import DownloadProfile, Episode
+from backend.db.core import run_write_transaction
 from backend.db.models.media_download import MediaDownloadBase
 from backend.services.episode_download_delay import episode_download_delay_ready_at
 from backend.services.episode_filters import has_latest_count
@@ -49,8 +50,7 @@ async def run_download_profile_worker(
     if not profile_ids:
         # A final-publication event must also release manual bulk downloads
         # waiting for a countdown, even when this collection has no Download Profiles.
-        dispatch_queued_media_download_operations(s)
-        s.commit()
+        run_write_transaction(dispatch_queued_media_download_operations)
         update_progress(progress, 100, "No enabled download profile in scope")
         print("download_profile_worker completed: nothing to do")
         return
@@ -65,85 +65,85 @@ async def run_download_profile_worker(
         s.rollback()
         if pair is not None:
             await wait_for_custom_index_pair(*pair)
-        profile = lock_enabled_download_profile(s, profile_id)
-        if profile is None:
-            # Release the lock acquired while confirming the profile is disabled.
-            s.rollback()
-            update_progress(
-                progress,
-                int((index + 1) / total * 90),
-                f"Prepared {created} download operation(s) ({index + 1}/{total} profile(s) checked)",
-            )
-            continue
-
-        only_episode: Optional[Episode] = None
-        if only_episode_id is not None:
-            only_episode = s.get(Episode, only_episode_id)
-            if only_episode is None:
-                s.rollback()
-                update_progress(progress, 100, f"Episode {only_episode_id} no longer exists")
-                return
-
-        for episode in get_download_profile_episodes(
-            s,
-            profile,
-            only_episode=only_episode,
-        ):
-            if episode.download_dismissed(profile.local_media_profile_id):
-                continue
-            ready_at = episode_download_delay_ready_at(episode)
-            delayed = (
-                ready_at is not None
-                and ready_at > datetime.now(timezone.utc)
-            )
-            action = ensure_episode_download(
-                s,
-                profile,
-                episode,
-                defer_artifact_preparation=delayed,
-            )
-
-            if not action.needs_operation:
-                set_media_download_operation_not_before(
-                    s,
-                    action.media_download_id,
-                    ready_at if delayed else None,
-                )
-                continue
-
-            download = s.get(MediaDownloadBase, action.media_download_id)
-            if download is None:
-                continue
-            create_media_download_operation(
-                s,
-                download,
-                source=OperationSource.SYSTEM.value,
-                is_redownload=action.is_redownload,
-                prepare_existing_artifact=action.prepare_existing_artifact,
-                not_before=ready_at if delayed else None,
-            )
-            created += 1
-
-        # A new episode can push an older one out of "the latest N".
-        should_cleanup = only_episode is None or has_latest_count(profile.filters)
-        if should_cleanup:
-            cleanup_older_episodes(s, profile)
-
-        # The profile lock is held through this commit. A concurrent disable can
-        # only proceed after every operation created from this enabled snapshot is
-        # durable; once disabled, later worker runs will skip the profile entirely.
-        s.commit()
+        made = run_write_transaction(lambda w: _reconcile_profile(w, profile_id, only_episode_id))
+        if made is None:
+            update_progress(progress, 100, f"Episode {only_episode_id} no longer exists")
+            return
+        created += made
         update_progress(
             progress,
             int((index + 1) / total * 90),
             f"Prepared {created} download operation(s) ({index + 1}/{total} profile(s) checked)",
         )
 
-    dispatched = dispatch_queued_media_download_operations(s)
-    s.commit()
+    dispatched = run_write_transaction(dispatch_queued_media_download_operations)
 
     message = f"Prepared {created} download operation(s)"
     if dispatched:
         message += f"; started {dispatched} queued download(s)"
     update_progress(progress, 100, message)
     print(f"download_profile_worker completed: {message}")
+
+
+def _reconcile_profile(s: Session, profile_id: int, only_episode_id: Optional[int]) -> Optional[int]:
+    """Create the download operations one enabled profile needs; None when the only episode is gone.
+
+    The profile lock is held until this transaction commits. A concurrent disable can only proceed
+    after every operation created from this enabled snapshot is durable; once disabled, later worker
+    runs skip the profile entirely.
+    """
+    profile = lock_enabled_download_profile(s, profile_id)
+    if profile is None:
+        return 0
+
+    only_episode: Optional[Episode] = None
+    if only_episode_id is not None:
+        only_episode = s.get(Episode, only_episode_id)
+        if only_episode is None:
+            return None
+
+    created = 0
+    for episode in get_download_profile_episodes(
+        s,
+        profile,
+        only_episode=only_episode,
+    ):
+        if episode.download_dismissed(profile.local_media_profile_id):
+            continue
+        ready_at = episode_download_delay_ready_at(episode)
+        delayed = (
+            ready_at is not None
+            and ready_at > datetime.now(timezone.utc)
+        )
+        action = ensure_episode_download(
+            s,
+            profile,
+            episode,
+            defer_artifact_preparation=delayed,
+        )
+
+        if not action.needs_operation:
+            set_media_download_operation_not_before(
+                s,
+                action.media_download_id,
+                ready_at if delayed else None,
+            )
+            continue
+
+        download = s.get(MediaDownloadBase, action.media_download_id)
+        if download is None:
+            continue
+        create_media_download_operation(
+            s,
+            download,
+            source=OperationSource.SYSTEM.value,
+            is_redownload=action.is_redownload,
+            prepare_existing_artifact=action.prepare_existing_artifact,
+            not_before=ready_at if delayed else None,
+        )
+        created += 1
+
+    # A new episode can push an older one out of "the latest N".
+    if only_episode is None or has_latest_count(profile.filters):
+        cleanup_older_episodes(s, profile)
+    return created

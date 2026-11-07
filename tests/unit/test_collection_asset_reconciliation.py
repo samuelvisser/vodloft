@@ -91,7 +91,14 @@ def writer(tmp_path, monkeypatch):
         path.write_bytes(state.image)
         return PreparedCollectionAsset(path, state.source_format, output_format)
 
+    def write_transaction(work, *, concurrent=False):
+        with session_scope() as session:
+            result = work(session)
+            session.commit()
+            return result
+
     monkeypatch.setattr(service, "db_session", session_scope)
+    monkeypatch.setattr(service, "run_write_transaction", write_transaction)
     monkeypatch.setattr(
         service,
         "get_settings",

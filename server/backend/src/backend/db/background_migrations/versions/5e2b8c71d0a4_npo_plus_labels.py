@@ -18,6 +18,7 @@ import logging
 from sqlalchemy import select
 
 from backend.db.core import get_session
+from backend.db.core import run_write_transaction
 from backend.db.models import Episode, Collection, Video
 from sources.npo.client import NpoClient, NpoError
 from sources.npo.source import NpoSource, needs_subscription, parse_link
@@ -73,34 +74,24 @@ def _premium_video(client: NpoClient, slug: str, url: str) -> bool:
 def _mark_episodes(collection_id: int, slugs: set[str]) -> None:
     if not slugs:
         return
-    session = get_session()
-    try:
+    def work(session):
         for episode in session.scalars(
             select(Episode).where(Episode.collection_id == collection_id, Episode.source_slug.in_(slugs))
         ):
             episode.needs_subscription = True
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
+
+    run_write_transaction(work)
 
 
 def _mark_video(slug: str) -> None:
-    session = get_session()
-    try:
+    def work(session):
         video = session.scalars(
             select(Video).where(Video.source_key == NpoSource.id, Video.slug == slug)
         ).one_or_none()
         if video is not None:
             video.needs_subscription = True
-            session.commit()
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
+
+    run_write_transaction(work)
 
 
 async def migrate(context) -> None:

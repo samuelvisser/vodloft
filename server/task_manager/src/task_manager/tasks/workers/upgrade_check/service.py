@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.db.core import run_write_transaction
 from backend.db.models import Episode
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.media_download_history import record_media_download_history
@@ -49,22 +50,18 @@ def run_upgrade_checks(s: Session, *, now: datetime | None = None) -> TaskResult
     checked = upgraded = 0
     for download_id in due:
         result = _check(s, download_id, now)
-        s.commit()
         if result is not None:
             checked += 1
             upgraded += result == UpgradeResult.UPGRADED
-    dispatch_queued_media_download_operations(s)
-    s.commit()
+    run_write_transaction(dispatch_queued_media_download_operations)
     return TaskResult(
         summary=f"Checked {checked} download(s), {upgraded} can be better" if checked else "No upgrade checks were due",
         data={"checked": checked, "upgraded": upgraded},
     )
 
 
-def _check(s: Session, download_id: int, now: datetime) -> UpgradeResult | None:
-    download = s.get(EpisodeMediaDownload, download_id)
-    if download is None:
-        return None
+def _site(download: EpisodeMediaDownload):
+    """The download's Site when its upgrade check still applies, else None."""
     profile = download.download_profile
     episode = download.media
     source = get_source(episode.source_key) if isinstance(episode, Episode) else None
@@ -73,13 +70,37 @@ def _check(s: Session, download_id: int, now: datetime) -> UpgradeResult | None:
         profile is None or site is None or not profile.enable_profile or not checks_profile(site, profile)
         or download.artifact_status != MediaDownloadArtifactStatus.AVAILABLE.value
     ):
-        download.upgrade_check_at = None
+        return None
+    return site
+
+
+def _check_later(download_id: int, when: datetime | None) -> None:
+    def work(w: Session) -> None:
+        download = w.get(EpisodeMediaDownload, download_id)
+        if download is not None:
+            download.upgrade_check_at = when
+
+    run_write_transaction(work)
+
+
+def _check(s: Session, download_id: int, now: datetime) -> UpgradeResult | None:
+    """Ask the site about one download, then record what it offered in a short write."""
+    download = s.get(EpisodeMediaDownload, download_id)
+    if download is None:
+        s.rollback()
+        return None
+    if _site(download) is None:
+        s.rollback()
+        _check_later(download_id, None)
         return None
     if get_active_media_download_operation(s, download.id) is not None:
-        download.upgrade_check_at = now + _RETRY_AFTER
+        s.rollback()
+        _check_later(download_id, now + _RETRY_AFTER)
         return None
 
-    url, categories = episode.sharing_url, sponsorblock_categories(profile)
+    episode = download.media
+    source = get_source(episode.source_key)
+    url, categories = episode.sharing_url, sponsorblock_categories(download.download_profile)
     s.rollback()
     try:
         offer = source.upgrade_offer(url, sponsorblock_categories=categories)
@@ -87,13 +108,18 @@ def _check(s: Session, download_id: int, now: datetime) -> UpgradeResult | None:
         if is_no_internet_error(exc):
             raise
         logger.info("Could not check %s for a better version: %s", url, exc)
-        download = s.get(EpisodeMediaDownload, download_id)
-        if download is not None:
-            download.upgrade_check_at = now + _RETRY_AFTER
+        _check_later(download_id, now + _RETRY_AFTER)
         return None
+    return run_write_transaction(lambda w: _record_offer(w, download_id, offer, now))
 
+
+def _record_offer(s: Session, download_id: int, offer, now: datetime) -> UpgradeResult | None:
     download = s.get(EpisodeMediaDownload, download_id)
     if download is None or download.download_profile is None:
+        return None
+    site = _site(download)
+    if site is None:
+        download.upgrade_check_at = None
         return None
     profile = download.download_profile
     findings = upgrade_findings(offer, download, profile, download.local_media_profile, site)

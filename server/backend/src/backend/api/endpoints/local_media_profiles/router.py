@@ -50,6 +50,7 @@ from .service import (
 from backend.security.access import Area, Level
 from backend.security import deps
 from backend.security.deps import may_delete_files, requires, requires_any
+from backend.db.core import run_write_transaction
 
 router = APIRouter(prefix="/local-media-profiles", tags=["Media Profiles (base)"])
 router.include_router(preview_router)
@@ -154,17 +155,14 @@ def local_media_profiles_view(local_media_profile_slug: str):
     status_code=202,
 )
 def local_media_profiles_rename_files(local_media_profile_slug: str):
-    with db_session() as s:
-        try:
-            result = request_local_media_profile_file_rename(
-                s,
-                local_media_profile_slug,
-            )
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        result = request_local_media_profile_file_rename(
+            s,
+            local_media_profile_slug,
+        )
+        return result
+
+    return run_write_transaction(work)
 
 
 @router.post(
@@ -174,17 +172,14 @@ def local_media_profiles_rename_files(local_media_profile_slug: str):
     status_code=202,
 )
 def local_media_profiles_delete_downloads(local_media_profile_slug: str):
-    with db_session() as s:
-        try:
-            result = request_local_media_profile_download_delete(
-                s,
-                local_media_profile_slug,
-            )
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        result = request_local_media_profile_download_delete(
+            s,
+            local_media_profile_slug,
+        )
+        return result
+
+    return run_write_transaction(work)
 
 
 @router.post(
@@ -194,17 +189,14 @@ def local_media_profiles_delete_downloads(local_media_profile_slug: str):
     status_code=202,
 )
 def local_media_profiles_redownload_media(local_media_profile_slug: str):
-    with db_session() as s:
-        try:
-            result = request_local_media_profile_redownload(
-                s,
-                local_media_profile_slug,
-            )
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        result = request_local_media_profile_redownload(
+            s,
+            local_media_profile_slug,
+        )
+        return result
+
+    return run_write_transaction(work)
 
 
 @router.get(
@@ -225,14 +217,10 @@ def local_media_profiles_move_episodes_preview(local_media_profile_slug: str, ta
     status_code=202,
 )
 def local_media_profiles_move_episodes(local_media_profile_slug: str, request: LocalMediaProfileMoveAPIRequest):
-    with db_session() as s:
-        try:
-            result = request_move(s, local_media_profile_slug, request)
-            s.commit()
-            return result
-        except Exception:
-            s.rollback()
-            raise
+    def work(s):
+        return request_move(s, local_media_profile_slug, request)
+
+    return run_write_transaction(work)
 
 
 @router.get("/{local_media_profile_slug}", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=LocalMediaProfileAPIRead)

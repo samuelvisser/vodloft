@@ -125,7 +125,7 @@ def test_new_episodes_without_a_picture_get_their_first_frame(framing, session, 
     session.commit()
 
     ids = [episode.id for episode in session.query(Episode).filter(Episode.id > newest)]
-    assert take_first_frames(session, ids) == 1
+    assert take_first_frames(ids) == 1
 
     a, b = session.query(Episode).order_by(Episode.index).all()
     assert a.thumbnail_landscape_path == a.background_image_path == f"thumbnails/{a.uuid}.jpg"
@@ -134,7 +134,7 @@ def test_new_episodes_without_a_picture_get_their_first_frame(framing, session, 
 
     # A frame VODLoft made is not looked at again.
     framing.asked.clear()
-    assert take_first_frames(session, ids) == 0
+    assert take_first_frames(ids) == 0
     assert [url for url, _ in framing.asked] == ["https://www.youtube.com/watch?v=b"]
 
 

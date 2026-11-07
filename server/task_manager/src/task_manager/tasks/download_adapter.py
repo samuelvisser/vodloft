@@ -12,6 +12,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from backend.db.core import run_write_transaction
 from backend.db.models import Episode
 from backend.db.models.media_download import MediaDownloadAsset, MediaDownloadBase
 from backend.services.collection_cookies import note_failed_download
@@ -96,7 +97,6 @@ def _mark_drm_protected(session: Session, media_download_id: int) -> bool:
         return False
     download.media.drm_protected = True
     download.automatic_retry_suppressed = True
-    session.commit()
     return True
 
 
@@ -106,7 +106,6 @@ def _mark_needs_subscription(session: Session, media_download_id: int) -> bool:
         return False
     download.media.needs_subscription = True
     download.automatic_retry_suppressed = True
-    session.commit()
     return True
 
 
@@ -119,26 +118,99 @@ def _retire_previous_after_commit(previous: PreviousDownload, execution: Downloa
     retire_superseded_files(previous, retained_paths=retained)
 
 
+def _allow_automatic_retry(session: Session, media_download_id: int) -> None:
+    current = session.get(MediaDownloadBase, media_download_id)
+    if current is None:
+        raise DownloadCanceled("Media download was deleted before replacement preparation")
+    current.automatic_retry_suppressed = False
+
+
+def _record_download(
+    session: Session, *, media_download_id: int, execution: DownloadExecution, plan, duration, publish_status,
+    is_redownload: bool, lifecycle, started: datetime, attempt: dict, title: str, progress,
+) -> TaskResult:
+    """Record the finished download, and complete its task run in the same transaction."""
+    download = session.get(MediaDownloadBase, media_download_id)
+    if download is None:
+        raise DownloadCanceled("Download was deleted during execution")
+    identity = execution.identity
+    download.file_path = execution.result.path
+    download.assets.clear()
+    session.flush()
+    for asset in execution.assets:
+        suffix = Path(asset.path).name[len(Path(execution.result.path).stem):]
+        download.assets.append(MediaDownloadAsset(
+            asset_key=asset.id, kind=asset.kind, path=asset.path, suffix=suffix,
+            size_bytes=asset.identity.size_bytes, fingerprint=asset.identity.fingerprint,
+        ))
+    download.artifact_stat_dev, download.artifact_stat_ino = identity.stat_dev, identity.stat_ino
+    download.artifact_size_bytes, download.artifact_fingerprint = identity.size_bytes, identity.fingerprint
+    download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+    download.artifact_error = None
+    download.automatic_retry_suppressed = False
+    download.downloaded_bytes = execution.result.bytes_downloaded
+    download.format_downloaded = execution.format_downloaded
+    segments = execution.result.sponsorblock
+    download.sponsorblock_segments = None if segments is None else [segment._asdict() for segment in segments]
+    video = execution.result.video
+    download.video_height, download.video_codec = (video.height, video.codec) if video is not None else (None, None)
+    download.duration = duration
+    download.subtitle_languages = (
+        [subtitle.language for subtitle in execution.result.subtitles if not subtitle.auto_generated]
+        if plan.source.ytdlp_command else None
+    )
+    finished = datetime.now(timezone.utc)
+    download.downloaded_at = finished
+    if isinstance(download.media, Episode):
+        download.downloaded_publish_status = publish_status
+        schedule_first_upgrade_check(download, collection_site(download.media.collection), finished)
+        episode_downloaded(session, download.media, path=execution.result.path, replaced=is_redownload)
+    result_data = {
+        "media_download_id": media_download_id, "is_redownload": is_redownload,
+        "file_path": execution.result.path, "downloaded_bytes": execution.result.bytes_downloaded,
+        "format_downloaded": execution.format_downloaded,
+        "thumbnail_path": download.thumbnail_path, "nfo_path": download.nfo_path,
+        "lifecycle": asdict(lifecycle),
+    }
+    record_media_download_history(
+        session, media_download_id, MediaDownloadHistoryAction.COMPLETED,
+        metadata=download_attempt_metadata(
+            started_at=started, finished_at=finished, **attempt, **result_data,
+            started_publish_status=publish_status, downloaded_publish_status=publish_status,
+        ), occurred_at=finished,
+    )
+    result = TaskResult(summary=f"Downloaded {title}", data=result_data)
+    if progress is not None:
+        progress.complete_transactionally(session, result)
+    return result
+
+
 def run_download(
     session: Session, *, media_download_id: int, is_redownload: bool = False,
     prepare_existing_artifact: bool = False, progress=None,
 ) -> TaskResult:
-    download = session.get(MediaDownloadBase, media_download_id)
-    if download is None:
-        raise DownloadCanceled("Media download was deleted before it started")
-    title = download.media.title
-    publish_status = getattr(download.media, "publish_status", None)
+    """Download one media item. ``session`` only reads; every write is a short write transaction of its own,
+    and none stays open while the Source is asked or the file is transferred."""
     operation_ids = current_operation_ids()
     run_id = getattr(progress, "run_id", None)
     attempt = {"operation_ids": list(operation_ids)}
     if run_id is not None:
         attempt["task_run_id"] = int(run_id)
     started = datetime.now(timezone.utc)
-    record_media_download_history(
-        session, media_download_id, MediaDownloadHistoryAction.STARTED,
-        metadata={**attempt, "is_redownload": is_redownload, "started_publish_status": publish_status}, occurred_at=started,
-    )
-    session.commit()
+
+    def record_start(w: Session) -> tuple[str, str | None, str]:
+        download = w.get(MediaDownloadBase, media_download_id)
+        if download is None:
+            raise DownloadCanceled("Media download was deleted before it started")
+        publish_status = getattr(download.media, "publish_status", None)
+        record_media_download_history(
+            w, media_download_id, MediaDownloadHistoryAction.STARTED,
+            metadata={**attempt, "is_redownload": is_redownload, "started_publish_status": publish_status},
+            occurred_at=started,
+        )
+        return download.media.title, publish_status, download.artifact_status
+
+    title, publish_status, artifact_status = run_write_transaction(record_start)
     reporter = DownloadProgressReporter(progress)
     tracker = DownloadTracker(reporter, progress if callable(progress) else None)
     execution = None
@@ -148,24 +220,22 @@ def run_download(
     resources.media.configure(get_settings().download_settings.max_concurrent_downloads)
     try:
         with tracker:
-            if prepare_existing_artifact or download.artifact_status != MediaDownloadArtifactStatus.ABSENT.value:
+            if prepare_existing_artifact or artifact_status != MediaDownloadArtifactStatus.ABSENT.value:
                 tracker.ensure_active()
                 tracker.preparing("prepare_existing_artifact")
+                session.rollback()
                 current = session.get(MediaDownloadBase, media_download_id)
                 if current is None:
                     raise DownloadCanceled("Media download was deleted before replacement preparation")
                 preserving_artifact = (
                     current.artifact_status != MediaDownloadArtifactStatus.ABSENT.value
                 )
+                file_path, size_bytes, fingerprint = current.file_path, current.artifact_size_bytes, current.artifact_fingerprint
+                assets = tuple((asset.path, asset.size_bytes, asset.fingerprint) for asset in current.assets)
+                session.rollback()
                 if preserving_artifact:
                     previous = capture_previous_download(
-                        current.file_path,
-                        size_bytes=current.artifact_size_bytes,
-                        fingerprint=current.artifact_fingerprint,
-                        assets=tuple(
-                            (asset.path, asset.size_bytes, asset.fingerprint)
-                            for asset in current.assets
-                        ),
+                        file_path, size_bytes=size_bytes, fingerprint=fingerprint, assets=assets,
                     )
                     if previous is None:
                         # The file at the recorded path no longer matches its
@@ -173,19 +243,17 @@ def run_download(
                         # fingerprinted). Replace it in place rather than
                         # publishing the new download next to it as a duplicate.
                         previous = capture_previous_download(
-                            current.file_path,
+                            file_path,
                             size_bytes=None,
                             fingerprint=None,
-                            assets=tuple((asset.path, None, None) for asset in current.assets),
+                            assets=tuple((path, None, None) for path, _, _ in assets),
                             claim_current=True,
                         )
                 # An attempt owns none of the previous output paths until a new
                 # artifact is committed. Never delete or reset the old artifact
                 # merely because retry work is starting, including Missing or
                 # Corrupted records that may still have a physical file.
-                current.automatic_retry_suppressed = False
-                session.commit()
-                session.expire_all()
+                run_write_transaction(lambda w: _allow_automatic_retry(w, media_download_id))
 
             def waiting(event):
                 tracker.wait("prepare", event.reason if event else None, event.until if event else None)
@@ -194,12 +262,14 @@ def run_download(
             reporter.selected_format = plan.source.format_downloaded
 
             def reserved(destination: str) -> None:
-                current = session.get(MediaDownloadBase, media_download_id)
-                if current is None:
-                    raise DownloadCanceled("Download was deleted before reserving its destination")
-                if not preserving_artifact:
-                    current.file_path = destination
-                    session.commit()
+                def write(w: Session) -> None:
+                    current = w.get(MediaDownloadBase, media_download_id)
+                    if current is None:
+                        raise DownloadCanceled("Download was deleted before reserving its destination")
+                    if not preserving_artifact:
+                        current.file_path = destination
+
+                run_write_transaction(write)
 
             execution = execute_download_plan(
                 plan, tracker=tracker, resources=resources,
@@ -215,61 +285,17 @@ def run_download(
             # no auxiliary thread owns a Session or writes past publication.
             lifecycle = tracker.finish()
             session.rollback()
-            session.expire_all()
-            download = session.get(MediaDownloadBase, media_download_id)
-            if download is None:
-                raise DownloadCanceled("Download was deleted during execution")
             from task_manager.scheduler.executor import ProgressUpdater
-            identity = execution.identity
-            download.file_path = execution.result.path
-            download.assets.clear()
-            session.flush()
-            for asset in execution.assets:
-                suffix = Path(asset.path).name[len(Path(execution.result.path).stem):]
-                download.assets.append(MediaDownloadAsset(
-                    asset_key=asset.id, kind=asset.kind, path=asset.path, suffix=suffix,
-                    size_bytes=asset.identity.size_bytes, fingerprint=asset.identity.fingerprint,
-                ))
-            download.artifact_stat_dev, download.artifact_stat_ino = identity.stat_dev, identity.stat_ino
-            download.artifact_size_bytes, download.artifact_fingerprint = identity.size_bytes, identity.fingerprint
-            download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
-            download.artifact_error = None
-            download.automatic_retry_suppressed = False
-            download.downloaded_bytes = execution.result.bytes_downloaded
-            download.format_downloaded = execution.format_downloaded
-            segments = execution.result.sponsorblock
-            download.sponsorblock_segments = None if segments is None else [segment._asdict() for segment in segments]
-            video = execution.result.video
-            download.video_height, download.video_codec = (video.height, video.codec) if video is not None else (None, None)
-            download.duration = duration
-            download.subtitle_languages = (
-                [subtitle.language for subtitle in execution.result.subtitles if not subtitle.auto_generated]
-                if plan.source.ytdlp_command else None
-            )
-            finished = datetime.now(timezone.utc)
-            download.downloaded_at = finished
-            if isinstance(download.media, Episode):
-                download.downloaded_publish_status = publish_status
-                schedule_first_upgrade_check(download, collection_site(download.media.collection), finished)
-                episode_downloaded(session, download.media, path=execution.result.path, replaced=is_redownload)
-            result_data = {
-                "media_download_id": media_download_id, "is_redownload": is_redownload,
-                "file_path": execution.result.path, "downloaded_bytes": execution.result.bytes_downloaded,
-                "format_downloaded": execution.format_downloaded,
-                "thumbnail_path": download.thumbnail_path, "nfo_path": download.nfo_path,
-                "lifecycle": asdict(lifecycle),
-            }
-            record_media_download_history(
-                session, media_download_id, MediaDownloadHistoryAction.COMPLETED,
-                metadata=download_attempt_metadata(
-                    started_at=started, finished_at=finished, **attempt, **result_data,
-                    started_publish_status=publish_status, downloaded_publish_status=publish_status,
-                ), occurred_at=finished,
-            )
-            result = TaskResult(summary=f"Downloaded {title}", data=result_data)
-            if isinstance(progress, ProgressUpdater):
-                progress.complete_transactionally(session, result)
-            session.commit()
+
+            def publish(session: Session) -> TaskResult:
+                return _record_download(
+                    session, media_download_id=media_download_id, execution=execution, plan=plan,
+                    duration=duration, publish_status=publish_status, is_redownload=is_redownload,
+                    lifecycle=lifecycle, started=started, attempt=attempt, title=title,
+                    progress=progress if isinstance(progress, ProgressUpdater) else None,
+                )
+
+            result = run_write_transaction(publish)
             committed = True
             try:
                 if execution.replacement_journal is not None:
@@ -299,29 +325,36 @@ def run_download(
             started_at=started, finished_at=finished, is_redownload=is_redownload,
             **attempt, error=exc, lifecycle=asdict(tracker.snapshot()),
         )
-        if isinstance(exc, (DownloadCanceled, RequestCanceled)):
-            entry = record_media_download_operation_history_once(
-                session, media_download_id, MediaDownloadHistoryAction.CANCELED,
-                operation_ids=operation_ids, metadata=metadata, occurred_at=finished,
-            )
-        else:
-            entry = record_media_download_history_if_exists(
-                session, media_download_id, MediaDownloadHistoryAction.FAILED,
-                metadata=metadata, occurred_at=finished,
-            )
-        if entry is not None:
-            session.commit()
-        if isinstance(exc, EncryptedMediaError) and _mark_drm_protected(session, media_download_id):
+        canceled = isinstance(exc, (DownloadCanceled, RequestCanceled))
+
+        def record_failure(w: Session) -> None:
+            if canceled:
+                record_media_download_operation_history_once(
+                    w, media_download_id, MediaDownloadHistoryAction.CANCELED,
+                    operation_ids=operation_ids, metadata=metadata, occurred_at=finished,
+                )
+            else:
+                record_media_download_history_if_exists(
+                    w, media_download_id, MediaDownloadHistoryAction.FAILED,
+                    metadata=metadata, occurred_at=finished,
+                )
+
+        run_write_transaction(record_failure)
+        if isinstance(exc, EncryptedMediaError) and run_write_transaction(
+            lambda w: _mark_drm_protected(w, media_download_id)
+        ):
             # Retrying cannot help; the item now shows it cannot be downloaded.
             return TaskResult(summary=f"{title} is protected by DRM and cannot be downloaded", outcome="failed")
-        if isinstance(exc, SubscriptionRequiredError) and _mark_needs_subscription(session, media_download_id):
+        if isinstance(exc, SubscriptionRequiredError) and run_write_transaction(
+            lambda w: _mark_needs_subscription(w, media_download_id)
+        ):
             return TaskResult(summary=f"{title} needs a subscription and cannot be downloaded", outcome="failed")
-        if not isinstance(exc, (DownloadCanceled, RequestCanceled)):
+        if not canceled:
             try:
                 # A Collection with automatic cookies uses the cookies file from the retry on.
-                note_failed_download(session, media_download_id, str(exc))
+                error = str(exc)
+                run_write_transaction(lambda w: note_failed_download(w, media_download_id, error))
             except Exception:
-                session.rollback()
                 logger.exception("Could not tell whether download %s needs the cookies file", media_download_id)
         raise
     finally:

@@ -5,6 +5,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from backend.api.models.auth import AuthMeRead, AuthResponse, LoginInput, PasswordChangeInput
 from backend.app import db_session
+from backend.db.core import run_write_transaction
 from backend.db.models import User
 from backend.security.auth import (
     clear_session_cookie,
@@ -49,19 +50,20 @@ def _sign_in(data: LoginInput, response: Response, address: str | None) -> None:
 
     with db_session() as s:
         accounts = users.accounts_enabled(s)
-        if accounts and username:
-            user = users.authenticate(s, username, data.passwordHash)
-            if user is None:
-                login_throttle.record_failure(username, address)
-                raise _login_error("password", "Incorrect username or password")
-            users.record_sign_in(user)
-            s.commit()
-            login_throttle.record_success(username)
-            set_session_cookie(response, user_id=user.id, session_version=user.session_version)
-            return
-
-        if accounts and users.enabled_administrators(s):
+        user = users.authenticate(s, username, data.passwordHash) if accounts and username else None
+        if accounts and username and user is None:
+            login_throttle.record_failure(username, address)
+            raise _login_error("password", "Incorrect username or password")
+        if user is not None:
+            user_id, session_version = user.id, user.session_version
+        elif accounts and users.enabled_administrators(s):
             raise _login_error("username", "Enter your username")
+
+    if user is not None:
+        run_write_transaction(lambda s: users.record_sign_in(s.get(User, user_id)), concurrent=True)
+        login_throttle.record_success(username)
+        set_session_cookie(response, user_id=user_id, session_version=session_version)
+        return
 
     # The environment password: the only sign-in without accounts, and the way
     # back in while user accounts are on but no administrator can sign in.
@@ -106,9 +108,11 @@ def change_password(body: PasswordChangeInput, request: Request, response: Respo
             status_code=status.HTTP_409_CONFLICT,
             detail="The environment password is changed in VODLoft's environment, not here.",
         )
-    with db_session() as s:
+    def work(s):
         user = s.get(User, access.user_id)
         users.change_own_password(user, body.current_password_hash, body.new_password_hash)
-        s.commit()
-        set_session_cookie(response, user_id=user.id, session_version=user.session_version)
+        return user.session_version
+
+    session_version = run_write_transaction(work)
+    set_session_cookie(response, user_id=access.user_id, session_version=session_version)
     return

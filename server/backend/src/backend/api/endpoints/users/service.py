@@ -89,8 +89,7 @@ def create_user(session: Session, body: UserCreate, acting: Access) -> UserRead:
         access=_access_list(body.access),
         created_by=creator,
     )
-    session.commit()
-    session.refresh(user)
+    session.flush()
     return user_read(user)
 
 
@@ -103,27 +102,23 @@ def update_user(session: Session, user_id: int, body: UserUpdate) -> UserRead:
         enabled=body.enabled,
         access=None if body.access is None else _access_list(body.access),
     )
-    session.commit()
-    session.refresh(user)
+    session.flush()
     return user_read(user)
 
 
 def reset_password(session: Session, user_id: int, password_hash: str) -> None:
     users.reset_password(_user(session, user_id), password_hash)
-    session.commit()
 
 
 def sign_out_everywhere(session: Session, user_id: int, acting: Access, response: Response) -> None:
     user = _user(session, user_id)
     users.sign_out_everywhere(user)
-    session.commit()
     if user.id == acting.user_id:
         clear_session_cookie(response)
 
 
 def delete_user(session: Session, user_id: int, stream_profiles: str, acting: Access) -> None:
     users.delete_user(session, _user(session, user_id), stream_profiles=stream_profiles, heir_id=acting.user_id)
-    session.commit()
 
 
 def accounts_settings(session: Session) -> UserAccountsSettingsRead:
@@ -142,7 +137,7 @@ def update_accounts_settings(
         first = (body.first_administrator.username, body.first_administrator.password_hash)
     was_enabled = users.accounts_enabled(session)
     created = users.set_accounts_enabled(session, body.enabled, first_administrator=first)
-    session.commit()
+    session.flush()
 
     if body.enabled and not was_enabled and not acting.is_user:
         # A shared-password session ends with accounts on. Keep the person signed

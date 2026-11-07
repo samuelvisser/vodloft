@@ -10,6 +10,7 @@ from sqlalchemy import case, event, exists, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.db.core import get_session, run_write_transaction
+from backend.db.core import write_when_changed
 from backend.db.models import Episode, Movie, MovieExtra
 from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
@@ -721,8 +722,7 @@ def cancel_media_download_operation(
     if snapshot is None:
         return snapshot
 
-    session = get_session()
-    try:
+    def work(session):
         record_media_download_operation_history_once(
             session,
             media_download_id,
@@ -732,15 +732,13 @@ def cancel_media_download_operation(
             # Never later than the Canceled entry that follows it.
             occurred_at=snapshot.finished_at,
         )
-        session.commit()
-    finally:
-        session.close()
+
+    run_write_transaction(work)
     if snapshot.status != OperationStatus.CANCELED.value:
         return snapshot
 
-    session = get_session()
-    try:
-        metadata = {
+    def work(session):
+        canceled = {
             **metadata,
             "operation_id": snapshot.id,
             "source": snapshot.source,
@@ -752,7 +750,7 @@ def cancel_media_download_operation(
             "reason": reason,
         }
         if snapshot.started_at is not None and snapshot.finished_at is not None:
-            metadata["duration_ms"] = max(
+            canceled["duration_ms"] = max(
                 0,
                 int((snapshot.finished_at - snapshot.started_at).total_seconds() * 1000),
             )
@@ -761,23 +759,20 @@ def cancel_media_download_operation(
             media_download_id,
             MediaDownloadHistoryAction.CANCELED,
             operation_ids=(snapshot.id,),
-            metadata=metadata,
+            metadata=canceled,
             occurred_at=snapshot.finished_at,
         )
-        session.commit()
-    finally:
-        session.close()
+
+    run_write_transaction(work)
     return snapshot
 
 
 def restart_media_download_operation(operation_id: str):
     """Restart a media.download operation while retaining the restart in domain history."""
-    session = get_session()
-    try:
+    def prepare(session):
         operation = _get_media_download_operation(session, operation_id)
         if operation is None:
             return None
-        media_download_id = int(operation.resource_id)
         was_active = operation.status in _ACTIVE_OPERATION_STATUSES
         metadata = _history_metadata_for_operation(session, operation)
         if operation_admission_wait_state(operation) is not None:
@@ -786,16 +781,18 @@ def restart_media_download_operation(operation_id: str):
                 _PUBLICATION_DELAY_BYPASSED_CONTEXT_KEY: True,
             }
             clear_operation_admission_wait(operation)
-            session.commit()
-    finally:
-        session.close()
+        return int(operation.resource_id), was_active, metadata
+
+    prepared = write_when_changed(prepare)
+    if prepared is None:
+        return None
+    media_download_id, was_active, metadata = prepared
 
     snapshot = restart_task_operation(operation_id)
     if snapshot is None:
         return None
 
-    session = get_session()
-    try:
+    def work(session):
         if was_active:
             reason = "Replaced by restarted operation"
             cancel_metadata = {**metadata, "reason": reason}
@@ -829,9 +826,8 @@ def restart_media_download_operation(operation_id: str):
             },
             occurred_at=snapshot.updated_at,
         )
-        session.commit()
-    finally:
-        session.close()
+
+    run_write_transaction(work)
     return snapshot
 
 
@@ -1322,17 +1318,15 @@ def on_media_download_task_terminal(
     **_,
 ) -> None:
     """Finalize pending episode replacements, then fill newly freed download slots."""
-    session = get_session()
-    try:
+    def work(session):
         if resource_type == ResourceType.MEDIA_DOWNLOAD.value and resource_id is not None:
             queue_episode_redownload_if_ready(session, resource_id)
         dispatch_queued_media_download_operations(session)
-        session.commit()
+
+    try:
+        run_write_transaction(work)
     except Exception:
-        session.rollback()
         logger.exception("Failed to dispatch the next queued media download operation")
-    finally:
-        session.close()
 
 
 def on_media_download_transfer_complete() -> None:

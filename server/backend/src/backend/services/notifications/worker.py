@@ -28,7 +28,7 @@ def start_notification_worker() -> tuple[threading.Event, threading.Thread]:
                 last_slow = time.monotonic()
             # Independent passes: a failing check must not stop messages, nor the other way around.
             for name, step in (
-                ("checks", lambda session: run_checks(session, include_slow=slow)),
+                ("checks", lambda session: run_checks(include_slow=slow)),
                 ("delivery", lambda session: deliver_pending(session)),
             ):
                 session = get_session()

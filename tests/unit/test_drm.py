@@ -13,6 +13,7 @@ from sqlalchemy.pool import StaticPool
 from sources import VideoDetails
 from sources import ytdlp_runner as runner
 from sources.ytdlp import YtDlpSource
+from conftest import use_database
 
 
 @pytest.fixture
@@ -22,6 +23,7 @@ def session():
 
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
+    use_database(engine)
     s = sessionmaker(bind=engine)()
     yield s
     s.close()

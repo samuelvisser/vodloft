@@ -15,7 +15,7 @@ from typing import Iterable
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from backend.db.core import get_session
+from backend.db.core import run_write_transaction, write_when_changed
 from backend.db.models import QuickDownloadHistory
 from config import get_settings
 
@@ -45,15 +45,10 @@ def _write(session: Session | None, work) -> None:
     if session is not None:
         work(session)
         return
-    own = get_session()
     try:
-        work(own)
-        own.commit()
+        run_write_transaction(work)
     except Exception:
-        own.rollback()
         logger.exception("Could not update the quick download history")
-    finally:
-        own.close()
 
 
 def record_started(request, *, source_name: str, session: Session | None = None) -> None:
@@ -131,8 +126,7 @@ def reconcile_history(session: Session) -> None:
 
 def list_history(session: Session, *, owner: str | None = None, everyone: bool = True, limit: int = 500) -> list[QuickDownloadHistory]:
     """Newest first; without ``everyone``, only the rows of ``owner``."""
-    reconcile_history(session)
-    session.commit()
+    write_when_changed(reconcile_history)
     query = select(QuickDownloadHistory)
     if not everyone:
         query = query.where(QuickDownloadHistory.owner == owner)
@@ -156,10 +150,9 @@ def forget_old_history(*, now: datetime | None = None) -> int:
     """Forget entries older than the retention period. The sweep calls this."""
     now = now or datetime.now(timezone.utc)
     cutoff = now - timedelta(days=get_settings().quick_download.history_retention_days)
-    session = get_session()
-    try:
-        result = session.execute(delete(QuickDownloadHistory).where(QuickDownloadHistory.started_at < cutoff))
-        session.commit()
-        return result.rowcount or 0
-    finally:
-        session.close()
+    return run_write_transaction(
+        lambda session: session.execute(
+            delete(QuickDownloadHistory).where(QuickDownloadHistory.started_at < cutoff)
+        ).rowcount or 0,
+        concurrent=True,
+    )
