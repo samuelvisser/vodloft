@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
 from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
+from backend.db.mixins.MediaContentMetadataMixin import PICTURE_PATH_COMMENT
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.db.mixins.CreatedByMixin import CreatedByMixin
 from backend.types.collection_types import EpisodeOrder
@@ -68,11 +69,11 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     author_name: Mapped[str]
     author_slug: Mapped[str]
     author_headshot_path: Mapped[Optional[str]]
-    background_image_path: Mapped[Optional[str]]
+    background_image_path: Mapped[Optional[str]] = mapped_column(comment=PICTURE_PATH_COMMENT)
     logo_image_path: Mapped[Optional[str]]
-    thumbnail_landscape_path: Mapped[Optional[str]]
-    thumbnail_portrait_path: Mapped[Optional[str]]
-    thumbnail_square_path: Mapped[Optional[str]]
+    thumbnail_landscape_path: Mapped[Optional[str]] = mapped_column(comment=PICTURE_PATH_COMMENT)
+    thumbnail_portrait_path: Mapped[Optional[str]] = mapped_column(comment=PICTURE_PATH_COMMENT)
+    thumbnail_square_path: Mapped[Optional[str]] = mapped_column(comment=PICTURE_PATH_COMMENT)
 
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()
