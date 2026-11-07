@@ -42,6 +42,11 @@ def thumbnail_file(name: str) -> Path | None:
     return path if path.is_file() else None
 
 
+def own_thumbnail_file(picture: str | None) -> Path | None:
+    """The file of a picture VODLoft made itself, which media items store as ``thumbnails/<name>.jpg``."""
+    return thumbnail_file(picture.removeprefix(_PREFIX)) if is_own_thumbnail(picture) else None
+
+
 def newest_media_item_id(s: Session) -> int:
     """The id of the newest media item, to find the items an indexing run adds after it."""
     return s.scalar(select(func.max(MediaItemBase.id))) or 0

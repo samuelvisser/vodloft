@@ -5,6 +5,8 @@ This adapter alone knows Local Media Profiles, output templates and ORM models.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from sqlalchemy.orm import Session
 
 from backend.services.collection_cookies import uses_cookies
@@ -13,7 +15,7 @@ from backend.services.sites import collection_site, video_site
 from backend.services.no_ascii_names import settle_no_ascii_name
 from backend.db.models import DownloadProfile, Episode, Movie, MovieExtra, Video
 from backend.db.models.media_download import MediaDownloadBase
-from backend.services.download_metadata import build_episode_metadata, build_movie_metadata, build_video_metadata, select_thumbnail_url
+from backend.services.download_metadata import build_episode_metadata, build_movie_metadata, build_video_metadata, select_thumbnail
 from backend.services.download_options import effective_download_mode, effective_metadata_mode, effective_thumbnail_mode
 from backend.services.download_quality import (
     chosen_subtitle_tracks, custom_ytdlp_options, default_subtitle_languages, ytdlp_quality, ytdlp_sponsorblock, ytdlp_subtitles,
@@ -90,7 +92,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     remux, ffmpeg_path, temporary_root = settings.remux_video_to_mp4, settings.ffmpeg_path, str(settings.temporary_download_root)
     output_template = profile.output_template
     title, slug, media_id = media.title, media.slug, media.id
-    thumbnail_url = select_thumbnail_url(media)
+    thumbnail = select_thumbnail(media)
     media_source = get_source(media.source_key)
     if (episode is not None and media_source.has(Feature.EPISODE_LISTS)) or video is not None:
         # A listed episode is a video on a page, just like a single video.
@@ -196,7 +198,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
                 raise DownloadCanceled("Movie extra was deleted during preparation")
             update_movie_extra_source_metadata(current.source, playback.metadata)
             if playback.metadata.model_fields_set & {"thumbnail_landscape_path", "thumbnail_portrait_path", "thumbnail_square_path", "background_image_path"}:
-                thumbnail_url = select_thumbnail_url(playback.metadata)
+                thumbnail = select_thumbnail(playback.metadata)
             session.commit()
         tracker.preparing("inspect_stream")
         source = resolve_download_source(playback.url, preferred_format=preferred, audio_only=False, remux_video_to_mp4=remux, cancellation=tracker.is_canceled)
@@ -225,11 +227,15 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     artwork_id = None
     # VODLoft embeds into MP4, M4A, MP3 and MKV; an Opus file only gets sidecars.
     embeddable = not source.hls_bundle and source.extension != "opus"
-    if thumbnail_url and thumbnail_mode is not ThumbnailMode.NO_THUMBNAIL:
+    if thumbnail is not None and thumbnail_mode is not ThumbnailMode.NO_THUMBNAIL:
         publish_artwork = thumbnail_mode in (ThumbnailMode.SIDECAR, ThumbnailMode.EMBED_AND_SIDECAR)
         embed_artwork = thumbnail_mode in (ThumbnailMode.EMBED, ThumbnailMode.EMBED_AND_SIDECAR) and embeddable
         if publish_artwork or embed_artwork:
-            assets.append(SidecarSpec("artwork", "thumbnail", url=thumbnail_url, extension="jpg", publish=publish_artwork, allowed_extensions=("jpg", "jpeg", "png", "webp")))
+            if isinstance(thumbnail, Path):
+                # A frame VODLoft took from the video: a JPEG it already has.
+                assets.append(SidecarSpec("artwork", "thumbnail", content=thumbnail.read_bytes(), extension="jpg", publish=publish_artwork))
+            else:
+                assets.append(SidecarSpec("artwork", "thumbnail", url=thumbnail, extension="jpg", publish=publish_artwork, allowed_extensions=("jpg", "jpeg", "png", "webp")))
         if embed_artwork:
             artwork_id = "artwork"
     tags = ()
