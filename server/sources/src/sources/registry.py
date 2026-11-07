@@ -59,11 +59,11 @@ def named_sites() -> list[Site]:
     return sorted(found.values(), key=lambda site: site.key)
 
 
-def site_refresh_intervals(site_key: str) -> str | None:
-    """The refresh schedule a Source knows for the Site with the key, such as YouTube's, or None."""
-    return next(
-        (intervals for source in _sources.values() if (intervals := source.refresh_intervals_of(site_key))), None,
-    )
+def site_of(site_key: str) -> Site:
+    """The contract for the Site with the key, told by the first Source that has one: a Source made for
+    the Site, such as The Daily Wire's, comes before one that fetches any site. A Site no Source knows
+    offers the defaults."""
+    return next((site for source in _sources.values() if (site := source.site_of(site_key)) is not None), Site(site_key, site_key))
 
 
 def named_site_for(url: str) -> Site | None:

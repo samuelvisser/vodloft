@@ -1,4 +1,3 @@
-import {useEffect} from 'react'
 import {Controller, useWatch, type UseFormReturn} from 'react-hook-form'
 import Switch from 'react-switch'
 
@@ -18,8 +17,6 @@ type Props = {
     sourceKey?: string
     /** The link of a collection that is not saved yet. */
     collectionUrl?: string
-    /** A profile that is not saved yet starts with the upgrade check its collection's Site suggests. */
-    newProfile?: boolean
 }
 
 const SWITCH = {onColor: '#0ea5e9', offColor: '#d1d5db', uncheckedIcon: false, checkedIcon: false} as const
@@ -36,8 +33,8 @@ const CHOICES: Record<Exclude<UpgradeImprovement, 'length'>, {label: string, hel
  * Collection's Site decides what shows: whether it has countdown downloads, and what can count as better.
  * A Site with neither has no upgrade check at all.
  */
-export default function UpgradeCheckCard({form, collectionId, sourceKey, collectionUrl, newProfile}: Props) {
-    const {control, register, setValue, getValues, formState: {errors}} = form
+export default function UpgradeCheckCard({form, collectionId, sourceKey, collectionUrl}: Props) {
+    const {control, register, setValue, formState: {errors}} = form
     const [withCountdown, upgradeCheck, afterDays, improvements, sponsorblockEnabled, localMediaProfileId] = useWatch({
         control,
         name: ['downloadWithCountdown', 'upgradeCheck', 'upgradeAfterDays', 'upgradeImprovements', 'sponsorblockEnabled', 'localMediaProfileId'],
@@ -45,20 +42,11 @@ export default function UpgradeCheckCard({form, collectionId, sourceKey, collect
 
     const {data: site} = useSiteOptions({collectionId, sourceKey, url: collectionUrl})
     // A profile that already downloads with the countdown keeps the switches, so it can turn them off.
-    const offersCountdown = !!site?.countdownDownloads || !!withCountdown
+    const offersCountdown = !!site?.settings.includes('downloadWithCountdown') || !!withCountdown
     const offered = site?.upgradeChecks.improvements ?? []
     const offersUpgrades = offered.length > 0
     const {data: mediaProfiles} = useLocalMediaProfiles()
     const mediaProfile = mediaProfiles?.find((profile) => String(profile.id) === String(localMediaProfileId))
-
-    // A new profile starts with the Site's own suggestion, unless it already checks for something the Site offers.
-    useEffect(() => {
-        if (!newProfile || !site) return
-        const current: UpgradeImprovement[] = getValues('upgradeImprovements') ?? []
-        if (current.some((improvement) => site.upgradeChecks.improvements.includes(improvement))) return
-        setValue('upgradeCheck', site.upgradeChecks.onByDefault)
-        setValue('upgradeImprovements', [...site.upgradeChecks.checked])
-    }, [newProfile, site, getValues, setValue])
 
     if (!offersCountdown && !offersUpgrades) return null
 

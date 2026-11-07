@@ -7,6 +7,15 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
+from config.settings.site_settings import DEFAULT_SPONSORBLOCK_SEGMENTS
+
+# What every Download Profile request names; the UI starts them from the Site's settings.
+PROFILE_CHOICES = dict(
+    auto_subtitles="fallback", sponsorblock_enabled=False, sponsorblock_segments=dict(DEFAULT_SPONSORBLOCK_SEGMENTS),
+    upgrade_check=False, upgrade_after_days=7, upgrade_repeat="once", upgrade_improvements=[], upgrade_length_minutes=5,
+)
+
+
 
 def _make_collection(session: Session, *, slug: str, collection_type: str):
     from backend.db.models import Collection
@@ -96,6 +105,7 @@ def test_podcast_profile_create_and_update_fire_transactional_events(db_session)
             download_with_countdown=False,
             redownload_final=False,
             delete_older_episodes=False,
+            **PROFILE_CHOICES,
         ),
     )
 
@@ -124,6 +134,7 @@ def test_podcast_profile_create_and_update_fire_transactional_events(db_session)
             download_with_countdown=True,
             redownload_final=False,
             delete_older_episodes=False,
+            **PROFILE_CHOICES,
         ),
     )
 
@@ -175,6 +186,7 @@ def test_series_profile_create_and_update_fire_transactional_events(db_session):
             download_with_countdown=False,
             redownload_final=False,
             delete_older_episodes=False,
+            **PROFILE_CHOICES,
         ),
     )
 
@@ -203,6 +215,7 @@ def test_series_profile_create_and_update_fire_transactional_events(db_session):
             download_with_countdown=False,
             redownload_final=False,
             delete_older_episodes=False,
+            **PROFILE_CHOICES,
         ),
     )
 
@@ -242,6 +255,7 @@ def test_download_profile_events_are_discarded_on_rollback(db_session):
             download_with_countdown=False,
             redownload_final=False,
             delete_older_episodes=False,
+            **PROFILE_CHOICES,
         ),
     )
     db_session.rollback()

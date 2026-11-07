@@ -15,6 +15,8 @@ from types import MappingProxyType
 from typing import Any, ClassVar
 from urllib.parse import urlsplit
 
+from config.settings.site_settings import SITE_SETTINGS, SiteSetting, UpgradeImprovement
+
 
 class Feature(StrEnum):
     """Optional capabilities. Code that only makes sense for some services
@@ -93,27 +95,30 @@ VIDEO_HEIGHTS = (360, 480, 720, 1080, 1440, 2160, 4320)
 """Every video resolution a Local Media Profile can download up to."""
 
 
-class UpgradeImprovement(StrEnum):
-    """What the upgrade check can count as a better version of a download."""
-
-    RESOLUTION = "resolution"
-    SPONSORBLOCK = "sponsorblock"
-    SUBTITLES = "subtitles"
-    CODEC = "codec"
-    LENGTH = "length"
-    """The episode got longer or shorter, such as a live stream cut down after it ended."""
-
-
 @dataclass(frozen=True)
 class UpgradeChecks:
     """What the upgrade check can find on a Site. A Site that offers no improvements has no upgrade check."""
 
     improvements: tuple[UpgradeImprovement, ...] = ()
     """What can count as a better version, in the order a Download Profile shows them."""
-    checked: tuple[UpgradeImprovement, ...] = ()
-    """The improvements a new Download Profile starts with."""
-    on_by_default: bool = False
-    """A new Download Profile starts with the upgrade check on."""
+
+
+@dataclass(frozen=True)
+class SiteSettings:
+    """Which of the settings in ``config.settings.site_settings`` a Site shows, and what it starts with.
+
+    A setting with a system default shows on every Site unless the Site ``hides`` it, because the
+    Site does not support it. A setting without one shows only on a Site that ``shows`` it. A preset is
+    the value a setting starts with on the Site, until the user gives it one of its own or sets it
+    back to the system default.
+    """
+
+    shows: frozenset[SiteSetting] = frozenset()
+    hides: frozenset[SiteSetting] = frozenset()
+    presets: Mapping[SiteSetting, Any] = field(default_factory=lambda: MappingProxyType({}), hash=False)
+
+    def offers(self, key: SiteSetting) -> bool:
+        return key not in self.hides if SITE_SETTINGS[key].has_system_default else key in self.shows
 
 
 @dataclass(frozen=True)
@@ -594,10 +599,6 @@ class Site:
     key: str
     name: str
     domains: tuple[str, ...] = ()
-    refresh_intervals: str | None = None
-    """How long after publication VODLoft looks the Site's items up again, such as
-    ``30m,2h,24h``, for a Site whose titles and pictures keep changing on a schedule of
-    its own. Without it, the Site follows VODLoft's system schedule."""
     stream_methods: frozenset[StreamMethod] = frozenset()
     """How RSS feeds can stream the Site's episodes straight from it, without downloading them
     first. A Site with none only serves downloads."""
@@ -610,10 +611,9 @@ class Site:
     """The Site's streams play for any address, so a feed can send podcast apps straight to them
     instead of passing them through VODLoft."""
     downloads: DownloadOptions = DownloadOptions()
-    countdown_downloads: bool = False
-    """The Site publishes live episodes with a countdown in the recording at first, so a Download
-    Profile can download them with the countdown and again once the final version is out."""
     upgrade_checks: UpgradeChecks = UpgradeChecks()
+    settings: SiteSettings = field(default_factory=SiteSettings, hash=False)
+    """Which settings the Site shows in Settings and on its Download Profiles, and its presets."""
 
     @property
     def streams(self) -> bool:
@@ -692,10 +692,10 @@ class Source(ABC):
         host = link_host(url)
         return next((site for site in self.sites if any(on_domain(host, domain) for domain in site.domains)), None)
 
-    def refresh_intervals_of(self, site_key: str) -> str | None:
-        """The refresh schedule this Source knows for the Site with the key, as its ``refresh_intervals``
-        say, or None when it knows none. A Source that tells its Sites apart in ``site_for`` implements it."""
-        return next((site.refresh_intervals for site in self.sites if site.key == site_key), None)
+    def site_of(self, site_key: str) -> Site | None:
+        """This Source's own contract for the Site with the key, or None when it has none. A Source
+        that tells its Sites apart in ``site_for`` implements it."""
+        return next((site for site in self.sites if site.key == site_key), None)
 
     def collection_ref(self, url: str) -> str | None:
         """The id one of this Source's ``sites`` gives the collection at the link, told from the
@@ -705,14 +705,6 @@ class Source(ABC):
     def episode_tags_for(self, url: str | None) -> tuple[EpisodeTag, ...]:
         """The tags episodes of the collection at this link can get, or all of them without a link."""
         return self.episode_tags
-
-    def auto_subtitles_for(self, url: str) -> bool:
-        """The site of the collection or video at this link makes auto-generated subtitles, as YouTube does."""
-        return False
-
-    def sponsorblock_for(self, url: str) -> bool:
-        """SponsorBlock has segments for the videos of the collection or video at this link: only YouTube's."""
-        return False
 
     def episode_tag(self, key: str | None) -> EpisodeTag | None:
         return next((tag for tag in self.episode_tags if tag.key == key), None)

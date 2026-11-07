@@ -7,9 +7,13 @@ import type {
 } from '../../types/schemas/settings'
 import ReadMore from '../../utils/ReadMore'
 import {createSelectRegistry} from '../../utils/selectRegistry'
+import {AutoSubtitlesReg} from '../../types/quality'
+import {UpgradeImprovementSchema} from '../../types/schemas/download_profile'
+import {UpgradeRepeatReg} from '../../types/schemas/siteSettings'
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import CronEditor from './CronEditor'
 import SpeedSettings from './SpeedSettings'
+import SiteSettingsCard, {ImprovementChoices} from './SiteSettingsCard'
 import type {SettingsTabProps} from './SettingsTabTypes'
 import {
     DurationField,
@@ -462,6 +466,88 @@ export default function DownloadsSettingsTab({
                         next.downloadSettings.downloadTimeoutSeconds = value
                     })}
                     help="Stops a single download attempt that makes no useful progress for too long."
+                />
+            </SettingsSection>
+
+            <SettingsSection
+                title="Download profile defaults"
+                description="What a new Download Profile starts with. Changing these leaves existing Download Profiles as they are."
+            >
+                <div className="settings-field settings-field--wide site-settings-system">
+                    <label>System defaults</label>
+                    <div className="settings-field__help">Used by every Site that follows the default, and by Sites VODLoft has not seen yet.</div>
+                </div>
+                <ToggleField
+                    id="settings-default-upgrade-check"
+                    label="Upgrade check"
+                    checked={draft.downloadProfileDefaults.upgradeCheck}
+                    environmentVariable={environmentVariableFor('downloadProfileDefaults.upgradeCheck')}
+                    onChange={(checked) => updateDraft((next) => {
+                        next.downloadProfileDefaults.upgradeCheck = checked
+                    })}
+                    help="Download an episode again later, and keep the new file only when it is better."
+                />
+                <NumberField
+                    id="settings-default-upgrade-after-days"
+                    label="Check after"
+                    unit="days"
+                    min={1}
+                    max={365}
+                    value={draft.downloadProfileDefaults.upgradeAfterDays}
+                    error={errorFor('downloadProfileDefaults.upgradeAfterDays')}
+                    environmentVariable={environmentVariableFor('downloadProfileDefaults.upgradeAfterDays')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.downloadProfileDefaults.upgradeAfterDays = value
+                    })}
+                />
+                <SelectField
+                    id="settings-default-upgrade-repeat"
+                    label="How often"
+                    registry={UpgradeRepeatReg}
+                    value={draft.downloadProfileDefaults.upgradeRepeat}
+                    environmentVariable={environmentVariableFor('downloadProfileDefaults.upgradeRepeat')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.downloadProfileDefaults.upgradeRepeat = value as typeof next.downloadProfileDefaults.upgradeRepeat
+                    })}
+                />
+                <div className={`settings-field${environmentVariableFor('downloadProfileDefaults.upgradeImprovements') ? ' is-environment-managed' : ''}`}>
+                    <label>Better means</label>
+                    <ImprovementChoices
+                        idPrefix="settings-default-improvement"
+                        offered={UpgradeImprovementSchema.options}
+                        value={draft.downloadProfileDefaults.upgradeImprovements}
+                        onChange={(value) => updateDraft((next) => {
+                            next.downloadProfileDefaults.upgradeImprovements = value
+                        })}
+                    />
+                    <div className="settings-field__help">A Site only checks for what it can find, so it leaves the rest out.</div>
+                </div>
+                <NumberField
+                    id="settings-default-upgrade-length"
+                    label="Different length by more than"
+                    unit="minutes"
+                    min={1}
+                    max={600}
+                    value={draft.downloadProfileDefaults.upgradeLengthMinutes}
+                    error={errorFor('downloadProfileDefaults.upgradeLengthMinutes')}
+                    environmentVariable={environmentVariableFor('downloadProfileDefaults.upgradeLengthMinutes')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.downloadProfileDefaults.upgradeLengthMinutes = value
+                    })}
+                />
+                <SelectField
+                    id="settings-default-auto-subtitles"
+                    label="Auto-generated subtitles"
+                    registry={AutoSubtitlesReg}
+                    value={draft.downloadProfileDefaults.autoSubtitles}
+                    environmentVariable={environmentVariableFor('downloadProfileDefaults.autoSubtitles')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.downloadProfileDefaults.autoSubtitles = value as typeof next.downloadProfileDefaults.autoSubtitles
+                    })}
+                />
+                <SiteSettingsCard
+                    group="downloadProfile" draft={draft} updateDraft={updateDraft} errorFor={errorFor}
+                    help="Default follows the system defaults above. A Site with a preset starts with its own value, which you can change or set back to Default. Settings without a Default, such as SponsorBlock, only exist on the Sites that show them."
                 />
             </SettingsSection>
 

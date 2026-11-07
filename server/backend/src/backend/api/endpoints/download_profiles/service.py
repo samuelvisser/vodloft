@@ -24,7 +24,8 @@ from backend.services.episode_filters import (
 )
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.utils.local_media_profiles import require_local_media_profile_type
-from sources import get_source
+from backend.services.sites import collection_site
+from sources import SiteSetting
 from task_manager.events.transactional import queue_event
 
 
@@ -203,8 +204,7 @@ def auto_subtitles_uses(s: Session, local_media_profile_id: int, access) -> list
         collection = profile.collection
         if not access.allows_source(collection.source_key):
             continue
-        source = get_source(collection.source_key)
-        if not source.auto_subtitles_for(collection.sharing_url):
+        if not collection_site(collection).settings.offers(SiteSetting.AUTO_SUBTITLES):
             continue
         uses.append(AutoSubtitlesUseAPIRead.model_validate({
             "download_profile_id": profile.id,

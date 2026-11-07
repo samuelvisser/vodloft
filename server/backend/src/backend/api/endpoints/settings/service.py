@@ -34,7 +34,7 @@ from config.settings.cron_validation import (
     WorkerCronExpressionError,
     worker_cron_validation_errors,
 )
-from config.settings.submodels import SiteSchedule
+from config.settings.site_settings import SiteSettingValues
 from config.settings.settings import (
     AppSettings,
     TIMEZONE_ENVIRONMENT_VARIABLE,
@@ -274,9 +274,9 @@ def _effective_settings_from_sources(
     )
     settings = AppSettings.model_validate(merged)
     # Reading its sources merges a mapping with the one still in config.yml; the saved one replaces it.
-    schedules = merged.get("siteSchedules", {})
+    own = merged.get("siteSettings", {})
     return settings.model_copy(update={
-        "site_schedules": {key: SiteSchedule.model_validate(own) for key, own in schedules.items()},
+        "site_settings": {key: SiteSettingValues.model_validate(values) for key, values in own.items()},
     })
 
 

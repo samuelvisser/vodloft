@@ -35,16 +35,16 @@ class SweptSource(ListedSource):
 
 
 @pytest.fixture
-def site_schedules():
-    """Give Sites their own scheduling, as under siteSchedules in config.yml."""
+def site_settings():
+    """Give Sites settings of their own, as under siteSettings in config.yml."""
     from config.registry import get_settings, replace_settings
-    from config.settings.submodels import SiteSchedule
+    from config.settings.site_settings import SiteSettingValues
 
     original = get_settings()
 
     def apply(**schedules: dict):
         replace_settings(original.model_copy(update={
-            "site_schedules": {key: SiteSchedule(**own) for key, own in schedules.items()},
+            "site_settings": {key: SiteSettingValues(**own) for key, own in schedules.items()},
         }))
 
     yield apply
@@ -60,10 +60,10 @@ def swept(monkeypatch):
     return registry.register(SweptSource())
 
 
-def _site_collection(session, site_schedules, *, refresh="1h,1d"):
+def _site_collection(session, site_settings, *, refresh="1h,1d"):
     from backend.db.models import Site
 
-    site_schedules(tube={"metadata_refresh": refresh})
+    site_settings(tube={"metadata_refresh": refresh})
     session.add(Site(key="tube", name="Tube", domains=["tube.example"]))
     collection = _collection(session, "UC1", source_key="swept")
     collection.site_key = "tube"
@@ -87,10 +87,10 @@ def _episode(session, slug: str):
     return session.query(Episode).filter(Episode.source_slug == slug).one()
 
 
-def test_an_upload_is_looked_up_on_each_interval_until_its_metadata_is_final(swept, session, site_schedules):
+def test_an_upload_is_looked_up_on_each_interval_until_its_metadata_is_final(swept, session, site_settings):
     from task_manager.tasks.workers.refresh_metadata.service import run_metadata_refresh
 
-    collection = _site_collection(session, site_schedules)
+    collection = _site_collection(session, site_settings)
     now = datetime.now(timezone.utc)
     _add(session, collection, "new", now - timedelta(minutes=30))
     # A video from the back catalogue is done from the start.
@@ -123,10 +123,10 @@ def test_an_upload_is_looked_up_on_each_interval_until_its_metadata_is_final(swe
     assert episode.episode_identifier == "ep.1"
 
 
-def test_a_failed_lookup_is_tried_again_and_a_removed_upload_is_marked(swept, session, site_schedules):
+def test_a_failed_lookup_is_tried_again_and_a_removed_upload_is_marked(swept, session, site_settings):
     from task_manager.tasks.workers.refresh_metadata.service import run_metadata_refresh
 
-    collection = _site_collection(session, site_schedules)
+    collection = _site_collection(session, site_settings)
     now = datetime.now(timezone.utc)
     _add(session, collection, "gone", now - timedelta(minutes=5))
     _add(session, collection, "flaky", now - timedelta(minutes=5))
@@ -140,10 +140,10 @@ def test_a_failed_lookup_is_tried_again_and_a_removed_upload_is_marked(swept, se
     assert result.sites["Tube"].failed == 1 and result.sites["Tube"].removed == 1
 
 
-def test_a_site_with_its_refresh_off_is_never_looked_up(swept, session, site_schedules):
+def test_a_site_with_its_refresh_off_is_never_looked_up(swept, session, site_settings):
     from task_manager.tasks.workers.refresh_metadata.service import run_metadata_refresh
 
-    collection = _site_collection(session, site_schedules, refresh="off")
+    collection = _site_collection(session, site_settings, refresh="off")
     now = datetime.now(timezone.utc)
     _add(session, collection, "new", now - timedelta(minutes=5))
     # Off means no schedule, so the upload is done from the start.
@@ -166,14 +166,14 @@ def test_a_new_site_starts_on_the_schedule_its_source_knows(session):
     assert site_refresh_offsets(vimeo.key) == site_refresh_offsets(None)
 
 
-def test_a_site_follows_its_own_schedule_then_its_default_then_the_system(site_schedules):
+def test_a_site_follows_its_own_schedule_then_its_default_then_the_system(site_settings):
     from backend.services.metadata_refresh import site_metadata_refresh, site_refresh_offsets
     from config import get_settings
 
     system = get_settings().new_episode_schedule.metadata_refresh_intervals
     assert site_metadata_refresh("youtube") == "30m,2h,6h,24h,3d,7d,14d"
     assert site_metadata_refresh("generic:vimeo.com") == system
-    site_schedules(youtube={"metadata_refresh": "1h"}, dailywire={"metadata_refresh": "off"})
+    site_settings(youtube={"metadata_refresh": "1h"}, dailywire={"metadata_refresh": "off"})
     assert site_metadata_refresh("youtube") == "1h"
     assert site_refresh_offsets("dailywire") == ()
 
@@ -228,20 +228,28 @@ def client(session, monkeypatch):  # noqa: F811
         yield test_client
 
 
-def test_the_settings_list_each_site_with_the_schedule_it_starts_on(client, session):
+def test_the_settings_list_each_site_with_the_settings_it_shows_and_starts_with(client, session):
     from backend.db.models import Site
 
     session.add(Site(key="youtube", name="YouTube", domains=["youtube.com"]))
     session.add(Site(key="generic:vimeo.com", name="vimeo.com", domains=["vimeo.com"]))
     session.commit()
 
-    rows = client.get("/api/settings/site-refresh").json()
-    assert rows == [
-        {"key": "youtube", "name": "YouTube", "domains": ["youtube.com"], "refreshes": True,
-         "followsPending": True, "defaultRefreshIntervals": "30m,2h,6h,24h,3d,7d,14d"},
-        {"key": "generic:vimeo.com", "name": "vimeo.com", "domains": ["vimeo.com"], "refreshes": True,
-         "followsPending": True, "defaultRefreshIntervals": None},
-    ]
+    body = client.get("/api/settings/sites").json()
+    specs = {spec["key"]: spec for spec in body["specs"]}
+    assert specs["metadataRefresh"] == {"key": "metadataRefresh", "group": "scheduling", "hasSystemDefault": True}
+    assert specs["sponsorblock"]["hasSystemDefault"] is False
+    youtube, vimeo = body["sites"]
+    assert (youtube["key"], vimeo["key"]) == ("youtube", "generic:vimeo.com")
+    shown = {site["key"]: {setting["key"]: setting for setting in site["settings"]} for site in body["sites"]}
+    # YouTube starts on its own preset; Vimeo follows the system default.
+    assert shown["youtube"]["metadataRefresh"] == {"key": "metadataRefresh", "start": "30m,2h,6h,24h,3d,7d,14d", "preset": True}
+    assert shown["generic:vimeo.com"]["metadataRefresh"] == {"key": "metadataRefresh", "start": None, "preset": False}
+    # SponsorBlock has no system default, so only YouTube shows it, starting on its built-in value.
+    assert shown["youtube"]["sponsorblock"] == {"key": "sponsorblock", "start": True, "preset": False}
+    assert "sponsorblock" not in shown["generic:vimeo.com"]
+    assert "autoSubtitles" in shown["generic:vimeo.com"] and "downloadWithCountdown" not in shown["youtube"]
+    assert youtube["upgradeImprovements"] == ["resolution", "sponsorblock", "subtitles", "codec"]
 
 
 # --- The Daily Wire's episodes ------------------------------------------------------------------
@@ -265,11 +273,11 @@ def _dailywire_episode(session, slug: str, published: datetime):
 
 
 @pytest.fixture
-def daily_wire(monkeypatch, site_schedules):
+def daily_wire(monkeypatch, site_settings):
     """The Daily Wire's own refresh, answering from a list instead of The Daily Wire."""
     from task_manager.tasks.workers.refresh_metadata import service
 
-    site_schedules(dailywire={"metadata_refresh": "1h,1d"})
+    site_settings(dailywire={"metadata_refresh": "1h,1d"})
 
     monkeypatch.setattr(service, "_last_sweep", None)
     answers: list[bool | None | Exception] = []

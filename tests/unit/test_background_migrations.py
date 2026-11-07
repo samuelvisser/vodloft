@@ -360,3 +360,64 @@ def test_the_daily_wire_keeps_a_refresh_schedule_the_user_set(tmp_path, monkeypa
     assert ("siteSchedules" in document) is written
     if written:
         assert document["siteSchedules"] == {"dailywire": {"metadataRefresh": "2h,1d"}}
+
+
+def test_site_schedules_become_site_settings_and_the_rest_of_the_file_stays():
+    import yaml
+
+    from backend.db.background_migrations.versions.b41e6d2a9c75_site_schedules_become_site_settings import (
+        _with_site_settings,
+    )
+
+    source = (
+        "logLevel: INFO\n"
+        "siteSchedules:\n"
+        "  dailywire:\n"
+        "    metadataRefresh: off\n"
+        "    upcomingAndLive: false\n"
+        "  generic:vimeo.com:\n"
+        "    pendingUpcomingMinutes: 90\n"
+        "    pendingStartingMinutes: 3\n"
+        "    pendingLiveMinutes: 10\n"
+        "  youtube: {}\n"
+        "# Kept below the Sites.\n"
+        "timezone: Europe/Amsterdam\n"
+    )
+
+    updated = _with_site_settings(source)
+
+    assert updated.startswith("logLevel: INFO\nsiteSettings:\n")
+    assert "# Kept below the Sites.\ntimezone: Europe/Amsterdam\n" in updated
+    document = yaml.safe_load(updated)
+    assert "siteSchedules" not in document
+    assert document["siteSettings"] == {
+        "dailywire": {"metadataRefresh": "off", "upcomingAndLive": False},
+        "generic:vimeo.com": {"lookupMinutes": {"upcoming": 90, "starting": 3, "live": 10}},
+    }
+    # Running it again changes nothing.
+    assert _with_site_settings(updated) == updated
+
+
+def test_site_settings_already_there_win_over_old_schedules():
+    import yaml
+
+    from backend.db.background_migrations.versions.b41e6d2a9c75_site_schedules_become_site_settings import (
+        _with_site_settings,
+    )
+
+    source = (
+        "siteSettings:\n"
+        "  youtube:\n"
+        "    metadataRefresh: 2h\n"
+        "    upgradeAfterDays: 4\n"
+        "siteSchedules:\n"
+        "  youtube:\n"
+        "    metadataRefresh: 1h\n"
+        "    upcomingAndLive: true\n"
+    )
+
+    assert yaml.safe_load(_with_site_settings(source)) == {"siteSettings": {"youtube": {
+        "metadataRefresh": "2h", "upcomingAndLive": True, "upgradeAfterDays": 4,
+    }}}
+    # A file without old schedules is left alone.
+    assert _with_site_settings("siteSettings:\n  youtube:\n    metadataRefresh: 2h\n").endswith("2h\n")

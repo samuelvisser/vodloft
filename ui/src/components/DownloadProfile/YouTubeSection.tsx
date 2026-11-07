@@ -16,7 +16,7 @@ type Props = {
     collectionUrl?: string
 }
 
-/** Choices only YouTube Collections have: auto-generated subtitles and SponsorBlock. */
+/** Choices only some Sites show: auto-generated subtitles and, on YouTube, SponsorBlock. */
 export default function YouTubeSection({form, collectionId, sourceKey, collectionUrl}: Props) {
     const {control} = form
     const localMediaProfileId = useWatch({control, name: 'localMediaProfileId'}) as number | string | undefined
@@ -28,10 +28,11 @@ export default function YouTubeSection({form, collectionId, sourceKey, collectio
     const mediaProfile = mediaProfiles?.find((profile) => String(profile.id) === String(localMediaProfileId))
     // A profile that is still being made in the same flow counts as storing subtitles.
     const storesSubtitles = !mediaProfile || mediaProfile.subtitleMode !== 'no_subtitles'
-    const autoShown = !!site?.autoSubtitles && storesSubtitles
+    const offersAuto = !!site?.settings.includes('autoSubtitles')
+    const autoShown = offersAuto && storesSubtitles
     // Say why the choice is missing rather than leaving it out without a word.
-    const autoWithoutSubtitles = !!site?.autoSubtitles && !storesSubtitles ? mediaProfile : undefined
-    const sponsorBlockShown = !!site?.sponsorblock
+    const autoWithoutSubtitles = offersAuto && !storesSubtitles ? mediaProfile : undefined
+    const sponsorBlockShown = !!site?.settings.includes('sponsorblock')
 
     // The Local Media Profile links here with #youtube-subtitles: scroll to it and briefly highlight it.
     useEffect(() => {
@@ -46,7 +47,7 @@ export default function YouTubeSection({form, collectionId, sourceKey, collectio
 
     return (
         <section className="youtube-section" aria-labelledby="youtube-section-heading">
-            <h3 className="youtube-section-heading" id="youtube-section-heading">YouTube</h3>
+            <h3 className="youtube-section-heading" id="youtube-section-heading">{site?.siteName}</h3>
             {autoShown && (
                 <div className={`form-row${highlight ? ' is-highlighted' : ''}`} id="youtube-subtitles" ref={subtitlesRow}>
                     <label htmlFor="auto-subtitles">Use auto-generated subtitles</label>

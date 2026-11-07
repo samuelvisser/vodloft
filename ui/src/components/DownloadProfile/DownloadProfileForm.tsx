@@ -1,7 +1,8 @@
+import {useEffect, useRef} from 'react'
 import {Controller, UseFormReturn} from 'react-hook-form'
 import Switch from 'react-switch'
 import ReadMore from '../../utils/ReadMore'
-import {useCollectionEpisodeTags} from "../../lib/queries";
+import {useCollectionEpisodeTags, useSiteOptions} from "../../lib/queries";
 import type {SeasonDetachedOut} from "../../types/schemas/season";
 import WhichEpisodes from "./WhichEpisodes";
 import YouTubeSection from "./YouTubeSection";
@@ -29,6 +30,17 @@ export default function DownloadProfileForm({form, episodeIdentifier, seasons, c
     collectionRoot ??= true
 
     const {data: tags} = useCollectionEpisodeTags({collectionId, sourceKey, url: collectionUrl})
+    const {data: site} = useSiteOptions({collectionId, sourceKey, url: collectionUrl})
+
+    // A new profile starts with what its Site's settings say, once per Site, leaving what the user already changed.
+    const startedFor = useRef<string | null>(null)
+    useEffect(() => {
+        if (!newProfile || !site || startedFor.current === site.siteName) return
+        startedFor.current = site.siteName
+        for (const [name, value] of Object.entries(site.profileDefaults)) {
+            if (!form.getFieldState(name).isDirty) form.setValue(name, structuredClone(value))
+        }
+    }, [newProfile, site, form])
 
     return (
         <>
@@ -78,7 +90,7 @@ export default function DownloadProfileForm({form, episodeIdentifier, seasons, c
                 seasons={seasons ?? []}
                 collectionId={collectionId}
             />
-            <UpgradeCheckCard form={form} collectionId={collectionId} sourceKey={sourceKey} collectionUrl={collectionUrl} newProfile={newProfile}/>
+            <UpgradeCheckCard form={form} collectionId={collectionId} sourceKey={sourceKey} collectionUrl={collectionUrl}/>
             <YouTubeSection form={form} collectionId={collectionId} sourceKey={sourceKey} collectionUrl={collectionUrl}/>
         </>
     )

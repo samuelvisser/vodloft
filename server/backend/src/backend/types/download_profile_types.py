@@ -3,7 +3,10 @@ from typing import Annotated
 
 from pydantic import Field
 
-from sources import UpgradeImprovement
+from config.settings.site_settings import (  # noqa: F401  (the Download Profile's options, defined with its defaults)
+    DEFAULT_SPONSORBLOCK_SEGMENTS, DEFAULT_UPGRADE_IMPROVEMENTS, AutoSubtitles, SponsorBlockAction, SponsorBlockCategory,
+    UpgradeImprovement, UpgradeRepeat,
+)
 
 
 class MediaDownloadArtifactStatus(StrEnum):
@@ -64,62 +67,7 @@ class DurationOperator(StrEnum):
     LONGER = "longer"
 
 
-class UpgradeRepeat(StrEnum):
-    """How often the upgrade check looks at a download again."""
-    ONCE = "once"
-    TWICE = "twice"
-    """Once more, 30 days after the first check."""
-    EVERY = "every"
-    """Every "check after" days, up to three times."""
-
-
 class UpgradeResult(StrEnum):
     """What the last upgrade check of a download found."""
     UPGRADED = "upgraded"
     CHECKED = "checked"
-
-
-DEFAULT_UPGRADE_IMPROVEMENTS = (UpgradeImprovement.RESOLUTION.value, UpgradeImprovement.SPONSORBLOCK.value)
-
-
-class AutoSubtitles(StrEnum):
-    """Whether a YouTube Download Profile downloads auto-generated subtitles."""
-    NEVER = "never"
-    FALLBACK = "fallback"
-    ALWAYS = "always"
-
-
-class SponsorBlockAction(StrEnum):
-    """What a download does with one type of SponsorBlock segment."""
-
-    KEEP = "keep"
-    CHAPTER = "chapter"
-    """A named chapter a player can skip."""
-    CUT = "cut"
-    """Removed from the file for good."""
-
-
-class SponsorBlockCategory(StrEnum):
-    """SponsorBlock's segment types, in the order they are shown."""
-
-    SPONSOR = "sponsor"
-    SELFPROMO = "selfpromo"
-    INTERACTION = "interaction"
-    INTRO = "intro"
-    OUTRO = "outro"
-    PREVIEW = "preview"
-    FILLER = "filler"
-    MUSIC_OFFTOPIC = "music_offtopic"
-
-
-DEFAULT_SPONSORBLOCK_SEGMENTS: dict[str, str] = {
-    SponsorBlockCategory.SPONSOR.value: SponsorBlockAction.CHAPTER.value,
-    SponsorBlockCategory.SELFPROMO.value: SponsorBlockAction.KEEP.value,
-    SponsorBlockCategory.INTERACTION.value: SponsorBlockAction.KEEP.value,
-    SponsorBlockCategory.INTRO.value: SponsorBlockAction.CHAPTER.value,
-    SponsorBlockCategory.OUTRO.value: SponsorBlockAction.CHAPTER.value,
-    SponsorBlockCategory.PREVIEW.value: SponsorBlockAction.KEEP.value,
-    SponsorBlockCategory.FILLER.value: SponsorBlockAction.KEEP.value,
-    SponsorBlockCategory.MUSIC_OFFTOPIC.value: SponsorBlockAction.KEEP.value,
-}
-"""A new YouTube Download Profile makes chapters of sponsors, intros and outros and keeps everything else."""

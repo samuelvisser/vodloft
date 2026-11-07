@@ -19,7 +19,7 @@ import {
     useLazyCollection,
 } from './lazyCollection'
 import {useFrontendPuller} from './puller'
-import {SiteRefreshReadSchema, type SiteRefreshRead} from '../types/schemas/siteRefresh'
+import {SitesSettingsReadSchema, type SitesSettingsRead} from '../types/schemas/siteSettings'
 import {downloadStatusesForApi} from './downloadStatusFilters'
 import {
     episodeQueryKeys,
@@ -470,13 +470,13 @@ export function useSourceSites() {
     })
 }
 
-/** Every Site VODLoft has seen, and which of its settings apply to it. */
-export function useSiteRefresh() {
-    return useQuery<SiteRefreshRead[], Error, SiteRefreshRead[], readonly ['siteRefresh']>({
-        queryKey: ['siteRefresh'] as const,
+/** The settings a Site can have of its own, and every Site VODLoft has seen with the ones it shows. */
+export function useSitesSettings() {
+    return useQuery<SitesSettingsRead, Error, SitesSettingsRead, readonly ['sitesSettings']>({
+        queryKey: ['sitesSettings'] as const,
         queryFn: async ({signal}) => {
-            const value = await fetchJSON<unknown>(`${apiUrl()}/settings/site-refresh`, signal)
-            return SiteRefreshReadSchema.array().parse(value)
+            const value = await fetchJSON<unknown>(`${apiUrl()}/settings/sites`, signal)
+            return SitesSettingsReadSchema.parse(value)
         },
     })
 }

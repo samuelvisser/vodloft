@@ -11,6 +11,15 @@ from sqlalchemy.orm import Session
 
 from backend.services.errors import ServiceError
 
+from config.settings.site_settings import DEFAULT_SPONSORBLOCK_SEGMENTS
+
+# What every Download Profile request names; the UI starts them from the Site's settings.
+PROFILE_CHOICES = dict(
+    auto_subtitles="fallback", sponsorblock_enabled=False, sponsorblock_segments=dict(DEFAULT_SPONSORBLOCK_SEGMENTS),
+    upgrade_check=False, upgrade_after_days=7, upgrade_repeat="once", upgrade_improvements=[], upgrade_length_minutes=5,
+)
+
+
 
 def _new_session() -> tuple[Session, object]:
     import backend.db.models  # noqa: F401
@@ -382,6 +391,7 @@ def test_manual_downloads_reject_the_wrong_local_media_profile_type() -> None:
                 download_with_countdown=False,
                 redownload_final=False,
                 delete_older_episodes=False,
+                **PROFILE_CHOICES,
             ),
         )
     assert profile_error.value.status_code == 422

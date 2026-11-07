@@ -9,8 +9,11 @@ from backend.security.access import Area, Level
 from backend.security import deps
 from backend.security.deps import requires, requires_any
 from backend.db.models import Collection
-from backend.api.models.source import DownloadOptionsAPIRead, SiteOptionsAPIRead, UpgradeChecksAPIRead
-from sources import get_source
+from backend.api.models.source import (
+    DownloadOptionsAPIRead, DownloadProfileDefaultsAPIRead, SiteOptionsAPIRead, UpgradeChecksAPIRead,
+)
+from backend.services.site_settings import download_profile_defaults, offered_settings
+from config.settings.site_settings import SiteSettingGroup
 from backend.services.sites import collection_site
 from backend.db.core import run_write_transaction
 
@@ -75,12 +78,10 @@ def download_profiles_site_options(collection_id: int, request: Request):
         collection = s.get(Collection, collection_id)
         if collection is None or not deps.request_access(request).allows_source(collection.source_key):
             raise HTTPException(status_code=404, detail="Collection not found")
-        source = get_source(collection.source_key)
         site = collection_site(collection)
         return SiteOptionsAPIRead(
-            auto_subtitles=source.auto_subtitles_for(collection.sharing_url),
-            sponsorblock=source.sponsorblock_for(collection.sharing_url),
-            countdown_downloads=site.countdown_downloads,
+            settings=offered_settings(site, SiteSettingGroup.DOWNLOAD_PROFILE),
+            profile_defaults=DownloadProfileDefaultsAPIRead.model_validate(download_profile_defaults(site)),
             upgrade_checks=UpgradeChecksAPIRead.model_validate(site.upgrade_checks),
             site_name=site.name, stream_methods=site.stream_methods,
             stream_video_heights=site.stream_video_heights, stream_proxy_choice=site.stream_proxy_choice,

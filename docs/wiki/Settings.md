@@ -108,6 +108,26 @@ These settings are available under **Settings → Downloads**.
 
 When you move the temporary, RSS cache, quick download, thumbnail or lock folder, VODLoft removes the old folder the next time it starts, but only if VODLoft alone uses it: a hidden `.vodloft-…` folder or the setting's default folder. Quick downloads and thumbnails move to the new folder first. A folder of your own, and the download root itself, are never removed.
 
+### Download profile defaults
+
+What a new Download Profile starts with, under **Settings → Downloads → Download profile defaults**. Changing these
+never changes a Download Profile you already have.
+
+| Setting | Environment variable | Default | What it does |
+| --- | --- | --- | --- |
+| `downloadProfileDefaults.upgradeCheck` | `VL_DOWNLOAD_PROFILE_DEFAULTS__UPGRADE_CHECK` | `true` | New profiles have the upgrade check on (see [[Download-Profiles#upgrade-check]]). |
+| `downloadProfileDefaults.upgradeAfterDays` | `VL_DOWNLOAD_PROFILE_DEFAULTS__UPGRADE_AFTER_DAYS` | `7` | Days after downloading before the first check. |
+| `downloadProfileDefaults.upgradeRepeat` | `VL_DOWNLOAD_PROFILE_DEFAULTS__UPGRADE_REPEAT` | `once` | How often it checks: `once`, `twice` or `every`. |
+| `downloadProfileDefaults.upgradeImprovements` | `VL_DOWNLOAD_PROFILE_DEFAULTS__UPGRADE_IMPROVEMENTS` | `[resolution]` | What counts as a better version. A Site only checks for what it can find. |
+| `downloadProfileDefaults.upgradeLengthMinutes` | `VL_DOWNLOAD_PROFILE_DEFAULTS__UPGRADE_LENGTH_MINUTES` | `5` | How many minutes longer or shorter counts as a different length. |
+| `downloadProfileDefaults.autoSubtitles` | `VL_DOWNLOAD_PROFILE_DEFAULTS__AUTO_SUBTITLES` | `fallback` | Auto-generated subtitles: `never`, `fallback` (only when there are no real ones) or `always`. |
+
+Below the system defaults, each Site has a row of its own, the same way as [Per-Site scheduling](#per-site-scheduling):
+**Default** follows the system default, and a Site with a preset starts on its own value. The Daily Wire checks after
+3 days for a different length; YouTube checks for a higher resolution and new SponsorBlock segments. Some settings only
+exist on the Sites they are made for, so they have no Default: downloading with the countdown on The Daily Wire, and
+SponsorBlock and its segments on YouTube. The Daily Wire makes no subtitles, so it has no auto-generated subtitles.
+
 ### Speed
 
 Downloads share one speed limit, however many run at the same time.
@@ -195,22 +215,29 @@ Metadata intervals accept positive values using `s`, `m`, `h`, or `d`, separated
 ### Per-Site scheduling
 
 Each Site follows the settings above unless you give it settings of its own under **Settings → Automation → Per-Site
-scheduling**. VODLoft keeps those under `siteSchedules` in `config.yml`, by the Site's key, and only writes the settings a
-Site changes:
+scheduling**. Every setting there has a dropdown: **Default** follows the system setting above, and the other choices give
+the Site a value of its own.
+
+Some Sites come with a value of their own already, a *preset*. They start on **Own value** with the preset filled in, and
+you can change it or set the Site back to **Default**. The Daily Wire's refresh schedule is `15m,30m,1h,3h,6h,24h,3d`, and
+YouTube's is `30m,2h,6h,24h,3d,7d,14d`, because creators keep testing titles and thumbnails there for up to two weeks.
+
+VODLoft keeps each Site's settings under `siteSettings` in `config.yml`, by the Site's key, together with its
+[Download Profile defaults](#download-profile-defaults). A setting that is left out uses the Site's preset, or the system
+setting when it has none. `default` always means the system setting, even on a Site with a preset:
 
 ```yaml
-siteSchedules:
+siteSettings:
   youtube:
-    metadataRefresh: 30m,2h,24h   # or off
+    metadataRefresh: 30m,2h,24h   # or off, or default
   dailywire:
     upcomingAndLive: false
-    pendingUpcomingMinutes: 30    # the three lookup times always come together
-    pendingStartingMinutes: 2
-    pendingLiveMinutes: 5
+    lookupMinutes:                # the three lookup times always come together
+      upcoming: 30
+      starting: 2
+      live: 5
+    upgradeAfterDays: default     # use the system default instead of The Daily Wire's 3 days
 ```
-
-Some Sites have a refresh schedule of their own by default: The Daily Wire's is `15m,30m,1h,3h,6h,24h,3d`, and
-YouTube's is `30m,2h,6h,24h,3d,7d,14d`, because creators keep testing titles and thumbnails there for up to two weeks.
 
 ### Episode lifecycle safeguards
 

@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from sources import StreamMethod, UpgradeImprovement, collection_on_site, site_for, source_site, sources_for
+from sources import SiteSetting, StreamMethod, UpgradeImprovement, collection_on_site, site_for, source_site, sources_for
 
 
 @pytest.mark.parametrize(("url", "source", "key", "name"), [
@@ -55,13 +55,13 @@ def test_what_a_site_offers_comes_from_the_source_that_fetches_it():
     # Both are The Daily Wire, so a user's settings for the Site apply to both.
     assert (by_dailywire.key, by_dailywire.name) == (by_ytdlp.key, by_ytdlp.name) == ("dailywire", "The Daily Wire")
 
-    assert by_dailywire.countdown_downloads
+    assert by_dailywire.settings.offers(SiteSetting.DOWNLOAD_WITH_COUNTDOWN)
     assert by_dailywire.upgrade_checks.improvements == (UpgradeImprovement.LENGTH,)
-    assert by_dailywire.upgrade_checks.on_by_default
+    assert by_dailywire.settings.presets[SiteSetting.UPGRADE_CHECK] is True
     assert StreamMethod.HLS in by_dailywire.stream_methods
 
     # yt-dlp has no contract for The Daily Wire, so it offers what it offers any site.
-    assert not by_ytdlp.countdown_downloads
+    assert not by_ytdlp.settings.offers(SiteSetting.DOWNLOAD_WITH_COUNTDOWN)
     assert UpgradeImprovement.LENGTH not in by_ytdlp.upgrade_checks.improvements
     assert not by_ytdlp.streams
     assert by_ytdlp.upgrade_checks == source_site("https://www.example.com/clip.mp4", "ytdlp").upgrade_checks
@@ -72,7 +72,6 @@ def test_only_youtube_offers_sponsorblock_as_a_better_version():
     assert youtube.improvements == (
         UpgradeImprovement.RESOLUTION, UpgradeImprovement.SPONSORBLOCK, UpgradeImprovement.SUBTITLES, UpgradeImprovement.CODEC,
     )
-    assert youtube.checked == (UpgradeImprovement.RESOLUTION, UpgradeImprovement.SPONSORBLOCK)
     assert UpgradeImprovement.SPONSORBLOCK not in source_site("https://rumble.com/c/someone", "ytdlp").upgrade_checks.improvements
     assert not source_site("https://npo.nl/start/serie/a-series", "npo").upgrade_checks.improvements
 

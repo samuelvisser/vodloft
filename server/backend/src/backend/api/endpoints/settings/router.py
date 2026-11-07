@@ -4,9 +4,10 @@ from backend.api.models.operations import TaskOperationAccepted
 from backend.api.models.settings import (
     LibraryDefaultsAPIRead, SettingsAPIRead, SettingsAPIUpdate, SpeedLimitStatusRead,
 )
-from backend.api.models.site_refresh import SiteRefreshAPIRead
+from backend.api.models.site_settings import SiteSettingSpecAPIRead, SiteSettingsAPIRead, SitesSettingsAPIRead
 from backend.services import speed_limit
-from backend.services.site_refresh import list_site_refresh
+from backend.services.site_settings import list_sites_settings
+from config.settings.site_settings import SITE_SETTINGS
 from config import get_settings
 from backend.app import db_session
 from backend.services.collection_assets import request_collection_asset_reconciliation
@@ -53,11 +54,14 @@ def settings_speed_limit():
     return SpeedLimitStatusRead.model_validate(speed_limit.status())
 
 
-@router.get("/site-refresh", dependencies=[requires(Area.SETTINGS, Level.MANAGE)], response_model=list[SiteRefreshAPIRead])
-def site_refresh_list():
-    """Every Site VODLoft has seen, and which of its settings apply to it."""
+@router.get("/sites", dependencies=[requires(Area.SETTINGS, Level.MANAGE)], response_model=SitesSettingsAPIRead)
+def sites_settings():
+    """The settings a Site can have of its own, and every Site VODLoft has seen with the ones it shows."""
     with db_session() as s:
-        return [SiteRefreshAPIRead.model_validate(site) for site in list_site_refresh(s)]
+        return SitesSettingsAPIRead(
+            specs=[SiteSettingSpecAPIRead.model_validate(spec) for spec in SITE_SETTINGS.values()],
+            sites=[SiteSettingsAPIRead.model_validate(listing) for listing in list_sites_settings(s)],
+        )
 
 
 @router.put("", dependencies=[requires(Area.SETTINGS, Level.MANAGE)], response_model=SettingsAPIRead)
