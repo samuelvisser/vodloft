@@ -534,16 +534,22 @@ def _collection_source() -> Subquery:
     )
 
 
-def _bulk_action_predicate(source: Subquery, action: str):
+MEDIA_DOWNLOAD_BULK_ACTIONS = ("retry", "cancel", "delete-unavailable")
+
+_UNAVAILABLE_ARTIFACT_STATUSES = (
+    MediaDownloadArtifactStatus.ABSENT,
+    MediaDownloadArtifactStatus.MISSING,
+)
+
+
+def supports_bulk_action(action: str, status: str, artifact_status: str) -> bool:
+    """Whether a download with this status and file state takes part in a bulk action."""
     if action == "retry":
-        return source.c.status.in_(_BULK_RETRYABLE_STATUSES)
+        return status in _BULK_RETRYABLE_STATUSES
     if action == "cancel":
-        return source.c.status.in_(_CANCELABLE_STATUSES)
+        return status in _CANCELABLE_STATUSES
     if action == "delete-unavailable":
-        return source.c.artifact_status.in_((
-            MediaDownloadArtifactStatus.ABSENT,
-            MediaDownloadArtifactStatus.MISSING,
-        ))
+        return artifact_status in _UNAVAILABLE_ARTIFACT_STATUSES
     raise ValueError(f"Unknown media download bulk action: {action}")
 
 
@@ -571,113 +577,99 @@ class MediaDownloadCollectionQuery:
             self.source.c.id.desc(),
         )
 
-    def ordered_ids_statement(self, *, statuses: Sequence[str], order: str):
-        """Project only ordered IDs, using exactly the same ordering as paging."""
-        statement = select(self.source.c.id)
-        if statuses:
-            statement = statement.where(self.source.c.status.in_(statuses))
-        return statement.order_by(*self._ordering(order))
+    def walk_statement(self, *, order: str | None):
+        """Every download in page order, with what a page counts and shows of it.
 
-    def cursor_anchor_statement(self, *, media_download_id: int, statuses: Sequence[str], order: str):
-        """Retrieve the current sort values of an ID in the filtered collection.
-
-        Timestamps come back as their stored SQLite text, for comparison
-        against ``stored_sort_text`` columns.
+        Working out the statuses is the expensive part, so a page reads them once,
+        here, and counts, filters and fingerprints the result in Python.
         """
-        predicates = [self.source.c.id == media_download_id]
-        if statuses:
-            predicates.append(self.source.c.status.in_(statuses))
-        return select(
-            self.source.c.id,
-            self.source.c.workflow_bucket,
-            self.source.c.workflow_queue,
-            *(
-                stored_sort_text(self.source.c[name]).label(name)
-                for name in ("recent_at", "workflow_active_started_at", "workflow_terminal_at")
-            ),
-        ).where(*predicates)
-
-    def page_statement(
-        self,
-        *,
-        statuses: Sequence[str],
-        order: str,
-        after=None,
-        limit: int,
-    ):
-        predicates = []
-        if statuses:
-            predicates.append(self.source.c.status.in_(statuses))
-        if after is not None:
-            predicates.append(after)
-
-        return (
-            select(
-                self.source.c.id,
-                self.source.c.queue_position,
-                self.source.c.recent_at,
-                self.source.c.workflow_bucket,
-                self.source.c.workflow_queue,
-                self.source.c.workflow_active_started_at,
-                self.source.c.workflow_terminal_at,
-            )
-            .where(*predicates)
-            .order_by(*self._ordering(order))
-            .limit(limit + 1)
-        )
-
-    def facets_statement(self):
-        return (
-            select(self.source.c.status, func.count(self.source.c.id))
-            .group_by(self.source.c.status)
-        )
-
-    def summary_statement(self, *, statuses: Sequence[str]):
         statement = select(
-            func.count(self.source.c.id),
-            func.coalesce(
-                func.sum(case((
-                    _bulk_action_predicate(self.source, "retry"),
-                    1,
-                ), else_=0)),
-                0,
-            ),
-            func.coalesce(
-                func.sum(case((
-                    _bulk_action_predicate(self.source, "cancel"),
-                    1,
-                ), else_=0)),
-                0,
-            ),
-            func.coalesce(
-                func.sum(case((
-                    _bulk_action_predicate(
-                        self.source,
-                        "delete-unavailable",
-                    ),
-                    1,
-                ), else_=0)),
-                0,
-            ),
+            self.source.c.id,
+            self.source.c.status,
+            self.source.c.artifact_status,
+            self.source.c.queue_position,
         )
-        if statuses:
-            statement = statement.where(self.source.c.status.in_(statuses))
-        return statement
+        return statement.order_by(*self._ordering(order)) if order else statement
 
-    def bulk_action_ids_statement(
-        self,
-        *,
-        statuses: Sequence[str],
-        action: str,
-    ):
-        predicates = [_bulk_action_predicate(self.source, action)]
-        if statuses:
-            predicates.append(self.source.c.status.in_(statuses))
-        return (
-            select(self.source.c.id)
-            .where(*predicates)
-            .order_by(self.source.c.id)
-        )
+
+@dataclass(frozen=True)
+class MediaDownloadPageWindow:
+    """What one page of the filtered collection shows, from a single walk over it."""
+
+    rows: list[Any]
+    """Up to ``limit + 1`` rows, the extra one only telling that more follow."""
+    facets: dict[str, int]
+    total: int
+    actions: dict[str, int]
+    revision: str
+    """Fingerprint of the membership and order of the filtered collection.
+
+    Execution progress, statuses and timestamps matter only if they change the
+    ordered sequence of matching IDs.
+    """
+
+
+def read_media_download_page_window(
+    session: Session,
+    *,
+    statuses: Sequence[str],
+    order: str,
+    limit: int,
+    after_id: int | None = None,
+    after_revision: str | None = None,
+) -> MediaDownloadPageWindow:
+    """Count, filter, fingerprint and page the downloads in one ordered pass.
+
+    The page continues after ``after_id`` only while the collection still has the
+    ``after_revision`` it had then; otherwise it starts again from the top. Raises
+    ``LookupError`` when the revision matches but ``after_id`` is not in it.
+    """
+    wanted = set(statuses)
+    facets: dict[str, int] = {}
+    actions = dict.fromkeys(MEDIA_DOWNLOAD_BULK_ACTIONS, 0)
+    total = 0
+    digest = blake2b(digest_size=16)
+    first: list[Any] = []
+    following: list[Any] = []
+    passed_after = False
+
+    walk = MediaDownloadCollectionQuery.build().walk_statement(order=order)
+    for row in session.execute(walk, execution_options={"yield_per": 1024}):
+        facets[row.status] = facets.get(row.status, 0) + 1
+        if wanted and row.status not in wanted:
+            continue
+        total += 1
+        digest.update(f"{row.id},".encode("ascii"))
+        for action in MEDIA_DOWNLOAD_BULK_ACTIONS:
+            if supports_bulk_action(action, row.status, row.artifact_status):
+                actions[action] += 1
+        if len(first) <= limit:
+            first.append(row)
+        if passed_after and len(following) <= limit:
+            following.append(row)
+        if row.id == after_id:
+            passed_after = True
+
+    revision = digest.hexdigest()
+    rows = first
+    if after_id is not None and revision == after_revision:
+        if not passed_after:
+            raise LookupError(after_id)
+        rows = following
+    return MediaDownloadPageWindow(rows=rows, facets=facets, total=total, actions=actions, revision=revision)
+
+
+def media_download_bulk_action_ids(session: Session, *, statuses: Sequence[str], action: str) -> list[int]:
+    """Every download in the filtered collection that takes part in one bulk action."""
+    if action not in MEDIA_DOWNLOAD_BULK_ACTIONS:
+        raise ValueError(f"Unknown media download bulk action: {action}")
+    wanted = set(statuses)
+    walk = MediaDownloadCollectionQuery.build().walk_statement(order=None)
+    return sorted(
+        int(row.id)
+        for row in session.execute(walk, execution_options={"yield_per": 1024})
+        if (not wanted or row.status in wanted) and supports_bulk_action(action, row.status, row.artifact_status)
+    )
 
 
 def stored_sort_text(expression):
@@ -688,24 +680,3 @@ def stored_sort_text(expression):
     own boundary row would sort after itself and repeat on the next page.
     """
     return type_coerce(expression, String)
-
-
-def media_download_collection_revision(
-    session: Session,
-    *,
-    collection: MediaDownloadCollectionQuery,
-    statuses: Sequence[str],
-    order: str,
-) -> str:
-    """Fingerprint the membership and relative order of one filtered collection.
-
-    Execution progress, statuses and timestamps matter only if they change
-    the ordered sequence of matching IDs. Project only IDs instead of hydrating
-    ORM entities, and hash incrementally to keep Python memory constant.
-    """
-    digest = blake2b(digest_size=16)
-    for media_download_id in session.scalars(
-        collection.ordered_ids_statement(statuses=statuses, order=order)
-    ).yield_per(512):
-        digest.update(f"{media_download_id},".encode("ascii"))
-    return digest.hexdigest()
