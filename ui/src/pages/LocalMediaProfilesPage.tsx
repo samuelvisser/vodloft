@@ -156,8 +156,12 @@ export default function LocalMediaProfilesPage() {
                         across collections and movies. You can create multiple profiles (e.g., “Podcasts to ABS”, “Videos to NAS”) and
                         reuse them.</p>
                 </PageSubtitle>
-                {canManage && <BulkEditButton selection={selection}/>}
-                {canManage && <Link className="btn btn-primary" to="/add-local-media-profile">Add media profile</Link>}
+                {canManage && (
+                    <div className="view-header-actions">
+                        <BulkEditButton selection={selection}/>
+                        <Link className="btn btn-primary" to="/add-local-media-profile">Add media profile</Link>
+                    </div>
+                )}
             </div>
 
             <ProfileTableFilters
