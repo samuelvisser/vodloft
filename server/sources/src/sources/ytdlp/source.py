@@ -654,6 +654,10 @@ class YtDlpSource(Source):
 
         The API lists all of a channel's uploads in seconds. yt-dlp lists the
         Videos, Shorts and Live tabs and looks every new video up on its own.
+
+        A channel's uploads playlist leaves out the videos only its members can
+        watch, so the channel's tabs are listed with yt-dlp after the API too,
+        which costs no quota, and only what the API did not list is looked up.
         """
         catalogue = self._catalogue(adding=not known) if mapping.youtube_ref(collection_url(url)) else None
         if catalogue is not None:
@@ -666,6 +670,11 @@ class YtDlpSource(Source):
             if ids is not None:
                 logger.info("Listing %s through the YouTube API", url)
                 yield from self._details_from_api(catalogue, [video_id for video_id in ids if video_id not in known])
+                if ref.kind != "playlist":
+                    try:
+                        yield from self._list_with_ytdlp(url, known | frozenset(ids))
+                    except runner.YtDlpError as exc:
+                        logger.info("Not listing %s's members-only videos: %s", url, exc)
                 return
         yield from self._list_with_ytdlp(url, known)
 

@@ -193,6 +193,25 @@ def test_a_channel_is_listed_through_the_api_with_its_shorts_and_livestreams(you
     assert (status.usage(Share.RESERVE).used, status.usage(Share.CHECKS).used) == (4, 0)
 
 
+def test_with_a_key_members_only_videos_come_from_the_channel_tabs(youtube, lookups, monkeypatch):
+    """The uploads playlist leaves out what only the channel's members can watch; its Videos tab shows it."""
+    answers, calls = lookups
+    channel = "https://www.youtube.com/channel/UC1"
+    youtube.playlists["UU1"] = ["v1"]
+    youtube.videos["v1"] = _video_item("v1")
+    answers[("--flat-playlist", f"{channel}/videos")] = {"_type": "playlist", "entries": [
+        {"id": "v1", "ie_key": "Youtube", "url": "https://www.youtube.com/watch?v=v1", "title": "v1"},
+        {"id": "m1", "ie_key": "Youtube", "url": "https://www.youtube.com/watch?v=m1", "title": "Weekly digest",
+         "availability": "subscriber_only"},
+    ]}
+
+    found = list(YtDlpSource().list_episodes(f"{channel}/videos", known=frozenset()))
+
+    assert [(video.slug, video.access) for video in found] == [("v1", None), ("m1", "members")]
+    # Only the video the API did not list is looked up with yt-dlp.
+    assert [args[-1] for args in calls if args[0] == "--no-playlist"] == ["https://www.youtube.com/watch?v=m1"]
+
+
 def test_a_premiere_is_a_video_as_ytdlp_says(youtube, lookups):
     """The API gives a premiere live details just like a livestream, so yt-dlp settles which it was."""
     answers, calls = lookups
