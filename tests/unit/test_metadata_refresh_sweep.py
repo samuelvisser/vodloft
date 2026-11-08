@@ -202,7 +202,7 @@ def _refs(*slugs: str) -> list[ItemRef]:
     return [ItemRef(slug, f"https://www.youtube.com/watch?v={slug}") for slug in slugs]
 
 
-def test_with_a_key_youtube_answers_50_videos_at_a_time_and_says_which_are_gone(youtube):
+def test_with_a_key_youtube_answers_50_videos_at_a_time_and_says_which_are_gone(youtube, lookups):
     youtube.videos["v1"] = _video_item("v1")
     youtube.videos["v1"]["snippet"]["title"] = "A better title"
     youtube.videos["soon"] = _video_item("soon", broadcast="upcoming")

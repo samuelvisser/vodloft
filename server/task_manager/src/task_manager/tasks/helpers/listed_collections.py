@@ -36,6 +36,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Season, Collection
 from backend.db.core import run_write_transaction
+from backend.services.media_access import lock_refused
 from backend.services.seasons import create_season_record
 from backend.services.metadata_refresh import new_item_metadata_is_final
 from backend.services.pending_episodes import site_follows_pending
@@ -326,12 +327,15 @@ def _apply_refresh(s: Session, collection_id: int, refresh) -> RefreshCounts:
                 removed += 1
             continue
         details = refresh.details.get(episode.source_slug)
-        if details is None:
+        access = refresh.refused.get(episode.source_slug)
+        if details is None and access is None:
             continue
         if episode.removed_from_source:
             episode.removed_from_source = False
             returned += 1
-        changed = apply_refreshed_details(episode, details)
-        updated += changed
-        check_upgrades_after_refresh(s, episode)
+        if access is not None and episode.access_refused_at is None:
+            lock_refused(episode, access)
+        if details is not None:
+            updated += apply_refreshed_details(episode, details)
+            check_upgrades_after_refresh(s, episode)
     return RefreshCounts(updated=updated, removed=removed, returned=returned)

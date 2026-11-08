@@ -657,7 +657,7 @@ class YtDlpSource(Source):
 
         A channel's uploads playlist leaves out the videos only its members can
         watch, so the channel's tabs are listed with yt-dlp after the API too,
-        which costs no quota, and only what the API did not list is looked up.
+        which costs no quota, and only what the API did not answer is looked up.
         """
         catalogue = self._catalogue(adding=not known) if mapping.youtube_ref(collection_url(url)) else None
         if catalogue is not None:
@@ -669,10 +669,14 @@ class YtDlpSource(Source):
                 ids = None
             if ids is not None:
                 logger.info("Listing %s through the YouTube API", url)
-                yield from self._details_from_api(catalogue, [video_id for video_id in ids if video_id not in known])
+                listed = set(known)
+                for details in self._details_from_api(catalogue, [video_id for video_id in ids if video_id not in known]):
+                    listed.add(details.slug)
+                    yield details
                 if ref.kind != "playlist":
                     try:
-                        yield from self._list_with_ytdlp(url, known | frozenset(ids))
+                        # Also what the API listed but would not give details of, which yt-dlp may still see.
+                        yield from self._list_with_ytdlp(url, frozenset(listed))
                     except runner.YtDlpError as exc:
                         logger.info("Not listing %s's members-only videos: %s", url, exc)
                 return
@@ -861,8 +865,8 @@ class YtDlpSource(Source):
     def refresh_items(self, url: str, items: Sequence[ItemRef]) -> ItemRefresh:
         """YouTube videos through the API, 50 a unit; the rest, or a batch the API could not answer, from yt-dlp's listing.
 
-        Only the API can say a video is gone: it leaves deleted and private
-        videos out of its answer. A video missing from yt-dlp's listing may
+        A video the API leaves out may be gone, and yt-dlp is asked whether it is
+        (see ``_missing_from_api``). A video missing from yt-dlp's listing may
         just be on a tab or page it did not list, so it stays as it is.
 
         The API cannot tell a members-only video, so the listing is read for
@@ -870,7 +874,7 @@ class YtDlpSource(Source):
         watch, and a video it marks keeps that access in the API's details.
         """
         details: dict[str, VideoDetails] = {}
-        removed: set[str] = set()
+        missing: list[ItemRef] = []
         listing = self._refresh_from_listing(url, frozenset(item.slug for item in items))
         youtube = [item.slug for item in items if _is_youtube(item.url)]
         catalogue = self._catalogue(adding=False) if youtube else None
@@ -890,22 +894,47 @@ class YtDlpSource(Source):
                         if (listed_video := listing.get(video_id)) is not None and listed_video.access is not None:
                             details[video_id] = replace(details[video_id], access=listed_video.access)
                     else:
-                        removed.add(video_id)
+                        missing.append(ItemRef(video_id, mapping.video_url(video_id)))
         details.update((slug, listing[slug]) for slug in listed if slug in listing)
-        return ItemRefresh(details=details, removed=frozenset(removed))
+        checked = self._missing_from_api(missing)
+        return ItemRefresh(details=details | checked.details, removed=checked.removed, refused=checked.refused)
+
+    def _missing_from_api(self, items: Sequence[ItemRef]) -> ItemRefresh:
+        """What yt-dlp says about videos the YouTube API left out of its answer.
+
+        The API leaves deleted and private videos out, but not only those: it may
+        also keep back what only a channel's members can watch. So a video is only
+        gone when yt-dlp says so too. A video yt-dlp refuses for lack of a
+        membership is refused, and one it can look up is still there.
+        """
+        details: dict[str, VideoDetails] = {}
+        removed: set[str] = set()
+        refused: dict[str, str] = {}
+        for ref in items:
+            try:
+                details[ref.slug] = self._video(self._pending_info(ref.url), ref.url)
+            except runner.YtDlpError as exc:
+                if is_gone_message(str(exc)):
+                    removed.add(ref.slug)
+                elif (key := self.refused_access(str(exc))) is not None:
+                    refused[ref.slug] = key
+                else:
+                    logger.info("Could not check %s, which the YouTube API left out: %s", ref.url, exc)
+        return ItemRefresh(details=details, removed=frozenset(removed), refused=refused)
 
     def refresh_metadata(self, items: Sequence[ItemRef]) -> ItemRefresh:
         """YouTube videos through the API, 50 a unit; the rest, or a batch the API could not answer, one by one with yt-dlp.
 
-        Only the API can say a video is gone: it leaves deleted and private videos
-        out of its answer. A yt-dlp lookup that fails may just have been refused
-        this time, so the video stays as it is, unless yt-dlp says it is for members.
+        A video the API leaves out may be gone, and yt-dlp is asked whether it is
+        (see ``_missing_from_api``). Any other yt-dlp lookup that fails may just have
+        been refused this time, so the video stays as it is, unless yt-dlp says it is
+        for members.
 
         The API cannot tell a members-only video, so a video it answered is looked
         up with yt-dlp as well, for the access it needs.
         """
         details: dict[str, VideoDetails] = {}
-        removed: set[str] = set()
+        missing: list[ItemRef] = []
         refused: dict[str, str] = {}
         youtube = [item for item in items if _is_youtube(item.url)]
         catalogue = self._catalogue(adding=False) if youtube else None
@@ -922,7 +951,7 @@ class YtDlpSource(Source):
                 for ref in batch:
                     item = found.get(ref.slug)
                     if item is None:
-                        removed.add(ref.slug)
+                        missing.append(ref)
                     elif not mapping.is_pending(item):
                         details[ref.slug] = mapping.video(item, short=False)
                         try:
@@ -941,7 +970,10 @@ class YtDlpSource(Source):
                     refused[ref.slug] = key
                 else:
                     logger.info("Skipping %s for now: %s", ref.url, exc)
-        return ItemRefresh(details=details, removed=frozenset(removed), refused=refused)
+        checked = self._missing_from_api(missing)
+        return ItemRefresh(
+            details=details | checked.details, removed=checked.removed, refused=refused | checked.refused,
+        )
 
     def _refresh_from_listing(self, url: str, wanted: frozenset[str]) -> dict[str, VideoDetails]:
         """Titles from the collection's flat listing, which takes one request a page instead of one a video.

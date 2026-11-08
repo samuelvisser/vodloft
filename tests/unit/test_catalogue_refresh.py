@@ -18,7 +18,7 @@ def _refs(*slugs: str) -> list[ItemRef]:
     return [ItemRef(slug, f"https://www.youtube.com/watch?v={slug}") for slug in slugs]
 
 
-def test_with_a_key_videos_missing_from_the_answer_are_removed(youtube):
+def test_with_a_key_videos_missing_from_the_answer_are_removed(youtube, lookups):
     youtube.videos["v1"] = _video_item("v1")
     youtube.videos["v1"]["snippet"]["title"] = "A better title"
 
@@ -28,6 +28,29 @@ def test_with_a_key_videos_missing_from_the_answer_are_removed(youtube):
     assert refresh.removed == {"gone"}
     # One unit for up to 50 videos, and no Shorts lookups: a refresh keeps the tag.
     assert [name for name, _ in youtube.calls] == ["videos"]
+
+
+def test_a_video_the_api_leaves_out_is_only_removed_when_ytdlp_says_it_is_gone(youtube, lookups, monkeypatch):
+    from sources import ytdlp_runner as runner
+
+    answers, _ = lookups
+    answers[("--no-playlist", "https://www.youtube.com/watch?v=hidden")] = {
+        "id": "hidden", "extractor_key": "Youtube", "title": "Still there",
+    }
+    answer = runner.run_json
+
+    def run_json(*args):
+        if args[-1].endswith("v=members"):
+            raise runner.YtDlpError("ERROR: [youtube] members: Join this channel to get access to members-only content")
+        return answer(*args)
+
+    monkeypatch.setattr(runner, "run_json", run_json)
+
+    refresh = YtDlpSource().refresh_items(CHANNEL, _refs("hidden", "members", "gone"))
+
+    assert refresh.details["hidden"].title == "Still there"
+    assert refresh.refused == {"members": "members"}
+    assert refresh.removed == {"gone"}
 
 
 def test_with_the_quota_used_up_titles_come_from_ytdlp_and_nothing_is_removed(youtube, lookups):
@@ -166,10 +189,12 @@ def test_the_refresh_locks_members_only_episodes_but_never_unlocks_them(refreshi
     refused = session.query(Episode).filter(Episode.source_slug == "v2").one()
     refused.access, refused.access_refused_at = "members", datetime.now(timezone.utc)
     session.commit()
+    add_listed_episodes(session, collection_id=collection.id, found=[_video("v3", 3)])
+    session.commit()
     refreshing.refresh = ItemRefresh(details={
         "v1": VideoDetails(slug="v1", url="u", title="v1", access="members"),
         "v2": VideoDetails(slug="v2", url="u", title="v2"),
-    })
+    }, refused={"v3": "members"})
 
     run_catalogue_refresh(session)
 
@@ -177,3 +202,6 @@ def test_the_refresh_locks_members_only_episodes_but_never_unlocks_them(refreshi
     assert episodes["v1"].access == "members"
     # Saying nothing about access does not prove anyone may download it.
     assert episodes["v2"].access == "members" and episodes["v2"].access_refused_at is not None
+    # One the Source would not show for lack of a membership is locked, and checked again later.
+    assert episodes["v3"].access_refused_at is not None and episodes["v3"].access_check_at is not None
+    assert not episodes["v3"].removed_from_source
