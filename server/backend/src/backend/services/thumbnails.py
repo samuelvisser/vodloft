@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from sqlalchemy import func, select
@@ -53,11 +53,12 @@ def newest_media_item_id(s: Session) -> int:
     return s.scalar(select(func.max(MediaItemBase.id))) or 0
 
 
-def take_first_frames(item_ids: Sequence[int]) -> int:
+def take_first_frames(item_ids: Sequence[int], *, checking: Callable[[int, int], None] | None = None) -> int:
     """Give the episodes and videos among ``item_ids`` whose picture is missing a frame of the video.
 
     Their Source decides whether a picture is missing and takes the frame. No
-    transaction stays open while it does. Returns how many thumbnails were made.
+    transaction stays open while it does. ``checking`` is told how many items were
+    checked so far, and of how many, before each one. Returns how many thumbnails were made.
     """
     if not item_ids:
         return 0
@@ -73,7 +74,9 @@ def take_first_frames(item_ids: Sequence[int]) -> int:
         s.rollback()
         s.close()
     made = 0
-    for item_id, uuid, source_key, url, picture in items:
+    for checked, (item_id, uuid, source_key, url, picture) in enumerate(items):
+        if checking is not None:
+            checking(checked, len(items))
         try:
             frame = get_source(source_key).first_frame(url, picture)
         except Exception as exc:
