@@ -1,16 +1,12 @@
 import {ChangeEvent, useRef, useState} from 'react'
 import {useQueryClient} from '@tanstack/react-query'
-import {useForm} from 'react-hook-form'
-import {z} from 'zod'
-import {zodResolver} from '@hookform/resolvers/zod'
 
-import {apiUrl} from '../../lib/api'
-import {saveSiteCookies, sortCookiesFile, useSiteSignIns} from '../../lib/queries'
-import {SiteSignInReadSchema, type SiteSignInRead, type SortedCookiesRead} from '../../types/schemas/source'
-import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
+import {saveSiteCookies, useSiteSignIns} from '../../lib/queries'
+import type {SiteSignInRead} from '../../types/schemas/source'
 import SourceSection from './SourceSection'
 import {sourceComponents} from './sourceComponents'
-import '../Settings/SiteSettingsCard.css'
+import AddSiteByLink from '../Settings/AddSiteByLink'
+import SiteRow, {SiteBadge, SiteRows} from '../Settings/SiteRow'
 import './SiteSignInsCard.css'
 
 const errorText = (exc: unknown) => exc instanceof Error ? exc.message : String(exc)
@@ -86,9 +82,8 @@ function SiteCookies({site, onSaved}: {site: SiteSignInRead; onSaved: (site: Sit
                             {domain ? ` on ${domain}` : ''}, and choose it here.
                         </>
                     )}
-                    {' '}{site.signInSourceKey
-                        ? `${site.name}'s own sign-in above is all its own Source needs; ${sitesNamed(site.cookieSourceNames)} only uses this file when it fetches ${site.name}'s links.`
-                        : `${sitesNamed(site.cookieSourceNames)} ${site.cookieSourceNames.length === 1 ? 'signs' : 'sign'} in with it for every lookup and download on ${site.name}.`}
+                    {' '}{sitesNamed(site.cookieSourceNames)} {site.cookieSourceNames.length === 1 ? 'signs' : 'sign'} in with
+                    it for every lookup and download on {site.name}.
                 </p>
                 <p>
                     {site.hasCookies
@@ -117,17 +112,13 @@ function SiteCookies({site, onSaved}: {site: SiteSignInRead; onSaved: (site: Sit
 
 function badges(site: SiteSignInRead) {
     const shown = []
-    if (site.signInSourceKey) shown.push(<span key="sign-in" className="site-settings-badge site-settings-badge--own">Own sign-in</span>)
+    if (site.signInSourceKey) shown.push(<SiteBadge key="sign-in" tone="own">Own sign-in</SiteBadge>)
     if (site.cookiesStatus) {
-        shown.push(
-            <span key="status" className={`site-settings-badge ${site.cookiesStatus.ok ? 'site-settings-badge--on' : 'site-settings-badge--problem'}`}>
-                {site.cookiesStatus.label}
-            </span>,
-        )
+        shown.push(<SiteBadge key="status" tone={site.cookiesStatus.ok ? 'on' : 'problem'}>{site.cookiesStatus.label}</SiteBadge>)
     } else if (site.hasCookies) {
-        shown.push(<span key="cookies" className="site-settings-badge site-settings-badge--on">Cookies file</span>)
+        shown.push(<SiteBadge key="cookies" tone="on">Cookies file</SiteBadge>)
     }
-    if (!shown.length) shown.push(<span key="none" className="site-settings-badge">Not signed in</span>)
+    if (!shown.length) shown.push(<SiteBadge key="none" tone="off">Not signed in</SiteBadge>)
     return shown
 }
 
@@ -135,107 +126,19 @@ function SiteSignInRow({site, onSaved}: {site: SiteSignInRead; onSaved: (site: S
     const {SignIn} = site.signInSourceKey ? sourceComponents(site.signInSourceKey) : {}
     const takesCookies = site.cookieSourceNames.length > 0
     return (
-        <details className="site-settings-site site-sign-in">
-            <summary>
-                <span className="site-settings-site__name">
-                    <strong>{site.name}</strong>
-                    {site.domains.length ? <span>{site.domains.join(', ')}</span> : null}
-                </span>
-                <span className="site-settings-site__badges">{badges(site)}</span>
-            </summary>
-            <div className="site-settings-site__body source-section__body">
-                {SignIn ? <SignIn/> : null}
-                {takesCookies ? <SiteCookies site={site} onSaved={onSaved}/> : null}
-                {!SignIn && !takesCookies ? <p className="settings-field__help">VODLoft can't sign in on {site.name}.</p> : null}
-            </div>
-        </details>
+        <SiteRow name={site.name} domains={site.domains} badges={badges(site)} bodyClassName="source-section__body site-sign-in__body">
+            {SignIn ? <SignIn/> : null}
+            {takesCookies ? <SiteCookies site={site} onSaved={onSaved}/> : null}
+            {!SignIn && !takesCookies ? <p className="settings-field__help">VODLoft can't sign in on {site.name}.</p> : null}
+        </SiteRow>
     )
 }
 
-function SortedResult({result}: {result: SortedCookiesRead}) {
-    const names = result.sites.map((site) => `${site.name} (${cookieCount(site.cookieCount)})`)
-    const other = result.otherDomains
-    return (
-        <div className="site-sign-ins-result" role="status">
-            <p>
-                {names.length
-                    ? `The cookies file now signs in on ${sitesNamed(names)}.`
-                    : 'The cookies file has no cookies for a Site VODLoft knows.'}
-            </p>
-            {other.length > 0 && (
-                <p>
-                    Left out the cookies of {other.length === 1 ? 'one other domain' : `${other.length} other domains`}:
-                    {' '}{other.slice(0, 8).join(', ')}{other.length > 8 ? ', …' : ''}. To sign in on one of those sites,
-                    add it below with a link to a channel or video there, and choose the file again.
-                </p>
-            )}
-        </div>
-    )
-}
-
-const AddSiteSchema = z.object({
-    url: z.string().trim().min(1, 'Paste a link to a channel or video on the site').url('Paste a whole link, starting with https://'),
-})
-type AddSiteValues = z.input<typeof AddSiteSchema>
-
-/** Add a Site by a link to it, before VODLoft has anything from it. */
-function AddSiteForm({onAdded}: {onAdded: (site: SiteSignInRead) => void}) {
-    const form = useForm<AddSiteValues>({
-        resolver: zodResolver(AddSiteSchema),
-        defaultValues: {url: ''},
-    })
-    const {register, formState: {errors, isSubmitting}} = form
-    const onSubmit = buildServerAwareSubmit<AddSiteValues, AddSiteValues, SiteSignInRead>(
-        form,
-        async (data) => fetch(`${apiUrl()}/sources/sign-ins`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({url: data.url.trim()}),
-        }),
-        {
-            parseSuccess: async (response) => SiteSignInReadSchema.parse(await response.json()),
-            onSuccess: (site, {resetForm}) => {
-                resetForm({url: ''})
-                onAdded(site)
-            },
-            fallbackField: 'url',
-        },
-    )
-    return (
-        <form className="source-setting site-sign-ins-add" onSubmit={onSubmit} noValidate>
-            <div className="source-setting-copy">
-                <h4>Another site</h4>
-                <p>
-                    A site shows up here once you add something from it. To sign in on a site first, such as Twitch
-                    before adding a members-only channel, paste a link to a channel or video there.
-                </p>
-                <input
-                    className="input settings-input" type="url" placeholder="https://www.twitch.tv/…"
-                    aria-label="Link to a page on the site" aria-invalid={Boolean(errors.url)} {...register('url')}
-                />
-                {errors.url && <div className="error" role="alert">{String(errors.url.message)}</div>}
-            </div>
-            <div className="source-setting-actions">
-                <button className="btn" type="submit" disabled={isSubmitting}>Add site</button>
-            </div>
-        </form>
-    )
-}
-
-/** Every Site VODLoft knows, with its own sign-in and its cookies file, and one cookies file for several Sites. */
+/** Every Site VODLoft knows, with its own sign-in or its cookies file. */
 export function SiteSignIns() {
     const queryClient = useQueryClient()
     const {data: sites, isLoading, error: loadError} = useSiteSignIns()
-    const [sorting, setSorting] = useState(false)
-    const [error, setError] = useState<string | null>(null)
-    const [result, setResult] = useState<SortedCookiesRead | null>(null)
 
-    const refresh = async () => {
-        await queryClient.invalidateQueries({queryKey: ['siteSignIns']})
-        // Signing in or out can change what a Source's subscription allows.
-        await queryClient.invalidateQueries({queryKey: ['sources']})
-    }
     const saved = (site: SiteSignInRead) => {
         queryClient.setQueryData<SiteSignInRead[]>(['siteSignIns'], (current) => {
             if (!current) return [site]
@@ -243,47 +146,21 @@ export function SiteSignIns() {
                 ? current.map((item) => (item.key === site.key ? site : item))
                 : [...current, site]
         })
-        void refresh()
-    }
-    const sort = async (content: string) => {
-        setSorting(true)
-        setError(null)
-        setResult(null)
-        try {
-            setResult(await sortCookiesFile(content))
-            await refresh()
-        } catch (exc) {
-            setError(errorText(exc))
-        } finally {
-            setSorting(false)
-        }
+        void queryClient.invalidateQueries({queryKey: ['siteSignIns']})
+        // Signing in or out can change what a Source's subscription allows.
+        void queryClient.invalidateQueries({queryKey: ['sources']})
     }
 
     return (
         <>
-            <div className="source-setting">
-                <div className="source-setting-copy">
-                    <h4>One cookies file for several sites</h4>
-                    <p>
-                        Export a cookies.txt file from a browser where you are signed in on the sites you need, such as
-                        YouTube and Twitch, and choose it here. Each site below gets the cookies for its own domains,
-                        in place of the ones it had; a site without cookies in the file keeps its own.
-                    </p>
-                    {error && <p className="source-setting-error" role="alert">{error}</p>}
-                </div>
-                <div className="source-setting-actions">
-                    <CookiesFileButton label="Choose file" ariaLabel="Cookies file for several sites" disabled={sorting} onFile={(content) => void sort(content)}/>
-                </div>
-            </div>
-            {result && <SortedResult result={result}/>}
             {isLoading && <p className="settings-field__help">Loading sites…</p>}
             {loadError && <p className="source-setting-error" role="alert">Could not load the sites: {loadError.message}</p>}
             {sites?.length ? (
-                <div className="site-settings-sites site-sign-ins-sites">
+                <SiteRows>
                     {sites.map((site) => <SiteSignInRow key={site.key} site={site} onSaved={saved}/>)}
-                </div>
+                </SiteRows>
             ) : null}
-            <AddSiteForm onAdded={saved}/>
+            <AddSiteByLink/>
         </>
     )
 }

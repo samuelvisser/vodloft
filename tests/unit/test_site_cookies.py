@@ -110,6 +110,10 @@ def test_one_cookies_file_is_sorted_into_the_sites(session):
 
 
 def test_a_cookies_file_adds_the_sites_its_domains_tell(session):
+    from fastapi import HTTPException
+
+    from backend.api.endpoints.sources import router
+    from backend.api.models.source import SiteAddAPIRequest
     from backend.db.models import Site
     from backend.services import site_cookies
 
@@ -120,12 +124,11 @@ def test_a_cookies_file_adds_the_sites_its_domains_tell(session):
     assert result.other_domains == ("twitch.tv",)
     assert session.get(Site, "youtube").domains == ["youtube.com"]
 
-    site = site_cookies.site_of_link(session, "https://www.twitch.tv/somechannel")
-    site_cookies.add_site(session, site)
-    session.commit()
+    added = router.add_site_by_link(SiteAddAPIRequest(url="https://www.twitch.tv/somechannel"))
+    assert (added.key, added.name) == ("twitch", "Twitch")
     assert [site.name for site in site_cookies.add_cookies_file(_file(TWITCH)).sites] == ["Twitch"]
-    with pytest.raises(site_cookies.SiteLinkError):
-        site_cookies.site_of_link(session, "twitch.tv")
+    with pytest.raises(HTTPException):
+        router.add_site_by_link(SiteAddAPIRequest(url="twitch.tv"))
 
 
 def test_every_site_lists_how_it_signs_in(session):

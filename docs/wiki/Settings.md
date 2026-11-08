@@ -270,11 +270,6 @@ signed in; open it to change that.
   A site keeps only its own cookies from the file you choose, so a file with cookies of other sites is fine.
 - **NPO Start** checks its cookies file with npo.nl, and shows whether it signs in with NPO Plus.
 
-**One cookies file for several sites** takes one file with the cookies of every site you need, such as one export of
-your whole browser, and gives each site the cookies for its own domains. A site without cookies in the file keeps the
-cookies file it had. VODLoft tells you which sites got cookies, and which domains it left out because it does not know
-their site yet.
-
 A site shows up once you add something from it. To sign in on a site first, such as Twitch before adding a members-only
 channel, use **Another site** with a link to a channel or video on that site, then choose the cookies file. A link to
 the site's home page is often not enough for VODLoft to tell which site it is.

@@ -151,22 +151,15 @@ class SiteSignInAPIRead(ResponseBase):
     cookies_status: Optional[CookiesStatusAPIRead] = None
 
 
-class SortedSiteAPIRead(ResponseBase):
+class SiteAddAPIRequest(RequestBase):
+    url: str = Field(min_length=1, max_length=2048)
+
+
+class SiteAddedAPIRead(ResponseBase):
+    """A Site added by a link to it."""
+
     key: str
     name: str
-    cookie_count: int
-
-
-class SortedCookiesAPIRead(ResponseBase):
-    """Where the cookies of one cookies file went."""
-
-    sites: list[SortedSiteAPIRead]
-    other_domains: list[str]
-    """The domains of the cookies no Site VODLoft knows is on, which were left out."""
-
-
-class SiteSignInAddAPIRequest(RequestBase):
-    url: str = Field(min_length=1, max_length=2048)
 
 
 def checked_ytdlp_options(value: str) -> str:

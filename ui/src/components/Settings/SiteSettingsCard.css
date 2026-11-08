@@ -90,6 +90,12 @@
     color: #15803d;
 }
 
+.site-settings-badge--problem {
+    border-color: rgba(239, 68, 68, 0.4);
+    background: rgba(239, 68, 68, 0.1);
+    color: #b91c1c;
+}
+
 .site-settings-site__body {
     padding: 4px 16px 8px;
 }
@@ -232,6 +238,34 @@
     font-size: 14px;
 }
 
+.site-add {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 10px;
+}
+
+.site-add__line {
+    display: flex;
+    gap: 8px;
+    max-width: 560px;
+}
+
+.site-add__line .settings-input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.site-add__line .btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.site-add__help {
+    color: var(--muted);
+    font-size: 12px;
+}
+
 @media (prefers-color-scheme: dark) {
     .site-settings-site {
         border-color: rgba(148, 163, 184, 0.2);
@@ -244,6 +278,10 @@
 
     .site-settings-badge--on {
         color: #86efac;
+    }
+
+    .site-settings-badge--problem {
+        color: #fca5a5;
     }
 
     .site-settings-preset {

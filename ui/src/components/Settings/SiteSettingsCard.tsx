@@ -1,4 +1,4 @@
-import {useState, type ReactNode} from 'react'
+import type {ReactNode} from 'react'
 import Switch from 'react-switch'
 
 import {useSitesSettings} from '../../lib/queries'
@@ -26,6 +26,8 @@ import {SponsorBlockActionReg, SponsorBlockCategoryReg} from '../../types/sponso
 import type {SelectRegistry} from '../../utils/selectRegistry'
 import NumberInput from '../common/NumberInput'
 import SimpleSelect from '../common/SimpleSelect'
+import AddSiteByLink from './AddSiteByLink'
+import SiteRow, {SiteBadge as Badge, SiteRows} from './SiteRow'
 import type {SettingsTabProps} from './SettingsTabTypes'
 import './SiteSettingsCard.css'
 
@@ -260,12 +262,6 @@ function resolve(offered: OfferedSetting, values: SiteSettingValues, draft: Sett
     return {offered, definition, value, own, isPreset: offered.preset && own && same(value, offered.start), system}
 }
 
-type BadgeTone = 'own' | 'on' | 'off'
-
-function Badge({tone, children}: {tone: BadgeTone; children: string}) {
-    return <span className={`site-settings-badge site-settings-badge--${tone}`}>{children}</span>
-}
-
 function badges(group: SiteSettingGroup, settings: Resolved[]): ReactNode[] {
     if (!settings.length) return [<Badge key="none" tone="off">Nothing to set</Badge>]
     const own = settings.some((setting) => setting.definition.system && setting.own)
@@ -292,7 +288,6 @@ type RowProps = Pick<SettingsTabProps, 'updateDraft' | 'errorFor'> & {
 }
 
 function SiteSettingsRow({site, group, groupKeys, draft, updateDraft, errorFor}: RowProps) {
-    const [open, setOpen] = useState(false)
     const values = draft.siteSettings[site.key] ?? {}
     const all = site.settings.map((offered) => resolve(offered, values, draft))
     const settings = all.filter((setting) => groupKeys.has(setting.offered.key))
@@ -304,30 +299,20 @@ function SiteSettingsRow({site, group, groupKeys, draft, updateDraft, errorFor}:
     })
     const errors = shown.map(({offered}) => errorFor(`siteSettings.${site.key}.${offered.key}`)
         ?? LOOKUP_FIELDS.map(({name}) => errorFor(`siteSettings.${site.key}.${offered.key}.${name}`)).find(Boolean))
-    // An error opens the Site, so a refused save shows why.
-    const isOpen = open || errors.some(Boolean)
 
     return (
-        <details className="site-settings-site" open={isOpen} onToggle={(event) => setOpen(event.currentTarget.open)}>
-            <summary>
-                <span className="site-settings-site__name">
-                    <strong>{site.name}</strong>
-                    {site.domains.length ? <span>{site.domains.join(', ')}</span> : null}
-                </span>
-                <span className="site-settings-site__badges">{badges(group, settings)}</span>
-            </summary>
-            <div className="site-settings-site__body">
-                {shown.map((setting, index) => (
-                    <SettingRow
-                        key={setting.offered.key} site={site} setting={setting} error={errors[index]}
-                        onChange={(value) => change(setting.offered.key, value)}
-                    />
-                ))}
-                {!shown.length ? (
-                    <p className="settings-field__help">This Site has nothing to set here.</p>
-                ) : null}
-            </div>
-        </details>
+        // An error opens the Site, so a refused save shows why.
+        <SiteRow name={site.name} domains={site.domains} badges={badges(group, settings)} forceOpen={errors.some(Boolean)}>
+            {shown.map((setting, index) => (
+                <SettingRow
+                    key={setting.offered.key} site={site} setting={setting} error={errors[index]}
+                    onChange={(value) => change(setting.offered.key, value)}
+                />
+            ))}
+            {!shown.length ? (
+                <p className="settings-field__help">This Site has nothing to set here.</p>
+            ) : null}
+        </SiteRow>
     )
 }
 
@@ -411,16 +396,16 @@ export default function SiteSettingsCard({group, draft, updateDraft, errorFor, h
             <div className="settings-field__help">{help}</div>
             {error ? <p className="error" role="alert">Could not load the Sites: {error.message}</p> : null}
             {data?.sites.length ? (
-                <div className="site-settings-sites">
+                <SiteRows>
                     {data.sites.map((site) => (
                         <SiteSettingsRow
                             key={site.key} site={site} group={group} groupKeys={groupKeys} draft={draft}
                             updateDraft={updateDraft} errorFor={errorFor}
                         />
                     ))}
-                </div>
+                </SiteRows>
             ) : null}
-            {data && !data.sites.length ? <p className="settings-field__help">Sites show up here once you add a collection or video.</p> : null}
+            {data ? <AddSiteByLink/> : null}
         </div>
     )
 }

@@ -1,8 +1,9 @@
 """Signing in per Site: a Site's own sign-in, such as The Daily Wire's, and a cookies file per Site.
 
 Every Source that signs in with cookies uses the cookies file of the Site it fetches, so YouTube and Twitch
-each have their own file, and yt-dlp uses NPO Start's file when it fetches npo.nl. One file exported from a
-browser can fill the files of every Site at once: each Site gets the cookies for its own domains.
+each have their own file, and yt-dlp uses NPO Start's file when it fetches npo.nl. A cookies file that another
+program kept for every site, such as yt-dlp's old one or Pinchflat's, is sorted into the Sites: each Site gets
+the cookies for its own domains.
 """
 from __future__ import annotations
 
@@ -18,8 +19,8 @@ from sqlalchemy.orm import Session
 
 from backend.db.core import get_session, run_write_transaction
 from backend.db.models import Site as SiteRecord
-from backend.services.sites import preferred_sources, site_record
-from sources import ANY_DOMAIN, CookiesStatus, Feature, Site, Source, all_sources, named_sites, site_for, site_of, sources_for
+from backend.services.sites import SiteLinkError, site_of_link, site_record
+from sources import ANY_DOMAIN, CookiesStatus, Feature, Site, Source, all_sources, named_sites, site_of, sources_for
 from sources import cookies as cookie_files
 
 logger = logging.getLogger(__name__)
@@ -246,22 +247,3 @@ def sort_cookies(s: Session, content: bytes) -> SortedCookies:
     if sorted_sites:
         logger.info("Sorted a cookies file into %s", ", ".join(site.name for site in sorted_sites))
     return SortedCookies(tuple(sorted(sorted_sites, key=lambda site: site.name.lower())), tuple(other))
-
-
-class SiteLinkError(ValueError):
-    pass
-
-
-def site_of_link(s: Session, url: str) -> Site:
-    """The Site of a link, as the Source VODLoft asks first for it tells, without a network request."""
-    candidates = sources_for(url, preferred_sources(s))
-    if not candidates or not url.lower().startswith(("http://", "https://")):
-        raise SiteLinkError("Paste a link to a page on the site, starting with https://")
-    return site_for(url, candidates[0].id)
-
-
-def add_site(s: Session, site: Site) -> SiteSignIn:
-    """Remember a Site before VODLoft has anything from it, so it can get a cookies file."""
-    record = site_record(s, site)
-    s.flush()
-    return site_sign_in(s, record.key)

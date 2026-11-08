@@ -241,12 +241,10 @@ export const SiteSignInReadSchema = z.object({
 })
 export type SiteSignInRead = z.infer<typeof SiteSignInReadSchema>
 
-export const SortedCookiesReadSchema = z.object({
-    sites: z.array(z.object({key: z.string(), name: z.string(), cookieCount: z.number()})),
-    /** Domains of cookies no Site VODLoft knows is on; they were left out. */
-    otherDomains: z.array(z.string()),
-})
-export type SortedCookiesRead = z.infer<typeof SortedCookiesReadSchema>
+/** A Site added by a link to it. */
+export const SiteAddedReadSchema = z.object({key: z.string(), name: z.string()})
+export type SiteAddedRead = z.infer<typeof SiteAddedReadSchema>
+
 
 /** A collection at a Source with listed episodes, shaped like the fields of a new collection. */
 export const CollectionDetailsReadSchema = z.object({

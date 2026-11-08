@@ -65,7 +65,7 @@ import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
     ApiStatusRead, ApiStatusReadSchema, EpisodeTagRead, EpisodeTagReadSchema, PublishStatusLabelRead, PublishStatusLabelReadSchema, ProgramStatusRead, SourceProblemRead,
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
-    ResolvedLinkReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SourceRead, SiteSignInRead, SiteSignInReadSchema, SortedCookiesRead, SortedCookiesReadSchema,
+    ResolvedLinkReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SourceRead, SiteSignInRead, SiteSignInReadSchema,
     SourceReadSchema,
     YtdlpOptionsReadSchema,
 } from "../types/schemas/source";
@@ -446,18 +446,6 @@ export async function saveSiteCookies(siteKey: string, content: string | null): 
     })
     if (!response.ok) throw await responseError(response)
     return SiteSignInReadSchema.parse(await response.json())
-}
-
-/** Give every Site the cookies of one cookies.txt file that are for its domains. */
-export async function sortCookiesFile(content: string): Promise<SortedCookiesRead> {
-    const response = await fetch(`${apiUrl()}/sources/sign-ins/cookies`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({content}),
-    })
-    if (!response.ok) throw await responseError(response)
-    return SortedCookiesReadSchema.parse(await response.json())
 }
 
 /** The yt-dlp options a Source gives every download. */

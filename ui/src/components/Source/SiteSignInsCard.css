@@ -1,67 +1,8 @@
-.site-sign-ins-sites {
-    margin-top: 18px;
-}
-
-.site-sign-in .site-settings-site__body {
+.site-sign-in__body.site-settings-site__body {
     padding: 14px 16px 16px;
 }
 
-.site-sign-in .site-settings-site__body > .source-setting:first-child {
+.site-sign-in__body > .source-setting:first-child {
     padding-top: 0;
     border-top: 0;
-}
-
-.site-settings-badge--problem {
-    border-color: rgba(239, 68, 68, 0.4);
-    background: rgba(239, 68, 68, 0.1);
-    color: #b91c1c;
-}
-
-.site-sign-ins-result {
-    margin-top: 14px;
-    padding: 10px 14px;
-    border: 1px solid rgba(34, 197, 94, 0.35);
-    border-radius: 10px;
-    background: rgba(34, 197, 94, 0.08);
-    font-size: 13px;
-    line-height: 1.5;
-}
-
-.site-sign-ins-result p {
-    margin: 0;
-}
-
-.site-sign-ins-result p + p {
-    margin-top: 6px;
-    color: var(--muted);
-}
-
-.site-sign-ins-add {
-    margin-top: 18px;
-}
-
-.site-sign-ins-add .source-setting-copy {
-    flex: 1 1 auto;
-}
-
-.site-sign-ins-add .settings-input {
-    width: 100%;
-    max-width: 460px;
-    margin-top: 10px;
-}
-
-.site-sign-ins-add .source-setting-actions {
-    align-self: flex-end;
-}
-
-@media (prefers-color-scheme: dark) {
-    .site-settings-badge--problem {
-        color: #fca5a5;
-    }
-}
-
-@media (max-width: 640px) {
-    .site-sign-ins-add .source-setting-actions {
-        align-self: flex-start;
-    }
 }
