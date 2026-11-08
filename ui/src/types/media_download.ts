@@ -13,7 +13,7 @@ export const MediaDownloadStatusReg = createSelectRegistry('MediaDownloadStatus'
     'local_processing': {label: 'Processing', help: 'Processing the downloaded file locally'},
     'canceled': {label: 'Canceled', help: 'Stopped by the user; no replacement is queued'},
     'error': {label: 'Error', help: 'The download failed'},
-    'locked': {label: 'Locked', help: 'The site only gives this to members or subscribers, so VODLoft does not retry it'},
+    'locked': {label: 'Locked', help: 'The site only gives this to members or subscribers'},
     'missing': {label: 'Missing', help: 'The file watcher could not find the downloaded file on disk'},
     'corrupted': {label: 'Corrupted', help: 'The file watcher found the downloaded file, but it is empty or truncated'},
 });

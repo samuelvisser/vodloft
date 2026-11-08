@@ -67,7 +67,7 @@ function lockedPresentation(download: MediaDownloadDomainViewRead): DownloadPres
     const check = download.accessCheckAt
         ? ` VODLoft checks again on ${formatCheckDate(download.accessCheckAt)}.`
         : ' VODLoft tries again when you ask it to check again, or sign in with that access.'
-    const detail = `The site keeps this for members or subscribers${access}, so VODLoft does not retry it.${check}`
+    const detail = `The site keeps this for members or subscribers${access}.${check}`
     return {
         ...terminal('locked', download.accessLabel ? `Locked: ${download.accessLabel}` : 'Locked', detail, 'locked'),
         compactLabel: 'Locked',
