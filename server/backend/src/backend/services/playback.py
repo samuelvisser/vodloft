@@ -4,6 +4,7 @@ from __future__ import annotations
 from downloader import AccessRequiredError, EncryptedMediaError
 from downloader.lifecycle import DownloadTracker
 from sources import Playback, Source
+from backend.services.media_access import link_access
 
 
 def resolve_playback(
@@ -18,7 +19,7 @@ def resolve_playback(
     if playback.drm_protected:
         raise EncryptedMediaError(f"{source.name} protects '{title}' with DRM")
     if playback.access is not None:
-        access = source.access(playback.access)
+        access = link_access(source.id, url, playback.access)
         raise AccessRequiredError(
             f"{source.name} only gives '{title}' with {access.label if access else 'an access VODLoft does not have'}",
             playback.access,

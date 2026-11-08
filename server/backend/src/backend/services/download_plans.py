@@ -15,6 +15,7 @@ from backend.services.playback import resolve_playback
 from backend.services.local_media_profile_sources import format_for_site
 from backend.services.sites import collection_site, video_site
 from backend.services.no_ascii_names import settle_no_ascii_name
+from backend.services.media_access import link_access
 from backend.db.core import run_write_transaction
 from backend.db.models import DownloadProfile, Episode, Movie, MovieExtra, Video
 from backend.db.models.media_download import MediaDownloadBase
@@ -283,16 +284,15 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
 def _raise_if_access_required(source: Source, *, slug: str, url: str, title: str) -> None:
     """A Source that gives no media for an episode may only give it to members: say so, so that the
     episode is locked instead of retried."""
-    if not source.accesses:
-        return
     try:
         access = source.current_access(slug=slug, url=url)
     except Exception:
         logger.info("Could not ask %s which access '%s' needs", source.name, title, exc_info=True)
         return
     if access is not None:
-        found = source.access(access)
-        raise AccessRequiredError(f"{source.name} only gives '{title}' with {found.label if found else access}", access)
+        found = link_access(source.id, url, access)
+        label = found.label if found else "an access VODLoft does not have"
+        raise AccessRequiredError(f"{source.name} only gives '{title}' with {label}", access)
 
 
 def _download_profile(download: MediaDownloadBase, episode: Episode | None) -> DownloadProfile | None:

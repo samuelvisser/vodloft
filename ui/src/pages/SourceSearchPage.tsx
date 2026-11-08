@@ -139,7 +139,7 @@ export default function SourceSearchPage({sourceId: givenSourceId, onChoose}: So
                                     <strong className="collection-summary-title">{result.title}</strong>
                                     <span className="collection-summary-author">{[result.kindLabel ?? kindName(source, result.kind, KIND_LABEL[result.kind]), result.authorName, ...(result.facts ?? [])].filter(Boolean).join(' · ')}</span>
                                     {result.description && <span className="collection-summary-description">{result.description}</span>}
-                                    {result.access && <span><AccessBadge label={source?.accesses.find((a) => a.key === result.access)?.label}/></span>}
+                                    {result.access && <span><AccessBadge label={result.accessLabel}/></span>}
                                 </span>
                                 {added && <span className="catalog-added"><FontAwesomeIcon icon={faIcon('fass', 'check')}/> In library</span>}
                             </button>

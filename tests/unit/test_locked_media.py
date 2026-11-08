@@ -126,6 +126,18 @@ def test_yt_dlp_locks_members_only_and_premium_videos_of_any_site():
     assert _access({"availability": "premium_only"}) == "premium"
     assert _access({"availability": "needs_auth"}) is None
     assert _access({}) is None
-    assert [access.label for access in YtDlpSource.accesses] == ["Members only", "Premium only"]
     assert YtDlpSource().refused_access("ERROR: Join this channel to get access to members-only content") == "members"
     assert YtDlpSource().refused_access("HTTP Error 500") is None
+
+
+def test_each_site_names_the_access_its_videos_need():
+    from backend.services.media_access import link_access, site_access
+
+    assert site_access("ytdlp", "youtube", "premium").label == "YouTube Premium"
+    assert site_access("ytdlp", "twitch", "members").label == "Subscribers only"
+    assert site_access("ytdlp", "vimeo", "members").label == "Members only"
+    assert site_access("ytdlp", "generic:example.com", "premium").label == "Premium only"
+    assert site_access("dailywire", "dailywire", "ALL_ACCESS").label == "All Access"
+    assert site_access("npo", "npo", "npo_plus").label == "NPO Plus"
+    assert site_access("ytdlp", None, "members") is None
+    assert link_access("ytdlp", "https://www.twitch.tv/videos/123", "members").label == "Subscribers only"

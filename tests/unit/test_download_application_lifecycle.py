@@ -160,8 +160,12 @@ def test_refused_access_locks_the_media_without_an_error(library, monkeypatch):
         raise AccessRequiredError('The site only gives this to channel members', 'INSIDER')
     monkeypatch.setattr(download_adapter, 'prepare_download_plan', prepare)
     with factory() as session:
+        session.get(MediaDownloadBase, download_id).media.collection.site_key = 'dailywire'
+        session.commit()
+    with factory() as session:
         result = download_adapter.run_download(session, media_download_id=download_id)
     assert result.outcome == 'failed'
+    # The Daily Wire names its membership levels.
     assert 'is locked: Insider' in result.summary
     with factory() as session:
         download = session.get(MediaDownloadBase, download_id)

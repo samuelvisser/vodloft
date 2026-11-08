@@ -127,9 +127,8 @@ class NpoSource(Source):
     id = "npo"
     name = "NPO Start"
     domains = ("npo.nl",)
-    sites = (Site("npo", "NPO Start", domains),)
+    sites = (Site("npo", "NPO Start", domains, accesses=(NPO_PLUS,)),)
     features = frozenset({Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.PAGE_STREAMS, Feature.VIDEOS, Feature.SEARCH, Feature.COOKIES})
-    accesses = (NPO_PLUS,)
     kind_names = MappingProxyType({LinkKind.COLLECTION: "Series"})
     cookies_help = (
         "Optional. Sign in with your NPO account to download programmes that need NPO Plus. Sign in on "

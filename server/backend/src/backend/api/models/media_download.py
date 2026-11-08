@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import AliasPath, Field
+from pydantic import AliasChoices, AliasPath, Field
 
 from backend.api.models.base import RequestBase, ResponseBase, response_model_config
 from backend.api.models.source import LockableResponse, SourcedResponse
@@ -113,6 +113,10 @@ class MediaDownloadAPIReadView(SourcedResponse, LockableResponse, MediaDownloadA
     """Persistent artifact context plus the latest canonical TaskRun facts."""
 
     source_key: str = Field(validation_alias=AliasPath("media", "source_key"))
+    site_key: Optional[str] = Field(
+        default=None, exclude=True,
+        validation_alias=AliasChoices(AliasPath("collection", "site_key"), AliasPath("media", "site_key")),
+    )
     access: Optional[str] = Field(default=None, validation_alias=AliasPath("media", "access"))
     access_refused_at: Optional[datetime] = Field(default=None, validation_alias=AliasPath("media", "access_refused_at"))
     access_check_at: Optional[datetime] = Field(default=None, validation_alias=AliasPath("media", "access_check_at"))

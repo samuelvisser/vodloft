@@ -289,7 +289,7 @@ def test_programmes_that_need_npo_plus_are_listed_and_not_looked_up(npo):
     }
     # Only the free season's two ends asked for a stream.
     assert client.stream_requests == ["NCRV_een-huis-vol_12", "NCRV_een-huis-vol_11"]
-    assert [access.label for access in source.accesses] == ["NPO Plus"]
+    assert [access.label for access in source.sites[0].accesses] == ["NPO Plus"]
 
 
 def test_a_programme_that_needs_npo_plus_resolves_and_plays_as_such(npo):

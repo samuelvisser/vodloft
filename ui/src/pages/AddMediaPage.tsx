@@ -251,7 +251,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                             <p className="add-media-preview-description">{link.preview.description}</p>
                         )}
                         {link.drmProtected && <DrmNotice/>}
-                        {!link.drmProtected && link.accessLocked && <AccessNotice item={{accessLabel: link.source.accesses.find((a) => a.key === link.access)?.label}}/>}
+                        {!link.drmProtected && link.accessLocked && <AccessNotice item={link}/>}
                         {target ? (
                             <div className="add-media-preview-actions">
                                 <button className="btn btn-primary" type="button" onClick={proceed} disabled={addingVideo}>

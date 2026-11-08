@@ -16,7 +16,6 @@ from config import get_settings
 from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
-    Access,
     ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, DownloadOptions, Feature, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
     ResolvedLink, SearchResults, CollectionDetails, Site, SiteSetting, Source, SourceProblem, SponsorBlockSegment, StreamMethod, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
@@ -399,9 +398,7 @@ _SIGN_IN_ERRORS = (
 )
 # What yt-dlp says about a video that only the channel's members can watch.
 _MEMBERS_ERRORS = ("join this channel", "members-only", "members only", "available to this channel's members")
-MEMBERS = Access("members", "Members only", "Only members of the channel can watch this.")
-PREMIUM = Access("premium", "Premium only", "Only paying subscribers of the site can watch this.")
-_ACCESS_BY_AVAILABILITY = {"subscriber_only": MEMBERS.key, "premium_only": PREMIUM.key}
+_ACCESS_BY_AVAILABILITY = {"subscriber_only": sites.MEMBERS_KEY, "premium_only": sites.PREMIUM_KEY}
 
 
 def _access(info: dict) -> str | None:
@@ -423,7 +420,6 @@ class YtDlpSource(Source):
         Feature.PENDING_CHECKS,
     })
     episode_tags = _YOUTUBE_TAGS
-    accesses = (MEMBERS, PREMIUM)
     # Search covers YouTube only; other sites are added by link.
     sites_label = "YouTube, and many more"
     search_label = "YouTube"
@@ -1014,7 +1010,7 @@ class YtDlpSource(Source):
 
     def refused_access(self, error: str) -> str | None:
         text = error.lower()
-        return MEMBERS.key if any(sign in text for sign in _MEMBERS_ERRORS) else None
+        return sites.MEMBERS_KEY if any(sign in text for sign in _MEMBERS_ERRORS) else None
 
     def program_status(self) -> ProgramStatus:
         last_update_at, last_update_error = runner.last_update()

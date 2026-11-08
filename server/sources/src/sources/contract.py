@@ -579,15 +579,16 @@ class ApiStatus:
 
 @dataclass(frozen=True)
 class Access:
-    """Something a Source only gives some of its videos with, such as a paid subscription,
+    """Something a Site only gives some of its videos with, such as a paid subscription,
     a membership level or a channel membership.
 
-    ``key`` is stored with every media item that needs it, so it never changes.
+    ``key`` is stored with every media item that needs it, so it never changes. The Source that
+    fetches the video tells the key; the Site says what it is called.
     """
 
     key: str
     label: str
-    """What the Source calls it, such as NPO Plus, as the badge on a locked item shows it."""
+    """What the Site calls it, such as NPO Plus, as the badge on a locked item shows it."""
     description: str
     """One sentence on who can watch what needs it, such as "Only NPO Plus subscribers can watch this"."""
 
@@ -629,6 +630,13 @@ class Site:
     upgrade_checks: UpgradeChecks = UpgradeChecks()
     settings: SiteSettings = field(default_factory=SiteSettings, hash=False)
     """Which settings the Site shows in Settings and on its Download Profiles, and its presets."""
+    accesses: tuple[Access, ...] = ()
+    """What the Site only gives some of its videos with, such as NPO Plus or a channel membership,
+    by the keys its Sources tell."""
+
+    def access(self, key: str | None) -> Access | None:
+        """One of ``accesses`` by its key."""
+        return next((access for access in self.accesses if access.key == key), None)
 
     @property
     def streams(self) -> bool:
@@ -664,8 +672,6 @@ class Source(ABC):
         EpisodeTag(MAIN_TAG, "Episode", "An episode of the collection", "episode", "episodes", main=True),
     )
     """Every tag the Source gives episodes, the main one first."""
-    accesses: ClassVar[tuple[Access, ...]] = ()
-    """Everything the Source only gives some of its videos with, such as NPO Plus."""
     cookies_help: ClassVar[str | None] = None
     """What a cookies file does for this Source, for a Source with ``Feature.COOKIES``."""
     sites: ClassVar[tuple[Site, ...]] = ()
@@ -886,10 +892,6 @@ class Source(ABC):
         such as the streams an account may play at the same time."""
         return None
 
-    def access(self, key: str | None) -> Access | None:
-        """One of ``accesses`` by its key."""
-        return next((access for access in self.accesses if access.key == key), None)
-
     def has_access(self, key: str) -> bool | None:
         """True when VODLoft can download what needs this access, False when it cannot, and None
         when only a download can tell, such as for a channel membership a cookies file may have."""
@@ -902,7 +904,7 @@ class Source(ABC):
 
     def current_access(self, *, slug: str, url: str) -> str | None:
         """The key of the access the video needs right now, or None when anyone can download it.
-        Raises when the Source could not be asked. Only Sources with ``accesses`` implement it."""
+        Raises when the Source could not be asked."""
         try:
             return self.video_details(url).access
         except Exception as exc:

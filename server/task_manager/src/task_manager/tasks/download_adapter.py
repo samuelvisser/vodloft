@@ -17,7 +17,7 @@ from backend.db.models import Episode
 from backend.db.models.media_download import MediaDownloadAsset, MediaDownloadBase
 from backend.services.collection_cookies import note_failed_download
 from backend.services.download_plans import prepare_download_plan
-from backend.services.media_access import lock_refused, source_access
+from backend.services.media_access import lock_refused, media_access, media_site_key, site_access
 from backend.services.sites import collection_site
 from backend.services.upgrade_check import schedule_first_upgrade_check
 from backend.services.notifications.emitters import episode_downloaded
@@ -128,13 +128,13 @@ def _refused_access(media_download_id: int, exc: Exception) -> str | None:
 
 
 def _lock_media(session: Session, media_download_id: int, access: str) -> str | None:
-    """Lock the download's media, and return what the Source calls the access."""
+    """Lock the download's media, and return what its Site calls the access."""
     download = session.get(MediaDownloadBase, media_download_id)
     if download is None:
         return None
     lock_refused(download.media, access)
-    found = source_access(download.media.source_key, access)
-    return found.label if found is not None else access
+    found = media_access(download.media)
+    return found.label if found is not None else "an access VODLoft does not have"
 
 
 def _retire_previous_after_commit(previous: PreviousDownload, execution: DownloadExecution) -> None:
@@ -370,10 +370,11 @@ def run_download(
                 )
             elif refused:
                 download = w.get(MediaDownloadBase, media_download_id)
-                found = source_access(download.media.source_key, refused) if download is not None else None
+                media = download.media if download is not None else None
+                found = site_access(media.source_key, media_site_key(media), refused) if media is not None else None
                 record_media_download_history_if_exists(
                     w, media_download_id, MediaDownloadHistoryAction.LOCKED,
-                    metadata={**metadata, "access": refused, "access_label": found.label if found else refused},
+                    metadata={**metadata, "access": refused, "access_label": found.label if found else None},
                     occurred_at=finished,
                 )
             else:

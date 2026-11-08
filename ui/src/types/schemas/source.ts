@@ -39,7 +39,7 @@ export const SourcedFields = {
     sourceFeatures: z.array(z.string()),
 }
 
-/** Media that may need an access, such as a channel membership; its label is in the Source's accesses. */
+/** Media that may need an access, such as a channel membership; accessLabel is what its Site calls it. */
 export const LockableFields = {
     access: z.string().nullable().optional().default(null),
     accessRefusedAt: ApiDateTimeSchema.nullable().optional().default(null),
@@ -47,16 +47,10 @@ export const LockableFields = {
     accessCheckAt: ApiDateTimeSchema.nullable().optional().default(null),
     /** VODLoft cannot download the media without the access, so it does not try. */
     accessLocked: z.boolean().optional().default(false),
-    /** What the Source calls the access, such as Members only or NPO Plus. */
+    /** What the Site calls the access, such as Members only or NPO Plus. */
     accessLabel: z.string().nullable().optional().default(null),
 }
 
-export const AccessReadSchema = z.object({
-    key: z.string(),
-    label: z.string(),
-    description: z.string(),
-})
-export type AccessRead = z.infer<typeof AccessReadSchema>
 
 export function hasSourceFeature(
     item: {sourceFeatures?: readonly string[] | null} | null | undefined,
@@ -87,8 +81,6 @@ export const SourceReadSchema = z.object({
     searchLabel: z.string().nullable().optional(),
     /** What the Source calls a kind of media in its own catalogue, such as Show for a Daily Wire collection. */
     kindNames: z.record(z.string(), z.string()).optional(),
-    /** What some of the Source's videos need before it gives them, such as NPO Plus or a channel membership. */
-    accesses: z.array(AccessReadSchema).optional().default([]),
     /** What a cookies file does for the Source, when it says so itself. */
     cookiesHelp: z.string().nullable().optional(),
     /** What a Local Media Profile can download for media of this Source: what any of its Sites offers. */
@@ -110,6 +102,7 @@ export const ResolvedLinkReadSchema = z.object({
     site: z.string().nullable(),
     drmProtected: z.boolean(),
     access: z.string().nullable().optional().default(null),
+    accessLabel: z.string().nullable().optional().default(null),
     accessLocked: z.boolean().optional().default(false),
     preview: z.object({
         title: z.string(),
@@ -135,6 +128,7 @@ export const SearchResultReadSchema = z.object({
     kindLabel: z.string().nullable().optional(),
     facts: z.array(z.string()).optional(),
     access: z.string().nullable().optional(),
+    accessLabel: z.string().nullable().optional(),
 })
 export type SearchResultRead = z.infer<typeof SearchResultReadSchema>
 

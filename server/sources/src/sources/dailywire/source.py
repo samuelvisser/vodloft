@@ -104,9 +104,9 @@ class DailyWireSource(Source):
                 SiteSetting.UPGRADE_IMPROVEMENTS: [UpgradeImprovement.LENGTH.value],
             }),
         ),
+        accesses=MEMBERSHIP_ACCESSES,
     ),)
     kind_names = MappingProxyType({LinkKind.COLLECTION: "Show"})
-    accesses = MEMBERSHIP_ACCESSES
     features = frozenset({
         Feature.COLLECTIONS,
         Feature.MOVIES,

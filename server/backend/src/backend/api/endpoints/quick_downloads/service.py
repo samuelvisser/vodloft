@@ -85,7 +85,7 @@ def start_quick_download(access: Access, body: QuickDownloadAPICreate) -> dict:
     quick_id = new_quick_download_id()
     try:
         check_quick_downloadable(
-            source, kind, drm_protected=link.drm_protected, access=link.access,
+            source, kind, drm_protected=link.drm_protected, access=link.access, url=link.url,
         )
     except QuickDownloadRefused as exc:
         if link.drm_protected or link.access_locked:
@@ -178,7 +178,7 @@ def quick_download_options(s: Session, access: Access, body: QuickDownloadOption
     source = get_source(link.source.id)
     try:
         check_quick_downloadable(
-            source, LinkKind(link.kind), drm_protected=link.drm_protected, access=link.access,
+            source, LinkKind(link.kind), drm_protected=link.drm_protected, access=link.access, url=link.url,
         )
     except QuickDownloadRefused as exc:
         return QuickDownloadOptionsAPIRead.model_validate(_OptionsSource(link, refused=str(exc)))

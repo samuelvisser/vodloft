@@ -16,7 +16,7 @@ from dataclasses import replace
 from types import MappingProxyType
 
 from ..contract import (
-    DownloadOptions, Site, SiteSetting, SiteSettings, StreamMethod, UpgradeChecks, UpgradeImprovement, domain_site, link_host,
+    Access, DownloadOptions, Site, SiteSetting, SiteSettings, StreamMethod, UpgradeChecks, UpgradeImprovement, domain_site, link_host,
 )
 
 # How VODLoft names the sites most people use; any other Site is named after its domain.
@@ -52,6 +52,26 @@ _SITE_SETTINGS = {"youtube": SiteSettings(
         SiteSetting.UPGRADE_IMPROVEMENTS: [UpgradeImprovement.RESOLUTION.value, UpgradeImprovement.SPONSORBLOCK.value],
     }),
 )}
+# What yt-dlp says a video needs: ``subscriber_only`` is a membership of the channel and ``premium_only`` the
+# site's paid subscription. Each Site calls them its own way; others get the general names.
+MEMBERS_KEY, PREMIUM_KEY = "members", "premium"
+_ACCESSES = (
+    Access(MEMBERS_KEY, "Members only", "Only members of the channel can watch this."),
+    Access(PREMIUM_KEY, "Premium only", "Only the site's paying subscribers can watch this."),
+)
+_SITE_ACCESSES = {
+    "youtube": (
+        Access(MEMBERS_KEY, "Members only", "Only members of the channel can watch this."),
+        Access(PREMIUM_KEY, "YouTube Premium", "Only YouTube Premium subscribers can watch this."),
+    ),
+    "twitch": (Access(MEMBERS_KEY, "Subscribers only", "Only subscribers of the channel can watch this."),),
+    "kick": (Access(MEMBERS_KEY, "Subscribers only", "Only subscribers of the channel can watch this."),),
+    "floatplane": (Access(MEMBERS_KEY, "Subscribers only", "Only subscribers of the creator can watch this."),),
+    "niconico": (
+        Access(MEMBERS_KEY, "Channel members only", "Only members of the channel can watch this."),
+        Access(PREMIUM_KEY, "Niconico Premium", "Only Niconico Premium members can watch this."),
+    ),
+}
 _PREFIX = "yt_dlp.extractor."
 _extractors: list | None = None
 _lock = threading.Lock()
@@ -79,7 +99,7 @@ def _family(extractor) -> str:
 def site_for(url: str) -> Site:
     extractor = next((candidate for candidate in _extractor_classes() if candidate.suitable(url)), None)
     if extractor is None or extractor.ie_key() == "Generic":
-        return replace(domain_site(url), upgrade_checks=_UPGRADE_CHECKS)
+        return replace(domain_site(url), upgrade_checks=_UPGRADE_CHECKS, accesses=_ACCESSES)
     host = domain_site(url).name
     return site_of(_family(extractor), host)
 
@@ -91,8 +111,14 @@ def site_of(key: str, host: str | None = None) -> Site:
         stream_video_heights=_STREAM_VIDEO_HEIGHTS.get(key, ()), stream_file_height=_STREAM_FILE_HEIGHTS.get(key),
         stream_proxy_choice=key in _STREAM_PROXY_CHOICE,
         downloads=_downloads(key), upgrade_checks=_SITE_UPGRADE_CHECKS.get(key, _UPGRADE_CHECKS),
-        settings=_SITE_SETTINGS.get(key, SiteSettings()),
+        settings=_SITE_SETTINGS.get(key, SiteSettings()), accesses=_accesses(key),
     )
+
+
+def _accesses(key: str) -> tuple[Access, ...]:
+    """The Site's own names for the accesses yt-dlp tells, and the general ones for those it has none for."""
+    own = _SITE_ACCESSES.get(key, ())
+    return own + tuple(access for access in _ACCESSES if access.key not in {mine.key for mine in own})
 
 
 def _downloads(key: str) -> DownloadOptions:

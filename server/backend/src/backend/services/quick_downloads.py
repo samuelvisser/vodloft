@@ -16,6 +16,7 @@ from typing import Any, Iterable, Literal
 
 from backend.services import quick_download_history
 from backend.services.playback import resolve_playback
+from backend.services.media_access import link_access
 from backend.utils.filenames import clean_value
 from backend.utils.output_template import sanitize_path_component
 from config import get_settings
@@ -135,13 +136,18 @@ class QuickDownloadRefused(ValueError):
     """The link cannot be quick downloaded; the message says why."""
 
 
-def check_quick_downloadable(source: Source, kind: LinkKind, *, drm_protected: bool, access: str | None) -> None:
+def check_quick_downloadable(
+    source: Source, kind: LinkKind, *, drm_protected: bool, access: str | None, url: str,
+) -> None:
     """Refuse a link before anything starts, with the same rules the download enforces later."""
     if drm_protected:
         raise QuickDownloadRefused(f"{source.name} protects this video with DRM, so VODLoft cannot download it")
     if access is not None and source.has_access(access) is False:
-        found = source.access(access)
-        raise QuickDownloadRefused(f"{source.name} only gives this video with {found.label if found else access}")
+        found = link_access(source.id, url, access)
+        raise QuickDownloadRefused(
+            f"{source.name} only gives this video with {found.label}" if found
+            else f"{source.name} only gives this video with an access VODLoft does not have"
+        )
     if kind is LinkKind.COLLECTION:
         raise QuickDownloadRefused("Quick download takes one video, episode or movie, not a whole collection such as a channel")
 

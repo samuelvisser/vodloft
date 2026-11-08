@@ -11,8 +11,10 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import and_, false, or_
 
+from backend.db.models import Episode, Video
 from backend.db.models.media_item import MediaItemBase
-from sources import Access, UnknownSourceError, all_sources, get_source
+from backend.services.sites import collection_site, video_site
+from sources import Access, UnknownSourceError, all_sources, get_source, site_for, site_of
 
 CHECK_GAPS = (
     timedelta(days=1), timedelta(days=2), timedelta(days=4),
@@ -21,12 +23,38 @@ CHECK_GAPS = (
 """The time before each check of refused media: after 1, 3 and 7 days, then weekly up to five weeks."""
 
 
-def source_access(source_key: str, key: str | None) -> Access | None:
-    """The Source's Access by its key."""
-    try:
-        return get_source(source_key).access(key)
-    except UnknownSourceError:
+def site_access(source_key: str, site_key: str | None, key: str | None) -> Access | None:
+    """What the media's Site calls the access it needs: as the Site itself says, else as the media's
+    Source names it on that Site, such as a membership yt-dlp tells on a Site made for another Source."""
+    if key is None or site_key is None:
         return None
+    found = site_of(site_key).access(key)
+    if found is None:
+        try:
+            own = get_source(source_key).site_of(site_key)
+        except UnknownSourceError:
+            own = None
+        found = own.access(key) if own is not None else None
+    return found
+
+
+def link_access(source_key: str, url: str, key: str | None) -> Access | None:
+    """What the Site of a link calls the access its video needs."""
+    return site_access(source_key, site_for(url, source_key).key, key) if key is not None else None
+
+
+def media_site_key(media: MediaItemBase) -> str | None:
+    """The key of the Site the media is on, told from its link while VODLoft has not stored it yet."""
+    if isinstance(media, Episode):
+        return media.collection.site_key or collection_site(media.collection).key
+    if isinstance(media, Video):
+        return media.site_key or video_site(media).key
+    return None
+
+
+def media_access(media: MediaItemBase) -> Access | None:
+    """What the media's Site calls the access the media needs."""
+    return site_access(media.source_key, media_site_key(media), media.access)
 
 
 class AccessLocks:
@@ -65,7 +93,7 @@ def locked_clause(item=MediaItemBase):
     """SQL for ``AccessLocks.locked``."""
     lacking = [
         and_(item.source_key == source.id, item.access == access.key)
-        for source in all_sources() for access in source.accesses
+        for source in all_sources() for site in source.sites for access in site.accesses
         if source.has_access(access.key) is False
     ]
     return and_(item.access.is_not(None), or_(item.access_refused_at.is_not(None), *lacking, false()))

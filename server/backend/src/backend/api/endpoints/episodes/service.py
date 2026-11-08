@@ -109,6 +109,7 @@ def _episode_view_stmt(
             Episode.publish_status.label("publish_status"),
             Episode.drm_protected.label("drm_protected"),
             Episode.access.label("access"),
+            Collection.site_key.label("site_key"),
             Episode.access_refused_at.label("access_refused_at"),
             Episode.access_check_at.label("access_check_at"),
             Episode.removed_from_source.label("removed_from_source"),

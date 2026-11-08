@@ -4,10 +4,10 @@ from datetime import datetime
 from collections.abc import Iterable, Mapping
 from typing import Literal, Optional
 
-from pydantic import Field, computed_field, field_validator
+from pydantic import AliasChoices, AliasPath, Field, computed_field, field_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
-from backend.services.media_access import access_locked, source_access
+from backend.services.media_access import access_locked, site_access
 from backend.types.collection_types import CollectionType
 from config.settings.site_settings import AutoSubtitles, SponsorBlockAction, SponsorBlockCategory, UpgradeRepeat
 from sources import Feature, SiteSetting, StreamMethod, UnknownSourceError, UpgradeImprovement, get_source
@@ -37,20 +37,17 @@ class SourcedResponse(ResponseBase):
         return source_features(self.source_key)
 
 
-class AccessAPIRead(ResponseBase):
-    """Something a Source only gives some of its videos with, such as NPO Plus."""
-
-    key: str
-    label: str
-    description: str
-
-
 class LockableResponse(ResponseBase):
     """Media that may need an access, such as a channel membership, and is locked without it."""
 
     source_key: str
+    site_key: Optional[str] = Field(
+        default=None, exclude=True,
+        validation_alias=AliasChoices("site_key", AliasPath("collection", "site_key"), AliasPath("episode", "collection", "site_key")),
+    )
+    """The Site the media is on, which names the access."""
     access: Optional[str] = None
-    """The key of the Source's Access the media needs; its label is in the Source's ``accesses``."""
+    """The key of the access the media needs; ``access_label`` is what its Site calls it."""
     access_refused_at: Optional[datetime] = None
     access_check_at: Optional[datetime] = None
     """When VODLoft next checks whether the locked media opened up."""
@@ -64,8 +61,8 @@ class LockableResponse(ResponseBase):
     @computed_field
     @property
     def access_label(self) -> Optional[str]:
-        """What the Source calls the access, such as Members only or NPO Plus."""
-        found = source_access(self.source_key, self.access) if self.access is not None else None
+        """What the media's Site calls the access, such as Members only or NPO Plus."""
+        found = site_access(self.source_key, self.site_key, self.access)
         return found.label if found is not None else None
 
 
@@ -106,7 +103,6 @@ class SourceAPIRead(ResponseBase):
     sites_label: Optional[str] = None
     search_label: Optional[str] = None
     kind_names: dict[str, str] = {}
-    accesses: list[AccessAPIRead] = []
     cookies_help: Optional[str] = None
     download_options: DownloadOptionsAPIRead
 
@@ -297,7 +293,9 @@ class ResolvedLinkAPIRead(ResponseBase):
     site: Optional[str] = None
     drm_protected: bool = False
     access: Optional[str] = None
-    """The key of the Source's Access the video needs."""
+    """The key of the access the video needs."""
+    access_label: Optional[str] = None
+    """What the link's Site calls that access, such as Members only."""
     access_locked: bool = False
     """VODLoft does not have that access, so it cannot download the video."""
     preview: ResolvedLinkPreviewAPIRead
@@ -318,6 +316,8 @@ class SearchResultAPIRead(ResponseBase):
     kind_label: Optional[str] = None
     facts: list[str] = []
     access: Optional[str] = None
+    access_label: Optional[str] = None
+    """What the result's Site calls the access it needs, such as Members only."""
 
 
 class SearchNoticeAPIRead(ResponseBase):
