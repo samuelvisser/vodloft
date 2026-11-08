@@ -148,6 +148,8 @@
     max-width: 850px;
     line-height: 1.55;
     white-space: pre-line;
+    /* Long URLs in a description would otherwise widen the page on a phone. */
+    overflow-wrap: anywhere;
 }
 
 .episode-view .episode-downloads {
