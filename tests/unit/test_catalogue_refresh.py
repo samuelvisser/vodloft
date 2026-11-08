@@ -71,6 +71,36 @@ def test_without_a_key_other_sites_refresh_from_their_listing(lookups):
     assert refresh.details["vimeo-1"].title == "Renamed"
 
 
+def test_with_a_key_the_listing_still_marks_members_only_videos(youtube, lookups):
+    answers, _ = lookups
+    youtube.videos["v1"] = _video_item("v1")
+    youtube.videos["v2"] = _video_item("v2")
+    answers[("--flat-playlist", CHANNEL)] = {"entries": [
+        {"id": "v1", "ie_key": "Youtube", "url": "https://www.youtube.com/watch?v=v1", "title": "v1",
+         "availability": "subscriber_only"},
+        {"id": "v2", "ie_key": "Youtube", "url": "https://www.youtube.com/watch?v=v2", "title": "v2", "availability": "public"},
+    ]}
+
+    refresh = YtDlpSource().refresh_items(CHANNEL, _refs("v1", "v2"))
+
+    assert refresh.details["v1"].access == "members"
+    assert refresh.details["v2"].access is None
+    # The rest still comes from the API.
+    assert refresh.details["v1"].image_url is not None
+
+
+def test_without_a_key_the_listing_marks_premium_videos(lookups):
+    answers, _ = lookups
+    answers[("--flat-playlist", CHANNEL)] = {"entries": [
+        {"id": "v1", "ie_key": "Youtube", "url": "https://www.youtube.com/watch?v=v1", "title": "v1",
+         "availability": "premium_only"},
+    ]}
+
+    refresh = YtDlpSource().refresh_items(CHANNEL, _refs("v1"))
+
+    assert refresh.details["v1"].access == "premium"
+
+
 class RefreshingSource(ListedSource):
     id = "refreshing"
     features = frozenset({Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.CATALOGUE_REFRESH})
@@ -121,3 +151,29 @@ def test_the_refresh_updates_marks_and_unmarks_episodes(refreshing, session):
     # A second run with the same answer changes nothing.
     again = run_catalogue_refresh(session)
     assert (again.updated, again.removed, again.returned) == (0, 0, 0)
+
+
+def test_the_refresh_locks_members_only_episodes_but_never_unlocks_them(refreshing, session):
+    from datetime import datetime, timezone
+
+    from backend.db.models import Episode
+    from task_manager.tasks.helpers.listed_collections import add_listed_episodes
+    from task_manager.tasks.workers.fetch_new_episodes.refresh import run_catalogue_refresh
+
+    collection = _collection(session, "UC1", source_key="refreshing")
+    add_listed_episodes(session, collection_id=collection.id, found=[_video("v1", 1), _video("v2", 2)])
+    session.commit()
+    refused = session.query(Episode).filter(Episode.source_slug == "v2").one()
+    refused.access, refused.access_refused_at = "members", datetime.now(timezone.utc)
+    session.commit()
+    refreshing.refresh = ItemRefresh(details={
+        "v1": VideoDetails(slug="v1", url="u", title="v1", access="members"),
+        "v2": VideoDetails(slug="v2", url="u", title="v2"),
+    })
+
+    run_catalogue_refresh(session)
+
+    episodes = {e.source_slug: e for e in session.query(Episode).filter(Episode.collection_id == collection.id)}
+    assert episodes["v1"].access == "members"
+    # Saying nothing about access does not prove anyone may download it.
+    assert episodes["v2"].access == "members" and episodes["v2"].access_refused_at is not None

@@ -855,9 +855,14 @@ class YtDlpSource(Source):
         Only the API can say a video is gone: it leaves deleted and private
         videos out of its answer. A video missing from yt-dlp's listing may
         just be on a tab or page it did not list, so it stays as it is.
+
+        The API cannot tell a members-only video, so the listing is read for
+        those too: it marks the videos only members or paying subscribers can
+        watch, and a video it marks keeps that access in the API's details.
         """
         details: dict[str, VideoDetails] = {}
         removed: set[str] = set()
+        listing = self._refresh_from_listing(url, frozenset(item.slug for item in items))
         youtube = [item.slug for item in items if _is_youtube(item.url)]
         catalogue = self._catalogue(adding=False) if youtube else None
         listed = [item.slug for item in items] if catalogue is None else [item.slug for item in items if not _is_youtube(item.url)]
@@ -873,10 +878,11 @@ class YtDlpSource(Source):
                 for video_id in batch:
                     if video_id in found:
                         details[video_id] = mapping.video(found[video_id], short=False)
+                        if (listed_video := listing.get(video_id)) is not None and listed_video.access is not None:
+                            details[video_id] = replace(details[video_id], access=listed_video.access)
                     else:
                         removed.add(video_id)
-        if listed:
-            details.update(self._refresh_from_listing(url, frozenset(listed)))
+        details.update((slug, listing[slug]) for slug in listed if slug in listing)
         return ItemRefresh(details=details, removed=frozenset(removed))
 
     def refresh_metadata(self, items: Sequence[ItemRef]) -> ItemRefresh:
@@ -915,7 +921,8 @@ class YtDlpSource(Source):
         """Titles from the collection's flat listing, which takes one request a page instead of one a video.
 
         The listing has no reliable description or picture, so those are kept. It
-        has the length of most YouTube videos, and the uploader when the site says.
+        has the length of most YouTube videos, the uploader when the site says, and
+        the badge YouTube shows on a video only members or paying subscribers can watch.
         """
         details: dict[str, VideoDetails] = {}
         for listing_url in _listing_urls(url):
@@ -935,6 +942,7 @@ class YtDlpSource(Source):
                         slug=slug, url=entry_url, title=entry["title"], description=entry.get("description") or None,
                         duration=float(duration) if isinstance(duration, (int, float)) and duration > 0 else None,
                         author_name=entry.get("uploader") or entry.get("channel") or None,
+                        access=_access(entry),
                     ))
         return details
 
