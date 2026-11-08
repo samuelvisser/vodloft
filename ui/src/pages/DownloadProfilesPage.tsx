@@ -145,8 +145,12 @@ export default function DownloadProfilesPage() {
                     <p>Download Profiles are always connected to a Local Media Profile, which defines where your
                         downloads will be stored and what their file name should be.</p>
                 </PageSubtitle>
-                {canManage && <BulkEditButton selection={selection}/>}
-                {canManage && <Link className="btn btn-primary" to="/add-download-profile">Add download profile</Link>}
+                {canManage && (
+                    <div className="view-header-actions">
+                        <BulkEditButton selection={selection}/>
+                        <Link className="btn btn-primary" to="/add-download-profile">Add download profile</Link>
+                    </div>
+                )}
             </div>
 
             <ProfileTableFilters
