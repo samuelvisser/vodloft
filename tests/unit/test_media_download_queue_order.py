@@ -1256,3 +1256,25 @@ def test_workflow_orders_publication_waits_in_dispatch_queue_order():
     finally:
         session.close()
         engine.dispose()
+
+
+def test_download_statuses_join_their_operations_through_an_index():
+    """Without statistics SQLite guessed the queue was tiny and scanned all of it for every download,
+    so a few thousand queued downloads made the Downloads page take minutes."""
+    import backend.db.models  # noqa: F401
+    import task_manager.scheduler.db  # noqa: F401
+    from backend.db import Base
+    from backend.services.media_download_collection import MediaDownloadCollectionQuery
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    statement = MediaDownloadCollectionQuery.build().facets_statement()
+    sql = str(statement.compile(engine, compile_kwargs={"literal_binds": True}))
+
+    with engine.connect() as connection:
+        plan = [row[3] for row in connection.exec_driver_sql(f"EXPLAIN QUERY PLAN {sql}")]
+
+    joins = [step for step in plan if step.endswith("LEFT-JOIN")]
+    assert joins
+    assert not [step for step in joins if step.startswith("SCAN")], plan
+    engine.dispose()

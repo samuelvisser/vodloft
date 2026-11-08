@@ -3,7 +3,9 @@ import {can} from '../lib/access'
 import {Link} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
-import {useDownloadProfilesView} from '../lib/queries'
+import {useDownloadProfilesTable} from '../lib/queries'
+import {updateLazyCollectionEntities} from '../lib/lazyCollection'
+import LoadMore from '../components/common/LoadMore'
 import {DownloadProfileReadView} from '../types/schemas/download_profile_view'
 import {PreferredFormatReg} from '../types/local_media_profile'
 import DataTable, {Column} from '../components/DataTable/DataTable'
@@ -18,7 +20,7 @@ import {apiUrl} from '../lib/api'
 export default function DownloadProfilesPage() {
     const queryClient = useQueryClient()
 
-    const {data: profiles, isLoading, error} = useDownloadProfilesView()
+    const table = useDownloadProfilesTable()
 
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
 
@@ -34,12 +36,8 @@ export default function DownloadProfilesPage() {
             })
             if (!response.ok) throw new Error(`Failed to update download profile (${response.status})`)
 
-            queryClient.setQueryData<DownloadProfileReadView[]>(['downloadProfilesView'], (current) => (
-                current?.map((item) => (
-                    item.id === profile.id
-                        ? {...item, enableProfile}
-                        : item
-                ))
+            updateLazyCollectionEntities<DownloadProfileReadView>(queryClient, ['downloadProfilesView'], (item) => (
+                item.id === profile.id ? {...item, enableProfile} : item
             ))
 
             await Promise.allSettled([
@@ -104,9 +102,9 @@ export default function DownloadProfilesPage() {
                 <DataTable<DownloadProfileReadView>
                     ariaLabel="Existing download profiles"
                     columns={columns}
-                    data={profiles}
-                    loading={isLoading}
-                    error={error}
+                    data={table.isLoading ? undefined : table.items}
+                    loading={table.isLoading}
+                    error={table.error}
                     rowKey={(p) => String(p.id)}
                     rowAriaLabel={(p) => p.collectionTitle}
                     mobileSummary={(p) => (
@@ -140,6 +138,7 @@ export default function DownloadProfilesPage() {
                         },
                     ]}
                 />
+                <LoadMore {...table} noun="profiles"/>
             </div>
 
             <ConfirmDeleteDialog

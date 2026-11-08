@@ -18,7 +18,7 @@ import {DrmBadge} from '../components/common/DrmProtected'
 import {SubscriptionBadge} from '../components/common/NeedsSubscription'
 import SourceFilter, {matchesSourceFilter} from '../components/Source/SourceFilter'
 import DownloadStatusBadge from '../components/DownloadProgress/DownloadStatusBadge'
-import {useMediaDownloadsView, useMovies, useCollectionsView, useVideos} from '../lib/queries'
+import {useLibraryCounts, useLibraryDownloads, useMovies, useCollectionsView, useVideos} from '../lib/queries'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {CollectionTypeReg, CollectionTypeValue} from '../types/collection'
 
@@ -67,7 +67,7 @@ function loadLibraryCollectionTypeFilter(): Set<CollectionTypeValue> {
 }
 
 function latestMovieDownload(downloads: MediaDownloadViewRead[] | undefined, slug: string) {
-    return downloads?.find((download) => download.movieSlug === slug)
+    return downloads?.find((download) => download.type === 'movie' && download.movieSlug === slug)
 }
 
 function latestVideoDownload(downloads: MediaDownloadViewRead[] | undefined, videoId: number) {
@@ -123,6 +123,11 @@ function NoMatches({search, what}: {search: boolean, what: string}) {
     )
 }
 
+function LibraryTypeLoading({what, error}: {what: string, error: Error | null}) {
+    if (error) return <div className="form-error-card" role="alert">{error.message}</div>
+    return <p>Loading {what}…</p>
+}
+
 export default function LibraryPage() {
     const [params, setParams] = useSearchParams()
     const [collectionTypeFilter, setCollectionTypeFilter] = useState(loadLibraryCollectionTypeFilter)
@@ -132,7 +137,8 @@ export default function LibraryPage() {
     const {data: collections, isLoading: collectionsLoading, error: collectionsError} = useCollectionsView()
     const {data: movies, isLoading: moviesLoading, error: moviesError} = useMovies()
     const {data: videos, isLoading: videosLoading, error: videosError} = useVideos()
-    const {data: downloads} = useMediaDownloadsView()
+    const {data: downloads} = useLibraryDownloads()
+    const {data: libraryCounts, error: libraryCountsError} = useLibraryCounts()
     const sourceKeys = useMemo(
         () => [...new Set([...(collections ?? []), ...(movies ?? []), ...(videos ?? [])].map((item) => item.sourceKey))].sort(),
         [collections, movies, videos],
@@ -164,9 +170,19 @@ export default function LibraryPage() {
         )) ?? [],
         [videos, activeSourceFilter, searchWords],
     )
-    const hasCollections = !!collections?.length
-    const hasMovies = !!movies?.length
-    const hasVideos = !!videos?.length
+    // A loaded list is the truth; until then the counts say which tabs the library will have,
+    // so the tabs are there from the start instead of appearing as each list arrives.
+    const typeCounts: Partial<Record<MediaType, number>> = {
+        collections: collections?.length ?? libraryCounts?.collections,
+        movies: movies?.length ?? libraryCounts?.movies,
+        videos: videos?.length ?? libraryCounts?.videos,
+    }
+    // Show no type before every type is known, or a list that arrives first would show alone.
+    const typesKnown = libraryCounts !== undefined || (!!collections && !!movies && !!videos)
+        || (!!libraryCountsError && !collectionsLoading && !moviesLoading && !videosLoading)
+    const hasCollections = typesKnown && !!typeCounts.collections
+    const hasMovies = typesKnown && !!typeCounts.movies
+    const hasVideos = typesKnown && !!typeCounts.videos
     const hasAny = hasCollections || hasMovies || hasVideos
     const presentTypes = useMemo(() => {
         const types: MediaType[] = []
@@ -234,7 +250,7 @@ export default function LibraryPage() {
                     onChange={chooseType}
                     ariaLabel="Library media type"
                     types={presentTypes}
-                    counts={{collections: collections?.length ?? 0, movies: movies?.length ?? 0, videos: videos?.length ?? 0}}
+                    counts={typeCounts}
                 />
             )}
 
@@ -271,7 +287,7 @@ export default function LibraryPage() {
                 />
             )}
 
-            {loading && !hasAny ? (
+            {(!typesKnown || loading) && !hasAny ? (
                 <p>Loading library…</p>
             ) : error && !hasAny ? (
                 <div className="form-error-card" role="alert">{error.message}</div>
@@ -282,6 +298,12 @@ export default function LibraryPage() {
                     <p>Paste a link to a collection, a movie or a video to add it.</p>
                     {can('add_media') && <Link className="btn btn-primary" to="/add">Add media</Link>}
                 </div>
+            ) : activeType === 'collections' && hasCollections && !collections ? (
+                <LibraryTypeLoading what="collections" error={collectionsError}/>
+            ) : activeType === 'movies' && hasMovies && !movies ? (
+                <LibraryTypeLoading what="movies" error={moviesError}/>
+            ) : activeType === 'videos' && hasVideos && !videos ? (
+                <LibraryTypeLoading what="videos" error={videosError}/>
             ) : activeType === 'collections' && hasCollections ? (
                 filteredCollections.length > 0 ? (
                     <div className="library-collection-grid" role="list" aria-label="Collections">

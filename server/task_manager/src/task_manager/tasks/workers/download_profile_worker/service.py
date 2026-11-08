@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
+from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session
 
 from backend.db.models import DownloadProfile, Episode
@@ -65,7 +66,7 @@ async def run_download_profile_worker(
         s.rollback()
         if pair is not None:
             await wait_for_custom_index_pair(*pair)
-        made = run_write_transaction(lambda w: _reconcile_profile(w, profile_id, only_episode_id))
+        made = _reconcile_profile(s, profile_id, only_episode_id)
         if made is None:
             update_progress(progress, 100, f"Episode {only_episode_id} no longer exists")
             return
@@ -85,30 +86,88 @@ async def run_download_profile_worker(
     print(f"download_profile_worker completed: {message}")
 
 
+# How many episodes one write transaction reconciles. A show can have thousands of episodes, and
+# SQLite has one writer: reconciling them all at once would hold up every other write for minutes.
+EPISODES_PER_TRANSACTION = 50
+
+
+def _profile_version(profile: DownloadProfile) -> tuple:
+    """What decides which episodes a profile wants, to notice a change between transactions."""
+    return (
+        profile.collection_id,
+        profile.local_media_profile_id,
+        profile.download_with_countdown,
+        profile.redownload_final,
+        tuple(
+            tuple(getattr(item, column.key) for column in inspect(item).mapper.column_attrs)
+            for item in profile.filters
+        ),
+    )
+
+
 def _reconcile_profile(s: Session, profile_id: int, only_episode_id: Optional[int]) -> Optional[int]:
     """Create the download operations one enabled profile needs; None when the only episode is gone.
 
-    The profile lock is held until this transaction commits. A concurrent disable can only proceed
-    after every operation created from this enabled snapshot is durable; once disabled, later worker
-    runs skip the profile entirely.
+    Which episodes the profile wants is read first, then reconciled a batch at a time, each batch in
+    its own write transaction that holds the profile lock until it commits. A concurrent disable can
+    therefore only proceed after every operation of a batch is durable, and a batch that finds the
+    profile disabled or changed stops: the change starts its own reconciliation.
     """
-    profile = lock_enabled_download_profile(s, profile_id)
-    if profile is None:
+    profile = s.get(DownloadProfile, profile_id)
+    if profile is None or not profile.enable_profile:
+        s.rollback()
         return 0
-
     only_episode: Optional[Episode] = None
     if only_episode_id is not None:
         only_episode = s.get(Episode, only_episode_id)
         if only_episode is None:
+            s.rollback()
             return None
+    version = _profile_version(profile)
+    # A new episode can push an older one out of "the latest N".
+    cleanup = only_episode_id is None or has_latest_count(profile.filters)
+    episode_ids = [
+        episode.id
+        for episode in get_download_profile_episodes(s, profile, only_episode=only_episode)
+        if not episode.download_dismissed(profile.local_media_profile_id)
+    ]
+    s.rollback()
 
     created = 0
-    for episode in get_download_profile_episodes(
-        s,
-        profile,
-        only_episode=only_episode,
-    ):
-        if episode.download_dismissed(profile.local_media_profile_id):
+    for start in range(0, len(episode_ids), EPISODES_PER_TRANSACTION):
+        batch = episode_ids[start:start + EPISODES_PER_TRANSACTION]
+        made = run_write_transaction(lambda w: _reconcile_episodes(w, profile_id, version, batch))
+        if made is None:
+            return created
+        created += made
+
+    if cleanup:
+        run_write_transaction(lambda w: _cleanup_older_episodes(w, profile_id, version))
+    return created
+
+
+def _locked_profile(s: Session, profile_id: int, version: tuple) -> Optional[DownloadProfile]:
+    """The profile, locked, when it is still enabled and wants what it wanted when the run read it."""
+    profile = lock_enabled_download_profile(s, profile_id)
+    if profile is None or _profile_version(profile) != version:
+        return None
+    return profile
+
+
+def _reconcile_episodes(s: Session, profile_id: int, version: tuple, episode_ids: list[int]) -> Optional[int]:
+    """Create the download operations one batch of a profile's wanted episodes needs.
+
+    None when the profile was disabled or changed since its episodes were read.
+    """
+    profile = _locked_profile(s, profile_id, version)
+    if profile is None:
+        return None
+    episodes = {episode.id: episode for episode in s.scalars(select(Episode).where(Episode.id.in_(episode_ids)))}
+
+    created = 0
+    for episode_id in episode_ids:
+        episode = episodes.get(episode_id)
+        if episode is None or episode.download_dismissed(profile.local_media_profile_id):
             continue
         ready_at = episode_download_delay_ready_at(episode)
         delayed = (
@@ -142,8 +201,9 @@ def _reconcile_profile(s: Session, profile_id: int, only_episode_id: Optional[in
             not_before=ready_at if delayed else None,
         )
         created += 1
-
-    # A new episode can push an older one out of "the latest N".
-    if only_episode is None or has_latest_count(profile.filters):
-        cleanup_older_episodes(s, profile)
     return created
+
+
+def _cleanup_older_episodes(s: Session, profile_id: int, version: tuple) -> int:
+    profile = _locked_profile(s, profile_id, version)
+    return cleanup_older_episodes(s, profile) if profile is not None else 0

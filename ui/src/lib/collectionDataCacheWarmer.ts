@@ -19,6 +19,9 @@ import {CollectionRead} from '../types/schemas/collection'
 
 const COLLECTION_DATA_MAX_AGE_MS = 24 * 60 * 60 * 1000
 const COLLECTION_WARM_CONCURRENCY = 2
+// A very large library would otherwise send hundreds of requests and fill browser storage, which
+// is only a few megabytes. The most recently updated collections are the likeliest to be opened.
+const COLLECTION_WARM_LIMIT = 50
 
 function isFresh(fetchedAt: number | undefined) {
   if (fetchedAt === undefined) return false
@@ -145,7 +148,10 @@ async function warmCollectionDataCache(queryClient: QueryClient) {
         || collection.episodeIdentifier === 'seasonal'
       ))
     : collections
-  await warmCollectionsWithLimitedConcurrency(queryClient, backgroundCollections)
+  const mostRecent = [...backgroundCollections]
+    .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())
+    .slice(0, COLLECTION_WARM_LIMIT)
+  await warmCollectionsWithLimitedConcurrency(queryClient, mostRecent)
 }
 
 const persistenceInstalledFor = new WeakSet<QueryClient>()

@@ -2,7 +2,7 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate, useSearchParams} from 'react-router-dom'
-import {useDownloadProfilesView, useCollections} from '../../lib/queries'
+import {useCollectionDownloadProfilesView, useCollections} from '../../lib/queries'
 import {buildCollectionSelectRegistry} from '../../types/collection'
 import {SelectRegistry} from '../../utils/selectRegistry'
 import Select from 'react-select'
@@ -24,7 +24,6 @@ export default function AddStreamProfilePage() {
     const [mode, setMode] = useState<StreamProfileMode>('rss')
 
     const {data: collections} = useCollections()
-    const {data: downloadProfiles} = useDownloadProfilesView()
     const collectionReg: SelectRegistry = buildCollectionSelectRegistry(collections)
 
     const form = useForm<RssStreamProfileCreateIn>({
@@ -39,12 +38,12 @@ export default function AddStreamProfilePage() {
     const selectedCollectionId = watch('collectionId')
     const useDownloads = watch('useDownloads')
     const selectedCollection = collections?.find((collection) => collection.id === selectedCollectionId)
+    const {data: downloadProfiles} = useCollectionDownloadProfilesView(selectedCollection?.slug)
 
     const downloadProfileDefaults = useMemo(() => {
-        if (!downloadProfiles) return undefined
         if (!selectedCollection) return []
+        if (!downloadProfiles) return undefined
         return downloadProfiles
-            .filter((profile) => profile.collectionSlug === selectedCollection.slug)
             .map((profile) => ({
                 id: profile.id,
                 preferredFormat: profile.localMediaProfilePreferredFormat,
@@ -74,7 +73,6 @@ export default function AddStreamProfilePage() {
     }
 
     const onSuccess = async (result: {id: number}) => {
-        await qc.invalidateQueries({queryKey: ['rssStreamProfiles']})
         await qc.invalidateQueries({queryKey: ['streamProfilesView']})
         navigate(`/edit-stream-profile/rss/${result.id}`)
     }

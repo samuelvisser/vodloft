@@ -2150,6 +2150,8 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .catalog-movie-grid .movie-poster-card { width: 100%; max-width: none; }
 .catalog-load-more { min-height: 72px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--muted); font-size: 13px; }
 .catalog-load-error { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 18px 0; color: var(--error); }
+.load-more { min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--muted); font-size: 13px; }
+.load-more[role="alert"] { color: var(--error); }
 .catalog-empty { min-height: 240px; display: grid; place-items: center; align-content: center; gap: 10px; color: var(--muted); }
 .catalog-empty > svg { font-size: 28px; }
 

@@ -1070,3 +1070,65 @@ def test_run_worker_no_enabled_profiles_still_reconciles_manual_download_waits(d
 
     created.assert_not_called()
     dispatched.assert_called_once()
+
+
+def _large_show(db_session, count):
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
+    lmp = _make_local_media_profile(db_session)
+    now = _now()
+    for index in range(1, count + 1):
+        _make_episode(
+            db_session, collection, season, slug=f"e{index}", ep_id=f"ep.{index}", status="published_final",
+            published_at=now - timedelta(hours=index), index=index,
+        )
+    profile = _make_podcast_profile(db_session, collection, lmp)
+    db_session.commit()
+    return profile
+
+
+def test_a_large_show_is_reconciled_in_short_write_transactions(db_session, monkeypatch):
+    """One write transaction per batch of episodes, so other writes are never held up for long."""
+    from backend.db import core
+    from task_manager.scheduler.db import TaskOperation
+    from task_manager.tasks.workers.download_profile_worker import service
+
+    _large_show(db_session, 120)
+    monkeypatch.setattr(service, "dispatch_queued_media_download_operations", Mock(return_value=0))
+    transactions = []
+    real = core.run_write_transaction
+
+    def counting(work, **kwargs):
+        transactions.append(work)
+        return real(work, **kwargs)
+
+    monkeypatch.setattr(service, "run_write_transaction", counting)
+    asyncio.run(service.run_download_profile_worker(db_session))
+
+    assert db_session.query(TaskOperation).count() == 120
+    # Three batches of at most 50 episodes, the cleanup and the final dispatch.
+    assert len(transactions) == 5
+
+
+def test_a_profile_disabled_during_a_run_stops_at_the_next_batch(db_session, monkeypatch):
+    from backend.db.models.download_profile import DownloadProfile
+    from task_manager.scheduler.db import TaskOperation
+    from task_manager.tasks.workers.download_profile_worker import service
+
+    profile = _large_show(db_session, 120)
+    monkeypatch.setattr(service, "dispatch_queued_media_download_operations", Mock(return_value=0))
+    real = service._reconcile_episodes
+    batches = []
+
+    def disable_after_first_batch(s, profile_id, version, episode_ids):
+        made = real(s, profile_id, version, episode_ids)
+        batches.append(made)
+        if len(batches) == 1:
+            s.get(DownloadProfile, profile_id).enable_profile = False
+        return made
+
+    monkeypatch.setattr(service, "_reconcile_episodes", disable_after_first_batch)
+    asyncio.run(service.run_download_profile_worker(db_session, resource_type="download_profile", resource_id=profile.id))
+
+    assert batches == [50, None]
+    assert db_session.query(TaskOperation).count() == 50

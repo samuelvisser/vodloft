@@ -106,7 +106,7 @@ def test_stream_profile_view_uses_relationship_aliases():
         type="rss",
         created_at=NOW,
         updated_at=NOW,
-        collection=SimpleNamespace(title="Collection", slug="collection"),
+        collection=SimpleNamespace(title="Collection", slug="collection", source_key="dailywire"),
         feed_url="https://example.test/feed",
         overwrite_collection_title=None,
         video_output_mode="audio_mp4",

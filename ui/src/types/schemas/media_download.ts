@@ -116,3 +116,12 @@ export const MediaDownloadPageReadSchema = z.looseObject({
     actions: z.record(z.string(), z.int()).default({}),
 })
 export type MediaDownloadPageRead = z.infer<typeof MediaDownloadPageReadSchema>;
+
+
+/** A Local Media Profile that holds downloads of a collection's episodes. */
+export const DownloadedLocalMediaProfileSchema = z.object({
+    id: z.int(),
+    name: z.string(),
+    preferredFormat: z.string().nullable().optional(),
+})
+export type DownloadedLocalMediaProfile = z.infer<typeof DownloadedLocalMediaProfileSchema>

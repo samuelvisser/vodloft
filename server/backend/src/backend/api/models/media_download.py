@@ -169,3 +169,11 @@ class MediaDownloadPageRead(CursorPageRead[MediaDownloadAPIReadView]):
     facets: dict[str, int] = Field(default_factory=dict)
     actions: dict[str, int] = Field(default_factory=dict)
 
+
+
+class DownloadedLocalMediaProfileAPIRead(ResponseBase):
+    """A Local Media Profile that holds downloads of a Collection's episodes."""
+
+    id: int
+    name: str
+    preferred_format: Optional[str] = None

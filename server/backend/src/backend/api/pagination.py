@@ -92,3 +92,47 @@ def keyset_after(fields: list[KeysetField]) -> ColumnElement[bool]:
     if not clauses:
         raise ValueError("At least one keyset field is required")
     return or_(*clauses)
+
+
+@dataclass(frozen=True)
+class SortKey:
+    """One column of a keyset page's order. The last key must be unique, such as the id."""
+
+    expression: ColumnElement[Any]
+    descending: bool = False
+
+
+def keyset_page(
+        query: Any,
+        keys: list[SortKey],
+        *,
+        cursor: str | None,
+        limit: int,
+        kind: str,
+        scope: dict[str, Any],
+) -> tuple[list[Any], str | None]:
+    """One page of an ORM query in ``keys`` order, and the cursor that continues it.
+
+    ``scope`` holds the page's filters; a cursor only continues the list it came from.
+    """
+    if cursor:
+        values = decode_cursor(cursor)
+        if values.get("kind") != kind or values.get("scope") != scope:
+            raise InvalidCursorError("Cursor does not match this list")
+        key = cursor_key_values(values, length=len(keys))
+        query = query.filter(keyset_after([
+            KeysetField(sort.expression, value, sort.descending)
+            for sort, value in zip(keys, key)
+        ]))
+    rows = (
+        query
+        .add_columns(*(sort.expression for sort in keys))
+        .order_by(*(sort.expression.desc() if sort.descending else sort.expression.asc() for sort in keys))
+        .limit(limit + 1)
+        .all()
+    )
+    next_cursor = None
+    if len(rows) > limit:
+        rows = rows[:limit]
+        next_cursor = encode_cursor({"kind": kind, "scope": scope, "key": list(rows[-1][1:])})
+    return [row[0] for row in rows], next_cursor
