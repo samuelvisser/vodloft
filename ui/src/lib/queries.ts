@@ -77,6 +77,7 @@ import {
 } from "../types/schemas/dailywire_catalog";
 import {apiUrl, responseError} from './api'
 import {profilePageSchema} from '../types/schemas/profile_page'
+import {LibraryCountsSchema} from '../types/schemas/library'
 
 async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
     const r = await fetch(url, {signal, credentials: 'include'})
@@ -279,6 +280,29 @@ export function useCollectionsView() {
             CollectionReadViewSchema.array(),
             signal,
         ),
+        refetchOnMount: 'always',
+    })
+}
+
+function libraryCountsQueryOptions() {
+    return {
+        queryKey: ['libraryCounts'] as const,
+        queryFn: ({signal}: {signal: AbortSignal}) => fetchParsed(
+            `${apiUrl()}/library/counts`,
+            LibraryCountsSchema,
+            signal,
+        ),
+    }
+}
+
+/**
+ * How many items of each type the library holds. It answers long before the lists themselves,
+ * so the library shows the tabs it will have right away instead of adding them as lists arrive.
+ */
+export function useLibraryCounts() {
+    return useQuery({
+        ...libraryCountsQueryOptions(),
+        enabled: can('library'),
         refetchOnMount: 'always',
     })
 }
@@ -1518,6 +1542,7 @@ export function prefetchCoreData(qc: QueryClient) {
             const collections = qc.getQueryData<CollectionRead[]>(collectionsQueryOptions().queryKey)
             if (collections) saveCollectionsToStorage(collections)
         })
+    if (library) void qc.prefetchQuery(libraryCountsQueryOptions())
     if (library) void qc.prefetchQuery({
         queryKey: ['movies'],
         queryFn: ({signal}) => fetchParsed(

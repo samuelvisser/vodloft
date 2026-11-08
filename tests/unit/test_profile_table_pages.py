@@ -232,3 +232,20 @@ def test_profile_table_endpoints_read_filters_from_the_query_string(session) -> 
     assert api_client.get("/stream-profiles/as-view", params={"streams_from": "source"}).status_code == 200
     assert api_client.get("/local-media-profiles/as-view", params={"used_for": ["movie", "video"]}).status_code == 200
     assert api_client.get("/download-profiles/as-view", params={"status": "maybe"}).status_code == 422
+
+
+def test_library_counts_say_which_tabs_the_library_has(session):
+    from backend.api.endpoints.library.service import get_library_counts
+    from backend.db.models import Movie
+    from backend.types.media_types import MediaType
+
+    session.add_all([_collection(index) for index in range(3)])
+    session.add(Movie(
+        source_key="dailywire", uuid="movie", type=MediaType.MOVIE.value, slug="movie", title="Movie",
+        extended_title="Movie", author_name="Director", mature_rating="PG", description=None, duration=60,
+    ))
+    session.flush()
+
+    counts = get_library_counts(session)
+
+    assert (counts.collections, counts.movies, counts.videos) == (3, 1, 0)

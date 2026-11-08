@@ -268,6 +268,7 @@ def create_app() -> FastAPI:
         collection_router,
         movie_router,
         video_router,
+        library_router,
         onboarding_router,
         operation_router,
         source_router,
@@ -315,6 +316,7 @@ def create_app() -> FastAPI:
     app.include_router(collection_router, prefix="/api")
     app.include_router(movie_router, prefix="/api")
     app.include_router(video_router, prefix="/api")
+    app.include_router(library_router, prefix="/api")
     app.include_router(onboarding_router, prefix="/api")
     app.include_router(source_router, prefix="/api")
     app.include_router(operation_router, prefix="/api")
