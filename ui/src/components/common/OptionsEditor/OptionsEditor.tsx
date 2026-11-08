@@ -26,7 +26,7 @@ const SETTING_LABELS: Record<string, string> = {
     file_names: 'the output template, on the Local Media Profile',
     sponsorblock: 'SponsorBlock, on the Download Profile',
     which_episodes: 'Which episodes, on the Download Profile',
-    cookies: 'Cookies, in Settings under Sources',
+    cookies: 'Cookies, per site in Settings under Sources › Sign-ins',
 }
 
 function statusIcon(status: OptionLine['status']) {

@@ -80,7 +80,7 @@ Use **Retry** once the underlying problem is resolved.
 
 Sites change often, and an outdated yt-dlp is the most common cause. Open **Settings → Sources** and use **Update now** on the yt-dlp card, then retry. The card also shows when yt-dlp was last updated and whether the last update failed.
 
-If the video needs a signed-in viewer, such as an age-restricted or members-only video, add a cookies file on the same card. For a site yt-dlp has no dedicated support for, labelled "Other sites · best effort", VODLoft may not find a video on the page at all.
+If the video needs a signed-in viewer, such as an age-restricted or members-only video, give its site a cookies file under **Settings → Sources → Sign-ins**. For a site yt-dlp has no dedicated support for, labelled "Other sites · best effort", VODLoft may not find a video on the page at all.
 
 ## An item shows a DRM badge
 

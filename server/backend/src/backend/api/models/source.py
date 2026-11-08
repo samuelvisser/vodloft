@@ -74,7 +74,6 @@ class SourceAPIRead(ResponseBase):
     search_label: Optional[str] = None
     kind_names: dict[str, str] = {}
     subscription_name: Optional[str] = None
-    cookies_help: Optional[str] = None
     subscription_active: bool = False
     download_options: DownloadOptionsAPIRead
 
@@ -136,9 +135,38 @@ class CookiesStatusAPIRead(ResponseBase):
     detail: Optional[str] = None
 
 
-class CookiesAPIRead(ResponseBase):
+class SiteSignInAPIRead(ResponseBase):
+    """A Site, and how VODLoft signs in on it: with a Source's own sign-in, or with the Site's cookies file."""
+
+    key: str
+    name: str
+    domains: list[str]
+    sign_in_source_key: Optional[str] = None
+    """The Source made for the Site with a sign-in of its own, such as The Daily Wire's."""
+    cookie_source_names: list[str]
+    """The Sources that sign in on the Site with its cookies file; none when nothing uses one there."""
+    cookies_help: Optional[str] = None
     has_cookies: bool
-    status: Optional[CookiesStatusAPIRead] = None
+    cookie_count: int
+    cookies_status: Optional[CookiesStatusAPIRead] = None
+
+
+class SortedSiteAPIRead(ResponseBase):
+    key: str
+    name: str
+    cookie_count: int
+
+
+class SortedCookiesAPIRead(ResponseBase):
+    """Where the cookies of one cookies file went."""
+
+    sites: list[SortedSiteAPIRead]
+    other_domains: list[str]
+    """The domains of the cookies no Site VODLoft knows is on, which were left out."""
+
+
+class SiteSignInAddAPIRequest(RequestBase):
+    url: str = Field(min_length=1, max_length=2048)
 
 
 def checked_ytdlp_options(value: str) -> str:

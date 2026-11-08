@@ -227,6 +227,7 @@ def test_update_needs_a_schedule_for_its_own_schedule():
 
 def test_automatic_cookies_start_after_a_sign_in_failure(db, monkeypatch):
     from backend.services import collection_cookies
+    from sources import cookies
 
     collection = _collection(db)
     assert not collection_cookies.uses_cookies(collection)
@@ -237,15 +238,16 @@ def test_automatic_cookies_start_after_a_sign_in_failure(db, monkeypatch):
         def has(self, feature):
             return True
 
-        def has_cookies(self):
-            return True
-
         def needs_cookies(self, error):
             return "Sign in to confirm" in error
 
     episode = _episode(db, collection)
     monkeypatch.setattr(db, "get", lambda model, key: SimpleNamespace(media=episode))
     monkeypatch.setattr(collection_cookies, "get_source", lambda key: Source())
+    # Without a cookies file for the Collection's Site, signing in cannot help.
+    assert not collection_cookies.note_failed_download(db, 1, "ERROR: Sign in to confirm you're not a bot")
+    collection.site_key = "youtube"
+    cookies.store_site_cookies("youtube", ["#HttpOnly_.youtube.com\tTRUE\t/\tTRUE\t0\tSID\tabc"])
     assert not collection_cookies.note_failed_download(db, 1, "HTTP Error 404")
     assert collection_cookies.note_failed_download(db, 1, "ERROR: Sign in to confirm you're not a bot")
     assert collection_cookies.uses_cookies(collection)

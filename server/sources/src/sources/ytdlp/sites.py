@@ -13,11 +13,14 @@ from __future__ import annotations
 import threading
 
 from dataclasses import replace
+from pathlib import Path
 from types import MappingProxyType
 
 from ..contract import (
     DownloadOptions, Site, SiteSetting, SiteSettings, StreamMethod, UpgradeChecks, UpgradeImprovement, domain_site, link_host,
 )
+from ..cookies import site_cookies
+from ..registry import named_site_for
 
 # How VODLoft names the sites most people use; any other Site is named after its domain.
 _NAMES = {
@@ -82,6 +85,16 @@ def site_for(url: str) -> Site:
         return replace(domain_site(url), upgrade_checks=_UPGRADE_CHECKS)
     host = domain_site(url).name
     return site_of(_family(extractor), host)
+
+
+def cookies_for(url: str, use: bool = True) -> Path | None:
+    """The cookies file of the link's Site, which yt-dlp signs in with there; ``use`` False leaves it out.
+
+    A Site some Source is made for, such as NPO Start, has its cookies file whichever Source fetches it.
+    """
+    if not use:
+        return None
+    return site_cookies((named_site_for(url) or site_for(url)).key)
 
 
 def site_of(key: str, host: str | None = None) -> Site:

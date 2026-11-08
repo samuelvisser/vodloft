@@ -21,7 +21,6 @@ from pathlib import Path
 import requests
 
 from config.settings.base import get_config_path
-from . import cookies as cookie_files
 from downloader.ytdlp import error_message
 
 RELEASE_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"
@@ -36,16 +35,12 @@ class YtDlpError(RuntimeError):
 
 
 def ytdlp_directory() -> Path:
-    """yt-dlp's updated release and cookies, in the config directory."""
+    """yt-dlp's updated release, in the config directory."""
     return get_config_path().parent / "yt-dlp"
 
 
 def updated_program_path() -> Path:
     return ytdlp_directory() / "yt-dlp"
-
-
-def cookies_path() -> Path:
-    return ytdlp_directory() / "cookies.txt"
 
 
 def _state_path() -> Path:
@@ -60,21 +55,21 @@ def program() -> tuple[str, ...]:
     return (sys.executable, "-m", "yt_dlp")
 
 
-def command(*, cookies: bool = True) -> tuple[str, ...]:
-    """yt-dlp with the options every run uses; ``cookies`` False leaves the cookies file out."""
+def command(*, cookies: Path | None = None) -> tuple[str, ...]:
+    """yt-dlp with the options every run uses, signed in with the ``cookies`` file when one is given."""
     options = ["--ignore-config", "--no-warnings", "--color", "never"]
     # YouTube needs a JavaScript runtime. VODLoft installs Deno next to Python,
     # which is not always on the PATH of the process that runs yt-dlp.
     deno = Path(sys.executable).with_name("deno")
     if deno.is_file():
         options += ["--js-runtimes", f"deno:{deno}"]
-    if cookies and cookies_path().is_file():
-        options += ["--cookies", str(cookies_path())]
+    if cookies is not None:
+        options += ["--cookies", str(cookies)]
     return (*program(), *options)
 
 
-def run_json(*args: str, cookies: bool = True) -> dict:
-    """Run yt-dlp with ``-J`` and return the info it prints; ``cookies`` False leaves the cookies file out."""
+def run_json(*args: str, cookies: Path | None = None) -> dict:
+    """Run yt-dlp with ``-J`` and return the info it prints, signed in with the ``cookies`` file when one is given."""
     try:
         result = subprocess.run(
             [*command(cookies=cookies), "--no-progress", "-J", *args], capture_output=True, text=True,
@@ -182,11 +177,3 @@ def update() -> str:
         _write_state(last_update_at=datetime.now(timezone.utc).isoformat(), last_update_error=None)
         return new_version
 
-
-def save_cookies(content: bytes) -> None:
-    """Store a Netscape cookies file that every yt-dlp run uses."""
-    cookie_files.store(cookies_path(), cookie_files.cookies_text(content))
-
-
-def remove_cookies() -> None:
-    cookies_path().unlink(missing_ok=True)

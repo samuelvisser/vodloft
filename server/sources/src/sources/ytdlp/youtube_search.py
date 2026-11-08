@@ -12,11 +12,15 @@ from urllib.parse import quote_plus
 
 from ..contract import LinkKind, ResolvedLink, SearchNotice
 from .. import ytdlp_runner as runner
+from ..cookies import site_cookies
 from .youtube_api import mapping, quota
 from .youtube_api.catalogue import Catalogue
 from .youtube_api.quota import Share
 
 logger = logging.getLogger(__name__)
+
+_YOUTUBE_SITE = "youtube"
+"""The Site key of YouTube, whose cookies file searches sign in with."""
 
 SEARCH_UNITS = 102
 """One search call, plus a batch of channel details and one of video details."""
@@ -196,7 +200,9 @@ def _ytdlp_video(entry: dict) -> ResolvedLink | None:
 
 
 def _entries(*args: str) -> list[dict]:
-    return [entry for entry in runner.run_json("--flat-playlist", *args).get("entries") or [] if isinstance(entry, dict)]
+    """The entries of a YouTube search, signed in on YouTube when it has a cookies file."""
+    listing = runner.run_json("--flat-playlist", *args, cookies=site_cookies(_YOUTUBE_SITE))
+    return [entry for entry in listing.get("entries") or [] if isinstance(entry, dict)]
 
 
 def _filtered(query: str, search_filter: str, count: int, to_link) -> list[ResolvedLink]:

@@ -69,8 +69,6 @@ export const SourceReadSchema = z.object({
     kindNames: z.record(z.string(), z.string()).optional(),
     /** What the Source calls the subscription some of its videos need, such as NPO Plus. */
     subscriptionName: z.string().nullable().optional(),
-    /** What a cookies file does for the Source, when it says so itself. */
-    cookiesHelp: z.string().nullable().optional(),
     /** VODLoft is signed in with that subscription, so media that needs it can be downloaded. */
     subscriptionActive: z.boolean().optional(),
     /** What a Local Media Profile can download for media of this Source: what any of its Sites offers. */
@@ -226,12 +224,29 @@ export const SourceProblemReadSchema = z.object({
 })
 export type SourceProblemRead = z.infer<typeof SourceProblemReadSchema>
 
-export const CookiesReadSchema = z.object({
+export const SiteSignInReadSchema = z.object({
+    key: z.string(),
+    name: z.string(),
+    domains: z.array(z.string()),
+    /** The Source made for the Site with a sign-in of its own, such as The Daily Wire's. */
+    signInSourceKey: z.string().nullable(),
+    /** The Sources that sign in on the Site with its cookies file. */
+    cookieSourceNames: z.array(z.string()),
+    /** How to export a cookies file for the Site, when it needs more than the usual. */
+    cookiesHelp: z.string().nullable(),
     hasCookies: z.boolean(),
-    /** What the cookies file signs in as, for a Source that can tell. */
-    status: z.object({label: z.string(), ok: z.boolean(), detail: z.string().nullable()}).nullable().optional(),
+    cookieCount: z.number(),
+    /** What the cookies file signs in as, for a Site whose Source can tell. */
+    cookiesStatus: z.object({label: z.string(), ok: z.boolean(), detail: z.string().nullable()}).nullable(),
 })
-export type CookiesRead = z.infer<typeof CookiesReadSchema>
+export type SiteSignInRead = z.infer<typeof SiteSignInReadSchema>
+
+export const SortedCookiesReadSchema = z.object({
+    sites: z.array(z.object({key: z.string(), name: z.string(), cookieCount: z.number()})),
+    /** Domains of cookies no Site VODLoft knows is on; they were left out. */
+    otherDomains: z.array(z.string()),
+})
+export type SortedCookiesRead = z.infer<typeof SortedCookiesReadSchema>
 
 /** A collection at a Source with listed episodes, shaped like the fields of a new collection. */
 export const CollectionDetailsReadSchema = z.object({

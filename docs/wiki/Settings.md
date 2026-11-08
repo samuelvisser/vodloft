@@ -253,13 +253,39 @@ These are safeguards for unusual Daily Wire publication states. Most users shoul
 
 ## Sources
 
-The Sources tab lists every Source VODLoft can add media from, with what it supports. See [[Sources]] for what each one does. The Daily Wire's card contains its sign-in plus advanced integration settings. Ordinary installations should leave the endpoint, OAuth, and pacing values unchanged.
+The Sources tab lists every Source VODLoft can add media from, with what it supports. See [[Sources]] for what each one does. Signing in is per site, under **Sign-ins** at the top. The Daily Wire's card contains advanced integration settings. Ordinary installations should leave the endpoint, OAuth, and pacing values unchanged.
+
+### Sign-ins
+
+Signing in is optional, and only needed for content that requires an account, such as members-only or age-restricted
+videos. It is set up per site, so YouTube, Twitch and NPO Start each have their own. **Sign-ins** lists every site
+VODLoft knows: the sites a Source is made for, and every site you added something from. Each site shows whether it is
+signed in; open it to change that.
+
+- **The Daily Wire** has a sign-in of its own: follow the steps shown and authorize VODLoft on The Daily Wire's site.
+  See [[Daily-Wire-Integration]].
+- **Every other site** signs in with a **cookies file**: a `cookies.txt` file (Netscape format) exported from a browser
+  where you are signed in on that site, with a browser extension made for that. Every Source that fetches the site uses
+  the site's own file, for every lookup and download there: yt-dlp on YouTube, and both NPO Start and yt-dlp on npo.nl.
+  A site keeps only its own cookies from the file you choose, so a file with cookies of other sites is fine.
+- **NPO Start** checks its cookies file with npo.nl, and shows whether it signs in with NPO Plus.
+
+**One cookies file for several sites** takes one file with the cookies of every site you need, such as one export of
+your whole browser, and gives each site the cookies for its own domains. A site without cookies in the file keeps the
+cookies file it had. VODLoft tells you which sites got cookies, and which domains it left out because it does not know
+their site yet.
+
+A site shows up once you add something from it. To sign in on a site first, such as Twitch before adding a members-only
+channel, use **Another site** with a link to a channel or video on that site, then choose the cookies file. A link to
+the site's home page is often not enough for VODLoft to tell which site it is.
+
+Treat a cookies file like a password: it signs VODLoft in as you.
 
 ### yt-dlp
 
 The yt-dlp card shows the installed yt-dlp version and when it was last updated. Sites change often, so VODLoft fetches the latest yt-dlp release once a week; **Update now** does it straight away, which is the first thing to try when a site stops working. The update is stored in the config directory and survives container upgrades.
 
-**Cookies file** is optional. Some videos only play for a signed-in viewer, such as age-restricted or members-only videos. Export a `cookies.txt` file (Netscape format) from a browser where you are signed in, with a browser extension made for that, and choose it here. yt-dlp then uses it for every lookup and download. Treat the file like a password: it signs VODLoft in as you.
+For videos that need a signed-in viewer, give the site a cookies file under [[Settings#sign-ins]].
 
 #### Your own yt-dlp options
 

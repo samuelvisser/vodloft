@@ -86,14 +86,14 @@ def test_each_source_declares_its_tags_with_the_main_one_first():
     ({"media_type": "video", "live_status": "not_live"}, "ep"),
 ])
 def test_youtube_videos_are_tagged_from_ytdlps_full_extraction(info, tag, monkeypatch):
-    monkeypatch.setattr(runner, "run_json", lambda *args: {
+    monkeypatch.setattr(runner, "run_json", lambda *args, **_kwargs: {
         "_type": "video", "id": "abc", "extractor_key": "Youtube", "title": "A video", **info,
     })
     assert YtDlpSource().video_details("https://www.youtube.com/watch?v=abc").tag == tag
 
 
 def test_other_sites_only_have_videos(monkeypatch):
-    monkeypatch.setattr(runner, "run_json", lambda *args: {
+    monkeypatch.setattr(runner, "run_json", lambda *args, **_kwargs: {
         "_type": "video", "id": "1", "extractor_key": "Vimeo", "title": "V", "live_status": "was_live",
     })
     assert YtDlpSource().video_details("https://vimeo.com/1").tag == MAIN_TAG

@@ -40,7 +40,7 @@ def _details(slug="abc", drm=False):
 def test_ytdlp_looks_up_a_drm_video_for_its_details(monkeypatch):
     calls = []
 
-    def run_json(*args):
+    def run_json(*args, **_kwargs):
         calls.append(args)
         if "--allow-unplayable-formats" not in args:
             raise runner.YtDlpError("[Site] abc: This video is DRM protected")
@@ -56,7 +56,7 @@ def test_ytdlp_looks_up_a_drm_video_for_its_details(monkeypatch):
 
 def test_ytdlp_marks_a_video_whose_formats_all_have_drm(monkeypatch):
     info = {"id": "abc", "extractor_key": "Site", "title": "Locked", "formats": [{"has_drm": True}, {"has_drm": True}]}
-    monkeypatch.setattr(runner, "run_json", lambda *args: info)
+    monkeypatch.setattr(runner, "run_json", lambda *args, **_kwargs: info)
     assert YtDlpSource().video_details("https://site.example/abc").drm_protected is True
 
     info["formats"].append({"has_drm": False})

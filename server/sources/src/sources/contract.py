@@ -40,8 +40,9 @@ class Feature(StrEnum):
     page searches when asked instead of while the user types."""
     PROGRAM_UPDATES = "program_updates"
     COOKIES = "cookies"
+    """The Source signs in on a Site with the Site's own cookies file (``sources.cookies``)."""
     OPTIONAL_COOKIES = "optional_cookies"
-    """Downloads work with or without the cookies file, so each Collection chooses when to use it, and
+    """Downloads work with or without the Site's cookies file, so each Collection chooses when to use it, and
     ``needs_cookies`` tells from a failed download that the cookies file would help."""
     API_KEY = "api_key"
     """An optional key for the service's own API, which makes catalogue lookups faster."""
@@ -532,7 +533,7 @@ class ProgramStatus:
 
 @dataclass(frozen=True)
 class CookiesStatus:
-    """What the Source's cookies file signs in as, shown next to it in the settings."""
+    """What a Site's cookies file signs in as, shown next to it in the settings."""
 
     label: str
     ok: bool
@@ -614,6 +615,8 @@ class Site:
     upgrade_checks: UpgradeChecks = UpgradeChecks()
     settings: SiteSettings = field(default_factory=SiteSettings, hash=False)
     """Which settings the Site shows in Settings and on its Download Profiles, and its presets."""
+    cookies_help: str | None = None
+    """How to export a cookies file that signs in on the Site, when the Site needs more than the usual."""
 
     @property
     def streams(self) -> bool:
@@ -651,8 +654,6 @@ class Source(ABC):
     """Every tag the Source gives episodes, the main one first."""
     subscription_name: ClassVar[str | None] = None
     """What the Source calls the paid subscription some of its videos need, such as NPO Plus."""
-    cookies_help: ClassVar[str | None] = None
-    """What a cookies file does for this Source, for a Source with ``Feature.COOKIES``."""
     sites: ClassVar[tuple[Site, ...]] = ()
     """The Sites this Source is made for, such as The Daily Wire, with what this Source offers on
     each. A Source that serves many sites, as yt-dlp does, names none and tells them apart in
@@ -850,20 +851,13 @@ class Source(ABC):
         """True when a failed download says signing in would help, for a Source with ``Feature.OPTIONAL_COOKIES``."""
         return False
 
-    def has_cookies(self) -> bool:
-        """True when a cookies file is stored. Only Sources with ``Feature.COOKIES`` implement it."""
-        raise NotImplementedError(f"{self.name} takes no cookies file")
-
-    def save_cookies(self, content: bytes) -> None:
-        """Store a cookies file that every lookup and download uses. Raises ValueError for a file it cannot use."""
-        raise NotImplementedError(f"{self.name} takes no cookies file")
-
-    def remove_cookies(self) -> None:
-        raise NotImplementedError(f"{self.name} takes no cookies file")
-
-    def cookies_status(self) -> CookiesStatus | None:
-        """What the stored cookies file signs in as, for a Source that can tell."""
+    def cookies_status(self, site_key: str) -> CookiesStatus | None:
+        """What the Site's cookies file signs in as, for a Source with ``Feature.COOKIES`` that can tell."""
         return None
+
+    def cookies_changed(self, site_key: str) -> None:
+        """The Site's cookies file was replaced or removed, for a Source with ``Feature.COOKIES`` that
+        remembers what it signed in as."""
 
     @property
     def download_streams(self) -> int | None:

@@ -384,33 +384,44 @@ COOKIES = "# Netscape HTTP Cookie File\n.npo.nl\tTRUE\t/\tTRUE\t0\tsession\tabc\
 
 
 @pytest.fixture
-def signed_in(tmp_path, monkeypatch):
+def signed_in():
     from sources.npo import account
 
-    monkeypatch.setattr(account, "cookies_path", lambda: tmp_path / "npo" / "cookies.txt")
     account.forget_status()
     yield account
     account.forget_status()
 
 
-def test_a_cookies_file_signs_npo_start_in(npo, signed_in):
+def _sign_in():
+    """Give the NPO Start Site its cookies file, as Settings › Sources › Sign-ins does."""
+    from sources import cookies
+    from sources.npo import account
+
+    cookies.store_site_cookies(account.SITE_KEY, cookies.cookie_lines(COOKIES))
+    account.forget_status()
+
+
+def test_a_cookies_file_signs_npo_start_in(npo, signed_in, session):
+    from backend.services import site_cookies
+
     source, _ = npo
-    assert source.has(Feature.COOKIES) and source.cookies_help
+    assert source.has(Feature.COOKIES) and source.sites[0].cookies_help
     assert source.subscription_active is False
-    with pytest.raises(ValueError, match="no npo.nl cookies"):
-        source.save_cookies(b"# Netscape HTTP Cookie File\n.example.com\tTRUE\t/\tTRUE\t0\tsession\tabc\n")
+    with pytest.raises(ValueError, match="no cookies for npo.nl"):
+        site_cookies.save_site_cookies(session, "npo", b"# Netscape HTTP Cookie File\n.example.com\tTRUE\t/\tTRUE\t0\tsession\tabc\n")
     with pytest.raises(ValueError, match="Netscape"):
-        source.save_cookies(b"not a cookies file")
-    source.save_cookies(COOKIES.encode())
-    assert source.has_cookies() and source.subscription_active is True
+        site_cookies.save_site_cookies(session, "npo", b"not a cookies file")
+    # Only the Site's own cookies are kept.
+    site_cookies.save_site_cookies(session, "npo", (COOKIES + ".example.com\tTRUE\t/\tTRUE\t0\tother\tx\n").encode())
+    assert signed_in.has_cookies() and source.subscription_active is True
     assert [cookie.name for cookie in signed_in.load_cookies()] == ["session"]
-    source.remove_cookies()
+    site_cookies.remove_site_cookies(session, "npo")
     assert source.subscription_active is False
 
 
 def test_signed_in_programmes_that_need_npo_plus_are_checked_and_played(npo, signed_in):
     source, client = npo
-    source.save_cookies(COOKIES.encode())
+    _sign_in()
     client.programs["s2"] = [_premium(program) for program in client.programs["s2"]]
     client.protected = {"NCRV_een-huis-vol_1"}
     episodes = list(source.list_episodes("https://npo.nl/start/serie/een-huis-vol", known=frozenset()))
@@ -425,7 +436,7 @@ def test_a_sign_in_without_npo_plus_still_cannot_play_them(npo, signed_in):
     from sources.npo.client import NpoError
 
     source, client = npo
-    source.save_cookies(COOKIES.encode())
+    _sign_in()
     client.programs["s2"] = [_premium(program) for program in client.programs["s2"]]
 
     def refused(product_id, referrer_url):
@@ -462,7 +473,7 @@ def test_signed_in_episodes_that_need_npo_plus_are_planned(npo, session, signed_
     session.flush()
     profile.seasons = list(collection.seasons)
     assert len(get_download_profile_episodes(session, profile)) == 2
-    source.save_cookies(COOKIES.encode())
+    _sign_in()
     # Checked once with npo.nl; every NPO Start instance shares the answer.
     assert source.subscription_active is True
     assert len(get_download_profile_episodes(session, profile)) == 5
@@ -473,7 +484,7 @@ def test_signed_in_npo_downloads_run_one_at_a_time(npo, signed_in):
 
     source, _ = npo
     assert source.download_streams is None
-    source.save_cookies(COOKIES.encode())
+    _sign_in()
     assert source.download_streams == 1
     resources = DownloadResources()
     lane = resources.lane("source:npo", 1)
@@ -489,7 +500,7 @@ def test_the_npo_account_decides_whether_npo_plus_downloads(npo, signed_in):
 
     source, client = npo
     assert source.problems() == []
-    source.save_cookies(COOKIES.encode())
+    _sign_in()
     assert source.subscription_active is True and source.problems() == []
 
     client.account = {"user": {"name": "Samuël"}, "hasSubscription": False, "expires": "2099-11-26T13:45:38.000Z"}
@@ -518,53 +529,62 @@ def test_the_cookies_file_says_what_it_signs_in_as(npo, signed_in):
     from sources.npo import account
 
     source, client = npo
-    source.save_cookies(COOKIES.encode())
-    status = source.cookies_status()
+    _sign_in()
+    status = source.cookies_status("npo")
     assert (status.label, status.ok) == ("NPO Plus", True)
     assert status.detail == "Signed in with NPO Plus. The sign-in lasts until 26 November 2099."
 
     client.account = {"user": {"name": "Samuël"}, "hasSubscription": False}
     account.status(client, refresh=True)
-    assert (source.cookies_status().label, source.cookies_status().ok) == ("No NPO Plus", False)
+    assert (source.cookies_status("npo").label, source.cookies_status("npo").ok) == ("No NPO Plus", False)
     client.account = {}
     account.status(client, refresh=True)
-    assert source.cookies_status().label == "Signed out"
+    assert source.cookies_status("npo").label == "Signed out"
 
 
-def test_the_cookies_endpoint_reports_the_npo_account(npo, signed_in, monkeypatch):
+def test_the_sign_ins_endpoint_reports_the_npo_account(npo, signed_in, session, monkeypatch):
+    from contextlib import contextmanager
+
     from backend.api.endpoints.sources import router
 
+    @contextmanager
+    def same_session():
+        yield session
+
+    monkeypatch.setattr(router, "db_session", same_session)
     source, _ = npo
-    monkeypatch.setattr(router, "_source", lambda source_id, feature: source)
-    source.save_cookies(COOKIES.encode())
-    answer = router.cookies("npo")
-    assert answer.has_cookies is True and answer.status.label == "NPO Plus"
-    assert router.remove_cookies("npo").status is None
+    _sign_in()
+    # Checked once with npo.nl; every NPO Start instance shares the answer.
+    assert source.subscription_active is True
+    npo_site = next(site for site in router.site_sign_ins() if site.key == "npo")
+    assert npo_site.has_cookies is True and npo_site.cookies_status.label == "NPO Plus"
+    assert "NPO Start" in npo_site.cookie_source_names and npo_site.cookies_help
+    assert router.remove_site_cookie_file("npo").cookies_status is None
 
 
 def test_a_session_whose_npo_id_token_ran_out_no_longer_signs_in(npo, signed_in):
     from sources.npo import account
 
     source, client = npo
-    source.save_cookies(COOKIES.encode())
+    _sign_in()
     client.account = {
         "user": {"name": "samuvisser"}, "hasSubscription": False,
         "expires": "2099-11-26T19:10:18.324Z", "tokenExpiresAt": 1793117707,
     }
     account.status(client, refresh=True)
-    assert source.cookies_status().label == "Signed out"
+    assert source.cookies_status("npo").label == "Signed out"
     assert [p.title for p in source.problems()] == ["NPO sign-in expired"]
 
     client.account = {**client.account, "hasSubscription": True, "tokenExpiresAt": 4102444800}
     account.status(client, refresh=True)
-    assert source.cookies_status().label == "NPO Plus"
+    assert source.cookies_status("npo").label == "NPO Plus"
 
 
 def test_npo_renewing_the_sign_in_updates_the_cookies_file(signed_in, monkeypatch):
     import requests
     from sources.npo import client as npo_client
 
-    signed_in.save_cookies(COOKIES.encode())
+    _sign_in()
     http = npo_client.NpoClient()
     sent = []
 

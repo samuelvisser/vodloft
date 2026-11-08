@@ -63,9 +63,9 @@ import {TaskOperationRead} from "../types/schemas/operation";
 import {MovieRead, MovieReadSchema} from "../types/schemas/movie";
 import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
-    ApiStatusRead, ApiStatusReadSchema, CookiesRead, EpisodeTagRead, EpisodeTagReadSchema, PublishStatusLabelRead, PublishStatusLabelReadSchema, CookiesReadSchema, ProgramStatusRead, SourceProblemRead,
+    ApiStatusRead, ApiStatusReadSchema, EpisodeTagRead, EpisodeTagReadSchema, PublishStatusLabelRead, PublishStatusLabelReadSchema, ProgramStatusRead, SourceProblemRead,
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
-    ResolvedLinkReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SourceRead,
+    ResolvedLinkReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SourceRead, SiteSignInRead, SiteSignInReadSchema, SortedCookiesRead, SortedCookiesReadSchema,
     SourceReadSchema,
     YtdlpOptionsReadSchema,
 } from "../types/schemas/source";
@@ -425,18 +425,40 @@ export async function updateSourceProgram(sourceId: string): Promise<ProgramStat
     return ProgramStatusReadSchema.parse(await response.json())
 }
 
-export function useSourceCookies(sourceId: string, enabled = true) {
-    return useQuery<CookiesRead, Error, CookiesRead, readonly ['sourceCookies', string]>({
-        queryKey: ['sourceCookies', sourceId] as const,
+/** Every Site VODLoft knows, with its sign-in and its cookies file. */
+export function useSiteSignIns(enabled = true) {
+    return useQuery<SiteSignInRead[], Error, SiteSignInRead[], readonly ['siteSignIns']>({
+        queryKey: ['siteSignIns'] as const,
         enabled,
-        queryFn: ({signal}) => fetchParsed(
-            `${apiUrl()}/sources/${encodeURIComponent(sourceId)}/cookies`,
-            CookiesReadSchema,
-            signal,
+        queryFn: async ({signal}) => SiteSignInReadSchema.array().parse(
+            await fetchJSON<unknown>(`${apiUrl()}/sources/sign-ins`, signal),
         ),
     })
 }
 
+/** Store the Site's cookies of a cookies.txt file, or remove the Site's cookies file with null. */
+export async function saveSiteCookies(siteKey: string, content: string | null): Promise<SiteSignInRead> {
+    const response = await fetch(`${apiUrl()}/sources/sign-ins/${encodeURIComponent(siteKey)}/cookies`, {
+        method: content === null ? 'DELETE' : 'PUT',
+        credentials: 'include',
+        headers: content === null ? undefined : {'Content-Type': 'application/json'},
+        body: content === null ? undefined : JSON.stringify({content}),
+    })
+    if (!response.ok) throw await responseError(response)
+    return SiteSignInReadSchema.parse(await response.json())
+}
+
+/** Give every Site the cookies of one cookies.txt file that are for its domains. */
+export async function sortCookiesFile(content: string): Promise<SortedCookiesRead> {
+    const response = await fetch(`${apiUrl()}/sources/sign-ins/cookies`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({content}),
+    })
+    if (!response.ok) throw await responseError(response)
+    return SortedCookiesReadSchema.parse(await response.json())
+}
 
 /** The yt-dlp options a Source gives every download. */
 export function useSourceYtdlpOptions(sourceId: string) {
@@ -465,18 +487,6 @@ export async function saveSourceYtdlpOptions(sourceId: string, text: string): Pr
     }
     if (!response.ok) throw await responseError(response)
     return YtdlpOptionsReadSchema.parse(await response.json()).text
-}
-
-/** Store a cookies.txt file for a Source, or remove it with null. */
-export async function saveSourceCookies(sourceId: string, content: string | null): Promise<CookiesRead> {
-    const response = await fetch(`${apiUrl()}/sources/${encodeURIComponent(sourceId)}/cookies`, {
-        method: content === null ? 'DELETE' : 'PUT',
-        credentials: 'include',
-        headers: content === null ? undefined : {'Content-Type': 'application/json'},
-        body: content === null ? undefined : JSON.stringify({content}),
-    })
-    if (!response.ok) throw await responseError(response)
-    return CookiesReadSchema.parse(await response.json())
 }
 
 /** The tags a Source gives episodes of the show at ``url``, or of any of its shows without one. */

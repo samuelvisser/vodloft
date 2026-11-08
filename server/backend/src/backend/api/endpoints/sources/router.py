@@ -2,12 +2,17 @@ from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.models.source import (
     DownloadOptionsAPIRead, DownloadProfileDefaultsAPIRead, SiteOptionsAPIRead, YtdlpOptionLineAPIRead, YtdlpOptionsAPIRead, YtdlpOptionsAPIUpdate, YtdlpOptionsCheckAPIRequest,
-    ApiKeyAPIUpdate, ApiStatusAPIRead, CookiesAPIRead, EpisodeTagAPIRead, PublishStatusLabelAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultsAPIRead,
+    ApiKeyAPIUpdate, ApiStatusAPIRead, EpisodeTagAPIRead, PublishStatusLabelAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultsAPIRead,
     CollectionDetailsAPIRead, SourceAPIRead, SourceSiteAPIRead, SourceSiteAPIUpdate, UpgradeChecksAPIRead,
+    SiteSignInAddAPIRequest, SiteSignInAPIRead, SortedCookiesAPIRead,
 )
 from backend.app import db_session
 from sources import ApiKeyRejected, Feature, Source, UnknownSourceError, get_source, source_site
 from sources.ytdlp_options import check_ytdlp_options
+from backend.services.site_cookies import (
+    SiteLinkError, SiteNotKnownError, add_cookies_file, add_site, list_site_sign_ins, remove_site_cookies,
+    save_site_cookies, site_of_link,
+)
 from backend.services.site_settings import download_profile_defaults, offered_settings
 from backend.services.source_options import save_ytdlp_source_options, ytdlp_source_options
 from config.settings.site_settings import SiteSettingGroup
@@ -161,32 +166,52 @@ def update_program(source_id: str):
     return update_source_program(_source(source_id, Feature.PROGRAM_UPDATES))
 
 
-@router.get("/sources/{source_id}/cookies", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=CookiesAPIRead)
-def cookies(source_id: str):
-    return _cookies(_source(source_id, Feature.COOKIES))
+@router.get("/sources/sign-ins", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=list[SiteSignInAPIRead])
+def site_sign_ins():
+    """Every Site VODLoft knows, with its sign-in and its cookies file."""
+    with db_session() as s:
+        return [SiteSignInAPIRead.model_validate(listing) for listing in list_site_sign_ins(s)]
 
 
-@router.put("/sources/{source_id}/cookies", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=CookiesAPIRead)
-def save_cookies(source_id: str, body: CookiesAPIUpdate):
-    """Store a cookies.txt file that the Source uses for every lookup and download."""
-    source = _source(source_id, Feature.COOKIES)
+@router.post("/sources/sign-ins", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteSignInAPIRead)
+def add_site_sign_in(body: SiteSignInAddAPIRequest):
+    """Add the Site of a link, so it can get a cookies file before VODLoft has anything from it."""
+    with db_session() as s:
+        try:
+            site = site_of_link(s, body.url.strip())
+        except SiteLinkError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return SiteSignInAPIRead.model_validate(run_write_transaction(lambda s: add_site(s, site), concurrent=True))
+
+
+@router.post("/sources/sign-ins/cookies", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SortedCookiesAPIRead)
+def sort_site_cookies(body: CookiesAPIUpdate):
+    """Give every Site the cookies of one cookies file that are for its domains."""
     try:
-        source.save_cookies(body.content.encode())
+        return SortedCookiesAPIRead.model_validate(add_cookies_file(body.content.encode()))
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return _cookies(source)
 
 
-@router.delete("/sources/{source_id}/cookies", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=CookiesAPIRead)
-def remove_cookies(source_id: str):
-    source = _source(source_id, Feature.COOKIES)
-    source.remove_cookies()
-    return _cookies(source)
+@router.put("/sources/sign-ins/{site_key}/cookies", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteSignInAPIRead)
+def save_site_cookie_file(site_key: str, body: CookiesAPIUpdate):
+    """Store the Site's cookies of a cookies.txt file, which every Source uses for lookups and downloads on the Site."""
+    with db_session() as s:
+        try:
+            return SiteSignInAPIRead.model_validate(save_site_cookies(s, site_key, body.content.encode()))
+        except SiteNotKnownError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-def _cookies(source: Source) -> CookiesAPIRead:
-    has_cookies = source.has_cookies()
-    return CookiesAPIRead(has_cookies=has_cookies, status=source.cookies_status() if has_cookies else None)
+@router.delete("/sources/sign-ins/{site_key}/cookies", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteSignInAPIRead)
+def remove_site_cookie_file(site_key: str):
+    with db_session() as s:
+        try:
+            return SiteSignInAPIRead.model_validate(remove_site_cookies(s, site_key))
+        except SiteNotKnownError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 def _api_key_rejected(exc: ApiKeyRejected) -> HTTPException:

@@ -144,6 +144,16 @@ def no_real_ytdlp(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def site_cookies_directory(tmp_path, monkeypatch):
+    """Each test keeps the Sites' cookies files in a folder of its own, never in the real config folder."""
+    from sources import cookies
+
+    directory = tmp_path / "site-cookies"
+    monkeypatch.setattr(cookies, "cookies_directory", lambda: directory)
+    return directory
+
+
+@pytest.fixture(autouse=True)
 def full_access_without_auth_guard(monkeypatch):
     """Most API tests mount a router on a bare FastAPI app, without the auth guard.
 
