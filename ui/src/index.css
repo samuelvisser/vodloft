@@ -245,7 +245,9 @@ body *::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-rad
     min-height: 100vh;
     min-height: 100dvh;
   }
-  .sidebar { width: 100%; min-width: 0; position: sticky; top: 0; z-index: 20; }
+  /* The sticky header is a stacking context, so its submenu can only rise as high as the header itself.
+     Keep it above the page's own overlays (the page details panel uses 20) and below select menus (30). */
+  .sidebar { width: 100%; min-width: 0; position: sticky; top: 0; z-index: 25; }
   .sidebar-inner { padding: 8px 12px; }
   .content { padding: 16px; }
   .view-header { flex-wrap: wrap; gap: 8px; }
