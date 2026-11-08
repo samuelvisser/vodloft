@@ -130,8 +130,12 @@ export default function StreamProfilesPage() {
                     <p>Use multiple profiles per collection to fit different listening or
                         viewing needs.</p>
                 </PageSubtitle>
-                {canManage && <BulkEditButton selection={selection}/>}
-                {canManage && <Link className="btn btn-primary" to="/add-stream-profile">Add stream profile</Link>}
+                {canManage && (
+                    <div className="view-header-actions">
+                        <BulkEditButton selection={selection}/>
+                        <Link className="btn btn-primary" to="/add-stream-profile">Add stream profile</Link>
+                    </div>
+                )}
             </div>
 
             <ProfileTableFilters
